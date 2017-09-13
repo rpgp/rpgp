@@ -1,0 +1,10 @@
+sudo: false
+
+language: rust
+
+rust:
+  - beta
+  - stable
+
+script:
+  - cargo build && cargo test
