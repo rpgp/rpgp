@@ -1,0 +1,9 @@
+[package]
+name = "mailer"
+version = "0.1.0"
+authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
+
+[dependencies]
+
+[dependencies.nom]
+version = "^3.2"
