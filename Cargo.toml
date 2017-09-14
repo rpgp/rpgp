@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 
 [dependencies]
+openssl = "^0.9.17"
 
 [dependencies.nom]
 version = "^3.2"

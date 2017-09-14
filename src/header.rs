@@ -1,6 +1,7 @@
 use nom::{self, IResult, AsChar, crlf, space};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
+use types::ParseResult;
 
 #[inline]
 fn is_name_token(chr: u8) -> bool {
@@ -13,7 +14,7 @@ fn is_body_token(chr: char) -> bool {
 }
 
 #[inline]
-fn collect_into_string(vec: Vec<&[u8]>) -> String {
+pub fn collect_into_string(vec: Vec<&[u8]>) -> String {
     vec.iter()
         .map(|s| str::from_utf8(s).unwrap())
         .collect::<Vec<&str>>()
@@ -78,7 +79,6 @@ named!(header<Vec<(String, String)>>, many0!(
     )
 ));
 
-pub type ParseResult<'a> = IResult<&'a [u8], Vec<(String, String)>>;
 pub fn parse(msg: &[u8]) -> ParseResult {
     header(msg)
 }
