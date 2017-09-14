@@ -5,6 +5,9 @@ authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 
 [dependencies]
 openssl = "^0.9.17"
+crc24 = "^0.1.6"
+base64 = "^0.6.0"
+byteorder = "^1.1.0"
 
 [dependencies.nom]
 version = "^3.2"
