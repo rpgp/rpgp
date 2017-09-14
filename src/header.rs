@@ -1,4 +1,4 @@
-use nom::{self, IResult, crlf, space, AsChar};
+use nom::{self, IResult, AsChar, crlf, space};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
 
@@ -14,16 +14,14 @@ fn is_body_token(chr: char) -> bool {
 
 #[inline]
 fn collect_into_string(vec: Vec<&[u8]>) -> String {
-    let mut s = String::new();
-    for p in vec.iter() {
-        s += str::from_utf8(p).unwrap();
-    }
-
-    s
+    vec.iter()
+        .map(|s| str::from_utf8(s).unwrap())
+        .collect::<Vec<&str>>()
+        .join("")
 }
 
 /// Recognizes one or more body tokens
-pub fn body_token<T>(input: T) -> IResult<T, T>
+fn body_token<T>(input: T) -> IResult<T, T>
 where
     T: nom::Slice<Range<usize>> + nom::Slice<RangeFrom<usize>> + nom::Slice<RangeTo<usize>>,
     T: nom::InputIter + nom::InputLength,
@@ -76,7 +74,7 @@ named!(header<Vec<(String, String)>>, many0!(
             sep,
             field_body
         ),
-        crlf
+        alt_complete!(crlf | eof!())
     )
 ));
 
@@ -119,7 +117,6 @@ mod tests {
             "X-MS-TNEF-Correlator:",
             "X-MS-Exchange-Organization-RecordReviewCfmType: 0",
             "Content-Type: multipart/related;\r\n boundary=\"_002_VI1P190MB0478680417513ABE9BA388C6BE910VI1P190MB0478EURP_\";\r\n type=\"text/html\"",
-            "",
         ].join("\r\n");
 
         let result = parse(raw.as_bytes());
@@ -145,5 +142,10 @@ mod tests {
         } else {
             panic!("failed to parse\n{}\n: {:?}", raw, result);
         }
+    }
+
+    #[test]
+    fn test_collect_into_string() {
+        assert_eq!(collect_into_string(vec![b"hello", b" ", b"world"]), "hello world");
     }
 }
