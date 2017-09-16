@@ -1,6 +1,6 @@
-use nom::{self, IResult, AsChar, digit, line_ending, not_line_ending, is_alphanumeric, be_u8};
+use nom::{self, IResult, AsChar, digit, line_ending, not_line_ending, is_alphanumeric};
 use std::str;
-use openssl::rsa::Rsa;
+// use openssl::rsa::Rsa;
 // use openssl::bn::BigNum;
 use header::collect_into_string;
 use std::collections::HashMap;
@@ -8,11 +8,54 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use crc24;
 use base64;
 use byteorder::{ByteOrder, BigEndian};
+use enum_primitive::FromPrimitive;
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Packet {
+    pub version: u8,
+    pub tag: u8,
+    pub body: Vec<u8>,
+}
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum PublicKeyAlgorithm {
+    /// RSA (Encrypt and Sign) [HAC]
+    RSA = 1,
+    /// DEPRECATED: RSA (Encrypt-Only) [HAC]
+    RSAEncrypt = 2,
+    /// DEPRECATED: RSA (Sign-Only) [HAC]
+    RSASign = 3,
+    /// Elgamal (Encrypt-Only) [ELGAMAL] [HAC]
+    ELSign = 16,
+    /// DSA (Digital Signature Algorithm) [FIPS186] [HAC]
+    DSA = 17,
+    /// RESERVED: Elliptic Curve
+    EC = 18,
+    /// RESERVED: ECDSA
+    ECDSA = 19,
+    /// DEPRECATED: Elgamal (Encrypt and Sign)
+    EL = 20,
+    /// Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)
+    DiffieHellman = 21,
+}
+}
 
 #[inline]
 fn is_base64_token(c: char) -> bool {
     is_alphanumeric(c as u8) || c == '/' || c == '+'
 }
+
+/// Parse Multi Precision Integers as described in
+/// https://tools.ietf.org/html/rfc4880.html#section-3.2
+named!(
+    mpi<&[u8]>,
+    do_parse!(
+    len: u16!(nom::Endianness::Big) >>
+    val: take!((len + 7) >> 3) >>
+    (val)
+)
+);
 
 /// Recognizes one or more body tokens
 fn base64_token<T>(input: T) -> IResult<T, T>
@@ -41,15 +84,10 @@ where
 
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ArmorBlock<'a> {
-    PublicKey {
-        headers: HashMap<&'a str, &'a str>,
-        version: u8,
-    },
-    PrivateKey {},
-    Message {},
-    Signature {},
-    // TODO: what about MultiPartMessage?
+pub struct ArmorBlock<'a> {
+    typ: ArmorBlockType,
+    headers: HashMap<&'a str, &'a str>,
+    packets: Vec<Packet>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -132,48 +170,130 @@ named!(armor_header<(ArmorBlockType, HashMap<&str, &str>)>, do_parse!(
     ((typ, headers))
 ));
 
-named!(public_key_parser<u8>, bits!(do_parse!(
-    // Packet Header - First octet
-         tag_bits!(u8, 1, 1) >>
-    top: alt_complete!(
-             // New Packet Style
-             do_parse!(
-                 // Version 
-                      tag_bits!(u8, 1, 1) >>
-                 // Packet Tag
-                 tag: take_bits!(u8, 6)   >>
-                 ((1, tag, None))
-             ) |
-             // Old Packet Style
-             do_parse!(
-                 // Version
-                     tag_bits!(u8, 1, 0) >>
-                 // Packet Tag
-                 tag: take_bits!(u8, 4)   >>
-                 // Packet Length 
-                 len: take_bits!(u8, 2)   >>
-                 ((0, tag, Some(len)))
-             )
+#[inline]
+fn u8_as_usize(a: u8) -> usize {
+    a as usize
+}
+
+#[inline]
+fn u16_as_usize(a: u16) -> usize {
+    a as usize
+}
+
+#[inline]
+fn u32_as_usize(a: u32) -> usize {
+    a as usize
+}
+
+named!(rsa_fields<(&[u8], &[u8])>, do_parse!(
+    n: mpi >>
+    e: mpi >>
+    ((n, e))
+));
+
+
+named!(packets_parser<Vec<Packet>>, many1!(packet_parser));
+
+named!(public_key_body<Option<u8>>, bits!(do_parse!(
+    key_ver: take_bits!(u8, 8) >>
+    details: switch!(
+        value!(key_ver), 
+        2...3 => do_parse!(
+            key_time: take_bits!(u32, 32) >>
+                exp: take_bits!(u16, 16)      >>
+                alg: map_opt!(
+                    take_bits!(u8, 8),
+                    PublicKeyAlgorithm::from_u8
+                ) >>
+                ((key_time, exp, alg, (&b""[..], &b""[..])))
+        ) |
+        4 => do_parse!(
+            key_time: take_bits!(u32, 32) >>
+                alg: map_opt!(
+                    take_bits!(u8, 8),
+                    PublicKeyAlgorithm::from_u8
+                ) >>
+                fields: bytes!(switch!(
+                    value!(&alg), 
+                    &PublicKeyAlgorithm::RSA => call!(rsa_fields) |
+                    &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields) |
+                    &PublicKeyAlgorithm::RSASign => call!(rsa_fields) 
+                )) >> 
+                ({
+                    let (n, e) = fields;
+                    let bits = n.len() * 8;
+                    println!("fields: {} {}", bits, e.len());
+                    
+                    (key_time, 0, alg, fields)
+                })
+        ) 
+    ) >>
+    ({ Some(key_ver) })
+)));
+
+named_args!(
+    packet_body_parser(tag: u8) <Option<u8>>,
+    switch!(value!(tag),
+    // Public Key
+    6 => call!(public_key_body) |
+    _ => value!(None)
+));
+
+named!(old_packet_header((&[u8], usize)) -> (u8, u8, usize), do_parse!(
+    // Version
+         tag_bits!(u8, 1, 0) >>
+    // Packet Tag
+    tag: take_bits!(u8, 4)   >>
+    // Packet Length Type
+    len: switch!(
+        take_bits!(u8, 2),
+        0 => map!(take_bits!(u8, 8), u8_as_usize)    |
+        1 => map!(take_bits!(u16, 16), u16_as_usize) |
+        2 => map!(take_bits!(u32, 32), u32_as_usize)
+        // TODO: indefinite length
+        // 3 => ?
     ) >> 
-    ver: take_bits!(u8, 8) >>
+    ((0, tag, len))
+));
+
+named!(new_packet_header((&[u8], usize)) -> (u8, u8, usize), do_parse!(
+    // Version 
+          tag_bits!(u8, 1, 1) >>
+    // Packet Tag
+    tag:  take_bits!(u8, 6)   >>
+    olen: take_bits!(u8, 8)   >>
+    len:  switch!(
+          value!(olen),
+        0...191  => value!(olen as usize) |
+        192...223 => map!(
+            take_bits!(u8, 8),
+            |a| ((olen as usize - 192) << 8) + 192 + a as usize                     ) |
+        255 => map!(
+            take_bits!(u16, 32),
+            u16_as_usize
+        )
+        // TODO: partial body length
+        // 224...254 => ?
+    ) >>
+    ((1, tag, len))
+));
+
+/// Parse Packet Headers
+/// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
+named!(packet_parser<Packet>, bits!(do_parse!(
+    // Packet Header - First octet
+          tag_bits!(u8, 1, 1) >>
+    top:  alt_complete!(new_packet_header | old_packet_header) >>
+    body: bytes!(take!(top.2)) >>
     ({
-        println!("header: {:?}", top);
-        ver
+        Packet {
+            version: top.0,
+            tag: top.1,
+            body: body.to_vec(),
+        }
     })
 )));
 
-fn public_key<'a, 'b>(headers: HashMap<&'b str, &'b str>, msg: &'a [u8]) -> Option<ArmorBlock<'b>> {
-    println!("start: {:#010b} {:#010b} {:#010b}", msg[0], msg[1], msg[2]);
-    match public_key_parser(msg) {
-        IResult::Done(rest, version) => {
-            Some(ArmorBlock::PublicKey {
-                headers: headers,
-                version: version,
-            })
-        }
-        _ => None,
-    }
-}
 
 named!(armor_block<(ArmorBlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
     header: armor_header >>
@@ -187,7 +307,7 @@ named!(armor_block<(ArmorBlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
     footer: armor_footer_line >>
     ({
         if header.0 != footer {
-            // TODO: proper error handlign
+            // TODO: proper error handling
             panic!("Non matching armor wrappers {:?} != {:?}", header.0, footer);
         }
 
@@ -196,7 +316,7 @@ named!(armor_block<(ArmorBlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
         
         let check_new = crc24::hash_raw(decoded.as_slice());
 
-        // TODO: proper error handlign
+        // TODO: proper error handling
         let check_decoded = base64::decode_config(check, base64::MIME).expect("Invalid base64 encoding checksum");
         let mut check_decoded_buf = [0; 4];
         let mut i = check_decoded.len();
@@ -210,30 +330,21 @@ named!(armor_block<(ArmorBlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
             // TODO: proper error handling
             panic!("Corrupted data, missmatch checksum {} != {}", check_new, check_u32);
         }
-
+        
         (header.0, header.1, decoded)
     })
 ));
 
-
-pub fn parse(msg: &[u8]) -> IResult<&[u8], ArmorBlock> {
-    let block = armor_block(msg);
-
-    match block {
-        IResult::Done(_, (typ, headers, inner)) => {
-            match typ {
-                ArmorBlockType::PublicKey => {
-                    match public_key(headers, inner.as_slice()) {
-                        Some(key) => IResult::Done(&b""[..], key),
-                        None => unimplemented!(),
-                    }
-                }
-                _ => unimplemented!(),
-            }
+pub fn parse<'a>(msg: &'a [u8]) -> IResult<&[u8], ArmorBlock<'a>> {
+    armor_block(msg).map(|(typ, headers, body)| {
+        // TODO: Proper error handling
+        let (_, packets) = packets_parser(body.as_slice()).unwrap();
+        ArmorBlock {
+            typ: typ,
+            headers: headers,
+            packets: packets,
         }
-        IResult::Error(e) => IResult::Error(e),
-        IResult::Incomplete(size) => IResult::Incomplete(size),
-    }
+    })
 }
 
 #[cfg(test)]
@@ -272,15 +383,17 @@ mod tests {
     fn test_parse() {
         let raw = include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc");
         let res = parse(raw);
-        if let IResult::Done(rest, key) = res {
-            let mut headers = HashMap::new();
-            headers.insert("Version", "GnuPG v1");
-            assert_eq!(key, ArmorBlock::PublicKey{
-                headers: headers,
-                version: 4,
-            })
+        if let IResult::Done(_, block) = res {
+            assert_eq!(block.typ, ArmorBlockType::PublicKey);
+            assert_eq!(block.packets.len(), 9);
         } else {
             panic!("failed to parse: {:?}", res);
         }
+    }
+
+    #[test]
+    fn test_mpi() {
+        assert_eq!(mpi(&[0x00, 0x01, 0x01][..]), IResult::Done(&b""[..], &[1][..]));
+        assert_eq!(mpi(&[0x00, 0x09, 0x01, 0xFF][..]), IResult::Done(&b""[..], &[0x01, 0xFF][..]));
     }
 }
