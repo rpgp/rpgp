@@ -1,7 +1,9 @@
 sudo: false
 language: rust
 rust: stable
-os: osx
+os:
+  - osx
+  - linux
 cache:
   cargo: true
 
