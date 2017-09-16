@@ -96,43 +96,45 @@ named!(armor_header<(BlockType, HashMap<&str, &str>)>, do_parse!(
     ((typ, headers))
 ));
 
+/// Read the checksum from an base64 encoded buffer.
+fn read_checksum(input: &[u8]) -> u32 {
+    let raw = base64::decode_config(input, base64::MIME).expect("Invalid base64 encoding checksum");
+    let mut buf = [0; 4];
+    let mut i = raw.len();
+    for a in raw.iter().rev() {
+        buf[i] = *a;
+        i -= 1;
+    }
+
+    BigEndian::read_u32(&buf)
+}
+
 named!(pub parse<(BlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
-    header: armor_header >>
-            many0!(line_ending) >>
-    inner:  map!(separated_list_complete!(
-              line_ending, base64_token
-            ), collect_into_string) >>
-            opt!(line_ending) >>
-    check:  preceded!(tag!("="), take!(4)) >>
-            many1!(line_ending) >>
-    footer: armor_footer_line >>
-    ({
-        if header.0 != footer {
-            // TODO: proper error handling
-            panic!("Non matching armor wrappers {:?} != {:?}", header.0, footer);
-        }
+         head: armor_header
+    >>         many0!(line_ending)
+    >>  inner: map!(separated_list_complete!(
+                   line_ending, base64_token
+               ), collect_into_string) 
+    >>         opt!(line_ending)
+    >>  check: preceded!(tag!("="), take!(4))
+    >>         many1!(line_ending)
+    >> footer: armor_footer_line
+    >> ({
+        let (typ, headers) = head;
+        
+        // TODO: proper error handling
+        assert_eq!(typ, footer, "Non matching armor wrappers");
 
         // TODO: proper error handling
         let decoded = base64::decode_config(&inner, base64::MIME).expect("Invalid base64 encoding");
         
         let check_new = crc24::hash_raw(decoded.as_slice());
-
-        // TODO: proper error handling
-        let check_decoded = base64::decode_config(check, base64::MIME).expect("Invalid base64 encoding checksum");
-        let mut check_decoded_buf = [0; 4];
-        let mut i = check_decoded.len();
-        for a in check_decoded.iter().rev() {
-            check_decoded_buf[i] = *a;
-            i -= 1;
-        }
-
-        let check_u32 = BigEndian::read_u32(&check_decoded_buf);
-        if check_new != check_u32 {
-            // TODO: proper error handling
-            panic!("Corrupted data, missmatch checksum {} != {}", check_new, check_u32);
-        }
+        let check_dec = read_checksum(check);
         
-        (header.0, header.1, decoded)
+        // TODO: proper error handling
+        assert_eq!(check_new, check_dec, "Corrupted data, checksum missmatch");
+        
+        (typ, headers, decoded)
     })
 ));
 
