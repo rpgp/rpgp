@@ -5,9 +5,11 @@ use util::{u8_as_usize, u16_as_usize, u32_as_usize};
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Packet {
+    /// Indicator if this is an old or new versioned packet
     pub version: Version,
     /// Denotes the type of data this packet holds
     pub tag: Tag,
+    /// The raw bytes of the packet
     pub body: Vec<u8>,
 }
 
@@ -111,15 +113,13 @@ named!(new_packet_header((&[u8], usize)) -> (Version, Tag, usize), do_parse!(
 /// Parse Packet Headers
 /// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
 named!(pub packet_parser<Packet>, bits!(do_parse!(
-    // Packet Header - First octet
-          tag_bits!(u8, 1, 1) >>
-    top:  alt_complete!(new_packet_header | old_packet_header) >>
-    body: bytes!(take!(top.2)) >>
-    ({
-        Packet {
-            version: top.0,
-            tag: top.1,
-            body: body.to_vec(),
-        }
+    // First bit is always 1
+             tag_bits!(u8, 1, 1)
+    >> head: alt_complete!(new_packet_header | old_packet_header) 
+    >> body: bytes!(take!(head.2))
+    >> (Packet{
+        version: head.0,
+        tag: head.1,
+        body: body.to_vec(),
     })
 )));

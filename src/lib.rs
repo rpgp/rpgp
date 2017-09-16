@@ -8,9 +8,10 @@ extern crate byteorder;
 extern crate enum_primitive;
 
 pub mod pgp;
+pub mod util;
 
 mod types;
 mod header;
 mod email;
 mod packet;
-mod util;
+mod armor;
