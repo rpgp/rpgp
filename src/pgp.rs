@@ -9,13 +9,7 @@ use crc24;
 use base64;
 use byteorder::{ByteOrder, BigEndian};
 use enum_primitive::FromPrimitive;
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Packet {
-    pub version: u8,
-    pub tag: u8,
-    pub body: Vec<u8>,
-}
+use packet::{Packet, packet_parser};
 
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -170,21 +164,6 @@ named!(armor_header<(ArmorBlockType, HashMap<&str, &str>)>, do_parse!(
     ((typ, headers))
 ));
 
-#[inline]
-fn u8_as_usize(a: u8) -> usize {
-    a as usize
-}
-
-#[inline]
-fn u16_as_usize(a: u16) -> usize {
-    a as usize
-}
-
-#[inline]
-fn u32_as_usize(a: u32) -> usize {
-    a as usize
-}
-
 named!(rsa_fields<(&[u8], &[u8])>, do_parse!(
     n: mpi >>
     e: mpi >>
@@ -239,60 +218,6 @@ named_args!(
     _ => value!(None)
 ));
 
-named!(old_packet_header((&[u8], usize)) -> (u8, u8, usize), do_parse!(
-    // Version
-         tag_bits!(u8, 1, 0) >>
-    // Packet Tag
-    tag: take_bits!(u8, 4)   >>
-    // Packet Length Type
-    len: switch!(
-        take_bits!(u8, 2),
-        0 => map!(take_bits!(u8, 8), u8_as_usize)    |
-        1 => map!(take_bits!(u16, 16), u16_as_usize) |
-        2 => map!(take_bits!(u32, 32), u32_as_usize)
-        // TODO: indefinite length
-        // 3 => ?
-    ) >> 
-    ((0, tag, len))
-));
-
-named!(new_packet_header((&[u8], usize)) -> (u8, u8, usize), do_parse!(
-    // Version 
-          tag_bits!(u8, 1, 1) >>
-    // Packet Tag
-    tag:  take_bits!(u8, 6)   >>
-    olen: take_bits!(u8, 8)   >>
-    len:  switch!(
-          value!(olen),
-        0...191  => value!(olen as usize) |
-        192...223 => map!(
-            take_bits!(u8, 8),
-            |a| ((olen as usize - 192) << 8) + 192 + a as usize                     ) |
-        255 => map!(
-            take_bits!(u16, 32),
-            u16_as_usize
-        )
-        // TODO: partial body length
-        // 224...254 => ?
-    ) >>
-    ((1, tag, len))
-));
-
-/// Parse Packet Headers
-/// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
-named!(packet_parser<Packet>, bits!(do_parse!(
-    // Packet Header - First octet
-          tag_bits!(u8, 1, 1) >>
-    top:  alt_complete!(new_packet_header | old_packet_header) >>
-    body: bytes!(take!(top.2)) >>
-    ({
-        Packet {
-            version: top.0,
-            tag: top.1,
-            body: body.to_vec(),
-        }
-    })
-)));
 
 
 named!(armor_block<(ArmorBlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
@@ -350,6 +275,7 @@ pub fn parse<'a>(msg: &'a [u8]) -> IResult<&[u8], ArmorBlock<'a>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use packet;
 
     #[test]
     fn test_armor_header_line() {
@@ -386,6 +312,8 @@ mod tests {
         if let IResult::Done(_, block) = res {
             assert_eq!(block.typ, ArmorBlockType::PublicKey);
             assert_eq!(block.packets.len(), 9);
+            assert_eq!(block.packets[0].version, packet::Version::Old);
+            assert_eq!(block.packets[0].tag, packet::Tag::PublicKey);
         } else {
             panic!("failed to parse: {:?}", res);
         }
