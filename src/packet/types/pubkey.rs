@@ -1,33 +1,9 @@
 use nom::IResult;
 use enum_primitive::FromPrimitive;
 
-use super::{Key, PrimaryKey};
+use super::{Key, PrimaryKey, PublicKeyAlgorithm, KeyVersion};
 use packet::{Tag, Packet};
 use util::mpi;
-
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum PublicKeyAlgorithm {
-    /// RSA (Encrypt and Sign) [HAC]
-    RSA = 1,
-    /// DEPRECATED: RSA (Encrypt-Only) [HAC]
-    RSAEncrypt = 2,
-    /// DEPRECATED: RSA (Sign-Only) [HAC]
-    RSASign = 3,
-    /// Elgamal (Encrypt-Only) [ELGAMAL] [HAC]
-    ELSign = 16,
-    /// DSA (Digital Signature Algorithm) [FIPS186] [HAC]
-    DSA = 17,
-    /// RESERVED: Elliptic Curve
-    EC = 18,
-    /// RESERVED: ECDSA
-    ECDSA = 19,
-    /// DEPRECATED: Elgamal (Encrypt and Sign)
-    EL = 20,
-    /// Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)
-    DiffieHellman = 21,
-}
-}
 
 named!(rsa_fields<(&[u8], &[u8])>, do_parse!(
     n: mpi >>
@@ -35,38 +11,43 @@ named!(rsa_fields<(&[u8], &[u8])>, do_parse!(
     ((n, e))
 ));
 
+named!(new_public_key_parser((&[u8], usize)) -> (u32, u16, PublicKeyAlgorithm, (&[u8], &[u8])), do_parse!(
+       key_time: take_bits!(u32, 32)
+    >>      alg: map_opt!(
+                     take_bits!(u8, 8),
+                     PublicKeyAlgorithm::from_u8
+                 ) 
+    >>   fields: bytes!(switch!(value!(&alg), 
+                   &PublicKeyAlgorithm::RSA => call!(rsa_fields) |
+                   &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields) |
+                   &PublicKeyAlgorithm::RSASign => call!(rsa_fields) 
+                 ))
+    >> ((key_time, 0, alg, fields))
+));
+
+named!(old_public_key_parser((&[u8], usize)) -> (u32, u16, PublicKeyAlgorithm, (&[u8], &[u8])), do_parse!(
+       key_time: take_bits!(u32, 32)
+    >>      exp: take_bits!(u16, 16) 
+    >>      alg: map_opt!(
+                     take_bits!(u8, 8),
+                     PublicKeyAlgorithm::from_u8
+                 )
+    >> ((key_time, exp, alg, (&b""[..], &b""[..])))
+));
+
 named!(public_key_parser<PrimaryKey>, bits!(do_parse!(
-          key_ver: take_bits!(u8, 8)
-    >>    details: switch!(value!(key_ver), 
-              2...3 => do_parse!(
-                      key_time: take_bits!(u32, 32)
-                  >>      exp: take_bits!(u16, 16) 
-                  >>      alg: map_opt!(
-                              take_bits!(u8, 8),
-                              PublicKeyAlgorithm::from_u8
-                          )
-                  >> ((key_time, exp, alg, (&b""[..], &b""[..])))
-              ) |
-              4     => do_parse!(
-                     key_time: take_bits!(u32, 32)
-                  >>      alg: map_opt!(
-                           take_bits!(u8, 8),
-                           PublicKeyAlgorithm::from_u8
-                       ) 
-                  >>   fields: bytes!(switch!(value!(&alg), 
-                  &PublicKeyAlgorithm::RSA => call!(rsa_fields) |
-                  &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields) |
-                  &PublicKeyAlgorithm::RSASign => call!(rsa_fields) 
-                )) 
-        >> ({
-            let (n, e) = fields;
-            let bits = n.len() * 8;
-            println!("fields: {} {}", bits, e.len());
-            
-            (key_time, 0, alg, fields)
-        })
-    )) 
+          key_ver: map_opt!(
+                       take_bits!(u8, 8), 
+                       KeyVersion::from_u8
+                   )
+    >>    details: switch!(value!(&key_ver), 
+                       &KeyVersion::V2 => call!(old_public_key_parser) |
+                       &KeyVersion::V3 => call!(old_public_key_parser) |
+                       &KeyVersion::V4 => call!(new_public_key_parser)
+                   ) 
     >> (PrimaryKey::PublicKey{
+        algorithm: details.2,
+        version: key_ver,
         n: (details.3).0.to_vec(),
         e: (details.3).1.to_vec(),
     })
@@ -81,6 +62,7 @@ fn take_sigs<'a>(packets: &'a Vec<Packet>, mut ctr: usize) -> Vec<&'a Packet> {
 
     res
 }
+
 
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1

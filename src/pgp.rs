@@ -28,14 +28,24 @@ pub fn parse_key(input: &[u8]) -> IResult<&[u8], Key> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use packet::types::PrimaryKey;
+    use packet::types::{PrimaryKey, KeyVersion, PublicKeyAlgorithm};
 
     #[test]
     fn test_parse() {
         let raw = include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc");
         let (_, key) = parse_key(raw).unwrap();
+
+        // assert_eq!(key.primary_key.fingerprint(), "56c65c513a0d1b9cff532d784c073ae0c8445c0c");
+
         match key.primary_key {
-            PrimaryKey::PublicKey { e, n } => {
+            PrimaryKey::PublicKey {
+                version,
+                algorithm,
+                e,
+                n,
+            } => {
+                assert_eq!(version, KeyVersion::V4);
+                assert_eq!(algorithm, PublicKeyAlgorithm::RSA);
                 assert_eq!(n.len(), 512);
                 assert_eq!(e, vec![1, 0, 1]);
             }
