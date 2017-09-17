@@ -28,7 +28,7 @@ pub fn parse_key(input: &[u8]) -> IResult<&[u8], Key> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use packet::types::{PublicKey, PrimaryKey, KeyVersion, PublicKeyAlgorithm};
+    use packet::types::{User, PublicKey, PrimaryKey, KeyVersion, PublicKeyAlgorithm};
 
     #[test]
     fn test_parse() {
@@ -51,5 +51,9 @@ mod tests {
             }
             _ => panic!("wrong key returned: {:?}", key.primary_key),
         }
+
+        assert_eq!(key.users, vec![
+            User::new("john doe (test) <johndoe@example.com>", vec![]),
+            User::new("john doe <johndoe@seconddomain.com>", vec![])]);
     }
 }

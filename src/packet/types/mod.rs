@@ -3,6 +3,21 @@ use armor;
 
 mod pubkey;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct User {
+    pub id: String,
+    pub signatures: Vec<Vec<u8>>,
+}
+
+impl User {
+    pub fn new<S: Into<String>>(id: S, signatures: Vec<Vec<u8>>) -> Self {
+        User {
+            id: id.into(),
+            signatures: signatures,
+        }
+    }
+}
+
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum KeyVersion {
@@ -99,7 +114,7 @@ pub struct Key {
     pub primary_key: PrimaryKey,
     // pub revocation_signature:
     // pub direct_signatures: Vec<>
-    // pub users: Vec<>
+    pub users: Vec<User>,
     // pub subkeys: Vec<>
 }
 

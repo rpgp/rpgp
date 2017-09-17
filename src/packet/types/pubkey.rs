@@ -1,7 +1,8 @@
 use nom::IResult;
 use enum_primitive::FromPrimitive;
+use std::str;
 
-use super::{Key, PrimaryKey, PublicKeyAlgorithm, KeyVersion};
+use super::{Key, PrimaryKey, PublicKeyAlgorithm, KeyVersion, User};
 use packet::{Tag, Packet};
 use util::mpi;
 
@@ -35,6 +36,8 @@ named!(old_public_key_parser((&[u8], usize)) -> (u32, u16, PublicKeyAlgorithm, (
     >> ((key_time, exp, alg, (&b""[..], &b""[..])))
 ));
 
+/// Parse a public key packet (Tag 6)
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
 named!(public_key_parser<PrimaryKey>, bits!(do_parse!(
           key_ver: map_opt!(
                        take_bits!(u8, 8), 
@@ -52,6 +55,12 @@ named!(public_key_parser<PrimaryKey>, bits!(do_parse!(
         (details.3).1.to_vec()
     ))
 )));
+
+/// Parse a user id packet (Tag 13)
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.11
+fn user_id_parser<'a>(raw: &'a [u8]) -> Result<&'a str, str::Utf8Error> {
+    str::from_utf8(raw)
+}
 
 fn take_sigs<'a>(packets: &'a Vec<Packet>, mut ctr: usize) -> Vec<&'a Packet> {
     let mut res = vec![];
@@ -83,20 +92,22 @@ pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Key> {
     // -- Zero or more User Attribute packets
     // -- Zero or more Subkey packets
 
-    let mut user_ids = vec![];
+    let mut users = vec![];
     let mut user_attrs = vec![];
 
     while ctr < packets_len {
         match packets[ctr].tag {
             Tag::UserID => {
-                let id = &packets[ctr];
+                // TODO: better erorr handling
+                let id = user_id_parser(packets[ctr].body.as_slice()).expect("invalid user id");
                 ctr += 1;
 
                 // --- zero or more signature packets
                 let sigs = take_sigs(&packets, ctr);
                 ctr += sigs.len();
 
-                user_ids.push((id, sigs));
+                // TODO: parse signatures and pass them along
+                users.push(User::new(id.to_string(), vec![]));
             }
             Tag::UserAttribute => {
                 let attr = &packets[ctr];
@@ -136,10 +147,16 @@ pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Key> {
     }
 
     // TODO: better error handling
-    assert!(user_ids.len() > 0, "Missing user ids");
+    assert!(users.len() > 0, "Missing user ids");
 
     // TODO: better error handling
     assert_eq!(ctr, packets_len);
 
-    IResult::Done(&b""[..], Key { primary_key: primary_key })
+    IResult::Done(
+        &b""[..],
+        Key {
+            primary_key: primary_key,
+            users: users,
+        },
+    )
 }
