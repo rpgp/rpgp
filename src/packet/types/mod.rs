@@ -37,17 +37,61 @@ pub enum PublicKeyAlgorithm {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum PrimaryKey {
-    PublicKey {
+pub enum PublicKey {
+    RSAPublicKey {
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         n: Vec<u8>,
         e: Vec<u8>,
     },
-    SecretKey {
+}
+
+impl PublicKey {
+    /// Create a new RSA key.
+    pub fn new_rsa(ver: KeyVersion, alg: PublicKeyAlgorithm, n: Vec<u8>, e: Vec<u8>) -> Self {
+        PublicKey::RSAPublicKey {
+            version: ver,
+            algorithm: alg,
+            n: n,
+            e: e,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum SecretKey {
+    RSASecretKey {
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
     },
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum PrimaryKey {
+    PublicKey(PublicKey),
+    SecretKey(SecretKey),
+}
+
+impl PrimaryKey {
+    /// Wrap a `PublicKey` as `PrimaryKey`.
+    pub fn from_public_key(pk: PublicKey) -> Self {
+        PrimaryKey::PublicKey(pk)
+    }
+
+    /// Wrap a `SecretKey` as `PrimaryKey`.
+    pub fn from_secret_key(sk: SecretKey) -> Self {
+        PrimaryKey::SecretKey(sk)
+    }
+
+    /// Create a new RSA public key.
+    pub fn new_public_rsa(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        n: Vec<u8>,
+        e: Vec<u8>,
+    ) -> Self {
+        Self::from_public_key(PublicKey::new_rsa(ver, alg, n, e))
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

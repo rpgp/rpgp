@@ -45,12 +45,12 @@ named!(public_key_parser<PrimaryKey>, bits!(do_parse!(
                        &KeyVersion::V3 => call!(old_public_key_parser) |
                        &KeyVersion::V4 => call!(new_public_key_parser)
                    ) 
-    >> (PrimaryKey::PublicKey{
-        algorithm: details.2,
-        version: key_ver,
-        n: (details.3).0.to_vec(),
-        e: (details.3).1.to_vec(),
-    })
+    >> (PrimaryKey::new_public_rsa(
+        key_ver,            
+        details.2,
+        (details.3).0.to_vec(),
+        (details.3).1.to_vec()
+    ))
 )));
 
 fn take_sigs<'a>(packets: &'a Vec<Packet>, mut ctr: usize) -> Vec<&'a Packet> {

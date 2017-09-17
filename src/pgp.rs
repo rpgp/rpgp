@@ -28,7 +28,7 @@ pub fn parse_key(input: &[u8]) -> IResult<&[u8], Key> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use packet::types::{PrimaryKey, KeyVersion, PublicKeyAlgorithm};
+    use packet::types::{PublicKey, PrimaryKey, KeyVersion, PublicKeyAlgorithm};
 
     #[test]
     fn test_parse() {
@@ -38,12 +38,12 @@ mod tests {
         // assert_eq!(key.primary_key.fingerprint(), "56c65c513a0d1b9cff532d784c073ae0c8445c0c");
 
         match key.primary_key {
-            PrimaryKey::PublicKey {
-                version,
-                algorithm,
-                e,
-                n,
-            } => {
+            PrimaryKey::PublicKey(PublicKey::RSAPublicKey {
+                                      version,
+                                      algorithm,
+                                      e,
+                                      n,
+                                  }) => {
                 assert_eq!(version, KeyVersion::V4);
                 assert_eq!(algorithm, PublicKeyAlgorithm::RSA);
                 assert_eq!(n.len(), 512);
