@@ -28,7 +28,8 @@ pub fn parse_key(input: &[u8]) -> IResult<&[u8], Key> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use packet::types::{User, PublicKey, PrimaryKey, KeyVersion, PublicKeyAlgorithm};
+    use packet::types::{Signature, SignatureVersion, SignatureType, User, PublicKey, PrimaryKey,
+                        KeyVersion, PublicKeyAlgorithm, HashAlgorithm};
 
     #[test]
     fn test_parse() {
@@ -53,7 +54,7 @@ mod tests {
         }
 
         assert_eq!(key.users, vec![
-            User::new("john doe (test) <johndoe@example.com>", vec![]),
-            User::new("john doe <johndoe@seconddomain.com>", vec![])]);
+            User::new("john doe (test) <johndoe@example.com>", vec![Signature::new(SignatureVersion::V4, SignatureType::CertPositive, PublicKeyAlgorithm::RSA, HashAlgorithm::SHA1)]),
+            User::new("john doe <johndoe@seconddomain.com>", vec![Signature::new(SignatureVersion::V4, SignatureType::CertPositive, PublicKeyAlgorithm::RSA, HashAlgorithm::SHA1)])]);
     }
 }
