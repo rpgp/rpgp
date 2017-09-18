@@ -1,4 +1,4 @@
-use nom::{self, IResult, AsChar, is_alphanumeric};
+use nom::{self, IResult, AsChar, is_alphanumeric, be_u8, be_u16};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::convert::AsMut;
 
@@ -89,3 +89,18 @@ where
     <A as AsMut<[T]>>::as_mut(&mut a).clone_from_slice(slice);
     a
 }
+
+named!(pub packet_length<usize>, do_parse!(
+       olen: be_u8
+    >>  len: switch!(value!(olen),
+    // One-Octet Lengths
+    0...191   => value!(olen as usize) |
+    // Two-Octet Lengths
+    192...223 => map!(be_u8, |a| {
+       ((olen as usize - 192) << 8) + 192 + a as usize
+    }) |
+    // Five-Octet Lengths
+    255       => map!(be_u16, u16_as_usize)
+    )
+    >> (len)
+));

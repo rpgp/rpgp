@@ -4,7 +4,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 
 use packet::types::{Signature, SignatureVersion, SignatureType, PublicKeyAlgorithm, HashAlgorithm,
                     Subpacket, SubpacketType, SymmetricKeyAlgorithm, CompressionAlgorithm};
-use util::{u16_as_usize, clone_into_array};
+use util::{clone_into_array, packet_length};
 
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -121,20 +121,10 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
 
 named!(subpackets<Vec<Subpacket>>, many0!(do_parse!(
     // the subpacket length (1, 2, or 5 octets)
-       olen: be_u8
-    >>  len: switch!(value!(olen),
-        // One-Octet Lengths
-            0...191   => value!(olen as usize) |
-        // Two-Octet Lengths
-            192...223 => map!(be_u8, |a| {
-                ((olen as usize - 192) << 8) + 192 + a as usize
-            }) |
-        // Five-Octet Lengths
-            255       => map!(be_u16, u16_as_usize)
-        )
+       len: packet_length
     // the subpacket type (1 octet)
-    >>  typ: map_opt!(be_u8, SubpacketType::from_u8)
-    >>    p: flat_map!(take!(len - 1), |b| subpacket(typ, b))
+    >> typ: map_opt!(be_u8, SubpacketType::from_u8)
+    >>   p: flat_map!(take!(len - 1), |b| subpacket(typ, b))
     >> (p)
 )));
 

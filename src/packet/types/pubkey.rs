@@ -1,7 +1,7 @@
 use nom::IResult;
 use std::str;
 
-use packet::types::{Key, User, Signature};
+use packet::types::{Key, User, Signature, UserAttribute};
 use packet::{Tag, Packet, tags};
 
 fn take_sigs<'a>(packets: &'a Vec<Packet>, mut ctr: usize) -> Vec<Signature> {
@@ -51,18 +51,18 @@ pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Key> {
                 let sigs = take_sigs(&packets, ctr);
                 ctr += sigs.len();
 
-                // TODO: parse signatures and pass them along
                 users.push(User::new(id.to_string(), sigs));
             }
             Tag::UserAttribute => {
-                let attr = &packets[ctr];
+                // TODO: better error handling
+                let (_, attr) = tags::userattr::parser(packets[ctr].body.as_slice()).unwrap();
                 ctr += 1;
 
                 // --- zero or more signature packets
                 let sigs = take_sigs(&packets, ctr);
                 ctr += sigs.len();
 
-                user_attrs.push((attr, sigs));
+                user_attrs.push(UserAttribute::new(attr, sigs));
             }
             _ => break,
         }
@@ -103,6 +103,7 @@ pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Key> {
         Key {
             primary_key: primary_key,
             users: users,
+            user_attributes: user_attrs,
         },
     )
 }

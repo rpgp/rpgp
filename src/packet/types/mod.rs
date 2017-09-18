@@ -4,6 +4,35 @@ use chrono::{DateTime, Utc};
 
 mod pubkey;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+/// Available user attribute types
+pub enum UserAttributeType {
+    Image(Vec<u8>),
+}
+
+impl UserAttributeType {
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            &UserAttributeType::Image(_) => 1,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct UserAttribute {
+    pub attr: UserAttributeType,
+    pub signatures: Vec<Signature>,
+}
+
+impl UserAttribute {
+    pub fn new(attr: UserAttributeType, sigs: Vec<Signature>) -> Self {
+        UserAttribute {
+            attr: attr,
+            signatures: sigs,
+        }
+    }
+}
+
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Available symmetric key algorithms.
@@ -358,6 +387,7 @@ pub struct Key {
     // pub revocation_signature:
     // pub direct_signatures: Vec<>
     pub users: Vec<User>,
+    pub user_attributes: Vec<UserAttribute>,
     // pub subkeys: Vec<>
 }
 
