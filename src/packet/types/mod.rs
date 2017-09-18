@@ -1,7 +1,87 @@
 use nom::IResult;
 use armor;
+use chrono::{DateTime, Utc};
 
 mod pubkey;
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
+/// Available symmetric key algorithms.
+pub enum SymmetricKeyAlgorithm {
+    /// Plaintext or unencrypted data
+    Plaintext = 0,
+    IDEA = 1,
+    /// TripleDES (DES-EDE, 168 bit key derived from 192)
+    TripleDES = 2,
+    /// CAST5 (128 bit key, as per [RFC2144])
+    CAST5 = 3,
+    /// Blowfish (128 bit key, 16 rounds)
+    Blowfish = 4,
+    AES128 = 7,
+    AES192 = 8,
+    AES256 = 9,
+    /// Twofish with 256-bit key [TWOFISH]
+    Twofish = 10,
+}
+}
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
+/// Available signature subpacket types
+pub enum SubpacketType {
+    SignatureCreationTime = 2,
+    SignatureExpirationTime = 3,
+    ExportableCertification = 4,
+    TrustSignature = 5,
+    RegularExpression = 6,
+    Revocable = 7,
+    Reserved = 8,
+    KeyExpirationTime = 9,
+    PreferredSymmetricAlgorithms = 11,
+    RevocationKey = 12,
+    Issuer = 16,
+    NotationData = 20,
+    PreferredHashAlgorithms = 21,
+    PreferredCompressionAlgorithms = 22,
+    KeyServerPreferences = 23,
+    PreferredKeyServer = 24,
+    PrimaryUserID = 25,
+    PolicyURI = 26,
+    KeyFlags = 27,
+    SignerUserID = 28,
+    RevocationReason = 29,
+    Features = 30,
+    SignatureTarget = 31,
+    EmbeddedSignature = 32,
+}    
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Subpacket {
+    /// The time the signature was made.
+    SignatureCreationTime(DateTime<Utc>),
+    Issuer([u8; 8]),
+    /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
+    PreferredSymmetricAlgorithms(Vec<SymmetricKeyAlgorithm>),
+    /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
+    PreferredHashAlgorithms(Vec<HashAlgorithm>),
+    /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
+    PreferredCompressionAlgorithms(Vec<CompressionAlgorithm>),
+    KeyServerPreferences(Vec<u8>),
+    KeyFlags(Vec<u8>),
+    Features(Vec<u8>),
+}
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
+/// Available compression algorithms.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.3
+pub enum CompressionAlgorithm {
+    Uncompressed = 0,
+    ZIP = 1,
+    ZLIB = 2,
+    BZip2 = 3,
+}
+}
 
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -130,6 +210,15 @@ pub struct Signature {
     pub typ: SignatureType,
     pub pub_alg: PublicKeyAlgorithm,
     pub hash_alg: HashAlgorithm,
+    pub unhashed_subpackets: Vec<Subpacket>,
+    pub created: Option<DateTime<Utc>>,
+    pub issuer: Option<[u8; 8]>,
+    pub preferred_symmetric_algs: Vec<SymmetricKeyAlgorithm>,
+    pub preferred_hash_algs: Vec<HashAlgorithm>,
+    pub preferred_compression_algs: Vec<CompressionAlgorithm>,
+    pub key_server_prefs: Vec<u8>,
+    pub key_flags: Vec<u8>,
+    pub features: Vec<u8>,
 }
 
 impl Signature {
@@ -144,6 +233,15 @@ impl Signature {
             typ: typ,
             pub_alg: pub_alg,
             hash_alg: hash_alg,
+            unhashed_subpackets: Vec::new(),
+            created: None,
+            issuer: None,
+            preferred_symmetric_algs: Vec::new(),
+            preferred_hash_algs: Vec::new(),
+            preferred_compression_algs: Vec::new(),
+            key_server_prefs: vec![0],
+            key_flags: vec![0],
+            features: vec![0],
         }
     }
 }

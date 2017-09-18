@@ -1,5 +1,6 @@
 use nom::{self, IResult, AsChar, is_alphanumeric};
 use std::ops::{Range, RangeFrom, RangeTo};
+use std::convert::AsMut;
 
 #[inline]
 pub fn u8_as_usize(a: u8) -> usize {
@@ -77,3 +78,14 @@ named!(mpi_parse<&[u8]>, do_parse!(
     >> val: take!((len + 7) >> 3)
     >> (val)
 ));
+
+/// Convert a slice into an array
+pub fn clone_into_array<A, T>(slice: &[T]) -> A
+where
+    A: Sized + Default + AsMut<[T]>,
+    T: Clone,
+{
+    let mut a = Default::default();
+    <A as AsMut<[T]>>::as_mut(&mut a).clone_from_slice(slice);
+    a
+}

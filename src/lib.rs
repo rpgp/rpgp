@@ -6,6 +6,7 @@ extern crate base64;
 extern crate byteorder;
 #[macro_use]
 extern crate enum_primitive;
+extern crate chrono;
 
 pub mod pgp;
 pub mod util;

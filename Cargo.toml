@@ -11,6 +11,7 @@ crc24 = "^0.1.6"
 base64 = "^0.6.0"
 byteorder = "^1.1.0"
 enum_primitive = "^0.1.1"
+chrono = "^0.4.0"
 
 [dependencies.nom]
 version = "^3.2"
