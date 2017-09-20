@@ -20,13 +20,19 @@ fn take_sigs<'a>(packets: &'a Vec<Packet>, mut ctr: usize) -> Vec<Signature> {
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
 pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Key> {
+    println!("parsing packets {}", packets.len());
     let packets_len = packets.len();
     let mut ctr = 0;
 
     // -- One Public-Key packet
     // TODO: better error management
     assert_eq!(packets[ctr].tag, Tag::PublicKey);
-    let (_, primary_key) = tags::pubkey::parser(packets[ctr].body.as_slice()).unwrap();
+    let res = tags::pubkey::parser(packets[ctr].body.as_slice());
+    if !res.is_done() {
+        println!("failed to parse pubkey {:?}", &res);
+    }
+    let (_, primary_key) = res.unwrap();
+
     ctr += 1;
 
     // -- Zero or more revocation signatures

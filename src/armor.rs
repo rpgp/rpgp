@@ -5,9 +5,8 @@ use byteorder::{ByteOrder, BigEndian};
 use std::collections::HashMap;
 use std::str;
 
-use header::collect_into_string;
 use packet::Packet;
-use util::base64_token;
+use util::{base64_token, collect_into_string};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Block<'a> {
@@ -112,21 +111,22 @@ fn read_checksum(input: &[u8]) -> u32 {
 named!(pub parse<(BlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
          head: armor_header
     >>         many0!(line_ending)
-    >>  inner: map!(separated_list_complete!(
+    >>   inner: map!(separated_list_complete!(
                    line_ending, base64_token
                ), collect_into_string) 
+    >>    pad: map!(many0!(tag!("=")), collect_into_string)
     >>         opt!(line_ending)
     >>  check: preceded!(tag!("="), take!(4))
     >>         many1!(line_ending)
     >> footer: armor_footer_line
     >> ({
         let (typ, headers) = head;
-        
+
         // TODO: proper error handling
         assert_eq!(typ, footer, "Non matching armor wrappers");
 
         // TODO: proper error handling
-        let decoded = base64::decode_config(&inner, base64::MIME).expect("Invalid base64 encoding");
+        let decoded = base64::decode_config(&(inner + &pad), base64::MIME).expect("Invalid base64 encoding");
         
         let check_new = crc24::hash_raw(decoded.as_slice());
         let check_dec = read_checksum(check);

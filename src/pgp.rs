@@ -34,6 +34,26 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     #[test]
+    fn test_parse_all() {
+        println!("001");
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-001.asc"),
+        ).unwrap();
+        println!("002");
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-002.asc"),
+        ).unwrap();
+        println!("003");
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc"),
+        ).unwrap();
+        println!("004");
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-004.asc"),
+        ).unwrap();
+    }
+
+    #[test]
     fn test_parse() {
         let raw = include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc");
         let (_, key) = parse_key(raw).unwrap();
@@ -136,7 +156,6 @@ mod tests {
             &UserAttributeType::Image(ref v) => {
                 assert_eq!(v.len(), 1156);
             }
-            _ => panic!("invalid type {:?}", ua),
         }
 
         let mut sig3 = Signature::new(

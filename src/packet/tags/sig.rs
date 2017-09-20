@@ -1,9 +1,11 @@
 use enum_primitive::FromPrimitive;
-use nom::{be_u8, be_u16, be_u32, IResult};
+use nom::{be_u8, be_u16, be_u32, rest, IResult};
 use chrono::{DateTime, NaiveDateTime, Utc};
+use std::str;
 
 use packet::types::{Signature, SignatureVersion, SignatureType, PublicKeyAlgorithm, HashAlgorithm,
-                    Subpacket, SubpacketType, SymmetricKeyAlgorithm, CompressionAlgorithm};
+                    Subpacket, SubpacketType, SymmetricKeyAlgorithm, CompressionAlgorithm,
+                    RevocationCode};
 use util::{clone_into_array, packet_length};
 
 enum_from_primitive!{
@@ -104,6 +106,12 @@ fn features(body: &[u8]) -> IResult<&[u8], Subpacket> {
     IResult::Done(&b""[..], Subpacket::Features(body.to_vec()))
 }
 
+named!(rev_reason<Subpacket>, do_parse!(
+         code: map_opt!(be_u8, RevocationCode::from_u8)
+    >> reason: rest
+    >> (Subpacket::RevocationReason(code, reason.to_vec()))
+));
+
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
     match typ {
@@ -115,6 +123,7 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
         KeyServerPreferences => key_server_prefs(body),
         KeyFlags => key_flags(body),
         Features => features(body),
+        RevocationReason => rev_reason(body),
         _ => unimplemented!("{:?}", typ),
     }
 }
@@ -176,15 +185,18 @@ named!(v4_parser<Signature>, do_parse!(
        for p in hsub {
            use self::Subpacket::*;
            match p {
-               SignatureCreationTime(d) => sig.created = Some(d),
-               Issuer(a) => sig.issuer = Some(a),               
-               PreferredSymmetricAlgorithms(list) => sig.preferred_symmetric_algs = list,
-               PreferredHashAlgorithms(list) => sig.preferred_hash_algs = list,
+               SignatureCreationTime(d)             => sig.created = Some(d),
+               Issuer(a)                            => sig.issuer = Some(a),               
+               PreferredSymmetricAlgorithms(list)   => sig.preferred_symmetric_algs = list,
+               PreferredHashAlgorithms(list)        => sig.preferred_hash_algs = list,
                PreferredCompressionAlgorithms(list) => sig.preferred_compression_algs = list,
-               KeyServerPreferences(f) => sig.key_server_prefs = f,
-               KeyFlags(f) => sig.key_flags = f,
-               Features(f) => sig.features = f,
-               _ => unimplemented!()
+               KeyServerPreferences(f)              => sig.key_server_prefs = f,
+               KeyFlags(f)                          => sig.key_flags = f,
+               Features(f)                          => sig.features = f,
+               RevocationReason(code, body)         => {
+                   sig.revocation_reason_code = Some(code);
+                   sig.revocation_reason_string = Some(str::from_utf8(body.as_slice()).unwrap().to_string());
+               }
            }
        }
        

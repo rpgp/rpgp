@@ -3,6 +3,8 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
 use types::ParseResult;
 
+use util::collect_into_string;
+
 #[inline]
 fn is_name_token(chr: u8) -> bool {
     (chr > 32 && chr < 58) || (chr > 58 && chr < 127)
@@ -11,14 +13,6 @@ fn is_name_token(chr: u8) -> bool {
 #[inline]
 fn is_body_token(chr: char) -> bool {
     chr != '\r' && chr != '\n' && chr != ' ' && chr != '\t' && (chr as u8) < 128
-}
-
-#[inline]
-pub fn collect_into_string(vec: Vec<&[u8]>) -> String {
-    vec.iter()
-        .map(|s| str::from_utf8(s).unwrap())
-        .collect::<Vec<&str>>()
-        .join("")
 }
 
 /// Recognizes one or more body tokens

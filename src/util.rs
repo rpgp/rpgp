@@ -1,6 +1,7 @@
 use nom::{self, IResult, AsChar, is_alphanumeric, be_u8, be_u16};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::convert::AsMut;
+use std::str;
 
 #[inline]
 pub fn u8_as_usize(a: u8) -> usize {
@@ -21,6 +22,13 @@ pub fn u32_as_usize(a: u32) -> usize {
 #[inline]
 pub fn is_base64_token(c: char) -> bool {
     is_alphanumeric(c as u8) || c == '/' || c == '+'
+}
+
+pub fn collect_into_string(vec: Vec<&[u8]>) -> String {
+    vec.iter()
+        .map(|s| str::from_utf8(s).unwrap())
+        .collect::<Vec<&str>>()
+        .join("")
 }
 
 /// Recognizes one or more body tokens

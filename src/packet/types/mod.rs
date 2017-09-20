@@ -35,6 +35,23 @@ impl UserAttribute {
 
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
+/// Codes for revocation reasons
+pub enum RevocationCode {
+    /// No reason specified (key revocations or cert revocations)
+    NoReason = 0,
+    /// Key is superseded (key revocations)
+    KeySuperseded = 1,
+    /// Key material has been compromised (key revocations)
+    KeyCompromised = 2,
+    /// Key is retired and no longer used (key revocations)
+    KeyRetired = 3,
+    /// User ID information is no longer valid (cert revocations)
+    CertUserIdInvalid = 32,
+}
+}
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
 /// Available symmetric key algorithms.
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
@@ -98,6 +115,7 @@ pub enum Subpacket {
     KeyServerPreferences(Vec<u8>),
     KeyFlags(Vec<u8>),
     Features(Vec<u8>),
+    RevocationReason(RevocationCode, Vec<u8>),
 }
 
 enum_from_primitive!{
@@ -248,6 +266,8 @@ pub struct Signature {
     pub key_server_prefs: Vec<u8>,
     pub key_flags: Vec<u8>,
     pub features: Vec<u8>,
+    pub revocation_reason_code: Option<RevocationCode>,
+    pub revocation_reason_string: Option<String>,
 }
 
 impl Signature {
@@ -271,6 +291,8 @@ impl Signature {
             key_server_prefs: vec![0],
             key_flags: vec![0],
             features: vec![0],
+            revocation_reason_code: None,
+            revocation_reason_string: None,
         }
     }
 }
@@ -331,6 +353,14 @@ pub enum PublicKey {
         n: Vec<u8>,
         e: Vec<u8>,
     },
+    DSAPublicKey {
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        p: Vec<u8>,
+        q: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
+    },
 }
 
 impl PublicKey {
@@ -341,6 +371,25 @@ impl PublicKey {
             algorithm: alg,
             n: n,
             e: e,
+        }
+    }
+
+    /// Create a new DSA key.
+    pub fn new_dsa(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        p: Vec<u8>,
+        q: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
+    ) -> Self {
+        PublicKey::DSAPublicKey {
+            version: ver,
+            algorithm: alg,
+            p: p,
+            q: q,
+            g: g,
+            y: y,
         }
     }
 }
@@ -378,6 +427,18 @@ impl PrimaryKey {
         e: Vec<u8>,
     ) -> Self {
         Self::from_public_key(PublicKey::new_rsa(ver, alg, n, e))
+    }
+
+    /// Create a new DSA public key.
+    pub fn new_public_dsa(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        p: Vec<u8>,
+        q: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
+    ) -> Self {
+        Self::from_public_key(PublicKey::new_dsa(ver, alg, p, q, g, y))
     }
 }
 
