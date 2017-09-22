@@ -72,7 +72,7 @@ named!(old_packet_header((&[u8], usize)) -> (Version, Tag, usize), do_parse!(
     // Version: 0
        ver: map_opt!(tag_bits!(u8, 1, 0), Version::from_u8)
     // Packet Tag
-    >> tag: map_opt!(take_bits!(u8, 4), Tag::from_u8 )
+    >> tag: map_opt!(take_bits!(u8, 4), Tag::from_u8)
     // Packet Length Type
     >> len: switch!(take_bits!(u8, 2),
         // One-Octet Lengths
@@ -89,7 +89,7 @@ named!(old_packet_header((&[u8], usize)) -> (Version, Tag, usize), do_parse!(
 
 /// Parses a new format packet header
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
-named!(new_packet_header((&[u8], usize)) -> (Version, Tag, usize), do_parse!(
+named!(new_packet_header((&[u8], usize)) -> (Version, Tag, usize), dbg!(do_parse!(
     // Version: 1
         ver: map_opt!(tag_bits!(u8, 1, 1), Version::from_u8)
     // Packet Tag
@@ -103,19 +103,16 @@ named!(new_packet_header((&[u8], usize)) -> (Version, Tag, usize), do_parse!(
             ((olen as usize - 192) << 8) + 192 + a as usize
         }) |
         // Five-Octet Lengths
-        255       => map!(
-            take_bits!(u16, 32),
-            u16_as_usize
-        )
+        255       => map!(take_bits!(u32, 32), u32_as_usize)
         // Partial Body Lengths
-        // TODO: 224...254 => ?
+        // TODO: 224...254 => value!(1)
     )
     >> ((ver, tag, len))
-));
+)));
 
 /// Parse Packet Headers
 /// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
-named!(pub packet_parser<Packet>, bits!(do_parse!(
+named!(pub packet_parser<Packet>, dbg_dmp!(bits!(do_parse!(
     // First bit is always 1
              tag_bits!(u8, 1, 1)
     >> head: alt_complete!(new_packet_header | old_packet_header) 
@@ -125,4 +122,4 @@ named!(pub packet_parser<Packet>, bits!(do_parse!(
         tag: head.1,
         body: body.to_vec(),
     })
-)));
+))));

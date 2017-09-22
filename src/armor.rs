@@ -116,23 +116,27 @@ named!(pub parse<(BlockType, HashMap<&str, &str>, Vec<u8>)>, do_parse!(
                ), collect_into_string) 
     >>    pad: map!(many0!(tag!("=")), collect_into_string)
     >>         opt!(line_ending)
-    >>  check: preceded!(tag!("="), take!(4))
+    >>  check: opt!(preceded!(tag!("="), take!(4)))
     >>         many1!(line_ending)
     >> footer: armor_footer_line
     >> ({
         let (typ, headers) = head;
-
+        
+        // println!("{:?}", inner);
+        
         // TODO: proper error handling
         assert_eq!(typ, footer, "Non matching armor wrappers");
 
         // TODO: proper error handling
         let decoded = base64::decode_config(&(inner + &pad), base64::MIME).expect("Invalid base64 encoding");
-        
-        let check_new = crc24::hash_raw(decoded.as_slice());
-        let check_dec = read_checksum(check);
-        
-        // TODO: proper error handling
-        assert_eq!(check_new, check_dec, "Corrupted data, checksum missmatch");
+
+        if let Some(c) = check {
+            let check_new = crc24::hash_raw(decoded.as_slice());
+            let check_dec = read_checksum(c);
+            
+            // TODO: proper error handling
+            assert_eq!(check_new, check_dec, "Corrupted data, checksum missmatch");
+        }
         
         (typ, headers, decoded)
     })

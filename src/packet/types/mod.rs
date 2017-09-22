@@ -4,6 +4,19 @@ use chrono::{DateTime, Utc};
 
 mod pubkey;
 
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+/// Available ECC Curves
+/// Ref: https://tools.ietf.org/html/rfc6637#section-11
+pub enum ECCCurve {
+    /// NIST Curve P-256, oid 0x2A8648CE3D030107
+    P256,
+    /// NIST Curve P-384, oid 0x2B81040022
+    P384,
+    /// NIST Curve P-521, oid 0x2B81040023
+    P521,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Available user attribute types
 pub enum UserAttributeType {
@@ -116,6 +129,7 @@ pub enum Subpacket {
     KeyFlags(Vec<u8>),
     Features(Vec<u8>),
     RevocationReason(RevocationCode, Vec<u8>),
+    IsPrimary(bool),
 }
 
 enum_from_primitive!{
@@ -268,6 +282,7 @@ pub struct Signature {
     pub features: Vec<u8>,
     pub revocation_reason_code: Option<RevocationCode>,
     pub revocation_reason_string: Option<String>,
+    pub is_primary: bool,
 }
 
 impl Signature {
@@ -293,6 +308,7 @@ impl Signature {
             features: vec![0],
             revocation_reason_code: None,
             revocation_reason_string: None,
+            is_primary: false,
         }
     }
 }
@@ -347,13 +363,13 @@ pub enum PublicKeyAlgorithm {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PublicKey {
-    RSAPublicKey {
+    RSA {
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         n: Vec<u8>,
         e: Vec<u8>,
     },
-    DSAPublicKey {
+    DSA {
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         p: Vec<u8>,
@@ -361,12 +377,18 @@ pub enum PublicKey {
         g: Vec<u8>,
         y: Vec<u8>,
     },
+    ECDSA {
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        curve: ECCCurve,
+        p: Vec<u8>,
+    },
 }
 
 impl PublicKey {
     /// Create a new RSA key.
     pub fn new_rsa(ver: KeyVersion, alg: PublicKeyAlgorithm, n: Vec<u8>, e: Vec<u8>) -> Self {
-        PublicKey::RSAPublicKey {
+        PublicKey::RSA {
             version: ver,
             algorithm: alg,
             n: n,
@@ -383,13 +405,28 @@ impl PublicKey {
         g: Vec<u8>,
         y: Vec<u8>,
     ) -> Self {
-        PublicKey::DSAPublicKey {
+        PublicKey::DSA {
             version: ver,
             algorithm: alg,
             p: p,
             q: q,
             g: g,
             y: y,
+        }
+    }
+
+    /// Create a new ECDSA key.
+    pub fn new_ecdsa(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        curve: ECCCurve,
+        p: Vec<u8>,
+    ) -> Self {
+        PublicKey::ECDSA {
+            version: ver,
+            algorithm: alg,
+            curve: curve,
+            p: p,
         }
     }
 }
@@ -439,6 +476,16 @@ impl PrimaryKey {
         y: Vec<u8>,
     ) -> Self {
         Self::from_public_key(PublicKey::new_dsa(ver, alg, p, q, g, y))
+    }
+
+    /// Create a new ECDSA public key.
+    pub fn new_public_ecdsa(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        curve: ECCCurve,
+        p: Vec<u8>,
+    ) -> Self {
+        Self::from_public_key(PublicKey::new_ecdsa(ver, alg, curve, p))
     }
 }
 

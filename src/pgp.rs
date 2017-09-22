@@ -9,7 +9,14 @@ named!(packets_parser<Vec<Packet>>, many1!(packet_parser));
 fn parse_key_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], armor::Block<'a>> {
     armor::parse(input).map(|(typ, headers, body)| {
         // TODO: Proper error handling
-        let (_, packets) = packets_parser(body.as_slice()).unwrap();
+        // println!("start: {:#08b} {:#08b}", body[0], body[1]);
+
+        let res = packets_parser(body.as_slice());
+        if res.is_err() {
+            println!("failed to parse packets: {:?}", res);
+        }
+
+        let (_, packets) = res.unwrap();
         armor::Block {
             typ: typ,
             headers: headers,
@@ -20,7 +27,7 @@ fn parse_key_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], armor::Block<'a>> {
 
 // TODO: change to regular result
 pub fn parse_key(input: &[u8]) -> IResult<&[u8], Key> {
-    let block = parse_key_raw(input).to_result().expect("Invalid input");
+    let (_, block) = parse_key_raw(input).unwrap();
 
     Key::from_block(block)
 }
@@ -34,22 +41,60 @@ mod tests {
     use chrono::{DateTime, Utc};
 
     #[test]
-    fn test_parse_all() {
-        println!("001");
+    fn test_parse_gnupg_v1() {
         parse_key(
             include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-001.asc"),
         ).unwrap();
-        println!("002");
         parse_key(
             include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-002.asc"),
         ).unwrap();
-        println!("003");
         parse_key(
             include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc"),
         ).unwrap();
-        println!("004");
         parse_key(
             include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-004.asc"),
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_parse_e2e() {
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/e2e-001.asc"),
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_parse_openkeychain() {
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/openkeychain-001.asc"),
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_parse_pgp() {
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/pgp-6-5-001.asc"),
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_parse_subkey() {
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/subkey-001.asc"),
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_parse_uid() {
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/uid-001.asc"),
+        ).unwrap();
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/uid-002.asc"),
+        ).unwrap();
+
+        parse_key(
+            include_bytes!("../tests/opengpg-interop/testcases/keys/uid-003.asc"),
         ).unwrap();
     }
 
@@ -61,7 +106,7 @@ mod tests {
         // assert_eq!(key.primary_key.fingerprint(), "56c65c513a0d1b9cff532d784c073ae0c8445c0c");
 
         match key.primary_key {
-            PrimaryKey::PublicKey(PublicKey::RSAPublicKey {
+            PrimaryKey::PublicKey(PublicKey::RSA {
                                       version,
                                       algorithm,
                                       e,

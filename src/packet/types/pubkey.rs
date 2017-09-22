@@ -77,25 +77,17 @@ pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Key> {
     // -- Zero or more Subkey packets
     let mut subkeys = vec![];
     while ctr < packets_len && packets[ctr].tag == Tag::PublicSubkey {
-        // --- one Signature packet,
-        // TODO: better error handling
-        assert_eq!(packets[ctr + 1].tag, Tag::Signature, "Missing signature");
-
+        // TODO: parse subkey
         let subkey = &packets[ctr];
-        let (_, sig) = tags::sig::parser(packets[ctr + 1].body.as_slice()).unwrap();
-        ctr += 2;
+        ctr += 1;
 
-        // --- optionally a revocation
-        let rev = if packets_len > ctr && packets[ctr].tag == Tag::Signature {
-            let (_, sig) = tags::sig::parser(packets[ctr].body.as_slice()).unwrap();
-            ctr += 1;
-            // TODO: assert sig is revocation
-            Some(sig)
-        } else {
-            None
-        };
+        let sigs = take_sigs(&packets, ctr);
+        ctr += sigs.len();
 
-        subkeys.push((subkey, sig, rev));
+        // TODO: better error handling
+        assert!(sigs.len() > 0, "Missing signature");
+
+        subkeys.push((subkey, sigs));
     }
 
     // TODO: better error handling
@@ -110,6 +102,7 @@ pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Key> {
             primary_key: primary_key,
             users: users,
             user_attributes: user_attrs,
+            // TODO: subkeys
         },
     )
 }

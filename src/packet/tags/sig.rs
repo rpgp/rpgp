@@ -112,6 +112,8 @@ named!(rev_reason<Subpacket>, do_parse!(
     >> (Subpacket::RevocationReason(code, reason.to_vec()))
 ));
 
+named!(primary_userid<Subpacket>, map!(be_u8, |a| Subpacket::IsPrimary(a == 1)));
+
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
     match typ {
@@ -124,6 +126,7 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
         KeyFlags => key_flags(body),
         Features => features(body),
         RevocationReason => rev_reason(body),
+        PrimaryUserID => primary_userid(body),
         _ => unimplemented!("{:?}", typ),
     }
 }
@@ -196,7 +199,8 @@ named!(v4_parser<Signature>, do_parse!(
                RevocationReason(code, body)         => {
                    sig.revocation_reason_code = Some(code);
                    sig.revocation_reason_string = Some(str::from_utf8(body.as_slice()).unwrap().to_string());
-               }
+               },
+               IsPrimary(b)                         => sig.is_primary = b,
            }
        }
        
