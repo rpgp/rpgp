@@ -10,9 +10,11 @@ extern crate chrono;
 
 pub mod pgp;
 pub mod util;
+pub mod key;
 
 mod types;
 mod header;
 mod email;
 mod packet;
 mod armor;
+mod errors;

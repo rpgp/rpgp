@@ -26,18 +26,50 @@ fn to_ecc_curve(oid: &[u8]) -> Option<ECCCurve> {
 named!(ecdsa_fields<Fields>, do_parse!(
     // a one-octet size of the following field
        len: be_u8
+    // octets representing a curve OID
     >> oid: take!(len)
+    // MPI of an EC point representing a public key
     >>   p: mpi
     >> ((oid, p, None, None))
 ));
 
-named!(dsa_fields<Fields>, do_parse!(
+// Ref: https://tools.ietf.org/html/rfc6637#section-9
+named!(ecdh_fields<Fields>, do_parse!(
+    // a one-octet size of the following field
+        len: be_u8
+    // octets representing a curve OID
+    >>  oid: take!(len)
+    // MPI of an EC point representing a public key
+    >>    p: mpi
+    // a one-octet size of the following fields
+    >> len2: be_u8
+    // a one-octet value 01, reserved for future extensions
+    >>       tag!(&[1][..])
+    // a one-octet hash function ID used with a KDF
+    >> hash: take!(1)
+    // a one-octet algorithm ID for the symmetric algorithm used to wrap
+    // the symmetric key used for the message encryption
+    >>  alg: take!(1)
+    >> ((oid, p, Some(hash), Some(alg)))
+));
+
+named!(elgamal_fields<Fields>, do_parse!(
+    // MPI of Elgamal prime p
+       p: mpi
+    // MPI of Elgamal group generator g
+    >> g: mpi
+    // MPI of Elgamal public key value y (= g**x mod p where x is secret)
+    >> y: mpi
+    >> ((p, g, Some(y), None))
+));
+
+named!(dsa_fields<Fields>, dbg_dmp!(do_parse!(
        p: mpi
     >> q: mpi
     >> g: mpi
     >> y: mpi
     >> ((p, q, Some(g), Some(y)))
-));
+)));
 
 named!(rsa_fields<Fields>, do_parse!(
        n: mpi
@@ -45,7 +77,7 @@ named!(rsa_fields<Fields>, do_parse!(
     >> ((n, e, None, None))
 ));
 
-named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
+named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg!(do_parse!(
        key_time: be_u32
     >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>   fields: switch!(value!(&alg), 
@@ -53,17 +85,24 @@ named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
                  &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields)   |
                  &PublicKeyAlgorithm::RSASign    => call!(rsa_fields)   |
                  &PublicKeyAlgorithm::DSA        => call!(dsa_fields)   |
-                 &PublicKeyAlgorithm::ECDSA      => call!(ecdsa_fields)
+                 &PublicKeyAlgorithm::ECDSA      => call!(ecdsa_fields) |
+                 &PublicKeyAlgorithm::ECDH       => call!(ecdh_fields)    |
+                 &PublicKeyAlgorithm::Elgamal    => call!(elgamal_fields) |
+                 &PublicKeyAlgorithm::ElgamalSign => call!(elgamal_fields)
+                 // &PublicKeyAlgorithm::DiffieHellman => 
                  )
-    >> ((key_time, 0, alg, fields))
-));
+    >> ({
+        println!("got alg: {:?}", alg);
+        (key_time, 0, alg, fields)
+    })
+)));
 
-named!(old_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
+named!(old_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg!(do_parse!(
        key_time: be_u32
     >>      exp: be_u16
     >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >> ((key_time, exp, alg, (&b""[..], &b""[..], None, None)))
-));
+)));
 
 /// Parse a public key packet (Tag 6)
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
@@ -95,6 +134,21 @@ named!(pub parser<PrimaryKey>, dbg_dmp!(do_parse!(
                 details.2,
                 to_ecc_curve((details.3).0).unwrap(),
                 (details.3).1.to_vec()
+            ),
+            PublicKeyAlgorithm::ECDSA => PrimaryKey::new_public_ecdh(
+                key_ver,
+                details.2,
+                to_ecc_curve((details.3).0).unwrap(),
+                (details.3).1.to_vec(),
+                (details.3).2.unwrap()[0],
+                (details.3).3.unwrap()[0]
+            ),
+            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => PrimaryKey::new_public_elgamal(
+                key_ver,
+                details.2,
+                (details.3).0.to_vec(),
+                (details.3).1.to_vec(),
+                (details.3).2.unwrap().to_vec()
             ),
             _ => unimplemented!("{:?}", details)
         }

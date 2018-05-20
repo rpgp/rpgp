@@ -1,9 +1,7 @@
-use nom::IResult;
-use armor;
 use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 
-mod pubkey;
-
+pub mod pubkey;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Available ECC Curves
@@ -93,7 +91,6 @@ pub enum SubpacketType {
     TrustSignature = 5,
     RegularExpression = 6,
     Revocable = 7,
-    Reserved = 8,
     KeyExpirationTime = 9,
     PreferredSymmetricAlgorithms = 11,
     RevocationKey = 12,
@@ -106,7 +103,7 @@ pub enum SubpacketType {
     PrimaryUserID = 25,
     PolicyURI = 26,
     KeyFlags = 27,
-    SignerUserID = 28,
+    SignersUserID = 28,
     RevocationReason = 29,
     Features = 30,
     SignatureTarget = 31,
@@ -118,6 +115,10 @@ pub enum SubpacketType {
 pub enum Subpacket {
     /// The time the signature was made.
     SignatureCreationTime(DateTime<Utc>),
+    /// The time the signature will expire.
+    SignatureExpirationTime(DateTime<Utc>),
+    /// When the key is going to expire
+    KeyExpirationTime(DateTime<Utc>),
     Issuer([u8; 8]),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
     PreferredSymmetricAlgorithms(Vec<SymmetricKeyAlgorithm>),
@@ -130,6 +131,12 @@ pub enum Subpacket {
     Features(Vec<u8>),
     RevocationReason(RevocationCode, Vec<u8>),
     IsPrimary(bool),
+    Revocable(bool),
+    EmbeddedSignature(Signature),
+    PreferredKeyServer(String),
+    Notation(String, String),
+    RevocationKey(u8, PublicKeyAlgorithm, [u8; 20]),
+    SignersUserID(String),
 }
 
 enum_from_primitive!{
@@ -260,9 +267,18 @@ pub enum SignatureType {
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SignatureVersion {
+    /// Deprecated
+    V2 = 2,
     V3 = 3,
     V4 = 4,
 }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct RevocationKey {
+    pub class: u8,
+    pub algorithm: PublicKeyAlgorithm,
+    pub fingerprint: [u8; 20],
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -271,6 +287,8 @@ pub struct Signature {
     pub typ: SignatureType,
     pub pub_alg: PublicKeyAlgorithm,
     pub hash_alg: HashAlgorithm,
+    pub key_expiration_time: Option<DateTime<Utc>>,
+    pub signature_expiration_time: Option<DateTime<Utc>>,
     pub unhashed_subpackets: Vec<Subpacket>,
     pub created: Option<DateTime<Utc>>,
     pub issuer: Option<[u8; 8]>,
@@ -283,6 +301,12 @@ pub struct Signature {
     pub revocation_reason_code: Option<RevocationCode>,
     pub revocation_reason_string: Option<String>,
     pub is_primary: bool,
+    pub is_revocable: bool,
+    pub embedded_signature: Option<Box<Signature>>,
+    pub preferred_key_server: Option<String>,
+    pub notations: HashMap<String, String>,
+    pub revocation_key: Option<RevocationKey>,
+    pub signers_userid: Option<String>,
 }
 
 impl Signature {
@@ -297,6 +321,8 @@ impl Signature {
             typ: typ,
             pub_alg: pub_alg,
             hash_alg: hash_alg,
+            key_expiration_time: None,
+            signature_expiration_time: None,
             unhashed_subpackets: Vec::new(),
             created: None,
             issuer: None,
@@ -309,6 +335,12 @@ impl Signature {
             revocation_reason_code: None,
             revocation_reason_string: None,
             is_primary: false,
+            is_revocable: true,
+            embedded_signature: None,
+            preferred_key_server: None,
+            notations: HashMap::new(),
+            revocation_key: None,
+            signers_userid: None,
         }
     }
 }
@@ -347,15 +379,15 @@ pub enum PublicKeyAlgorithm {
     /// DEPRECATED: RSA (Sign-Only) [HAC]
     RSASign = 3,
     /// Elgamal (Encrypt-Only) [ELGAMAL] [HAC]
-    ELSign = 16,
+    ElgamalSign = 16,
     /// DSA (Digital Signature Algorithm) [FIPS186] [HAC]
     DSA = 17,
     /// RESERVED: Elliptic Curve
-    EC = 18,
+    ECDH = 18,
     /// RESERVED: ECDSA
     ECDSA = 19,
     /// DEPRECATED: Elgamal (Encrypt and Sign)
-    EL = 20,
+    Elgamal = 20,
     /// Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)
     DiffieHellman = 21,
 }
@@ -382,6 +414,21 @@ pub enum PublicKey {
         algorithm: PublicKeyAlgorithm,
         curve: ECCCurve,
         p: Vec<u8>,
+    },
+    ECDH {
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        curve: ECCCurve,
+        p: Vec<u8>,
+        hash: u8,
+        alg_sym: u8,
+    },
+    Elgamal {
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        p: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
     },
 }
 
@@ -427,6 +474,42 @@ impl PublicKey {
             algorithm: alg,
             curve: curve,
             p: p,
+        }
+    }
+
+    /// Create a new ECDH key.
+    pub fn new_ecdh(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        curve: ECCCurve,
+        p: Vec<u8>,
+        hash: u8,
+        alg_sym: u8,
+    ) -> Self {
+        PublicKey::ECDH {
+            version: ver,
+            algorithm: alg,
+            curve: curve,
+            p: p,
+            hash: hash,
+            alg_sym: alg_sym,
+        }
+    }
+
+    /// Create a new DSA key.
+    pub fn new_elgamal(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        p: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
+    ) -> Self {
+        PublicKey::Elgamal {
+            version: ver,
+            algorithm: alg,
+            p: p,
+            g: g,
+            y: y,
         }
     }
 }
@@ -487,24 +570,27 @@ impl PrimaryKey {
     ) -> Self {
         Self::from_public_key(PublicKey::new_ecdsa(ver, alg, curve, p))
     }
-}
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Key {
-    pub primary_key: PrimaryKey,
-    // pub revocation_signature:
-    // pub direct_signatures: Vec<>
-    pub users: Vec<User>,
-    pub user_attributes: Vec<UserAttribute>,
-    // pub subkeys: Vec<>
-}
+    /// Create a new ECDH public key.
+    pub fn new_public_ecdh(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        curve: ECCCurve,
+        p: Vec<u8>,
+        hash: u8,
+        alg_sym: u8,
+    ) -> Self {
+        Self::from_public_key(PublicKey::new_ecdh(ver, alg, curve, p, hash, alg_sym))
+    }
 
-impl Key {
-    /// Parse a raw armor block
-    pub fn from_block(block: armor::Block) -> IResult<&[u8], Self> {
-        match block.typ {
-            armor::BlockType::PublicKey => pubkey::parse(block.packets),
-            _ => unimplemented!(),
-        }
+    /// Create a new Elgamal public key.
+    pub fn new_public_elgamal(
+        ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        p: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
+    ) -> Self {
+        Self::from_public_key(PublicKey::new_elgamal(ver, alg, p, g, y))
     }
 }
