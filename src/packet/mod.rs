@@ -89,7 +89,7 @@ named!(old_packet_header((&[u8], usize)) -> (Version, Tag, usize), do_parse!(
 
 /// Parses a new format packet header
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
-named!(new_packet_header((&[u8], usize)) -> (Version, Tag, usize), dbg!(do_parse!(
+named!(new_packet_header((&[u8], usize)) -> (Version, Tag, usize), do_parse!(
     // Version: 1
         ver: map_opt!(tag_bits!(u8, 1, 1), Version::from_u8)
     // Packet Tag
@@ -108,11 +108,11 @@ named!(new_packet_header((&[u8], usize)) -> (Version, Tag, usize), dbg!(do_parse
         // TODO: 224...254 => value!(1)
     )
     >> ((ver, tag, len))
-)));
+));
 
 /// Parse Packet Headers
 /// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
-named!(pub packet_parser<Packet>, dbg_dmp!(bits!(do_parse!(
+named!(pub packet_parser<Packet>, bits!(do_parse!(
     // First bit is always 1
              tag_bits!(u8, 1, 1)
     >> head: alt_complete!(new_packet_header | old_packet_header) 
@@ -122,4 +122,6 @@ named!(pub packet_parser<Packet>, dbg_dmp!(bits!(do_parse!(
         tag: head.1,
         body: body.to_vec(),
     })
-))));
+)));
+
+named!(pub packets_parser<Vec<Packet>>, many1!(packet_parser));

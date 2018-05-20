@@ -1,4 +1,4 @@
-use nom::{self, IResult, AsChar, is_alphanumeric, be_u8, be_u16};
+use nom::{self, IResult, AsChar, is_alphanumeric, be_u8, be_u16, be_u32};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::convert::AsMut;
 use std::str;
@@ -67,25 +67,37 @@ where
 ///
 /// // Decode the number `1`.
 /// assert_eq!(
-///    mpi(&[0x00, 0x01, 0x01][..]).unwrap(),
-///    (&b""[..], &[1][..])
+///     mpi(&[0x00, 0x01, 0x01][..]).unwrap(),
+///     (&b""[..], &[1][..])
 /// );
 ///
 /// // Decode the number `511` (`0x1FF` in hex).
 /// assert_eq!(
-///    mpi(&[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
-///    (&b""[..], &[0x01, 0xFF][..])
+///     mpi(&[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
+///     (&b""[..], &[0x01, 0xFF][..])
+/// );
+///
+/// // Decode the number `2^255 + 7`.
+/// assert_eq!(
+///     mpi(&[0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07][..]).unwrap(),
+///     (&b""[..], &[0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07][..])
 /// );
 /// ```
+///
+///
 pub fn mpi(input: &[u8]) -> IResult<&[u8], &[u8], u32> {
+    println!("mpi {:?} ({})", input, input.len());
     mpi_parse(input)
 }
 
-named!(mpi_parse<&[u8]>, do_parse!(
-       len: u16!(nom::Endianness::Big)
+named!(mpi_parse<&[u8]>, dbg_dmp!(do_parse!(
+       len: be_u16
     >> val: take!((len + 7) >> 3)
-    >> (val)
-));
+    >> ({
+        println!("{:?} {} - {}", val, len, (len + 7) >> 3);
+        val
+    })
+)));
 
 /// Convert a slice into an array
 pub fn clone_into_array<A, T>(slice: &[T]) -> A
@@ -108,7 +120,7 @@ named!(pub packet_length<usize>, do_parse!(
        ((olen as usize - 192) << 8) + 192 + a as usize
     }) |
     // Five-Octet Lengths
-    255       => map!(be_u16, u16_as_usize)
+    255       => map!(be_u32, u32_as_usize)
     )
     >> (len)
 ));
