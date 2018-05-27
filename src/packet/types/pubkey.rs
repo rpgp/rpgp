@@ -1,8 +1,7 @@
-use nom::IResult;
-
 use packet::types::{User, Signature, UserAttribute};
 use packet::{Tag, Packet, tags};
 use key::Key;
+use nom::IResult;
 
 fn take_sigs(packets: &Vec<Packet>, mut ctr: usize) -> Vec<Signature> {
     let mut res = vec![];
@@ -31,7 +30,7 @@ fn parse_single<'a>(mut ctr: usize, packets: &Vec<Packet>) -> (usize, Key) {
     assert_eq!(packets[ctr].tag, Tag::PublicKey);
 
     let res = tags::pubkey::parser(packets[ctr].body.as_slice());
-    if !res.is_done() {
+    if !res.is_ok() {
         println!("failed to parse pubkey {:?}", &res);
         println!("{:?}", packets[ctr]);
     }
@@ -129,5 +128,5 @@ pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Vec<Key>> {
     // TODO: better error handling
     assert_eq!(ctr, packets.len(), "failed to process all packets");
 
-    IResult::Done(&b""[..], keys)
+    Ok((&b""[..], keys))
 }

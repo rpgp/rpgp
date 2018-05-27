@@ -1,12 +1,14 @@
-use nom::{self, IResult, AsChar, crlf, space};
+use nom::{self, Err, AsChar, crlf, space, IResult, rest};
+use nom::types::CompleteStr;
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
 use types::ParseResult;
 
-use util::collect_into_string;
+use util::{collect_into_string, end_of_line};
 
 #[inline]
-fn is_name_token(chr: u8) -> bool {
+fn is_name_token(chr: char) -> bool {
+    let chr = chr as u8;
     (chr > 32 && chr < 58) || (chr > 58 && chr < 127)
 }
 
@@ -24,57 +26,73 @@ where
 {
     let input_length = input.input_len();
     if input_length == 0 {
-        return IResult::Incomplete(nom::Needed::Unknown);
+        return Err(Err::Incomplete(nom::Needed::Unknown));
     }
 
     for (idx, item) in input.iter_indices() {
         let item = item.as_char();
         if !is_body_token(item) {
             if idx == 0 {
-                return IResult::Error(error_position!(nom::ErrorKind::AlphaNumeric, input));
+                return Err(Err::Error(
+                    error_position!(input, nom::ErrorKind::AlphaNumeric),
+                ));
             } else {
-                return IResult::Done(input.slice(idx..), input.slice(0..idx));
+                return Ok((input.slice(idx..), input.slice(0..idx)));
             }
         }
     }
-    IResult::Done(input.slice(input_length..), input)
+    Ok((input.slice(input_length..), input))
 }
 
-named!(field_name<String>, map!(
-    take_while1!(is_name_token),
-    |n| str::from_utf8(n).unwrap().to_string()
-));
+// named!(field_name(CompleteStr) -> &str, do_parse!(
+//     v: is_name_token >>
+//     (v.0)
+// ));
+//        map!(
+//     take_while1!(is_name_token),
+//     |n| str::from_utf8(n).unwrap().to_string()
+// ));
 
-named!(sep<()>, do_parse!(
+named!(sep(CompleteStr) -> (), do_parse!(
     char!(':') >>
     many0!(space) >>
     ()
 ));
 
-named!(field_body<String>, map!(
-    many0!(alt_complete!(
-        body_token | do_parse!(
-            crlf >>
-            many1!(space) >> 
-           (&b" "[..])    
-        ) | space
-    )),
-    collect_into_string
+named!(field_body(CompleteStr) -> Vec<&str>, map!(many0!(alt_complete!(
+    body_token |
+    do_parse!(crlf >> many1!(space) >> (CompleteStr(" ")) ) |
+    space
+)), |v| v.iter().map(|s| s.0).filter(|v| v.len() > 0).collect()));
+
+named!(kv_pair(CompleteStr) -> (&str, Vec<&str>), do_parse!(
+    k: take_while!(is_name_token) >>
+       sep                        >>
+    v: field_body                 >>
+    ((k.0, v))
 ));
 
-named!(header<Vec<(String, String)>>, many0!(
-    terminated!(
-        separated_pair!(
-            field_name,
-            sep,
-            field_body
-        ),
-        alt_complete!(crlf | eof!())
-    )
+named!(header(CompleteStr) -> Vec<(&str, Vec<&str>)>, many0!(
+    terminated!(kv_pair, end_of_line)
 ));
 
-pub fn parse(msg: &[u8]) -> ParseResult {
-    header(msg)
+pub fn parse(input: &[u8]) -> ParseResult {
+    // TODO: fix signature
+    let s = str::from_utf8(input).unwrap();
+    match header(CompleteStr(s)) {
+        Ok((rem, res)) => Ok((
+            rem.as_bytes(),
+            res.iter()
+                .map(|v| {
+                    println!("{:?} {:?}", v.0, v.1);
+                    (v.0.to_string(), v.1.join(""))
+                })
+                .collect(),
+        )),
+        Err(_) => Err(nom::Err::Error(
+            error_position!(input, nom::ErrorKind::Custom(9)),
+        )),
+    }
 }
 
 #[cfg(test)]
@@ -83,17 +101,58 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        assert_eq!(parse(b"MIME-Version: 1.0\r\n"), IResult::Done(&b""[..], vec![("MIME-Version".to_string(), "1.0".to_string())]));
+        assert_eq!(
+            parse(b"MIME-Version: 1.0\r\n"),
+            Ok((
+                &b""[..],
+                vec![("MIME-Version".to_string(), "1.0".to_string())],
+            ))
+        );
 
         // spaces in the value
-        assert_eq!(parse(b"MyHeader: 1.0  2.0\r\n"), IResult::Done(&b""[..], vec![("MyHeader".to_string(), "1.0  2.0".to_string())]));
+        assert_eq!(
+            parse(b"MyHeader: 1.0  2.0\r\n"),
+            Ok((
+                &b""[..],
+                vec![("MyHeader".to_string(), "1.0  2.0".to_string())],
+            ))
+        );
         // line breaks in the value
-        assert_eq!(parse(b"MyHeader: hello\r\n world\r\n foo\r\n"), IResult::Done(&b""[..], vec![("MyHeader".to_string(), "hello world foo".to_string())]));
+        assert_eq!(
+            parse(b"MyHeader: hello\r\n world\r\n foo\r\n"),
+            Ok((
+                &b""[..],
+                vec![
+                    ("MyHeader".to_string(), "hello world foo".to_string()),
+                ],
+            ))
+        );
 
         // no space after :
-        assert_eq!(parse(b"MIME-Version:1.0\r\n"), IResult::Done(&b""[..], vec![("MIME-Version".to_string(), "1.0".to_string())]));
+        assert_eq!(
+            parse(b"MIME-Version:1.0\r\n"),
+            Ok((
+                &b""[..],
+                vec![("MIME-Version".to_string(), "1.0".to_string())],
+            ))
+        );
 
-        assert_eq!(parse(b"MIME-Version: 1.0\r\nSubject: Daily schedule on Monday, September 4, 2017\r\n"), IResult::Done(&b""[..], vec![("MIME-Version".to_string(), "1.0".to_string()), ("Subject".to_string(), "Daily schedule on Monday, September 4, 2017".to_string())]));
+        assert_eq!(
+            parse(
+                b"MIME-Version: 1.0\r\nSubject: Daily schedule on Monday, September 4, 2017\r\n",
+            ),
+            Ok((
+                &b""[..],
+                vec![
+                    ("MIME-Version".to_string(), "1.0".to_string()),
+                    (
+                        "Subject".to_string(),
+                        "Daily schedule on Monday, September 4, 2017"
+                            .to_string()
+                    ),
+                ],
+            ))
+        );
 
         let raw = [
             "MIME-Version: 1.0",
@@ -114,32 +173,72 @@ mod tests {
         ].join("\r\n");
 
         let result = parse(raw.as_bytes());
-        if let IResult::Done(rest, headers) = result {
+        if let Ok((rest, headers)) = result {
             assert_eq!(rest, &b""[..]);
             assert_eq!(headers.len(), 15);
 
             assert_eq!(headers[0], ("MIME-Version".to_string(), "1.0".to_string()));
-            assert_eq!(headers[1], ("From".to_string(), "Microsoft Outlook Calendar".to_string()));
-            assert_eq!(headers[2], ("To".to_string(), "Friedel Ziegelmayer <outlook_57FECB636A413BC1@outlook.com>".to_string()));
-            assert_eq!(headers[3], ("Subject".to_string(), "Daily schedule on Monday, September 4, 2017".to_string()));
-            assert_eq!(headers[4], ("Thread-Topic".to_string(), "Daily schedule on Monday, September 4, 2017".to_string()));
-            assert_eq!(headers[5], ("Thread-Index".to_string(), "AQHTJSBvMuakG0Ruy0uDR85wGR/zrg==".to_string()));
-            assert_eq!(headers[6], ("Date".to_string(), "Mon, 4 Sep 2017 03:52:15 +0200".to_string()));
-            assert_eq!(headers[7], ("Message-ID".to_string(), "<VI1P190MB0478680417513ABE9BA388C6BE910@VI1P190MB0478.EURP190.PROD.OUTLOOK.COM>".to_string()));
-            assert_eq!(headers[8], ("Reply-To".to_string(), "\"no-reply@microsoft.com\" <no-reply@microsoft.com>".to_string()));
-            assert_eq!(headers[9], ("Content-Language".to_string(), "en-US".to_string()));
-            assert_eq!(headers[10], ("X-MS-Has-Attach".to_string(), "yes".to_string()));
-            assert_eq!(headers[11], ("X-MS-Exchange-Organization-SCL".to_string(), "-1".to_string()));
-            assert_eq!(headers[12], ("X-MS-TNEF-Correlator".to_string(), "".to_string()));
-            assert_eq!(headers[13], ("X-MS-Exchange-Organization-RecordReviewCfmType".to_string(), "0".to_string()));
+            assert_eq!(headers[1], (
+                "From".to_string(),
+                "Microsoft Outlook Calendar".to_string(),
+            ));
+            assert_eq!(headers[2], (
+                "To".to_string(),
+                "Friedel Ziegelmayer <outlook_57FECB636A413BC1@outlook.com>"
+                    .to_string(),
+            ));
+            assert_eq!(headers[3], (
+                "Subject".to_string(),
+                "Daily schedule on Monday, September 4, 2017"
+                    .to_string(),
+            ));
+            assert_eq!(headers[4], (
+                "Thread-Topic".to_string(),
+                "Daily schedule on Monday, September 4, 2017"
+                    .to_string(),
+            ));
+            assert_eq!(headers[5], (
+                "Thread-Index".to_string(),
+                "AQHTJSBvMuakG0Ruy0uDR85wGR/zrg==".to_string(),
+            ));
+            assert_eq!(headers[6], (
+                "Date".to_string(),
+                "Mon, 4 Sep 2017 03:52:15 +0200".to_string(),
+            ));
+            assert_eq!(headers[7], (
+                "Message-ID".to_string(),
+                "<VI1P190MB0478680417513ABE9BA388C6BE910@VI1P190MB0478.EURP190.PROD.OUTLOOK.COM>"
+                    .to_string(),
+            ));
+            assert_eq!(headers[8], (
+                "Reply-To".to_string(),
+                "\"no-reply@microsoft.com\" <no-reply@microsoft.com>"
+                    .to_string(),
+            ));
+            assert_eq!(headers[9], (
+                "Content-Language".to_string(),
+                "en-US".to_string(),
+            ));
+            assert_eq!(headers[10], (
+                "X-MS-Has-Attach".to_string(),
+                "yes".to_string(),
+            ));
+            assert_eq!(headers[11], (
+                "X-MS-Exchange-Organization-SCL".to_string(),
+                "-1".to_string(),
+            ));
+            assert_eq!(headers[12], (
+                "X-MS-TNEF-Correlator".to_string(),
+                "".to_string(),
+            ));
+            assert_eq!(headers[13], (
+                "X-MS-Exchange-Organization-RecordReviewCfmType"
+                    .to_string(),
+                "0".to_string(),
+            ));
             assert_eq!(headers[14], ("Content-Type".to_string(), "multipart/related; boundary=\"_002_VI1P190MB0478680417513ABE9BA388C6BE910VI1P190MB0478EURP_\"; type=\"text/html\"".to_string()));
         } else {
             panic!("failed to parse\n{}\n: {:?}", raw, result);
         }
-    }
-
-    #[test]
-    fn test_collect_into_string() {
-        assert_eq!(collect_into_string(vec![b"hello", b" ", b"world"]), "hello world");
     }
 }

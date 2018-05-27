@@ -1,45 +1,29 @@
-use std::{fmt, error};
-use nom::{self, IResult};
+use nom;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
+// custom nom error types
+pub const MPI_TOO_LONG: u32 = 1000;
 
 /// Error types
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Fail)]
 pub enum Error {
+    #[fail(display = "failed to parse {:?}", _0)]
     ParsingError(nom::ErrorKind),
+    #[fail(display = "invalid input")]
     InvalidInput,
+    #[fail(display = "incomplete input")]
     Incomplete,
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(error::Error::description(self))
+impl<'a> From<nom::Err<&'a [u8]>> for Error {
+    fn from(err: nom::Err<&'a [u8]>) -> Error {
+        Error::ParsingError(err.into_error_kind())
     }
 }
 
-impl error::Error for Error {
-    fn description(&self) -> &str {
-        match *self {
-            Error::ParsingError(_) => "failed to parse",
-            Error::InvalidInput => "invalid input",
-            Error::Incomplete => "incomplete input",
-        }
-    }
-
-    #[inline]
-    fn cause(&self) -> Option<&error::Error> {
-        match *self {
-            Error::ParsingError(ref err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-pub fn unwrap_iresult<I, O>(res: IResult<I, O>) -> Result<O> {
-    match res {
-        IResult::Done(_, res) => Ok(res),
-        IResult::Error(err) => Err(Error::ParsingError(err)),
-        IResult::Incomplete(_) => Err(Error::Incomplete),
+impl<'a> From<nom::Err<&'a str>> for Error {
+    fn from(err: nom::Err<&'a str>) -> Error {
+        Error::ParsingError(err.into_error_kind())
     }
 }
