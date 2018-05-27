@@ -1,7 +1,15 @@
-use nom::{self, IResult, AsChar, is_alphanumeric, be_u8, be_u16, be_u32};
+use nom::{self, Err, AsChar, is_alphanumeric, be_u8, be_u16, be_u32, InputIter, InputTake,
+          IResult, eol};
+use nom::types::CompleteStr;
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::convert::AsMut;
 use std::str;
+
+use errors;
+
+/// Number of bits we accept when reading or writing MPIs.
+/// The value is the same as gnupgs.
+const MAX_EXTERN_MPI_BITS: u32 = 16384;
 
 #[inline]
 pub fn u8_as_usize(a: u8) -> usize {
@@ -32,7 +40,7 @@ pub fn collect_into_string(vec: Vec<&[u8]>) -> String {
 }
 
 /// Recognizes one or more body tokens
-pub fn base64_token<T>(input: T) -> IResult<T, T>
+pub fn base64_token<T>(input: T) -> nom::IResult<T, T>
 where
     T: nom::Slice<Range<usize>> + nom::Slice<RangeFrom<usize>> + nom::Slice<RangeTo<usize>>,
     T: nom::InputIter + nom::InputLength,
@@ -40,20 +48,22 @@ where
 {
     let input_length = input.input_len();
     if input_length == 0 {
-        return IResult::Incomplete(nom::Needed::Unknown);
+        return Err(Err::Incomplete(nom::Needed::Unknown));
     }
 
     for (idx, item) in input.iter_indices() {
         let item = item.as_char();
         if !is_base64_token(item) {
             if idx == 0 {
-                return IResult::Error(error_position!(nom::ErrorKind::AlphaNumeric, input));
+                return Err(Err::Error(
+                    error_position!(input, nom::ErrorKind::AlphaNumeric),
+                ));
             } else {
-                return IResult::Done(input.slice(idx..), input.slice(0..idx));
+                return Ok((input.slice(idx..), input.slice(0..idx)));
             }
         }
     }
-    IResult::Done(input.slice(input_length..), input)
+    Ok((input.slice(input_length..), input))
 }
 
 
@@ -85,19 +95,29 @@ where
 /// ```
 ///
 ///
-pub fn mpi(input: &[u8]) -> IResult<&[u8], &[u8], u32> {
-    println!("mpi {:?} ({})", input, input.len());
-    mpi_parse(input)
-}
+pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
+    let len = be_u16(&input[0..2]);
 
-named!(mpi_parse<&[u8]>, dbg_dmp!(do_parse!(
-       len: be_u16
-    >> val: take!((len + 7) >> 3)
-    >> ({
-        println!("{:?} {} - {}", val, len, (len + 7) >> 3);
-        val
-    })
-)));
+    match len {
+        Ok((_, len)) => {
+            let len_actual = ((len + 7) >> 3) as u32;
+            if len_actual > MAX_EXTERN_MPI_BITS {
+                Err(Err::Error(error_position!(
+                    input,
+                    nom::ErrorKind::Custom(errors::MPI_TOO_LONG)
+                )))
+            } else {
+                // same as take!
+                let cnt = len_actual as usize;
+                match input.slice_index(cnt) {
+                    None => nom::need_more(input, nom::Needed::Size(cnt)),
+                    Some(index) => Ok(input.take_split(index)),
+                }
+            }
+        }
+        Err(err) => Err(err),
+    }
+}
 
 /// Convert a slice into an array
 pub fn clone_into_array<A, T>(slice: &[T]) -> A
@@ -124,3 +144,22 @@ named!(pub packet_length<usize>, do_parse!(
     )
     >> (len)
 ));
+
+pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
+    alt!(input, eof!() | eol)
+}
+
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_collect_into_string() {
+        assert_eq!(
+            collect_into_string(vec![b"hello", b" ", b"world"]),
+            "hello world"
+        );
+    }
+}

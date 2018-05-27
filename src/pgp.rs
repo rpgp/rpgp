@@ -1,4 +1,3 @@
-// use nom::IResult;
 // use std::str;
 
 // use packet::{Packet, packet_parser};
@@ -6,7 +5,7 @@
 // use armor;
 
 
-// fn parse_key_raw<'a>(input: &'a [u8]) -> IResult<&'a [u8], armor::Block<'a>> {
+// fn parse_key_raw<'a>(input: &'a [u8]) -> Result<armor::Block<'a>> {
 //     armor::parse(input).map(|(typ, headers, body)| {
 //         // TODO: Proper error handling
 //         // println!("start: {:#08b} {:#08b}", body[0], body[1]);
@@ -26,7 +25,7 @@
 // }
 
 // /// parse a key dump in the format retunred from `gpg --export`.
-// pub fn parse_keys(input: &[u8]) -> IResult<&[u8], Vec<Key>> {
+// pub fn parse_keys(input: &[u8]) -> Result<Vec<Key>> {
 //     let (_, packets) = packets_parser(input).unwrap();
 //     Key::from_packets(packets)
 // }

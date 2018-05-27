@@ -135,7 +135,7 @@ named!(pub parser<PrimaryKey>, dbg_dmp!(do_parse!(
                 to_ecc_curve((details.3).0).unwrap(),
                 (details.3).1.to_vec()
             ),
-            PublicKeyAlgorithm::ECDSA => PrimaryKey::new_public_ecdh(
+            PublicKeyAlgorithm::ECDH => PrimaryKey::new_public_ecdh(
                 key_ver,
                 details.2,
                 to_ecc_curve((details.3).0).unwrap(),

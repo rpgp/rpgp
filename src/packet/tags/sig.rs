@@ -139,7 +139,7 @@ named!(notation_data<Subpacket>, do_parse!(
 /// Parse a key server preferences subpacket
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2.3.17
 fn key_server_prefs(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    IResult::Done(&b""[..], Subpacket::KeyServerPreferences(body.to_vec()))
+    Ok((&b""[..], Subpacket::KeyServerPreferences(body.to_vec())))
 }
 
 /// Parse a preferred key server subpacket
@@ -156,7 +156,7 @@ named!(primary_userid<Subpacket>, map!(be_u8, |a| Subpacket::IsPrimary(a == 1)))
 /// Parse a key flags subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.21
 fn key_flags(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    IResult::Done(&b""[..], Subpacket::KeyFlags(body.to_vec()))
+    Ok((&b""[..], Subpacket::KeyFlags(body.to_vec())))
 }
 
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
@@ -167,7 +167,7 @@ named!(signers_userid<Subpacket>, do_parse!(
 /// Parse a features subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.24
 fn features(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    IResult::Done(&b""[..], Subpacket::Features(body.to_vec()))
+    Ok((&b""[..], Subpacket::Features(body.to_vec())))
 }
 
 /// Parse a revocation reason subpacket

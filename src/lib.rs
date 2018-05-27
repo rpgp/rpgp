@@ -7,6 +7,8 @@ extern crate byteorder;
 #[macro_use]
 extern crate enum_primitive;
 extern crate chrono;
+#[macro_use]
+extern crate failure;
 
 pub mod pgp;
 pub mod util;
