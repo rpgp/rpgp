@@ -1,3 +1,4 @@
+use base64;
 use nom;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -14,6 +15,12 @@ pub enum Error {
     InvalidInput,
     #[fail(display = "incomplete input")]
     Incomplete,
+    #[fail(display = "invalid armor wrappers")]
+    InvalidArmorWrappers,
+    #[fail(display = "invalid crc24 checksum")]
+    InvalidChecksum,
+    #[fail(display = "failed to decode base64 {:?}", _0)]
+    Base64DecodeError(base64::DecodeError),
 }
 
 impl<'a> From<nom::Err<&'a [u8]>> for Error {
@@ -25,5 +32,11 @@ impl<'a> From<nom::Err<&'a [u8]>> for Error {
 impl<'a> From<nom::Err<&'a str>> for Error {
     fn from(err: nom::Err<&'a str>) -> Error {
         Error::ParsingError(err.into_error_kind())
+    }
+}
+
+impl From<base64::DecodeError> for Error {
+    fn from(err: base64::DecodeError) -> Error {
+        Error::Base64DecodeError(err)
     }
 }

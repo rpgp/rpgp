@@ -23,7 +23,7 @@ fn to_ecc_curve(oid: &[u8]) -> Option<ECCCurve> {
 }
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(ecdsa_fields<Fields>, do_parse!(
+named!(ecdsa_fields<Fields>, dbg_dmp!(do_parse!(
     // a one-octet size of the following field
        len: be_u8
     // octets representing a curve OID
@@ -31,10 +31,10 @@ named!(ecdsa_fields<Fields>, do_parse!(
     // MPI of an EC point representing a public key
     >>   p: mpi
     >> ((oid, p, None, None))
-));
+)));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(ecdh_fields<Fields>, do_parse!(
+named!(ecdh_fields<Fields>, dbg_dmp!(do_parse!(
     // a one-octet size of the following field
         len: be_u8
     // octets representing a curve OID
@@ -51,9 +51,9 @@ named!(ecdh_fields<Fields>, do_parse!(
     // the symmetric key used for the message encryption
     >>  alg: take!(1)
     >> ((oid, p, Some(hash), Some(alg)))
-));
+)));
 
-named!(elgamal_fields<Fields>, do_parse!(
+named!(elgamal_fields<Fields>, dbg_dmp!(do_parse!(
     // MPI of Elgamal prime p
        p: mpi
     // MPI of Elgamal group generator g
@@ -61,7 +61,7 @@ named!(elgamal_fields<Fields>, do_parse!(
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
     >> y: mpi
     >> ((p, g, Some(y), None))
-));
+)));
 
 named!(dsa_fields<Fields>, dbg_dmp!(do_parse!(
        p: mpi
@@ -71,13 +71,13 @@ named!(dsa_fields<Fields>, dbg_dmp!(do_parse!(
     >> ((p, q, Some(g), Some(y)))
 )));
 
-named!(rsa_fields<Fields>, do_parse!(
+named!(rsa_fields<Fields>, dbg_dmp!(do_parse!(
        n: mpi
     >> e: mpi
     >> ((n, e, None, None))
-));
+)));
 
-named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg!(do_parse!(
+named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg_dmp!(do_parse!(
        key_time: be_u32
     >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>   fields: switch!(value!(&alg), 
@@ -97,7 +97,7 @@ named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg!(do_pa
     })
 )));
 
-named!(old_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg!(do_parse!(
+named!(old_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg_dmp!(do_parse!(
        key_time: be_u32
     >>      exp: be_u16
     >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
@@ -106,7 +106,7 @@ named!(old_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, dbg!(do_pa
 
 /// Parse a public key packet (Tag 6)
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
-named!(pub parser<PrimaryKey>, dbg_dmp!(do_parse!(
+named!(pub parser<PrimaryKey>, do_parse!(
           key_ver: map_opt!(be_u8, KeyVersion::from_u8)
     >>    details: switch!(value!(&key_ver), 
                        &KeyVersion::V2 => call!(old_public_key_parser) |
@@ -153,4 +153,4 @@ named!(pub parser<PrimaryKey>, dbg_dmp!(do_parse!(
             _ => unimplemented!("{:?}", details)
         }
     })
-)));
+));

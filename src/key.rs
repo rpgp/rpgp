@@ -1,7 +1,7 @@
 use armor;
-use packet::packets_parser;
-use packet::types::{User, UserAttribute, PrimaryKey, pubkey};
 use errors::Result;
+use packet::packets_parser;
+use packet::types::{pubkey, PrimaryKey, User, UserAttribute};
 
 /// Represents a PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -18,8 +18,11 @@ impl Key {
     /// Parse a raw byte encoded publickey.
     /// This is usually a file with the extension `.pgp`.
     pub fn from_raw_bytes(bytes: &[u8]) -> Result<Vec<Self>> {
-        let (_, packets) = packets_parser(bytes)?;
-
+        let res = packets_parser(bytes);
+        println!("packets_parsed: {:?}", res);
+        let (missing, packets) = res?;
+        println!("failed to parse: {:?}", missing);
+        println!("packets: {}", packets.len());
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
         let (_, res) = pubkey::parse(packets)?;
@@ -29,8 +32,9 @@ impl Key {
     /// Parse an armor encoded publickey.
     /// This is usually a file with the extension `.asc`.
     pub fn from_armor(input: &str) -> Result<Vec<Self>> {
-        let (_, res) = armor::parse(input)?;
-        let (_typ, _headers, body) = res;
+        println!("decoding");
+        let (_typ, _headers, body) = armor::parse(input)?;
+        println!("decoded {:?} {:?}", _typ, _headers);
         Key::from_raw_bytes(body.as_slice())
     }
 }
@@ -57,9 +61,7 @@ mod tests {
     }
 
     fn get_test_key(name: &str) -> Vec<u8> {
-        return read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(
-            name,
-        ));
+        return read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name));
     }
 
     #[test]
@@ -78,9 +80,8 @@ mod tests {
         for i in 1..5 {
             let name = format!("gnupg-v1-00{}.asc", i);
             let buf = get_test_key(&name);
-
-            let key = Key::from_armor(::std::str::from_utf8(buf.as_slice()).unwrap())
-                .expect("failed to parse key");
+            let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
+            let key = Key::from_armor(input).expect("failed to parse key");
             assert_eq!(1, key.len());
         }
     }
