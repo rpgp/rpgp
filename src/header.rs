@@ -1,10 +1,10 @@
 use nom::types::CompleteStr;
-use nom::{self, crlf, rest, space, AsChar, Err, IResult};
+use nom::{self, crlf, space, AsChar, Err, IResult};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
 use types::ParseResult;
 
-use util::{collect_into_string, end_of_line};
+use util::end_of_line;
 
 #[inline]
 fn is_name_token(chr: char) -> bool {
