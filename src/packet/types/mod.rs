@@ -108,7 +108,7 @@ pub enum SubpacketType {
     Features = 30,
     SignatureTarget = 31,
     EmbeddedSignature = 32,
-}    
+}
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -307,6 +307,8 @@ pub struct Signature {
     pub notations: HashMap<String, String>,
     pub revocation_key: Option<RevocationKey>,
     pub signers_userid: Option<String>,
+    pub signed_hash_value: Vec<u8>,
+    pub signature: Vec<u8>,
 }
 
 impl Signature {
@@ -315,6 +317,8 @@ impl Signature {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
+        signed_hash_value: Vec<u8>,
+        signature: Vec<u8>,
     ) -> Self {
         Signature {
             version: version,
@@ -341,6 +345,8 @@ impl Signature {
             notations: HashMap::new(),
             revocation_key: None,
             signers_userid: None,
+            signed_hash_value: signed_hash_value,
+            signature: signature,
         }
     }
 }

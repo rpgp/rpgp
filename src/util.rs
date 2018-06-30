@@ -1,8 +1,9 @@
-use nom::{self, Err, AsChar, is_alphanumeric, be_u8, be_u16, be_u32, InputIter, InputTake,
-          IResult, eol};
 use nom::types::CompleteStr;
-use std::ops::{Range, RangeFrom, RangeTo};
+use nom::{
+    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter, InputTake,
+};
 use std::convert::AsMut;
+use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
 
 use errors;
@@ -25,7 +26,6 @@ pub fn u16_as_usize(a: u16) -> usize {
 pub fn u32_as_usize(a: u32) -> usize {
     a as usize
 }
-
 
 #[inline]
 pub fn is_base64_token(c: char) -> bool {
@@ -55,9 +55,10 @@ where
         let item = item.as_char();
         if !is_base64_token(item) {
             if idx == 0 {
-                return Err(Err::Error(
-                    error_position!(input, nom::ErrorKind::AlphaNumeric),
-                ));
+                return Err(Err::Error(error_position!(
+                    input,
+                    nom::ErrorKind::AlphaNumeric
+                )));
             } else {
                 return Ok((input.slice(idx..), input.slice(0..idx)));
             }
@@ -65,7 +66,6 @@ where
     }
     Ok((input.slice(input_length..), input))
 }
-
 
 /// Parse Multi Precision Integers
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-3.2
@@ -100,7 +100,8 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
 
     match len {
         Ok((_, len)) => {
-            let len_actual = ((len + 7) >> 3) as u32;
+            let len_actual = ((len + 7) >> 3) as u32 + 2;
+            println!("mpi: {:?} {}", input, len_actual);
             if len_actual > MAX_EXTERN_MPI_BITS {
                 Err(Err::Error(error_position!(
                     input,
@@ -136,7 +137,7 @@ named!(pub packet_length<usize>, do_parse!(
     // One-Octet Lengths
     0...191   => value!(olen as usize) |
     // Two-Octet Lengths
-    192...223 => map!(be_u8, |a| {
+    192...254 => map!(be_u8, |a| {
        ((olen as usize - 192) << 8) + 192 + a as usize
     }) |
     // Five-Octet Lengths
@@ -148,9 +149,6 @@ named!(pub packet_length<usize>, do_parse!(
 pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
     alt!(input, eof!() | eol)
 }
-
-
-
 
 #[cfg(test)]
 mod tests {
