@@ -2,6 +2,7 @@ use chrono::{DateTime, NaiveDateTime, Utc};
 use enum_primitive::FromPrimitive;
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use std::str;
+use util::mpi;
 
 use packet::types::{
     self, CompressionAlgorithm, HashAlgorithm, PublicKeyAlgorithm, RevocationCode, Signature,
@@ -208,6 +209,7 @@ named!(
 
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
+    println!("parsing subpacket: {:?} {:?}", typ, body);
 
     match typ {
         SignatureCreationTime => signature_creation_time(body),
@@ -237,15 +239,14 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
 }
 
 named!(subpackets(&[u8]) -> Vec<Subpacket>,
-    many0!(do_parse!(
+    many0!(complete!(do_parse!(
         // the subpacket length (1, 2, or 5 octets)
         len: packet_length
     // the subpacket type (1 octet)
     >> typ: map_opt!(be_u8, SubpacketType::from_u8)
     >>   p: flat_map!(take!(len - 1), |b| subpacket(typ, b))
-    >> eof!()
     >> (p)
-)));
+))));
 
 /// Parse a v2 signature packet
 /// > OBSOLETE FORMAT, ONLY HERE FOR COMPATABILITY
@@ -327,7 +328,13 @@ named!(
     // Two-octet field holding the left 16 bits of the signed hash value.
     >>  ls_hash: take!(2)
     // One or more multiprecision integers comprising the signature.
-    >>      sig: rest >> ({
+    >>      sig: switch!(value!(&pub_alg),
+                         &PublicKeyAlgorithm::RSA     => call!(mpi) |
+                         &PublicKeyAlgorithm::RSASign => call!(mpi) 
+                        // TODO: figure out
+                        // &PublicKeyAlgorithm::DSA => conacat(mpi | mpi)
+                        // TODO: verify what about the other algorithms
+    ) >> ({
             let mut sig = Signature::new(
                 SignatureVersion::V4,
                 typ,

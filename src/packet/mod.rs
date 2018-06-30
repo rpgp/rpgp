@@ -1,6 +1,5 @@
 use enum_primitive::FromPrimitive;
 use util::{u8_as_usize, u16_as_usize, u32_as_usize};
-use nom::IResult;
 
 pub mod types;
 pub mod tags;

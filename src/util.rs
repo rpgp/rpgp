@@ -80,42 +80,26 @@ where
 ///     mpi(&[0x00, 0x01, 0x01][..]).unwrap(),
 ///     (&b""[..], &[1][..])
 /// );
-///
-/// // Decode the number `511` (`0x1FF` in hex).
-/// assert_eq!(
-///     mpi(&[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
-///     (&b""[..], &[0x01, 0xFF][..])
-/// );
-///
-/// // Decode the number `2^255 + 7`.
-/// assert_eq!(
-///     mpi(&[0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07][..]).unwrap(),
-///     (&b""[..], &[0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07][..])
-/// );
 /// ```
 ///
 ///
 pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
-    let len = be_u16(&input[0..2]);
+    let (number, len) = be_u16(input)?;
 
-    match len {
-        Ok((_, len)) => {
-            let len_actual = ((len + 7) >> 3) as u32 + 2;
-            if len_actual > MAX_EXTERN_MPI_BITS {
-                Err(Err::Error(error_position!(
-                    input,
-                    nom::ErrorKind::Custom(errors::MPI_TOO_LONG)
-                )))
-            } else {
-                // same as take!
-                let cnt = len_actual as usize;
-                match input.slice_index(cnt) {
-                    None => nom::need_more(input, nom::Needed::Size(cnt)),
-                    Some(index) => Ok(input.take_split(index)),
-                }
-            }
+    let len_actual = ((len + 7) >> 3) as u32;
+
+    if len_actual > MAX_EXTERN_MPI_BITS {
+        Err(Err::Error(error_position!(
+            input,
+            nom::ErrorKind::Custom(errors::MPI_TOO_LONG)
+        )))
+    } else {
+        // same as take!
+        let cnt = len_actual as usize;
+        match number.slice_index(cnt) {
+            None => nom::need_more(number, nom::Needed::Size(cnt)),
+            Some(index) => Ok(number.take_split(index)),
         }
-        Err(err) => Err(err),
     }
 }
 
@@ -157,6 +141,31 @@ mod tests {
         assert_eq!(
             collect_into_string(vec![b"hello", b" ", b"world"]),
             "hello world"
+        );
+    }
+
+    #[test]
+    fn test_mpi() {
+        // Decode the number `511` (`0x1FF` in hex).
+        assert_eq!(
+            mpi(&[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
+            (&b""[..], &[0x01, 0xFF][..])
+        );
+
+        // Decode the number `2^255 + 7`.
+        assert_eq!(
+            mpi(&[
+                0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0x07
+            ][..])
+                .unwrap(),
+            (
+                &b""[..],
+                &[
+                    0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0x07
+                ][..]
+            )
         );
     }
 }

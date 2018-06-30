@@ -42,7 +42,7 @@ named!(ecdh_fields<Fields>, do_parse!(
     // MPI of an EC point representing a public key
     >>    p: mpi
     // a one-octet size of the following fields
-    >> len2: be_u8
+    >> _len2: be_u8
     // a one-octet value 01, reserved for future extensions
     >>       tag!(&[1][..])
     // a one-octet hash function ID used with a KDF

@@ -16,3 +16,6 @@ failure = "*"
 
 [dependencies.nom]
 version = "^4.0"
+
+[dev-dependencies]
+hex-literal = "0.1"
