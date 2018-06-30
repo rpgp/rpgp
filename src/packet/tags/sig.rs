@@ -1,6 +1,5 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
 use enum_primitive::FromPrimitive;
-use nom::types::CompleteByteSlice;
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use std::str;
 
@@ -210,8 +209,6 @@ named!(
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
 
-    println!("subpacket: {:?} {:?}", typ, body);
-
     match typ {
         SignatureCreationTime => signature_creation_time(body),
         SignatureExpirationTime => signature_expiration_time(body),
@@ -239,9 +236,8 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
     }
 }
 
-named!(
-    subpackets(&[u8]) -> Vec<Subpacket>,
-    dbg_dmp!(many0!(do_parse!(
+named!(subpackets(&[u8]) -> Vec<Subpacket>,
+    many0!(do_parse!(
         // the subpacket length (1, 2, or 5 octets)
         len: packet_length
     // the subpacket type (1 octet)
@@ -249,8 +245,7 @@ named!(
     >>   p: flat_map!(take!(len - 1), |b| subpacket(typ, b))
     >> eof!()
     >> (p)
-    )))
-);
+)));
 
 /// Parse a v2 signature packet
 /// > OBSOLETE FORMAT, ONLY HERE FOR COMPATABILITY

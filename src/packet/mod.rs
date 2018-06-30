@@ -1,6 +1,6 @@
 use enum_primitive::FromPrimitive;
 use util::{u8_as_usize, u16_as_usize, u32_as_usize};
-use nom::eol;
+use nom::IResult;
 
 pub mod types;
 pub mod tags;
@@ -88,7 +88,7 @@ named!(old_packet_header(&[u8]) -> (Version, Tag, usize), bits!(do_parse!(
         // TODO: Indeterminate length
         // 3 => unimplemented!("indeterminate length")
     )
-        >> ({println!("{:?} {:?} {} {}", ver, tag, len, len_type);(ver, tag, len)})
+        >> ((ver, tag, len))
 )));
 
 /// Parses a new format packet header
@@ -121,16 +121,11 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, usize), bits!(do_parse!(
 named!(pub packet_parser<Packet>, do_parse!(
        head: alt!(new_packet_header | old_packet_header) 
     >> body: take!(head.2)
-    >> ({
-        println!("packet: {:?} {}", head, body.len());
-        Packet{
+    >> (Packet{
             version: head.0,
             tag: head.1,
             body: body.to_vec(),
-        }})
+        })
 ));
 
-named!(pub packets_parser<Vec<Packet>>, do_parse!(
-    packets: many_till!(packet_parser, eof!())
-        >> ((packets.0))
-));
+named!(pub packets_parser<Vec<Packet>>, many1!(complete!(packet_parser)));

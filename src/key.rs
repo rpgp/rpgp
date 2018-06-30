@@ -19,22 +19,21 @@ impl Key {
     /// This is usually a file with the extension `.pgp`.
     pub fn from_raw_bytes(bytes: &[u8]) -> Result<Vec<Self>> {
         let res = packets_parser(bytes);
-        println!("packets_parsed: {:?}", res);
-        let (missing, packets) = res?;
-        println!("failed to parse: {:?}", missing);
-        println!("packets: {}", packets.len());
+        let (_missing, packets) = res?;
+        // TODO: warn if there was not processed input
+        println!("parsed {} packets", packets.len());
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
         let (_, res) = pubkey::parse(packets)?;
+
         Ok(res)
     }
 
     /// Parse an armor encoded publickey.
     /// This is usually a file with the extension `.asc`.
     pub fn from_armor(input: &str) -> Result<Vec<Self>> {
-        println!("decoding");
         let (_typ, _headers, body) = armor::parse(input)?;
-        println!("decoded {:?} {:?}", _typ, _headers);
+        // TODO: add typ and headers information to the key possibly?
         Key::from_raw_bytes(body.as_slice())
     }
 }
