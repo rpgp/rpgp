@@ -101,7 +101,6 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     match len {
         Ok((_, len)) => {
             let len_actual = ((len + 7) >> 3) as u32 + 2;
-            println!("mpi: {:?} {}", input, len_actual);
             if len_actual > MAX_EXTERN_MPI_BITS {
                 Err(Err::Error(error_position!(
                     input,

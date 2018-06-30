@@ -147,7 +147,7 @@ pub fn parse(input: &str) -> Result<(BlockType, HashMap<&str, &str>, Vec<u8>)> {
         return Err(Error::InvalidArmorWrappers);
     }
 
-    let mut decoded = base64::decode_config(&(inner + &pad), base64::MIME)?;
+    let decoded = base64::decode_config(&(inner + &pad), base64::MIME)?;
     
     if let Some(c) = check {
         let check_new = crc24::hash_raw(decoded.as_slice());

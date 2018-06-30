@@ -1,5 +1,5 @@
-use nom::{self, Err, AsChar, crlf, space, IResult, rest};
 use nom::types::CompleteStr;
+use nom::{self, crlf, rest, space, AsChar, Err, IResult};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
 use types::ParseResult;
@@ -33,9 +33,10 @@ where
         let item = item.as_char();
         if !is_body_token(item) {
             if idx == 0 {
-                return Err(Err::Error(
-                    error_position!(input, nom::ErrorKind::AlphaNumeric),
-                ));
+                return Err(Err::Error(error_position!(
+                    input,
+                    nom::ErrorKind::AlphaNumeric
+                )));
             } else {
                 return Ok((input.slice(idx..), input.slice(0..idx)));
             }
@@ -83,15 +84,13 @@ pub fn parse(input: &[u8]) -> ParseResult {
         Ok((rem, res)) => Ok((
             rem.as_bytes(),
             res.iter()
-                .map(|v| {
-                    println!("{:?} {:?}", v.0, v.1);
-                    (v.0.to_string(), v.1.join(""))
-                })
+                .map(|v| (v.0.to_string(), v.1.join("")))
                 .collect(),
         )),
-        Err(_) => Err(nom::Err::Error(
-            error_position!(input, nom::ErrorKind::Custom(9)),
-        )),
+        Err(_) => Err(nom::Err::Error(error_position!(
+            input,
+            nom::ErrorKind::Custom(9)
+        ))),
     }
 }
 
@@ -122,9 +121,7 @@ mod tests {
             parse(b"MyHeader: hello\r\n world\r\n foo\r\n"),
             Ok((
                 &b""[..],
-                vec![
-                    ("MyHeader".to_string(), "hello world foo".to_string()),
-                ],
+                vec![("MyHeader".to_string(), "hello world foo".to_string())],
             ))
         );
 
@@ -138,17 +135,14 @@ mod tests {
         );
 
         assert_eq!(
-            parse(
-                b"MIME-Version: 1.0\r\nSubject: Daily schedule on Monday, September 4, 2017\r\n",
-            ),
+            parse(b"MIME-Version: 1.0\r\nSubject: Daily schedule on Monday, September 4, 2017\r\n",),
             Ok((
                 &b""[..],
                 vec![
                     ("MIME-Version".to_string(), "1.0".to_string()),
                     (
                         "Subject".to_string(),
-                        "Daily schedule on Monday, September 4, 2017"
-                            .to_string()
+                        "Daily schedule on Monday, September 4, 2017".to_string(),
                     ),
                 ],
             ))
@@ -178,64 +172,83 @@ mod tests {
             assert_eq!(headers.len(), 15);
 
             assert_eq!(headers[0], ("MIME-Version".to_string(), "1.0".to_string()));
-            assert_eq!(headers[1], (
-                "From".to_string(),
-                "Microsoft Outlook Calendar".to_string(),
-            ));
-            assert_eq!(headers[2], (
-                "To".to_string(),
-                "Friedel Ziegelmayer <outlook_57FECB636A413BC1@outlook.com>"
-                    .to_string(),
-            ));
-            assert_eq!(headers[3], (
-                "Subject".to_string(),
-                "Daily schedule on Monday, September 4, 2017"
-                    .to_string(),
-            ));
-            assert_eq!(headers[4], (
-                "Thread-Topic".to_string(),
-                "Daily schedule on Monday, September 4, 2017"
-                    .to_string(),
-            ));
-            assert_eq!(headers[5], (
-                "Thread-Index".to_string(),
-                "AQHTJSBvMuakG0Ruy0uDR85wGR/zrg==".to_string(),
-            ));
-            assert_eq!(headers[6], (
-                "Date".to_string(),
-                "Mon, 4 Sep 2017 03:52:15 +0200".to_string(),
-            ));
+            assert_eq!(
+                headers[1],
+                ("From".to_string(), "Microsoft Outlook Calendar".to_string(),)
+            );
+            assert_eq!(
+                headers[2],
+                (
+                    "To".to_string(),
+                    "Friedel Ziegelmayer <outlook_57FECB636A413BC1@outlook.com>".to_string(),
+                )
+            );
+            assert_eq!(
+                headers[3],
+                (
+                    "Subject".to_string(),
+                    "Daily schedule on Monday, September 4, 2017".to_string(),
+                )
+            );
+            assert_eq!(
+                headers[4],
+                (
+                    "Thread-Topic".to_string(),
+                    "Daily schedule on Monday, September 4, 2017".to_string(),
+                )
+            );
+            assert_eq!(
+                headers[5],
+                (
+                    "Thread-Index".to_string(),
+                    "AQHTJSBvMuakG0Ruy0uDR85wGR/zrg==".to_string(),
+                )
+            );
+            assert_eq!(
+                headers[6],
+                (
+                    "Date".to_string(),
+                    "Mon, 4 Sep 2017 03:52:15 +0200".to_string(),
+                )
+            );
             assert_eq!(headers[7], (
                 "Message-ID".to_string(),
                 "<VI1P190MB0478680417513ABE9BA388C6BE910@VI1P190MB0478.EURP190.PROD.OUTLOOK.COM>"
                     .to_string(),
             ));
-            assert_eq!(headers[8], (
-                "Reply-To".to_string(),
-                "\"no-reply@microsoft.com\" <no-reply@microsoft.com>"
-                    .to_string(),
-            ));
-            assert_eq!(headers[9], (
-                "Content-Language".to_string(),
-                "en-US".to_string(),
-            ));
-            assert_eq!(headers[10], (
-                "X-MS-Has-Attach".to_string(),
-                "yes".to_string(),
-            ));
-            assert_eq!(headers[11], (
-                "X-MS-Exchange-Organization-SCL".to_string(),
-                "-1".to_string(),
-            ));
-            assert_eq!(headers[12], (
-                "X-MS-TNEF-Correlator".to_string(),
-                "".to_string(),
-            ));
-            assert_eq!(headers[13], (
-                "X-MS-Exchange-Organization-RecordReviewCfmType"
-                    .to_string(),
-                "0".to_string(),
-            ));
+            assert_eq!(
+                headers[8],
+                (
+                    "Reply-To".to_string(),
+                    "\"no-reply@microsoft.com\" <no-reply@microsoft.com>".to_string(),
+                )
+            );
+            assert_eq!(
+                headers[9],
+                ("Content-Language".to_string(), "en-US".to_string(),)
+            );
+            assert_eq!(
+                headers[10],
+                ("X-MS-Has-Attach".to_string(), "yes".to_string(),)
+            );
+            assert_eq!(
+                headers[11],
+                (
+                    "X-MS-Exchange-Organization-SCL".to_string(),
+                    "-1".to_string(),
+                )
+            );
+            assert_eq!(
+                headers[12],
+                ("X-MS-TNEF-Correlator".to_string(), "".to_string(),)
+            );
+            assert_eq!(
+                headers[13],
+                (
+                    "X-MS-Exchange-Organization-RecordReviewCfmType".to_string(),
+                    "0".to_string(),
+                )
+            );
             assert_eq!(headers[14], ("Content-Type".to_string(), "multipart/related; boundary=\"_002_VI1P190MB0478680417513ABE9BA388C6BE910VI1P190MB0478EURP_\"; type=\"text/html\"".to_string()));
         } else {
             panic!("failed to parse\n{}\n: {:?}", raw, result);
