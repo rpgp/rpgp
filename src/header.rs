@@ -2,7 +2,6 @@ use nom::types::CompleteStr;
 use nom::{self, crlf, space, AsChar, Err, IResult};
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::str;
-use types::ParseResult;
 
 use util::end_of_line;
 
@@ -64,7 +63,7 @@ named!(field_body(CompleteStr) -> Vec<&str>, map!(many0!(alt_complete!(
     body_token |
     do_parse!(crlf >> many1!(space) >> (CompleteStr(" ")) ) |
     space
-)), |v| v.iter().map(|s| s.0).filter(|v| v.len() > 0).collect()));
+)), |v| v.iter().map(|s| s.0).filter(|v| !v.is_empty()).collect()));
 
 named!(kv_pair(CompleteStr) -> (&str, Vec<&str>), do_parse!(
     k: take_while!(is_name_token) >>
@@ -77,7 +76,7 @@ named!(header(CompleteStr) -> Vec<(&str, Vec<&str>)>, many0!(
     terminated!(kv_pair, end_of_line)
 ));
 
-pub fn parse(input: &[u8]) -> ParseResult {
+pub fn parse(input: &[u8]) -> IResult<&[u8], Vec<(String, String)>> {
     // TODO: fix signature
     let s = str::from_utf8(input).unwrap();
     match header(CompleteStr(s)) {
