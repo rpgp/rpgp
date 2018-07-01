@@ -1,5 +1,5 @@
+use errors::Result;
 use key::Key;
-use nom::IResult;
 use packet::types::{Signature, User, UserAttribute};
 use packet::{tags, Packet, Tag};
 
@@ -21,7 +21,7 @@ fn take_sigs(packets: &[Packet], mut ctr: usize) -> Vec<Signature> {
 
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-fn parse_single(mut ctr: usize, packets: &[Packet]) -> (usize, Key) {
+fn parse_single(mut ctr: usize, packets: &[Packet]) -> Result<(usize, Key)> {
     let packets_len = packets.len();
 
     // -- One Public-Key packet
@@ -33,7 +33,7 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> (usize, Key) {
         println!("failed to parse pubkey {:?}", &res);
         println!("{:?}", packets[ctr]);
     }
-    let (_, primary_key) = res.unwrap();
+    let (_, primary_key) = res?;
 
     ctr += 1;
 
@@ -67,7 +67,7 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> (usize, Key) {
                     println!("failed to parse {:?}\n{:?}", packets[ctr], a);
                 }
 
-                let (_, attr) = a.unwrap();
+                let (_, attr) = a?;
                 ctr += 1;
 
                 // --- zero or more signature packets
@@ -99,7 +99,7 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> (usize, Key) {
     // TODO: better error handling
     assert!(!users.is_empty(), "Missing user ids");
 
-    (
+    Ok((
         ctr,
         Key {
             primary_key,
@@ -107,18 +107,18 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> (usize, Key) {
             user_attributes: user_attrs,
             // TODO: subkeys
         },
-    )
+    ))
 }
 
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-pub fn parse(packets: &[Packet]) -> IResult<&[u8], Vec<Key>> {
+pub fn parse(packets: &[Packet]) -> Result<Vec<Key>> {
     let mut ctr = 0;
     let mut keys = Vec::new();
 
     while ctr < packets.len() {
         println!("{}/{}", ctr, packets.len());
-        let (next_ctr, key) = parse_single(ctr, packets);
+        let (next_ctr, key) = parse_single(ctr, packets)?;
         ctr = next_ctr;
         keys.push(key);
     }
@@ -126,5 +126,5 @@ pub fn parse(packets: &[Packet]) -> IResult<&[u8], Vec<Key>> {
     // TODO: better error handling
     assert_eq!(ctr, packets.len(), "failed to process all packets");
 
-    Ok((&b""[..], keys))
+    Ok(keys)
 }

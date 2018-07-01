@@ -24,9 +24,7 @@ impl Key {
         println!("parsed {} packets", packets.len());
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
-        let (_, res) = pubkey::parse(&packets)?;
-
-        Ok(res)
+        pubkey::parse(&packets)
     }
 
     /// Parse an armor encoded publickey.

@@ -247,6 +247,22 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>,
     >> (p)
 ))));
 
+fn unimplemented<'a>(body: &'a [u8], typ: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
+    unimplemented!("actual signature for {:?} not there", typ);
+}
+
+named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<u8>>, switch!(
+    value!(typ),
+    &PublicKeyAlgorithm::RSA |
+    &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| v.to_vec()) |
+    &PublicKeyAlgorithm::DSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<_>, item| {
+        acc.extend(item);
+        acc
+    }) |
+    // TODO: check which other algorithms need handling
+    _ => call!(unimplemented, typ)
+));
+
 /// Parse a v2 signature packet
 /// > OBSOLETE FORMAT, ONLY HERE FOR COMPATABILITY
 /// Ref: https://tools.ietf.org/html/rfc1991#section-6.2
@@ -327,13 +343,7 @@ named!(
     // Two-octet field holding the left 16 bits of the signed hash value.
     >>  ls_hash: take!(2)
     // One or more multiprecision integers comprising the signature.
-    >>      sig: switch!(value!(&pub_alg),
-                         &PublicKeyAlgorithm::RSA     => call!(mpi) |
-                         &PublicKeyAlgorithm::RSASign => call!(mpi) 
-                        // TODO: figure out
-                        // &PublicKeyAlgorithm::DSA => conacat(mpi | mpi)
-                        // TODO: verify what about the other algorithms
-    ) >> ({
+    >>      sig: call!(actual_signature, &pub_alg) >> ({
             let mut sig = Signature::new(
                 SignatureVersion::V4,
                 typ,
