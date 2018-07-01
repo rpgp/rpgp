@@ -112,7 +112,9 @@ fn parse_single(ctr: &mut usize, packets: &[Packet]) -> Result<Key> {
     }
 
     // TODO: better error handling
-    assert!(!users.is_empty(), "Missing user ids");
+    if users.is_empty() {
+        println!("WARNING: missing user ids");
+    }
 
     Ok(Key {
         primary_key,
@@ -129,7 +131,7 @@ pub fn parse(packets: &[Packet]) -> Result<Vec<Key>> {
     let mut keys = Vec::new();
 
     while ctr < packets.len() {
-        println!("{}/{}", ctr, packets.len());
+        // println!("{}/{}", ctr, packets.len());
         match parse_single(&mut ctr, packets) {
             Ok(key) => {
                 keys.push(key);

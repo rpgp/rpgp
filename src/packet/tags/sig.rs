@@ -108,6 +108,20 @@ named!(
     )
 );
 
+/// Parse a exportable certification subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
+named!(
+    exportable_certification<Subpacket>,
+    map!(complete!(be_u8), |v| Subpacket::ExportableCertification(v == 1))
+);
+
+/// Parse a revocable subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
+named!(
+    revocable<Subpacket>,
+    map!(complete!(be_u8), |v| Subpacket::Revocable(v == 1))
+);
+
 /// Parse a trust signature subpacket.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.13
 named!(
@@ -121,15 +135,6 @@ named!(
     regular_expression<Subpacket>,
     map!(map_res!(rest, str::from_utf8), |v| Subpacket::RegularExpression(v.to_string()))
 );
-
-/// Parse a revocable subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
-fn revocable<'a>(body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
-    // TODO: proper error handling
-    assert_eq!(body.len(), 1);
-
-    Ok((&b""[..], Subpacket::Revocable(body[0] == 1)))
-}
 
 /// Parse a revocation key subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
@@ -230,7 +235,7 @@ fn subpacket<'a>(typ: &SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpa
     match *typ {
         SignatureCreationTime => signature_creation_time(body),
         SignatureExpirationTime => signature_expiration_time(body),
-        ExportableCertification => unimplemented!("{:?}", typ),
+        ExportableCertification => exportable_certification(body),
         TrustSignature => trust_signature(body),
         RegularExpression => regular_expression(body),
         Revocable => revocable(body),
@@ -411,6 +416,7 @@ named!(
                     PolicyURI(s) => sig.policy_uri = Some(s),
                     TrustSignature(v) => sig.trust_signature = Some(v),
                     RegularExpression(v) => sig.regular_expression = Some(v),
+                    ExportableCertification(v) => sig.exportable_certification = v,
                 }
             }
 

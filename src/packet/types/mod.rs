@@ -170,12 +170,14 @@ impl ToString for ECCCurve {
 /// Available user attribute types
 pub enum UserAttributeType {
     Image(Vec<u8>),
+    Unknown((u8, Vec<u8>)),
 }
 
 impl UserAttributeType {
     pub fn to_u8(&self) -> u8 {
         match *self {
             UserAttributeType::Image(_) => 1,
+            UserAttributeType::Unknown((typ, _)) => typ,
         }
     }
 }
@@ -288,6 +290,7 @@ pub enum Subpacket {
     PolicyURI(String),
     TrustSignature(u8),
     RegularExpression(String),
+    ExportableCertification(bool),
 }
 
 enum_from_primitive!{
@@ -463,6 +466,7 @@ pub struct Signature {
     pub policy_uri: Option<String>,
     pub trust_signature: Option<u8>,
     pub regular_expression: Option<String>,
+    pub exportable_certification: bool,
 }
 
 impl Signature {
@@ -504,6 +508,7 @@ impl Signature {
             policy_uri: None,
             trust_signature: None,
             regular_expression: None,
+            exportable_certification: true,
         }
     }
 }
