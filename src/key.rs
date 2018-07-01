@@ -67,15 +67,58 @@ mod tests {
         return read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name));
     }
 
-    #[test]
-    fn test_parse_dump() {
-        let i = 0;
-        // for i in 0..10 {
+    fn test_parse_dump(i: usize) {
         let buf = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
+        Key::from_raw_bytes(buf.as_slice()).unwrap();
+    }
 
-        let key = Key::from_raw_bytes(buf.as_slice());
-        key.expect("failed to parse key");
-        // }
+    #[test]
+    fn test_parse_dumps_0() {
+        test_parse_dump(0);
+    }
+
+    #[test]
+    fn test_parse_dumps_1() {
+        test_parse_dump(1);
+    }
+
+    #[test]
+    fn test_parse_dumps_2() {
+        test_parse_dump(2);
+    }
+
+    #[test]
+    fn test_parse_dumps_3() {
+        test_parse_dump(3);
+    }
+    #[test]
+    fn test_parse_dumps_4() {
+        test_parse_dump(4);
+    }
+
+    #[test]
+    fn test_parse_dumps_5() {
+        test_parse_dump(5);
+    }
+
+    #[test]
+    fn test_parse_dumps_6() {
+        test_parse_dump(6);
+    }
+
+    #[test]
+    fn test_parse_dumps_7() {
+        test_parse_dump(7);
+    }
+
+    #[test]
+    fn test_parse_dumps_8() {
+        test_parse_dump(8);
+    }
+
+    #[test]
+    fn test_parse_dumps_9() {
+        test_parse_dump(9);
     }
 
     #[test]
@@ -276,6 +319,7 @@ mod tests {
             &UserAttributeType::Image(ref v) => {
                 assert_eq!(v.len(), 1156);
             }
+            _ => panic!("not here"),
         }
 
         let mut sig3 = Signature::new(

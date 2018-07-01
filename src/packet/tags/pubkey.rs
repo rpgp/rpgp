@@ -61,20 +61,23 @@ named!(rsa_fields<Fields>, do_parse!(
     >> (n, e, None, None)
 ));
 
+named_args!(key_fields<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Fields<'a>>, switch!(
+    value!(typ), 
+    &PublicKeyAlgorithm::RSA        => call!(rsa_fields)   |
+    &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields)   |
+    &PublicKeyAlgorithm::RSASign    => call!(rsa_fields)   |
+    &PublicKeyAlgorithm::DSA        => call!(dsa_fields)   |
+    &PublicKeyAlgorithm::ECDSA      => call!(ecdsa_fields) |
+    &PublicKeyAlgorithm::ECDH       => call!(ecdh_fields)    |
+    &PublicKeyAlgorithm::Elgamal    => call!(elgamal_fields) |
+    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal_fields)
+    // &PublicKeyAlgorithm::DiffieHellman => 
+));
+
 named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
        key_time: be_u32
     >>      alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
-    >>   fields: switch!(value!(&alg), 
-                 &PublicKeyAlgorithm::RSA        => call!(rsa_fields)   |
-                 &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields)   |
-                 &PublicKeyAlgorithm::RSASign    => call!(rsa_fields)   |
-                 &PublicKeyAlgorithm::DSA        => call!(dsa_fields)   |
-                 &PublicKeyAlgorithm::ECDSA      => call!(ecdsa_fields) |
-                 &PublicKeyAlgorithm::ECDH       => call!(ecdh_fields)    |
-                 &PublicKeyAlgorithm::Elgamal    => call!(elgamal_fields) |
-                 &PublicKeyAlgorithm::ElgamalSign => call!(elgamal_fields)
-                 // &PublicKeyAlgorithm::DiffieHellman => 
-                 )
+    >>   fields: call!(key_fields, &alg)
     >> (key_time, 0, alg, fields)
 ));
 
@@ -82,7 +85,8 @@ named!(old_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
        key_time: be_u32
     >>      exp: be_u16
     >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >> (key_time, exp, alg, (&b""[..], &b""[..], None, None))
+    >>   fields: call!(key_fields, &alg)
+    >> (key_time, exp, alg, fields)
 ));
 
 /// Parse a public key packet (Tag 6)
@@ -124,13 +128,16 @@ named!(pub parser<PrimaryKey>, do_parse!(
                 (details.3).2.unwrap()[0],
                 (details.3).3.unwrap()[0]
             ),
-            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => PrimaryKey::new_public_elgamal(
+            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
+                println!("elgamal key: {:?} {:?}", key_ver, details);
+                PrimaryKey::new_public_elgamal(
                 key_ver,
                 details.2,
                 (details.3).0.to_vec(),
                 (details.3).1.to_vec(),
                 (details.3).2.unwrap().to_vec()
-            ),
+                )
+            },
             _ => unimplemented!("{:?}", details)
         }
     })

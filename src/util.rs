@@ -78,7 +78,7 @@ where
 pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let (number, len) = be_u16(input)?;
 
-    let len_actual = u32::from((len + 7) >> 3);
+    let len_actual = (u32::from(len) + 7) >> 3;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
         Err(Err::Error(error_position!(
