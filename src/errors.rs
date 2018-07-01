@@ -21,6 +21,8 @@ pub enum Error {
     InvalidChecksum,
     #[fail(display = "failed to decode base64 {:?}", _0)]
     Base64DecodeError(base64::DecodeError),
+    #[fail(display = "requested data size is larger than the packet body")]
+    RequestedSizeTooLarge,
 }
 
 impl<'a> From<nom::Err<&'a [u8]>> for Error {

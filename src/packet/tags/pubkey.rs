@@ -79,7 +79,10 @@ named!(rsa_fields<Fields>, do_parse!(
 
 named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
        key_time: be_u32
-    >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+        >>      alg: map_opt!(be_u8, |v| {
+            println!("parsing alg: {:?}", v);
+            PublicKeyAlgorithm::from_u8(v)
+        })
     >>   fields: switch!(value!(&alg), 
                  &PublicKeyAlgorithm::RSA        => call!(rsa_fields)   |
                  &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields)   |
