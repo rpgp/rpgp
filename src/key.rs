@@ -1,17 +1,17 @@
 use armor;
 use errors::Result;
 use packet::packets_parser;
-use packet::types::{pubkey, PrimaryKey, User, UserAttribute};
+use packet::types::{pubkey, PrimaryKey, Signature, User, UserAttribute};
 
 /// Represents a PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Key {
     pub primary_key: PrimaryKey,
-    // pub revocation_signature:
-    // pub direct_signatures: Vec<>
+    pub revocation_signatures: Vec<Signature>,
+    pub direct_signatures: Vec<Signature>,
     pub users: Vec<User>,
     pub user_attributes: Vec<UserAttribute>,
-    // pub subkeys: Vec<>
+    // pub subkeys: Vec<Subkey>
 }
 
 impl Key {
