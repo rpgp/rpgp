@@ -55,13 +55,15 @@ fn parse_single(ctr: &mut usize, packets: &[Packet]) -> Result<Key> {
     *ctr += 1;
 
     // -- Zero or more revocation signatures
-    let _rev_sigs = take_sigs(packets, ctr);
+    let revocation_signatures = take_sigs(packets, ctr);
 
     // -- Zero or more User ID packets
     // -- Zero or more User Attribute packets
 
     let mut users = vec![];
     let mut user_attrs = vec![];
+
+    // TODO: handle direct signatures
 
     while *ctr < packets_len {
         match packets[*ctr].tag {
@@ -121,6 +123,10 @@ fn parse_single(ctr: &mut usize, packets: &[Packet]) -> Result<Key> {
         users,
         user_attributes: user_attrs,
         // TODO: subkeys
+        // subkeys,
+        revocation_signatures,
+        // TODO: direct signatures, properly
+        direct_signatures: Vec::new(),
     })
 }
 

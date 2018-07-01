@@ -394,7 +394,7 @@ named!(
                     RevocationReason(code, body) => {
                         sig.revocation_reason_code = Some(code);
                         sig.revocation_reason_string =
-                            Some(str::from_utf8(body.as_slice()).unwrap().to_string());
+                            Some(String::from_utf8_lossy(body.as_slice()).to_string());
                     }
                     IsPrimary(b) => sig.is_primary = b,
                     KeyExpirationTime(d) => sig.key_expiration_time = Some(d),

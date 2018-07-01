@@ -128,16 +128,13 @@ named!(pub parser<PrimaryKey>, do_parse!(
                 (details.3).2.unwrap()[0],
                 (details.3).3.unwrap()[0]
             ),
-            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
-                println!("elgamal key: {:?} {:?}", key_ver, details);
-                PrimaryKey::new_public_elgamal(
+            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => PrimaryKey::new_public_elgamal(
                 key_ver,
                 details.2,
                 (details.3).0.to_vec(),
                 (details.3).1.to_vec(),
                 (details.3).2.unwrap().to_vec()
-                )
-            },
+            ),
             _ => unimplemented!("{:?}", details)
         }
     })
