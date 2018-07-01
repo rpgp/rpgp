@@ -14,12 +14,13 @@ extern crate failure;
 #[macro_use]
 extern crate hex_literal;
 
+pub mod email;
 pub mod key;
-pub mod pgp;
+
+// public so it can be used in doc test
 pub mod util;
 
 mod armor;
-mod email;
 mod errors;
 mod header;
 mod packet;

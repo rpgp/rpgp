@@ -87,7 +87,7 @@ named!(kv_pair(CompleteStr) -> (CompleteStr, CompleteStr), do_parse!(
     k: take_until!(": ") >>
        tag!(": ")        >>
     v: terminated!(not_line_ending, end_of_line)  >>
-    ((k, v))
+    (k, v)
 ));
 
 
@@ -107,7 +107,7 @@ fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<&str, &str>> {
 named!(armor_header(&str) -> (BlockType, HashMap<&str, &str>), do_parse!(
     typ:     armor_header_line >>
     headers: armor_headers     >>
-    ((typ, headers))
+    (typ, headers)
 ));
 
 /// Read the checksum from an base64 encoded buffer.
@@ -134,7 +134,7 @@ named!(parse_inner(&str) -> ((BlockType, HashMap<&str, &str>), String, String, O
     >>  check: opt!(preceded!(tag!("="), take!(4)))
     >>         many0!(line_ending)
     >> footer: armor_footer_line
-    >> ((head, inner, pad, check, footer))
+    >> (head, inner, pad, check, footer)
 ));
 
 pub fn parse(input: &str) -> Result<(BlockType, HashMap<&str, &str>, Vec<u8>)> {

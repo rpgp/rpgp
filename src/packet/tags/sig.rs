@@ -115,6 +115,13 @@ named!(
     map!(be_u8, Subpacket::TrustSignature)
 );
 
+/// Parse a regular expression subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
+named!(
+    regular_expression<Subpacket>,
+    map!(map_res!(rest, str::from_utf8), |v| Subpacket::RegularExpression(v.to_string()))
+);
+
 /// Parse a revocable subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
 fn revocable<'a>(body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
@@ -225,7 +232,7 @@ fn subpacket<'a>(typ: &SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpa
         SignatureExpirationTime => signature_expiration_time(body),
         ExportableCertification => unimplemented!("{:?}", typ),
         TrustSignature => trust_signature(body),
-        RegularExpression => unimplemented!("{:?}", typ),
+        RegularExpression => regular_expression(body),
         Revocable => revocable(body),
         KeyExpirationTime => key_expiration(body),
         PreferredSymmetricAlgorithms => pref_sym_alg(body),
@@ -257,8 +264,9 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>,
     >> (p)
 ))));
 
-fn unimplemented<'a>(_body: &'a [u8], typ: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
-    unimplemented!("actual signature for {:?}", typ);
+fn unknown_sig<'a>(body: &'a [u8], typ: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
+    println!("unknown signature type {:?}", typ);
+    Ok((&b""[..], body.to_vec()))
 }
 
 named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<u8>>, switch!(
@@ -274,7 +282,7 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<u8>>, 
         acc
     }) |    
     // TODO: check which other algorithms need handling
-    _ => call!(unimplemented, typ)
+    _ => call!(unknown_sig, typ)
 ));
 
 /// Parse a v2 signature packet
@@ -340,10 +348,10 @@ named!(
 named!(
     v4_parser<Signature>,
     do_parse!(
-        // One-octet signature type.
+    // One-octet signature type.
         typ: map_opt!(be_u8, SignatureType::from_u8)
     // One-octet public-key algorithm.
-    >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+            >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     // One-octet hash algorithm.
     >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
     // Two-octet scalar octet count for following hashed subpacket data.
@@ -357,7 +365,7 @@ named!(
     // Two-octet field holding the left 16 bits of the signed hash value.
     >>  ls_hash: take!(2)
     // One or more multiprecision integers comprising the signature.
-    >>      sig: call!(actual_signature, &pub_alg) >> ({
+    >>      sig: complete!(call!(actual_signature, &pub_alg)) >> ({
             let mut sig = Signature::new(
                 SignatureVersion::V4,
                 typ,
@@ -402,6 +410,7 @@ named!(
                     SignersUserID(u) => sig.signers_userid = Some(u),
                     PolicyURI(s) => sig.policy_uri = Some(s),
                     TrustSignature(v) => sig.trust_signature = Some(v),
+                    RegularExpression(v) => sig.regular_expression = Some(v),
                 }
             }
 

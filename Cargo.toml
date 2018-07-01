@@ -13,8 +13,6 @@ byteorder = "^1.1.0"
 enum_primitive = "^0.1.1"
 chrono = "^0.4.0"
 failure = "*"
-lazy_static = "*"
-asn1_der = "0.5"
 
 [dependencies.nom]
 version = "^4.0"

@@ -5,17 +5,18 @@ use nom::Needed;
 use packet::types::{Signature, User, UserAttribute};
 use packet::{tags, Packet, Tag};
 
-fn take_sigs(packets: &[Packet], mut ctr: usize) -> Vec<Signature> {
+fn take_sigs(packets: &[Packet], ctr: &mut usize) -> Vec<Signature> {
     let mut res = vec![];
-    while ctr < packets.len() && packets[ctr].tag == Tag::Signature {
-        let sig_res = tags::sig::parser(packets[ctr].body.as_slice());
-        // TODO: error handling
-        if sig_res.is_err() {
-            println!("failed to parse sig: {:?}", sig_res);
+    while *ctr < packets.len() && packets[*ctr].tag == Tag::Signature {
+        match tags::sig::parser(packets[*ctr].body.as_slice()) {
+            Ok((_, sig)) => {
+                res.push(sig);
+            }
+            Err(err) => {
+                println!("WARNING: failed to parse sig: {:?}", err);
+            }
         }
-        let (_, sig) = sig_res.unwrap();
-        res.push(sig);
-        ctr += 1;
+        *ctr += 1;
     }
 
     res
@@ -23,17 +24,17 @@ fn take_sigs(packets: &[Packet], mut ctr: usize) -> Vec<Signature> {
 
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-fn parse_single(mut ctr: usize, packets: &[Packet]) -> Result<(usize, Key)> {
+fn parse_single(ctr: &mut usize, packets: &[Packet]) -> Result<Key> {
     let packets_len = packets.len();
 
     // -- One Public-Key packet
     // TODO: better error management
-    assert_eq!(packets[ctr].tag, Tag::PublicKey);
+    assert_eq!(packets[*ctr].tag, Tag::PublicKey);
 
-    let body = packets[ctr].body.as_slice();
+    let body = packets[*ctr].body.as_slice();
     let (_, primary_key) = tags::pubkey::parser(body).map_err(|err| {
         println!("failed to parse pubkey {:?}", err);
-        println!("{:?}", packets[ctr]);
+        println!("{:?}", packets[*ctr]);
         match err {
             Incomplete(n) => {
                 // a size larger than the packet was requested, always invalid
@@ -51,11 +52,10 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> Result<(usize, Key)> {
         }
     })?;
 
-    ctr += 1;
+    *ctr += 1;
 
     // -- Zero or more revocation signatures
-    let rev_sigs = take_sigs(packets, ctr);
-    ctr += rev_sigs.len();
+    let _rev_sigs = take_sigs(packets, ctr);
 
     // -- Zero or more User ID packets
     // -- Zero or more User Attribute packets
@@ -63,32 +63,30 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> Result<(usize, Key)> {
     let mut users = vec![];
     let mut user_attrs = vec![];
 
-    while ctr < packets_len {
-        match packets[ctr].tag {
+    while *ctr < packets_len {
+        match packets[*ctr].tag {
             Tag::UserID => {
                 // TODO: better erorr handling
-                let id = tags::userid::parser(packets[ctr].body.as_slice());
-                ctr += 1;
+                let id = tags::userid::parser(packets[*ctr].body.as_slice());
+                *ctr += 1;
 
                 // --- zero or more signature packets
                 let sigs = take_sigs(packets, ctr);
-                ctr += sigs.len();
 
                 users.push(User::new(id, sigs));
             }
             Tag::UserAttribute => {
                 // TODO: better error handling
-                let a = tags::userattr::parser(packets[ctr].body.as_slice());
+                let a = tags::userattr::parser(packets[*ctr].body.as_slice());
                 if a.is_err() {
-                    println!("failed to parse {:?}\n{:?}", packets[ctr], a);
+                    println!("failed to parse {:?}\n{:?}", packets[*ctr], a);
                 }
 
                 let (_, attr) = a?;
-                ctr += 1;
+                *ctr += 1;
 
                 // --- zero or more signature packets
                 let sigs = take_sigs(packets, ctr);
-                ctr += sigs.len();
 
                 user_attrs.push(UserAttribute::new(attr, sigs));
             }
@@ -98,16 +96,17 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> Result<(usize, Key)> {
 
     // -- Zero or more Subkey packets
     let mut subkeys = vec![];
-    while ctr < packets_len && packets[ctr].tag == Tag::PublicSubkey {
+    while *ctr < packets_len && packets[*ctr].tag == Tag::PublicSubkey {
         // TODO: parse subkey
-        let subkey = &packets[ctr];
-        ctr += 1;
+        let subkey = &packets[*ctr];
+        *ctr += 1;
 
         let sigs = take_sigs(packets, ctr);
-        ctr += sigs.len();
 
         // TODO: better error handling
-        assert!(!sigs.is_empty(), "Missing signature");
+        if sigs.is_empty() {
+            println!("WARNING: missing signature");
+        }
 
         subkeys.push((subkey, sigs));
     }
@@ -115,15 +114,12 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> Result<(usize, Key)> {
     // TODO: better error handling
     assert!(!users.is_empty(), "Missing user ids");
 
-    Ok((
-        ctr,
-        Key {
-            primary_key,
-            users,
-            user_attributes: user_attrs,
-            // TODO: subkeys
-        },
-    ))
+    Ok(Key {
+        primary_key,
+        users,
+        user_attributes: user_attrs,
+        // TODO: subkeys
+    })
 }
 
 /// Parse a transferable public key
@@ -134,10 +130,9 @@ pub fn parse(packets: &[Packet]) -> Result<Vec<Key>> {
 
     while ctr < packets.len() {
         println!("{}/{}", ctr, packets.len());
-        match parse_single(ctr, packets) {
-            Ok((next_ctr, key)) => {
+        match parse_single(&mut ctr, packets) {
+            Ok(key) => {
                 keys.push(key);
-                ctr = next_ctr;
             }
             Err(err) => {
                 println!("failed to parse key: {:?}", err);

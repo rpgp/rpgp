@@ -14,7 +14,7 @@ named!(ecdsa_fields<Fields>, do_parse!(
     >> oid: take!(len)
     // MPI of an EC point representing a public key
     >>   p: mpi
-    >> ((oid, p, None, None))
+    >> (oid, p, None, None)
 ));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
@@ -34,7 +34,7 @@ named!(ecdh_fields<Fields>, do_parse!(
     // a one-octet algorithm ID for the symmetric algorithm used to wrap
     // the symmetric key used for the message encryption
     >>  alg: take!(1)
-    >> ((oid, p, Some(hash), Some(alg)))
+    >> (oid, p, Some(hash), Some(alg))
 ));
 
 named!(elgamal_fields<Fields>, do_parse!(
@@ -44,7 +44,7 @@ named!(elgamal_fields<Fields>, do_parse!(
     >> g: mpi
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
     >> y: mpi
-    >> ((p, g, Some(y), None))
+    >> (p, g, Some(y), None)
 ));
 
 named!(dsa_fields<Fields>, do_parse!(
@@ -52,13 +52,13 @@ named!(dsa_fields<Fields>, do_parse!(
     >> q: mpi
     >> g: mpi
     >> y: mpi
-    >> ((p, q, Some(g), Some(y)))
+    >> (p, q, Some(g), Some(y))
 ));
 
 named!(rsa_fields<Fields>, do_parse!(
        n: mpi
     >> e: mpi
-    >> ((n, e, None, None))
+    >> (n, e, None, None)
 ));
 
 named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
@@ -75,14 +75,14 @@ named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
                  &PublicKeyAlgorithm::ElgamalSign => call!(elgamal_fields)
                  // &PublicKeyAlgorithm::DiffieHellman => 
                  )
-    >> ((key_time, 0, alg, fields))
+    >> (key_time, 0, alg, fields)
 ));
 
 named!(old_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
        key_time: be_u32
     >>      exp: be_u16
     >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >> ((key_time, exp, alg, (&b""[..], &b""[..], None, None)))
+    >> (key_time, exp, alg, (&b""[..], &b""[..], None, None))
 ));
 
 /// Parse a public key packet (Tag 6)
