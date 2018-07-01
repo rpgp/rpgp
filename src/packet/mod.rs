@@ -87,7 +87,7 @@ named!(old_packet_header(&[u8]) -> (Version, Tag, usize), bits!(do_parse!(
         // TODO: Indeterminate length
         // 3 => unimplemented!("indeterminate length")
     )
-        >> ((ver, tag, len))
+        >> (ver, tag, len)
 )));
 
 /// Parses a new format packet header
@@ -112,7 +112,7 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, usize), bits!(do_parse!(
         // Partial Body Lengths
         // TODO: 224...254 => value!(1)
     )
-    >> ((ver, tag, len))
+    >> (ver, tag, len)
 )));
 
 /// Parse Packet Headers

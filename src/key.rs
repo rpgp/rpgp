@@ -21,7 +21,7 @@ impl Key {
         let res = packets_parser(bytes);
         let (_missing, packets) = res?;
         // TODO: warn if there was not processed input
-        println!("parsed {} packets", packets.len());
+
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
         pubkey::parse(&packets)

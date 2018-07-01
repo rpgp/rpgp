@@ -287,6 +287,7 @@ pub enum Subpacket {
     SignersUserID(String),
     PolicyURI(String),
     TrustSignature(u8),
+    RegularExpression(String),
 }
 
 enum_from_primitive!{
@@ -461,6 +462,7 @@ pub struct Signature {
     pub signature: Vec<u8>,
     pub policy_uri: Option<String>,
     pub trust_signature: Option<u8>,
+    pub regular_expression: Option<String>,
 }
 
 impl Signature {
@@ -501,6 +503,7 @@ impl Signature {
             signature,
             policy_uri: None,
             trust_signature: None,
+            regular_expression: None,
         }
     }
 }
@@ -552,8 +555,19 @@ pub enum PublicKeyAlgorithm {
     DiffieHellman = 21,
     /// EdDSA (not yet assigned)
     EdDSA = 22,
-    /// Private (from OpenGPG)
-    Private = 110,
+    /// Private experimental range (from OpenGPG)
+    // TODO: genenric Unknown(u8)
+    Private100 = 100,
+    Private101 = 101,
+    Private102 = 102,
+    Private103 = 103,
+    Private104 = 104,
+    Private105 = 105,
+    Private106 = 106,
+    Private107 = 107,
+    Private108 = 108,
+    Private109 = 109,
+    Private110 = 110,
 }
 }
 

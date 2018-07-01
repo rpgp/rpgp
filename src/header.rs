@@ -69,7 +69,7 @@ named!(kv_pair(CompleteStr) -> (&str, Vec<&str>), do_parse!(
     k: take_while!(is_name_token) >>
        sep                        >>
     v: field_body                 >>
-    ((k.0, v))
+    (k.0, v)
 ));
 
 named!(header(CompleteStr) -> Vec<(&str, Vec<&str>)>, many0!(

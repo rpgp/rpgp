@@ -4,7 +4,6 @@ use nom::{
 };
 use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
-use std::str;
 
 use errors;
 
@@ -30,13 +29,6 @@ pub fn u32_as_usize(a: u32) -> usize {
 #[inline]
 pub fn is_base64_token(c: char) -> bool {
     is_alphanumeric(c as u8) || c == '/' || c == '+'
-}
-
-pub fn collect_into_string(vec: &[&[u8]]) -> String {
-    vec.iter()
-        .map(|s| str::from_utf8(s).unwrap())
-        .collect::<Vec<&str>>()
-        .join("")
 }
 
 /// Recognizes one or more body tokens
@@ -136,11 +128,6 @@ pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn test_collect_into_string() {
-        let input: Vec<&[u8]> = vec![b"hello", b" ", b"world"];
-        assert_eq!(collect_into_string(input.as_slice()), "hello world");
-    }
 
     #[test]
     fn test_mpi() {
