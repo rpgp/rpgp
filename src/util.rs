@@ -137,7 +137,7 @@ pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
 mod tests {
     use super::*;
     #[test]
-    fn test_collecnt_into_string() {
+    fn test_collect_into_string() {
         let input: Vec<&[u8]> = vec![b"hello", b" ", b"world"];
         assert_eq!(collect_into_string(input.as_slice()), "hello world");
     }
