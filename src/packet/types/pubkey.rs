@@ -3,7 +3,7 @@ use nom::IResult;
 use packet::types::{Signature, User, UserAttribute};
 use packet::{tags, Packet, Tag};
 
-fn take_sigs(packets: &Vec<Packet>, mut ctr: usize) -> Vec<Signature> {
+fn take_sigs(packets: &[Packet], mut ctr: usize) -> Vec<Signature> {
     let mut res = vec![];
     while ctr < packets.len() && packets[ctr].tag == Tag::Signature {
         let sig_res = tags::sig::parser(packets[ctr].body.as_slice());
@@ -21,7 +21,7 @@ fn take_sigs(packets: &Vec<Packet>, mut ctr: usize) -> Vec<Signature> {
 
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-fn parse_single<'a>(mut ctr: usize, packets: &Vec<Packet>) -> (usize, Key) {
+fn parse_single(mut ctr: usize, packets: &[Packet]) -> (usize, Key) {
     let packets_len = packets.len();
 
     // -- One Public-Key packet
@@ -29,7 +29,7 @@ fn parse_single<'a>(mut ctr: usize, packets: &Vec<Packet>) -> (usize, Key) {
     assert_eq!(packets[ctr].tag, Tag::PublicKey);
 
     let res = tags::pubkey::parser(packets[ctr].body.as_slice());
-    if !res.is_ok() {
+    if res.is_err() {
         println!("failed to parse pubkey {:?}", &res);
         println!("{:?}", packets[ctr]);
     }
@@ -91,19 +91,19 @@ fn parse_single<'a>(mut ctr: usize, packets: &Vec<Packet>) -> (usize, Key) {
         ctr += sigs.len();
 
         // TODO: better error handling
-        assert!(sigs.len() > 0, "Missing signature");
+        assert!(!sigs.is_empty(), "Missing signature");
 
         subkeys.push((subkey, sigs));
     }
 
     // TODO: better error handling
-    assert!(users.len() > 0, "Missing user ids");
+    assert!(!users.is_empty(), "Missing user ids");
 
     (
         ctr,
         Key {
-            primary_key: primary_key,
-            users: users,
+            primary_key,
+            users,
             user_attributes: user_attrs,
             // TODO: subkeys
         },
@@ -112,13 +112,13 @@ fn parse_single<'a>(mut ctr: usize, packets: &Vec<Packet>) -> (usize, Key) {
 
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-pub fn parse<'a>(packets: Vec<Packet>) -> IResult<&'a [u8], Vec<Key>> {
+pub fn parse(packets: &[Packet]) -> IResult<&[u8], Vec<Key>> {
     let mut ctr = 0;
     let mut keys = Vec::new();
 
     while ctr < packets.len() {
         println!("{}/{}", ctr, packets.len());
-        let (next_ctr, key) = parse_single(ctr, &packets);
+        let (next_ctr, key) = parse_single(ctr, packets);
         ctr = next_ctr;
         keys.push(key);
     }

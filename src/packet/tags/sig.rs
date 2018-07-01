@@ -33,7 +33,7 @@ pub enum KeyFlag {
 
 /// Convert an epoch timestamp to a `DateTime`
 fn dt_from_timestamp(ts: u32) -> DateTime<Utc> {
-    DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(ts as i64, 0), Utc)
+    DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(i64::from(ts), 0), Utc)
 }
 
 /// Parse a signature creation time subpacket
@@ -204,14 +204,13 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
 named!(
     embedded_sig<Subpacket>,
-    map!(parser, |sig| Subpacket::EmbeddedSignature(sig))
+    map!(parser, |sig| Subpacket::EmbeddedSignature(Box::new(sig)))
 );
 
-fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
+fn subpacket<'a>(typ: &SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
-    println!("parsing subpacket: {:?} {:?}", typ, body);
 
-    match typ {
+    match *typ {
         SignatureCreationTime => signature_creation_time(body),
         SignatureExpirationTime => signature_expiration_time(body),
         ExportableCertification => unimplemented!("{:?}", typ),
@@ -244,7 +243,7 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>,
         len: packet_length
     // the subpacket type (1 octet)
     >> typ: map_opt!(be_u8, SubpacketType::from_u8)
-    >>   p: flat_map!(take!(len - 1), |b| subpacket(typ, b))
+    >>   p: flat_map!(take!(len - 1), |b| subpacket(&typ, b))
     >> (p)
 ))));
 
@@ -363,17 +362,17 @@ named!(
                     IsPrimary(b) => sig.is_primary = b,
                     KeyExpirationTime(d) => sig.key_expiration_time = Some(d),
                     Revocable(b) => sig.is_revocable = b,
-                    EmbeddedSignature(mut sig) => sig.embedded_signature = Some(Box::new(sig)),
+                    EmbeddedSignature(mut inner_sig) => sig.embedded_signature = Some(inner_sig),
                     PreferredKeyServer(server) => sig.preferred_key_server = Some(server),
                     SignatureExpirationTime(d) => sig.signature_expiration_time = Some(d),
                     Notation(name, value) => {
                         sig.notations.insert(name, value);
                     }
-                    RevocationKey(class, alg, fp) => {
+                    RevocationKey(class, algorithm, fingerprint) => {
                         sig.revocation_key = Some(types::RevocationKey {
-                            class: class,
-                            algorithm: alg,
-                            fingerprint: fp,
+                            class,
+                            algorithm,
+                            fingerprint,
                         });
                     }
                     SignersUserID(u) => sig.signers_userid = Some(u),

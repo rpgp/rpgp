@@ -32,7 +32,7 @@ pub fn is_base64_token(c: char) -> bool {
     is_alphanumeric(c as u8) || c == '/' || c == '+'
 }
 
-pub fn collect_into_string(vec: Vec<&[u8]>) -> String {
+pub fn collect_into_string(vec: &[&[u8]]) -> String {
     vec.iter()
         .map(|s| str::from_utf8(s).unwrap())
         .collect::<Vec<&str>>()
@@ -86,7 +86,7 @@ where
 pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let (number, len) = be_u16(input)?;
 
-    let len_actual = ((len + 7) >> 3) as u32;
+    let len_actual = u32::from((len + 7) >> 3);
 
     if len_actual > MAX_EXTERN_MPI_BITS {
         Err(Err::Error(error_position!(
@@ -137,11 +137,9 @@ pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
 mod tests {
     use super::*;
     #[test]
-    fn test_collect_into_string() {
-        assert_eq!(
-            collect_into_string(vec![b"hello", b" ", b"world"]),
-            "hello world"
-        );
+    fn test_collecnt_into_string() {
+        let input: Vec<&[u8]> = vec![b"hello", b" ", b"world"];
+        assert_eq!(collect_into_string(input.as_slice()), "hello world");
     }
 
     #[test]

@@ -23,8 +23,8 @@ pub enum UserAttributeType {
 
 impl UserAttributeType {
     pub fn to_u8(&self) -> u8 {
-        match self {
-            &UserAttributeType::Image(_) => 1,
+        match *self {
+            UserAttributeType::Image(_) => 1,
         }
     }
 }
@@ -36,11 +36,8 @@ pub struct UserAttribute {
 }
 
 impl UserAttribute {
-    pub fn new(attr: UserAttributeType, sigs: Vec<Signature>) -> Self {
-        UserAttribute {
-            attr: attr,
-            signatures: sigs,
-        }
+    pub fn new(attr: UserAttributeType, signatures: Vec<Signature>) -> Self {
+        UserAttribute { attr, signatures }
     }
 }
 
@@ -132,7 +129,7 @@ pub enum Subpacket {
     RevocationReason(RevocationCode, Vec<u8>),
     IsPrimary(bool),
     Revocable(bool),
-    EmbeddedSignature(Signature),
+    EmbeddedSignature(Box<Signature>),
     PreferredKeyServer(String),
     Notation(String, String),
     RevocationKey(u8, PublicKeyAlgorithm, [u8; 20]),
@@ -321,10 +318,10 @@ impl Signature {
         signature: Vec<u8>,
     ) -> Self {
         Signature {
-            version: version,
-            typ: typ,
-            pub_alg: pub_alg,
-            hash_alg: hash_alg,
+            version,
+            typ,
+            pub_alg,
+            hash_alg,
             key_expiration_time: None,
             signature_expiration_time: None,
             unhashed_subpackets: Vec::new(),
@@ -345,8 +342,8 @@ impl Signature {
             notations: HashMap::new(),
             revocation_key: None,
             signers_userid: None,
-            signed_hash_value: signed_hash_value,
-            signature: signature,
+            signed_hash_value,
+            signature,
         }
     }
 }
@@ -361,7 +358,7 @@ impl User {
     pub fn new<S: Into<String>>(id: S, signatures: Vec<Signature>) -> Self {
         User {
             id: id.into(),
-            signatures: signatures,
+            signatures,
         }
     }
 }
@@ -440,82 +437,87 @@ pub enum PublicKey {
 
 impl PublicKey {
     /// Create a new RSA key.
-    pub fn new_rsa(ver: KeyVersion, alg: PublicKeyAlgorithm, n: Vec<u8>, e: Vec<u8>) -> Self {
+    pub fn new_rsa(
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        n: Vec<u8>,
+        e: Vec<u8>,
+    ) -> Self {
         PublicKey::RSA {
-            version: ver,
-            algorithm: alg,
-            n: n,
-            e: e,
+            version,
+            algorithm,
+            n,
+            e,
         }
     }
 
     /// Create a new DSA key.
     pub fn new_dsa(
-        ver: KeyVersion,
-        alg: PublicKeyAlgorithm,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
         p: Vec<u8>,
         q: Vec<u8>,
         g: Vec<u8>,
         y: Vec<u8>,
     ) -> Self {
         PublicKey::DSA {
-            version: ver,
-            algorithm: alg,
-            p: p,
-            q: q,
-            g: g,
-            y: y,
+            version,
+            algorithm,
+            p,
+            q,
+            g,
+            y,
         }
     }
 
     /// Create a new ECDSA key.
     pub fn new_ecdsa(
-        ver: KeyVersion,
-        alg: PublicKeyAlgorithm,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
         curve: ECCCurve,
         p: Vec<u8>,
     ) -> Self {
         PublicKey::ECDSA {
-            version: ver,
-            algorithm: alg,
-            curve: curve,
-            p: p,
+            version,
+            algorithm,
+            curve,
+            p,
         }
     }
 
     /// Create a new ECDH key.
     pub fn new_ecdh(
-        ver: KeyVersion,
-        alg: PublicKeyAlgorithm,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
         curve: ECCCurve,
         p: Vec<u8>,
         hash: u8,
         alg_sym: u8,
     ) -> Self {
         PublicKey::ECDH {
-            version: ver,
-            algorithm: alg,
-            curve: curve,
-            p: p,
-            hash: hash,
-            alg_sym: alg_sym,
+            version,
+            algorithm,
+            curve,
+            p,
+            hash,
+            alg_sym,
         }
     }
 
     /// Create a new DSA key.
     pub fn new_elgamal(
-        ver: KeyVersion,
-        alg: PublicKeyAlgorithm,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
         p: Vec<u8>,
         g: Vec<u8>,
         y: Vec<u8>,
     ) -> Self {
         PublicKey::Elgamal {
-            version: ver,
-            algorithm: alg,
-            p: p,
-            g: g,
-            y: y,
+            version,
+            algorithm,
+            p,
+            g,
+            y,
         }
     }
 }
