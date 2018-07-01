@@ -1,26 +1,10 @@
 use enum_primitive::FromPrimitive;
 use nom::{be_u8, be_u16, be_u32};
 
-use packet::types::{KeyVersion, PrimaryKey, PublicKeyAlgorithm, ECCCurve};
+use packet::types::{KeyVersion, PrimaryKey, PublicKeyAlgorithm, ecc_curve_from_oid};
 use util::mpi;
 
 type Fields<'a> = (&'a [u8], &'a [u8], Option<&'a [u8]>, Option<&'a [u8]>);
-
-const ECC_P256: [u8; 8] = [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];
-const ECC_P384: [u8; 5] = [0x2B, 0x81, 0x04, 0x00, 0x22];
-const ECC_P521: [u8; 5] = [0x2B, 0x81, 0x04, 0x00, 0x23];
-
-fn to_ecc_curve(oid: &[u8]) -> Option<ECCCurve> {
-    if oid == &ECC_P256[..] {
-        Some(ECCCurve::P256)
-    } else if oid == &ECC_P384[..] {
-        Some(ECCCurve::P384)
-    } else if oid == &ECC_P521[..] {
-        Some(ECCCurve::P521)
-    } else {
-        None
-    }
-}
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 named!(ecdsa_fields<Fields>, do_parse!(
@@ -79,10 +63,7 @@ named!(rsa_fields<Fields>, do_parse!(
 
 named!(new_public_key_parser<(u32, u16, PublicKeyAlgorithm, Fields)>, do_parse!(
        key_time: be_u32
-        >>      alg: map_opt!(be_u8, |v| {
-            println!("parsing alg: {:?}", v);
-            PublicKeyAlgorithm::from_u8(v)
-        })
+    >>      alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
     >>   fields: switch!(value!(&alg), 
                  &PublicKeyAlgorithm::RSA        => call!(rsa_fields)   |
                  &PublicKeyAlgorithm::RSAEncrypt => call!(rsa_fields)   |
@@ -132,13 +113,13 @@ named!(pub parser<PrimaryKey>, do_parse!(
             PublicKeyAlgorithm::ECDSA => PrimaryKey::new_public_ecdsa(
                 key_ver,
                 details.2,
-                to_ecc_curve((details.3).0).unwrap(),
+                ecc_curve_from_oid((details.3).0).unwrap(),
                 (details.3).1.to_vec()
             ),
             PublicKeyAlgorithm::ECDH => PrimaryKey::new_public_ecdh(
                 key_ver,
                 details.2,
-                to_ecc_curve((details.3).0).unwrap(),
+                ecc_curve_from_oid((details.3).0).unwrap(),
                 (details.3).1.to_vec(),
                 (details.3).2.unwrap()[0],
                 (details.3).3.unwrap()[0]

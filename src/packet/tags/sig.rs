@@ -257,8 +257,8 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>,
     >> (p)
 ))));
 
-fn unimplemented<'a>(body: &'a [u8], typ: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
-    unimplemented!("actual signature for {:?} not there", typ);
+fn unimplemented<'a>(_body: &'a [u8], typ: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
+    unimplemented!("actual signature for {:?}", typ);
 }
 
 named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<u8>>, switch!(
@@ -269,6 +269,10 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<u8>>, 
         acc.extend(item);
         acc
     }) |
+    &PublicKeyAlgorithm::ECDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<_>, item| {
+        acc.extend(item);
+        acc
+    }) |    
     // TODO: check which other algorithms need handling
     _ => call!(unimplemented, typ)
 ));
