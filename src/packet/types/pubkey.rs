@@ -1,5 +1,7 @@
-use errors::Result;
+use errors::{Error, Result};
 use key::Key;
+use nom::Err::Incomplete;
+use nom::Needed;
 use packet::types::{Signature, User, UserAttribute};
 use packet::{tags, Packet, Tag};
 
@@ -28,12 +30,26 @@ fn parse_single(mut ctr: usize, packets: &[Packet]) -> Result<(usize, Key)> {
     // TODO: better error management
     assert_eq!(packets[ctr].tag, Tag::PublicKey);
 
-    let res = tags::pubkey::parser(packets[ctr].body.as_slice());
-    if res.is_err() {
-        println!("failed to parse pubkey {:?}", &res);
+    let body = packets[ctr].body.as_slice();
+    let (_, primary_key) = tags::pubkey::parser(body).map_err(|err| {
+        println!("failed to parse pubkey {:?}", err);
         println!("{:?}", packets[ctr]);
-    }
-    let (_, primary_key) = res?;
+        match err {
+            Incomplete(n) => {
+                // a size larger than the packet was requested, always invalid
+                if let Needed::Size(size) = n {
+                    if size > body.len() {
+                        Error::RequestedSizeTooLarge
+                    } else {
+                        err.into()
+                    }
+                } else {
+                    err.into()
+                }
+            }
+            _ => err.into(),
+        }
+    })?;
 
     ctr += 1;
 
@@ -118,9 +134,20 @@ pub fn parse(packets: &[Packet]) -> Result<Vec<Key>> {
 
     while ctr < packets.len() {
         println!("{}/{}", ctr, packets.len());
-        let (next_ctr, key) = parse_single(ctr, packets)?;
-        ctr = next_ctr;
-        keys.push(key);
+        match parse_single(ctr, packets) {
+            Ok((next_ctr, key)) => {
+                keys.push(key);
+                ctr = next_ctr;
+            }
+            Err(err) => {
+                println!("failed to parse key: {:?}", err);
+                // skipping packets until we find a pubkey again
+                ctr += 1;
+                while ctr < packets.len() && packets[ctr].tag != Tag::PublicKey {
+                    ctr += 1;
+                }
+            }
+        }
     }
 
     // TODO: better error handling

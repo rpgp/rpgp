@@ -134,6 +134,8 @@ pub enum Subpacket {
     Notation(String, String),
     RevocationKey(u8, PublicKeyAlgorithm, [u8; 20]),
     SignersUserID(String),
+    PolicyURI(String),
+    TrustSignature(u8),
 }
 
 enum_from_primitive!{
@@ -306,6 +308,8 @@ pub struct Signature {
     pub signers_userid: Option<String>,
     pub signed_hash_value: Vec<u8>,
     pub signature: Vec<u8>,
+    pub policy_uri: Option<String>,
+    pub trust_signature: Option<u8>,
 }
 
 impl Signature {
@@ -344,6 +348,8 @@ impl Signature {
             signers_userid: None,
             signed_hash_value,
             signature,
+            policy_uri: None,
+            trust_signature: None,
         }
     }
 }

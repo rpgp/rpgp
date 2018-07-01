@@ -49,12 +49,12 @@ named!(
 
 /// Parse an issuer subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
-fn issuer<'a>(body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
-    // TODO: proper error handling
-    assert_eq!(body.len(), 8);
-
-    Ok((&b""[..], Subpacket::Issuer(clone_into_array(body))))
-}
+named!(
+    issuer<Subpacket>,
+    map!(complete!(take!(8)), |body| {
+        Subpacket::Issuer(clone_into_array(body))
+    })
+);
 
 /// Parse a key expiration time subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
@@ -69,39 +69,33 @@ named!(
 
 /// Parse a preferred symmetric algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
-fn pref_sym_alg<'a>(body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
-    let algs = body
-        .iter()
-        // TODO: proper error handling
-        .map(|b| SymmetricKeyAlgorithm::from_u8(*b).unwrap())
-        .collect();
-
-    Ok((&b""[..], Subpacket::PreferredSymmetricAlgorithms(algs)))
-}
+named!(
+    pref_sym_alg<Subpacket>,
+    do_parse!(
+        algs: many0!(complete!(map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)))
+            >> (Subpacket::PreferredSymmetricAlgorithms(algs))
+    )
+);
 
 /// Parse a preferred hash algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.8
-fn pref_hash_alg<'a>(body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
-    let algs = body
-        .iter()
-        // TODO: proper error handling
-        .map(|b| HashAlgorithm::from_u8(*b).unwrap())
-        .collect();
-
-    Ok((&b""[..], Subpacket::PreferredHashAlgorithms(algs)))
-}
+named!(
+    pref_hash_alg<Subpacket>,
+    do_parse!(
+        algs: many0!(complete!(map_opt!(be_u8, HashAlgorithm::from_u8)))
+            >> (Subpacket::PreferredHashAlgorithms(algs))
+    )
+);
 
 /// Parse a preferred compression algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.9
-fn pref_com_alg<'a>(body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
-    let algs = body
-        .iter()
-        // TODO: proper error handling
-        .map(|b| CompressionAlgorithm::from_u8(*b).unwrap())
-        .collect();
-
-    Ok((&b""[..], Subpacket::PreferredCompressionAlgorithms(algs)))
-}
+named!(
+    pref_com_alg<Subpacket>,
+    do_parse!(
+        algs: many0!(complete!(map_opt!(be_u8, CompressionAlgorithm::from_u8)))
+            >> (Subpacket::PreferredCompressionAlgorithms(algs))
+    )
+);
 
 /// Parse a signature expiration time subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
@@ -112,6 +106,13 @@ named!(
         be_u32,
         |date| Subpacket::SignatureExpirationTime(dt_from_timestamp(date))
     )
+);
+
+/// Parse a trust signature subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.13
+named!(
+    trust_signature<Subpacket>,
+    map!(be_u8, Subpacket::TrustSignature)
 );
 
 /// Parse a revocable subpacket
@@ -173,6 +174,15 @@ named!(
     map!(be_u8, |a| Subpacket::IsPrimary(a == 1))
 );
 
+/// Parse a policy URI subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
+named!(
+    policy_uri<Subpacket>,
+    map!(map_res!(rest, str::from_utf8), |v| {
+        Subpacket::PolicyURI(v.to_string())
+    })
+);
+
 /// Parse a key flags subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.21
 fn key_flags(body: &[u8]) -> IResult<&[u8], Subpacket> {
@@ -214,7 +224,7 @@ fn subpacket<'a>(typ: &SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpa
         SignatureCreationTime => signature_creation_time(body),
         SignatureExpirationTime => signature_expiration_time(body),
         ExportableCertification => unimplemented!("{:?}", typ),
-        TrustSignature => unimplemented!("{:?}", typ),
+        TrustSignature => trust_signature(body),
         RegularExpression => unimplemented!("{:?}", typ),
         Revocable => revocable(body),
         KeyExpirationTime => key_expiration(body),
@@ -227,7 +237,7 @@ fn subpacket<'a>(typ: &SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpa
         KeyServerPreferences => key_server_prefs(body),
         PreferredKeyServer => preferred_key_server(body),
         PrimaryUserID => primary_userid(body),
-        PolicyURI => unimplemented!("{:?}", typ),
+        PolicyURI => policy_uri(body),
         KeyFlags => key_flags(body),
         SignersUserID => signers_userid(body),
         RevocationReason => rev_reason(body),
@@ -386,6 +396,8 @@ named!(
                         });
                     }
                     SignersUserID(u) => sig.signers_userid = Some(u),
+                    PolicyURI(s) => sig.policy_uri = Some(s),
+                    TrustSignature(v) => sig.trust_signature = Some(v),
                 }
             }
 
