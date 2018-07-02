@@ -7,6 +7,68 @@ pub mod pubkey;
 // const OID_ECC_P384: [u8; 5] = [0x2B, 0x81, 0x04, 0x00, 0x22];
 // const OID_ECC_P521: [u8; 5] = [0x2B, 0x81, 0x04, 0x00, 0x23];
 
+/// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-4
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Packet {
+    /// Indicator if this is an old or new versioned packet
+    pub version: Version,
+    /// Denotes the type of data this packet holds
+    pub tag: Tag,
+    /// The raw bytes of the packet
+    pub body: Vec<u8>,
+}
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Tag {
+    /// Public-Key Encrypted Session Key Packet
+    PublicKeyEncryptedSessionKey = 1,
+    /// Signature Packet
+    Signature = 2,
+    /// Symmetric-Key Encrypted Session Key Packet
+    SymKeyEncryptedSessionKey = 3,
+    /// One-Pass Signature Packet
+    OnePassSignature = 4,
+    /// Secret-Key Packet
+    SecretKey = 5,
+    /// Public-Key Packet
+    PublicKey = 6,
+    /// Secret-Subkey Packet
+    SecretSubkey = 7,
+    /// Compressed Data Packet
+    CompressedData = 8,
+    /// Symmetrically Encrypted Data Packet
+    SymetricEncryptedData = 9,
+    /// Marker Packet
+    Marker = 10,
+    /// Literal Data Packet
+    Literal = 11,
+    /// Trust Packet
+    Trust = 12,
+    /// User ID Packet
+    UserID = 13,
+    /// Public-Subkey Packet
+    PublicSubkey = 14,
+    /// User Attribute Packet
+    UserAttribute = 17,
+    /// Sym. Encrypted and Integrity Protected Data Packet
+    SymEncryptedProtectedData = 18,
+    /// Modification Detection Code Packet
+    ModDetectionCode = 19,
+}
+}
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Version {
+    /// Old Packet Format
+    Old = 0,
+    /// New Packet Format
+    New = 1,
+}
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ECCCurve {
     Curve25519,

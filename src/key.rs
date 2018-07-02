@@ -1,6 +1,6 @@
 use armor;
 use errors::{Error, Result};
-use packet::packets_parser;
+use packet;
 use packet::types::{pubkey, PrimaryKey, Signature, User, UserAttribute};
 use std::io::Read;
 
@@ -42,7 +42,7 @@ impl Key {
 
     /// Parse byte encoded keys.
     pub fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
-        let packets = packets_parser(bytes)?;
+        let packets = packet::parser(bytes)?;
 
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
