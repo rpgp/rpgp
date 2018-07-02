@@ -13,6 +13,7 @@ byteorder = "^1.1.0"
 enum_primitive = "^0.1.1"
 chrono = "^0.4.0"
 failure = "*"
+circular = "0.2"
 
 [dependencies.nom]
 version = "^4.0"

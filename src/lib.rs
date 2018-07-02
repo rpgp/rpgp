@@ -14,6 +14,8 @@ extern crate failure;
 #[macro_use]
 extern crate hex_literal;
 
+extern crate circular;
+
 pub mod email;
 pub mod key;
 
