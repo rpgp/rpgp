@@ -1,7 +1,8 @@
 use armor;
-use errors::Result;
+use errors::{Error, Result};
 use packet::packets_parser;
 use packet::types::{pubkey, PrimaryKey, Signature, User, UserAttribute};
+use std::io::Read;
 
 /// Represents a PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -15,24 +16,44 @@ pub struct Key {
 }
 
 impl Key {
-    /// Parse a raw byte encoded publickey.
+    /// Parse a single byte encoded key.
     /// This is usually a file with the extension `.pgp`.
-    pub fn from_raw_bytes(bytes: &[u8]) -> Result<Vec<Self>> {
-        let res = packets_parser(bytes);
-        let (_missing, packets) = res?;
-        // TODO: warn if there was not processed input
+    pub fn from_bytes(bytes: impl Read) -> Result<Self> {
+        let keys = Key::from_bytes_many(bytes)?;
+
+        if keys.len() > 1 {
+            return Err(Error::MultipleKeys);
+        }
+
+        keys.into_iter().nth(0).ok_or_else(|| Error::NoKey)
+    }
+
+    /// Parse a single armor encoded key string.
+    /// This is usually a file with the extension `.asc`.
+    pub fn from_string(input: &str) -> Result<Self> {
+        let keys = Key::from_string_many(input)?;
+
+        if keys.len() > 1 {
+            return Err(Error::MultipleKeys);
+        }
+
+        keys.into_iter().nth(0).ok_or_else(|| Error::NoKey)
+    }
+
+    /// Parse byte encoded keys.
+    pub fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
+        let packets = packets_parser(bytes)?;
 
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
         pubkey::parse(&packets)
     }
 
-    /// Parse an armor encoded publickey.
-    /// This is usually a file with the extension `.asc`.
-    pub fn from_armor(input: &str) -> Result<Vec<Self>> {
+    /// Parse an armor encoded list of keys.
+    pub fn from_string_many(input: &str) -> Result<Vec<Self>> {
         let (_typ, _headers, body) = armor::parse(input)?;
         // TODO: add typ and headers information to the key possibly?
-        Key::from_raw_bytes(body.as_slice())
+        Key::from_bytes_many(body.as_slice())
     }
 }
 
@@ -69,7 +90,7 @@ mod tests {
 
     fn test_parse_dump(i: usize) {
         let buf = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
-        Key::from_raw_bytes(buf.as_slice()).unwrap();
+        Key::from_bytes_many(buf.as_slice()).unwrap();
     }
 
     #[test]
@@ -127,17 +148,14 @@ mod tests {
             let name = format!("gnupg-v1-00{}.asc", i);
             let buf = get_test_key(&name);
             let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-            let key = Key::from_armor(input).expect("failed to parse key");
-            assert_eq!(1, key.len());
+            Key::from_string(input).expect("failed to parse key");
         }
     }
     #[test]
     fn test_parse_details() {
         let raw = include_bytes!("../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc");
         let input = ::std::str::from_utf8(raw).unwrap();
-        let keys = Key::from_armor(input).expect("failed to parse key");
-        assert_eq!(keys.len(), 1);
-        let key = &keys[0];
+        let key = Key::from_string(input).expect("failed to parse key");
 
         // assert_eq!(key.primary_key.fingerprint(), "56c65c513a0d1b9cff532d784c073ae0c8445c0c");
 

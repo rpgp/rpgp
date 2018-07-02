@@ -1,8 +1,14 @@
 use enum_primitive::FromPrimitive;
 use util::{u8_as_usize, u16_as_usize, u32_as_usize};
+use std::io::Read;
+use circular::Buffer;
+use nom::{self, Needed, Offset};
 
+use errors::Result;
+    
 pub mod types;
 pub mod tags;
+
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4
@@ -127,4 +133,75 @@ named!(pub packet_parser<Packet>, do_parse!(
         })
 ));
 
-named!(pub packets_parser<Vec<Packet>>, many1!(complete!(packet_parser)));
+/// Parse packets, in a streaming fashion from the given reader.
+pub fn packets_parser(mut input: impl Read) -> Result<Vec<Packet>> {
+    // maximum size of our buffer
+    let max_capacity = 1024 * 1024 * 1024;
+    // the inital capacity of our buffer
+    // TODO: use a better value than a random guess
+    let mut capacity = 1024;
+    let mut b = Buffer::with_capacity(capacity);
+
+    let mut packets = Vec::new();
+
+    loop {
+        // read some data
+        let sz = input.read(b.space()).unwrap();
+        b.fill(sz);
+
+        // if there's no more available data in the buffer after a write, that means we reached
+        // the end of the input
+        if b.available_data() == 0 {
+            break;
+        }
+
+        let needed: Option<Needed>;
+
+        loop {
+            let length = {
+                match packet_parser(b.data()) {
+                    Ok((remaining, p)) => {
+                        packets.push(p);
+                        b.data().offset(remaining)
+                    }
+                    Err(err) => match err {
+                        nom::Err::Incomplete(n) => {
+                            needed = Some(n);
+                            break;
+                        }
+                        _ => return Err(err.into())
+                    },
+                }
+            };
+            
+            b.consume(length);
+        }
+
+        // if the parser returned `Incomplete`, and it needs more data than the buffer can hold, we grow the buffer.
+        if let Some(Needed::Size(sz)) = needed {
+            if sz > b.capacity() && capacity * 2 < max_capacity {
+                capacity *= 2;
+                b.grow(capacity);
+            }
+        }
+    }
+
+    Ok(packets)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::path::Path;
+    
+    #[test]
+    fn test_packets_parser() {
+        let p = Path::new("./tests/sks-dump/0000.pgp");
+        let file = File::open(p).unwrap();
+
+        let packets = packets_parser(file).unwrap();
+        assert_eq!(packets.len(), 141945);
+    }
+}

@@ -23,6 +23,10 @@ pub enum Error {
     Base64DecodeError(base64::DecodeError),
     #[fail(display = "requested data size is larger than the packet body")]
     RequestedSizeTooLarge,
+    #[fail(display = "no valid key found")]
+    NoKey,
+    #[fail(display = "more than one key found")]
+    MultipleKeys,
 }
 
 impl<'a> From<nom::Err<&'a [u8]>> for Error {
