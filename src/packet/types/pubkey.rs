@@ -2,8 +2,8 @@ use errors::{Error, Result};
 use key::Key;
 use nom::Err::Incomplete;
 use nom::Needed;
-use packet::types::{Signature, User, UserAttribute};
-use packet::{tags, Packet, Tag};
+use packet::tags;
+use packet::types::{Packet, Signature, Tag, User, UserAttribute};
 
 fn take_sigs(packets: &[Packet], ctr: &mut usize) -> Vec<Signature> {
     let mut res = vec![];

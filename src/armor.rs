@@ -6,7 +6,7 @@ use byteorder::{ByteOrder, BigEndian};
 use std::collections::HashMap;
 use std::str;
 
-use packet::Packet;
+use packet::types::Packet;
 use util::{base64_token, end_of_line};
 use errors::{Result, Error};
 
