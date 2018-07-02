@@ -5,6 +5,7 @@ use nom::Err::Incomplete;
 use nom::Needed;
 use packet::tags;
 use packet::types::{Packet, PrimaryKey, Signature, Tag, User, UserAttribute};
+use std::iter::IntoIterator;
 
 /// Take as many consecutive signatures as we can find and try to parse them.
 /// Skips the ones that are not parsed, but they are reflected in the `processed` count that is returned.
@@ -143,7 +144,7 @@ fn parse_single(packets: &[&Packet]) -> Result<Key> {
 
 /// Parse a transferable public key
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-pub fn parse(packets: &[Packet]) -> Result<Vec<Key>> {
+pub fn parse<'a>(packets: impl IntoIterator<Item = &'a Packet>) -> Result<Vec<Key>> {
     // This counter tracks which top level key we are in.
     let mut ctr = 0;
 
