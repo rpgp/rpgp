@@ -70,27 +70,23 @@ mod tests {
     use std::io::Read;
     use std::path::{Path, PathBuf};
 
-    fn read_file(path: PathBuf) -> Vec<u8> {
+    fn read_file(path: PathBuf) -> File {
         // Open the path in read-only mode, returns `io::Result<File>`
-        let mut file = match File::open(&path) {
+        match File::open(&path) {
             // The `description` method of `io::Error` returns a string that
             // describes the error
             Err(why) => panic!("couldn't open {}: {}", path.display(), why),
             Ok(file) => file,
-        };
-        let mut res = Vec::new();
-        file.read_to_end(&mut res).expect("failed to read file");
-
-        res
+        }
     }
 
-    fn get_test_key(name: &str) -> Vec<u8> {
+    fn get_test_key(name: &str) -> File {
         return read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name));
     }
 
     fn test_parse_dump(i: usize) {
-        let buf = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
-        Key::from_bytes_many(buf.as_slice()).unwrap();
+        let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
+        Key::from_bytes_many(f).unwrap();
     }
 
     #[test]
@@ -146,7 +142,10 @@ mod tests {
     fn test_parse_gnupg_v1() {
         for i in 1..5 {
             let name = format!("gnupg-v1-00{}.asc", i);
-            let buf = get_test_key(&name);
+            let mut file = get_test_key(&name);
+            let mut buf = vec![];
+            file.read_to_end(&mut buf).unwrap();
+
             let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
             Key::from_string(input).expect("failed to parse key");
         }
