@@ -9,10 +9,16 @@ use std::io::Read;
 pub struct Key {
     pub primary_key: PrimaryKey,
     pub revocation_signatures: Vec<Signature>,
-    pub direct_signatures: Vec<Signature>,
     pub users: Vec<User>,
     pub user_attributes: Vec<UserAttribute>,
-    // pub subkeys: Vec<Subkey>
+    pub subkeys: Vec<SubKey>,
+}
+
+/// Represents a PGP SubKey
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct SubKey {
+    pub key: PrimaryKey,
+    pub signatures: Vec<Signature>,
 }
 
 impl Key {
@@ -174,6 +180,9 @@ mod tests {
             }
             _ => panic!("wrong key returned: {:?}", key.primary_key),
         }
+
+        // TODO: examine subkey details
+        assert_eq!(key.subkeys.len(), 1, "missing subkey");
 
         let mut sig1 = Signature::new(
             SignatureVersion::V4,

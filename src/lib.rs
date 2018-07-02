@@ -9,12 +9,12 @@ extern crate enum_primitive;
 extern crate chrono;
 #[macro_use]
 extern crate failure;
+extern crate circular;
+extern crate itertools;
 
 #[cfg(test)]
 #[macro_use]
 extern crate hex_literal;
-
-extern crate circular;
 
 pub mod email;
 pub mod key;
