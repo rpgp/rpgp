@@ -97,8 +97,6 @@ impl ParseKey<key::Public> for KeyParser {
     /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
     /// Currently skips packets it fails to parse.
     fn single(packets: &[&Packet]) -> Result<Key<key::Public>> {
-        // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
-        // TODO: v3 vs v4 packets
         // TODO: abstract to public and private keys
         // TODO: actually return errors, don't silently fail (idea, return Result<Vec<Key>> at `parse` level)
 
@@ -154,6 +152,8 @@ impl ParseKey<key::Public> for KeyParser {
                     ctr += 1;
 
                     // --- zero or more signature packets
+
+                    // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
                     let (cnt, sigs) = take_sigs(&packets[ctr..])?;
                     ctr += cnt;
 
@@ -170,6 +170,8 @@ impl ParseKey<key::Public> for KeyParser {
                     ctr += 1;
 
                     // --- zero or more signature packets
+
+                    // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
                     let (cnt, sigs) = take_sigs(&packets[ctr..])?;
                     ctr += cnt;
 
@@ -177,6 +179,18 @@ impl ParseKey<key::Public> for KeyParser {
                 }
                 _ => break,
             }
+        }
+
+        // -- Only V4 keys should have sub keys
+
+        // TODO: better error handling
+        if ctr != packets_len && primary_key.version() != &KeyVersion::V4 {
+            panic!(
+                "no more packets expected {} {} {:?}",
+                ctr,
+                packets_len,
+                &packets[ctr..]
+            );
         }
 
         // -- Zero or more Subkey packets
@@ -202,6 +216,16 @@ impl ParseKey<key::Public> for KeyParser {
         // TODO: better error handling
         if users.is_empty() {
             println!("WARNING: missing user ids");
+        }
+
+        // TODO: better error handling
+        if ctr != packets_len {
+            panic!(
+                "failed to process all packets, processed {}/{}\n{:?}",
+                ctr,
+                packets_len,
+                &packets[ctr..]
+            )
         }
 
         Ok(Key {
