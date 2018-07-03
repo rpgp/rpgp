@@ -17,13 +17,12 @@ extern crate itertools;
 extern crate hex_literal;
 
 pub mod email;
-pub mod key;
+pub use composed::key::Key;
 
 // public so it can be used in doc test
 pub mod util;
 
 mod armor;
+mod composed;
 mod errors;
-mod header;
 mod packet;
-mod types;
