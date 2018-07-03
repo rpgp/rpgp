@@ -4,6 +4,8 @@ use errors::{Error, Result};
 use packet::{self, types};
 use std::io::Read;
 
+// TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
+
 /// Represents a PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Key<T>
@@ -60,7 +62,7 @@ where
     /// Parse byte encoded keys.
     pub fn from_bytes_many(bytes: impl Read) -> Result<Vec<Key<T>>> {
         let packets = packet::parser(bytes)?;
-
+        println!("got packets {:?}", packets);
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
         parser::KeyParser::many(&packets)
@@ -69,6 +71,7 @@ where
     /// Parse an armor encoded list of keys.
     pub fn from_string_many(input: &str) -> Result<Vec<Key<T>>> {
         let (_typ, _headers, body) = armor::parse(input)?;
+        println!("got key: {:?} {:?} {}", _typ, _headers, body.len());
         // TODO: add typ and headers information to the key possibly?
         Key::from_bytes_many(body.as_slice())
     }
@@ -167,6 +170,22 @@ mod tests {
             Key::<key::Public>::from_string(input).expect("failed to parse key");
         }
     }
+
+    #[test]
+    fn test_parse_openpgp_sample_rsa_private() {
+        let p = Path::new("./tests/openpgp/samplekeys/rsa-primary-auth-only.sec.asc");
+        let mut file = read_file(p.to_path_buf());
+
+        let mut buf = vec![];
+        file.read_to_end(&mut buf).unwrap();
+
+        let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
+        let key = Key::<key::Private>::from_string(input).expect("failed to parse key");
+
+        assert_eq!(key.primary_key.version(), &KeyVersion::V4);
+        assert_eq!(key.primary_key.algorithm(), &PublicKeyAlgorithm::RSA);
+    }
+
     #[test]
     fn test_parse_details() {
         let raw = include_bytes!("../../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc");
@@ -179,7 +198,7 @@ mod tests {
 
         assert_eq!(
             key.primary_key,
-            key::RSA::<key::Public>::new_public(
+            key::RSA::<key::Public>::new(
                 KeyVersion::V4,
                 PublicKeyAlgorithm::RSA,
                 key::RSAPublicParams {

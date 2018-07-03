@@ -32,72 +32,14 @@ where
     T: ::std::fmt::Debug + Clone,
 {
     fn key(&Packet) -> Result<key::Key<T>>;
-    fn single(&[&Packet]) -> Result<Key<T>>;
 
-    /// Parse a transferable public key
-    /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-    fn many<'a>(packets: impl IntoIterator<Item = &'a Packet>) -> Result<Vec<Key<T>>> {
-        // This counter tracks which top level key we are in.
-        let mut ctr = 0;
+    fn key_tag() -> Tag;
+    fn subkey_tag() -> Tag;
 
-        packets
-            .into_iter()
-            .group_by(|packet| {
-                if packet.tag == Tag::PublicKey {
-                    ctr += 1;
-                }
-
-                ctr
-            })
-            .into_iter()
-            .map(|(_, packets)| Self::single(&packets.collect::<Vec<_>>()))
-        // TODO: better error handling
-            .filter(|v| v.is_ok())
-            .collect()
-    }
-}
-
-pub struct KeyParser {}
-
-impl ParseKey<key::Private> for KeyParser {
-    fn key(_packet: &Packet) -> Result<key::Key<key::Private>> {
-        unimplemented!();
-    }
-
-    fn single(_packets: &[&Packet]) -> Result<Key<key::Private>> {
-        unimplemented!();
-    }
-}
-
-impl ParseKey<key::Public> for KeyParser {
-    fn key(packet: &Packet) -> Result<key::Key<key::Public>> {
-        let (_, key) = tags::pubkey::parser(packet.body.as_slice()).map_err(|err| {
-            println!("WARNING: failed to parse pubkey {:?}", err);
-            match err {
-                Incomplete(n) => {
-                    // a size larger than the packet was requested, always invalid
-                    if let Needed::Size(size) = n {
-                        if size > packet.body.len() {
-                            Error::RequestedSizeTooLarge
-                        } else {
-                            err.into()
-                        }
-                    } else {
-                        err.into()
-                    }
-                }
-                _ => err.into(),
-            }
-        })?;
-
-        Ok(key)
-    }
-
-    /// Parse a single transferable public key.
+    /// Parse a single transferable public or private key.
     /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
     /// Currently skips packets it fails to parse.
-    fn single(packets: &[&Packet]) -> Result<Key<key::Public>> {
-        // TODO: abstract to public and private keys
+    fn single(packets: &[&Packet]) -> Result<Key<T>> {
         // TODO: actually return errors, don't silently fail (idea, return Result<Vec<Key>> at `parse` level)
 
         let mut ctr = 0;
@@ -106,7 +48,7 @@ impl ParseKey<key::Public> for KeyParser {
         // -- One Public-Key packet
         // TODO: better error management
         // idea: use Error::UnexpectedPacket(actual, expected)
-        assert_eq!(packets[ctr].tag, Tag::PublicKey);
+        assert_eq!(packets[ctr].tag, Self::key_tag());
 
         let primary_key = Self::key(packets[ctr])?;
         ctr += 1;
@@ -195,7 +137,7 @@ impl ParseKey<key::Public> for KeyParser {
 
         // -- Zero or more Subkey packets
         let mut subkeys = vec![];
-        while ctr < packets_len && packets[ctr].tag == Tag::PublicSubkey {
+        while ctr < packets_len && packets[ctr].tag == Self::subkey_tag() {
             let subkey = Self::key(packets[ctr])?;
             ctr += 1;
 
@@ -236,5 +178,95 @@ impl ParseKey<key::Public> for KeyParser {
             revocation_signatures,
             direct_signatures,
         })
+    }
+
+    /// Parse a transferable public or private key
+    /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+    fn many<'a>(packets: impl IntoIterator<Item = &'a Packet>) -> Result<Vec<Key<T>>> {
+        // This counter tracks which top level key we are in.
+        let mut ctr = 0;
+
+        packets
+            .into_iter()
+            .group_by(|packet| {
+                if packet.tag == Self::key_tag() {
+                    ctr += 1;
+                }
+
+                ctr
+            })
+            .into_iter()
+            .map(|(_, packets)| Self::single(&packets.collect::<Vec<_>>()))
+        // TODO: better error handling
+            .filter(|v| v.is_ok())
+            .collect()
+    }
+}
+
+pub struct KeyParser {}
+
+impl ParseKey<key::Private> for KeyParser {
+    fn key(packet: &Packet) -> Result<key::Key<key::Private>> {
+        let (_, key) = tags::privkey::parser(packet.body.as_slice()).map_err(|err| {
+            println!("WARNING: failed to parse pubkey {:?}", err);
+            match err {
+                Incomplete(n) => {
+                    // a size larger than the packet was requested, always invalid
+                    if let Needed::Size(size) = n {
+                        if size > packet.body.len() {
+                            Error::RequestedSizeTooLarge
+                        } else {
+                            err.into()
+                        }
+                    } else {
+                        err.into()
+                    }
+                }
+                _ => err.into(),
+            }
+        })?;
+
+        Ok(key)
+    }
+
+    fn key_tag() -> Tag {
+        Tag::SecretKey
+    }
+
+    fn subkey_tag() -> Tag {
+        Tag::SecretSubkey
+    }
+}
+
+impl ParseKey<key::Public> for KeyParser {
+    fn key(packet: &Packet) -> Result<key::Key<key::Public>> {
+        let (_, key) = tags::pubkey::parser(packet.body.as_slice()).map_err(|err| {
+            println!("WARNING: failed to parse pubkey {:?}", err);
+            match err {
+                Incomplete(n) => {
+                    // a size larger than the packet was requested, always invalid
+                    if let Needed::Size(size) = n {
+                        if size > packet.body.len() {
+                            Error::RequestedSizeTooLarge
+                        } else {
+                            err.into()
+                        }
+                    } else {
+                        err.into()
+                    }
+                }
+                _ => err.into(),
+            }
+        })?;
+
+        Ok(key)
+    }
+
+    fn key_tag() -> Tag {
+        Tag::PublicKey
+    }
+
+    fn subkey_tag() -> Tag {
+        Tag::PublicSubkey
     }
 }

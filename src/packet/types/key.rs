@@ -26,6 +26,16 @@ where
             Key::Elgamal(k) => k.version(),
         }
     }
+
+    pub fn algorithm(&self) -> &PublicKeyAlgorithm {
+        match self {
+            Key::RSA(k) => k.algorithm(),
+            Key::DSA(k) => k.algorithm(),
+            Key::ECDSA(k) => k.algorithm(),
+            Key::ECDH(k) => k.algorithm(),
+            Key::Elgamal(k) => k.algorithm(),
+        }
+    }
 }
 
 /// A tag type indicating that a key has only public components.
@@ -48,11 +58,7 @@ macro_rules! key {
         }
 
         impl $name<Public> {
-            pub fn new_public(
-                version: KeyVersion,
-                algorithm: PublicKeyAlgorithm,
-                params: $pub,
-            ) -> Self {
+            pub fn new(version: KeyVersion, algorithm: PublicKeyAlgorithm, params: $pub) -> Self {
                 $name::<Public> {
                     version,
                     algorithm,
@@ -64,7 +70,7 @@ macro_rules! key {
         }
 
         impl $name<Private> {
-            pub fn new_private(
+            pub fn new(
                 version: KeyVersion,
                 algorithm: PublicKeyAlgorithm,
                 pub_params: $pub,
