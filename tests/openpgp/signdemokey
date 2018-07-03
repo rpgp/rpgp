@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+if [ $# != 3 ]; then
+    echo "Usage: signdemokey name user_id user_id_no"
+    exit 1
+fi
+name="$1"
+user_id="$2"
+user_id_no="$3"
+
+echo "abc" | ../g10/gpg --options ./gpg.conf --homedir $name \
+		--sign-key --batch --yes --passphrase-fd 0 $user_id \
+		$user_id_no sign save
+

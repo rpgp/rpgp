@@ -1,0 +1,8 @@
+This directory contains three keys (1C005AF3, B662E42F, and BE04EB2B),
+which all have the same user id, namely "Joke Factory
+<joke.factory@example.com>".
+
+The keys are stored in KEYID.gpg.  The secret key material is stored
+in KEYID-secret.gpg (the secret key material is not password
+protected).  The files KEYID-N.txt contain messages, which are signed
+by KEYID.  The message is "N\n".
