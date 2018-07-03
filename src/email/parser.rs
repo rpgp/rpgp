@@ -1,22 +1,20 @@
 use std::str;
 
-use types::Email;
-use header;
+use super::mime;
+use email::types::Email;
 use nom::IResult;
 
 pub fn parse(msg: &[u8]) -> IResult<&[u8], Email> {
-    let res = header::parse(msg);
+    let res = mime::parse(msg);
 
     match res {
-        Ok((rest, headers)) => {
-            Ok((
-                &b""[..],
-                Email {
-                    header: headers,
-                    body: str::from_utf8(rest).unwrap().trim(),
-                },
-            ))
-        }
+        Ok((rest, headers)) => Ok((
+            &b""[..],
+            Email {
+                header: headers,
+                body: str::from_utf8(rest).unwrap().trim(),
+            },
+        )),
         Err(err) => Err(err),
     }
 }
