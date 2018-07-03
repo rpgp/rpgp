@@ -1,0 +1,424 @@
+2011-12-01  Werner Koch  <wk@g10code.com>
+
+	NB: ChangeLog files are no longer manually maintained.  Starting
+	on December 1st, 2011 we put change information only in the GIT
+	commit log, and generate a top-level ChangeLog file from logs at
+	"make dist".  See doc/HACKING for details.
+
+2011-02-10  Werner Koch  <wk@g10code.com>
+
+	* ecc.test: New.
+	* pinentry.sh: New.
+	* defs.inc: Do not create a log when running tests with envvar
+	verbose > 1.  Add pinentry-program to gpg-agent.conf.
+	* Makefile.am (sample_keys): New.
+	(EXTRA_DIST): Add them.
+
+2010-10-15  Werner Koch  <wk@g10code.com>
+
+	* Makefile.am (clean-local): New.
+
+2010-10-14  Werner Koch  <wk@g10code.com>
+
+	* genkey1024.test: Use the new no-protection option.
+
+	* decrypt-dsa.test: Do not specify an extra keyring.  The keyring
+	has been loaded into pubring.gpg.
+	* sigs-dsa.test: Ditto.
+	* encrypt-dsa.test: Ditto.
+	* signencrypt-dsa.test: Ditto.
+
+	* decrypt.test: Remove passphrase stuff.
+	* sigs.test: Ditto.
+
+	* privkeys/: New.
+
+	* Makefile.am: Move most stuff to ...
+	* version.test: Prepare data files etc.
+	* finish.test: New.
+	* defs.inc: Set all envvars.
+	(usrname1, usrname2, username3): Use full mail address.
+
+2010-06-07  Werner Koch  <wk@g10code.com>
+
+	* Makefile.am (TESTS_ENVIRONMENT): New.  Start all scripts under
+	the control of the gpg-agent.
+	(prepared.stamp): Create gpg-agent.conf.
+	* defs.inc: Do not create gpg-agent.conf
+	(GNUPGHOME): Check that it is set properly.
+	(GPG_AGENT_INFO): Do not change.
+
+2010-05-12  Werner Koch  <wk@g10code.com>
+
+	* armor.test (Version): Add test for bug#1179.
+
+2010-05-11  Werner Koch  <wk@g10code.com>
+
+	* genkey1024.test: Use GPG macro.
+
+	* gpg-agent.conf.tmpl: New.
+	* defs.inc: Create gpg-agent.conf
+	(GNUPGHOME): Set and export.
+	(GPG_AGENT_INFO): Unset.
+	* Makefile.am (CLEANFILES): Add S.gpg-agent
+
+2010-05-07  Werner Koch  <wk@g10code.com>
+
+	* import.test: Add test case for bug#1223.
+	* bug1223-good.asc, bug1223-bogus.asc: New.
+
+2009-12-21  Werner Koch  <wk@g10code.com>
+
+	* Makefile.am (required_pgms): New.
+	(./gpg_dearmor): Depend on them.
+
+2009-06-05  David Shaw  <dshaw@jabberwocky.com>
+
+	* defs.inc: Improved all_cipher_algos and all_hash_algos to work
+	when there are more than one line of algorithms.  From 1.4.
+
+2009-04-19  Werner Koch  <wk@g10code.com>
+
+	* mkdemodirs (GPG): Use --no-options.
+
+2008-09-29  Werner Koch  <wk@g10code.com>
+
+	* clearsig.test: Replace -sat by --clearsign.
+
+2008-03-19  Werner Koch  <wk@g10code.com>
+
+	* import.test, bug894-test.asc: New.
+
+2007-12-14  Werner Koch  <wk@g10code.com>
+
+	* Makefile.am (./gpg_dearmor): Reverted last change because the
+	real fix is to --no-options.
+
+2007-11-22  Werner Koch  <wk@g10code.com>
+
+	* Makefile.am (./gpg_dearmor): Add --homedir so that we don't
+	auto create a ~/.gnupg/.  From Gentoo.
+
+2007-10-25  Werner Koch  <wk@g10code.com>
+
+	Add missing copyright notices to *.test.
+
+2007-10-25  David Shaw  <dshaw@jabberwocky.com>  (wk)
+
+	From 1.4 (July):
+
+	* defs.inc (all_cipher_algos): New function to return all ciphers.
+	* defs.inc (all_cipher_algos): New function to return all ciphers
+	we support.  This is safer than the previous setup which could
+	hide that some ciphers weren't being tested.  Plus, this
+	automatically tests any new ciphers libgcrypt supports.
+	(all_hash_algos): New.
+	* sigs.test: Use it here, and also test with >=160 bit hashes for
+	DSA2.
+	* conventional.test, encrypt.test, encrypt-dsa.test,
+	* conventional-mdc.test: Use it here.
+
+2007-05-02  David Shaw  <dshaw@jabberwocky.com>
+
+	* conventional.test, encrypt.test, encrypt-dsa.test,
+	conventional-mdc.test: Fix some broken tests that were only
+	testing 3DES instead of all available ciphers.
+
+2007-03-04  David Shaw  <dshaw@jabberwocky.com>  (wk)
+
+	* verify.test: Use --allow-multiple-messages instead of
+	--allow-multisig-verification.  Two clearsigs in a row counds as a
+	multiple-message test.
+
+2006-11-16  Werner Koch  <wk@g10code.com>
+
+	* Makefile.am (plain-large): Use gpg.texi instead of FAQ which
+	won't be found as it is not a source file.  Pointed out by Moritz.
+
+2006-10-04  Werner Koch  <wk@g10code.com>
+
+	* signencrypt.test: Need to prepend srcdir to the file name
+
+2006-09-27  Werner Koch  <wk@g10code.com>
+
+	* signencrypt.test: Add a test for bug 537.
+	* bug537-test.data.asc: New. Taken from the BTS.
+
+2006-08-21  Werner Koch  <wk@g10code.com>
+
+	Copied tests from 1.4 and adjusted paths.
+
+2006-04-19  David Shaw  <dshaw@jabberwocky.com>
+
+	* sigs.test, mds.test: Add tests for SHA-224, SHA-384, and
+	SHA-512.
+
+2006-04-11  Werner Koch  <wk@g10code.com>
+
+	* armor.test: New.
+
+2006-03-09  Werner Koch  <wk@g10code.com>
+
+	* defs.inc: Removed Basishm by proper redirection.
+
+2006-03-06  Werner Koch  <wk@g10code.com>
+
+	* defs.inc: Print error messages also to stderr.  Allow for
+	verbose environment variable.
+	(linefeed): New.
+	(suspend_error, resume_error): New.
+	* verify.test:  More tests.
+	* multisig.test: Better error printing.
+	(sig_1ls1ls_valid, sig_ls_valid):  Moved to the non-valid group.
+
+2006-02-14  Werner Koch  <wk@gnupg.org>
+
+	* verify.test: New.
+
+2005-06-21  Werner Koch  <wk@g10code.com>
+
+	* conventional.test (algos): Uhh ohh, cut+paste error and not
+	tested.
+
+2005-06-02  Werner Koch  <wk@g10code.com>
+
+	* conventional.test: have_cipher_algo now requires uppercase
+	algorithm names.  Changed.  Noted by John R. Shannon.
+
+2004-02-09  David Shaw  <dshaw@jabberwocky.com>
+
+	* clearsig.test, sigs.test: Properly detect RSA being missing, and
+	use the proper key for doing an RSA test.
+
+2003-12-31  David Shaw  <dshaw@jabberwocky.com>
+
+	* clearsig.test, conventional-mdc.test, conventional.test,
+	defs.inc, encrypt-dsa.test, encrypt.test, genkey1024.test,
+	plain-1.asc, plain-1-pgp.asc, plain-2.asc, plain-3.asc,
+	pubring.asc, secring.asc, sigs.test: Rework tests to work properly
+	with a gpg binary that doesn't have all ciphers and all pk algos.
+	Basically, we test for the ciphers we have, only test signing with
+	non-160-bit hashes with RSA (we test all hashes as hashes).  Test
+	all key lengths of AES.
+
+2003-12-05  David Shaw  <dshaw@jabberwocky.com>
+
+	* Makefile.am: Reenable tests now that the Elgamal signature keys
+	are gone.
+
+	* defs.inc, pubring.asc, secring.asc, plain-1.asc, plain-2.asc,
+	plain-3.asc: Remove the old v3 Elgamal keys and replace with
+	RSA+Elgamal and RSA s+e.
+
+2003-12-03  David Shaw  <dshaw@jabberwocky.com>
+
+	* options: Remove emulate-md-encode-bug.
+
+2003-11-27  Werner Koch  <wk@gnupg.org>
+
+	* Makefile.am (TESTS): Temporary remove tests using ElG signatures.
+
+2003-09-04  David Shaw  <dshaw@jabberwocky.com>
+
+	* mds.test, sigs.test: Remove TIGER/192 and make SHA-256 optional
+	(since it might not be compiled in).
+
+2003-07-10  David Shaw  <dshaw@jabberwocky.com>
+
+	* Makefile.am: Add --no-permission-warning to avoid spurious
+	warning when importing demo keys.
+
+2003-05-27  Werner Koch  <wk@gnupg.org>
+
+	* Makefile.am (CLEANFILES): Add gpg.conf
+
+2003-05-26  David Shaw  <dshaw@jabberwocky.com>
+
+	* defs.inc (pgmname): Make sure there is a valid options
+	file. (From wk on stable branch)
+
+	* mds.test: Note that missing algorithms are not errors.
+
+2003-04-23  David Shaw  <dshaw@jabberwocky.com>
+
+	* Makefile.am, options.in: Rename options.in to options since it
+	no longer needs to be a generated file.
+
+	* sigs.test: TODO note to add the new SHAs when we start
+	generating them.
+
+	* mds.test: Test the new SHAs.
+
+2002-05-10  Werner Koch  <wk@gnupg.org>
+
+	* Makefile.am: Add gpg_dearmor to all targets where it is used.
+	Noted by Andreas Haumer.
+
+2002-04-19  Werner Koch  <wk@gnupg.org>
+
+	* signencrypt-dsa.test, sigs-dsa.test: Don't check with MD5 as
+	this is not valid with DSA signatures.
+
+2001-12-22  Werner Koch  <wk@gnupg.org>
+
+	* options.in: Add no-permission-warning.
+
+2001-12-21  Werner Koch  <wk@gnupg.org>
+
+	* Makefile.am (distclean-local): prefix mkdemodirs with srcdir
+	(DISTCLEANFILES): Add random_seed.
+
+2001-12-19  Werner Koch  <wk@gnupg.org>
+
+	* options.in: Remove load-extension tiger
+	* Makefile.am (./options): append it if there is such a module.
+
+2001-10-23  Werner Koch  <wk@gnupg.org>
+
+	* defs.inc, Makefile.am: Do not use $srcdir when invoking gpg.
+	Write the logfile to the current directory.
+
+2001-09-28  Werner Koch  <wk@gnupg.org>
+
+	* defs.inc: Write a log file for each test.
+	* run-gpg, run-gpgm, run-gpg.patterns: Removed.  Replaced in all
+	tests by a simple macro from defs.inc.
+	* Makefile.am (CLEANFILES): Remove log files.
+	(./gpg_dearmor): create it and use it instead of the macro.
+	This is needed in multisig.test due to IFS tricks.
+
+	* armsignencrypt.test, signencrypt-dsa.test, signencrypt.test,
+	armencryptp.test, armencrypt.test, encryptp.test, seat.test,
+	encrypt-dsa.test, encrypt.test: Use --always-trust because the
+	test are not designed to check the validity.
+
+2001-09-06  Werner Koch  <wk@gnupg.org>
+
+	* genkey1024.test: Simplified by using a parameter file.
+
+2001-05-30  Werner Koch  <wk@gnupg.org>
+
+	* multisig.test (IFS): Reset IFS just before the test.
+
+2001-04-30  Werner Koch  <wk@gnupg.org>
+
+	* multisig.test: Add an set +x to avoid ksh problems
+
+2001-04-28  Werner Koch  <wk@gnupg.org>
+
+	* run-gpg.patterns: a v3 test key expired yesterday, suppress the
+	messages.
+
+2001-03-27  Werner Koch  <wk@gnupg.org>
+
+	* defs.inc: Removed creation of options file.
+	* options.in: New.
+	* Makefile.am: Create options file and fixed import of pubdemo.asc.
+
+	* run-gpg.patterns (gpg): Add some more patterns.
+
+2001-03-20  Werner Koch  <wk@gnupg.org>
+
+	* Makefile.am: Import the pubdemo.asc file
+
+	* sigs.test (hash_algo_list): s/tiger/tiger192/
+
+2001-03-19  Werner Koch  <wk@gnupg.org>
+
+	* mkdemodirs (GPGDEMO): Add --allow-secret-key-import to all gpg
+	invocations.  Use echon -n instead of an argument with \c.
+
+2001-02-12  Werner Koch  <wk@gnupg.org>
+
+	* multisig.test: new
+	* Makefile.am (TESTS): Added.
+
+2000-10-18  Werner Koch  <wk@gnupg.org>
+
+	* conventional-mdc.test: Add Rijndael and fix for empty plain texts.
+
+Thu Feb 10 17:39:44 CET 2000  Werner Koch  <wk@gnupg.de>
+
+	* mkdemodirs: Fixed the --clean loop.
+
+Thu Jan 13 19:31:58 CET 2000  Werner Koch  <wk@gnupg.de>
+
+	* defs.inc (chdir): Removed becuase it is unsused an plain old sh
+	does not like this name.  Reported by Alec Habig.
+
+Tue Oct 26 20:02:23 1999  Werner Koch  (wk@gnupg.org)
+
+	* Makefile.am (GPG_DEARMOR): New and use --no-options.
+
+Tue Aug 31 17:20:44 CEST 1999  Werner Koch  <wk@isil.d.shuttle.de>
+
+	* defs.inc: set LC_ALL empty
+
+Wed Aug  4 10:34:18 CEST 1999  Werner Koch  <wk@isil.d.shuttle.de>
+
+	* defs.inc (echo_n): New and used instead of /bin/echo "\c"
+
+Sun Apr 18 10:11:28 CEST 1999  Werner Koch  <wk@isil.d.shuttle.de>
+
+	* mkdemodirs: New
+	* signdemokey: New.
+	* Makefile.am (distclean-local): New.
+
+Wed Mar 17 13:09:03 CET 1999  Werner Koch  <wk@isil.d.shuttle.de>
+
+	* mds.test: replaced the "echo -n"
+
+Mon Mar  8 20:47:17 CET 1999  Werner Koch  <wk@isil.d.shuttle.de>
+
+	* pubdemo.asc, secdemo.asc: New.
+
+Fri Feb 19 15:49:15 CET 1999  Werner Koch  <wk@isil.d.shuttle.de>
+
+	* genkey1024.test: Be really quiet.
+
+1999-01-01  Geoff Keating  <geoffk@ozemail.com.au>
+
+	* Makefile.am (CLEANFILES): Also delete trustdb and any leftover
+	lockfiles.
+
+Fri Nov 27 15:30:24 CET 1998  Werner Koch  <wk@isil.d.shuttle.de>
+
+	* clearsig.test: Some more test cases.
+
+Sun Oct 25 18:19:35 1998  Werner Koch  (wk@isil.d.shuttle.de)
+
+	* mds.test: Check whether TIGER is available.
+	* sigs.tesr: Ditto.
+
+Wed Sep 23 12:25:07 1998  Werner Koch  (wk@isil.d.shuttle.de)
+
+	* run-gpg.patterns: New (because Solaris fgrep does not like -f -).
+
+Mon Aug 10 21:33:38 1998  Werner Koch  (wk@(none))
+
+	* genkey1024.test: Ariel fixed this.
+
+Wed Jul  8 10:43:47 1998  Werner Koch  (wk@isil.d.shuttle.de)
+
+	* seat.test: New.
+
+Mon May 18 15:40:02 1998  Werner Koch  (wk@isil.d.shuttle.de)
+
+	* Makefile.am: Now uses mk-tdata to produce random test data.
+
+	* ChangeLog: New.
+
+
+ Copyright 1998, 1999, 2000, 2001, 2007 Free Software Foundation, Inc.
+
+ This file is free software; as a special exception the author gives
+ unlimited permission to copy and/or distribute it, with or without
+ modifications, as long as this notice is preserved.
+
+ This file is distributed in the hope that it will be useful, but
+ WITHOUT ANY WARRANTY, to the extent permitted by law; without even the
+ implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+Local Variables:
+buffer-read-only: t
+End:

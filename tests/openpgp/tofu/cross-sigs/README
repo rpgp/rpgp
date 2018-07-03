@@ -1,0 +1,79 @@
+# How I generate the keys and messages to verify:
+
+# Generate and export two non-conflicting keys.
+gpg --quick-gen-key 'Spy Cow <spy@cow.com>'
+gpg --quick-gen-key 'Spy R. Cow <spy@cow.de>'
+
+KEYIDA=1938C3A0E4674B6C217AC0B987DB2814EC38277E
+KEYIDB=DC463A16E42F03240D76E8BA8B48C6BD871C2247
+
+for KEYID in $KEYIDA $KEYIDB
+do
+  gpg --export $KEYID  > tofu-$KEYID.gpg
+  gpg --export-secret-keys $KEYID  > tofu-$KEYID-secret.gpg
+done
+
+# Sign some data.
+echo foo | gpg --default-key $KEYIDA -s > tofu-$KEYIDA-1.txt
+echo foo | gpg --default-key $KEYIDB -s > tofu-$KEYIDB-1.txt
+
+# Again, but with an issuer.
+echo foo | gpg --default-key "<spy@cow.com>" -s > tofu-$KEYIDA-2.txt
+echo foo | gpg --default-key "<spy@cow.de>" -s > tofu-$KEYIDB-2.txt
+
+# Have A sign B and vice versa.
+gpg --default-key $KEYIDA --quick-sign $KEYIDB
+gpg --default-key $KEYIDB --quick-sign $KEYIDA
+
+gpg --export $KEYIDA  > tofu-$KEYIDA-2.gpg
+gpg --export $KEYIDB  > tofu-$KEYIDB-2.gpg
+
+# Cause A and B to conflict.
+gpg --quick-adduid $KEYIDB 'Spy R. Cow <spy@cow.com>'
+gpg --export $KEYIDB  > tofu-$KEYIDB-3.gpg
+
+echo foo | gpg --default-key "<spy@cow.com>" -s > tofu-$KEYIDA-3.txt
+echo foo | gpg --default-key "<spy@cow.com>" -s > tofu-$KEYIDB-3.txt
+
+# Have A sign B's conflicting user id.
+gpg --default-key $KEYIDA --quick-sign $KEYIDB
+gpg --export $KEYIDB  > tofu-$KEYIDB-4.gpg
+
+exit 0
+
+# In a new directory (so the keys are not ultimately trusted).
+
+D=~/neal/work/gpg/test
+echo 'trust-model tofu+pgp' > gpg.conf
+gpg --import $D/tofu-$KEYIDA.gpg
+gpg --import $D/tofu-$KEYIDB.gpg
+gpg -k
+
+gpg --verify $D/tofu-$KEYIDA-1.txt
+gpg --verify $D/tofu-$KEYIDB-1.txt
+# With an issuer.
+gpg --verify $D/tofu-$KEYIDA-2.txt
+gpg --verify $D/tofu-$KEYIDB-2.txt
+
+# Import the cross signatures.
+gpg --import $D/tofu-$KEYIDA-2.gpg
+gpg --import $D/tofu-$KEYIDB-2.gpg
+gpg -k
+
+gpg --verify $D/tofu-$KEYIDA-1.txt
+gpg --verify $D/tofu-$KEYIDB-1.txt
+# With an issuer.
+gpg --verify $D/tofu-$KEYIDA-2.txt
+gpg --verify $D/tofu-$KEYIDB-2.txt
+
+
+gpg --status-fd=1 --batch --verify $D/tofu-$KEYIDA-3.txt | grep TRUST_UNDEFINED
+gpg --status-fd=1 --batch --verify $D/tofu-$KEYIDB-3.txt | grep TRUST_UNDEFINED
+
+# Import the conflicting user id.
+gpg --import $D/tofu-$KEYIDB-3.gpg
+gpg -k
+
+# Import the cross signature, which should remove the conflict.
+gpg --import $D/tofu-$KEYIDB-4.gpg
+gpg -k

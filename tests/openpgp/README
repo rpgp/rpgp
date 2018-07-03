@@ -1,0 +1,254 @@
+#                                   Emacs, this is an -*- org -*- file.
+
+* How to run the test suite
+** tldr: How to run all tests fast.
+
+ obj $ make check-all TESTFLAGS=--parallel
+
+You can use --parallel=N to request N parallel jobs.  Hint: Tuck
+TESTFLAGS=--parallel in your environment.
+
+** Running individual test suites or tests
+
+From your build directory, run
+
+  obj $ make -C tests/openpgp check
+
+to run all tests or
+
+  obj $ make -C tests/openpgp check TESTS=your-test.scm
+
+to run a specific test (or any number of tests separated by spaces).
+
+If you want to debug a test, add verbose=1 to see messages printed by
+spawned programs to their standard error stream, verbose=2 to see what
+programs are executed, or verbose=3 to see even more program output
+and exit codes.
+
+** Inspecting the test environment
+
+To inspect the environment in which tests are running, or to quickly
+create keys for debugging or testing, you can start a shell.  There is
+one test that doese just that:
+
+  obj $ make -C tests/openpgp check TESTS=shell.scm
+  PASS: tests/openpgp/setup.scm
+  Load legacy test environment? [Y/n] y
+  Drop 'batch' from gpg.conf? [Y/n] y
+
+  Enjoy your test environment.  Type 'exit' to exit it, it will be cleaned up after you.
+
+  ... $ gpg -k Alfa
+  gpg: NOTE: THIS IS A DEVELOPMENT VERSION!
+  gpg: It is only intended for test purposes and should NOT be
+  gpg: used in a production environment or with production keys!
+  gpg: /tmp/gpgscm-20170809T144032-run-tests-PFfybw/trustdb.gpg: trustdb created
+  pub   dsa1024 1999-03-08 [SCA]
+        A0FF4590BB6122EDEF6E3C542D727CC768697734
+  uid           [ unknown] Alfa Test (demo key) <alfa@example.net>
+  uid           [ unknown] Alpha Test (demo key) <alpha@example.net>
+  uid           [ unknown] Alice (demo key)
+  sub   elg1024 1999-03-08 [E]
+
+PATH is adjusted so that you will use the tools from the build tree.
+Note that the directory is removed when you exit the shell.
+
+** Passing options to the test driver
+
+You can set TESTFLAGS to pass flags to 'run-tests.scm'.  For example,
+to speed up the test suite when bisecting, do
+
+  obj $ make -C tests/openpgp check TESTFLAGS=--parallel
+
+See below for the arguments supported by the driver.
+
+** Calling the test driver directly
+This is a bit tricky because one needs to manually set some
+environment variables.  We should make that easier.  See discussion
+below.  From your build directory, do:
+
+  obj $ srcdir=<path to>/tests/openpgp \
+        GPGSCM_PATH=<path to>/tests/gpgscm:<path to>/tests/openpgp \
+        $(pwd)/tests/gpgscm/gpgscm [gpgscm args] \
+        run-tests.scm [test suite runner args]
+
+*** Arguments supported by the test suite runner
+The test suite runner supports two modes of operation, '--sequential'
+and '--parallel'.  By default the tests are run in sequential order,
+each one in a clean environment.
+
+You can specify the tests to run as positional arguments relative to
+srcdir (e.g. just 'version.scm').  Note that you do not have to
+specify setup.scm and finish.scm, they are executed implicitly.
+
+The test suite runner can be executed in any location that the current
+user can write to.  It will create temporary files and directories,
+but will in general clean up all of them.
+*** Discussion of the various environment variables
+**** srcdir
+Must be set to the source of the openpgp test suite.  Used to locate
+data files.
+**** GPGSCM_PATH
+Used to locate the Scheme library as well as code used by the test
+suite.
+**** BIN_PREFIX
+The test suite does not hardcode any paths to tools.  If set it is
+used to locate the tools to test, otherwise the test suite assumes to
+be run from the build directory.
+**** GPG_PRESET_PASSPHRASE
+This tool is not installed by 'make install', hence we need to
+explicitly override its position.  In fact, the location of any tool
+used by the test suite can be overridden this way.  See defs.scm.
+**** argv[0]
+run-tests.scm depends on being able to re-exec gpgscm.  It uses
+argv[0] for that.  Therefore you must use an absolute path to invoke
+gpgscm.
+* How to write tests
+gpgscm provides a number of functions to aid you in writing tests, as
+well as bindings to process management abstractions provided by GnuPG.
+For the Scheme environment provided by TinySCHEME, see the TinySCHEME
+manual that is included in tests/gpgscm/Manual.txt.
+
+For a quick start, please have a look at various tests that are
+already implemented, e.g. 'encrypt.scm'.
+** The test framework
+The functions info, error, and skip display their first argument and
+flush the output buffers.  error and skip will also terminate the
+process, signaling that the test failed or should be skipped.
+
+(for-each-p msg proc list) will display msg, and call proc with each
+element of list while displaying the progress appropriately.
+for-each-p' is similar, but accepts another callback before the 'list'
+argument to format each item.  for-each-p can be safely nested, and
+the inner progress indicator will be abbreviated using '.'.
+** Debugging tests
+
+Say you are working on a new test called 'your-test.scm', you can run
+it on its own using
+
+  obj $ make -C tests/openpgp check TESTS=your-test.scm
+
+but something isn't working as expected.  There are several little
+gadgets that might help.  The first one is 'trace', a function that
+prints the value given to it and evaluates to it.  E.g.
+
+  (trace (+ 2 3))
+
+prints '5' and evaluates to 5.  Also, there is an 'assert' macro that
+aborts the execution if its argument does not evaluate to a trueish
+value.  Feel free to express invariants with it.
+
+You can also get an interactive repl by dropping
+
+  (interactive-repl (current-environment))
+
+anywhere you like.  Or, if you want to examine the environment from an
+operating system shell, use
+
+  (interactive-shell)
+
+** Interfacing with gpg
+
+defs.scm defines several convenience functions.  Say you want to parse
+the colon output from gpg, there is gpg-with-colons that splits the
+result at newlines and colons, so you can use the result like this:
+
+ (define (fpr some-key)
+   (list-ref (assoc "fpr" (gpg-with-colons
+			   `(--with-fingerprint
+			     --list-secret-keys ,some-key)))
+	     9))
+
+Or if you want to count all non-revoked uids for a given key, do
+
+ (define (count-uids-of-secret-key some-key)
+   (length (filter (lambda (x) (and (string=? "uid" (car x))
+				    (string=? "u" (cadr x))))
+		   (gpg-with-colons
+		    `(--with-fingerprint
+		      --list-secret-keys ,some-key)))))
+
+** Temporary files
+(lettmp <bindings> <body>) will create and delete temporary files that
+you can use in <body>.  (with-temporary-working-directory <body>) will
+create a temporary director, change to that, and clean it up after
+executing <body>).
+
+make-temporary-file will create a temporary file.  You can optionally
+provide an argument to that function that will serve as tag so you can
+distinguish the files for debugging.  remove-temporary-file will
+delete a file created using make-temporary-file.
+
+** Monadic transformer and pipe support
+Tests often perform sequential transformations on files, or connect
+processes using pipes.  To aid you in this, the test framework
+provides two monadic data structures.
+
+(Currently, the implementation mashes the 'bind' operation together
+with the application of the monad.  Also, there is no 'return'
+operation.  I guess all of that could be implemented on top of
+call/cc, but it isn't at the moment.)
+*** pipe
+The pipe monad constructs pipe lines.  It consists of a function
+pipe:do that binds the functions together and manages the execution of
+the child processes, a family of functions that act as sources, a
+function to spawn processes, and a family of functions acting as
+sinks.
+
+Sources are pipe:open, pipe:defer, pipe:echo.  To spawn a process use
+pipe:spawn, or the convenience function pipe:gpg.  To sink the data
+use pipe:splice, or pipe:write-to.
+
+Example:
+
+  (pipe:do
+    (pipe:echo "3\n1\n2\n")
+    (pipe:spawn '("/usr/bin/sort"))
+    (pipe:write-to "sorted" (logior O_WRONLY O_CREAT) #o600))
+
+Caveats: Due to the single-threaded nature of gpgscm you cannot use
+both a source and sink that is implemented in Scheme.  pipe:defer and
+pipe:echo are executing in gpgscm, and so does pipe:splice.
+*** tr
+The transformer monad describes sequential file transformations.
+
+There is one source function, tr:open.  To describe a transformation
+using some process, use tr:spawn, tr:gpg, or tr:pipe-do.  There are
+several sinks, although sink is not quite the right term, because the
+data is not consumed, and hence one can use them at any position.  The
+"sinks" are tr:write-to, tr:call-with-content, tr:assert-identity, and
+tr:assert-weak-identity.
+
+A somewhat contrived example demonstrating many functions is:
+
+  (tr:do
+    (tr:pipe-do
+      (pipe:echo "3\n1\n2\n")
+      (pipe:spawn '("/usr/bin/sort")))
+    (tr:write-to "reference")
+    (tr:call-with-content
+     (lambda (c)
+       (echo "currently, c contains" (string-length c) "bytes")))
+    (tr:spawn "" '("/usr/bin/gcc" -x c "-E" -o **out** **in**))
+    (tr:pipe-do
+      (pipe:spawn '("/bin/grep" -v "#")))
+    (tr:assert-identity "reference"))
+
+Caveats: As a convenience, gpgscm allows one to specify command line
+arguments as Scheme symbols.  Scheme symbols, however, are
+case-insensitive, and get converted to lower case.  Therefore, the -E
+argument must be given as a string in the example above.  Similarly,
+you need to quote numerical values.
+** Process management
+If you just need to execute a single command, there is (call-with-fds
+cmdline infd outfd errfd) which executes cmdline with the given file
+descriptors bound to it, and waits for its completion returning the
+status code.  There is (call cmdline) which is similar, but calls the
+command with a closed stdin, connecting stdout and stderr to stderr if
+gpgscm is executed with --verbose.  (call-check cmdline) raises an
+exception if the command does not return 0.
+
+(call-popen cmdline input) calls a command, writes input to its stdin,
+and returns any output from stdout, or raises an exception containing
+stderr on failure.
+* Sample messages

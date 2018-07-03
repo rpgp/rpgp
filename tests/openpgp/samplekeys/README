@@ -1,0 +1,21 @@
+
+no-creation-time.gpg   A key with a zero creation time.
+ecc-sample-1-pub.asc   A NIST P-256 ECC sample key.
+ecc-sample-1-sec.asc   Ditto, but the secret keyblock.
+ecc-sample-2-pub.asc   A NIST P-384 ECC sample key.
+ecc-sample-2-sec.asc   Ditto, but the secret keyblock.
+ecc-sample-3-pub.asc   A NIST P-521 ECC sample key.
+ecc-sample-3-sec.asc   Ditto, but the secret keyblock.
+eddsa-sample-1-pub.asc An Ed25519 sample key.
+eddsa-sample-1-sec.asc Ditto, but as protected secret keyblock.
+dda252ebb8ebe1af-1.asc rsa4096 key 1
+dda252ebb8ebe1af-2.asc rsa4096 key 2 with a long keyid collision.
+whats-new-in-2.1.asc   Collection of sample keys.
+e2e-p256-1-clr.asc     Google End-end-End test key (no protection)
+e2e-p256-1-prt.asc     Ditto, but protected with passphrase "a".
+E657FB607BB4F21C90BB6651BC067AF28BC90111.asc Key with subkeys (no protection)
+rsa-rsa-sample-1.asc   RSA+RSA sample key (no passphrase)
+ed25519-cv25519-sample-1.asc  Ed25519+CV25519 sample key (no passphrase)
+silent-running.asc     Collection of sample secret keys (no passphrases)
+rsa-primary-auth-only.pub.asc  rsa2408 primary only, usage: cert,auth
+rsa-primary-auth-only.sec.asc  Ditto but the secret keyblock.
