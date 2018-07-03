@@ -5,11 +5,24 @@ environment:
     - TARGET: i686-pc-windows-gnu
       BITS: 32
       MSYS2: 1
-      OPENSSL_VERSION: 1_1_0f
+      OPENSSL_VERSION: 1_1_0h
     - TARGET: x86_64-pc-windows-msvc
       BITS: 64
-      OPENSSL_VERSION: 1_1_0f
+      OPENSSL_VERSION: 1_1_0h
       OPENSSL_DIR: C:\OpenSSL
+
+    # 1.0.2, 64/32 bit
+    - TARGET: x86_64-pc-windows-gnu
+      BITS: 64
+      MSYS2: 1
+      OPENSSL_VERSION: 1_0_2o
+    - TARGET: i686-pc-windows-msvc
+      BITS: 32
+      OPENSSL_VERSION: 1_0_2o
+      OPENSSL_DIR: C:\OpenSSL
+    - TARGET: x86_64-pc-windows-msvc
+      VCPKG_DEFAULT_TRIPLET: x64-windows
+      VCPKGRS_DYNAMIC: 1
 install:
   # install OpenSSL
   - mkdir C:\OpenSSL
@@ -33,13 +46,5 @@ install:
 build: false
 
 test_script:
-  - cargo build --target %TARGET%
-  - cargo test --target %TARGET%
-
-cache:
-  - target
-  - C:\Users\appveyor\.cargo\registry
-
-clone_script:
-  - cmd: git clone -q --recursive --branch=%APPVEYOR_REPO_BRANCH% https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
-  - cmd: git checkout -qf %APPVEYOR_REPO_COMMIT%
+  - cargo run --manifest-path systest/Cargo.toml --target %TARGET%
+  - cargo test --manifest-path openssl/Cargo.toml --target %TARGET%
