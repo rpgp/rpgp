@@ -24,9 +24,12 @@ pub enum BlockType {
     Message,
     MultiPartMessage(usize, usize),
     Signature,
+    // gnupgp extension
+    File,
 }
 
-named!(armor_header_sep(&str) -> &str, tag!("-----"));
+
+named!(armor_header_sep(&str) -> &str,  tag!("-----"));
 
 named!(armor_header_type(&str) -> BlockType, alt_complete!(
     map!(
@@ -57,6 +60,10 @@ named!(armor_header_type(&str) -> BlockType, alt_complete!(
     map!(
         tag!("PGP SIGNATURE"),
         |_| BlockType::Signature
+    ) |
+    map!(
+        tag!("PGP ARMORED FILE"),
+        |_| BlockType::File
     )
 ));
 
@@ -124,7 +131,8 @@ fn read_checksum(input: &[u8]) -> u32 {
 }
 
 named!(parse_inner(&str) -> ((BlockType, HashMap<&str, &str>), String, String, Option<&str>, BlockType), do_parse!(
-         head: armor_header
+               take_until!("-----")
+    >>   head: armor_header
     >>         many0!(line_ending)
     >>   inner: map!(separated_list_complete!(
                    line_ending, base64_token
