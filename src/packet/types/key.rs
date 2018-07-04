@@ -107,7 +107,6 @@ macro_rules! key {
 }
 
 key!(RSA, RSAPublicParams, RSAPrivateParams);
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RSAPublicParams {
     pub n: Vec<u8>,

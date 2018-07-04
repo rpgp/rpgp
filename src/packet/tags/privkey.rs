@@ -1,9 +1,9 @@
 use enum_primitive::FromPrimitive;
-use nom::{be_u8, be_u16, be_u32};
+use nom::{be_u16, be_u32, be_u8};
 
-use packet::types::{KeyVersion, PublicKeyAlgorithm};
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
+use packet::types::{KeyVersion, PublicKeyAlgorithm};
 use util::mpi;
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
@@ -62,7 +62,7 @@ named_args!(rsa<'a>(alg: &PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>
 ));
 
 named_args!(key_from_fields<'a>(typ: PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>>, switch!(
-    value!(&typ), 
+    value!(&typ),
     &PublicKeyAlgorithm::RSA        |
     &PublicKeyAlgorithm::RSAEncrypt |
     &PublicKeyAlgorithm::RSASign    => call!(rsa, &typ, ver)     |
@@ -71,7 +71,7 @@ named_args!(key_from_fields<'a>(typ: PublicKeyAlgorithm, ver: &'a KeyVersion) <K
     &PublicKeyAlgorithm::ECDH       => call!(ecdh, &typ, ver)    |
     &PublicKeyAlgorithm::Elgamal    |
     &PublicKeyAlgorithm::ElgamalSign => call!(elgamal, &typ, ver)
-    // &PublicKeyAlgorithm::DiffieHellman => 
+    // &PublicKeyAlgorithm::DiffieHellman =>
 ));
 
 named_args!(new_public_key_parser<'a>(key_ver: &'a KeyVersion) <Key<Private>>, do_parse!(
@@ -93,10 +93,10 @@ named_args!(old_public_key_parser<'a>(key_ver: &'a KeyVersion) <Key<Private>>, d
 /// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 named!(pub parser<Key<Private>>, do_parse!(
           key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-    >>    key: switch!(value!(&key_ver), 
+    >>    key: switch!(value!(&key_ver),
                        &KeyVersion::V2 => call!(old_public_key_parser, &key_ver) |
                        &KeyVersion::V3 => call!(old_public_key_parser, &key_ver) |
                        &KeyVersion::V4 => call!(new_public_key_parser, &key_ver)
-                   ) 
+                   )
     >> (key)
 ));

@@ -112,7 +112,9 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
 named!(
     exportable_certification<Subpacket>,
-    map!(complete!(be_u8), |v| Subpacket::ExportableCertification(v == 1))
+    map!(complete!(be_u8), |v| {
+        Subpacket::ExportableCertification(v == 1)
+    })
 );
 
 /// Parse a revocable subpacket
@@ -133,7 +135,9 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
 named!(
     regular_expression<Subpacket>,
-    map!(map_res!(rest, str::from_utf8), |v| Subpacket::RegularExpression(v.to_string()))
+    map!(map_res!(rest, str::from_utf8), |v| {
+        Subpacket::RegularExpression(v.to_string())
+    })
 );
 
 /// Parse a revocation key subpacket
@@ -285,7 +289,7 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<u8>>, 
     &PublicKeyAlgorithm::ECDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<_>, item| {
         acc.extend(item);
         acc
-    }) |    
+    }) |
     // TODO: check which other algorithms need handling
     _ => call!(unknown_sig, typ)
 ));
@@ -353,7 +357,7 @@ named!(
 named!(
     v4_parser<Signature>,
     do_parse!(
-    // One-octet signature type.
+        // One-octet signature type.
         typ: map_opt!(be_u8, SignatureType::from_u8)
     // One-octet public-key algorithm.
             >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
