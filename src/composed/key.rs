@@ -1,44 +1,71 @@
-use super::parser::{self, ParseKey};
+use super::parser;
 use armor;
 use errors::{Error, Result};
 use packet::{self, types};
+use std::boxed::Box;
 use std::io::Read;
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 
-/// Represents a PGP key.
+// TODO: make armor parsing streaming
+// TODO: rename armor parser to dearmor
+
+/// Represents a Public PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Key<T>
+pub struct PublicKey<K>
 where
-    T: ::std::fmt::Debug + Clone,
+    K: types::key::PublicKey,
 {
-    pub primary_key: types::key::Key<T>,
+    pub primary_key: Box<K>,
     pub revocation_signatures: Vec<types::Signature>,
     pub direct_signatures: Vec<types::Signature>,
     pub users: Vec<types::User>,
     pub user_attributes: Vec<types::UserAttribute>,
-    pub subkeys: Vec<SubKey<T>>,
+    pub subkeys: Vec<PublicSubKey<K>>,
+}
+
+/// Represents a Public PGP SubKey.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PublicSubKey<K>
+where
+    K: types::key::PublicKey,
+{
+    pub key: Box<K>,
+    pub signatures: Vec<types::Signature>,
+}
+
+/// Represents a Private PGP key.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PrivateKey<K>
+where
+    K: types::key::PrivateKey,
+{
+    pub primary_key: Box<K>,
+    pub revocation_signatures: Vec<types::Signature>,
+    pub direct_signatures: Vec<types::Signature>,
+    pub users: Vec<types::User>,
+    pub user_attributes: Vec<types::UserAttribute>,
+    pub subkeys: Vec<PrivateSubKey<K>>,
 }
 
 /// Represents a PGP SubKey
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SubKey<T>
+pub struct PrivateSubKey<K>
 where
-    T: ::std::fmt::Debug + Clone,
+    K: types::key::PrivateKey,
 {
-    pub key: types::key::Key<T>,
+    pub key: Box<K>,
     pub signatures: Vec<types::Signature>,
 }
 
-impl<T> Key<T>
+pub trait Key
 where
-    T: ::std::fmt::Debug + Clone,
-    parser::KeyParser: parser::ParseKey<T>,
+    Self: ::std::marker::Sized,
 {
     /// Parse a single byte encoded key.
     /// This is usually a file with the extension `.pgp`.
-    pub fn from_bytes(bytes: impl Read) -> Result<Key<T>> {
-        let keys = Key::from_bytes_many(bytes)?;
+    fn from_bytes(bytes: impl Read) -> Result<Self> {
+        let keys = Self::from_bytes_many(bytes)?;
 
         if keys.len() > 1 {
             return Err(Error::MultipleKeys);
@@ -49,8 +76,8 @@ where
 
     /// Parse a single armor encoded key string.
     /// This is usually a file with the extension `.asc`.
-    pub fn from_string(input: &str) -> Result<Key<T>> {
-        let keys = Key::from_string_many(input)?;
+    fn from_string(input: &str) -> Result<Self> {
+        let keys = Self::from_string_many(input)?;
 
         if keys.len() > 1 {
             return Err(Error::MultipleKeys);
@@ -59,21 +86,42 @@ where
         keys.into_iter().nth(0).ok_or_else(|| Error::NoKey)
     }
 
+    /// Parse an armor encoded list of keys.
+    fn from_string_many(input: &str) -> Result<Vec<Self>> {
+        let (_typ, _headers, body) = armor::parse(input)?;
+        println!("got key: {:?} {:?} {}", _typ, _headers, body.len());
+        // TODO: add typ and headers information to the key possibly?
+        Self::from_bytes_many(body.as_slice())
+    }
+
+    fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>>;
+}
+
+impl<K> Key for PrivateKey<K>
+where
+    K: types::key::PrivateKey,
+{
     /// Parse byte encoded keys.
-    pub fn from_bytes_many(bytes: impl Read) -> Result<Vec<Key<T>>> {
+    fn from_bytes_many(bytes: impl Read) -> Result<Vec<PrivateKey<K>>> {
         let packets = packet::parser(bytes)?;
         println!("got packets {:?}", packets);
         // TODO: handle both public key and private keys.
         // tip: They use different packet types.
-        parser::KeyParser::many(&packets)
+        parser::private_many(&packets)
     }
+}
 
-    /// Parse an armor encoded list of keys.
-    pub fn from_string_many(input: &str) -> Result<Vec<Key<T>>> {
-        let (_typ, _headers, body) = armor::parse(input)?;
-        println!("got key: {:?} {:?} {}", _typ, _headers, body.len());
-        // TODO: add typ and headers information to the key possibly?
-        Key::from_bytes_many(body.as_slice())
+impl<K> Key for PublicKey<K>
+where
+    K: types::key::PublicKey,
+{
+    /// Parse byte encoded keys.
+    fn from_bytes_many(bytes: impl Read) -> Result<Vec<PublicKey<K>>> {
+        let packets = packet::parser(bytes)?;
+        println!("got packets {:?}", packets);
+        // TODO: handle both public key and private keys.
+        // tip: They use different packet types.
+        parser::public_many(&packets)
     }
 }
 
@@ -106,7 +154,7 @@ mod tests {
 
     fn test_parse_dump(i: usize) {
         let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
-        Key::<key::Public>::from_bytes_many(f).unwrap();
+        PublicKey::from_bytes_many(f).unwrap();
     }
 
     #[test]
@@ -167,7 +215,7 @@ mod tests {
             file.read_to_end(&mut buf).unwrap();
 
             let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-            Key::<key::Public>::from_string(input).expect("failed to parse key");
+            Key::<key::PublicKey>::from_string(input).expect("failed to parse key");
         }
     }
 
@@ -180,15 +228,20 @@ mod tests {
         file.read_to_end(&mut buf).unwrap();
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-        let key = Key::<key::Private>::from_string(input).expect("failed to parse key");
+        let key = Key::<key::PrivateKey>::from_string(input).expect("failed to parse key");
 
         let mut pkey = key.primary_key;
         assert_eq!(pkey.version(), &KeyVersion::V4);
         assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
 
-        pkey.decrypt(|| "").unwrap();
-        let priv_params = pkey.private_params().to_vec();
-        assert_eq!(priv_params[0].len(), 256); // 2044 bits
+        pkey.unlock(
+            || "",
+            |priv_params| {
+                assert_eq!(priv_params.to_vec()[0].len(), 256); // 2044 bits
+
+                Ok(())
+            },
+        ).unwrap();
     }
 
     #[test]
@@ -203,7 +256,7 @@ mod tests {
 
         assert_eq!(
             key.primary_key,
-            key::RSA::<key::Public>::new(
+            key::RSAPublic::new(
                 KeyVersion::V4,
                 PublicKeyAlgorithm::RSA,
                 key::RSAPublicParams {
