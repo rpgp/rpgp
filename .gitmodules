@@ -1,3 +1,0 @@
-[submodule "tests/opengpg-interop"]
-	path = tests/opengpg-interop
-	url = https://github.com/google/openpgp-interop.git
