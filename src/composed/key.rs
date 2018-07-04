@@ -182,8 +182,13 @@ mod tests {
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = Key::<key::Private>::from_string(input).expect("failed to parse key");
 
-        assert_eq!(key.primary_key.version(), &KeyVersion::V4);
-        assert_eq!(key.primary_key.algorithm(), &PublicKeyAlgorithm::RSA);
+        let mut pkey = key.primary_key;
+        assert_eq!(pkey.version(), &KeyVersion::V4);
+        assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
+
+        pkey.decrypt(|| "").unwrap();
+        let priv_params = pkey.private_params().to_vec();
+        assert_eq!(priv_params[0].len(), 256); // 2044 bits
     }
 
     #[test]

@@ -1,10 +1,10 @@
 use enum_primitive::FromPrimitive;
 use nom::{be_u8, be_u16, be_u32};
 
-use packet::types::{KeyVersion, PublicKeyAlgorithm};
+use packet::types::{KeyVersion, PublicKeyAlgorithm, SymmetricKeyAlgorithm, StringToKeyType};
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
-use util::mpi;
+use util::{mpi, rest_len};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 named_args!(ecdsa<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>>, do_parse!(
@@ -34,7 +34,17 @@ named_args!(ecdh<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Priv
     // a one-octet algorithm ID for the symmetric algorithm used to wrap
     // the symmetric key used for the message encryption
     >>  alg_sym: take!(1)
-    >> (ECDH::<Private>::new(*ver, *alg, ECDHPublicParams{curve, p: p.to_vec(), hash: hash[0], alg_sym: alg_sym[0]}, ECDHPrivateParams{}).into())
+    >> (ECDH::<Private>::new(
+        *ver,
+        *alg,
+        ECDHPublicParams{
+            curve, p:
+            p.to_vec(),
+            hash: hash[0],
+            alg_sym: alg_sym[0]
+        },
+        ECDHPrivateParams{}
+    ).into())
 ));
 
 named_args!(elgamal<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>>, do_parse!(
@@ -44,7 +54,18 @@ named_args!(elgamal<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<P
     >> g: mpi
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
     >> y: mpi
-        >> (Elgamal::<Private>::new(*ver, *alg, ElgamalPublicParams{p: p.to_vec(), g: g.to_vec(), y: y.to_vec()},ElgamalPrivateParams{}).into())
+    >> (Elgamal::<Private>::new(
+        *ver,
+        *alg,
+        ElgamalPublicParams{
+            p: p.to_vec(),
+            g: g.to_vec(),
+            y: y.to_vec()
+        },
+        ElgamalPrivateParams{
+            x: vec![],
+        }
+    ).into())
 ));
 
 named_args!(dsa<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>>, do_parse!(
@@ -52,13 +73,79 @@ named_args!(dsa<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Priva
     >> q: mpi
     >> g: mpi
     >> y: mpi
-    >> (DSA::<Private>::new(*ver, *alg, DSAPublicParams{p: p.to_vec(), q: q.to_vec(), g: g.to_vec(), y: y.to_vec()}, DSAPrivateParams{}).into())
+    >> (DSA::<Private>::new(
+        *ver,
+        *alg,
+        DSAPublicParams{
+            p: p.to_vec(),
+            q: q.to_vec(),
+            g: g.to_vec(),
+            y: y.to_vec()
+        },
+        DSAPrivateParams{
+            x: vec![],
+        }
+    ).into())
 ));
 
 named_args!(rsa<'a>(alg: &PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>>, do_parse!(
-       n: mpi
-    >> e: mpi
-    >> (RSA::<Private>::new(*ver, *alg, RSAPublicParams{n: n.to_vec(), e: e.to_vec()}, RSAPrivateParams{}).into())
+             n: mpi
+    >>       e: mpi
+    >> s2k_typ: be_u8
+    >> enc_params: switch!(value!(s2k_typ), 
+        // 0 is no encryption
+        0       => value!((None, None, None, None)) |
+        // symmetric key algorithm
+        1...253 => do_parse!(
+               sym_alg: map_opt!(value!(s2k_typ), SymmetricKeyAlgorithm::from_u8)
+            >>      iv: take!(sym_alg.block_size())
+            >> (Some(sym_alg), Some(iv), None, None)
+        ) |
+        // symmetric key + string-to-key
+        254...255 => do_parse!(
+                      sym_alg: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
+                >>        s2k: map_opt!(be_u8, StringToKeyType::from_u8)
+                >> s2k_params: take!(s2k.param_len())
+                >>         iv: take!(sym_alg.block_size())
+                >> (Some(sym_alg), Some(iv), Some(s2k), Some(s2k_params))
+        )
+    )
+    >> checksum_len: switch!(value!(s2k_typ),
+                     0   => value!(0) |
+                     // 20 octect hash at the end
+                     254 => value!(20) |
+                     // 2 octet checksum at the end
+                     _   => value!(2)
+                         
+    )
+    >> data_len: map!(rest_len, |r| r - checksum_len)
+    >>     data: take!(data_len)
+    >> checksum: take!(checksum_len)
+    >> ({
+        RSA::<Private>::new(
+        *ver,
+        *alg,
+        RSAPublicParams{
+            n: n.to_vec(),
+            e: e.to_vec()
+        },
+        RSAPrivateParams{
+            d: vec![],
+            p: vec![],
+            q: vec![],
+            u: vec![],
+            raw: Some(EncryptedPrivateParams {
+                data: data.to_vec(),
+                checksum: checksum.to_vec(),
+                iv: enc_params.1.map(|iv| iv.to_vec()),
+                encryption_algorithm: enc_params.0,
+                string_to_key: enc_params.2,
+                string_to_key_params: enc_params.3.map(|p| p.to_vec()),
+                string_to_key_id: s2k_typ,
+            })
+        }
+        ).into()
+    })
 ));
 
 named_args!(key_from_fields<'a>(typ: PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>>, switch!(
@@ -100,3 +187,14 @@ named!(pub parser<Key<Private>>, do_parse!(
                    ) 
     >> (key)
 ));
+
+
+/// Parse the decrpyted private params of an RSA private key.
+named!(pub rsa_private_params<(Vec<u8>, Vec<u8>,Vec<u8>, Vec<u8>)>, do_parse!(
+       d: mpi
+    >> p: mpi
+    >> q: mpi
+    >> u: mpi
+    >> (d.to_vec(), p.to_vec(), q.to_vec(), u.to_vec())
+));
+    
