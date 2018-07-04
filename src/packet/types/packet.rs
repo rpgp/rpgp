@@ -132,6 +132,61 @@ pub enum SymmetricKeyAlgorithm {
     Twofish = 10,
 }
 }
+
+impl SymmetricKeyAlgorithm {
+    /// The size of a single block in bytes.
+    /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher
+    pub fn block_size(&self) -> usize {
+        match self {
+            SymmetricKeyAlgorithm::Plaintext => 0,
+            SymmetricKeyAlgorithm::IDEA => 8,
+            SymmetricKeyAlgorithm::TripleDES => 8,
+            SymmetricKeyAlgorithm::CAST5 => 8,
+            SymmetricKeyAlgorithm::Blowfish => 8,
+            SymmetricKeyAlgorithm::AES128 => 16,
+            SymmetricKeyAlgorithm::AES192 => 16,
+            SymmetricKeyAlgorithm::AES256 => 16,
+            SymmetricKeyAlgorithm::Twofish => 16,
+        }
+    }
+}
+
+enum_from_primitive!{
+#[derive(Debug, PartialEq, Eq, Clone)]
+/// Available String-To-Key types
+    pub enum StringToKeyType {
+        Simple = 0,
+        Salted = 1,
+        Reserved = 2,
+        IteratedAndSalted = 3,
+        Private100 = 100,
+        Private101 = 101,
+        Private102 = 102,
+        Private103 = 103,
+        Private104 = 104,
+        Private105 = 105,
+        Private106 = 106,
+        Private107 = 107,
+        Private108 = 108,
+        Private109 = 109,
+        Private110 = 110,
+    }
+}
+
+impl StringToKeyType {
+    pub fn param_len(&self) -> usize {
+        match self {
+            // 1 octet hash algorithm.
+            StringToKeyType::Simple => 1,
+            // Salted has 1 octet hash algorithm and 8 octets salt value.
+            StringToKeyType::Salted => 9,
+            // Salted and iterated has 1 octet hash algorithm, 8 octets salt value and 1 octet count.
+            StringToKeyType::IteratedAndSalted => 10,
+            _ => 0,
+        }
+    }
+}
+
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Available signature subpacket types

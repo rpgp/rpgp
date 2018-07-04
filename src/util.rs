@@ -1,6 +1,7 @@
 use nom::types::CompleteStr;
 use nom::{
-    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter, InputTake,
+    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter,
+    InputLength, InputTake, Slice,
 };
 use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
@@ -123,6 +124,18 @@ named!(pub packet_length<usize>, do_parse!(
 
 pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
     alt!(input, eof!() | eol)
+}
+
+/// Return the length of the remaining input.
+// Adapted from https://github.com/Geal/nom/pull/684
+#[inline]
+pub fn rest_len<T>(input: T) -> IResult<T, usize>
+where
+    T: Slice<Range<usize>> + Slice<RangeFrom<usize>> + Slice<RangeTo<usize>>,
+    T: InputLength,
+{
+    let len = input.input_len();
+    Ok((input, len))
 }
 
 #[cfg(test)]
