@@ -30,7 +30,10 @@ pub enum Error {
     MultipleKeys,
     #[fail(display = "openssl error: {:?}", _0)]
     OpenSSLError(ErrorStack),
+    #[fail(display = "io error: {:?}", _0)]
+    IOError(::std::io::Error),
 }
+
 impl Error {
     pub fn as_code(&self) -> u32 {
         match self {
@@ -44,6 +47,7 @@ impl Error {
             Error::NoKey => 7,
             Error::MultipleKeys => 8,
             Error::OpenSSLError(_) => 9,
+            Error::IOError(_) => 10,
         }
     }
 }
@@ -78,5 +82,11 @@ impl From<base64::DecodeError> for Error {
 impl From<ErrorStack> for Error {
     fn from(err: ErrorStack) -> Error {
         Error::OpenSSLError(err)
+    }
+}
+
+impl From<::std::io::Error> for Error {
+    fn from(err: ::std::io::Error) -> Error {
+        Error::IOError(err)
     }
 }

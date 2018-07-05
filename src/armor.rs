@@ -99,9 +99,9 @@ named!(kv_pair(CompleteStr) -> (CompleteStr, CompleteStr), do_parse!(
 
 
 /// Armor Headers
-fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<&str, &str>> {
+fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<String, String>> {
     match map!(CompleteStr(input), many0!(kv_pair), |v| {
-        v.iter().map(|p| (*p.0, *p.1)).collect()
+        v.iter().map(|p| (p.0.to_string(), p.1.to_string())).collect()
     }) {
         Ok((rem, res)) => Ok((&rem, res)),
         Err(_) => Err(nom::Err::Error(
@@ -111,7 +111,7 @@ fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<&str, &str>> {
 }
 
 /// Armor Header
-named!(armor_header(&str) -> (BlockType, HashMap<&str, &str>), do_parse!(
+named!(armor_header(&str) -> (BlockType, HashMap<String, String>), do_parse!(
     typ:     armor_header_line >>
     headers: armor_headers     >>
     (typ, headers)
@@ -130,32 +130,37 @@ fn read_checksum(input: &[u8]) -> u32 {
     BigEndian::read_u32(&buf)
 }
 
-named!(parse_inner(&str) -> ((BlockType, HashMap<&str, &str>), String, String, Option<&str>, BlockType), do_parse!(
+named!(parse_inner(&str) -> ((BlockType, HashMap<String, String>), Vec<Vec<u8>>, Option<&str>, BlockType), do_parse!(
                take_until!("-----")
     >>   head: armor_header
     >>         many0!(line_ending)
-    >>   inner: map!(separated_list_complete!(
-                   line_ending, base64_token
-               ), |v| v.join("")) 
-    >>    pad: map!(many0!(tag!("=")), |v| v.join(""))
+    >>   inner: separated_list_complete!(
+                   line_ending, map_res!(base64_token, |v| base64::decode_config(v, base64::MIME))
+               )
+    >>         many0!(tag!("="))
     >>         opt!(line_ending)
     >>  check: opt!(preceded!(tag!("="), take!(4)))
     >>         many0!(line_ending)
     >> footer: armor_footer_line
-    >> (head, inner, pad, check, footer)
+    >> (head, inner, check, footer)
 ));
 
-pub fn parse(input: &str) -> Result<(BlockType, HashMap<&str, &str>, Vec<u8>)> {
-    let (_, res) = parse_inner(input)?;
-    let (head, inner, pad, check, footer) = res;
+
+pub fn parse(mut input: impl ::std::io::Read) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
+    // TODO: actual streaming
+    let mut input_str = String::new();
+    input.read_to_string(&mut input_str)?;
+    
+    let (_, res) = parse_inner(&input_str)?;
+    let (head, inner, check, footer) = res;
     
     let (typ, headers) = head;
 
     if typ != footer {
         return Err(Error::InvalidArmorWrappers);
     }
-
-    let decoded = base64::decode_config(&(inner + &pad), base64::MIME)?;
+    
+    let decoded = inner.concat();
     
     if let Some(c) = check {
         let check_new = crc24::hash_raw(decoded.as_slice());
@@ -172,6 +177,7 @@ pub fn parse(input: &str) -> Result<(BlockType, HashMap<&str, &str>, Vec<u8>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_armor_header_line() {
@@ -188,9 +194,9 @@ mod tests {
     #[test]
     fn test_armor_headers() {
         let mut map = HashMap::new();
-        map.insert("Version", "12");
-        map.insert("special-stuff", "cool12.0");
-        map.insert("some:colon", "with:me");
+        map.insert("Version".to_string(), "12".to_string());
+        map.insert("special-stuff".to_string(), "cool12.0".to_string());
+        map.insert("some:colon".to_string(), "with:me".to_string());
 
         assert_eq!(
             armor_headers(
@@ -203,8 +209,8 @@ mod tests {
     #[test]
     fn test_armor_header() {
         let mut map = HashMap::new();
-        map.insert("Version", "1.0");
-        map.insert("Mode", "Test");
+        map.insert("Version".to_string(), "1.0".to_string());
+        map.insert("Mode".to_string(), "Test".to_string());
 
         assert_eq!(
             armor_header(
@@ -214,7 +220,7 @@ mod tests {
         );
 
         let mut map = HashMap::new();
-        map.insert("Version", "GnuPG v1");
+        map.insert("Version".to_string(), "GnuPG v1".to_string());
 
         assert_eq!(
             armor_header(
@@ -245,15 +251,15 @@ mod tests {
     #[test]
     fn test_parse_armor_small() {
         let mut map = HashMap::new();
-        map.insert("Version", "GnuPG v1");
+        map.insert("Version".to_string(), "GnuPG v1".to_string());
 
-        let (typ, headers, _) = parse(
+        let c = Cursor::new(
             "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
 Version: GnuPG v1\n\
 \n\
 mQGiBEig\n\
------END PGP PUBLIC KEY BLOCK-----\n",
-        ).unwrap();
+-----END PGP PUBLIC KEY BLOCK-----\n");
+        let (typ, headers, _) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
         assert_eq!(headers, map);
@@ -262,11 +268,11 @@ mQGiBEig\n\
     #[test]
     fn test_parse_armor_full() {
         let mut map = HashMap::new();
-        map.insert("Version", "GnuPG v1");
+        map.insert("Version".to_string(), "GnuPG v1".to_string());
 
-        let (typ, headers, decoded) = parse(
-            "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: GnuPG v1\n\n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\n=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n",
-        ).unwrap();
+        
+        let c = Cursor::new("-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: GnuPG v1\n\n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\n=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n");
+        let (typ, headers, decoded) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
         assert_eq!(headers, map);
