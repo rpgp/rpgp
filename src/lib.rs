@@ -1,9 +1,9 @@
 #[macro_use]
 extern crate nom;
-// extern crate openssl;
 extern crate base64;
 extern crate byteorder;
 extern crate crc24;
+extern crate openssl;
 #[macro_use]
 extern crate enum_primitive;
 extern crate chrono;
