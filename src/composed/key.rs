@@ -75,6 +75,10 @@ where
         // TODO: add typ and headers information to the key possibly?
         Key::from_bytes_many(body.as_slice())
     }
+
+    pub fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
+    }
 }
 
 #[cfg(test)]
@@ -439,5 +443,29 @@ mod tests {
         );
 
         assert_eq!(ua.signatures, vec![sig3]);
+    }
+
+    #[test]
+    fn test_fingerprint_v3() {
+        // RSA
+
+        // DSA
+
+        // ELG
+    }
+
+    #[test]
+    fn test_fingerprint_v4() {
+        // RSA
+
+        // DSA
+
+        // ELG
+
+        // ECDH
+
+        // ECDSA
+
+        // EdDSA
     }
 }

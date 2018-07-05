@@ -1,5 +1,11 @@
+use std::ops::Deref;
+use std::time::SystemTime;
+
+use super::super::super::byteorder::{BigEndian, ByteOrder};
+use super::super::super::openssl::hash::{Hasher, MessageDigest};
 use super::ecc_curve::ECCCurve;
-use super::packet::{KeyVersion, PublicKeyAlgorithm};
+use super::packet::Tag::{PublicKey, SecretKey};
+use super::packet::{KeyVersion, Packet, PublicKeyAlgorithm, Version};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Key<T>
@@ -36,6 +42,91 @@ where
             Key::Elgamal(k) => k.algorithm(),
         }
     }
+
+    pub fn creation_time(&self) -> &u32 {
+        match self {
+            Key::RSA(k) => k.creation_time(),
+            Key::DSA(k) => k.creation_time(),
+            Key::ECDSA(k) => k.creation_time(),
+            Key::ECDH(k) => k.creation_time(),
+            Key::Elgamal(k) => k.creation_time(),
+        }
+    }
+
+    // Ref: https://tools.ietf.org/html/rfc4880.html#section-12.2
+    pub fn fingerprint(&self) -> Vec<u8> {
+        match self.version() {
+            KeyVersion::V4 => {
+                // A one-octet version number (4).
+                let mut packet = Vec::new();
+                packet.push(4);
+
+                // A four-octet number denoting the time that the key was created.
+                let mut time_buf: [u8; 4] = [0; 4];
+                BigEndian::write_u32(&mut time_buf, *self.creation_time());
+                packet.extend_from_slice(&time_buf);
+
+                // A one-octet number denoting the public-key algorithm of this key.
+                packet.push(*self.algorithm() as u8);
+
+                // ???
+                packet.push(16);
+                packet.push(0);
+
+                // A series of multiprecision integers comprising the key material.
+                match self {
+                    Key::RSA(k) => {
+                        packet.extend(&k.public_params.n);
+                        packet.extend(&k.public_params.e);
+                    }
+                    Key::DSA(k) => {
+                        packet.extend(&k.public_params.p);
+                        packet.extend(&k.public_params.q);
+                        packet.extend(&k.public_params.g);
+                        packet.extend(&k.public_params.y);
+                    }
+                    Key::ECDSA(k) => {
+                        packet.extend(&k.public_params.curve.oid());
+                        packet.extend(&k.public_params.p);
+                    }
+                    Key::ECDH(k) => {
+                        packet.extend(&k.public_params.curve.oid());
+                        packet.extend(&k.public_params.p);
+                        packet.push(k.public_params.hash);
+                        packet.push(k.public_params.alg_sym);
+                    }
+                    Key::Elgamal(k) => {
+                        packet.extend(&k.public_params.p);
+                        packet.extend(&k.public_params.g);
+                        packet.extend(&k.public_params.y);
+                    }
+                }
+
+                println!("{:?}", packet);
+
+                let mut length_buf: [u8; 2] = [0; 2];
+                BigEndian::write_uint(&mut length_buf, packet.len() as u64, 2);
+
+                let mut h = Hasher::new(MessageDigest::sha1()).unwrap();
+
+                h.update(&[0x99]).unwrap();
+                h.update(&length_buf).unwrap();
+                h.update(&packet).unwrap();
+
+                h.finish().unwrap().deref().to_vec()
+            }
+
+            KeyVersion::V2 | KeyVersion::V3 => {
+                let mut hash_material = [0x99];
+
+                let mut h = Hasher::new(MessageDigest::md5()).unwrap();
+
+                h.update(&hash_material).unwrap();
+
+                h.finish().unwrap().deref().to_vec()
+            }
+        }
+    }
 }
 
 /// A tag type indicating that a key has only public components.
@@ -51,6 +142,7 @@ macro_rules! key {
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct $name<T: ::std::fmt::Debug + Clone> {
             version: KeyVersion,
+            creation_time: u32,
             algorithm: PublicKeyAlgorithm,
             public_params: $pub,
             private_params: Option<$priv>,
@@ -58,9 +150,15 @@ macro_rules! key {
         }
 
         impl $name<Public> {
-            pub fn new(version: KeyVersion, algorithm: PublicKeyAlgorithm, params: $pub) -> Self {
+            pub fn new(
+                version: KeyVersion,
+                creation_time: u32,
+                algorithm: PublicKeyAlgorithm,
+                params: $pub,
+            ) -> Self {
                 $name::<Public> {
                     version,
+                    creation_time,
                     algorithm,
                     public_params: params,
                     private_params: None,
@@ -92,6 +190,10 @@ macro_rules! key {
         {
             pub fn version(&self) -> &KeyVersion {
                 &self.version
+            }
+
+            pub fn creation_time(&self) -> &u32 {
+                &self.creation_time
             }
 
             pub fn algorithm(&self) -> &PublicKeyAlgorithm {

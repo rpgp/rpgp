@@ -1,9 +1,11 @@
+#![feature(assoc_unix_epoch)]
+
 #[macro_use]
 extern crate nom;
-// extern crate openssl;
 extern crate base64;
 extern crate byteorder;
 extern crate crc24;
+extern crate openssl;
 #[macro_use]
 extern crate enum_primitive;
 extern crate chrono;
@@ -23,6 +25,6 @@ pub use composed::key::Key;
 pub mod util;
 
 mod armor;
-mod composed;
+pub mod composed;
 mod errors;
-mod packet;
+pub mod packet;
