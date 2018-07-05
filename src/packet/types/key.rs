@@ -253,6 +253,11 @@ macro_rules! key {
             pub fn public_params(&self) -> &PublicParams {
                 &self.public_params
             }
+
+            /// Returns the fingerprint of this key.
+            pub fn fingerprint(&self) -> Vec<u8> {
+                unimplemented!("implement me please")
+            }
         }
     };
 }

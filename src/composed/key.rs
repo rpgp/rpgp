@@ -37,6 +37,11 @@ impl PublicKey {
             subkeys,
         }
     }
+
+    /// Returns the fingerprint of the associated primary key.
+    pub fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
+    }
 }
 
 /// Represents a Public PGP SubKey.
@@ -80,6 +85,11 @@ impl PrivateKey {
             user_attributes,
             subkeys,
         }
+    }
+
+    /// Returns the fingerprint of the associated primary key.
+    pub fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
     }
 }
 
