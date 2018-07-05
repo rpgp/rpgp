@@ -1,4 +1,3 @@
-use super::parser::{self, ParseKey};
 use armor;
 use errors::{Error, Result};
 use packet::{self, types};
@@ -6,39 +5,102 @@ use std::io::Read;
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 
-/// Represents a PGP key.
+// TODO: make armor parsing streaming
+// TODO: rename armor parser to dearmor
+
+/// Represents a Public PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Key<T>
-where
-    T: ::std::fmt::Debug + Clone,
-{
-    pub primary_key: types::key::Key<T>,
+pub struct PublicKey {
+    pub primary_key: types::key::PublicKey,
     pub revocation_signatures: Vec<types::Signature>,
     pub direct_signatures: Vec<types::Signature>,
     pub users: Vec<types::User>,
     pub user_attributes: Vec<types::UserAttribute>,
-    pub subkeys: Vec<SubKey<T>>,
+    pub subkeys: Vec<PublicSubKey>,
 }
 
-/// Represents a PGP SubKey
+impl PublicKey {
+    pub fn new(
+        primary_key: types::key::PublicKey,
+        revocation_signatures: Vec<types::Signature>,
+        direct_signatures: Vec<types::Signature>,
+        users: Vec<types::User>,
+        user_attributes: Vec<types::UserAttribute>,
+        subkeys: Vec<PublicSubKey>,
+    ) -> PublicKey {
+        PublicKey {
+            primary_key,
+            revocation_signatures,
+            direct_signatures,
+            users,
+            user_attributes,
+            subkeys,
+        }
+    }
+}
+
+/// Represents a Public PGP SubKey.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SubKey<T>
-where
-    T: ::std::fmt::Debug + Clone,
-{
-    pub key: types::key::Key<T>,
+pub struct PublicSubKey {
+    pub key: types::key::PublicKey,
     pub signatures: Vec<types::Signature>,
 }
 
-impl<T> Key<T>
-where
-    T: ::std::fmt::Debug + Clone,
-    parser::KeyParser: parser::ParseKey<T>,
-{
+impl PublicSubKey {
+    pub fn new(key: types::key::PublicKey, signatures: Vec<types::Signature>) -> PublicSubKey {
+        PublicSubKey { key, signatures }
+    }
+}
+
+/// Represents a Private PGP key.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PrivateKey {
+    pub primary_key: types::key::PrivateKey,
+    pub revocation_signatures: Vec<types::Signature>,
+    pub direct_signatures: Vec<types::Signature>,
+    pub users: Vec<types::User>,
+    pub user_attributes: Vec<types::UserAttribute>,
+    pub subkeys: Vec<PrivateSubKey>,
+}
+
+impl PrivateKey {
+    pub fn new(
+        primary_key: types::key::PrivateKey,
+        revocation_signatures: Vec<types::Signature>,
+        direct_signatures: Vec<types::Signature>,
+        users: Vec<types::User>,
+        user_attributes: Vec<types::UserAttribute>,
+        subkeys: Vec<PrivateSubKey>,
+    ) -> PrivateKey {
+        PrivateKey {
+            primary_key,
+            revocation_signatures,
+            direct_signatures,
+            users,
+            user_attributes,
+            subkeys,
+        }
+    }
+}
+
+/// Represents a composed private PGP SubKey.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PrivateSubKey {
+    pub key: types::key::PrivateKey,
+    pub signatures: Vec<types::Signature>,
+}
+
+impl PrivateSubKey {
+    pub fn new(key: types::key::PrivateKey, signatures: Vec<types::Signature>) -> PrivateSubKey {
+        PrivateSubKey { key, signatures }
+    }
+}
+
+pub trait Key: Sized {
     /// Parse a single byte encoded key.
     /// This is usually a file with the extension `.pgp`.
-    pub fn from_bytes(bytes: impl Read) -> Result<Key<T>> {
-        let keys = Key::from_bytes_many(bytes)?;
+    fn from_bytes(bytes: impl Read) -> Result<Self> {
+        let keys = Self::from_bytes_many(bytes)?;
 
         if keys.len() > 1 {
             return Err(Error::MultipleKeys);
@@ -49,8 +111,8 @@ where
 
     /// Parse a single armor encoded key string.
     /// This is usually a file with the extension `.asc`.
-    pub fn from_string(input: &str) -> Result<Key<T>> {
-        let keys = Key::from_string_many(input)?;
+    fn from_string(input: &str) -> Result<Self> {
+        let keys = Self::from_string_many(input)?;
 
         if keys.len() > 1 {
             return Err(Error::MultipleKeys);
@@ -59,22 +121,21 @@ where
         keys.into_iter().nth(0).ok_or_else(|| Error::NoKey)
     }
 
-    /// Parse byte encoded keys.
-    pub fn from_bytes_many(bytes: impl Read) -> Result<Vec<Key<T>>> {
-        let packets = packet::parser(bytes)?;
-        println!("got packets {:?}", packets);
-        // TODO: handle both public key and private keys.
-        // tip: They use different packet types.
-        parser::KeyParser::many(&packets)
+    /// Parse an armor encoded list of keys.
+    fn from_string_many(input: &str) -> Result<Vec<Self>> {
+        let (_typ, _headers, body) = armor::parse(input)?;
+
+        // TODO: add typ and headers information to the key possibly?
+        Self::from_bytes_many(body.as_slice())
     }
 
-    /// Parse an armor encoded list of keys.
-    pub fn from_string_many(input: &str) -> Result<Vec<Key<T>>> {
-        let (_typ, _headers, body) = armor::parse(input)?;
-        println!("got key: {:?} {:?} {}", _typ, _headers, body.len());
-        // TODO: add typ and headers information to the key possibly?
-        Key::from_bytes_many(body.as_slice())
+    fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
+        let packets = packet::parser(bytes)?;
+
+        Self::from_packets(&packets)
     }
+
+    fn from_packets<'a>(impl IntoIterator<Item = &'a types::Packet>) -> Result<Vec<Self>>;
 }
 
 #[cfg(test)]
@@ -106,7 +167,7 @@ mod tests {
 
     fn test_parse_dump(i: usize) {
         let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
-        Key::<key::Public>::from_bytes_many(f).unwrap();
+        PublicKey::from_bytes_many(f).unwrap();
     }
 
     #[test]
@@ -167,7 +228,7 @@ mod tests {
             file.read_to_end(&mut buf).unwrap();
 
             let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-            Key::<key::Public>::from_string(input).expect("failed to parse key");
+            PublicKey::from_string(input).expect("failed to parse key");
         }
     }
 
@@ -180,22 +241,36 @@ mod tests {
         file.read_to_end(&mut buf).unwrap();
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-        let key = Key::<key::Private>::from_string(input).expect("failed to parse key");
+        let key = PrivateKey::from_string(input).expect("failed to parse key");
 
-        let mut pkey = key.primary_key;
+        let pkey = key.primary_key;
         assert_eq!(pkey.version(), &KeyVersion::V4);
         assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
 
-        pkey.decrypt(|| "").unwrap();
-        let priv_params = pkey.private_params().to_vec();
-        assert_eq!(priv_params[0].len(), 256); // 2044 bits
+        assert_eq!(pkey.private_params().checksum.as_slice(), hex!("2c46"));
+
+        pkey.unlock(
+            || "",
+            |priv_params| {
+                match priv_params {
+                    types::key::PrivateParams::RSA { d, p, q, u } => {
+                        assert_eq!(d.len(), 256); // 2044 bits
+                        assert_eq!(p.len(), 1024 / 8);
+                        assert_eq!(q.len(), 1024 / 8);
+                        assert_eq!(u.len(), 1024 / 8);
+                    }
+                    _ => panic!("unexpected params type {:?}", priv_params),
+                }
+                Ok(())
+            },
+        ).unwrap();
     }
 
     #[test]
     fn test_parse_details() {
         let raw = include_bytes!("../../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc");
         let input = ::std::str::from_utf8(raw).unwrap();
-        let key = Key::from_string(input).expect("failed to parse key");
+        let key = PublicKey::from_string(input).expect("failed to parse key");
 
         // assert_eq!(key.primary_key.fingerprint(), "56c65c513a0d1b9cff532d784c073ae0c8445c0c");
 
@@ -203,10 +278,10 @@ mod tests {
 
         assert_eq!(
             key.primary_key,
-            key::RSA::<key::Public>::new(
+            key::PublicKey::new(
                 KeyVersion::V4,
                 PublicKeyAlgorithm::RSA,
-                key::RSAPublicParams {
+                key::PublicParams::RSA {
                     n: primary_n,
                     e: vec![1u8, 0u8, 1u8],
                 }
