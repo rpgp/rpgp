@@ -1,5 +1,6 @@
 use base64;
 use nom;
+use openssl::error::ErrorStack;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -27,11 +28,38 @@ pub enum Error {
     NoKey,
     #[fail(display = "more than one key found")]
     MultipleKeys,
+    #[fail(display = "openssl error: {:?}", _0)]
+    OpenSSLError(ErrorStack),
+}
+impl Error {
+    pub fn as_code(&self) -> u32 {
+        match self {
+            Error::ParsingError(_) => 0,
+            Error::InvalidInput => 1,
+            Error::Incomplete => 2,
+            Error::InvalidArmorWrappers => 3,
+            Error::InvalidChecksum => 4,
+            Error::Base64DecodeError(_) => 5,
+            Error::RequestedSizeTooLarge => 6,
+            Error::NoKey => 7,
+            Error::MultipleKeys => 8,
+            Error::OpenSSLError(ErrorStack) => 9,
+        }
+    }
 }
 
 impl<'a> From<nom::Err<&'a [u8]>> for Error {
     fn from(err: nom::Err<&'a [u8]>) -> Error {
         Error::ParsingError(err.into_error_kind())
+    }
+}
+
+impl<'a> From<Error> for nom::Err<&'a [u8]> {
+    fn from(err: Error) -> nom::Err<&'a [u8]> {
+        nom::Err::Error(nom::Context::Code(
+            &b""[..],
+            nom::ErrorKind::Custom(err.as_code()),
+        ))
     }
 }
 
@@ -44,5 +72,11 @@ impl<'a> From<nom::Err<&'a str>> for Error {
 impl From<base64::DecodeError> for Error {
     fn from(err: base64::DecodeError) -> Error {
         Error::Base64DecodeError(err)
+    }
+}
+
+impl From<ErrorStack> for Error {
+    fn from(err: ErrorStack) -> Error {
+        Error::OpenSSLError(err)
     }
 }
