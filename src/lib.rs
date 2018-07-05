@@ -16,13 +16,24 @@ extern crate itertools;
 #[macro_use]
 extern crate hex_literal;
 
+#[cfg(test)]
+#[macro_use]
+extern crate serde_derive;
+
+#[cfg(test)]
+extern crate glob;
+#[cfg(test)]
+extern crate serde;
+#[cfg(test)]
+extern crate serde_json;
+
 pub mod email;
 pub use composed::key::*;
+pub mod composed;
 
 // public so it can be used in doc test
 pub mod util;
 
 mod armor;
-mod composed;
 mod errors;
 mod packet;
