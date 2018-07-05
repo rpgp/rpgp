@@ -93,7 +93,7 @@ named_args!(old_public_key_parser<'a>(key_time: &'a u32, key_ver: &'a KeyVersion
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
 named!(pub parser<Key<Public>>, do_parse!(
           key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-          key_time: 
+    >>      key_time: be_u32
     >>    key: switch!(value!(&key_ver),
                        &KeyVersion::V2 => call!(old_public_key_parser, &key_ver) |
                        &KeyVersion::V3 => call!(old_public_key_parser, &key_ver) |

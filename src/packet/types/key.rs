@@ -1,5 +1,4 @@
 use std::ops::Deref;
-use std::time::SystemTime;
 
 use super::super::super::byteorder::{BigEndian, ByteOrder};
 use super::super::super::openssl::hash::{Hasher, MessageDigest};
@@ -170,12 +169,14 @@ macro_rules! key {
         impl $name<Private> {
             pub fn new(
                 version: KeyVersion,
+                creation_time: u32,
                 algorithm: PublicKeyAlgorithm,
                 pub_params: $pub,
                 priv_params: $priv,
             ) -> Self {
                 $name::<Private> {
                     version,
+                    creation_time,
                     algorithm,
                     public_params: pub_params,
                     private_params: Some(priv_params),
