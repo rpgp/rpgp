@@ -124,14 +124,13 @@ pub trait Key: Sized {
     /// Parse an armor encoded list of keys.
     fn from_string_many(input: &str) -> Result<Vec<Self>> {
         let (_typ, _headers, body) = armor::parse(input)?;
-        println!("got key: {:?} {:?} {}", _typ, _headers, body.len());
+
         // TODO: add typ and headers information to the key possibly?
         Self::from_bytes_many(body.as_slice())
     }
 
     fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
         let packets = packet::parser(bytes)?;
-        println!("got packets {:?}", packets);
 
         Self::from_packets(&packets)
     }
@@ -244,15 +243,24 @@ mod tests {
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
 
-        let mut pkey = key.primary_key;
+        let pkey = key.primary_key;
         assert_eq!(pkey.version(), &KeyVersion::V4);
         assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
+
+        assert_eq!(pkey.private_params().checksum.as_slice(), hex!("2c46"));
 
         pkey.unlock(
             || "",
             |priv_params| {
-                assert_eq!(priv_params.to_vec()[0].len(), 256); // 2044 bits
-
+                match priv_params {
+                    types::key::PrivateParams::RSA { d, p, q, u } => {
+                        assert_eq!(d.len(), 256); // 2044 bits
+                        assert_eq!(p.len(), 1024 / 8);
+                        assert_eq!(q.len(), 1024 / 8);
+                        assert_eq!(u.len(), 1024 / 8);
+                    }
+                    _ => panic!("unexpected params type {:?}", priv_params),
+                }
                 Ok(())
             },
         ).unwrap();
@@ -262,7 +270,7 @@ mod tests {
     fn test_parse_details() {
         let raw = include_bytes!("../../tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc");
         let input = ::std::str::from_utf8(raw).unwrap();
-        let key = Key::from_string(input).expect("failed to parse key");
+        let key = PublicKey::from_string(input).expect("failed to parse key");
 
         // assert_eq!(key.primary_key.fingerprint(), "56c65c513a0d1b9cff532d784c073ae0c8445c0c");
 

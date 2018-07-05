@@ -43,7 +43,7 @@ pub enum PublicParams {
         hash: u8,
         alg_sym: u8,
     },
-    ElgamalPublicParams {
+    Elgamal {
         p: Vec<u8>,
         g: Vec<u8>,
         y: Vec<u8>,
@@ -95,13 +95,25 @@ pub struct EncryptedPrivateParams {
 }
 
 impl EncryptedPrivateParams {
+    pub fn new_plaintext(data: Vec<u8>, checksum: Vec<u8>) -> EncryptedPrivateParams {
+        EncryptedPrivateParams {
+            data,
+            checksum,
+            iv: None,
+            encryption_algorithm: None,
+            string_to_key: None,
+            string_to_key_id: 0,
+            string_to_key_params: None,
+        }
+    }
+
     pub fn is_encrypted(&self) -> bool {
         self.string_to_key_id != 0
     }
 }
 
 impl PublicKey {
-    fn new(
+    pub fn new(
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         public_params: PublicParams,
@@ -115,7 +127,7 @@ impl PublicKey {
 }
 
 impl PrivateKey {
-    fn new(
+    pub fn new(
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         public_params: PublicParams,
@@ -135,21 +147,20 @@ impl PrivateKey {
         pw: fn() -> &'a str,
         work: fn(&PrivateParams) -> Result<()>,
     ) -> Result<()> {
-        match self.private_params {
-            Some(ref raw) => {
-                let decrypted = if raw.is_encrypted() {
-                    self.from_ciphertext(pw, raw)
-                } else {
-                    self.from_plaintext(pw, raw)
-                }?;
+        let decrypted = if self.private_params.is_encrypted() {
+            self.from_ciphertext(pw, self.private_params.data.as_slice())
+        } else {
+            self.from_plaintext(self.private_params.data.as_slice())
+        }?;
 
-                work(&decrypted)
-            }
-            None => panic!("not actually a private key, missing the private part"),
-        }
+        work(&decrypted)
     }
 
-    fn from_ciphertext<'a>(&self, _pw: fn() -> &'a str, _ciphertext: &[u8]) -> Result<Self> {
+    fn from_ciphertext<'a>(
+        &self,
+        _pw: fn() -> &'a str,
+        _ciphertext: &[u8],
+    ) -> Result<PrivateParams> {
         match self.algorithm {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
@@ -171,7 +182,7 @@ impl PrivateKey {
             PublicKeyAlgorithm::Elgamal => {
                 unimplemented!("implement me");
             }
-            _ => panic!("unsupported algoritm: {}", self.algorithm),
+            _ => panic!("unsupported algoritm: {:?}", self.algorithm),
         }
     }
 
@@ -199,8 +210,12 @@ impl PrivateKey {
             PublicKeyAlgorithm::Elgamal => {
                 unimplemented!("implement me");
             }
-            _ => panic!("unsupported algoritm: {}", self.algorithm),
+            _ => panic!("unsupported algoritm: {:?}", self.algorithm),
         }
+    }
+
+    pub fn private_params(&self) -> &EncryptedPrivateParams {
+        &self.private_params
     }
 }
 

@@ -17,7 +17,7 @@ extern crate itertools;
 extern crate hex_literal;
 
 pub mod email;
-pub use composed::key::Key;
+pub use composed::key::*;
 
 // public so it can be used in doc test
 pub mod util;

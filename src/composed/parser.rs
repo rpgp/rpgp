@@ -188,11 +188,11 @@ macro_rules! key_parser {
 
                 Ok(<$key_type>::new(
                     primary_key,
+                    revocation_signatures,
+                    direct_signatures,
                     users,
                     user_attributes,
                     subkeys,
-                    revocation_signatures,
-                    direct_signatures,
                 ))
             }
 
@@ -234,5 +234,5 @@ key_parser!(
     PublicSubKey,
     Tag::PublicKey,
     Tag::PublicSubkey,
-    key::PrivateKey
+    key::PublicKey
 );
