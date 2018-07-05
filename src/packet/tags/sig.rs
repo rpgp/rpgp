@@ -269,7 +269,7 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>,
     >> (p)
 ))));
 
-fn unknown_sig<'a>(body: &'a [u8], typ: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
+fn unknown_sig<'a>(body: &'a [u8], typ: PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
     println!("unknown signature type {:?}", typ);
     Ok((&b""[..], body.to_vec()))
 }
@@ -287,7 +287,7 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<u8>>, 
         acc
     }) |    
     // TODO: check which other algorithms need handling
-    _ => call!(unknown_sig, typ)
+    _ => call!(unknown_sig, *typ)
 ));
 
 /// Parse a v2 signature packet

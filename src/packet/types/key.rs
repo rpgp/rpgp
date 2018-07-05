@@ -8,6 +8,8 @@ use packet::tags::privkey::rsa_private_params;
 pub struct PrivateKey {
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
+    created_at: u32,
+    expiration: Option<u16>,
     public_params: PublicParams,
     private_params: EncryptedPrivateParams,
 }
@@ -17,6 +19,8 @@ pub struct PrivateKey {
 pub struct PublicKey {
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
+    created_at: u32,
+    expiration: Option<u16>,
     public_params: PublicParams,
 }
 
@@ -116,11 +120,15 @@ impl PublicKey {
     pub fn new(
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
+        created_at: u32,
+        expiration: Option<u16>,
         public_params: PublicParams,
     ) -> PublicKey {
         PublicKey {
             version,
             algorithm,
+            created_at,
+            expiration,
             public_params,
         }
     }
@@ -130,12 +138,16 @@ impl PrivateKey {
     pub fn new(
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
+        created_at: u32,
+        expiration: Option<u16>,
         public_params: PublicParams,
         private_params: EncryptedPrivateParams,
     ) -> PrivateKey {
         PrivateKey {
             version,
             algorithm,
+            created_at,
+            expiration,
             public_params,
             private_params,
         }
@@ -228,6 +240,18 @@ macro_rules! key {
 
             pub fn algorithm(&self) -> &PublicKeyAlgorithm {
                 &self.algorithm
+            }
+
+            pub fn created_at(&self) -> u32 {
+                self.created_at
+            }
+
+            pub fn expiration(&self) -> Option<u16> {
+                self.expiration
+            }
+
+            pub fn public_params(&self) -> &PublicParams {
+                &self.public_params
             }
         }
     };

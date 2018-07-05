@@ -8,26 +8,22 @@ use composed;
 use util::{mpi, rest_len};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named_args!(ecdsa<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>, do_parse!(
+named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // a one-octet size of the following field
        len: be_u8
     // octets representing a curve OID
     >> curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
     >>   p: mpi
-    >> (PrivateKey::new(
-        *ver,
-        *alg,
-        PublicParams::ECDSA {
+    >> (PublicParams::ECDSA {
             curve,
             p: p.to_vec()
         },
-        EncryptedPrivateParams::new_plaintext(vec![], vec![]),
-    ))
+        EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named_args!(ecdh<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>, do_parse!(
+named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // a one-octet size of the following field
         len: be_u8
     // octets representing a curve OID
@@ -43,57 +39,45 @@ named_args!(ecdh<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateK
     // a one-octet algorithm ID for the symmetric algorithm used to wrap
     // the symmetric key used for the message encryption
     >>  alg_sym: take!(1)
-    >> (PrivateKey::new(
-        *ver,
-        *alg,
-        PublicParams::ECDH {
+    >> (PublicParams::ECDH {
             curve, p:
             p.to_vec(),
             hash: hash[0],
             alg_sym: alg_sym[0]
         },
-        EncryptedPrivateParams::new_plaintext(vec![], vec![])
-    ))
+        EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
-named_args!(elgamal<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>, do_parse!(
+named!(elgamal<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // MPI of Elgamal prime p
        p: mpi
     // MPI of Elgamal group generator g
     >> g: mpi
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
     >> y: mpi
-    >> (PrivateKey::new(
-        *ver,
-        *alg,
-        PublicParams::Elgamal {
+    >> (PublicParams::Elgamal {
             p: p.to_vec(),
             g: g.to_vec(),
             y: y.to_vec()
         },
-        EncryptedPrivateParams::new_plaintext(vec![], vec![]),
-    ))
+        EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
-named_args!(dsa<'a>(alg: &'a PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>, do_parse!(
+named!(dsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
        p: mpi
     >> q: mpi
     >> g: mpi
     >> y: mpi
-    >> (PrivateKey::new(
-        *ver,
-        *alg,
-        PublicParams::DSA{
+    >> (PublicParams::DSA {
             p: p.to_vec(),
             q: q.to_vec(),
             g: g.to_vec(),
             y: y.to_vec()
         },
-        EncryptedPrivateParams::new_plaintext(vec![], vec![])
-    ))
+        EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
-named_args!(rsa<'a>(alg: &PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>, do_parse!(
+named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
              n: mpi
     >>       e: mpi
     >> s2k_typ: be_u8
@@ -125,11 +109,7 @@ named_args!(rsa<'a>(alg: &PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>,
     >> data_len: map!(rest_len, |r| r - checksum_len)
     >>     data: take!(data_len)
     >> checksum: take!(checksum_len)
-    >> ({
-        PrivateKey::new(
-        *ver,
-        *alg,
-        PublicParams::RSA {
+    >> (PublicParams::RSA {
             n: n.to_vec(),
             e: e.to_vec()
         },
@@ -142,35 +122,34 @@ named_args!(rsa<'a>(alg: &PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>,
             string_to_key_params: enc_params.3.map(|p| p.to_vec()),
             string_to_key_id: s2k_typ,
         })
-    })
 ));
 
-named_args!(key_from_fields<'a>(typ: PublicKeyAlgorithm, ver: &'a KeyVersion) <PrivateKey>, switch!(
+named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, EncryptedPrivateParams)>, switch!(
     value!(&typ), 
     &PublicKeyAlgorithm::RSA        |
     &PublicKeyAlgorithm::RSAEncrypt |
-    &PublicKeyAlgorithm::RSASign    => call!(rsa, &typ, ver)     |
-    &PublicKeyAlgorithm::DSA        => call!(dsa, &typ, ver)     |
-    &PublicKeyAlgorithm::ECDSA      => call!(ecdsa, &typ, ver)   |
-    &PublicKeyAlgorithm::ECDH       => call!(ecdh, &typ, ver)    |
+    &PublicKeyAlgorithm::RSASign    => call!(rsa)     |
+    &PublicKeyAlgorithm::DSA        => call!(dsa)     |
+    &PublicKeyAlgorithm::ECDSA      => call!(ecdsa)   |
+    &PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
     &PublicKeyAlgorithm::Elgamal    |
-    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal, &typ, ver)
+    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal)
     // &PublicKeyAlgorithm::DiffieHellman => 
 ));
 
 named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do_parse!(
-       _key_time: be_u32
-    >>      alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
-    >>   key: call!(key_from_fields, alg, key_ver)
-    >> (key)
+        created_at: be_u32
+    >>         alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
+    >>      params: call!(key_from_fields, &alg)
+    >> (PrivateKey::new(*key_ver, alg, created_at, None, params.0, params.1))
 ));
 
 named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do_parse!(
-       _key_time: be_u32
-    >>      _exp: be_u16
-    >>      alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >>   key: call!(key_from_fields, alg, key_ver)
-    >> (key)
+       created_at: be_u32
+    >>        exp: be_u16
+    >>        alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+    >>     params: call!(key_from_fields, &alg)
+    >> (PrivateKey::new(*key_ver, alg, created_at, Some(exp), params.0, params.1))
 ));
 
 /// Parse a private key packet (Tag 5)
