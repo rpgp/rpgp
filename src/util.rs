@@ -3,6 +3,7 @@ use nom::{
     self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter,
     InputLength, InputTake, Slice,
 };
+use openssl::bn::BigNum;
 use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
 
@@ -95,6 +96,9 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
         }
     }
 }
+
+/// Parse an mpi and convert it to a `BigNum`.
+named!(pub mpi_big<BigNum>, map_res!(mpi, BigNum::from_slice));
 
 /// Convert a slice into an array
 pub fn clone_into_array<A, T>(slice: &[T]) -> A
