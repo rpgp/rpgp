@@ -45,6 +45,15 @@ install:
 
 build: false
 
+
 test_script:
-  - cargo run --manifest-path systest/Cargo.toml --target %TARGET%
-  - cargo test --manifest-path openssl/Cargo.toml --target %TARGET%
+  - cargo build --target %TARGET%
+  - cargo test --target %TARGET%
+
+cache:
+  - target
+  - C:\Users\appveyor\.cargo\registry
+
+clone_script:
+  - cmd: git clone -q --recursive --branch=%APPVEYOR_REPO_BRANCH% https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
+  - cmd: git checkout -qf %APPVEYOR_REPO_COMMIT%
