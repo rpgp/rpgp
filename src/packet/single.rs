@@ -55,7 +55,7 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, usize), bits!(do_parse!(
 /// Parse Packet Headers
 /// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
 named!(pub parser<Packet>, do_parse!(
-       head: alt!(new_packet_header | old_packet_header) 
+       head: alt!(new_packet_header | old_packet_header)
     >> body: take!(head.2)
     >> (Packet{
             version: head.0,

@@ -1,11 +1,10 @@
 use enum_primitive::FromPrimitive;
-use nom::{be_u8, be_u16, be_u32, self};
+use nom::{be_u16, be_u32, be_u8};
 
-use packet::types::{KeyVersion, PublicKeyAlgorithm, SymmetricKeyAlgorithm, StringToKeyType};
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
-use composed;
-use util::{mpi, rest_len};
+use packet::types::{KeyVersion, PublicKeyAlgorithm};
+use util::mpi;
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
@@ -124,8 +123,8 @@ named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
         })
 ));
 
-named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, EncryptedPrivateParams)>, switch!(
-    value!(&typ), 
+named_args!(key_from_fields<'a>(typ: PublicKeyAlgorithm, ver: &'a KeyVersion) <Key<Private>>, switch!(
+    value!(&typ),
     &PublicKeyAlgorithm::RSA        |
     &PublicKeyAlgorithm::RSAEncrypt |
     &PublicKeyAlgorithm::RSASign    => call!(rsa)     |
@@ -133,8 +132,8 @@ named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, Enc
     &PublicKeyAlgorithm::ECDSA      => call!(ecdsa)   |
     &PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
     &PublicKeyAlgorithm::Elgamal    |
-    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal)
-    // &PublicKeyAlgorithm::DiffieHellman => 
+    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal, &typ, ver)
+    // &PublicKeyAlgorithm::DiffieHellman =>
 ));
 
 named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do_parse!(
@@ -156,11 +155,11 @@ named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do
 /// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 named!(pub parser<PrivateKey>, do_parse!(
           key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-    >>    key: switch!(value!(&key_ver), 
-                       &KeyVersion::V2 => call!(old_private_key_parser, &key_ver) |
-                       &KeyVersion::V3 => call!(old_private_key_parser, &key_ver) |
-                       &KeyVersion::V4 => call!(new_private_key_parser, &key_ver)
-                   ) 
+    >>    key: switch!(value!(&key_ver),
+                       &KeyVersion::V2 => call!(old_public_key_parser, &key_ver) |
+                       &KeyVersion::V3 => call!(old_public_key_parser, &key_ver) |
+                       &KeyVersion::V4 => call!(new_public_key_parser, &key_ver)
+                   )
     >> (key)
 ));
 
