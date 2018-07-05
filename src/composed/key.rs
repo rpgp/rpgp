@@ -139,13 +139,9 @@ pub trait Key: Sized {
         Self::from_bytes_many(body.as_slice())
     }
 
-    fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
-        let packets = packet::parser(bytes)?;
-
-        Self::from_packets(&packets)
+    pub fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
     }
-
-    fn from_packets<'a>(impl IntoIterator<Item = &'a types::Packet>) -> Result<Vec<Self>>;
 }
 
 #[cfg(test)]
@@ -532,5 +528,29 @@ mod tests {
         );
 
         assert_eq!(ua.signatures, vec![sig3]);
+    }
+
+    #[test]
+    fn test_fingerprint_v3() {
+        // RSA
+
+        // DSA
+
+        // ELG
+    }
+
+    #[test]
+    fn test_fingerprint_v4() {
+        // RSA
+
+        // DSA
+
+        // ELG
+
+        // ECDH
+
+        // ECDSA
+
+        // EdDSA
     }
 }
