@@ -3,25 +3,77 @@ use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, SymmetricKe
 use errors::Result;
 use packet::tags::privkey::rsa_private_params;
 
-pub trait Key: Sized {
-    fn version(&self) -> &KeyVersion;
-    fn algorithm(&self) -> &PublicKeyAlgorithm;
+/// Represents a single private key packet.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PrivateKey {
+    version: KeyVersion,
+    algorithm: PublicKeyAlgorithm,
+    public_params: PublicParams,
+    private_params: EncryptedPrivateParams,
 }
 
-pub trait PublicParams {}
-
-pub trait PrivateParams
-where
-    Self: Sized,
-{
-    fn from_ciphertext<'a>(fn() -> &'a str, &[u8]) -> Result<Self>;
-
-    fn from_plaintext(&[u8]) -> Result<Self>;
+/// Represents a single public key packet.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PublicKey {
+    version: KeyVersion,
+    algorithm: PublicKeyAlgorithm,
+    public_params: PublicParams,
 }
 
-pub trait PrivateKey: Key {}
+/// Represent the public paramaters for the different algorithms.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum PublicParams {
+    RSA {
+        n: Vec<u8>,
+        e: Vec<u8>,
+    },
+    DSA {
+        p: Vec<u8>,
+        q: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
+    },
+    ECDSA {
+        curve: ECCCurve,
+        p: Vec<u8>,
+    },
+    ECDH {
+        curve: ECCCurve,
+        p: Vec<u8>,
+        hash: u8,
+        alg_sym: u8,
+    },
+    ElgamalPublicParams {
+        p: Vec<u8>,
+        g: Vec<u8>,
+        y: Vec<u8>,
+    },
+}
 
-pub trait PublicKey: Key {}
+/// Represents the private, encrypted paramters for the various algorithms.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum PrivateParams {
+    RSA {
+        /// Secret exponent d
+        d: Vec<u8>,
+        /// Secret prime value p
+        p: Vec<u8>,
+        /// Secret prime value q (p < q)
+        q: Vec<u8>,
+        /// The multiplicative inverse of p, mod q
+        u: Vec<u8>,
+    },
+    DSA {
+        /// Secret exponent x.
+        x: Vec<u8>,
+    },
+    ECDSA {},
+    ECDH {},
+    Elgamal {
+        /// Secret exponent x.
+        x: Vec<u8>,
+    },
+}
 
 /// A list of params that are used to represent the values of possibly encrypted key, from imports and exports.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,238 +100,123 @@ impl EncryptedPrivateParams {
     }
 }
 
+impl PublicKey {
+    fn new(
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        public_params: PublicParams,
+    ) -> PublicKey {
+        PublicKey {
+            version,
+            algorithm,
+            public_params,
+        }
+    }
+}
+
+impl PrivateKey {
+    fn new(
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        public_params: PublicParams,
+        private_params: EncryptedPrivateParams,
+    ) -> PrivateKey {
+        PrivateKey {
+            version,
+            algorithm,
+            public_params,
+            private_params,
+        }
+    }
+
+    /// Unlock the raw data in the secret parameters.
+    pub fn unlock<'a>(
+        &self,
+        pw: fn() -> &'a str,
+        work: fn(&PrivateParams) -> Result<()>,
+    ) -> Result<()> {
+        match self.private_params {
+            Some(ref raw) => {
+                let decrypted = if raw.is_encrypted() {
+                    self.from_ciphertext(pw, raw)
+                } else {
+                    self.from_plaintext(pw, raw)
+                }?;
+
+                work(&decrypted)
+            }
+            None => panic!("not actually a private key, missing the private part"),
+        }
+    }
+
+    fn from_ciphertext<'a>(&self, _pw: fn() -> &'a str, _ciphertext: &[u8]) -> Result<Self> {
+        match self.algorithm {
+            PublicKeyAlgorithm::RSA
+            | PublicKeyAlgorithm::RSAEncrypt
+            | PublicKeyAlgorithm::RSASign => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::DSA => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::ECDH => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::ECDSA => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::EdDSA => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::Elgamal => {
+                unimplemented!("implement me");
+            }
+            _ => panic!("unsupported algoritm: {}", self.algorithm),
+        }
+    }
+
+    fn from_plaintext(&self, plaintext: &[u8]) -> Result<PrivateParams> {
+        match self.algorithm {
+            PublicKeyAlgorithm::RSA
+            | PublicKeyAlgorithm::RSAEncrypt
+            | PublicKeyAlgorithm::RSASign => {
+                let (_, (d, p, q, u)) = rsa_private_params(plaintext)?;
+
+                Ok(PrivateParams::RSA { d, p, q, u })
+            }
+            PublicKeyAlgorithm::DSA => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::ECDH => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::ECDSA => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::EdDSA => {
+                unimplemented!("implement me");
+            }
+            PublicKeyAlgorithm::Elgamal => {
+                unimplemented!("implement me");
+            }
+            _ => panic!("unsupported algoritm: {}", self.algorithm),
+        }
+    }
+}
+
 macro_rules! key {
-    ($name:ident, $priv_name:ident, $pub:ident, $priv:ident) => {
-        /// The $name public key
-        #[derive(Debug, Clone, PartialEq, Eq)]
-        pub struct $name {
-            version: KeyVersion,
-            algorithm: PublicKeyAlgorithm,
-            public_params: $pub,
-        }
-
-        impl Key for $name {
-            fn version(&self) -> &KeyVersion {
-                &self.version
-            }
-
-            fn algorithm(&self) -> &PublicKeyAlgorithm {
-                &self.algorithm
-            }
-        }
-
-        impl PublicKey for $name {}
+    ($name:ident) => {
         impl $name {
-            fn new(
-                version: KeyVersion,
-                algorithm: PublicKeyAlgorithm,
-                public_params: $pub,
-            ) -> Self {
-                $name {
-                    version,
-                    algorithm,
-                    public_params,
-                }
-            }
-        }
-
-        /// Private thing
-        pub struct $priv_name {
-            version: KeyVersion,
-            algorithm: PublicKeyAlgorithm,
-            public_params: $pub,
-            private_params: EncryptedPrivateParams,
-        }
-
-        impl Key for $priv_name {
-            fn version(&self) -> &KeyVersion {
+            pub fn version(&self) -> &KeyVersion {
                 &self.version
             }
 
-            fn algorithm(&self) -> &PublicKeyAlgorithm {
+            pub fn algorithm(&self) -> &PublicKeyAlgorithm {
                 &self.algorithm
             }
         }
-
-        impl PrivateKey for $priv_name {}
-
-        impl $priv_name {
-            fn new(
-                version: KeyVersion,
-                algorithm: PublicKeyAlgorithm,
-                public_params: $pub,
-                private_params: EncryptedPrivateParams,
-            ) -> Self {
-                $name {
-                    version,
-                    algorithm,
-                    public_params,
-                    private_params,
-                }
-            }
-
-            /// Unlock the raw data in the secret parameters.
-            fn unlock<'a>(&self, pw: fn() -> &'a str, work: fn($priv) -> Result<()>) -> Result<()> {
-                match self.private_params {
-                    Some(ref raw) => {
-                        let decrypted = if raw.is_encrypted() {
-                            $priv::from_ciphertext(pw, raw)
-                        } else {
-                            $priv::from_plaintext(pw, raw)
-                        }?;
-
-                        work(&decrypted)
-                    }
-                    None => panic!("not actually a private key, missing the private part"),
-                }
-            }
-        }
-
-        impl PublicParams for $pub {}
     };
 }
 
-// -- RSA
-
-key!(RSAPublic, RSAPrivate, RSAPublicParams, RSAPrivateParams);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RSAPublicParams {
-    pub n: Vec<u8>,
-    pub e: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RSAPrivateParams {
-    /// Secret exponent d
-    pub d: Vec<u8>,
-    /// Secret prime value p
-    pub p: Vec<u8>,
-    /// Secret prime value q (p < q)
-    pub q: Vec<u8>,
-    /// The multiplicative inverse of p, mod q
-    pub u: Vec<u8>,
-}
-
-impl PrivateParams for RSAPrivateParams {
-    fn from_ciphertext<'a>(_pw: fn() -> &'a str, _ciphertext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-
-    fn from_plaintext(plaintext: &[u8]) -> Result<Self> {
-        let (_, (d, p, q, u)) = rsa_private_params(plaintext)?;
-
-        Ok(RSAPrivateParams { d, p, q, u })
-    }
-}
-
-// -- DSA
-
-key!(DSAPublic, DSAPrivate, DSAPublicParams, DSAPrivateParams);
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DSAPublicParams {
-    pub p: Vec<u8>,
-    pub q: Vec<u8>,
-    pub g: Vec<u8>,
-    pub y: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DSAPrivateParams {
-    /// Secret exponent x.
-    pub x: Vec<u8>,
-}
-
-impl PrivateParams for DSAPrivateParams {
-    fn from_ciphertext<'a>(_pw: fn() -> &'a str, _ciphertext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-
-    fn from_plaintext(_plaintext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-}
-
-// -- ECDSA
-
-key!(
-    ECDSAPublic,
-    ECDSAPrivate,
-    ECDSAPublicParams,
-    ECDSAPrivateParams
-);
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ECDSAPublicParams {
-    pub curve: ECCCurve,
-    pub p: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ECDSAPrivateParams {}
-
-impl PrivateParams for ECDSAPrivateParams {
-    fn from_ciphertext<'a>(_pw: fn() -> &'a str, _ciphertext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-
-    fn from_plaintext(_plaintext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-}
-
-// -- ECDH
-
-key!(ECDHPublic, ECDHPrivate, ECDHPublicParams, ECDHPrivateParams);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ECDHPublicParams {
-    pub curve: ECCCurve,
-    pub p: Vec<u8>,
-    pub hash: u8,
-    pub alg_sym: u8,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ECDHPrivateParams {}
-
-impl PrivateParams for ECDHPrivateParams {
-    fn from_ciphertext<'a>(_pw: fn() -> &'a str, _ciphertext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-
-    fn from_plaintext(_plaintext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-}
-
-// -- Elgamal
-
-key!(
-    ElgamalPublic,
-    ElgamalPrivate,
-    ElgamalPublicParams,
-    ElgamalPrivateParams
-);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ElgamalPublicParams {
-    pub p: Vec<u8>,
-    pub g: Vec<u8>,
-    pub y: Vec<u8>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ElgamalPrivateParams {
-    /// Secret exponent x.
-    pub x: Vec<u8>,
-}
-
-impl PrivateParams for ElgamalPrivateParams {
-    fn from_ciphertext<'a>(_pw: fn() -> &'a str, _ciphertext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-
-    fn from_plaintext(_plaintext: &[u8]) -> Result<Self> {
-        unimplemented!("make me");
-    }
-}
+key!(PublicKey);
+key!(PrivateKey);

@@ -1,8 +1,6 @@
-use super::parser;
 use armor;
 use errors::{Error, Result};
 use packet::{self, types};
-use std::boxed::Box;
 use std::io::Read;
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
@@ -12,56 +10,93 @@ use std::io::Read;
 
 /// Represents a Public PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicKey<K>
-where
-    K: types::key::PublicKey,
-{
-    pub primary_key: Box<K>,
+pub struct PublicKey {
+    pub primary_key: types::key::PublicKey,
     pub revocation_signatures: Vec<types::Signature>,
     pub direct_signatures: Vec<types::Signature>,
     pub users: Vec<types::User>,
     pub user_attributes: Vec<types::UserAttribute>,
-    pub subkeys: Vec<PublicSubKey<K>>,
+    pub subkeys: Vec<PublicSubKey>,
+}
+
+impl PublicKey {
+    pub fn new(
+        primary_key: types::key::PublicKey,
+        revocation_signatures: Vec<types::Signature>,
+        direct_signatures: Vec<types::Signature>,
+        users: Vec<types::User>,
+        user_attributes: Vec<types::UserAttribute>,
+        subkeys: Vec<PublicSubKey>,
+    ) -> PublicKey {
+        PublicKey {
+            primary_key,
+            revocation_signatures,
+            direct_signatures,
+            users,
+            user_attributes,
+            subkeys,
+        }
+    }
 }
 
 /// Represents a Public PGP SubKey.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicSubKey<K>
-where
-    K: types::key::PublicKey,
-{
-    pub key: Box<K>,
+pub struct PublicSubKey {
+    pub key: types::key::PublicKey,
     pub signatures: Vec<types::Signature>,
+}
+
+impl PublicSubKey {
+    pub fn new(key: types::key::PublicKey, signatures: Vec<types::Signature>) -> PublicSubKey {
+        PublicSubKey { key, signatures }
+    }
 }
 
 /// Represents a Private PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PrivateKey<K>
-where
-    K: types::key::PrivateKey,
-{
-    pub primary_key: Box<K>,
+pub struct PrivateKey {
+    pub primary_key: types::key::PrivateKey,
     pub revocation_signatures: Vec<types::Signature>,
     pub direct_signatures: Vec<types::Signature>,
     pub users: Vec<types::User>,
     pub user_attributes: Vec<types::UserAttribute>,
-    pub subkeys: Vec<PrivateSubKey<K>>,
+    pub subkeys: Vec<PrivateSubKey>,
 }
 
-/// Represents a PGP SubKey
+impl PrivateKey {
+    pub fn new(
+        primary_key: types::key::PrivateKey,
+        revocation_signatures: Vec<types::Signature>,
+        direct_signatures: Vec<types::Signature>,
+        users: Vec<types::User>,
+        user_attributes: Vec<types::UserAttribute>,
+        subkeys: Vec<PrivateSubKey>,
+    ) -> PrivateKey {
+        PrivateKey {
+            primary_key,
+            revocation_signatures,
+            direct_signatures,
+            users,
+            user_attributes,
+            subkeys,
+        }
+    }
+}
+
+/// Represents a composed private PGP SubKey.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PrivateSubKey<K>
-where
-    K: types::key::PrivateKey,
-{
-    pub key: Box<K>,
+pub struct PrivateSubKey {
+    pub key: types::key::PrivateKey,
     pub signatures: Vec<types::Signature>,
 }
 
-pub trait Key
-where
-    Self: ::std::marker::Sized,
-{
+impl PrivateSubKey {
+    pub fn new(key: types::key::PrivateKey, signatures: Vec<types::Signature>) -> PrivateSubKey {
+        PrivateSubKey { key, signatures }
+    }
+}
+
+pub trait Key: Sized {
     /// Parse a single byte encoded key.
     /// This is usually a file with the extension `.pgp`.
     fn from_bytes(bytes: impl Read) -> Result<Self> {
@@ -94,35 +129,14 @@ where
         Self::from_bytes_many(body.as_slice())
     }
 
-    fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>>;
-}
-
-impl<K> Key for PrivateKey<K>
-where
-    K: types::key::PrivateKey,
-{
-    /// Parse byte encoded keys.
-    fn from_bytes_many(bytes: impl Read) -> Result<Vec<PrivateKey<K>>> {
+    fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
         let packets = packet::parser(bytes)?;
         println!("got packets {:?}", packets);
-        // TODO: handle both public key and private keys.
-        // tip: They use different packet types.
-        parser::private_many(&packets)
-    }
-}
 
-impl<K> Key for PublicKey<K>
-where
-    K: types::key::PublicKey,
-{
-    /// Parse byte encoded keys.
-    fn from_bytes_many(bytes: impl Read) -> Result<Vec<PublicKey<K>>> {
-        let packets = packet::parser(bytes)?;
-        println!("got packets {:?}", packets);
-        // TODO: handle both public key and private keys.
-        // tip: They use different packet types.
-        parser::public_many(&packets)
+        Self::from_packets(&packets)
     }
+
+    fn from_packets<'a>(impl IntoIterator<Item = &'a types::Packet>) -> Result<Vec<Self>>;
 }
 
 #[cfg(test)]
@@ -215,7 +229,7 @@ mod tests {
             file.read_to_end(&mut buf).unwrap();
 
             let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-            Key::<key::PublicKey>::from_string(input).expect("failed to parse key");
+            PublicKey::from_string(input).expect("failed to parse key");
         }
     }
 
@@ -228,7 +242,7 @@ mod tests {
         file.read_to_end(&mut buf).unwrap();
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-        let key = Key::<key::PrivateKey>::from_string(input).expect("failed to parse key");
+        let key = PrivateKey::from_string(input).expect("failed to parse key");
 
         let mut pkey = key.primary_key;
         assert_eq!(pkey.version(), &KeyVersion::V4);
@@ -256,10 +270,10 @@ mod tests {
 
         assert_eq!(
             key.primary_key,
-            key::RSAPublic::new(
+            key::PublicKey::new(
                 KeyVersion::V4,
                 PublicKeyAlgorithm::RSA,
-                key::RSAPublicParams {
+                key::PublicParams::RSA {
                     n: primary_n,
                     e: vec![1u8, 0u8, 1u8],
                 }
