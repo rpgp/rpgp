@@ -1,11 +1,12 @@
 use enum_primitive::FromPrimitive;
 use nom::{be_u8, be_u16, be_u32, self};
+use openssl::bn::BigNum;
 
 use packet::types::{KeyVersion, PublicKeyAlgorithm, SymmetricKeyAlgorithm, StringToKeyType};
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
 use composed;
-use util::{mpi, rest_len};
+use util::{mpi_big, rest_len};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
@@ -14,12 +15,8 @@ named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // octets representing a curve OID
     >> curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
-    >>   p: mpi
-    >> (PublicParams::ECDSA {
-            curve,
-            p: p.to_vec()
-        },
-        EncryptedPrivateParams::new_plaintext(vec![], vec![]))
+    >>   p: mpi_big
+    >> (PublicParams::ECDSA { curve, p }, EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
@@ -29,7 +26,7 @@ named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // octets representing a curve OID
     >>  curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
-    >>    p: mpi
+    >>    p: mpi_big
     // a one-octet size of the following fields
     >> _len2: be_u8
     // a one-octet value 01, reserved for future extensions
@@ -40,46 +37,45 @@ named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // the symmetric key used for the message encryption
     >>  alg_sym: take!(1)
     >> (PublicParams::ECDH {
-            curve, p:
-            p.to_vec(),
-            hash: hash[0],
-            alg_sym: alg_sym[0]
-        },
-        EncryptedPrivateParams::new_plaintext(vec![], vec![]))
+        curve,
+        p,
+        hash: hash[0],
+        alg_sym: alg_sym[0]
+    }, EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
 named!(elgamal<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // MPI of Elgamal prime p
-       p: mpi
+       p: mpi_big
     // MPI of Elgamal group generator g
-    >> g: mpi
+    >> g: mpi_big
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
-    >> y: mpi
+    >> y: mpi_big
     >> (PublicParams::Elgamal {
-            p: p.to_vec(),
-            g: g.to_vec(),
-            y: y.to_vec()
+            p,
+            g,
+            y,
         },
         EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
 named!(dsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
-       p: mpi
-    >> q: mpi
-    >> g: mpi
-    >> y: mpi
+       p: mpi_big
+    >> q: mpi_big
+    >> g: mpi_big
+    >> y: mpi_big
     >> (PublicParams::DSA {
-            p: p.to_vec(),
-            q: q.to_vec(),
-            g: g.to_vec(),
-            y: y.to_vec()
+            p,
+            q,
+            g,
+            y,
         },
         EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
 named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
-             n: mpi
-    >>       e: mpi
+             n: mpi_big
+    >>       e: mpi_big
     >> s2k_typ: be_u8
     >> enc_params: switch!(value!(s2k_typ), 
         // 0 is no encryption
@@ -110,8 +106,8 @@ named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     >>     data: take!(data_len)
     >> checksum: take!(checksum_len)
     >> (PublicParams::RSA {
-            n: n.to_vec(),
-            e: e.to_vec()
+            n,
+            e,
         },
         EncryptedPrivateParams {
             data: data.to_vec(),
@@ -172,11 +168,11 @@ impl composed::key::PrivateKey {
 }
 
 /// Parse the decrpyted private params of an RSA private key.
-named!(pub rsa_private_params<(Vec<u8>, Vec<u8>,Vec<u8>, Vec<u8>)>, do_parse!(
-       d: mpi
-    >> p: mpi
-    >> q: mpi
-    >> u: mpi
-    >> (d.to_vec(), p.to_vec(), q.to_vec(), u.to_vec())
+named!(pub rsa_private_params<(BigNum, BigNum,BigNum, BigNum)>, do_parse!(
+       d: mpi_big
+    >> p: mpi_big
+    >> q: mpi_big
+    >> u: mpi_big
+    >> (d, p, q, u)
 ));
     

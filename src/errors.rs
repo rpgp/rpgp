@@ -43,7 +43,7 @@ impl Error {
             Error::RequestedSizeTooLarge => 6,
             Error::NoKey => 7,
             Error::MultipleKeys => 8,
-            Error::OpenSSLError(ErrorStack) => 9,
+            Error::OpenSSLError(_) => 9,
         }
     }
 }
