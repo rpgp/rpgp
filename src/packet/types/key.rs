@@ -116,11 +116,39 @@ where
             }
 
             KeyVersion::V2 | KeyVersion::V3 => {
-                let mut hash_material = [0x99];
-
                 let mut h = Hasher::new(MessageDigest::md5()).unwrap();
 
-                h.update(&hash_material).unwrap();
+                let mut packet = Vec::new();
+
+                match self {
+                    Key::RSA(k) => {
+                        packet.extend(&k.public_params.n);
+                        packet.extend(&k.public_params.e);
+                    }
+                    Key::DSA(k) => {
+                        packet.extend(&k.public_params.p);
+                        packet.extend(&k.public_params.q);
+                        packet.extend(&k.public_params.g);
+                        packet.extend(&k.public_params.y);
+                    }
+                    Key::ECDSA(k) => {
+                        packet.extend(&k.public_params.curve.oid());
+                        packet.extend(&k.public_params.p);
+                    }
+                    Key::ECDH(k) => {
+                        packet.extend(&k.public_params.curve.oid());
+                        packet.extend(&k.public_params.p);
+                        packet.push(k.public_params.hash);
+                        packet.push(k.public_params.alg_sym);
+                    }
+                    Key::Elgamal(k) => {
+                        packet.extend(&k.public_params.p);
+                        packet.extend(&k.public_params.g);
+                        packet.extend(&k.public_params.y);
+                    }
+                }
+
+                h.update(&packet).unwrap();
 
                 h.finish().unwrap().deref().to_vec()
             }
