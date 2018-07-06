@@ -42,6 +42,11 @@ impl PublicKey {
     pub fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
+
+    /// Returns the Key ID of the associated primary key.
+    pub fn key_id(&self) -> Vec<u8> {
+        self.primary_key.key_id()
+    }
 }
 
 /// Represents a Public PGP SubKey.
@@ -90,6 +95,11 @@ impl PrivateKey {
     /// Returns the fingerprint of the associated primary key.
     pub fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
+    }
+
+    /// Returns the Key ID of the associated primary key.
+    pub fn key_id(&self) -> Vec<u8> {
+        self.primary_key.key_id()
     }
 }
 
@@ -558,26 +568,38 @@ mod tests {
 
     #[test]
     fn test_fingerprint_rsa() {
+        // V4
+        w
 
+
+        // V3
     }
 
     #[test]
     fn test_fingerprint_dsa() {
+        // V4
 
+        // V3
     }
 
     #[test]
     fn test_fingerprint_ecdsa() {
+        // V4
 
+        // V3
     }
 
     #[test]
     fn test_fingerprint_ecdh() {
+        // V4
 
+        // V3
     }
 
     #[test]
     fn test_fingerprint_elgamel() {
+        // V4
 
+        // V3
     }
 }
