@@ -1,7 +1,11 @@
+use byteorder::{BigEndian, ByteOrder};
 use openssl::bn::BigNum;
 use openssl::dsa::Dsa;
+use openssl::hash::{Hasher, MessageDigest};
 use openssl::pkey;
 use openssl::rsa::{Rsa, RsaPrivateKeyBuilder};
+
+use std::ops::Deref;
 
 use super::ecc_curve::ECCCurve;
 use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, SymmetricKeyAlgorithm};
@@ -257,7 +261,116 @@ macro_rules! key {
 
             /// Returns the fingerprint of this key.
             pub fn fingerprint(&self) -> Vec<u8> {
-                unimplemented!("implement me please")
+                match self.version() {
+                    KeyVersion::V4 => {
+                        // A one-octet version number (4).
+                        let mut packet = Vec::new();
+                        packet.push(4);
+
+                        // A four-octet number denoting the time that the key was created.
+                        let mut time_buf: [u8; 4] = [0; 4];
+                        BigEndian::write_u32(&mut time_buf, self.created_at());
+                        packet.extend_from_slice(&time_buf);
+
+                        // A one-octet number denoting the public-key algorithm of this key.
+                        packet.push(*self.algorithm() as u8);
+
+                        // ???
+                        packet.push(16);
+                        packet.push(0);
+
+                        // A series of multiprecision integers comprising the key material.
+                        match &self.public_params {
+                            PublicParams::RSA { n, e } => {
+                                packet.extend(n.to_vec().iter().cloned());
+
+                                // ???
+                                packet.push(0);
+                                packet.push(17);
+
+                                packet.extend(e.to_vec().iter().cloned());
+                            }
+                            PublicParams::DSA { p, q, g, y } => {
+                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(q.to_vec().iter().cloned());
+                                packet.extend(g.to_vec().iter().cloned());
+                                packet.extend(y.to_vec().iter().cloned());
+                            }
+                            PublicParams::ECDSA { curve, p } => {
+                                packet.extend(curve.oid().iter().cloned());
+                                packet.extend(p.to_vec().iter().cloned());
+                            }
+                            PublicParams::ECDH {
+                                curve,
+                                p,
+                                hash,
+                                alg_sym,
+                            } => {
+                                packet.extend(curve.oid().iter().cloned());
+                                packet.extend(p.to_vec().iter().cloned());
+                                packet.push(*hash);
+                                packet.push(*alg_sym);
+                            }
+                            PublicParams::Elgamal { p, g, y } => {
+                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(g.to_vec().iter().cloned());
+                                packet.extend(y.to_vec().iter().cloned());
+                            }
+                        }
+
+                        println!("{:?}", packet);
+
+                        let mut length_buf: [u8; 2] = [0; 2];
+                        BigEndian::write_uint(&mut length_buf, packet.len() as u64, 2);
+
+                        let mut h = Hasher::new(MessageDigest::sha1()).unwrap();
+
+                        h.update(&[0x99]).unwrap();
+                        h.update(&length_buf).unwrap();
+                        h.update(&packet).unwrap();
+
+                        h.finish().unwrap().deref().to_vec()
+                    }
+
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        let mut h = Hasher::new(MessageDigest::md5()).unwrap();
+
+                        let mut packet = Vec::new();
+
+                        /*
+                                match self {
+                                    PublicKeyAlgorithm::RSA(k) => {
+                                        packet.extend(&k.public_params.n);
+                                        packet.extend(&k.public_params.e);
+                                    }
+                                    PublicKeyAlgorithm::DSA(k) => {
+                                        packet.extend(&k.public_params.p);
+                                        packet.extend(&k.public_params.q);
+                                        packet.extend(&k.public_params.g);
+                                        packet.extend(&k.public_params.y);
+                                    }
+                                    PublicKeyAlgorithm::ECDSA(k) => {
+                                        packet.extend(&k.public_params.curve.oid());
+                                        packet.extend(&k.public_params.p);
+                                    }
+                                    PublicKeyAlgorithm::ECDH(k) => {
+                                        packet.extend(&k.public_params.curve.oid());
+                                        packet.extend(&k.public_params.p);
+                                        packet.push(k.public_params.hash);
+                                        packet.push(k.public_params.alg_sym);
+                                    }
+                                    PublicKeyAlgorithm::Elgamal(k) => {
+                                        packet.extend(&k.public_params.p);
+                                        packet.extend(&k.public_params.g);
+                                        packet.extend(&k.public_params.y);
+                                    }
+                                }
+                                */
+                        h.update(&packet).unwrap();
+
+                        h.finish().unwrap().deref().to_vec()
+                    }
+                }
             }
         }
     };
