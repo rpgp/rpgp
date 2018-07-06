@@ -569,8 +569,6 @@ mod tests {
     #[test]
     fn test_fingerprint_rsa() {
         // V4
-        w
-
 
         // V3
     }

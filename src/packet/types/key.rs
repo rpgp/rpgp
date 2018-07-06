@@ -275,30 +275,22 @@ macro_rules! key {
                         // A one-octet number denoting the public-key algorithm of this key.
                         packet.push(*self.algorithm() as u8);
 
-                        // ???
-                        packet.push(16);
-                        packet.push(0);
 
                         // A series of multiprecision integers comprising the key material.
                         match &self.public_params {
                             PublicParams::RSA { n, e } => {
-                                packet.extend(n.to_vec().iter().cloned());
-
-                                // ???
-                                packet.push(0);
-                                packet.push(17);
-
-                                packet.extend(e.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(n));
+                                packet.extend(mpi_to_vec(e));
                             }
                             PublicParams::DSA { p, q, g, y } => {
-                                packet.extend(p.to_vec().iter().cloned());
-                                packet.extend(q.to_vec().iter().cloned());
-                                packet.extend(g.to_vec().iter().cloned());
-                                packet.extend(y.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
+                                packet.extend(mpi_to_vec(q));
+                                packet.extend(mpi_to_vec(g));
+                                packet.extend(mpi_to_vec(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
                                 packet.extend(curve.oid().iter().cloned());
-                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
                             }
                             PublicParams::ECDH {
                                 curve,
@@ -307,14 +299,14 @@ macro_rules! key {
                                 alg_sym,
                             } => {
                                 packet.extend(curve.oid().iter().cloned());
-                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
                                 packet.push(*hash);
                                 packet.push(*alg_sym);
                             }
                             PublicParams::Elgamal { p, g, y } => {
-                                packet.extend(p.to_vec().iter().cloned());
-                                packet.extend(g.to_vec().iter().cloned());
-                                packet.extend(y.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
+                                packet.extend(mpi_to_vec(g));
+                                packet.extend(mpi_to_vec(y));
                             }
                         }
 
@@ -337,23 +329,18 @@ macro_rules! key {
 
                         match &self.public_params {
                             PublicParams::RSA { n, e } => {
-                                packet.extend(n.to_vec().iter().cloned());
-
-                                // ???
-                                packet.push(0);
-                                packet.push(17);
-
-                                packet.extend(e.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(n));
+                                packet.extend(mpi_to_vec(e));
                             }
                             PublicParams::DSA { p, q, g, y } => {
-                                packet.extend(p.to_vec().iter().cloned());
-                                packet.extend(q.to_vec().iter().cloned());
-                                packet.extend(g.to_vec().iter().cloned());
-                                packet.extend(y.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
+                                packet.extend(mpi_to_vec(q));
+                                packet.extend(mpi_to_vec(g));
+                                packet.extend(mpi_to_vec(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
                                 packet.extend(curve.oid().iter().cloned());
-                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
                             }
                             PublicParams::ECDH {
                                 curve,
@@ -362,14 +349,14 @@ macro_rules! key {
                                 alg_sym,
                             } => {
                                 packet.extend(curve.oid().iter().cloned());
-                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
                                 packet.push(*hash);
                                 packet.push(*alg_sym);
                             }
                             PublicParams::Elgamal { p, g, y } => {
-                                packet.extend(p.to_vec().iter().cloned());
-                                packet.extend(g.to_vec().iter().cloned());
-                                packet.extend(y.to_vec().iter().cloned());
+                                packet.extend(mpi_to_vec(p));
+                                packet.extend(mpi_to_vec(g));
+                                packet.extend(mpi_to_vec(y));
                             }
                         }
 
@@ -398,3 +385,13 @@ macro_rules! key {
 
 key!(PublicKey);
 key!(PrivateKey);
+
+
+fn mpi_to_vec(n: &BigNum) -> Vec<u8> {
+    let number = n.to_vec();
+
+    let mut length_buf: [u8; 2] = [0; 2];
+    BigEndian::write_uint(&mut length_buf, n.num_bits() as u64, 2);
+
+    [length_buf.to_vec(), number].concat()
+}
