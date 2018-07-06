@@ -142,6 +142,7 @@ pub trait Key: Sized {
     fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
         let packets = packet::parser(bytes)?;
 
+        println!("{:?}", packets);
         Self::from_packets(&packets)
     }
 
