@@ -337,35 +337,44 @@ macro_rules! key {
 
                         let mut packet = Vec::new();
 
-                        /*
-                                match self {
-                                    PublicKeyAlgorithm::RSA(k) => {
-                                        packet.extend(&k.public_params.n);
-                                        packet.extend(&k.public_params.e);
-                                    }
-                                    PublicKeyAlgorithm::DSA(k) => {
-                                        packet.extend(&k.public_params.p);
-                                        packet.extend(&k.public_params.q);
-                                        packet.extend(&k.public_params.g);
-                                        packet.extend(&k.public_params.y);
-                                    }
-                                    PublicKeyAlgorithm::ECDSA(k) => {
-                                        packet.extend(&k.public_params.curve.oid());
-                                        packet.extend(&k.public_params.p);
-                                    }
-                                    PublicKeyAlgorithm::ECDH(k) => {
-                                        packet.extend(&k.public_params.curve.oid());
-                                        packet.extend(&k.public_params.p);
-                                        packet.push(k.public_params.hash);
-                                        packet.push(k.public_params.alg_sym);
-                                    }
-                                    PublicKeyAlgorithm::Elgamal(k) => {
-                                        packet.extend(&k.public_params.p);
-                                        packet.extend(&k.public_params.g);
-                                        packet.extend(&k.public_params.y);
-                                    }
-                                }
-                                */
+                        match &self.public_params {
+                            PublicParams::RSA { n, e } => {
+                                packet.extend(n.to_vec().iter().cloned());
+
+                                // ???
+                                packet.push(0);
+                                packet.push(17);
+
+                                packet.extend(e.to_vec().iter().cloned());
+                            }
+                            PublicParams::DSA { p, q, g, y } => {
+                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(q.to_vec().iter().cloned());
+                                packet.extend(g.to_vec().iter().cloned());
+                                packet.extend(y.to_vec().iter().cloned());
+                            }
+                            PublicParams::ECDSA { curve, p } => {
+                                packet.extend(curve.oid().iter().cloned());
+                                packet.extend(p.to_vec().iter().cloned());
+                            }
+                            PublicParams::ECDH {
+                                curve,
+                                p,
+                                hash,
+                                alg_sym,
+                            } => {
+                                packet.extend(curve.oid().iter().cloned());
+                                packet.extend(p.to_vec().iter().cloned());
+                                packet.push(*hash);
+                                packet.push(*alg_sym);
+                            }
+                            PublicParams::Elgamal { p, g, y } => {
+                                packet.extend(p.to_vec().iter().cloned());
+                                packet.extend(g.to_vec().iter().cloned());
+                                packet.extend(y.to_vec().iter().cloned());
+                            }
+                        }
+
                         h.update(&packet).unwrap();
 
                         h.finish().unwrap().deref().to_vec()
