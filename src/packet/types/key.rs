@@ -318,8 +318,6 @@ macro_rules! key {
                             }
                         }
 
-                        println!("{:?}", packet);
-
                         let mut length_buf: [u8; 2] = [0; 2];
                         BigEndian::write_uint(&mut length_buf, packet.len() as u64, 2);
 
@@ -379,6 +377,19 @@ macro_rules! key {
 
                         h.finish().unwrap().deref().to_vec()
                     }
+                }
+            }
+
+            pub fn key_id(&self) -> Vec<u8> {
+                match self.version() {
+                    KeyVersion::V4 => {
+                        // Lower 64 bits
+                        self.fingerprint()[16..].to_vec()
+                    }
+                    KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
+                        PublicParams::RSA { n, e: _ } => n.to_vec()[16..].to_vec(),
+                        _ => vec![],
+                    },
                 }
             }
         }
