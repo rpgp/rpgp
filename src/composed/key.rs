@@ -557,27 +557,27 @@ mod tests {
     }
 
     #[test]
-    fn test_fingerprint_RSA() {
-    
+    fn test_fingerprint_rsa() {
+
     }
 
     #[test]
-    fn test_fingerprint_DSA() {
-    
+    fn test_fingerprint_dsa() {
+
     }
 
     #[test]
-    fn test_fingerprint_ECDSA() {
-    
+    fn test_fingerprint_ecdsa() {
+
     }
 
     #[test]
-    fn test_fingerprint_ECDH() {
-    
+    fn test_fingerprint_ecdh() {
+
     }
 
     #[test]
-    fn test_fingerprint_Elgamel() {
-    
+    fn test_fingerprint_elgamel() {
+
     }
 }
