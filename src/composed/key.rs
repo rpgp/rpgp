@@ -142,7 +142,6 @@ pub trait Key: Sized {
     fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
         let packets = packet::parser(bytes)?;
 
-        println!("{:?}", packets);
         Self::from_packets(&packets)
     }
 
@@ -555,5 +554,30 @@ mod tests {
         );
 
         assert_eq!(ua.signatures, vec![sig3]);
+    }
+
+    #[test]
+    fn test_fingerprint_RSA() {
+    
+    }
+
+    #[test]
+    fn test_fingerprint_DSA() {
+    
+    }
+
+    #[test]
+    fn test_fingerprint_ECDSA() {
+    
+    }
+
+    #[test]
+    fn test_fingerprint_ECDH() {
+    
+    }
+
+    #[test]
+    fn test_fingerprint_Elgamel() {
+    
     }
 }
