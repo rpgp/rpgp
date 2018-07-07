@@ -1,14 +1,14 @@
-use nom::{self, digit, line_ending, not_line_ending};
-use nom::types::CompleteStr;
-use crc24;
 use base64;
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{BigEndian, ByteOrder};
+use crc24;
+use nom::types::CompleteStr;
+use nom::{self, digit, line_ending, not_line_ending};
 use std::collections::HashMap;
 use std::str;
 
+use errors::{Error, Result};
 use packet::types::Packet;
 use util::{base64_token, end_of_line};
-use errors::{Result, Error};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Block<'a> {
@@ -28,7 +28,6 @@ pub enum BlockType {
     File,
 }
 
-
 named!(armor_header_sep(&str) -> &str,  tag!("-----"));
 
 named!(armor_header_type(&str) -> BlockType, alt_complete!(
@@ -46,12 +45,12 @@ named!(armor_header_type(&str) -> BlockType, alt_complete!(
         y: opt!(preceded!(tag!("/"), digit)) >>
         ({
             // unwraps are safe, as the parser already determined that this is a digit.
-            
+
             let x: usize = x.parse().unwrap();
             let y: usize = y.map(|s| s.parse().unwrap()).unwrap_or(0);
-            
+
             BlockType::MultiPartMessage(x, y)
-        })    
+        })
     ) |
     map!(
         tag!("PGP MESSAGE"),
@@ -97,16 +96,16 @@ named!(kv_pair(CompleteStr) -> (CompleteStr, CompleteStr), do_parse!(
     (k, v)
 ));
 
-
 /// Armor Headers
 fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<&str, &str>> {
     match map!(CompleteStr(input), many0!(kv_pair), |v| {
         v.iter().map(|p| (*p.0, *p.1)).collect()
     }) {
         Ok((rem, res)) => Ok((&rem, res)),
-        Err(_) => Err(nom::Err::Error(
-            error_position!(input, nom::ErrorKind::Many0),
-        )),
+        Err(_) => Err(nom::Err::Error(error_position!(
+            input,
+            nom::ErrorKind::Many0
+        ))),
     }
 }
 
@@ -136,7 +135,7 @@ named!(parse_inner(&str) -> ((BlockType, HashMap<&str, &str>), String, String, O
     >>         many0!(line_ending)
     >>   inner: map!(separated_list_complete!(
                    line_ending, base64_token
-               ), |v| v.join("")) 
+               ), |v| v.join(""))
     >>    pad: map!(many0!(tag!("=")), |v| v.join(""))
     >>         opt!(line_ending)
     >>  check: opt!(preceded!(tag!("="), take!(4)))
@@ -148,7 +147,7 @@ named!(parse_inner(&str) -> ((BlockType, HashMap<&str, &str>), String, String, O
 pub fn parse(input: &str) -> Result<(BlockType, HashMap<&str, &str>, Vec<u8>)> {
     let (_, res) = parse_inner(input)?;
     let (head, inner, pad, check, footer) = res;
-    
+
     let (typ, headers) = head;
 
     if typ != footer {
@@ -156,7 +155,7 @@ pub fn parse(input: &str) -> Result<(BlockType, HashMap<&str, &str>, Vec<u8>)> {
     }
 
     let decoded = base64::decode_config(&(inner + &pad), base64::MIME)?;
-    
+
     if let Some(c) = check {
         let check_new = crc24::hash_raw(decoded.as_slice());
         let check_dec = read_checksum(c.as_bytes());
@@ -180,9 +179,15 @@ mod tests {
             ("", BlockType::Message)
         );
 
-        assert_eq!(armor_header_line("-----BEGIN PGP MESSAGE, PART 3/14-----\n").unwrap(), ("", BlockType::MultiPartMessage(3, 14)));
+        assert_eq!(
+            armor_header_line("-----BEGIN PGP MESSAGE, PART 3/14-----\n").unwrap(),
+            ("", BlockType::MultiPartMessage(3, 14))
+        );
 
-        assert_eq!(armor_header_line("-----BEGIN PGP MESSAGE, PART 14-----\n").unwrap(), ("", BlockType::MultiPartMessage(14, 0)));
+        assert_eq!(
+            armor_header_line("-----BEGIN PGP MESSAGE, PART 14-----\n").unwrap(),
+            ("", BlockType::MultiPartMessage(14, 0))
+        );
     }
 
     #[test]
@@ -193,9 +198,8 @@ mod tests {
         map.insert("some:colon", "with:me");
 
         assert_eq!(
-            armor_headers(
-                "Version: 12\r\nspecial-stuff: cool12.0\r\nsome:colon: with:me",
-            ).unwrap(),
+            armor_headers("Version: 12\r\nspecial-stuff: cool12.0\r\nsome:colon: with:me",)
+                .unwrap(),
             ("", map)
         );
     }
@@ -207,9 +211,7 @@ mod tests {
         map.insert("Mode", "Test");
 
         assert_eq!(
-            armor_header(
-                "-----BEGIN PGP MESSAGE-----\nVersion: 1.0\nMode: Test\n",
-            ).unwrap(),
+            armor_header("-----BEGIN PGP MESSAGE-----\nVersion: 1.0\nMode: Test\n",).unwrap(),
             ("", (BlockType::Message, map))
         );
 
@@ -217,29 +219,20 @@ mod tests {
         map.insert("Version", "GnuPG v1");
 
         assert_eq!(
-            armor_header(
-                "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: GnuPG v1\n",
-            ).unwrap(),
+            armor_header("-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: GnuPG v1\n",).unwrap(),
             ("", (BlockType::PublicKey, map))
         );
     }
 
-
     #[test]
     fn test_kv_pair() {
-        assert_eq!(kv_pair(CompleteStr("hel-lo: world")).unwrap(), (
-            CompleteStr(
-                "",
-            ),
+        assert_eq!(
+            kv_pair(CompleteStr("hel-lo: world")).unwrap(),
             (
-                CompleteStr(
-                    "hel-lo",
-                ),
-                CompleteStr(
-                    "world",
-                ),
-            ),
-        ));
+                CompleteStr("",),
+                (CompleteStr("hel-lo",), CompleteStr("world",),),
+            )
+        );
     }
 
     #[test]
@@ -249,10 +242,10 @@ mod tests {
 
         let (typ, headers, _) = parse(
             "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
-Version: GnuPG v1\n\
-\n\
-mQGiBEig\n\
------END PGP PUBLIC KEY BLOCK-----\n",
+             Version: GnuPG v1\n\
+             \n\
+             mQGiBEig\n\
+             -----END PGP PUBLIC KEY BLOCK-----\n",
         ).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
@@ -271,6 +264,6 @@ mQGiBEig\n\
         assert_eq!(typ, (BlockType::PublicKey));
         assert_eq!(headers, map);
         assert_eq!(decoded.len(), 1675);
-        assert_eq!(decoded.len() %3, 1); // two padding chars
+        assert_eq!(decoded.len() % 3, 1); // two padding chars
     }
 }

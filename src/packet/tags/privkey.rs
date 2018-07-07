@@ -1,11 +1,11 @@
 use enum_primitive::FromPrimitive;
-use nom::{be_u8, be_u16, be_u32, self};
+use nom::{self, be_u16, be_u32, be_u8};
 use openssl::bn::BigNum;
 
-use packet::types::{KeyVersion, PublicKeyAlgorithm, SymmetricKeyAlgorithm, StringToKeyType};
+use composed;
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
-use composed;
+use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, SymmetricKeyAlgorithm};
 use util::{mpi_big, rest_len};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
@@ -20,7 +20,9 @@ named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
 ));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
+named!(
+    ecdh<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(
     // a one-octet size of the following field
         len: be_u8
     // octets representing a curve OID
@@ -36,7 +38,8 @@ named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     // a one-octet algorithm ID for the symmetric algorithm used to wrap
     // the symmetric key used for the message encryption
     >>  alg_sym: take!(1)
-    >> (PublicParams::ECDH {
+            >> (
+                PublicParams::ECDH {
         curve,
         p,
         hash: hash[0],
@@ -44,7 +47,9 @@ named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     }, EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
-named!(elgamal<(PublicParams, EncryptedPrivateParams)>, do_parse!(
+named!(
+    elgamal<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(
     // MPI of Elgamal prime p
        p: mpi_big
     // MPI of Elgamal group generator g
@@ -95,20 +100,16 @@ named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
                 >> (Some(sym_alg), Some(iv), Some(s2k), Some(s2k_params))
         )
     )
-    >> checksum_len: switch!(value!(s2k_typ),
+            >> checksum_len:
+                switch!(value!(s2k_typ),
                      // 20 octect hash at the end
                      254 => value!(20) |
                      // 2 octet checksum at the end
                      _   => value!(2)
-                         
-    )
-    >> data_len: map!(rest_len, |r| r - checksum_len)
-    >>     data: take!(data_len)
+    ) >> data_len: map!(rest_len, |r| r - checksum_len) >> data: take!(data_len)
     >> checksum: take!(checksum_len)
-    >> (PublicParams::RSA {
-            n,
-            e,
-        },
+            >> (
+                PublicParams::RSA { n, e },
         EncryptedPrivateParams {
             data: data.to_vec(),
             checksum: checksum.to_vec(),
