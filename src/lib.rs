@@ -13,6 +13,14 @@ extern crate circular;
 extern crate itertools;
 
 #[cfg(test)]
+extern crate serde;
+#[cfg(test)]
+extern crate serde_json;
+
+#[cfg(test)]
+extern crate hex;
+
+#[cfg(test)]
 #[macro_use]
 extern crate hex_literal;
 
