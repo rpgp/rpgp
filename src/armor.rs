@@ -1,10 +1,14 @@
-use nom::{self, digit, line_ending, not_line_ending};
+use nom::{self, digit, line_ending, not_line_ending, Needed, Offset, eol, is_space, is_alphanumeric, IResult, InputIter,
+          InputLength, InputTake, Slice, AsBytes};
+use std::ops::{Range, RangeFrom, RangeTo};
+
 use nom::types::CompleteStr;
 use crc24;
 use base64;
 use byteorder::{ByteOrder, BigEndian};
 use std::collections::HashMap;
 use std::str;
+use circular::Buffer;
 
 use packet::types::Packet;
 use util::{base64_token, end_of_line};
@@ -30,6 +34,7 @@ pub enum BlockType {
 
 
 named!(armor_header_sep(&str) -> &str,  tag!("-----"));
+named!(armor_header_sep_b,  tag!("-----"));
 
 named!(armor_header_type(&str) -> BlockType, alt_complete!(
     map!(
@@ -66,6 +71,40 @@ named!(armor_header_type(&str) -> BlockType, alt_complete!(
         |_| BlockType::File
     )
 ));
+named!(armor_header_type_b<BlockType>, alt_complete!(
+    map!(
+        tag!("PGP PUBLIC KEY BLOCK"),
+        |_| BlockType::PublicKey
+    ) |
+    map!(
+        tag!("PGP PRIVATE KEY BLOCK"),
+        |_| BlockType::PrivateKey
+    ) |
+    do_parse!(
+           tag!("PGP MESSAGE, PART ") >>
+        x: digit >>
+        y: opt!(preceded!(tag!("/"), digit)) >>
+        ({
+            // unwraps are safe, as the parser already determined that this is a digit.
+            let x: usize = ::std::str::from_utf8(x).unwrap().parse().unwrap();
+            let y: usize = y.map(|s| ::std::str::from_utf8(s).unwrap().parse().unwrap()).unwrap_or(0);
+            
+            BlockType::MultiPartMessage(x, y)
+        })    
+    ) |
+    map!(
+        tag!("PGP MESSAGE"),
+        |_| BlockType::Message
+    ) |
+    map!(
+        tag!("PGP SIGNATURE"),
+        |_| BlockType::Signature
+    ) |
+    map!(
+        tag!("PGP ARMORED FILE"),
+        |_| BlockType::File
+    )
+));
 
 named!(
     armor_header_line(&str) -> BlockType,
@@ -76,6 +115,18 @@ named!(
          armor_header_sep  >>
          line_ending       >>
     (typ)
+)
+);
+
+named!(
+    armor_header_line_b<BlockType>,
+    do_parse!(
+         armor_header_sep_b  >>
+         tag!("BEGIN ")    >>
+    typ: armor_header_type_b >>
+         armor_header_sep_b  >>
+         line_ending       >>
+    ({println!("got header: {:?}", typ); typ})
 )
 );
 
@@ -97,6 +148,32 @@ named!(kv_pair(CompleteStr) -> (CompleteStr, CompleteStr), do_parse!(
     (k, v)
 ));
 
+named!(key_value_sep, tag!(": "));
+
+/// Recognizes one or more key tokens.
+pub fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
+    let input_length = input.input_len();
+
+    for (idx, item) in input.iter_indices() {
+        if item == b':' {
+            // are we done? ": " is reached
+            if input.slice(idx+1..idx+2)[0] == b' ' {
+                return Ok((input.slice(idx+2..), input.slice(0..idx)))
+            }
+        }
+    }
+    
+    Ok((input.slice(input_length..), input))
+}
+
+named!(key_value<(&str, &str)>, do_parse!(
+         key: map_res!(key_token, ::std::str::from_utf8)
+    >> value: map_res!(terminated!(not_line_ending, line_ending), ::std::str::from_utf8)
+    >> (key, value)
+));
+
+named!(key_value_pairs<Vec<(&str, &str)>>, many0!(complete!(key_value)));
+
 
 /// Armor Headers
 fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<String, String>> {
@@ -110,10 +187,24 @@ fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<String, String>> {
     }
 }
 
+
+/// Armor Headers
+named!(armor_headers_b<HashMap<String, String>>, do_parse!(
+    pairs: key_value_pairs
+    >> (pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect())
+));
+
 /// Armor Header
 named!(armor_header(&str) -> (BlockType, HashMap<String, String>), do_parse!(
     typ:     armor_header_line >>
-    headers: armor_headers     >>
+    headers: armor_headers    >>
+    (typ, headers)
+));
+
+/// Armor Header
+named!(armor_header_b(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
+    typ:     armor_header_line_b >>
+    headers: armor_headers_b     >>
     (typ, headers)
 ));
 
@@ -130,6 +221,16 @@ fn read_checksum(input: &[u8]) -> u32 {
     BigEndian::read_u32(&buf)
 }
 
+
+named!(header_parser(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
+               take_until!("-----")
+    >>   head: armor_header_b
+    >>         many0!(line_ending)
+    >> (head.0, head.1)
+));
+
+
+
 named!(parse_inner(&str) -> ((BlockType, HashMap<String, String>), Vec<Vec<u8>>, Option<&str>, BlockType), do_parse!(
                take_until!("-----")
     >>   head: armor_header
@@ -145,6 +246,103 @@ named!(parse_inner(&str) -> ((BlockType, HashMap<String, String>), Vec<Vec<u8>>,
     >> (head, inner, check, footer)
 ));
 
+#[derive(Debug)]
+pub struct Dearmor<R> {
+    pub typ: Option<BlockType>,
+    pub headers: HashMap<String, String>,
+
+    // track if we are currently parsing the header
+    is_header: bool,
+    buffer: Buffer,
+    inner: R,
+    capacity: usize,
+}
+
+impl<R: ::std::io::Read> Dearmor<R> {
+    pub fn new(input: R) -> Dearmor<R> {
+        Dearmor {
+            typ: None,
+            headers: HashMap::new(),
+            is_header: true,
+            buffer: Buffer::with_capacity(32 * 1024),
+            capacity: 32 * 1024,
+            inner: input,
+        }
+    }
+}
+
+impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
+    fn read(&mut self, into: &mut [u8]) -> ::std::io::Result<usize> {
+        // TODO: const/configurable
+        let max_capacity = 1024 * 1024 * 1024;
+
+        // if we are still parsing the header, make sure to finish it now.
+        let length = if self.is_header {
+            let mut length = 0;
+            loop {
+                println!("parsing header");
+                let b = &mut self.buffer;
+                
+                let sz = self.inner.read(b.space())?;
+                b.fill(sz);
+
+                if b.available_data() == 0 {
+                    break;
+                }
+
+                let mut needed: Option<Needed> = None;
+                loop {
+                    println!("parsing: {:?}", b.data());
+                    let l = {
+                        match header_parser(b.data()) {
+                            Ok((remaining, (typ, header))) => {
+                                println!("parsed header {:?} {:?}", &typ, &header);
+                                self.typ = Some(typ);
+                                self.headers = header;
+                                self.is_header = false;
+                                b.data().offset(remaining)
+                            }
+                            Err(err) => match err {
+                                nom::Err::Incomplete(n) => {
+                                    needed = Some(n);
+                                    break;
+                                },
+                                _ => {
+                                    println!("nom error: {:?}", err);
+                                    return Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "parsing failure"))
+                                }
+                            }
+                        }
+                    };
+
+                    println!("consuming {} {:?}", l, self.is_header);
+                    b.consume(l);
+                    length = l;
+                    if !self.is_header {
+                        break;
+                    }
+                }
+
+                if let Some(Needed::Size(sz)) = needed {
+                    println!("need more data! {}", sz);
+                    if sz > b.capacity() && self.capacity * 2 < max_capacity {
+                        self.capacity *= 2;
+                        b.grow(self.capacity);
+                    }
+                }
+                
+                if !self.is_header {
+                    break;
+                }
+            }
+            length
+        } else {
+            panic!("not yet there");
+        };
+
+        Ok(length)
+    }
+}
 
 pub fn parse(mut input: impl ::std::io::Read) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
     // TODO: actual streaming
@@ -178,6 +376,7 @@ pub fn parse(mut input: impl ::std::io::Read) -> Result<(BlockType, HashMap<Stri
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use std::io::Read;
 
     #[test]
     fn test_armor_header_line() {
@@ -278,5 +477,58 @@ mQGiBEig\n\
         assert_eq!(headers, map);
         assert_eq!(decoded.len(), 1675);
         assert_eq!(decoded.len() %3, 1); // two padding chars
+    }
+
+    #[test]
+    fn test_parse_armor_small_stream() {
+        let mut map = HashMap::new();
+        map.insert("Version".to_string(), "GnuPG v1".to_string());
+
+        let c = Cursor::new(
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+Version: GnuPG v1\n\
+\n\
+mQGiBEig\n\
+-----END PGP PUBLIC KEY BLOCK-----\n");
+
+        let mut dec = Dearmor::new(c);
+        
+        let mut res = vec![0u8; 100];
+        let read = dec.read(&mut res).unwrap();
+        println!("read: {} bytes", read);
+
+        assert_eq!(dec.typ, Some(BlockType::PublicKey));
+        assert_eq!(dec.headers, map);
+    }
+
+
+    #[test]
+    fn test_key_value() {
+        assert_eq!(
+            key_value(&b"hello: world\n"[..]).unwrap(),
+            (&b""[..], ("hello", "world")),
+            "single"
+        );
+        
+        assert_eq!(
+            key_value(&b"hello: world\nother content"[..]).unwrap(),
+            (&b"other content"[..], ("hello", "world")),
+            "with rest"
+        );
+    }
+
+    #[test]
+    fn test_key_value_pairs() {
+        assert_eq!(
+            key_value_pairs(&b"hello: world\ncool: stuff\n"[..]).unwrap(),
+            (&b""[..], vec![("hello", "world"), ("cool", "stuff")]),
+            "single"
+        );
+        
+        assert_eq!(
+            key_value_pairs(&b"hello: world\ncool: stuff\nother content"[..]).unwrap(),
+            (&b"other content"[..], vec![("hello", "world"), ("cool", "stuff")]),
+            "with rest"
+        );        
     }
 }
