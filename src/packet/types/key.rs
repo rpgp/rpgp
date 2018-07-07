@@ -275,7 +275,6 @@ macro_rules! key {
                         // A one-octet number denoting the public-key algorithm of this key.
                         packet.push(*self.algorithm() as u8);
 
-
                         // A series of multiprecision integers comprising the key material.
                         match &self.public_params {
                             PublicParams::RSA { n, e } => {
@@ -385,7 +384,6 @@ macro_rules! key {
 
 key!(PublicKey);
 key!(PrivateKey);
-
 
 fn mpi_to_vec(n: &BigNum) -> Vec<u8> {
     let number = n.to_vec();
