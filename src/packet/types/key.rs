@@ -288,8 +288,11 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
+                                //a one-octet size of the following field
                                 packet.push(curve.oid().len() as u8);
+                                //octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
                                 packet.extend(bignum_to_mpi(p));
                             }
                             PublicParams::ECDH {
@@ -298,10 +301,19 @@ macro_rules! key {
                                 hash,
                                 alg_sym,
                             } => {
+                                //a one-octet size of the following field
                                 packet.push(curve.oid().len() as u8);
+                                //the octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
                                 packet.extend(bignum_to_mpi(p));
+                                //a one-octet size of the following fields
+                                packet.push(3); // Always 3??
+                                //a one-octet value 01
+                                packet.push(1);
+                                //a one-octet hash function ID used with a KDF
                                 packet.push(*hash);
+                                //a one-octet algorithm ID
                                 packet.push(*alg_sym);
                             }
                             PublicParams::Elgamal { p, g, y } => {
@@ -340,8 +352,11 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
+                                //a one-octet size of the following field
                                 packet.push(curve.oid().len() as u8);
+                                //octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
                                 packet.extend(bignum_to_mpi(p));
                             }
                             PublicParams::ECDH {
@@ -350,10 +365,19 @@ macro_rules! key {
                                 hash,
                                 alg_sym,
                             } => {
+                                //a one-octet size of the following field
                                 packet.push(curve.oid().len() as u8);
+                                //the octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
                                 packet.extend(bignum_to_mpi(p));
+                                //a one-octet size of the following fields
+                                packet.push(3); // Always 3??
+                                //a one-octet value 01
+                                packet.push(1);
+                                //a one-octet hash function ID used with a KDF
                                 packet.push(*hash);
+                                //a one-octet algorithm ID
                                 packet.push(*alg_sym);
                             }
                             PublicParams::Elgamal { p, g, y } => {
