@@ -9,7 +9,9 @@ use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, SymmetricKe
 use util::{mpi_big, rest_len};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
+named!(
+    ecdsa<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(
     // a one-octet size of the following field
        len: be_u8
     // octets representing a curve OID
@@ -78,11 +80,12 @@ named!(dsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
         EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
-named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
-             n: mpi_big
-    >>       e: mpi_big
-    >> s2k_typ: be_u8
-    >> enc_params: switch!(value!(s2k_typ), 
+named!(
+    rsa<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(
+        n: mpi_big >> e: mpi_big >> s2k_typ: be_u8
+            >> enc_params:
+                switch!(value!(s2k_typ),
         // 0 is no encryption
         0       => value!((None, None, None, None)) |
         // symmetric key algorithm
@@ -122,7 +125,7 @@ named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
 ));
 
 named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, EncryptedPrivateParams)>, switch!(
-    value!(&typ), 
+    value!(&typ),
     &PublicKeyAlgorithm::RSA        |
     &PublicKeyAlgorithm::RSAEncrypt |
     &PublicKeyAlgorithm::RSASign    => call!(rsa)     |
@@ -131,7 +134,7 @@ named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, Enc
     &PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
     &PublicKeyAlgorithm::Elgamal    |
     &PublicKeyAlgorithm::ElgamalSign => call!(elgamal)
-    // &PublicKeyAlgorithm::DiffieHellman => 
+    // &PublicKeyAlgorithm::DiffieHellman =>
 ));
 
 named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do_parse!(
@@ -153,11 +156,11 @@ named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do
 /// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 named!(pub parser<PrivateKey>, do_parse!(
           key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-    >>    key: switch!(value!(&key_ver), 
+    >>    key: switch!(value!(&key_ver),
                        &KeyVersion::V2 => call!(old_private_key_parser, &key_ver) |
                        &KeyVersion::V3 => call!(old_private_key_parser, &key_ver) |
                        &KeyVersion::V4 => call!(new_private_key_parser, &key_ver)
-                   ) 
+                   )
     >> (key)
 ));
 
@@ -176,4 +179,3 @@ named!(pub rsa_private_params<(BigNum, BigNum,BigNum, BigNum)>, do_parse!(
     >> u: mpi_big
     >> (d, p, q, u)
 ));
-    
