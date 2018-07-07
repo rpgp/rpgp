@@ -9,6 +9,7 @@ use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, SymmetricKe
 use util::{mpi_big, rest_len};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
+#[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
     ecdsa<(PublicParams, EncryptedPrivateParams)>,
     do_parse!(
@@ -22,6 +23,7 @@ named!(
 ));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
+#[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
     ecdh<(PublicParams, EncryptedPrivateParams)>,
     do_parse!(
@@ -49,6 +51,7 @@ named!(
     }, EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
     elgamal<(PublicParams, EncryptedPrivateParams)>,
     do_parse!(
@@ -66,6 +69,7 @@ named!(
         EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 named!(dsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
        p: mpi_big
     >> q: mpi_big
@@ -80,6 +84,7 @@ named!(dsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
         EncryptedPrivateParams::new_plaintext(vec![], vec![]))
 ));
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 named!(
     rsa<(PublicParams, EncryptedPrivateParams)>,
     do_parse!(
