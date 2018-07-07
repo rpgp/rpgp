@@ -288,6 +288,7 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
+                                packet.push(curve.oid().len() as u8);
                                 packet.extend(curve.oid().iter().cloned());
                                 packet.extend(bignum_to_mpi(p));
                             }
@@ -297,6 +298,7 @@ macro_rules! key {
                                 hash,
                                 alg_sym,
                             } => {
+                                packet.push(curve.oid().len() as u8);
                                 packet.extend(curve.oid().iter().cloned());
                                 packet.extend(bignum_to_mpi(p));
                                 packet.push(*hash);
@@ -338,6 +340,7 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
+                                packet.push(curve.oid().len() as u8);
                                 packet.extend(curve.oid().iter().cloned());
                                 packet.extend(bignum_to_mpi(p));
                             }
@@ -347,6 +350,7 @@ macro_rules! key {
                                 hash,
                                 alg_sym,
                             } => {
+                                packet.push(curve.oid().len() as u8);
                                 packet.extend(curve.oid().iter().cloned());
                                 packet.extend(bignum_to_mpi(p));
                                 packet.push(*hash);
