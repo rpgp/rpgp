@@ -1,3 +1,4 @@
+use byteorder::{BigEndian, ByteOrder};
 use nom::types::CompleteStr;
 use nom::{
     self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter,
@@ -97,6 +98,16 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     }
 }
 
+// Convert a BigNum to an MPI for use in packets
+pub fn bignum_to_mpi(n: &BigNum) -> Vec<u8> {
+    let number = n.to_vec();
+
+    let mut length_buf: [u8; 2] = [0; 2];
+    BigEndian::write_uint(&mut length_buf, n.num_bits() as u64, 2);
+
+    [length_buf.to_vec(), number].concat()
+}
+
 /// Parse an mpi and convert it to a `BigNum`.
 named!(pub mpi_big<BigNum>, map_res!(mpi, BigNum::from_slice));
 
@@ -170,4 +181,7 @@ mod tests {
             )
         );
     }
+
+    #[test]
+    fn test_bignum_to_mpi() {}
 }

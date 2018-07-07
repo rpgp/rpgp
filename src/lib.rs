@@ -13,8 +13,10 @@ extern crate circular;
 extern crate itertools;
 
 #[cfg(test)]
-#[macro_use]
-extern crate hex_literal;
+extern crate serde_json;
+
+#[cfg(test)]
+extern crate hex;
 
 pub mod email;
 pub use composed::key::*;
