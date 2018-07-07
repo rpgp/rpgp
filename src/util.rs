@@ -1,3 +1,4 @@
+use byteorder::{BigEndian, ByteOrder};
 use nom::types::CompleteStr;
 use nom::{
     self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter,
@@ -6,7 +7,6 @@ use nom::{
 use openssl::bn::BigNum;
 use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
-use byteorder::{BigEndian, ByteOrder};
 
 use errors;
 
@@ -183,7 +183,5 @@ mod tests {
     }
 
     #[test]
-    fn test_bignum_to_mpi() {
-
-    }
+    fn test_bignum_to_mpi() {}
 }

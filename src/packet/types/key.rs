@@ -370,15 +370,15 @@ macro_rules! key {
                 }
             }
 
-            pub fn key_id(&self) -> Vec<u8> {
+            pub fn key_id(&self) -> Option<Vec<u8>> {
                 match self.version() {
                     KeyVersion::V4 => {
                         // Lower 64 bits
-                        self.fingerprint()[16..].to_vec()
+                        Some(self.fingerprint()[16..].to_vec())
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
-                        PublicParams::RSA { n, e: _ } => n.to_vec()[16..].to_vec(),
-                        _ => vec![],
+                        PublicParams::RSA { n, e: _ } => Some(n.to_vec()[16..].to_vec()),
+                        _ => None,
                     },
                 }
             }
@@ -388,4 +388,3 @@ macro_rules! key {
 
 key!(PublicKey);
 key!(PrivateKey);
-
