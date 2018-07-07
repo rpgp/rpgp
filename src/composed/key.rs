@@ -44,7 +44,7 @@ impl PublicKey {
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Vec<u8> {
+    pub fn key_id(&self) -> Option<Vec<u8>> {
         self.primary_key.key_id()
     }
 }
@@ -98,7 +98,7 @@ impl PrivateKey {
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Vec<u8> {
+    pub fn key_id(&self) -> Option<Vec<u8>> {
         self.primary_key.key_id()
     }
 }
