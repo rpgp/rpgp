@@ -29,24 +29,18 @@ pub fn u32_as_usize(a: u32) -> usize {
 }
 
 #[inline]
-pub fn is_base64_token(c: char) -> bool {
-    is_alphanumeric(c as u8) || c == '/' || c == '+'
+pub fn is_base64_token(c: u8) -> bool {
+    is_alphanumeric(c) || c == b'/' || c == b'+'
 }
 
 /// Recognizes one or more body tokens
-pub fn base64_token<T>(input: T) -> nom::IResult<T, T>
-where
-    T: nom::Slice<Range<usize>> + nom::Slice<RangeFrom<usize>> + nom::Slice<RangeTo<usize>>,
-    T: nom::InputIter + nom::InputLength,
-    <T as nom::InputIter>::Item: AsChar,
-{
+pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let input_length = input.input_len();
     if input_length == 0 {
         return Err(Err::Incomplete(nom::Needed::Unknown));
     }
 
     for (idx, item) in input.iter_indices() {
-        let item = item.as_char();
         if !is_base64_token(item) {
             if idx == 0 {
                 return Err(Err::Error(error_position!(
