@@ -1,7 +1,7 @@
 use nom::types::CompleteStr;
 use nom::{
-    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter,
-    InputLength, InputTake, Slice,
+    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, Err, IResult, InputIter, InputLength,
+    InputTake, Slice,
 };
 use openssl::bn::BigNum;
 use std::convert::AsMut;
@@ -30,7 +30,7 @@ pub fn u32_as_usize(a: u32) -> usize {
 
 #[inline]
 pub fn is_base64_token(c: u8) -> bool {
-    is_alphanumeric(c) || c == b'/' || c == b'+'
+    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'\n' || c == b'\r'
 }
 
 /// Recognizes one or more body tokens

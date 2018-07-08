@@ -1,27 +1,18 @@
-use nom::{self, digit, line_ending, not_line_ending, Needed, Offset, eol, is_space, is_alphanumeric, IResult, InputIter,
-          InputLength, InputTake, Slice, AsBytes};
-use std::ops::{Range, RangeFrom, RangeTo};
-use std::hash::Hasher;
-
-use nom::types::CompleteStr;
-use crc24;
 use base64;
-use byteorder::{ByteOrder, BigEndian};
-use std::collections::HashMap;
-use std::str;
+use byteorder::{BigEndian, ByteOrder};
 use circular::Buffer;
+use crc24;
+use nom::{
+    self, digit, line_ending, not_line_ending, InputIter, InputLength, Needed, Offset, Slice,
+};
+use std::collections::HashMap;
+use std::io::Read;
+use std::str;
 
-use packet::types::Packet;
-use util::{base64_token, end_of_line};
-use errors::{Result, Error};
+use errors::{Error, Result};
+use util::base64_token as body_parser;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Block<'a> {
-    pub typ: BlockType,
-    pub headers: HashMap<&'a str, &'a str>,
-    pub packets: Vec<Packet>,
-}
-
+/// Armor block types.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BlockType {
     PublicKey,
@@ -33,236 +24,162 @@ pub enum BlockType {
     File,
 }
 
+/// Parses a single ascii armor header separator.
+named!(armor_header_sep, tag!("-----"));
 
-named!(armor_header_sep(&str) -> &str,  tag!("-----"));
-named!(armor_header_sep_b,  tag!("-----"));
-
-named!(armor_header_type(&str) -> BlockType, alt_complete!(
-    map!(
-        tag!("PGP PUBLIC KEY BLOCK"),
-        |_| BlockType::PublicKey
-    ) |
-    map!(
-        tag!("PGP PRIVATE KEY BLOCK"),
-        |_| BlockType::PrivateKey
-    ) |
-    do_parse!(
-           tag!("PGP MESSAGE, PART ") >>
-        x: digit >>
-        y: opt!(preceded!(tag!("/"), digit)) >>
-        ({
-            // unwraps are safe, as the parser already determined that this is a digit.
-            
-            let x: usize = x.parse().unwrap();
-            let y: usize = y.map(|s| s.parse().unwrap()).unwrap_or(0);
-            
-            BlockType::MultiPartMessage(x, y)
-        })    
-    ) |
-    map!(
-        tag!("PGP MESSAGE"),
-        |_| BlockType::Message
-    ) |
-    map!(
-        tag!("PGP SIGNATURE"),
-        |_| BlockType::Signature
-    ) |
-    map!(
-        tag!("PGP ARMORED FILE"),
-        |_| BlockType::File
-    )
-));
-named!(armor_header_type_b<BlockType>, alt_complete!(
-    map!(
-        tag!("PGP PUBLIC KEY BLOCK"),
-        |_| BlockType::PublicKey
-    ) |
-    map!(
-        tag!("PGP PRIVATE KEY BLOCK"),
-        |_| BlockType::PrivateKey
-    ) |
-    do_parse!(
-           tag!("PGP MESSAGE, PART ") >>
-        x: digit >>
-        y: opt!(preceded!(tag!("/"), digit)) >>
-        ({
-            // unwraps are safe, as the parser already determined that this is a digit.
-            let x: usize = ::std::str::from_utf8(x).unwrap().parse().unwrap();
-            let y: usize = y.map(|s| ::std::str::from_utf8(s).unwrap().parse().unwrap()).unwrap_or(0);
-            
-            BlockType::MultiPartMessage(x, y)
-        })    
-    ) |
-    map!(
-        tag!("PGP MESSAGE"),
-        |_| BlockType::Message
-    ) |
-    map!(
-        tag!("PGP SIGNATURE"),
-        |_| BlockType::Signature
-    ) |
-    map!(
-        tag!("PGP ARMORED FILE"),
-        |_| BlockType::File
-    )
-));
-
+/// Parses the type inside of an ascii armor header.
 named!(
-    armor_header_line(&str) -> BlockType,
-    do_parse!(
-         armor_header_sep  >>
-         tag!("BEGIN ")    >>
-    typ: armor_header_type >>
-         armor_header_sep  >>
-         line_ending       >>
-    (typ)
-)
+    armor_header_type<BlockType>,
+    alt_complete!(
+        map!(tag!("PGP PUBLIC KEY BLOCK"), |_| BlockType::PublicKey)
+            | map!(tag!("PGP PRIVATE KEY BLOCK"), |_| BlockType::PrivateKey)
+            | do_parse!(
+                tag!("PGP MESSAGE, PART ") >> x: digit >> y: opt!(preceded!(tag!("/"), digit))
+                    >> ({
+                        // unwraps are safe, as the parser already determined that this is a digit.
+                        let x: usize = str::from_utf8(x).unwrap().parse().unwrap();
+                        let y: usize = y
+                            .map(|s| str::from_utf8(s).unwrap().parse().unwrap())
+                            .unwrap_or(0);
+
+                        BlockType::MultiPartMessage(x, y)
+                    })
+            ) | map!(tag!("PGP MESSAGE"), |_| BlockType::Message)
+            | map!(tag!("PGP SIGNATURE"), |_| BlockType::Signature)
+            | map!(tag!("PGP ARMORED FILE"), |_| BlockType::File)
+    )
 );
 
+/// Parses a single armor header line.
 named!(
-    armor_header_line_b<BlockType>,
+    armor_header_line<BlockType>,
     do_parse!(
-         armor_header_sep_b  >>
-         tag!("BEGIN ")    >>
-    typ: armor_header_type_b >>
-         armor_header_sep_b  >>
-         line_ending       >>
-    ({println!("got header: {:?}", typ); typ})
-)
+        armor_header_sep
+            >> tag!("BEGIN ")
+            >> typ: armor_header_type
+            >> armor_header_sep
+            >> line_ending
+            >> (typ)
+    )
 );
 
-named!(armor_footer_line(&str) -> BlockType, do_parse!(
-         armor_header_sep  >>
-         tag!("END ")      >>
-    typ: armor_header_type >>
-         armor_header_sep  >>
-         alt_complete!(line_ending | eof!()) >>
-    (typ)
-)
+/// Parses a single armor footer line
+named!(
+    armor_footer_line<BlockType>,
+    do_parse!(
+        armor_header_sep
+            >> tag!("END ")
+            >> typ: armor_header_type
+            >> armor_header_sep
+            >> alt_complete!(line_ending | eof!())
+            >> (typ)
+    )
 );
-named!(armor_footer_line_b<BlockType>, do_parse!(
-         armor_header_sep_b  >>
-         tag!("END ")      >>
-    typ: armor_header_type_b >>
-         armor_header_sep_b  >>
-         alt_complete!(line_ending | eof!()) >>
-    (typ)
-)
-);
-
-/// Armor Header Key-Value Pair
-named!(kv_pair(CompleteStr) -> (CompleteStr, CompleteStr), do_parse!(
-    k: take_until!(": ") >>
-       tag!(": ")        >>
-    v: terminated!(not_line_ending, end_of_line)  >>
-    (k, v)
-));
-
-named!(key_value_sep, tag!(": "));
 
 /// Recognizes one or more key tokens.
-pub fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
+fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let input_length = input.input_len();
 
     for (idx, item) in input.iter_indices() {
-        if item == b':' {
-            // are we done? ": " is reached
-            if input.slice(idx+1..idx+2)[0] == b' ' {
-                return Ok((input.slice(idx+2..), input.slice(0..idx)))
-            }
+        // are we done? ": " is reached
+        if item == b':' && idx + 1 < input_length && input.slice(idx + 1..idx + 2)[0] == b' ' {
+            return Ok((input.slice(idx + 2..), input.slice(0..idx)));
         }
     }
-    
+
     Ok((input.slice(input_length..), input))
 }
 
-named!(key_value<(&str, &str)>, do_parse!(
-         key: map_res!(key_token, ::std::str::from_utf8)
-    >> value: map_res!(terminated!(not_line_ending, line_ending), ::std::str::from_utf8)
-    >> (key, value)
-));
+/// Parses a single key value pair, for the header.
+named!(
+    key_value_pair<(&str, &str)>,
+    do_parse!(
+        key: map_res!(key_token, str::from_utf8)
+            >> value: map_res!(terminated!(not_line_ending, line_ending), str::from_utf8)
+            >> (key, value)
+    )
+);
 
-named!(key_value_pairs<Vec<(&str, &str)>>, many0!(complete!(key_value)));
+/// Parses a list of key value pairs.
+named!(
+    key_value_pairs<Vec<(&str, &str)>>,
+    many0!(complete!(key_value_pair))
+);
 
-
-/// Armor Headers
-fn armor_headers(input: &str) -> nom::IResult<&str, HashMap<String, String>> {
-    match map!(CompleteStr(input), many0!(kv_pair), |v| {
-        v.iter().map(|p| (p.0.to_string(), p.1.to_string())).collect()
-    }) {
-        Ok((rem, res)) => Ok((&rem, res)),
-        Err(_) => Err(nom::Err::Error(
-            error_position!(input, nom::ErrorKind::Many0),
-        )),
-    }
-}
-
-
-/// Armor Headers
-named!(armor_headers_b<HashMap<String, String>>, do_parse!(
-    pairs: key_value_pairs
-    >> (pairs.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect())
-));
+/// Parses the full armor header.
+named!(
+    armor_headers<HashMap<String, String>>,
+    do_parse!(
+        pairs: key_value_pairs
+            >> (pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect())
+    )
+);
 
 /// Armor Header
-named!(armor_header(&str) -> (BlockType, HashMap<String, String>), do_parse!(
+named!(armor_header(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
     typ:     armor_header_line >>
-    headers: armor_headers    >>
-    (typ, headers)
-));
-
-/// Armor Header
-named!(armor_header_b(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
-    typ:     armor_header_line_b >>
-    headers: armor_headers_b     >>
+    headers: armor_headers     >>
     (typ, headers)
 ));
 
 /// Read the checksum from an base64 encoded buffer.
-fn read_checksum(input: &[u8]) -> u64 {
-    let raw = base64::decode_config(input, base64::MIME).expect("Invalid base64 encoding checksum");
+fn read_checksum(input: &[u8]) -> u32 {
+    // TODO: proper error handling
+    let checksum =
+        base64::decode_config(input, base64::MIME).expect("Invalid base64 encoding checksum");
+
     let mut buf = [0; 4];
-    let mut i = raw.len();
-    for a in raw.iter().rev() {
+    let mut i = checksum.len();
+    for a in checksum.iter().rev() {
         buf[i] = *a;
         i -= 1;
     }
 
-    BigEndian::read_u32(&buf) as u64
+    BigEndian::read_u32(&buf)
 }
-
 
 named!(header_parser(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
                take_until!("-----")
-    >>   head: armor_header_b
+    >>   head: armor_header
     >>         many0!(line_ending)
     >> (head.0, head.1)
 ));
 
-named!(body_parser<&[u8]>, alt!(base64_token | line_ending));
+named!(
+    footer_parser<(Option<&[u8]>, BlockType)>,
+    do_parse!(
+        // possible padding chars from base64
+        opt!(pair!(many_m_n!(1, 3, tag!("=")), line_ending))
+            >> opt!(line_ending)
+            >> crc: opt!(preceded!(tag!("="), take!(4)))
+            >> many0!(line_ending)
+            >> footer: armor_footer_line
+            >> (crc, footer)
+    )
+);
 
-named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
-               // possible padding chars from base64
-               many0!(tag!("="))
-    >>         opt!(line_ending)
-    >>    crc: opt!(preceded!(tag!("="), take!(4)))
-    >>         many0!(line_ending)
-    >> footer: armor_footer_line_b
-    >> (crc, footer)
-));
-
+/// Streaming based ascii armor parsing.
 pub struct Dearmor<R> {
+    /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
+    /// The headers found in the armored file.
     pub headers: HashMap<String, String>,
-
-    // track what we are currently parsing
+    /// Optional crc checksum
+    pub checksum: Option<u32>,
+    /// track what we are currently parsing
     current_part: Part,
+    /// internal buffer of data already read from the underlying source
     buffer: Buffer,
+    /// the underlying data source
     inner: R,
+    /// the current capacity of our buffer
     capacity: usize,
-    crc: crc24::Crc24Hasher,
 }
 
+/// Internal indicator, where in the parsing phase we are
 #[derive(Debug)]
 enum Part {
     Header,
@@ -275,16 +192,14 @@ impl<R: ::std::io::Read> Dearmor<R> {
         Dearmor {
             typ: None,
             headers: HashMap::new(),
+            checksum: None,
             current_part: Part::Header,
             buffer: Buffer::with_capacity(32 * 1024),
             capacity: 32 * 1024,
             inner: input,
-            crc: crc24::Crc24Hasher::new(),
         }
     }
 }
-
-
 
 impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> ::std::io::Result<usize> {
@@ -292,11 +207,9 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
         let max_capacity = 1024 * 1024 * 1024;
         // how much data have we read into our target `into`
         let mut read = 0;
-        // how much data did we consume from our inner source
-        let mut consumed = 0;
         // how much data do we want to read
         let into_len = into.len();
-        
+
         while read < into_len {
             let b = &mut self.buffer;
             let sz = self.inner.read(b.space())?;
@@ -306,13 +219,11 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
                 break;
             }
 
-            let mut needed: Option<Needed> = None;
-            loop {
-                println!("parsing: {:?}", b.data());
+            let mut needed = None;
+            while read < into_len {
                 let l = match self.current_part {
                     Part::Header => match header_parser(b.data()) {
                         Ok((remaining, (typ, header))) => {
-                            println!("parsed header {:?} {:?}", &typ, &header);
                             self.typ = Some(typ);
                             self.headers = header;
                             self.current_part = Part::Body;
@@ -322,66 +233,67 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
                             nom::Err::Incomplete(n) => {
                                 needed = Some(n);
                                 break;
-                            },
-                            _ => {
-                                println!("nom error: {:?}", err);
-                                return Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "header parsing failure"))
                             }
-                        }
-                    }
+                            _ => {
+                                return Err(::std::io::Error::new(
+                                    ::std::io::ErrorKind::InvalidData,
+                                    "header parsing failure",
+                                ));
+                            }
+                        },
+                    },
                     Part::Body => {
-                        println!("body parsing");
                         let data = if into_len > b.data().len() {
                             b.data()
                         } else {
                             &b.data()[0..into_len]
                         };
-                        println!("parsing: {:?}", data);
+
                         match body_parser(data) {
                             Ok((remaining, bytes)) => {
-                                println!("parsed body: {:?}", bytes);
                                 self.current_part = Part::Body;
-
                                 into[0..bytes.len()].copy_from_slice(bytes);
-                                read += bytes.len();
-                                self.crc.write(bytes);
-                                
-                                b.data().offset(remaining)
+                                let bytes_read = b.data().offset(remaining);
+                                read += bytes_read;
+
+                                bytes_read
                             }
                             Err(err) => match err {
                                 nom::Err::Incomplete(n) => {
-                                    println!("missing: {:?}", n);
                                     needed = Some(n);
                                     break;
-                                },
-                                nom::Err::Error(e) => {
+                                }
+                                nom::Err::Error(_) => {
                                     // this happens when there are no more base64 tokens, so lets move
                                     // to parse the rest
                                     self.current_part = Part::Footer;
                                     0
                                 }
-                                nom::Err::Failure(err) => {
-                                    println!("nom error: {:?}", err);
-                                    return Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "body parsing failure"))
+                                nom::Err::Failure(_) => {
+                                    return Err(::std::io::Error::new(
+                                        ::std::io::ErrorKind::InvalidData,
+                                        "body parsing failure",
+                                    ));
                                 }
-                            }
+                            },
                         }
                     }
                     Part::Footer => match footer_parser(b.data()) {
-                        Ok((remaining, (crc, footer_typ))) => {
+                        Ok((remaining, (checksum, footer_typ))) => {
                             if let Some(ref header_typ) = self.typ {
                                 if header_typ != &footer_typ {
-                                    return Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, format!("missmatch in armor ascii footer: {:?} != {:?}", self.typ, footer_typ)));
+                                    return Err(::std::io::Error::new(
+                                        ::std::io::ErrorKind::InvalidData,
+                                        format!(
+                                            "missmatch in armor ascii footer: {:?} != {:?}",
+                                            self.typ, footer_typ
+                                        ),
+                                    ));
                                 }
                             }
-                            
-                            if let Some(c) = crc {
-                                let check_new = self.crc.finish();
-                                let check_dec = read_checksum(c.as_bytes());
 
-                                if check_new != check_dec {
-                                    return Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "invalid checksum"));
-                                }
+                            if let Some(raw) = checksum {
+                                self.checksum = Some(read_checksum(raw));
                             }
 
                             b.data().offset(remaining)
@@ -390,25 +302,25 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
                             nom::Err::Incomplete(n) => {
                                 needed = Some(n);
                                 break;
-                            },
-                            _ => {
-                                println!("nom error: {:?}", err);
-                                return Err(::std::io::Error::new(::std::io::ErrorKind::InvalidData, "footer parsing failure"))
                             }
-                        }
-                    }                        
+                            _ => {
+                                return Err(::std::io::Error::new(
+                                    ::std::io::ErrorKind::InvalidData,
+                                    format!("footer parsing failure {:?}", err),
+                                ));
+                            }
+                        },
+                    },
                 };
 
                 b.consume(l);
-                consumed = l;
 
                 // break if we filled the input
                 if read == into_len {
                     break;
                 }
-                
+
                 if let Some(Needed::Size(sz)) = needed {
-                    println!("need more data! {}", sz);
                     if sz > b.capacity() && self.capacity * 2 < max_capacity {
                         self.capacity *= 2;
                         b.grow(self.capacity);
@@ -421,32 +333,28 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
     }
 }
 
-pub fn parse(mut input: impl ::std::io::Read) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
-    // TODO: actual streaming
-    let mut input_str = String::new();
-    input.read_to_string(&mut input_str)?;
-    unimplemented!();
-    // // let (_, res) = parse_inner(&input_str)?;
-    // // let (head, inner, check, footer) = res;
-    
-    // let (typ, headers) = head;
+// helper function to parse all data at once
+pub fn parse<R: ::std::io::Read>(
+    input: R,
+) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
+    let mut dearmor = Dearmor::new(input);
 
-    // if typ != footer {
-    //     return Err(Error::InvalidArmorWrappers);
-    // }
-    
-    // let decoded = inner.concat();
-    
-    // if let Some(c) = check {
-    //     let check_new = crc24::hash_raw(decoded.as_slice());
-    //     let check_dec = read_checksum(c.as_bytes());
+    // estimate size
+    let mut bytes = Vec::new();
+    dearmor.read_to_end(&mut bytes)?;
 
-    //     if check_new != check_dec {
-    //         return Err(Error::InvalidChecksum);
-    //     }
-    // }
+    // TODO: streaming base64 decoding
+    let decoded = base64::decode_config(&bytes, base64::MIME)?;
 
-    // Ok((typ, headers, decoded))
+    if let Some(expected) = dearmor.checksum {
+        let actual = crc24::hash_raw(&decoded);
+
+        if expected != actual {
+            return Err(Error::InvalidChecksum);
+        }
+    }
+
+    Ok((dearmor.typ.unwrap(), dearmor.headers, decoded))
 }
 
 #[cfg(test)]
@@ -458,13 +366,19 @@ mod tests {
     #[test]
     fn test_armor_header_line() {
         assert_eq!(
-            armor_header_line("-----BEGIN PGP MESSAGE-----\n").unwrap(),
-            ("", BlockType::Message)
+            armor_header_line(&b"-----BEGIN PGP MESSAGE-----\n"[..]).unwrap(),
+            (&b""[..], BlockType::Message)
         );
 
-        assert_eq!(armor_header_line("-----BEGIN PGP MESSAGE, PART 3/14-----\n").unwrap(), ("", BlockType::MultiPartMessage(3, 14)));
+        assert_eq!(
+            armor_header_line(&b"-----BEGIN PGP MESSAGE, PART 3/14-----\n"[..]).unwrap(),
+            (&b""[..], BlockType::MultiPartMessage(3, 14))
+        );
 
-        assert_eq!(armor_header_line("-----BEGIN PGP MESSAGE, PART 14-----\n").unwrap(), ("", BlockType::MultiPartMessage(14, 0)));
+        assert_eq!(
+            armor_header_line(&b"-----BEGIN PGP MESSAGE, PART 14-----\n"[..]).unwrap(),
+            (&b""[..], BlockType::MultiPartMessage(14, 0))
+        );
     }
 
     #[test]
@@ -476,9 +390,9 @@ mod tests {
 
         assert_eq!(
             armor_headers(
-                "Version: 12\r\nspecial-stuff: cool12.0\r\nsome:colon: with:me",
+                &b"Version: 12\r\nspecial-stuff: cool12.0\r\nsome:colon: with:me\r\n"[..],
             ).unwrap(),
-            ("", map)
+            (&b""[..], map)
         );
     }
 
@@ -489,39 +403,18 @@ mod tests {
         map.insert("Mode".to_string(), "Test".to_string());
 
         assert_eq!(
-            armor_header(
-                "-----BEGIN PGP MESSAGE-----\nVersion: 1.0\nMode: Test\n",
-            ).unwrap(),
-            ("", (BlockType::Message, map))
+            armor_header(&b"-----BEGIN PGP MESSAGE-----\nVersion: 1.0\nMode: Test\n"[..],).unwrap(),
+            (&b""[..], (BlockType::Message, map))
         );
 
         let mut map = HashMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
         assert_eq!(
-            armor_header(
-                "-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: GnuPG v1\n",
-            ).unwrap(),
-            ("", (BlockType::PublicKey, map))
+            armor_header(&b"-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: GnuPG v1\n"[..],)
+                .unwrap(),
+            (&b""[..], (BlockType::PublicKey, map))
         );
-    }
-
-
-    #[test]
-    fn test_kv_pair() {
-        assert_eq!(kv_pair(CompleteStr("hel-lo: world")).unwrap(), (
-            CompleteStr(
-                "",
-            ),
-            (
-                CompleteStr(
-                    "hel-lo",
-                ),
-                CompleteStr(
-                    "world",
-                ),
-            ),
-        ));
     }
 
     #[test]
@@ -531,14 +424,16 @@ mod tests {
 
         let c = Cursor::new(
             "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
-Version: GnuPG v1\n\
-\n\
-mQGiBEig\n\
------END PGP PUBLIC KEY BLOCK-----\n");
-        let (typ, headers, _) = parse(c).unwrap();
+             Version: GnuPG v1\n\
+             \n\
+             aGVsbG8gd29ybGQ=\n\
+             -----END PGP PUBLIC KEY BLOCK-----\n",
+        );
+        let (typ, headers, res) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
         assert_eq!(headers, map);
+        assert_eq!(res.as_slice(), &b"hello world"[..]);
     }
 
     #[test]
@@ -546,18 +441,58 @@ mQGiBEig\n\
         let mut map = HashMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
-        
-        let c = Cursor::new("-----BEGIN PGP PUBLIC KEY BLOCK-----\nVersion: GnuPG v1\n\n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\n=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n");
+        let c = Cursor::new(
+            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+             Version: GnuPG v1\n\
+             \n\
+             mQGiBEigu7MRBAD7gZJzevtYLB3c1pE7uMwu+zHzGGJDrEyEaz0lYTAaJ2YXmJ1+\n\
+             IvmvBI/iMrRqpFLR35uUcz2UHgJtIP+xenCF4WIhHv5wg3XvBvTgG/ooZaj1gtez\n\
+             miXV2bXTlEMxSqsZKvkieQRrMv3eV2VYhgaPvp8xJhl+xs8eVhlrmMv94wCgzWUw\n\
+             BrOICLPF5lANocvkqGNO3UUEAMH7GguhvXNlIUncqOpHC0N4FGPirPh/6nYxa9iZ\n\
+             kQEEg6mB6wPkaHZ5ddpagzFC6AncoOrhX5HPin9T6+cPhdIIQMogJOqDZ4xsAYCY\n\
+             KwjkoLQjfMdS5CYrMihFm4guNMKpWPfCe/T4TU7tFmTug8nnAIPFh2BNm8/EqHpg\n\
+             jR4JA/9wJMxv+2eFuFGeLtiPjo+o2+AfIxTTEIlWyNkO+a9KkzmPY/JP4OyVGKjM\n\
+             V+aO0vZ6FamdlrXAaAPm1ULmY5pC15P/hNr0YAbN28Y8cwNGuuKGbiYvYD35KKhs\n\
+             5c5/pfMy0rgDElhFTGd4rpZdkHei3lwF5cyV0htv5s2lwGJKnrQnQW5kcm9pZCBT\n\
+             ZWN1cml0eSA8c2VjdXJpdHlAYW5kcm9pZC5jb20+iGAEExECACAFAkigu7MCGwMG\n\
+             CwkIBwMCBBUCCAMEFgIDAQIeAQIXgAAKCRBzHmufAFQPw547AKDIDW3mDx+84xk1\n\
+             EfzH/uNQQLYBBgCeMabHPlx+2+IGnfPsQ8UsxMPLFnO5BA0ESKC72BAQALKb8W8l\n\
+             U3Xs+lbquuVEA5x+mNnJriRnq1q1ZA8J43z0lCqT6n+q/nICuE/SjGxfp+8G/K3/\n\
+             LrIfBWLLQHZMQyk/1Eild/ZoRxNAbjTGiQY6HWrZOd+Z2fWiSN03nSSpWImPbua3\n\
+             6LwSRRZNmZ77tdY0hI9TqJzqax1WQWk7IxfWubNTbNsPiktm/d6C2P04OkKOAmr8\n\
+             QCqKLLCO578zYLTgraL6F4g2YVurGgAB1KFSX2F8fh6Igr+pIW/ytoS9n2H+uecR\n\
+             l+2RB6Pq7MahwZvPPeMavwUMPQpOI6Or3pYZTzp/IJWNyL6MOBzV5q4gkD0xYtEq\n\
+             Ihr1hX1IdiGdOA4oH1Rk1K/XIPwLelQdYp3ftiReh4/Gb3kfKCxpmMXL1f/ndx6N\n\
+             zIiqweDU5mZBpXBsBzFZfUDALL4VGqpc2eEltkVtD0RuQI2YaImBjOPsHI4StN5t\n\
+             2OspWke4xJGf0PqRVjTDJmtUrIJX4X5Fh8M85unHYYIpBCaDbM/7/xIaNQbQfdeO\n\
+             6yqGrj/0WAjL34wbo4D12BiPeoUTreD60aNwmpu5z1NRPS2Wn+6kTIHGhf47wGTZ\n\
+             v9OFYWhgSs3INpna4VA4E8SpOWPd8LFYLs9clAlaUhqJyLJ3JlmXmhGnWM41z+p9\n\
+             RA8UQXhvQcvYJSR77SC4O503wdVKJ07OH6WbAAMFD/4yjBZ+X7QBIKTLHXAIQBjB\n\
+             526iOhmfxyIgmX4vWcggJFZrBxPFulkGJj65Mwr9AwZeIceukKQUGcf2LpEoIdZY\n\
+             dP8gEshRDZQ1Y3GDD9ukChRDoK9kFIxnYmH8euU/TwTPtAEEDASfwEZnM5DcJQOA\n\
+             Q6G3GVKr/8uwmT5hUn5sR2L9vmrjw1nPkfZeDQNBmeTI8A+byosp6Nxl8thJIGNt\n\
+             8UTa02+g/nbf+ODRrEf3xeeFUNb14kTqULNT/hTj8/6xDwxwaF2ms60kYxA/EXDB\n\
+             21jqmhnfUwjSa++R38Qig9tGwOo83Z7uNCqtU3caFW1P55iD/Sju/ZecHVSgfq6j\n\
+             2H7mNWfvB9ILkS7w1w/InjEA7LpY9jtmPKDIYYQ7YGZuxFwOxtw69ulkS6ddc1Pt\n\
+             AQ5oe0d59rBicE8R7rBCxwzMihG5ctJ+a+t4/MHqi6jy/WI9OK+SwWmCeT1nVy6F\n\
+             NZ00QOPe89DFBCqhj4qSGfjOtCEKAM7SOhkyEYJ8jk5KrsLOcWPOM9i3uus1RquG\n\
+             XJ2Cljt6zJYtEnpkjrw+Ge0SBDNEMGZEBLbEZKECtNJ2NBrMRKYeAseCGNQ+uJOz\n\
+             8vL7ztUKoi1SbFGuHkv5N2NmPq42QrN8dftW01DceGDnJ1KHRvCUbpPcyQYFhRFb\n\
+             nxd3tMIEGO83iEmozvJfB4hJBBgRAgAJBQJIoLvYAhsMAAoJEHMea58AVA/D6ewA\n\
+             ninKQSW+oL4z28F3T0GHag38WeWyAJ45d7dx4z0GxhTm2b9DclLombY+nw==\n\
+             =XyBX\n\
+             -----END PGP PUBLIC KEY BLOCK-----\n",
+        );
         let (typ, headers, decoded) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
         assert_eq!(headers, map);
         assert_eq!(decoded.len(), 1675);
-        assert_eq!(decoded.len() %3, 1); // two padding chars
+        assert_eq!(decoded.len() % 3, 1); // two padding chars
     }
 
     #[test]
-    fn test_parse_armor_small_stream() {
+    fn test_dearmor_small_stream() {
         let mut map = HashMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
@@ -566,17 +501,18 @@ mQGiBEig\n\
              Version: GnuPG v1\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP PUBLIC KEY BLOCK-----\n");
+             -----END PGP PUBLIC KEY BLOCK-----\n",
+        );
 
         let mut dec = Dearmor::new(c);
-        
+
         let mut res = vec![0u8; 5];
         let read = dec.read(&mut res).unwrap();
 
         // first read reads the header
         assert_eq!(dec.typ, Some(BlockType::PublicKey));
         assert_eq!(dec.headers, map);
-        
+
         assert_eq!(read, 5);
         assert_eq!(res.as_slice(), &b"aGVsb"[..]);
 
@@ -593,17 +529,16 @@ mQGiBEig\n\
         assert_eq!(res.as_slice(), &b"9ybGQ"[..]); // unchanged
     }
 
-
     #[test]
-    fn test_key_value() {
+    fn test_key_value_pair() {
         assert_eq!(
-            key_value(&b"hello: world\n"[..]).unwrap(),
+            key_value_pair(&b"hello: world\n"[..]).unwrap(),
             (&b""[..], ("hello", "world")),
             "single"
         );
-        
+
         assert_eq!(
-            key_value(&b"hello: world\nother content"[..]).unwrap(),
+            key_value_pair(&b"hello: world\nother content"[..]).unwrap(),
             (&b"other content"[..], ("hello", "world")),
             "with rest"
         );
@@ -616,14 +551,17 @@ mQGiBEig\n\
             (&b""[..], vec![("hello", "world"), ("cool", "stuff")]),
             "single"
         );
-        
+
         assert_eq!(
             key_value_pairs(&b"hello: world\ncool: stuff\nother content"[..]).unwrap(),
-            (&b"other content"[..], vec![("hello", "world"), ("cool", "stuff")]),
+            (
+                &b"other content"[..],
+                vec![("hello", "world"), ("cool", "stuff")]
+            ),
             "with rest"
-        );        
+        );
     }
-    
+
     #[test]
     fn test_body_parser() {
         assert_eq!(
@@ -635,14 +573,21 @@ mQGiBEig\n\
             Ok((&b"==\n-other"[..], &b"abcabc+"[..]))
         );
 
+        assert_eq!(body_parser(&b"ab++\n"[..]), Ok((&b""[..], &b"ab++\n"[..])));
+
+        assert_eq!(body_parser(&b"ab"[..]), Ok((&b""[..], &b"ab"[..])));
+    }
+
+    #[test]
+    fn test_footer_parser() {
         assert_eq!(
-            body_parser(&b"ab++\n"[..]),
-            Ok((&b"\n"[..], &b"ab++"[..]))
+            footer_parser(&b"=4JBj\r\n-----END PGP PUBLIC KEY BLOCK-----\r\n"[..]),
+            Ok((&b""[..], (Some(&b"4JBj"[..]), BlockType::PublicKey)))
         );
 
         assert_eq!(
-            body_parser(&b"ab"[..]),
-            Ok((&b""[..], &b"ab"[..]))
+            footer_parser(&b"==\n=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n"[..]),
+            Ok((&b""[..], (Some(&b"XyBX"[..]), BlockType::PublicKey)))
         );
     }
 }
