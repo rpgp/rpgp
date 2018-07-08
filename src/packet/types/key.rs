@@ -309,7 +309,7 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(p));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
-                                //a one-octet value 01
+                                                //a one-octet value 01
                                 packet.push(1);
                                 //a one-octet hash function ID used with a KDF
                                 packet.push(*hash);
@@ -373,7 +373,7 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(p));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
-                                //a one-octet value 01
+                                                //a one-octet value 01
                                 packet.push(1);
                                 //a one-octet hash function ID used with a KDF
                                 packet.push(*hash);
