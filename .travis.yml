@@ -1,12 +1,21 @@
 sudo: false
+
 language: rust
-rust: stable
+rust: nightly
+
 os:
   - osx
   - linux
+
 cache:
   cargo: true
 
+install:
+  - rustup component add rustfmt-preview
+  - cargo install clippy
+
 script:
+  - cargo fmt --all -- --check
+  - cargo clippy
   - cargo build
   - cargo test
