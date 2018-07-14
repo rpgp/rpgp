@@ -1,5 +1,7 @@
-use packet::types::Packet;
 use std::boxed::Box;
+
+use errors::Result;
+use packet::types::{self, Packet};
 
 /// A PGP message
 #[derive(Debug)]
@@ -28,6 +30,25 @@ pub struct OnePassSignedMessage {
 }
 
 impl Message {
+    /// Decrypt the message using the given password and key.
+    pub fn decrypt<'a, F>(&self, pw: F, key: &types::key::PrivateKeyRepr) -> Result<Vec<u8>>
+    where
+        F: FnOnce() -> String,
+    {
+        match self {
+            Message::Compressed(packet) => Ok(packet.body.clone()),
+            Message::Literal(packet) => Ok(packet.body.clone()),
+            Message::Signed { message, .. } => match message {
+                Some(message) => message.as_ref().decrypt(pw, key),
+                None => Ok(Vec::new()),
+            },
+            Message::Encrypted { .. } => {
+                unimplemented!(":(");
+            }
+        }
+    }
+
+    /// Check if this message is a signature, that was signed with a one pass signature.
     pub fn is_one_pass_signed(&self) -> bool {
         match self {
             Message::Signed {
@@ -79,20 +100,19 @@ mod tests {
             let mut cipher_file = File::open(file_name).unwrap();
 
             let message = Message::from_armor_single(&mut cipher_file).unwrap();
-            assert!(false);
-            // key.primary_key
-            //     .unlock(
-            //         || "",
-            //         |unlocked_key| {
-            //             let decrypted = message.decrypt(|| details.passphrase, unlocked_key);
-            //             assert_eq!(
-            //                 decrypted,
-            //                 details.textcontent.unwrap_or_else(|| "".to_string())
-            //             );
-            //             Ok(())
-            //         },
-            //     )
-            //     .unwrap();
+            key.unlock(
+                || "".to_string(),
+                |unlocked_key| {
+                    let decrypted = message
+                        .decrypt(|| details.passphrase.clone(), unlocked_key)
+                        .unwrap();
+                    assert_eq!(
+                        ::std::str::from_utf8(&decrypted).unwrap(),
+                        details.textcontent.unwrap_or_else(|| "".to_string())
+                    );
+                    Ok(())
+                },
+            ).unwrap();
         }
     }
 }

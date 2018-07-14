@@ -142,11 +142,11 @@ impl PrivateKey {
     }
 
     /// Unlock the raw data in the secret parameters.
-    pub fn unlock<'a>(
-        &self,
-        pw: fn() -> &'a str,
-        work: fn(&PrivateKeyRepr) -> Result<()>,
-    ) -> Result<()> {
+    pub fn unlock<'a, F, G>(&self, pw: F, work: G) -> Result<()>
+    where
+        F: FnOnce() -> String,
+        G: FnOnce(&PrivateKeyRepr) -> Result<()>,
+    {
         let decrypted = if self.private_params.is_encrypted() {
             self.from_ciphertext(pw, self.private_params.data.as_slice())
         } else {
@@ -156,11 +156,10 @@ impl PrivateKey {
         work(&decrypted)
     }
 
-    fn from_ciphertext<'a>(
-        &self,
-        _pw: fn() -> &'a str,
-        _ciphertext: &[u8],
-    ) -> Result<PrivateKeyRepr> {
+    fn from_ciphertext<'a, F>(&self, _pw: F, _ciphertext: &[u8]) -> Result<PrivateKeyRepr>
+    where
+        F: FnOnce() -> String,
+    {
         match self.algorithm {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
