@@ -1,3 +1,4 @@
+use errors::Result;
 use packet::types;
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
@@ -87,6 +88,14 @@ impl PrivateKey {
     /// Returns the fingerprint of the associated primary key.
     pub fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
+    }
+
+    pub fn unlock<'a, F, G>(&self, pw: F, work: G) -> Result<()>
+    where
+        F: FnOnce() -> String,
+        G: FnOnce(&types::key::PrivateKeyRepr) -> Result<()>,
+    {
+        self.primary_key.unlock(pw, work)
     }
 }
 
@@ -219,7 +228,7 @@ mod tests {
         assert_eq!(pkey.private_params().checksum.as_slice(), hex!("2c46"));
 
         pkey.unlock(
-            || "",
+            || "".to_string(),
             |unlocked_key| {
                 match unlocked_key {
                     types::key::PrivateKeyRepr::RSA(k) => {

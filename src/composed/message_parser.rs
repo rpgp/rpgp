@@ -6,14 +6,6 @@ use composed::Deserializable;
 use errors::Result;
 use packet::types::{Packet, Tag};
 
-#[derive(Debug)]
-enum Group {
-    Compressed,
-    Literal,
-    ESK,
-    EncryptedData,
-}
-
 impl Deserializable for Message {
     /// Parse a composed message.
     /// Ref: https://tools.ietf.org/html/rfc4880#section-11.3
@@ -21,7 +13,7 @@ impl Deserializable for Message {
         // stack = [];
         // cur = none;
         // is_esk = false;
-        // is_edata =>
+        // is_edata = false;
 
         // literal => stack.push new Literal @;
         // compressed compressed => stack.push new Compressed @;
@@ -33,7 +25,6 @@ impl Deserializable for Message {
         let mut stack: Vec<Message> = Vec::new();
         // track a currently open package
         let mut cur: Option<usize> = None;
-        let mut is_esk = false;
         let mut is_edata = false;
 
         packets.into_iter().for_each(|packet| {
@@ -121,8 +112,6 @@ impl Deserializable for Message {
                         cur = Some(stack.len() - 1);
                     }
 
-                    is_esk = true;
-
                     if let Some(i) = cur {
                         if let Message::Encrypted { ref mut esk, .. } = stack[i] {
                             esk.push(packet.to_owned());
@@ -134,7 +123,6 @@ impl Deserializable for Message {
                 //    Encrypted Data :- Symmetrically Encrypted Data Packet |
                 //          Symmetrically Encrypted Integrity Protected Data Packet
                 Tag::SymetricEncryptedData | Tag::SymEncryptedProtectedData => {
-                    is_esk = false;
                     is_edata = true;
 
                     if cur.is_none() {
@@ -197,9 +185,6 @@ impl Deserializable for Message {
                 _ => panic!("unexpected packet {:?}", packet.tag),
             }
         });
-
-        // TODO: assemble final message
-        stack.iter().for_each(|s| println!("{:?}", s));
 
         Ok(stack)
     }
