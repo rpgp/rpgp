@@ -1,6 +1,43 @@
+use packet::types::Packet;
+use std::boxed::Box;
+
 /// A PGP message
 #[derive(Debug)]
-pub struct Message {}
+pub enum Message {
+    Literal(Packet),
+    Compressed(Packet),
+    Signed {
+        /// nested message
+        message: Option<Box<Message>>,
+        /// for signature packets that contain a one pass message
+        one_pass_signed_message: Option<OnePassSignedMessage>,
+        // actual signature
+        signature: Option<Packet>,
+    },
+    Encrypted {
+        esk: Vec<Packet>,
+        edata: Vec<Packet>,
+    },
+}
+
+#[derive(Debug)]
+pub struct OnePassSignedMessage {
+    pub one_pass_signature: Packet,
+    pub message: Option<Box<Message>>,
+    pub signature: Option<Packet>,
+}
+
+impl Message {
+    pub fn is_one_pass_signed(&self) -> bool {
+        match self {
+            Message::Signed {
+                one_pass_signed_message,
+                ..
+            } => one_pass_signed_message.is_some(),
+            _ => false,
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -41,8 +78,8 @@ mod tests {
             let file_name = entry.to_str().unwrap().replace(".json", ".asc");
             let mut cipher_file = File::open(file_name).unwrap();
 
-            // let message = Message::from_armor_single(&mut cipher_file).unwrap();
-
+            let message = Message::from_armor_single(&mut cipher_file).unwrap();
+            assert!(false);
             // key.primary_key
             //     .unlock(
             //         || "",
