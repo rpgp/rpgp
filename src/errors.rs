@@ -32,6 +32,8 @@ pub enum Error {
     OpenSSLError(ErrorStack),
     #[fail(display = "io error: {:?}", _0)]
     IOError(::std::io::Error),
+    #[fail(display = "missing packets")]
+    MissingPackets,
 }
 
 impl Error {
@@ -48,6 +50,7 @@ impl Error {
             Error::MultipleKeys => 8,
             Error::OpenSSLError(_) => 9,
             Error::IOError(_) => 10,
+            Error::MissingPackets => 11,
         }
     }
 }
