@@ -1,7 +1,11 @@
 use std::boxed::Box;
 
+use openssl::rsa::Padding;
+
+use composed::key::PrivateKey;
 use errors::Result;
-use packet::types::{self, Packet};
+use packet::types::key::PrivateKeyRepr;
+use packet::types::Packet;
 
 /// A PGP message
 #[derive(Debug)]
@@ -31,19 +35,44 @@ pub struct OnePassSignedMessage {
 
 impl Message {
     /// Decrypt the message using the given password and key.
-    pub fn decrypt<'a, F>(&self, pw: F, key: &types::key::PrivateKeyRepr) -> Result<Vec<u8>>
+    // TODO: allow for multiple keys to be passed in
+    pub fn decrypt<'a, F, G>(&self, msg_pw: F, key_pw: G, key: &PrivateKey) -> Result<Vec<u8>>
     where
         F: FnOnce() -> String,
+        G: FnOnce() -> String,
     {
         match self {
             Message::Compressed(packet) => Ok(packet.body.clone()),
             Message::Literal(packet) => Ok(packet.body.clone()),
             Message::Signed { message, .. } => match message {
-                Some(message) => message.as_ref().decrypt(pw, key),
+                Some(message) => message.as_ref().decrypt(msg_pw, key_pw, key),
                 None => Ok(Vec::new()),
             },
-            Message::Encrypted { .. } => {
-                unimplemented!(":(");
+            Message::Encrypted { esk, edata } => {
+                key.unlock(key_pw, |priv_key| match priv_key {
+                    PrivateKeyRepr::RSA(priv_key) => {
+                        for packet in esk {
+                            let mut out = vec![];
+                            priv_key.private_decrypt(
+                                packet.body.as_slice(),
+                                out.as_mut_slice(),
+                                Padding::PKCS1,
+                            )?;
+                            println!("res: {:?}", out);
+                        }
+                        Ok(())
+                    }
+                    PrivateKeyRepr::DSA(_) => unimplemented!("dsa"),
+                    PrivateKeyRepr::ECDSA(priv_key) => {
+                        for packet in esk {
+                            println!("esk: {:?}", packet);
+                        }
+                        println!("{:?}", key.primary_key);
+                        Ok(())
+                    }
+                })?;
+
+                Ok(Vec::new())
             }
         }
     }
@@ -67,7 +96,7 @@ mod tests {
     use serde_json;
     use std::fs::File;
 
-    use composed::key::PrivateKey;
+    use composed::key::{PrivateKey, PublicKey};
     use composed::Deserializable;
 
     #[derive(Deserialize, Debug)]
@@ -85,34 +114,40 @@ mod tests {
     #[test]
     fn test_parse_pgp_messages() {
         let base_path = "./tests/opengpg-interop/testcases/messages";
-        for entry in glob("./tests/opengpg-interop/testcases/messages/*.json").unwrap() {
+        for entry in glob("./tests/opengpg-interop/testcases/messages/gnu*.json").unwrap() {
             let entry = entry.unwrap();
             let mut file = File::open(&entry).unwrap();
 
             let details: Testcase = serde_json::from_reader(&mut file).unwrap();
             println!("{:?}: {:?}", entry, details);
 
-            let mut key_file =
+            let mut decrypt_key_file =
                 File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
-            let key = PrivateKey::from_armor_single(&mut key_file).unwrap();
+            let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file).unwrap();
+            println!("decrypt key: {:?}", decrypt_key);
+
+            if let Some(verify_key_str) = details.verify_key.clone() {
+                let mut verify_key_file =
+                    File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
+                let verify_key = PublicKey::from_armor_single(&mut verify_key_file).unwrap();
+                println!("verify key: {:?}", verify_key);
+            }
 
             let file_name = entry.to_str().unwrap().replace(".json", ".asc");
             let mut cipher_file = File::open(file_name).unwrap();
 
             let message = Message::from_armor_single(&mut cipher_file).unwrap();
-            key.unlock(
-                || "".to_string(),
-                |unlocked_key| {
-                    let decrypted = message
-                        .decrypt(|| details.passphrase.clone(), unlocked_key)
-                        .unwrap();
-                    assert_eq!(
-                        ::std::str::from_utf8(&decrypted).unwrap(),
-                        details.textcontent.unwrap_or_else(|| "".to_string())
-                    );
-                    Ok(())
-                },
-            ).unwrap();
+            let decrypted = message
+                .decrypt(
+                    || details.passphrase.clone(),
+                    || "".to_string(),
+                    &decrypt_key,
+                )
+                .unwrap();
+            assert_eq!(
+                ::std::str::from_utf8(&decrypted).unwrap(),
+                details.textcontent.unwrap_or_else(|| "".to_string())
+            );
         }
     }
 }

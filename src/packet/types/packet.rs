@@ -1,6 +1,9 @@
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
+use crypto::hash::HashAlgorithm;
+use crypto::sym::SymmetricKeyAlgorithm;
+
 // const OID_ECC_P256: [u8; 8] = [0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];
 // const OID_ECC_P384: [u8; 5] = [0x2B, 0x81, 0x04, 0x00, 0x22];
 // const OID_ECC_P521: [u8; 5] = [0x2B, 0x81, 0x04, 0x00, 0x23];
@@ -114,45 +117,6 @@ pub enum RevocationCode {
 
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
-/// Available symmetric key algorithms.
-pub enum SymmetricKeyAlgorithm {
-    /// Plaintext or unencrypted data
-    Plaintext = 0,
-    IDEA = 1,
-    /// TripleDES (DES-EDE, 168 bit key derived from 192)
-    TripleDES = 2,
-    /// CAST5 (128 bit key, as per [RFC2144])
-    CAST5 = 3,
-    /// Blowfish (128 bit key, 16 rounds)
-    Blowfish = 4,
-    AES128 = 7,
-    AES192 = 8,
-    AES256 = 9,
-    /// Twofish with 256-bit key [TWOFISH]
-    Twofish = 10,
-}
-}
-
-impl SymmetricKeyAlgorithm {
-    /// The size of a single block in bytes.
-    /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher
-    pub fn block_size(&self) -> usize {
-        match self {
-            SymmetricKeyAlgorithm::Plaintext => 0,
-            SymmetricKeyAlgorithm::IDEA => 8,
-            SymmetricKeyAlgorithm::TripleDES => 8,
-            SymmetricKeyAlgorithm::CAST5 => 8,
-            SymmetricKeyAlgorithm::Blowfish => 8,
-            SymmetricKeyAlgorithm::AES128 => 16,
-            SymmetricKeyAlgorithm::AES192 => 16,
-            SymmetricKeyAlgorithm::AES256 => 16,
-            SymmetricKeyAlgorithm::Twofish => 16,
-        }
-    }
-}
-
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
 /// Available String-To-Key types
     pub enum StringToKeyType {
         Simple = 0,
@@ -258,21 +222,6 @@ pub enum CompressionAlgorithm {
     ZIP = 1,
     ZLIB = 2,
     BZip2 = 3,
-}
-}
-
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
-/// Available hash algorithms.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
-pub enum HashAlgorithm {
-    MD5 = 1,
-    SHA1 = 2,
-    RIPEMD160 = 3,
-    SHA256 = 8,
-    SHA384 = 9,
-    SHA512 = 10,
-    SHA224 = 11,
 }
 }
 

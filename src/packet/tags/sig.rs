@@ -5,9 +5,11 @@ use std::str;
 use util::mpi;
 
 use packet::types::{
-    self, CompressionAlgorithm, HashAlgorithm, PublicKeyAlgorithm, RevocationCode, Signature,
-    SignatureType, SignatureVersion, Subpacket, SubpacketType, SymmetricKeyAlgorithm,
+    self, CompressionAlgorithm, PublicKeyAlgorithm, RevocationCode, Signature,
+    SignatureType, SignatureVersion, Subpacket, SubpacketType, 
 };
+use crypto::sym::SymmetricKeyAlgorithm;
+use crypto::hash::HashAlgorithm;
 use util::{clone_into_array, packet_length};
 
 enum_from_primitive!{
