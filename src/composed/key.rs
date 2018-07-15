@@ -123,10 +123,12 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use composed::Deserializable;
+    use crypto::hash::HashAlgorithm;
+    use crypto::sym::SymmetricKeyAlgorithm;
     use packet::types::key;
     use packet::types::{
-        CompressionAlgorithm, HashAlgorithm, KeyVersion, PublicKeyAlgorithm, Signature,
-        SignatureType, SignatureVersion, Subpacket, SymmetricKeyAlgorithm, User, UserAttributeType,
+        CompressionAlgorithm, KeyVersion, PublicKeyAlgorithm, Signature, SignatureType,
+        SignatureVersion, Subpacket, User, UserAttributeType,
     };
 
     fn read_file(path: PathBuf) -> File {
