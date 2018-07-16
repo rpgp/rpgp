@@ -1,10 +1,14 @@
 use std::fmt;
 
+use byteorder::{BigEndian, ByteOrder};
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::dsa::Dsa;
 use openssl::ec::{EcGroup, EcKey, EcPoint};
+use openssl::hash::{Hasher, MessageDigest};
 use openssl::pkey;
 use openssl::rsa::{Rsa, RsaPrivateKeyBuilder};
+
+use std::ops::Deref;
 
 use super::ecc_curve::ECCCurve;
 use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
@@ -13,6 +17,7 @@ use crypto::kdf::s2k;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
 use packet::tags::privkey::{ecc_private_params, rsa_private_params};
+use util::bignum_to_mpi;
 
 /// Represents a single private key packet.
 #[derive(Debug, PartialEq, Eq)]
@@ -309,7 +314,150 @@ macro_rules! key {
 
             /// Returns the fingerprint of this key.
             pub fn fingerprint(&self) -> Vec<u8> {
-                unimplemented!("implement me please")
+                match self.version() {
+                    KeyVersion::V4 => {
+                        // A one-octet version number (4).
+                        let mut packet = Vec::new();
+                        packet.push(4);
+
+                        // A four-octet number denoting the time that the key was created.
+                        let mut time_buf: [u8; 4] = [0; 4];
+                        BigEndian::write_u32(&mut time_buf, self.created_at());
+                        packet.extend_from_slice(&time_buf);
+
+                        // A one-octet number denoting the public-key algorithm of this key.
+                        packet.push(*self.algorithm() as u8);
+
+                        // A series of multiprecision integers comprising the key material.
+                        match &self.public_params {
+                            PublicParams::RSA { n, e } => {
+                                packet.extend(bignum_to_mpi(n));
+                                packet.extend(bignum_to_mpi(e));
+                            }
+                            PublicParams::DSA { p, q, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(q));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
+                            }
+                            PublicParams::ECDSA { curve, p } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigNum::from_slice(p).unwrap()));
+                            }
+                            PublicParams::ECDH {
+                                curve,
+                                p,
+                                hash,
+                                alg_sym,
+                            } => {
+                                //a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                //the octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(p));
+                                //a one-octet size of the following fields
+                                packet.push(3); // Always 3??
+                                                //a one-octet value 01
+                                packet.push(1);
+                                //a one-octet hash function ID used with a KDF
+                                packet.push(*hash);
+                                //a one-octet algorithm ID
+                                packet.push(*alg_sym);
+                            }
+                            PublicParams::Elgamal { p, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
+                            }
+                        }
+
+                        let mut length_buf: [u8; 2] = [0; 2];
+                        BigEndian::write_uint(&mut length_buf, packet.len() as u64, 2);
+
+                        let mut h = Hasher::new(MessageDigest::sha1()).unwrap();
+
+                        h.update(&[0x99]).unwrap();
+                        h.update(&length_buf).unwrap();
+                        h.update(&packet).unwrap();
+
+                        h.finish().unwrap().deref().to_vec()
+                    }
+
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        let mut h = Hasher::new(MessageDigest::md5()).unwrap();
+
+                        let mut packet = Vec::new();
+
+                        match &self.public_params {
+                            PublicParams::RSA { n, e } => {
+                                packet.extend(bignum_to_mpi(n));
+                                packet.extend(bignum_to_mpi(e));
+                            }
+                            PublicParams::DSA { p, q, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(q));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
+                            }
+                            PublicParams::ECDSA { curve, p } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigNum::from_slice(p).unwrap()));
+                            }
+                            PublicParams::ECDH {
+                                curve,
+                                p,
+                                hash,
+                                alg_sym,
+                            } => {
+                                //a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                //the octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(p));
+                                //a one-octet size of the following fields
+                                packet.push(3); // Always 3??
+                                                //a one-octet value 01
+                                packet.push(1);
+                                //a one-octet hash function ID used with a KDF
+                                packet.push(*hash);
+                                //a one-octet algorithm ID
+                                packet.push(*alg_sym);
+                            }
+                            PublicParams::Elgamal { p, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
+                            }
+                        }
+
+                        h.update(&packet).unwrap();
+
+                        h.finish().unwrap().deref().to_vec()
+                    }
+                }
+            }
+
+            pub fn key_id(&self) -> Option<Vec<u8>> {
+                match self.version() {
+                    KeyVersion::V4 => {
+                        // Lower 64 bits
+                        Some(self.fingerprint()[16..].to_vec())
+                    }
+                    KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
+                        PublicParams::RSA { n, e: _ } => Some(n.to_vec()[16..].to_vec()),
+                        _ => None,
+                    },
+                }
             }
         }
     };

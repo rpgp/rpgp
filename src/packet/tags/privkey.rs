@@ -1,5 +1,5 @@
 use enum_primitive::FromPrimitive;
-use nom::{be_u8, be_u16, be_u32, self};
+use nom::{self, be_u16, be_u32, be_u8};
 use openssl::bn::BigNum;
 
 use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
@@ -90,7 +90,10 @@ named!(enc_priv_params<EncryptedPrivateParams>, do_parse!(
 ));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    ecdsa<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(
     // a one-octet size of the following field
        len: be_u8
     // octets representing a curve OID
@@ -102,7 +105,10 @@ named!(ecdsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
 ));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    ecdh<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(
     // a one-octet size of the following field
         len: be_u8
     // octets representing a curve OID
@@ -127,7 +133,10 @@ named!(ecdh<(PublicParams, EncryptedPrivateParams)>, do_parse!(
     }, pp)
 ));
 
-named!(elgamal<(PublicParams, EncryptedPrivateParams)>, do_parse!(
+#[cfg_attr(rustfmt, rustfmt_skip)]
+named!(
+    elgamal<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(
     // MPI of Elgamal prime p
        p: mpi_big
     // MPI of Elgamal group generator g
@@ -143,6 +152,7 @@ named!(elgamal<(PublicParams, EncryptedPrivateParams)>, do_parse!(
         pp)
 ));
 
+#[cfg_attr(rustfmt, rustfmt_skip)]
 named!(dsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
        p: mpi_big
     >> q: mpi_big
@@ -166,7 +176,7 @@ named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
 ));
 
 named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, EncryptedPrivateParams)>, switch!(
-    value!(&typ), 
+    value!(&typ),
     &PublicKeyAlgorithm::RSA        |
     &PublicKeyAlgorithm::RSAEncrypt |
     &PublicKeyAlgorithm::RSASign    => call!(rsa)     |
@@ -175,7 +185,7 @@ named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, Enc
     &PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
     &PublicKeyAlgorithm::Elgamal    |
     &PublicKeyAlgorithm::ElgamalSign => call!(elgamal)
-    // &PublicKeyAlgorithm::DiffieHellman => 
+    // &PublicKeyAlgorithm::DiffieHellman =>
 ));
 
 named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do_parse!(
@@ -197,11 +207,11 @@ named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <PrivateKey>, do
 /// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 named!(pub parser<PrivateKey>, do_parse!(
           key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-    >>    key: switch!(value!(&key_ver), 
+    >>    key: switch!(value!(&key_ver),
                        &KeyVersion::V2 => call!(old_private_key_parser, &key_ver) |
                        &KeyVersion::V3 => call!(old_private_key_parser, &key_ver) |
                        &KeyVersion::V4 => call!(new_private_key_parser, &key_ver)
-                   ) 
+                   )
     >> (key)
 ));
 
@@ -221,7 +231,7 @@ named!(pub rsa_private_params<(BigNum, BigNum,BigNum, BigNum)>, do_parse!(
     >> opt!(take!(20))
     >> (d, p, q, u)
 ));
-    
+
 named!(pub ecc_private_params<BigNum>, do_parse!(
        key: mpi_big
     >> (key) 
