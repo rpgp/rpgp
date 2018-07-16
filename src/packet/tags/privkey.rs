@@ -61,8 +61,8 @@ named!(enc_priv_params<EncryptedPrivateParams>, do_parse!(
         )
     )
     >> checksum_len: switch!(value!(s2k_typ),
-                     // 20 octect hash at the end
-                     254 => value!(20) |
+                     // 20 octect hash at the end, but part of the encrypted part
+                     254 => value!(0) |
                      // 2 octet checksum at the end
                      _   => value!(2)
     )
@@ -70,6 +70,7 @@ named!(enc_priv_params<EncryptedPrivateParams>, do_parse!(
     >>     data: take!(data_len)
     >> checksum: take!(checksum_len)
     >> ({
+        println!("data_len: {} checksum_len: {} data: {:?}", data_len, checksum_len, data);
         let (hash, salt, count) = match enc_params.3 {
             Some((hash, salt, count)) => (Some(hash), salt, count),
             None => (None, None, None),

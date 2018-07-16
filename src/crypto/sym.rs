@@ -63,9 +63,16 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
+    /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     pub fn decrypt(&self, key: &[u8], ciphertext: &mut [u8]) -> Result<()> {
         let iv_vec = vec![0u8; self.block_size()];
+        self.decrypt_with_iv(key, &iv_vec, ciphertext)
+    }
 
+    /// Decrypt the data using CFB mode, without padding. Overwrites the input.
+    pub fn decrypt_with_iv(&self, key: &[u8], iv_vec: &[u8], ciphertext: &mut [u8]) -> Result<()> {
+        let rounds = ciphertext.len() / self.block_size();
+        let ciphertext = &mut ciphertext[0..rounds * self.block_size()];
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
@@ -105,9 +112,14 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
-    pub fn encrypt(&self, key: &[u8], plaintext: &mut [u8]) -> Result<()> {
+    /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
+    pub fn encrypt(&self, key: &[u8], ciphertext: &mut [u8]) -> Result<()> {
         let iv_vec = vec![0u8; self.block_size()];
+        self.encrypt_with_iv(key, &iv_vec, ciphertext)
+    }
 
+    /// Encrypt the data using CFB mode, without padding. Overwrites the input.
+    pub fn encrypt_with_iv(&self, key: &[u8], iv_vec: &[u8], plaintext: &mut [u8]) -> Result<()> {
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),

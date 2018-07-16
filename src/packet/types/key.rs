@@ -182,56 +182,40 @@ impl PrivateKey {
     where
         F: FnOnce() -> String,
     {
-        match self.algorithm {
-            PublicKeyAlgorithm::RSA
-            | PublicKeyAlgorithm::RSAEncrypt
-            | PublicKeyAlgorithm::RSASign => {
-                let sym_alg = self
-                    .private_params
-                    .encryption_algorithm
-                    .as_ref()
-                    .expect("missing encryption alg");
-                let typ = self
-                    .private_params
-                    .string_to_key
-                    .as_ref()
-                    .expect("missing s2k method");
-                let hash_alg = self
-                    .private_params
-                    .string_to_key_hash
-                    .as_ref()
-                    .expect("missing hash algorithm");
-                let key = s2k(
-                    pw,
-                    sym_alg,
-                    typ,
-                    hash_alg,
-                    self.private_params.string_to_key_salt.as_ref(),
-                    self.private_params.string_to_key_count.as_ref(),
-                )?;
+        let sym_alg = self
+            .private_params
+            .encryption_algorithm
+            .as_ref()
+            .expect("missing encryption alg");
+        let typ = self
+            .private_params
+            .string_to_key
+            .as_ref()
+            .expect("missing s2k method");
+        let hash_alg = self
+            .private_params
+            .string_to_key_hash
+            .as_ref()
+            .expect("missing hash algorithm");
+        let key = s2k(
+            pw,
+            sym_alg,
+            typ,
+            hash_alg,
+            self.private_params.string_to_key_salt.as_ref(),
+            self.private_params.string_to_key_count.as_ref(),
+        )?;
 
-                println!("key: {:?}", key);
-
-                let plaintext = vec![];
-                // TODO: decrypt
-                self.from_plaintext(&plaintext)
-            }
-            PublicKeyAlgorithm::DSA => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::ECDH => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::ECDSA => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::EdDSA => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::Elgamal => {
-                unimplemented!("implement me");
-            }
-            _ => panic!("unsupported algoritm: {:?}", self.algorithm),
+        println!("key: {:?}", key);
+        println!("iv: {:?}", self.private_params.iv);
+        if let Some(ref iv) = self.private_params.iv {
+            println!("ciphertext: {} {:?}", ciphertext.len(), ciphertext);
+            let mut plaintext = ciphertext.to_vec();
+            sym_alg.decrypt_with_iv(&key, iv, &mut plaintext)?;
+            println!("plaintext: {:?}", plaintext);
+            self.from_plaintext(&plaintext)
+        } else {
+            panic!("missing iv");
         }
     }
 
@@ -247,6 +231,7 @@ impl PrivateKey {
                         // Sad but true
                         let n = BigNum::from_slice(n.to_vec().as_slice())?;
                         let e = BigNum::from_slice(e.to_vec().as_slice())?;
+                        println!("{:?} {:?}", n, e);
                         let private_key = RsaPrivateKeyBuilder::new(n, e, d)?
                             .set_factors(p, q)?
                             .build();

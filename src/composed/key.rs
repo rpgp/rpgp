@@ -128,7 +128,7 @@ mod tests {
     use packet::types::key;
     use packet::types::{
         CompressionAlgorithm, KeyVersion, PublicKeyAlgorithm, Signature, SignatureType,
-        SignatureVersion, Subpacket, User, UserAttributeType,
+        SignatureVersion, StringToKeyType, Subpacket, User, UserAttributeType,
     };
 
     fn read_file(path: PathBuf) -> File {
@@ -520,5 +520,53 @@ mod tests {
         );
 
         assert_eq!(ua.signatures, vec![sig3]);
+    }
+
+    #[test]
+    fn encrypted_private_key() {
+        let p = Path::new("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
+        let mut file = read_file(p.to_path_buf());
+
+        let mut buf = vec![];
+        file.read_to_end(&mut buf).unwrap();
+
+        let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
+        let key = PrivateKey::from_string(input).expect("failed to parse key");
+
+        let pp = key.primary_key.private_params().clone();
+
+        assert_eq!(
+            pp.iv,
+            Some(hex!("22 71 f7 18 af 70 d3 bd 9d 60 c2 ae d9 46 9b 67").to_vec())
+        );
+
+        assert_eq!(
+            pp.string_to_key_salt,
+            Some(hex!("CB18E77884F2F055").to_vec())
+        );
+
+        assert_eq!(pp.string_to_key, Some(StringToKeyType::IteratedAndSalted));
+
+        assert_eq!(pp.string_to_key_count, Some(65536));
+
+        assert_eq!(pp.string_to_key_hash, Some(HashAlgorithm::SHA256));
+
+        assert_eq!(pp.encryption_algorithm, Some(SymmetricKeyAlgorithm::AES128));
+        assert_eq!(pp.string_to_key_id, 254);
+
+        key.unlock(
+            || "test".to_string(),
+            |k| {
+                println!("{:?}", k);
+                match k {
+                    types::key::PrivateKeyRepr::RSA(k) => {
+                        assert_eq!(k.e().to_vec(), hex!("010001"));
+                        assert_eq!(k.n().to_vec(), hex!("9AF89C08A8EA84B5363268BAC8A06821194163CBCEEED2D921F5F3BDD192528911C7B1E515DCE8865409E161DBBBD8A4688C56C1E7DFCF639D9623E3175B1BCA86B1D12AE4E4FBF9A5B7D5493F468DA744F4ACFC4D13AD2D83398FFC20D7DF02DF82F3BC05F92EDC41B3C478638A053726586AAAC57E2B66C04F9775716A0C71").to_vec());
+                    }
+                    _ => panic!("wrong key format"),
+                }
+                Ok(())
+            },
+        ).unwrap();
     }
 }
