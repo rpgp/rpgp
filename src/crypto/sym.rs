@@ -71,43 +71,63 @@ impl SymmetricKeyAlgorithm {
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     pub fn decrypt_with_iv(&self, key: &[u8], iv_vec: &[u8], ciphertext: &mut [u8]) -> Result<()> {
-        let rounds = ciphertext.len() / self.block_size();
-        let ciphertext = &mut ciphertext[0..rounds * self.block_size()];
-        match self {
-            SymmetricKeyAlgorithm::Plaintext => {}
-            SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
-            SymmetricKeyAlgorithm::TripleDES => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<TdesEde3, ZeroPadding>::new_varkey(key, iv)?;
-                mode.decrypt_nopad(ciphertext)?;
-            }
-            SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
-            SymmetricKeyAlgorithm::Blowfish => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Blowfish, ZeroPadding>::new_varkey(key, iv)?;
-                mode.decrypt_nopad(ciphertext)?;
-            }
-            SymmetricKeyAlgorithm::AES128 => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
-                mode.decrypt_nopad(ciphertext)?;
-            }
-            SymmetricKeyAlgorithm::AES192 => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
-                mode.decrypt_nopad(ciphertext)?;
-            }
-            SymmetricKeyAlgorithm::AES256 => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
-                mode.decrypt_nopad(ciphertext)?;
-            }
-            SymmetricKeyAlgorithm::Twofish => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Twofish, ZeroPadding>::new_varkey(key, iv)?;
-                mode.decrypt_nopad(ciphertext)?;
+        let cipher_len = ciphertext.len();
+        let rounds = cipher_len / self.block_size();
+        let end = rounds * self.block_size();
+
+        let mut ciphertext_rest = {
+            let mut r = vec![0u8; self.block_size()];
+            &r[0..cipher_len - end].copy_from_slice(&ciphertext[end..]);
+            r
+        };
+
+        {
+            let ciphertext_block = &mut ciphertext[0..end];
+
+            match self {
+                SymmetricKeyAlgorithm::Plaintext => {}
+                SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+                SymmetricKeyAlgorithm::TripleDES => {
+                    let iv = GenericArray::from_slice(&iv_vec);
+                    let mut mode = Cfb::<TdesEde3, ZeroPadding>::new_varkey(key, iv)?;
+                    mode.decrypt_nopad(ciphertext_block)?;
+                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                }
+                SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
+                SymmetricKeyAlgorithm::Blowfish => {
+                    let iv = GenericArray::from_slice(&iv_vec);
+                    let mut mode = Cfb::<Blowfish, ZeroPadding>::new_varkey(key, iv)?;
+                    mode.decrypt_nopad(ciphertext_block)?;
+                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                }
+                SymmetricKeyAlgorithm::AES128 => {
+                    let iv = GenericArray::from_slice(&iv_vec);
+                    let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
+                    mode.decrypt_nopad(ciphertext_block)?;
+                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                }
+                SymmetricKeyAlgorithm::AES192 => {
+                    let iv = GenericArray::from_slice(&iv_vec);
+                    let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
+                    mode.decrypt_nopad(ciphertext_block)?;
+                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                }
+                SymmetricKeyAlgorithm::AES256 => {
+                    let iv = GenericArray::from_slice(&iv_vec);
+                    let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
+                    mode.decrypt_nopad(ciphertext_block)?;
+                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                }
+                SymmetricKeyAlgorithm::Twofish => {
+                    let iv = GenericArray::from_slice(&iv_vec);
+                    let mut mode = Cfb::<Twofish, ZeroPadding>::new_varkey(key, iv)?;
+                    mode.decrypt_nopad(ciphertext_block)?;
+                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                }
             }
         }
+        &ciphertext[end..].copy_from_slice(&ciphertext_rest[0..cipher_len - end]);
+
         Ok(())
     }
 

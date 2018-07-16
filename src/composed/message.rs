@@ -142,8 +142,8 @@ mod tests {
             let message = Message::from_armor_single(&mut cipher_file).unwrap();
             let decrypted = message
                 .decrypt(
-                    || details.passphrase.clone(),
                     || "".to_string(),
+                    || details.passphrase.clone(),
                     &decrypt_key,
                 )
                 .unwrap();
