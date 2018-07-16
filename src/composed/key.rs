@@ -239,7 +239,10 @@ mod tests {
         assert_eq!(pkey.version(), &KeyVersion::V4);
         assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
 
-        assert_eq!(pkey.private_params().checksum, hex::decode("2c46").unwrap());
+        assert_eq!(
+            pkey.private_params().checksum,
+            Some(hex::decode("2c46").unwrap())
+        );
 
         pkey.unlock(
             || "".to_string(),
@@ -553,7 +556,7 @@ mod tests {
         assert_eq!(
             pp.iv,
             Some(
-                hex::decode("22 71 f7 18 af 70 d3 bd 9d 60 c2 ae d9 46 9b 67")
+                hex::decode("2271f718af70d3bd9d60c2aed9469b67")
                     .unwrap()
                     .to_vec()
             )

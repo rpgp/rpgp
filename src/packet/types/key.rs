@@ -94,7 +94,7 @@ pub struct EncryptedPrivateParams {
     /// The raw data as generated when imported.
     pub data: Vec<u8>,
     /// Hash or checksum of the raw data.
-    pub checksum: Vec<u8>,
+    pub checksum: Option<Vec<u8>>,
     /// IV, exist encrypted raw data.
     pub iv: Option<Vec<u8>>,
     /// If raw is encrypted, the encryption algorithm used.
@@ -112,7 +112,7 @@ pub struct EncryptedPrivateParams {
 }
 
 impl EncryptedPrivateParams {
-    pub fn new_plaintext(data: Vec<u8>, checksum: Vec<u8>) -> EncryptedPrivateParams {
+    pub fn new_plaintext(data: Vec<u8>, checksum: Option<Vec<u8>>) -> EncryptedPrivateParams {
         EncryptedPrivateParams {
             data,
             checksum,
@@ -229,7 +229,7 @@ impl PrivateKey {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
-                let (_, (d, p, q, _)) = rsa_private_params(plaintext)?;
+                let (_, (d, p, q, _, _)) = rsa_private_params(plaintext, self.has_checksum())?;
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
                         // create an actual openssl key
@@ -286,6 +286,11 @@ impl PrivateKey {
 
     pub fn private_params(&self) -> &EncryptedPrivateParams {
         &self.private_params
+    }
+
+    /// Checks if we should expect a sha1 checksum in the encrypted part.
+    fn has_checksum(&self) -> bool {
+        self.private_params.string_to_key_id == 254
     }
 }
 
