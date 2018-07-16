@@ -4,6 +4,7 @@ use openssl::rsa::Padding;
 
 use composed::key::PrivateKey;
 use errors::Result;
+use packet::tags::public_key_encrypted_session_key::PKESK;
 use packet::types::key::PrivateKeyRepr;
 use packet::types::Packet;
 
@@ -21,7 +22,7 @@ pub enum Message {
         signature: Option<Packet>,
     },
     Encrypted {
-        esk: Vec<Packet>,
+        esk: Vec<PKESK>,
         edata: Vec<Packet>,
     },
 }
@@ -54,13 +55,14 @@ impl Message {
                     match priv_key {
                         PrivateKeyRepr::RSA(priv_key) => {
                             for packet in esk {
-                                let mut out = vec![];
-                                priv_key.private_decrypt(
-                                    packet.body.as_slice(),
-                                    out.as_mut_slice(),
-                                    Padding::PKCS1,
-                                )?;
-                                println!("res: {:?}", out);
+                                println!("esk packet: {:?}", packet);
+                                // let mut out = vec![0u8; packet.body.len()];
+                                // priv_key.private_decrypt(
+                                //     packet.body.as_slice(),
+                                //     out.as_mut_slice(),
+                                //     Padding::PKCS1,
+                                // )?;
+                                // println!("res: {:?}", out);
                             }
                             Ok(())
                         }

@@ -4,6 +4,7 @@ use std::iter::Iterator;
 use composed::message::{Message, OnePassSignedMessage};
 use composed::Deserializable;
 use errors::Result;
+use packet::tags::public_key_encrypted_session_key;
 use packet::types::{Packet, Tag};
 
 impl Deserializable for Message {
@@ -27,7 +28,7 @@ impl Deserializable for Message {
         let mut cur: Option<usize> = None;
         let mut is_edata = false;
 
-        packets.into_iter().for_each(|packet| {
+        for packet in packets.into_iter() {
             match packet.tag {
                 Tag::Literal => match cur {
                     Some(i) => {
@@ -106,7 +107,9 @@ impl Deserializable for Message {
 
                     if cur.is_none() {
                         stack.push(Message::Encrypted {
-                            esk: vec![packet.to_owned()],
+                            esk: vec![public_key_encrypted_session_key::parse(
+                                packet.body.as_slice(),
+                            )?],
                             edata: Vec::new(),
                         });
                         cur = Some(stack.len() - 1);
@@ -114,7 +117,9 @@ impl Deserializable for Message {
 
                     if let Some(i) = cur {
                         if let Message::Encrypted { ref mut esk, .. } = stack[i] {
-                            esk.push(packet.to_owned());
+                            esk.push(public_key_encrypted_session_key::parse(
+                                packet.body.as_slice(),
+                            )?);
                         } else {
                             panic!("bad esk init");
                         }
@@ -184,7 +189,7 @@ impl Deserializable for Message {
                 },
                 _ => panic!("unexpected packet {:?}", packet.tag),
             }
-        });
+        }
 
         Ok(stack)
     }
