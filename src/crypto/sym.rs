@@ -1,7 +1,10 @@
-use aes_soft::{Aes128, Aes192, Aes256, BlockCipher};
+use aes_soft::block_cipher_trait::generic_array::GenericArray;
+use aes_soft::{Aes128, Aes192, Aes256};
 use block_modes::block_padding::ZeroPadding;
 use block_modes::{BlockMode, BlockModeIv, Cfb};
-use generic_array::GenericArray;
+use blowfish::Blowfish;
+use des::TdesEde3;
+use twofish::Twofish;
 
 use errors::Result;
 
@@ -35,7 +38,7 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::IDEA => 8,
             SymmetricKeyAlgorithm::TripleDES => 8,
             SymmetricKeyAlgorithm::CAST5 => 8,
-            SymmetricKeyAlgorithm::Blowfish => 16,
+            SymmetricKeyAlgorithm::Blowfish => 8,
             SymmetricKeyAlgorithm::AES128 => 16,
             SymmetricKeyAlgorithm::AES192 => 16,
             SymmetricKeyAlgorithm::AES256 => 16,
@@ -62,61 +65,85 @@ impl SymmetricKeyAlgorithm {
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     pub fn decrypt(&self, key: &[u8], ciphertext: &mut [u8]) -> Result<()> {
         let iv_vec = vec![0u8; self.block_size()];
-        let iv = GenericArray::from_slice(&iv_vec);
 
         match self {
-            SymmetricKeyAlgorithm::Plaintext => Ok(()),
+            SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
-            SymmetricKeyAlgorithm::TripleDES => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::TripleDES => {
+                let iv = GenericArray::from_slice(&iv_vec);
+                let mut mode = Cfb::<TdesEde3, ZeroPadding>::new_varkey(key, iv)?;
+                mode.decrypt_nopad(ciphertext)?;
+            }
             SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
-            SymmetricKeyAlgorithm::Blowfish => unimplemented!("Blowfish encrypt"),
+            SymmetricKeyAlgorithm::Blowfish => {
+                let iv = GenericArray::from_slice(&iv_vec);
+                let mut mode = Cfb::<Blowfish, ZeroPadding>::new_varkey(key, iv)?;
+                mode.decrypt_nopad(ciphertext)?;
+            }
             SymmetricKeyAlgorithm::AES128 => {
+                let iv = GenericArray::from_slice(&iv_vec);
                 let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
                 mode.decrypt_nopad(ciphertext)?;
-                Ok(())
             }
             SymmetricKeyAlgorithm::AES192 => {
+                let iv = GenericArray::from_slice(&iv_vec);
                 let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
                 mode.decrypt_nopad(ciphertext)?;
-                Ok(())
             }
             SymmetricKeyAlgorithm::AES256 => {
+                let iv = GenericArray::from_slice(&iv_vec);
                 let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
                 mode.decrypt_nopad(ciphertext)?;
-                Ok(())
             }
-            SymmetricKeyAlgorithm::Twofish => unimplemented!("Twofish encrypt"),
+            SymmetricKeyAlgorithm::Twofish => {
+                let iv = GenericArray::from_slice(&iv_vec);
+                let mut mode = Cfb::<Twofish, ZeroPadding>::new_varkey(key, iv)?;
+                mode.decrypt_nopad(ciphertext)?;
+            }
         }
+        Ok(())
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     pub fn encrypt(&self, key: &[u8], plaintext: &mut [u8]) -> Result<()> {
         let iv_vec = vec![0u8; self.block_size()];
-        let iv = GenericArray::from_slice(&iv_vec);
 
         match self {
-            SymmetricKeyAlgorithm::Plaintext => Ok(()),
+            SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
-            SymmetricKeyAlgorithm::TripleDES => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::TripleDES => {
+                let iv = GenericArray::from_slice(&iv_vec);
+                let mut mode = Cfb::<TdesEde3, ZeroPadding>::new_varkey(key, iv)?;
+                mode.encrypt_nopad(plaintext)?;
+            }
             SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
-            SymmetricKeyAlgorithm::Blowfish => unimplemented!("Blowfish encrypt"),
+            SymmetricKeyAlgorithm::Blowfish => {
+                let iv = GenericArray::from_slice(&iv_vec);
+                let mut mode = Cfb::<Blowfish, ZeroPadding>::new_varkey(key, iv)?;
+                mode.encrypt_nopad(plaintext)?;
+            }
             SymmetricKeyAlgorithm::AES128 => {
+                let iv = GenericArray::from_slice(&iv_vec);
                 let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
                 mode.encrypt_nopad(plaintext)?;
-                Ok(())
             }
             SymmetricKeyAlgorithm::AES192 => {
+                let iv = GenericArray::from_slice(&iv_vec);
                 let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
                 mode.encrypt_nopad(plaintext)?;
-                Ok(())
             }
             SymmetricKeyAlgorithm::AES256 => {
+                let iv = GenericArray::from_slice(&iv_vec);
                 let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
                 mode.encrypt_nopad(plaintext)?;
-                Ok(())
             }
-            SymmetricKeyAlgorithm::Twofish => unimplemented!("Twofish encrypt"),
+            SymmetricKeyAlgorithm::Twofish => {
+                let iv = GenericArray::from_slice(&iv_vec);
+                let mut mode = Cfb::<Twofish, ZeroPadding>::new_varkey(key, iv)?;
+                mode.encrypt_nopad(plaintext)?;
+            }
         }
+        Ok(())
     }
 }
 
@@ -145,4 +172,7 @@ mod tests {
     roundtrip!(roundtrip_aes128, SymmetricKeyAlgorithm::AES128);
     roundtrip!(roundtrip_aes192, SymmetricKeyAlgorithm::AES192);
     roundtrip!(roundtrip_aes256, SymmetricKeyAlgorithm::AES256);
+    roundtrip!(roundtrip_tripledes, SymmetricKeyAlgorithm::TripleDES);
+    roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
+    roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
 }
