@@ -214,10 +214,11 @@ impl composed::key::PrivateKey {
 
 /// Parse the decrpyted private params of an RSA private key.
 named!(pub rsa_private_params<(BigNum, BigNum,BigNum, BigNum)>, do_parse!(
-       d: mpi_big
-    >> p: mpi_big
-    >> q: mpi_big
-    >> u: mpi_big
+       d: dbg_dmp!(mpi_big)
+    >> p: dbg_dmp!(mpi_big)
+    >> q: dbg_dmp!(mpi_big)
+    >> u: dbg_dmp!(mpi_big)
+    >> opt!(take!(20))
     >> (d, p, q, u)
 ));
     
