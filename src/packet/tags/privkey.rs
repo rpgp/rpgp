@@ -68,16 +68,15 @@ named!(enc_priv_params<EncryptedPrivateParams>, do_parse!(
     )
     >> data_len: map!(rest_len, |r| r - checksum_len)
     >>     data: take!(data_len)
-    >> checksum: take!(checksum_len)
+    >> checksum: cond!(checksum_len > 0, take!(checksum_len))
     >> ({
-        println!("data_len: {} checksum_len: {} data: {:?}", data_len, checksum_len, data);
         let (hash, salt, count) = match enc_params.3 {
             Some((hash, salt, count)) => (Some(hash), salt, count),
             None => (None, None, None),
         };
         EncryptedPrivateParams {
             data: data.to_vec(),
-            checksum: checksum.to_vec(),
+            checksum: checksum.map(|c| c.to_vec()),
             iv: enc_params.1.map(|iv| iv.to_vec()),
             encryption_algorithm: enc_params.0,
             string_to_key: enc_params.2,
@@ -223,13 +222,13 @@ impl composed::key::PrivateKey {
 }
 
 /// Parse the decrpyted private params of an RSA private key.
-named!(pub rsa_private_params<(BigNum, BigNum,BigNum, BigNum)>, do_parse!(
+named_args!(pub rsa_private_params(has_checksum: bool) <(BigNum, BigNum,BigNum, BigNum, Option<Vec<u8>>)>, do_parse!(
        d: dbg_dmp!(mpi_big)
     >> p: dbg_dmp!(mpi_big)
     >> q: dbg_dmp!(mpi_big)
     >> u: dbg_dmp!(mpi_big)
-    >> opt!(take!(20))
-    >> (d, p, q, u)
+    >> checksum:  cond!(has_checksum, take!(20))
+    >> (d, p, q, u, checksum.map(|c| c.to_vec()))
 ));
 
 named!(pub ecc_private_params<BigNum>, do_parse!(
