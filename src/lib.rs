@@ -9,7 +9,11 @@ extern crate enum_primitive;
 extern crate chrono;
 #[macro_use]
 extern crate failure;
+extern crate aes_soft;
+extern crate block_modes;
+extern crate blowfish;
 extern crate circular;
+extern crate des;
 extern crate digest;
 extern crate generic_array;
 extern crate itertools;
@@ -17,6 +21,7 @@ extern crate md5;
 extern crate ripemd160;
 extern crate sha1;
 extern crate sha2;
+extern crate twofish;
 
 #[cfg(test)]
 #[macro_use]

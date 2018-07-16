@@ -1,3 +1,10 @@
+use aes_soft::{Aes128, Aes192, Aes256, BlockCipher};
+use block_modes::block_padding::ZeroPadding;
+use block_modes::{BlockMode, BlockModeIv, Cfb};
+use generic_array::GenericArray;
+
+use errors::Result;
+
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Available symmetric key algorithms.
@@ -51,4 +58,91 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Twofish => 32,
         }
     }
+
+    /// Decrypt the data using CFB mode, without padding. Overwrites the input.
+    pub fn decrypt(&self, key: &[u8], ciphertext: &mut [u8]) -> Result<()> {
+        let iv_vec = vec![0u8; self.block_size()];
+        let iv = GenericArray::from_slice(&iv_vec);
+
+        match self {
+            SymmetricKeyAlgorithm::Plaintext => Ok(()),
+            SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::TripleDES => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
+            SymmetricKeyAlgorithm::Blowfish => unimplemented!("Blowfish encrypt"),
+            SymmetricKeyAlgorithm::AES128 => {
+                let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
+                mode.decrypt_nopad(ciphertext)?;
+                Ok(())
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
+                mode.decrypt_nopad(ciphertext)?;
+                Ok(())
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
+                mode.decrypt_nopad(ciphertext)?;
+                Ok(())
+            }
+            SymmetricKeyAlgorithm::Twofish => unimplemented!("Twofish encrypt"),
+        }
+    }
+
+    /// Encrypt the data using CFB mode, without padding. Overwrites the input.
+    pub fn encrypt(&self, key: &[u8], plaintext: &mut [u8]) -> Result<()> {
+        let iv_vec = vec![0u8; self.block_size()];
+        let iv = GenericArray::from_slice(&iv_vec);
+
+        match self {
+            SymmetricKeyAlgorithm::Plaintext => Ok(()),
+            SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::TripleDES => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
+            SymmetricKeyAlgorithm::Blowfish => unimplemented!("Blowfish encrypt"),
+            SymmetricKeyAlgorithm::AES128 => {
+                let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
+                mode.encrypt_nopad(plaintext)?;
+                Ok(())
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
+                mode.encrypt_nopad(plaintext)?;
+                Ok(())
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
+                mode.encrypt_nopad(plaintext)?;
+                Ok(())
+            }
+            SymmetricKeyAlgorithm::Twofish => unimplemented!("Twofish encrypt"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    macro_rules! roundtrip {
+        ($name:ident, $alg:path) => {
+            #[test]
+            fn $name() {
+                let data = vec![2u8; 256];
+                let key = vec![1u8; $alg.key_size()];
+
+                let mut ciphertext = data.clone();
+                $alg.encrypt(&key, &mut ciphertext).unwrap();
+                assert_ne!(data, ciphertext);
+
+                let mut plaintext = ciphertext.clone();
+                $alg.decrypt(&key, &mut plaintext).unwrap();
+                assert_eq!(data, plaintext);
+            }
+        };
+    }
+
+    roundtrip!(roundtrip_aes128, SymmetricKeyAlgorithm::AES128);
+    roundtrip!(roundtrip_aes192, SymmetricKeyAlgorithm::AES192);
+    roundtrip!(roundtrip_aes256, SymmetricKeyAlgorithm::AES256);
 }
