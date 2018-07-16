@@ -1,5 +1,6 @@
 use errors::Result;
 use packet::types;
+use packet::types::key::KeyID;
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 
@@ -42,7 +43,7 @@ impl PublicKey {
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Option<Vec<u8>> {
+    pub fn key_id(&self) -> Option<KeyID> {
         self.primary_key.key_id()
     }
 }
@@ -57,6 +58,16 @@ pub struct PublicSubKey {
 impl PublicSubKey {
     pub fn new(key: types::key::PublicKey, signatures: Vec<types::Signature>) -> PublicSubKey {
         PublicSubKey { key, signatures }
+    }
+
+    /// Returns the fingerprint of the key.
+    pub fn fingerprint(&self) -> Vec<u8> {
+        self.key.fingerprint()
+    }
+
+    /// Returns the Key ID of the key.
+    pub fn key_id(&self) -> Option<KeyID> {
+        self.key.key_id()
     }
 }
 
@@ -96,7 +107,7 @@ impl PrivateKey {
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Option<Vec<u8>> {
+    pub fn key_id(&self) -> Option<KeyID> {
         self.primary_key.key_id()
     }
 
@@ -119,6 +130,24 @@ pub struct PrivateSubKey {
 impl PrivateSubKey {
     pub fn new(key: types::key::PrivateKey, signatures: Vec<types::Signature>) -> PrivateSubKey {
         PrivateSubKey { key, signatures }
+    }
+
+    /// Returns the fingerprint of the key.
+    pub fn fingerprint(&self) -> Vec<u8> {
+        self.key.fingerprint()
+    }
+
+    /// Returns the Key ID of the key.
+    pub fn key_id(&self) -> Option<KeyID> {
+        self.key.key_id()
+    }
+
+    pub fn unlock<'a, F, G>(&self, pw: F, work: G) -> Result<()>
+    where
+        F: FnOnce() -> String,
+        G: FnOnce(&types::key::PrivateKeyRepr) -> Result<()>,
+    {
+        self.key.unlock(pw, work)
     }
 }
 
@@ -285,6 +314,11 @@ mod tests {
         assert_eq!(
             hex::encode(key.primary_key.fingerprint()),
             "56c65c513a0d1b9cff532d784c073ae0c8445c0c"
+        );
+
+        assert_eq!(
+            key.primary_key.key_id().unwrap().to_vec(),
+            hex::decode("4c073ae0c8445c0c").unwrap().to_vec()
         );
 
         let primary_n = BigNum::from_slice(hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap().to_vec().as_slice()).unwrap();

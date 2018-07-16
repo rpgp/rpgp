@@ -19,6 +19,25 @@ use errors::Result;
 use packet::tags::privkey::{ecc_private_params, rsa_private_params};
 use util::bignum_to_mpi;
 
+/// Represents a KeyID.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeyID([u8; 8]);
+
+impl KeyID {
+    pub fn from_slice(input: &[u8]) -> Result<KeyID> {
+        // TODO: return an error
+        assert_eq!(input.len(), 8);
+        let mut r = [0u8; 8];
+        r.copy_from_slice(input);
+
+        Ok(KeyID(r))
+    }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
 /// Represents a single private key packet.
 #[derive(Debug, PartialEq, Eq)]
 pub struct PrivateKey {
@@ -452,14 +471,22 @@ macro_rules! key {
                 }
             }
 
-            pub fn key_id(&self) -> Option<Vec<u8>> {
+            pub fn key_id(&self) -> Option<KeyID> {
                 match self.version() {
                     KeyVersion::V4 => {
                         // Lower 64 bits
-                        Some(self.fingerprint()[16..].to_vec())
+                        let f = self.fingerprint();
+                        let offset = f.len() - 8;
+
+                        Some(KeyID::from_slice(&f[offset..]).unwrap())
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
-                        PublicParams::RSA { n, e: _ } => Some(n.to_vec()[16..].to_vec()),
+                        PublicParams::RSA { n, e: _ } => {
+                            let n = n.to_vec();
+                            let offset = n.len() - 8;
+
+                            Some(KeyID::from_slice(&n[offset..]).unwrap())
+                        }
                         _ => None,
                     },
                 }

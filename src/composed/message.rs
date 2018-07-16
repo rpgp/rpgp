@@ -1,9 +1,13 @@
 use std::boxed::Box;
 
+use byteorder::{LittleEndian, ReadBytesExt};
+use enum_primitive::FromPrimitive;
 use openssl::rsa::Padding;
 
 use composed::key::PrivateKey;
-use errors::Result;
+use composed::shared::Deserializable;
+use crypto::sym::SymmetricKeyAlgorithm;
+use errors::{Error, Result};
 use packet::tags::public_key_encrypted_session_key::PKESK;
 use packet::types::key::PrivateKeyRepr;
 use packet::types::Packet;
@@ -37,7 +41,7 @@ pub struct OnePassSignedMessage {
 impl Message {
     /// Decrypt the message using the given password and key.
     // TODO: allow for multiple keys to be passed in
-    pub fn decrypt<'a, F, G>(&self, msg_pw: F, key_pw: G, key: &PrivateKey) -> Result<Vec<u8>>
+    pub fn decrypt<F, G>(&self, msg_pw: F, key_pw: G, key: &PrivateKey) -> Result<Vec<u8>>
     where
         F: FnOnce() -> String,
         G: FnOnce() -> String,
@@ -50,34 +54,65 @@ impl Message {
                 None => Ok(Vec::new()),
             },
             Message::Encrypted { esk, edata } => {
-                key.unlock(key_pw, |priv_key| {
-                    println!("unlocked key!");
-                    match priv_key {
-                        PrivateKeyRepr::RSA(priv_key) => {
-                            for packet in esk {
-                                println!("esk packet: {:?}", packet);
-                                // let mut out = vec![0u8; packet.body.len()];
-                                // priv_key.private_decrypt(
-                                //     packet.body.as_slice(),
-                                //     out.as_mut_slice(),
-                                //     Padding::PKCS1,
-                                // )?;
-                                // println!("res: {:?}", out);
-                            }
-                            Ok(())
-                        }
-                        PrivateKeyRepr::DSA(_) => unimplemented!("dsa"),
-                        PrivateKeyRepr::ECDSA(priv_key) => {
-                            for packet in esk {
-                                println!("esk: {:?}", packet);
-                            }
-                            println!("{:?}", key.primary_key);
-                            Ok(())
-                        }
-                    }
-                })?;
+                println!("unlocked key!");
 
-                Ok(Vec::new())
+                // search for a packet with a key id that we have and that key
+                let mut packet = None;
+                let mut encoding_key = None;
+                let mut encoding_subkey = None;
+
+                for esk_packet in esk {
+                    println!("esk packet: {:?}", esk_packet);
+                    println!("{:?}", key.key_id());
+                    println!(
+                        "{:?}",
+                        key.subkeys.iter().map(|k| k.key_id()).collect::<Vec<_>>()
+                    );
+
+                    // find the key with the matching key id
+
+                    if key.primary_key.key_id().expect("missing key_id") == esk_packet.id {
+                        encoding_key = Some(&key.primary_key);
+                    } else {
+                        encoding_subkey = key.subkeys.iter().find(|subkey| {
+                            subkey.key_id().expect("missing key_id") == esk_packet.id
+                        });
+                    }
+
+                    if encoding_key.is_some() || encoding_subkey.is_some() {
+                        packet = Some(esk_packet);
+                        break;
+                    }
+                }
+
+                if packet.is_none() {
+                    return Err(Error::MissingKey);
+                }
+
+                let packet = packet.unwrap();
+
+                let mut res: Vec<u8> = Vec::new();
+                if let Some(encoding_key) = encoding_key {
+                    encoding_key.unlock(key_pw, |priv_key| {
+                        res = decrypt(priv_key, &packet.mpis, &edata)?;
+                        Ok(())
+                    })?;
+                } else if let Some(encoding_key) = encoding_subkey {
+                    let mut sym_key = vec![0u8; 8];
+                    encoding_key.unlock(key_pw, |priv_key| {
+                        res = decrypt(priv_key, &packet.mpis, &edata)?;
+                        Ok(())
+                    })?;
+                    println!("symkey {:?}", sym_key);
+                } else {
+                    return Err(Error::MissingKey);
+                }
+
+                let mut res = Vec::new();
+
+                // TODO: decrypt
+
+                Ok(res)
             }
         }
     }
@@ -91,6 +126,41 @@ impl Message {
             } => one_pass_signed_message.is_some(),
             _ => false,
         }
+    }
+}
+
+fn decrypt(priv_key: &PrivateKeyRepr, mpis: &[Vec<u8>], edata: &[Packet]) -> Result<Vec<u8>> {
+    match priv_key {
+        &PrivateKeyRepr::RSA(ref priv_key) => {
+            println!("mpis: {:?}", mpis);
+            let mut m = vec![0u8; mpis[0].len()];
+            priv_key.private_decrypt(mpis[0].as_slice(), &mut m, Padding::PKCS1)?;
+            println!("m: {:?}", m);
+            let alg = SymmetricKeyAlgorithm::from_u8(m[0]).unwrap();
+            println!("alg: {:?}", alg);
+
+            let key = &m[1..alg.key_size() + 1];
+            assert_eq!(key.len(), alg.key_size());
+            let mut checksum = &m[alg.key_size() + 1..alg.key_size() + 3];
+            println!("{:?} {:?}", key, checksum);
+
+            let checksum = checksum.read_u16::<LittleEndian>()? as usize;
+            let expected_checksum = m.iter().map(|v| *v as usize).sum::<usize>() & 0xffff;
+
+            assert_eq!(checksum, expected_checksum, "wrong checksum");
+
+            for packet in edata {
+                let mut res = packet.body.clone();
+                println!("{:?}", res);
+                alg.decrypt(key, &mut res);
+                println!("{:?}", res);
+                let msg = Message::from_bytes(res.as_slice())?;
+                println!("msg: {:?}", msg);
+            }
+            Ok(Vec::new())
+        }
+        &PrivateKeyRepr::DSA(_) => unimplemented!("dsa"),
+        &PrivateKeyRepr::ECDSA(ref priv_key) => Ok(Vec::new()),
     }
 }
 

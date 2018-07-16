@@ -40,6 +40,8 @@ pub enum Error {
     InvalidKeyLength,
     #[fail(display = "block mode error")]
     BlockMode,
+    #[fail(display = "missing key")]
+    MissingKey,
 }
 
 impl Error {
@@ -59,6 +61,7 @@ impl Error {
             Error::MissingPackets => 11,
             Error::InvalidKeyLength => 12,
             Error::BlockMode => 13,
+            Error::MissingKey => 14,
         }
     }
 }
