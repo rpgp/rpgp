@@ -1,10 +1,10 @@
-use openssl::bn::BigNum;
-use nom::be_u8;
 use enum_primitive::FromPrimitive;
+use nom::be_u8;
+use openssl::bn::BigNum;
 
+use errors::Result;
 use packet::types::PublicKeyAlgorithm;
 use util::mpi_big;
-use errors::Result;
 
 #[derive(Debug)]
 pub struct KeyID([u8; 8]);
@@ -28,7 +28,7 @@ pub struct PKESK {
 }
 
 named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<BigNum>>, switch!(
-    value!(alg), 
+    value!(alg),
     &PublicKeyAlgorithm::RSA |
     &PublicKeyAlgorithm::RSASign |
     &PublicKeyAlgorithm::RSAEncrypt => map!(mpi_big, |v| vec![v]) |
@@ -54,8 +54,7 @@ named!(
             // the symmetric key algorithm
             >> alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
             // key algorithm specific data
-            >> mpis: call!(parse_mpis, &alg)
-            >> (PKESK {
+            >> mpis: call!(parse_mpis, &alg) >> (PKESK {
             version,
             id,
             algorithm: alg,
@@ -64,8 +63,7 @@ named!(
     )
 );
 
-
 pub fn parse(body: &[u8]) -> Result<PKESK> {
-    let (_, res) = parse_inner(body)?; 
-   Ok(res)
+    let (_, res) = parse_inner(body)?;
+    Ok(res)
 }

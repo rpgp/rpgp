@@ -4,12 +4,12 @@ use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use std::str;
 use util::mpi;
 
-use packet::types::{
-    self, CompressionAlgorithm, PublicKeyAlgorithm, RevocationCode, Signature,
-    SignatureType, SignatureVersion, Subpacket, SubpacketType, 
-};
-use crypto::sym::SymmetricKeyAlgorithm;
 use crypto::hash::HashAlgorithm;
+use crypto::sym::SymmetricKeyAlgorithm;
+use packet::types::{
+    self, CompressionAlgorithm, PublicKeyAlgorithm, RevocationCode, Signature, SignatureType,
+    SignatureVersion, Subpacket, SubpacketType,
+};
 use util::{clone_into_array, packet_length};
 
 enum_from_primitive!{

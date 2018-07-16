@@ -2,19 +2,19 @@ use enum_primitive::FromPrimitive;
 use nom::{self, be_u16, be_u32, be_u8};
 use openssl::bn::BigNum;
 
-use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
+use composed;
 use crypto::hash::HashAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
-use composed;
-use util::{mpi_big, rest_len, mpi};
+use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
+use util::{mpi, mpi_big, rest_len};
 
 /// Has the given s2k type a salt?
 fn has_salt(typ: &StringToKeyType) -> bool {
     match typ {
         StringToKeyType::Salted | StringToKeyType::IteratedAndSalted => true,
-        _ => false
+        _ => false,
     }
 }
 
@@ -22,7 +22,7 @@ fn has_salt(typ: &StringToKeyType) -> bool {
 fn has_count(typ: &StringToKeyType) -> bool {
     match typ {
         StringToKeyType::IteratedAndSalted => true,
-        _ => false
+        _ => false,
     }
 }
 
@@ -40,9 +40,12 @@ named_args!(s2k_param_parser<'a>(typ: &'a StringToKeyType) <(HashAlgorithm, Opti
     >> (hash_alg, salt, count)
 ));
 
-named!(enc_priv_params<EncryptedPrivateParams>, do_parse!(
-          s2k_typ: be_u8
-    >> enc_params: switch!(value!(s2k_typ), 
+named!(
+    enc_priv_params<EncryptedPrivateParams>,
+    do_parse!(
+        s2k_typ: be_u8
+            >> enc_params:
+                switch!(value!(s2k_typ),
         // 0 is no encryption
         0       => value!((None, None, None, None)) |
         // symmetric key algorithm
@@ -60,33 +63,32 @@ named!(enc_priv_params<EncryptedPrivateParams>, do_parse!(
                 >> (Some(sym_alg), Some(iv), Some(s2k), Some(s2k_params))
         )
     )
-    >> checksum_len: switch!(value!(s2k_typ),
+            >> checksum_len:
+                switch!(value!(s2k_typ),
                      // 20 octect hash at the end, but part of the encrypted part
                      254 => value!(0) |
                      // 2 octet checksum at the end
                      _   => value!(2)
+    ) >> data_len: map!(rest_len, |r| r - checksum_len) >> data: take!(data_len)
+            >> checksum: cond!(checksum_len > 0, take!(checksum_len)) >> ({
+            let (hash, salt, count) = match enc_params.3 {
+                Some((hash, salt, count)) => (Some(hash), salt, count),
+                None => (None, None, None),
+            };
+            EncryptedPrivateParams {
+                data: data.to_vec(),
+                checksum: checksum.map(|c| c.to_vec()),
+                iv: enc_params.1.map(|iv| iv.to_vec()),
+                encryption_algorithm: enc_params.0,
+                string_to_key: enc_params.2,
+                string_to_key_hash: hash,
+                string_to_key_salt: salt,
+                string_to_key_count: count,
+                string_to_key_id: s2k_typ,
+            }
+        })
     )
-    >> data_len: map!(rest_len, |r| r - checksum_len)
-    >>     data: take!(data_len)
-    >> checksum: cond!(checksum_len > 0, take!(checksum_len))
-    >> ({
-        let (hash, salt, count) = match enc_params.3 {
-            Some((hash, salt, count)) => (Some(hash), salt, count),
-            None => (None, None, None),
-        };
-        EncryptedPrivateParams {
-            data: data.to_vec(),
-            checksum: checksum.map(|c| c.to_vec()),
-            iv: enc_params.1.map(|iv| iv.to_vec()),
-            encryption_algorithm: enc_params.0,
-            string_to_key: enc_params.2,
-            string_to_key_hash: hash,
-            string_to_key_salt: salt,
-            string_to_key_count: count,
-            string_to_key_id: s2k_typ,
-        }
-    })
-));
+);
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -167,12 +169,10 @@ named!(dsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
         pp)
 ));
 
-named!(rsa<(PublicParams, EncryptedPrivateParams)>, do_parse!(
-             n: mpi_big
-    >>       e: mpi_big
-    >>      pp: enc_priv_params
-    >> (PublicParams::RSA { n, e, }, pp)
-));
+named!(
+    rsa<(PublicParams, EncryptedPrivateParams)>,
+    do_parse!(n: mpi_big >> e: mpi_big >> pp: enc_priv_params >> (PublicParams::RSA { n, e }, pp))
+);
 
 named_args!(key_from_fields<'a>(typ: &'a PublicKeyAlgorithm) <(PublicParams, EncryptedPrivateParams)>, switch!(
     value!(&typ),
@@ -233,5 +233,5 @@ named_args!(pub rsa_private_params(has_checksum: bool) <(BigNum, BigNum,BigNum, 
 
 named!(pub ecc_private_params<BigNum>, do_parse!(
        key: mpi_big
-    >> (key) 
+    >> (key)
 ));
