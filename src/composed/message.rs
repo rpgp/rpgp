@@ -49,26 +49,29 @@ impl Message {
                 None => Ok(Vec::new()),
             },
             Message::Encrypted { esk, edata } => {
-                key.unlock(key_pw, |priv_key| match priv_key {
-                    PrivateKeyRepr::RSA(priv_key) => {
-                        for packet in esk {
-                            let mut out = vec![];
-                            priv_key.private_decrypt(
-                                packet.body.as_slice(),
-                                out.as_mut_slice(),
-                                Padding::PKCS1,
-                            )?;
-                            println!("res: {:?}", out);
+                key.unlock(key_pw, |priv_key| {
+                    println!("unlocked key!");
+                    match priv_key {
+                        PrivateKeyRepr::RSA(priv_key) => {
+                            for packet in esk {
+                                let mut out = vec![];
+                                priv_key.private_decrypt(
+                                    packet.body.as_slice(),
+                                    out.as_mut_slice(),
+                                    Padding::PKCS1,
+                                )?;
+                                println!("res: {:?}", out);
+                            }
+                            Ok(())
                         }
-                        Ok(())
-                    }
-                    PrivateKeyRepr::DSA(_) => unimplemented!("dsa"),
-                    PrivateKeyRepr::ECDSA(priv_key) => {
-                        for packet in esk {
-                            println!("esk: {:?}", packet);
+                        PrivateKeyRepr::DSA(_) => unimplemented!("dsa"),
+                        PrivateKeyRepr::ECDSA(priv_key) => {
+                            for packet in esk {
+                                println!("esk: {:?}", packet);
+                            }
+                            println!("{:?}", key.primary_key);
+                            Ok(())
                         }
-                        println!("{:?}", key.primary_key);
-                        Ok(())
                     }
                 })?;
 
