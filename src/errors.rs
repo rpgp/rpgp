@@ -1,4 +1,6 @@
+use aes_soft::block_cipher_trait;
 use base64;
+use block_modes;
 use nom;
 use openssl::error::ErrorStack;
 
@@ -34,6 +36,10 @@ pub enum Error {
     IOError(::std::io::Error),
     #[fail(display = "missing packets")]
     MissingPackets,
+    #[fail(display = "invalid key length")]
+    InvalidKeyLength,
+    #[fail(display = "block mode error")]
+    BlockMode,
 }
 
 impl Error {
@@ -51,6 +57,8 @@ impl Error {
             Error::OpenSSLError(_) => 9,
             Error::IOError(_) => 10,
             Error::MissingPackets => 11,
+            Error::InvalidKeyLength => 12,
+            Error::BlockMode => 13,
         }
     }
 }
@@ -91,5 +99,17 @@ impl From<ErrorStack> for Error {
 impl From<::std::io::Error> for Error {
     fn from(err: ::std::io::Error) -> Error {
         Error::IOError(err)
+    }
+}
+
+impl From<block_cipher_trait::InvalidKeyLength> for Error {
+    fn from(err: block_cipher_trait::InvalidKeyLength) -> Error {
+        Error::InvalidKeyLength
+    }
+}
+
+impl From<block_modes::BlockModeError> for Error {
+    fn from(err: block_modes::BlockModeError) -> Error {
+        Error::BlockMode
     }
 }
