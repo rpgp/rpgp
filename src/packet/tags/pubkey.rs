@@ -5,7 +5,7 @@ use composed;
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
 use packet::types::{KeyVersion, PublicKeyAlgorithm};
-use util::mpi_big;
+use util::{mpi, mpi_big};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 named!(
@@ -16,8 +16,10 @@ named!(
     // octets representing a curve OID
     >> curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
-    >>   p: mpi_big
-    >> (PublicParams::ECDSA{ curve, p})
+    >>   p: mpi >> (PublicParams::ECDSA {
+            curve,
+            p: p.to_vec(),
+        })
     )
 );
 

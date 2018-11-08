@@ -1,17 +1,40 @@
-use byteorder::{BigEndian, ByteOrder};
-use openssl::bn::BigNum;
-use openssl::dsa::Dsa;
-use openssl::hash::{Hasher, MessageDigest};
-use openssl::pkey;
-use openssl::rsa::{Rsa, RsaPrivateKeyBuilder};
+use std::fmt;
 
-use std::ops::Deref;
+use byteorder::{BigEndian, ByteOrder};
+use hex;
+use md5::Md5;
+use num_bigint::BigUint;
+use rsa::RSAPrivateKey;
+use sha1::{Digest, Sha1};
 
 use super::ecc_curve::ECCCurve;
-use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, SymmetricKeyAlgorithm};
+use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
+use crypto::hash::HashAlgorithm;
+use crypto::kdf::s2k;
+use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
 use packet::tags::privkey::rsa_private_params;
 use util::bignum_to_mpi;
+
+/// Represents a KeyID.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct KeyID([u8; 8]);
+
+impl KeyID {
+    pub fn from_slice(input: &[u8]) -> Result<KeyID> {
+        // TODO: return an error
+        assert_eq!(input.len(), 8);
+        let mut r = [0u8; 8];
+        r.copy_from_slice(input);
+
+        Ok(KeyID(r))
+    }
+
+    pub fn to_vec(&self) -> Vec<u8> {
+        self.0.to_vec()
+    }
+}
+
 /// Represents a single private key packet.
 #[derive(Debug, PartialEq, Eq)]
 pub struct PrivateKey {
@@ -37,38 +60,48 @@ pub struct PublicKey {
 #[derive(Debug, PartialEq, Eq)]
 pub enum PublicParams {
     RSA {
-        n: BigNum,
-        e: BigNum,
+        n: BigUint,
+        e: BigUint,
     },
     DSA {
-        p: BigNum,
-        q: BigNum,
-        g: BigNum,
-        y: BigNum,
+        p: BigUint,
+        q: BigUint,
+        g: BigUint,
+        y: BigUint,
     },
     ECDSA {
         curve: ECCCurve,
-        p: BigNum,
+        p: Vec<u8>,
     },
     ECDH {
         curve: ECCCurve,
-        p: BigNum,
+        p: BigUint,
         hash: u8,
         alg_sym: u8,
     },
     Elgamal {
-        p: BigNum,
-        g: BigNum,
-        y: BigNum,
+        p: BigUint,
+        g: BigUint,
+        y: BigUint,
     },
 }
 
-/// this is the version of the private key that is actually exposed to users to
+/// The version of the private key that is actually exposed to users to
 /// do crypto operations.
-#[derive(Debug)]
 pub enum PrivateKeyRepr {
-    RSA(Rsa<pkey::Private>),
-    DSA(Dsa<pkey::Private>),
+    RSA(RSAPrivateKey),
+    DSA,
+    ECDSA,
+}
+
+impl fmt::Debug for PrivateKeyRepr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PrivateKeyRepr::RSA(_) => write!(f, "PrivateKeyRepr(RSA)"),
+            PrivateKeyRepr::DSA => write!(f, "PrivateKeyRepr(DSA)"),
+            PrivateKeyRepr::ECDSA => write!(f, "PrivateKeyRepr(ECDSA)"),
+        }
+    }
 }
 
 /// A list of params that are used to represent the values of possibly encrypted key, from imports and exports.
@@ -77,21 +110,25 @@ pub struct EncryptedPrivateParams {
     /// The raw data as generated when imported.
     pub data: Vec<u8>,
     /// Hash or checksum of the raw data.
-    pub checksum: Vec<u8>,
+    pub checksum: Option<Vec<u8>>,
     /// IV, exist encrypted raw data.
     pub iv: Option<Vec<u8>>,
     /// If raw is encrypted, the encryption algorithm used.
     pub encryption_algorithm: Option<SymmetricKeyAlgorithm>,
     /// If raw is encrypted, the string-to-key method used.
     pub string_to_key: Option<StringToKeyType>,
-    /// If raw is encrypted, the params for the string-to-key method.
-    pub string_to_key_params: Option<Vec<u8>>,
+    /// If raw is encrypted, the hash algorithm for the s2k method.
+    pub string_to_key_hash: Option<HashAlgorithm>,
+    /// If raw is encrypted, and a salt is used the salt for the s2k method.
+    pub string_to_key_salt: Option<Vec<u8>>,
+    /// If raw is encrypted, and a count is used the hash algorithm for the s2k method.
+    pub string_to_key_count: Option<usize>,
     /// The identifier for how this data is stored.
     pub string_to_key_id: u8,
 }
 
 impl EncryptedPrivateParams {
-    pub fn new_plaintext(data: Vec<u8>, checksum: Vec<u8>) -> EncryptedPrivateParams {
+    pub fn new_plaintext(data: Vec<u8>, checksum: Option<Vec<u8>>) -> EncryptedPrivateParams {
         EncryptedPrivateParams {
             data,
             checksum,
@@ -99,7 +136,9 @@ impl EncryptedPrivateParams {
             encryption_algorithm: None,
             string_to_key: None,
             string_to_key_id: 0,
-            string_to_key_params: None,
+            string_to_key_hash: None,
+            string_to_key_salt: None,
+            string_to_key_count: None,
         }
     }
 
@@ -146,11 +185,11 @@ impl PrivateKey {
     }
 
     /// Unlock the raw data in the secret parameters.
-    pub fn unlock<'a>(
-        &self,
-        pw: fn() -> &'a str,
-        work: fn(&PrivateKeyRepr) -> Result<()>,
-    ) -> Result<()> {
+    pub fn unlock<'a, F, G>(&self, pw: F, work: G) -> Result<()>
+    where
+        F: FnOnce() -> String,
+        G: FnOnce(&PrivateKeyRepr) -> Result<()>,
+    {
         let decrypted = if self.private_params.is_encrypted() {
             self.from_ciphertext(pw, self.private_params.data.as_slice())
         } else {
@@ -160,33 +199,56 @@ impl PrivateKey {
         work(&decrypted)
     }
 
-    fn from_ciphertext<'a>(
-        &self,
-        _pw: fn() -> &'a str,
-        _ciphertext: &[u8],
-    ) -> Result<PrivateKeyRepr> {
-        match self.algorithm {
-            PublicKeyAlgorithm::RSA
-            | PublicKeyAlgorithm::RSAEncrypt
-            | PublicKeyAlgorithm::RSASign => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::DSA => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::ECDH => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::ECDSA => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::EdDSA => {
-                unimplemented!("implement me");
-            }
-            PublicKeyAlgorithm::Elgamal => {
-                unimplemented!("implement me");
-            }
-            _ => panic!("unsupported algoritm: {:?}", self.algorithm),
+    fn from_ciphertext<'a, F>(&self, pw: F, ciphertext: &[u8]) -> Result<PrivateKeyRepr>
+    where
+        F: FnOnce() -> String,
+    {
+        let sym_alg = self
+            .private_params
+            .encryption_algorithm
+            .as_ref()
+            .expect("missing encryption alg");
+        let typ = self
+            .private_params
+            .string_to_key
+            .as_ref()
+            .expect("missing s2k method");
+        let hash_alg = self
+            .private_params
+            .string_to_key_hash
+            .as_ref()
+            .expect("missing hash algorithm");
+        let key = s2k(
+            pw,
+            sym_alg,
+            typ,
+            hash_alg,
+            self.private_params.string_to_key_salt.as_ref(),
+            self.private_params.string_to_key_count.as_ref(),
+        )?;
+
+        println!(
+            "salt: {}",
+            hex::encode(self.private_params.string_to_key_salt.clone().unwrap())
+        );
+        println!(
+            "code: {:?}",
+            self.private_params.string_to_key_count.as_ref()
+        );
+        println!("hash alg: {:?}", hash_alg);
+        println!("key: {}", hex::encode(&key));
+        println!(
+            "iv: {}",
+            hex::encode(self.private_params.iv.clone().unwrap())
+        );
+        if let Some(ref iv) = self.private_params.iv {
+            println!("ciphertext: {} {:?}", ciphertext.len(), ciphertext);
+            let mut plaintext = ciphertext.to_vec();
+            sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
+            println!("plaintext: {:?}", plaintext);
+            self.from_plaintext(&plaintext)
+        } else {
+            panic!("missing iv");
         }
     }
 
@@ -195,18 +257,12 @@ impl PrivateKey {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
-                let (_, (d, p, q, u)) = rsa_private_params(plaintext)?;
+                let (_, (d, p, q, _, _)) = rsa_private_params(plaintext, self.has_checksum())?;
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
-                        // create an actual openssl key
-                        // Sad but true
-                        let n = BigNum::from_slice(n.to_vec().as_slice())?;
-                        let e = BigNum::from_slice(e.to_vec().as_slice())?;
-                        let private_key = RsaPrivateKeyBuilder::new(n, e, d)?
-                            .set_factors(p, q)?
-                            .build();
-                        println!("got a private key :) {:?}", private_key);
-
+                        let private_key =
+                            RSAPrivateKey::from_components(n.clone(), e.clone(), d, vec![p, q]);
+                        private_key.validate()?;
                         Ok(PrivateKeyRepr::RSA(private_key))
                     }
                     _ => unreachable!("inconsistent key state"),
@@ -219,7 +275,7 @@ impl PrivateKey {
                 unimplemented!("implement me");
             }
             PublicKeyAlgorithm::ECDSA => {
-                unimplemented!("implement me");
+                unimplemented!("implemente me");
             }
             PublicKeyAlgorithm::EdDSA => {
                 unimplemented!("implement me");
@@ -233,6 +289,11 @@ impl PrivateKey {
 
     pub fn private_params(&self) -> &EncryptedPrivateParams {
         &self.private_params
+    }
+
+    /// Checks if we should expect a sha1 checksum in the encrypted part.
+    fn has_checksum(&self) -> bool {
+        self.private_params.string_to_key_id == 254
     }
 }
 
@@ -288,12 +349,12 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
-                                //a one-octet size of the following field
+                                // a one-octet size of the following field
                                 packet.push(curve.oid().len() as u8);
-                                //octets representing a curve OID
+                                // octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
-                                //MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(p));
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                             }
                             PublicParams::ECDH {
                                 curve,
@@ -309,7 +370,7 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(p));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
-                                //a one-octet value 01
+                                                //a one-octet value 01
                                 packet.push(1);
                                 //a one-octet hash function ID used with a KDF
                                 packet.push(*hash);
@@ -326,17 +387,16 @@ macro_rules! key {
                         let mut length_buf: [u8; 2] = [0; 2];
                         BigEndian::write_uint(&mut length_buf, packet.len() as u64, 2);
 
-                        let mut h = Hasher::new(MessageDigest::sha1()).unwrap();
+                        let mut h = Sha1::new();
+                        h.input(&[0x99]);
+                        h.input(&length_buf);
+                        h.input(&packet);
 
-                        h.update(&[0x99]).unwrap();
-                        h.update(&length_buf).unwrap();
-                        h.update(&packet).unwrap();
-
-                        h.finish().unwrap().deref().to_vec()
+                        h.result().to_vec()
                     }
 
                     KeyVersion::V2 | KeyVersion::V3 => {
-                        let mut h = Hasher::new(MessageDigest::md5()).unwrap();
+                        let mut h = Md5::new();
 
                         let mut packet = Vec::new();
 
@@ -352,12 +412,12 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(y));
                             }
                             PublicParams::ECDSA { curve, p } => {
-                                //a one-octet size of the following field
+                                // a one-octet size of the following field
                                 packet.push(curve.oid().len() as u8);
-                                //octets representing a curve OID
+                                // octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
-                                //MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(p));
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                             }
                             PublicParams::ECDH {
                                 curve,
@@ -373,7 +433,7 @@ macro_rules! key {
                                 packet.extend(bignum_to_mpi(p));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
-                                //a one-octet value 01
+                                                //a one-octet value 01
                                 packet.push(1);
                                 //a one-octet hash function ID used with a KDF
                                 packet.push(*hash);
@@ -387,21 +447,29 @@ macro_rules! key {
                             }
                         }
 
-                        h.update(&packet).unwrap();
+                        h.input(&packet);
 
-                        h.finish().unwrap().deref().to_vec()
+                        h.result().to_vec()
                     }
                 }
             }
 
-            pub fn key_id(&self) -> Option<Vec<u8>> {
+            pub fn key_id(&self) -> Option<KeyID> {
                 match self.version() {
                     KeyVersion::V4 => {
                         // Lower 64 bits
-                        Some(self.fingerprint()[16..].to_vec())
+                        let f = self.fingerprint();
+                        let offset = f.len() - 8;
+
+                        Some(KeyID::from_slice(&f[offset..]).unwrap())
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
-                        PublicParams::RSA { n, e: _ } => Some(n.to_vec()[16..].to_vec()),
+                        PublicParams::RSA { n, e: _ } => {
+                            let n = n.to_bytes_be();
+                            let offset = n.len() - 8;
+
+                            Some(KeyID::from_slice(&n[offset..]).unwrap())
+                        }
                         _ => None,
                     },
                 }

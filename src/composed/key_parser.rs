@@ -1,4 +1,5 @@
-use composed::key::{Key, PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
+use super::Deserializable;
+use composed::key::{PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
 use errors::{Error, Result};
 use itertools::Itertools;
 use nom::Err::Incomplete;
@@ -17,7 +18,9 @@ fn take_sigs(packets: &[&Packet]) -> Result<(usize, Vec<Signature>)> {
         .take_while(|packet| packet.tag == Tag::Signature)
         .map(|packet| {
             processed += 1;
-            tags::sig::parser(packet.body.as_slice()).map(|(_, sig)| sig).map_err(|err| err.into())
+            tags::sig::parser(packet.body.as_slice())
+                .map(|(_, sig)| sig)
+                .map_err(|err| err.into())
         })
         // TODO: better error handling
         .filter(|sig| sig.is_ok())
@@ -30,10 +33,12 @@ fn take_sigs(packets: &[&Packet]) -> Result<(usize, Vec<Signature>)> {
 /// public and private.
 macro_rules! key_parser {
     ( $key_type:ty, $subkey_type:ty, $key_tag:expr, $subkey_tag:expr, $inner_key_type:ty ) => {
-        impl Key for $key_type {
+        impl Deserializable for $key_type {
             /// Parse a transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-            fn from_packets<'a>(packets: impl IntoIterator<Item = &'a Packet>) -> Result<Vec<$key_type>> {
+            fn from_packets<'a>(
+                packets: impl IntoIterator<Item = &'a Packet>,
+            ) -> Result<Vec<$key_type>> {
                 // This counter tracks which top level key we are in.
                 let mut ctr = 0;
 
@@ -48,7 +53,7 @@ macro_rules! key_parser {
                     })
                     .into_iter()
                     .map(|(_, packets)| Self::from_packets_single(&packets.collect::<Vec<_>>()))
-                // TODO: better error handling
+                    // TODO: better error handling
                     .filter(|v| v.is_ok())
                     .collect()
             }
