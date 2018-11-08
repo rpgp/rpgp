@@ -1,7 +1,6 @@
 use std::boxed::Box;
-use std::iter::Iterator;
 
-use composed::message::{Message, OnePassSignedMessage};
+use composed::message::{Message, OnePassSignature};
 use composed::Deserializable;
 use errors::Result;
 use packet::tags::public_key_encrypted_session_key;
@@ -39,33 +38,14 @@ impl Deserializable for Message {
             match packet.tag {
                 Tag::Literal => match cur {
                     Some(i) => {
-                        if stack[i].is_one_pass_signed() {
-                            // setting the message packet if we are currently parsing a one time pass sigend message
-                            match stack[i] {
-                                Message::Signed {
-                                    ref mut one_pass_signed_message,
-                                    ..
-                                } => {
-                                    if let Some(ref mut opsm) = one_pass_signed_message {
-                                        opsm.message =
-                                            Some(Box::new(Message::Literal(packet.to_owned())));
-                                    } else {
-                                        panic!("failed one_pass_signed_message setup");
-                                    }
-                                }
-                                _ => panic!("unexpected packet"),
+                        // setting the message packet if we are currently parsing a sigend message
+                        match stack[i] {
+                            Message::Signed {
+                                ref mut message, ..
+                            } => {
+                                *message = Some(Box::new(Message::Literal(packet.to_owned())));
                             }
-                        } else {
-                            // setting the message on a regular signed message
-                            match stack[i] {
-                                Message::Signed {
-                                    ref mut message, ..
-                                } => {
-                                    *message = Some(Box::new(Message::Literal(packet.to_owned())));
-                                    cur = None;
-                                }
-                                _ => panic!("unexpected packet"),
-                            }
+                            _ => panic!("unexpected literal"),
                         }
                     }
                     None => {
@@ -75,36 +55,18 @@ impl Deserializable for Message {
                 },
                 Tag::CompressedData => match cur {
                     Some(i) => {
-                        if stack[i].is_one_pass_signed() {
-                            // setting the message packet if we are currently parsing a one time pass sigend message
-                            match stack[i] {
-                                Message::Signed {
-                                    ref mut one_pass_signed_message,
-                                    ..
-                                } => {
-                                    if let Some(ref mut opsm) = one_pass_signed_message {
-                                        opsm.message =
-                                            Some(Box::new(Message::Literal(packet.to_owned())));
-                                    } else {
-                                        panic!("failed one_pass_signed_message setup");
-                                    }
-                                }
-                                _ => panic!("unexpected packet"),
+                        // setting the message packet if we are currently parsing a signed message
+                        match stack[i] {
+                            Message::Signed {
+                                ref mut message, ..
+                            } => {
+                                *message = Some(Box::new(Message::Literal(packet.to_owned())));
                             }
-                        } else {
-                            match stack[i] {
-                                Message::Signed {
-                                    ref mut message, ..
-                                } => {
-                                    *message =
-                                        Some(Box::new(Message::Compressed(packet.to_owned())));
-                                    cur = None;
-                                }
-                                _ => panic!("unexpected packet"),
-                            }
+                            _ => panic!("unexpected packet"),
                         }
                     }
                     None => {
+                        // just a regular compressed mesage
                         stack.push(Message::Compressed(packet.to_owned()));
                     }
                 },
@@ -116,7 +78,6 @@ impl Deserializable for Message {
                     }
 
                     if cur.is_none() {
-                        println!("DATA={}", hex::encode(packet.body.as_slice()));
                         stack.push(Message::Encrypted {
                             esk: vec![public_key_encrypted_session_key::parse(
                                 packet.body.as_slice(),
@@ -141,11 +102,6 @@ impl Deserializable for Message {
                 //          Symmetrically Encrypted Integrity Protected Data Packet
                 Tag::SymetricEncryptedData | Tag::SymEncryptedProtectedData => {
                     is_edata = true;
-                    println!(
-                        "taaag {:?} {:?}",
-                        packet.tag == Tag::SymEncryptedProtectedData,
-                        packet.tag
-                    );
                     if cur.is_none() {
                         stack.push(Message::Encrypted {
                             esk: Vec::new(),
@@ -156,64 +112,93 @@ impl Deserializable for Message {
                     }
 
                     if let Some(i) = cur {
-                        if let Message::Encrypted {
-                            ref mut edata,
-                            ref mut protected,
-                            ..
-                        } = stack[i]
-                        {
-                            edata.push(packet.to_owned());
-                            *protected = packet.tag == Tag::SymEncryptedProtectedData;
-                        } else {
-                            panic!("bad edata init");
-                        }
+                        let mut el = stack.pop().unwrap();
+                        stack.push(update_message(el, packet));
                     }
                 }
                 Tag::Signature => match cur {
-                    Some(i) => {
-                        if stack[i].is_one_pass_signed() {
-                            match stack[i] {
-                                Message::Signed {
-                                    ref mut signature, ..
-                                } => {
-                                    *signature = Some(packet.to_owned());
-                                }
-                                _ => panic!("unexpected message"),
-                            }
+                    Some(i) => match stack[i] {
+                        Message::Signed {
+                            ref mut signature, ..
+                        } => {
+                            *signature = Some(packet.to_owned());
                             cur = None;
-                        } else {
-                            panic!("unexpected signature");
                         }
-                    }
+                        _ => panic!("unexpected signature"),
+                    },
                     None => {
                         stack.push(Message::Signed {
                             message: None,
-                            one_pass_signed_message: None,
+                            one_pass_signature: None,
                             signature: Some(packet.to_owned()),
                         });
-                        cur = Some(stack.len() - 1);
                     }
                 },
-                Tag::OnePassSignature => match cur {
-                    None => panic!("no standalone one pass signatures allowed"),
-                    Some(i) => match stack[i] {
-                        Message::Signed {
-                            ref mut one_pass_signed_message,
-                            ..
-                        } => {
-                            *one_pass_signed_message = Some(OnePassSignedMessage {
-                                one_pass_signature: packet.to_owned(),
-                                message: None,
-                                signature: None,
-                            });
-                        }
-                        _ => panic!("invalid format"),
-                    },
-                },
+                Tag::OnePassSignature => {
+                    stack.push(Message::Signed {
+                        message: None,
+                        one_pass_signature: Some(OnePassSignature(packet.to_owned())),
+                        signature: None,
+                    });
+                    cur = Some(stack.len() - 1);
+                }
                 _ => panic!("unexpected packet {:?}", packet.tag),
             }
         }
 
         Ok(stack)
+    }
+}
+
+fn update_message(mut el: Message, packet: &Packet) -> Message {
+    match el {
+        Message::Encrypted { .. } => update_encrypted(el, packet),
+        Message::Signed { .. } => update_signed(el, packet),
+        _ => panic!("bad edata init"),
+    }
+}
+fn update_encrypted(mut el: Message, packet: &Packet) -> Message {
+    if let Message::Encrypted {
+        ref mut edata,
+        ref mut protected,
+        ..
+    } = el
+    {
+        edata.push(packet.to_owned());
+        *protected = packet.tag == Tag::SymEncryptedProtectedData;
+    }
+
+    el
+}
+
+fn update_signed(mut el: Message, packet: &Packet) -> Message {
+    if let Message::Signed {
+        message,
+        signature,
+        one_pass_signature,
+    } = el
+    {
+        let new_message = match message {
+            Some(msg) => {
+                if let Message::Encrypted { .. } = *msg {
+                    Some(Box::new(update_encrypted((*msg).clone(), packet)))
+                } else {
+                    panic!("bad edata init in signed message");
+                }
+            }
+            None => Some(Box::new(Message::Encrypted {
+                esk: Vec::new(),
+                edata: vec![packet.to_owned()],
+                protected: packet.tag == Tag::SymEncryptedProtectedData,
+            })),
+        };
+
+        Message::Signed {
+            message: new_message,
+            signature,
+            one_pass_signature,
+        }
+    } else {
+        unreachable!()
     }
 }
