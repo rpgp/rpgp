@@ -1,5 +1,6 @@
 use aes::{Aes128, Aes192, Aes256};
 use blowfish::Blowfish;
+use cast5::Cast5;
 use cfb_mode::Cfb;
 use des::TdesEde3;
 use twofish::Twofish;
@@ -165,7 +166,15 @@ impl SymmetricKeyAlgorithm {
                         resync
                     );
                 }
-                SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
+                SymmetricKeyAlgorithm::CAST5 => decrypt!(
+                    Cast5,
+                    key,
+                    &iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
                 SymmetricKeyAlgorithm::Blowfish => decrypt!(
                     Blowfish,
                     key,
@@ -233,7 +242,7 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::TripleDES => {
                 decrypt_regular!(TdesEde3, key, &iv_vec, ciphertext, bs);
             }
-            SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
+            SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, &iv_vec, ciphertext, bs),
             SymmetricKeyAlgorithm::Blowfish => {
                 decrypt_regular!(Blowfish, key, &iv_vec, ciphertext, bs)
             }
@@ -264,7 +273,7 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::TripleDES => {
                 encrypt_regular!(TdesEde3, key, &iv_vec, plaintext, bs);
             }
-            SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
+            SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, &iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::Blowfish => {
                 encrypt_regular!(Blowfish, key, &iv_vec, plaintext, bs)
             }
@@ -308,4 +317,5 @@ mod tests {
     roundtrip!(roundtrip_tripledes, SymmetricKeyAlgorithm::TripleDES);
     roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
     roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
+    roundtrip!(roundtrip_cast5, SymmetricKeyAlgorithm::CAST5);
 }
