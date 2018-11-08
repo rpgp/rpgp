@@ -1,12 +1,17 @@
 sudo: false
 language: rust
-rust: stable
+rust:
+  - stable
+  - beta
+  - nightly
+
 os:
   - osx
   - linux
+
 cache:
   cargo: true
 
 script:
-  - cargo build
-  - cargo test
+  - cargo build --release
+  - cargo test --all-features

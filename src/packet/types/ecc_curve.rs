@@ -1,5 +1,3 @@
-use openssl::nid::Nid;
-
 use super::packet::PublicKeyAlgorithm;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,21 +26,6 @@ impl ECCCurve {
             ECCCurve::BrainpoolP384r1 => "brainpoolP384r1",
             ECCCurve::BrainpoolP512r1 => "brainpool5126r1",
             ECCCurve::Secp256k1 => "secp256k1",
-        }
-    }
-
-    /// Returns the matching OpenSSL nid for the curve.
-    pub fn to_nid(&self) -> Option<Nid> {
-        match *self {
-            ECCCurve::Curve25519 => None,
-            ECCCurve::Ed25519 => None,
-            ECCCurve::P256 => Some(Nid::X9_62_PRIME256V1),
-            ECCCurve::P384 => None,
-            ECCCurve::P521 => None,
-            ECCCurve::BrainpoolP256r1 => None,
-            ECCCurve::BrainpoolP384r1 => None,
-            ECCCurve::BrainpoolP512r1 => None,
-            ECCCurve::Secp256k1 => Some(Nid::SECP256K1),
         }
     }
 

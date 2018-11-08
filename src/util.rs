@@ -1,10 +1,10 @@
 use byteorder::{BigEndian, ByteOrder};
 use nom::types::CompleteStr;
 use nom::{
-    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, AsChar, Err, IResult, InputIter,
-    InputLength, InputTake, Slice,
+    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, Err, IResult, InputIter, InputLength,
+    InputTake, Slice,
 };
-use openssl::bn::BigNum;
+use num_bigint::BigUint;
 use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
 
@@ -30,24 +30,18 @@ pub fn u32_as_usize(a: u32) -> usize {
 }
 
 #[inline]
-pub fn is_base64_token(c: char) -> bool {
-    is_alphanumeric(c as u8) || c == '/' || c == '+'
+pub fn is_base64_token(c: u8) -> bool {
+    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'\n' || c == b'\r'
 }
 
 /// Recognizes one or more body tokens
-pub fn base64_token<T>(input: T) -> nom::IResult<T, T>
-where
-    T: nom::Slice<Range<usize>> + nom::Slice<RangeFrom<usize>> + nom::Slice<RangeTo<usize>>,
-    T: nom::InputIter + nom::InputLength,
-    <T as nom::InputIter>::Item: AsChar,
-{
+pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let input_length = input.input_len();
     if input_length == 0 {
         return Err(Err::Incomplete(nom::Needed::Unknown));
     }
 
     for (idx, item) in input.iter_indices() {
-        let item = item.as_char();
         if !is_base64_token(item) {
             if idx == 0 {
                 return Err(Err::Error(error_position!(
@@ -98,18 +92,28 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     }
 }
 
-// Convert a BigNum to an MPI for use in packets
-pub fn bignum_to_mpi(n: &BigNum) -> Vec<u8> {
-    let number = n.to_vec();
+// Convert a BigUint to an MPI for use in packets
+pub fn bignum_to_mpi(n: &BigUint) -> Vec<u8> {
+    let number = n.to_bytes_be();
 
     let mut length_buf: [u8; 2] = [0; 2];
-    BigEndian::write_uint(&mut length_buf, n.num_bits() as u64, 2);
+    BigEndian::write_uint(&mut length_buf, n.bits() as u64, 2);
 
     [length_buf.to_vec(), number].concat()
 }
 
-/// Parse an mpi and convert it to a `BigNum`.
-named!(pub mpi_big<BigNum>, map_res!(mpi, BigNum::from_slice));
+/// Parse an mpi and convert it to a `BigUint`.
+named!(pub mpi_big<BigUint>, map!(mpi, BigUint::from_bytes_be));
+
+/// Parse an mpi and convert it to a `u32`.
+named!(pub mpi_u32<u32>, map!(mpi, |val| {
+    assert!(val.len() < 5, "too large for a u32 {:?}", val);
+    // ensure we have enough bytes to decode a u32
+    let mut v = vec![0u8; 4];
+    v[4-val.len()..].copy_from_slice(val);
+
+    BigEndian::read_u32(&v)
+}));
 
 /// Convert a slice into an array
 pub fn clone_into_array<A, T>(slice: &[T]) -> A
@@ -171,7 +175,7 @@ mod tests {
                 0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, 0x07
             ][..])
-                .unwrap(),
+            .unwrap(),
             (
                 &b""[..],
                 &[
