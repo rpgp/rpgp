@@ -111,7 +111,7 @@ impl Deserializable for Message {
                         cur = Some(stack.len() - 1);
                     }
 
-                    if let Some(i) = cur {
+                    if let Some(_) = cur {
                         let mut el = stack.pop().unwrap();
                         stack.push(update_message(el, packet));
                     }
@@ -150,7 +150,7 @@ impl Deserializable for Message {
     }
 }
 
-fn update_message(mut el: Message, packet: &Packet) -> Message {
+fn update_message(el: Message, packet: &Packet) -> Message {
     match el {
         Message::Encrypted { .. } => update_encrypted(el, packet),
         Message::Signed { .. } => update_signed(el, packet),
@@ -171,7 +171,7 @@ fn update_encrypted(mut el: Message, packet: &Packet) -> Message {
     el
 }
 
-fn update_signed(mut el: Message, packet: &Packet) -> Message {
+fn update_signed(el: Message, packet: &Packet) -> Message {
     if let Message::Signed {
         message,
         signature,

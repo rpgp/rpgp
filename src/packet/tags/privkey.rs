@@ -1,6 +1,6 @@
 use enum_primitive::FromPrimitive;
 use nom::{self, be_u16, be_u32, be_u8};
-use openssl::bn::BigNum;
+use num_bigint::BigUint;
 
 use composed;
 use crypto::hash::HashAlgorithm;
@@ -223,7 +223,7 @@ impl composed::key::PrivateKey {
 }
 
 /// Parse the decrpyted private params of an RSA private key.
-named_args!(pub rsa_private_params(has_checksum: bool) <(BigNum, BigNum,BigNum, BigNum, Option<Vec<u8>>)>, do_parse!(
+named_args!(pub rsa_private_params(has_checksum: bool) <(BigUint, BigUint, BigUint, BigUint, Option<Vec<u8>>)>, do_parse!(
        d: dbg_dmp!(mpi_big)
     >> p: dbg_dmp!(mpi_big)
     >> q: dbg_dmp!(mpi_big)
@@ -232,7 +232,7 @@ named_args!(pub rsa_private_params(has_checksum: bool) <(BigNum, BigNum,BigNum, 
     >> (d, p, q, u, checksum.map(|c| c.to_vec()))
 ));
 
-named!(pub ecc_private_params<BigNum>, do_parse!(
+named!(pub ecc_private_params<BigUint>, do_parse!(
        key: mpi_big
     >> (key)
 ));

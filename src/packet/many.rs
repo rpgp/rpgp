@@ -18,6 +18,8 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
     let mut packets = Vec::new();
     let mut needed: Option<Needed> = None;
 
+    let mut second_round = false;
+
     loop {
         // read some data
         let sz = input.read(b.space()).unwrap();
@@ -31,10 +33,11 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
 
         if needed.is_some() {
             if sz == 0 {
-                // Cancel if we didn't receive enough bytes from our source.
-                return Err(Error::Incomplete);
-            } else {
-                needed = None;
+                if second_round {
+                    // Cancel if we didn't receive enough bytes from our source, the second time around.
+                    return Err(Error::Incomplete);
+                }
+                second_round = true;
             }
         }
 

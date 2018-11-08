@@ -3,7 +3,7 @@ use std::boxed::Box;
 use byteorder::{BigEndian, ReadBytesExt};
 use enum_primitive::FromPrimitive;
 use flate2::read::DeflateDecoder;
-use openssl::rsa::Padding;
+use rsa::padding::PaddingScheme;
 
 use composed::key::PrivateKey;
 use composed::shared::Deserializable;
@@ -176,15 +176,14 @@ fn decrypt(
             // rsa consist of exactly one mpi
             let mpi = &mpis[0];
             println!("RSA m^e mod n: {}", hex::encode(mpi));
-            let mut m = vec![0u8; mpi.len()];
-            priv_key.private_decrypt(mpi, &mut m, Padding::PKCS1)?;
+            let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi)?;
             println!("m: {}", hex::encode(&m));
             let alg = SymmetricKeyAlgorithm::from_u8(m[0]).unwrap();
             println!("alg: {:?}", alg);
             (alg, m)
         }
-        PrivateKeyRepr::DSA(_) => unimplemented!("DSA"),
-        PrivateKeyRepr::ECDSA(_) => unimplemented!("ECDSA"),
+        PrivateKeyRepr::DSA => unimplemented!("DSA"),
+        PrivateKeyRepr::ECDSA => unimplemented!("ECDSA"),
     };
 
     let key_size = alg.key_size();

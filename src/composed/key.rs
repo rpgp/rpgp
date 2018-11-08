@@ -153,15 +153,20 @@ impl PrivateSubKey {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use chrono::{DateTime, Utc};
-    use hex;
-    use openssl::bn::BigNum;
-    use openssl::rsa::Padding;
-    use serde_json;
     use std::fs::File;
     use std::io::Read;
     use std::path::{Path, PathBuf};
+
+    use super::*;
+
+    use chrono::{DateTime, Utc};
+    use hex;
+    use num_bigint::BigUint;
+    use num_traits::cast::ToPrimitive;
+    use rand::thread_rng;
+    use rsa::padding::PaddingScheme;
+    use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
+    use serde_json;
 
     use composed::Deserializable;
     use crypto::hash::HashAlgorithm;
@@ -278,27 +283,25 @@ mod tests {
             |unlocked_key| {
                 match unlocked_key {
                     types::key::PrivateKeyRepr::RSA(k) => {
-                        assert_eq!(k.d().num_bits(), 2044);
-                        assert_eq!(k.p().unwrap().num_bits(), 1024);
-                        assert_eq!(k.q().unwrap().num_bits(), 1024);
+                        assert_eq!(k.d().bits(), 2044);
+                        assert_eq!(k.primes()[0].bits(), 1024);
+                        assert_eq!(k.primes()[1].bits(), 1024);
 
                         // test basic encrypt decrypt
-                        let plaintext = vec![2u8; 256];
-                        let mut ciphertext = vec![0u8; 256];
+                        let plaintext = vec![2u8; 128];
+                        let mut rng = thread_rng();
 
-                        k.public_encrypt(
-                            plaintext.as_slice(),
-                            ciphertext.as_mut_slice(),
-                            Padding::NONE,
-                        )
-                        .unwrap();
-                        let mut new_plaintext = vec![0u8; 256];
-                        k.private_decrypt(
-                            ciphertext.as_slice(),
-                            new_plaintext.as_mut_slice(),
-                            Padding::NONE,
-                        )
-                        .unwrap();
+                        let ciphertext = {
+                            // TODO: fix this in rust-rsa
+                            let k: RSAPrivateKey = k.clone();
+                            let pk: RSAPublicKey = k.into();
+                            pk.encrypt(&mut rng, PaddingScheme::PKCS1v15, plaintext.as_slice())
+                                .unwrap()
+                        };
+
+                        let new_plaintext = k
+                            .decrypt(PaddingScheme::PKCS1v15, ciphertext.as_slice())
+                            .unwrap();
                         assert_eq!(plaintext, new_plaintext);
                     }
                     _ => panic!("unexpected params type {:?}", unlocked_key),
@@ -324,7 +327,7 @@ mod tests {
             hex::decode("4c073ae0c8445c0c").unwrap().to_vec()
         );
 
-        let primary_n = BigNum::from_slice(hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap().to_vec().as_slice()).unwrap();
+        let primary_n = BigUint::from_bytes_be(hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap().to_vec().as_slice());
 
         let pk = key.primary_key;
         assert_eq!(pk.version(), &KeyVersion::V4);
@@ -333,10 +336,7 @@ mod tests {
         match pk.public_params() {
             key::PublicParams::RSA { n, e } => {
                 assert_eq!(n, &primary_n);
-                assert_eq!(
-                    e,
-                    &BigNum::from_slice(vec![1u8, 0u8, 1u8].as_slice()).unwrap()
-                );
+                assert_eq!(e.to_u64().unwrap(), 0x010001);
             }
             _ => panic!("wrong public params: {:?}", pk.public_params()),
         }
@@ -619,11 +619,11 @@ mod tests {
                 println!("{:?}", k);
                 match k {
                     types::key::PrivateKeyRepr::RSA(k) => {
-                        assert_eq!(k.e().to_vec(), hex::decode("010001").unwrap().to_vec());
-                        assert_eq!(k.n().to_vec(), hex::decode("9AF89C08A8EA84B5363268BAC8A06821194163CBCEEED2D921F5F3BDD192528911C7B1E515DCE8865409E161DBBBD8A4688C56C1E7DFCF639D9623E3175B1BCA86B1D12AE4E4FBF9A5B7D5493F468DA744F4ACFC4D13AD2D83398FFC20D7DF02DF82F3BC05F92EDC41B3C478638A053726586AAAC57E2B66C04F9775716A0C71").unwrap().to_vec());
-                        assert_eq!(k.d().to_vec(), hex::decode("33DE47E3421E1442CE9BFA9FA1ACC68D657594604FA7719CC91817F78D604B0DA38CD206D9D571621C589E3DF19CA2BB0C5F045EAC2C25AEB2BCE0D00E2E29538F8239F8A499EAF872497809E524A9EDA88E7ECEE78DF722E33DD62C9E204FE0F90DCF6F4247D1F7C8CE3BB3F0A4BAB23CFD95D41BC8A39C22C99D5BC38BC51D").unwrap().to_vec());
-                        assert_eq!(k.p().unwrap().to_vec(), hex::decode("C62B8CD033331BFF171188C483B5B87E41A84415A004A83A4109014A671A5A3DA0A467CDB786F0BB75354245DA0DFFF53B6E25A44E28CBFF8CC1AC58A968AF57").unwrap().to_vec());
-                        assert_eq!(k.q().unwrap().to_vec(), hex::decode("C831D89F49E642383C115413B2CB5F6EC09012B50C1E8596877E8F7B88C82C8F14FC354C21B6032BEF78B3C5EC92E434BEB2436B12C7C9FEDEFD866678DBED77").unwrap().to_vec());
+                        assert_eq!(k.e().to_bytes_be(), hex::decode("010001").unwrap().to_vec());
+                        assert_eq!(k.n().to_bytes_be(), hex::decode("9AF89C08A8EA84B5363268BAC8A06821194163CBCEEED2D921F5F3BDD192528911C7B1E515DCE8865409E161DBBBD8A4688C56C1E7DFCF639D9623E3175B1BCA86B1D12AE4E4FBF9A5B7D5493F468DA744F4ACFC4D13AD2D83398FFC20D7DF02DF82F3BC05F92EDC41B3C478638A053726586AAAC57E2B66C04F9775716A0C71").unwrap().to_vec());
+                        assert_eq!(k.d().to_bytes_be(), hex::decode("33DE47E3421E1442CE9BFA9FA1ACC68D657594604FA7719CC91817F78D604B0DA38CD206D9D571621C589E3DF19CA2BB0C5F045EAC2C25AEB2BCE0D00E2E29538F8239F8A499EAF872497809E524A9EDA88E7ECEE78DF722E33DD62C9E204FE0F90DCF6F4247D1F7C8CE3BB3F0A4BAB23CFD95D41BC8A39C22C99D5BC38BC51D").unwrap().to_vec());
+                        assert_eq!(k.primes()[0].to_bytes_be(), hex::decode("C62B8CD033331BFF171188C483B5B87E41A84415A004A83A4109014A671A5A3DA0A467CDB786F0BB75354245DA0DFFF53B6E25A44E28CBFF8CC1AC58A968AF57").unwrap().to_vec());
+                       assert_eq!(k.primes()[1].to_bytes_be(), hex::decode("C831D89F49E642383C115413B2CB5F6EC09012B50C1E8596877E8F7B88C82C8F14FC354C21B6032BEF78B3C5EC92E434BEB2436B12C7C9FEDEFD866678DBED77").unwrap().to_vec());
                     }
                     _ => panic!("wrong key format"),
                 }

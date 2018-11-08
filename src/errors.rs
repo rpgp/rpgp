@@ -3,7 +3,7 @@ use base64;
 use block_modes;
 use cfb_mode;
 use nom;
-use openssl::error::ErrorStack;
+use rsa;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -31,8 +31,8 @@ pub enum Error {
     NoKey,
     #[fail(display = "more than one key found")]
     MultipleKeys,
-    #[fail(display = "openssl error: {:?}", _0)]
-    OpenSSLError(ErrorStack),
+    #[fail(display = "rsa error: {:?}", _0)]
+    RSAError(rsa::errors::Error),
     #[fail(display = "io error: {:?}", _0)]
     IOError(::std::io::Error),
     #[fail(display = "missing packets")]
@@ -59,7 +59,7 @@ impl Error {
             Error::RequestedSizeTooLarge => 6,
             Error::NoKey => 7,
             Error::MultipleKeys => 8,
-            Error::OpenSSLError(_) => 9,
+            Error::RSAError(_) => 9,
             Error::IOError(_) => 10,
             Error::MissingPackets => 11,
             Error::InvalidKeyLength => 12,
@@ -97,9 +97,9 @@ impl From<base64::DecodeError> for Error {
     }
 }
 
-impl From<ErrorStack> for Error {
-    fn from(err: ErrorStack) -> Error {
-        Error::OpenSSLError(err)
+impl From<rsa::errors::Error> for Error {
+    fn from(err: rsa::errors::Error) -> Error {
+        Error::RSAError(err)
     }
 }
 
@@ -110,19 +110,19 @@ impl From<::std::io::Error> for Error {
 }
 
 impl From<block_cipher_trait::InvalidKeyLength> for Error {
-    fn from(err: block_cipher_trait::InvalidKeyLength) -> Error {
+    fn from(_: block_cipher_trait::InvalidKeyLength) -> Error {
         Error::InvalidKeyLength
     }
 }
 
 impl From<block_modes::BlockModeError> for Error {
-    fn from(err: block_modes::BlockModeError) -> Error {
+    fn from(_: block_modes::BlockModeError) -> Error {
         Error::BlockMode
     }
 }
 
 impl From<cfb_mode::InvalidKeyIvLength> for Error {
-    fn from(err: cfb_mode::InvalidKeyIvLength) -> Error {
+    fn from(_: cfb_mode::InvalidKeyIvLength) -> Error {
         Error::CfbInvalidKeyIvLength
     }
 }

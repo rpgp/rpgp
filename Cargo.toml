@@ -10,7 +10,8 @@ repository = "https://github.com/dignifiedquire/pgp"
 keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy"]
 
 [dependencies]
-openssl = "^0.10"
+rsa = { git = "https://github.com/dignifiedquire/rust-rsa", branch = "master" }
+num-bigint = { git = "https://github.com/dignifiedquire/num-bigint", branch = "master" }
 crc24 = "^0.1"
 base64 = "^0.9"
 byteorder = "^1.2"
@@ -38,6 +39,8 @@ flate2 = { version = "1.0.4", default-features = false, features = ["rust_backen
 version = "^4.0"
 
 [dev-dependencies]
+num-traits = "0.2.6"
+rand = "0.5.5"
 hex-literal = "^0.1"
 serde = "^1.0"
 serde_derive = "^1.0"

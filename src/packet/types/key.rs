@@ -2,14 +2,10 @@ use std::fmt;
 
 use byteorder::{BigEndian, ByteOrder};
 use hex;
-use openssl::bn::{BigNum, BigNumContext};
-use openssl::dsa::Dsa;
-use openssl::ec::{EcGroup, EcKey, EcPoint};
-use openssl::hash::{Hasher, MessageDigest};
-use openssl::pkey;
-use openssl::rsa::{Rsa, RsaPrivateKeyBuilder};
-
-use std::ops::Deref;
+use md5::Md5;
+use num_bigint::BigUint;
+use rsa::RSAPrivateKey;
+use sha1::{Digest, Sha1};
 
 use super::ecc_curve::ECCCurve;
 use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
@@ -17,7 +13,7 @@ use crypto::hash::HashAlgorithm;
 use crypto::kdf::s2k;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use packet::tags::privkey::{ecc_private_params, rsa_private_params};
+use packet::tags::privkey::rsa_private_params;
 use util::bignum_to_mpi;
 
 /// Represents a KeyID.
@@ -64,14 +60,14 @@ pub struct PublicKey {
 #[derive(Debug, PartialEq, Eq)]
 pub enum PublicParams {
     RSA {
-        n: BigNum,
-        e: BigNum,
+        n: BigUint,
+        e: BigUint,
     },
     DSA {
-        p: BigNum,
-        q: BigNum,
-        g: BigNum,
-        y: BigNum,
+        p: BigUint,
+        q: BigUint,
+        g: BigUint,
+        y: BigUint,
     },
     ECDSA {
         curve: ECCCurve,
@@ -79,31 +75,31 @@ pub enum PublicParams {
     },
     ECDH {
         curve: ECCCurve,
-        p: BigNum,
+        p: BigUint,
         hash: u8,
         alg_sym: u8,
     },
     Elgamal {
-        p: BigNum,
-        g: BigNum,
-        y: BigNum,
+        p: BigUint,
+        g: BigUint,
+        y: BigUint,
     },
 }
 
 /// The version of the private key that is actually exposed to users to
 /// do crypto operations.
 pub enum PrivateKeyRepr {
-    RSA(Rsa<pkey::Private>),
-    DSA(Dsa<pkey::Private>),
-    ECDSA(EcKey<pkey::Private>),
+    RSA(RSAPrivateKey),
+    DSA,
+    ECDSA,
 }
 
 impl fmt::Debug for PrivateKeyRepr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PrivateKeyRepr::RSA(_) => write!(f, "PrivateKeyRepr(RSA)"),
-            PrivateKeyRepr::DSA(_) => write!(f, "PrivateKeyRepr(DSA)"),
-            PrivateKeyRepr::ECDSA(_) => write!(f, "PrivateKeyRepr(ECDSA)"),
+            PrivateKeyRepr::DSA => write!(f, "PrivateKeyRepr(DSA)"),
+            PrivateKeyRepr::ECDSA => write!(f, "PrivateKeyRepr(ECDSA)"),
         }
     }
 }
@@ -264,22 +260,9 @@ impl PrivateKey {
                 let (_, (d, p, q, _, _)) = rsa_private_params(plaintext, self.has_checksum())?;
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
-                        // create an actual openssl key
-                        // Sad but true
-                        println!(
-                            "n: {}\ne: {}",
-                            hex::encode(n.to_vec()),
-                            hex::encode(e.to_vec())
-                        );
-
-                        let n = BigNum::from_slice(n.to_vec().as_slice())?;
-                        let e = BigNum::from_slice(e.to_vec().as_slice())?;
-
-                        let private_key = RsaPrivateKeyBuilder::new(n, e, d)?
-                            .set_factors(p, q)?
-                            .build();
-                        println!("got a private key :) {:?}", private_key);
-
+                        let private_key =
+                            RSAPrivateKey::from_components(n.clone(), e.clone(), d, vec![p, q]);
+                        private_key.validate()?;
                         Ok(PrivateKeyRepr::RSA(private_key))
                     }
                     _ => unreachable!("inconsistent key state"),
@@ -292,25 +275,7 @@ impl PrivateKey {
                 unimplemented!("implement me");
             }
             PublicKeyAlgorithm::ECDSA => {
-                let (_, private_key) = ecc_private_params(plaintext)?;
-
-                match self.public_params {
-                    PublicParams::ECDSA { ref curve, ref p } => {
-                        println!("parsed: {:?}", curve);
-                        if let Some(nid) = curve.to_nid() {
-                            let group = EcGroup::from_curve_name(nid)?;
-                            let mut ctx = BigNumContext::new()?;
-                            let pub_point = EcPoint::from_bytes(&group, p, &mut ctx)?;
-                            let key =
-                                EcKey::from_private_components(&group, &private_key, &pub_point)?;
-
-                            Ok(PrivateKeyRepr::ECDSA(key))
-                        } else {
-                            panic!("unsupported curve: {:?}", curve);
-                        }
-                    }
-                    _ => unreachable!("inconsistent key state"),
-                }
+                unimplemented!("implemente me");
             }
             PublicKeyAlgorithm::EdDSA => {
                 unimplemented!("implement me");
@@ -389,7 +354,7 @@ macro_rules! key {
                                 // octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
                                 // MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(&BigNum::from_slice(p).unwrap()));
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                             }
                             PublicParams::ECDH {
                                 curve,
@@ -422,17 +387,16 @@ macro_rules! key {
                         let mut length_buf: [u8; 2] = [0; 2];
                         BigEndian::write_uint(&mut length_buf, packet.len() as u64, 2);
 
-                        let mut h = Hasher::new(MessageDigest::sha1()).unwrap();
+                        let mut h = Sha1::new();
+                        h.input(&[0x99]);
+                        h.input(&length_buf);
+                        h.input(&packet);
 
-                        h.update(&[0x99]).unwrap();
-                        h.update(&length_buf).unwrap();
-                        h.update(&packet).unwrap();
-
-                        h.finish().unwrap().deref().to_vec()
+                        h.result().to_vec()
                     }
 
                     KeyVersion::V2 | KeyVersion::V3 => {
-                        let mut h = Hasher::new(MessageDigest::md5()).unwrap();
+                        let mut h = Md5::new();
 
                         let mut packet = Vec::new();
 
@@ -453,7 +417,7 @@ macro_rules! key {
                                 // octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
                                 // MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(&BigNum::from_slice(p).unwrap()));
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                             }
                             PublicParams::ECDH {
                                 curve,
@@ -483,9 +447,9 @@ macro_rules! key {
                             }
                         }
 
-                        h.update(&packet).unwrap();
+                        h.input(&packet);
 
-                        h.finish().unwrap().deref().to_vec()
+                        h.result().to_vec()
                     }
                 }
             }
@@ -501,7 +465,7 @@ macro_rules! key {
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                         PublicParams::RSA { n, e: _ } => {
-                            let n = n.to_vec();
+                            let n = n.to_bytes_be();
                             let offset = n.len() - 8;
 
                             Some(KeyID::from_slice(&n[offset..]).unwrap())
