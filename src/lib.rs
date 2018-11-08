@@ -12,6 +12,7 @@ extern crate failure;
 extern crate aes;
 extern crate block_modes;
 extern crate blowfish;
+extern crate cast5;
 extern crate cfb_mode;
 extern crate circular;
 extern crate des;

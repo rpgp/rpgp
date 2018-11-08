@@ -340,11 +340,12 @@ mod tests {
         };
     }
 
+    // RSA
     msg_test!(parse_gnupg_msg_v1_001, "gnupg-v1-001");
+    // Elgamal
     // msg_test!(parse_gnupg_msg_v1_002, "gnupg-v1-002");
+    // RSA
     msg_test!(parse_gnupg_msg_v1_003, "gnupg-v1-003");
-
-    // Lots of failures due to missing CAST5 right now
 
     // msg_test!(parse_gnupg_msg_v1_4_11_001, "gnupg-v1-4-11-001");
     // msg_test!(parse_gnupg_msg_v1_4_11_002, "gnupg-v1-4-11-002");

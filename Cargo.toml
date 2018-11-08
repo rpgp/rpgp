@@ -36,6 +36,7 @@ cfb-mode = "^0.1"
 flate2 = { version = "1.0.4", default-features = false, features = ["rust_backend"] }
 num-derive = "0.2.3"
 num-traits = "0.2.6"
+cast5 = { git = "https://github.com/dignifiedquire/block-ciphers", branch = "cast5" }
 
 [dependencies.nom]
 version = "^4.0"
