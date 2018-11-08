@@ -9,9 +9,10 @@ extern crate enum_primitive;
 extern crate chrono;
 #[macro_use]
 extern crate failure;
-extern crate aes_soft;
+extern crate aes;
 extern crate block_modes;
 extern crate blowfish;
+extern crate cfb_mode;
 extern crate circular;
 extern crate des;
 extern crate digest;
@@ -26,7 +27,7 @@ extern crate twofish;
 #[cfg(test)]
 extern crate serde_json;
 
-#[cfg(test)]
+// #[cfg(test)]
 extern crate hex;
 
 #[cfg(test)]

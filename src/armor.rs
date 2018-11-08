@@ -34,7 +34,9 @@ named!(
         map!(tag!("PGP PUBLIC KEY BLOCK"), |_| BlockType::PublicKey)
             | map!(tag!("PGP PRIVATE KEY BLOCK"), |_| BlockType::PrivateKey)
             | do_parse!(
-                tag!("PGP MESSAGE, PART ") >> x: digit >> y: opt!(preceded!(tag!("/"), digit))
+                tag!("PGP MESSAGE, PART ")
+                    >> x: digit
+                    >> y: opt!(preceded!(tag!("/"), digit))
                     >> ({
                         // unwraps are safe, as the parser already determined that this is a digit.
                         let x: usize = str::from_utf8(x).unwrap().parse().unwrap();
@@ -44,7 +46,8 @@ named!(
 
                         BlockType::MultiPartMessage(x, y)
                     })
-            ) | map!(tag!("PGP MESSAGE"), |_| BlockType::Message)
+            )
+            | map!(tag!("PGP MESSAGE"), |_| BlockType::Message)
             | map!(tag!("PGP SIGNATURE"), |_| BlockType::Signature)
             | map!(tag!("PGP ARMORED FILE"), |_| BlockType::File)
     )
@@ -391,7 +394,8 @@ mod tests {
         assert_eq!(
             armor_headers(
                 &b"Version: 12\r\nspecial-stuff: cool12.0\r\nsome:colon: with:me\r\n"[..],
-            ).unwrap(),
+            )
+            .unwrap(),
             (&b""[..], map)
         );
     }

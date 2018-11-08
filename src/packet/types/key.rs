@@ -1,6 +1,7 @@
 use std::fmt;
 
 use byteorder::{BigEndian, ByteOrder};
+use hex;
 use openssl::bn::{BigNum, BigNumContext};
 use openssl::dsa::Dsa;
 use openssl::ec::{EcGroup, EcKey, EcPoint};
@@ -230,12 +231,24 @@ impl PrivateKey {
             self.private_params.string_to_key_count.as_ref(),
         )?;
 
-        println!("key: {:?}", key);
-        println!("iv: {:?}", self.private_params.iv);
+        println!(
+            "salt: {}",
+            hex::encode(self.private_params.string_to_key_salt.clone().unwrap())
+        );
+        println!(
+            "code: {:?}",
+            self.private_params.string_to_key_count.as_ref()
+        );
+        println!("hash alg: {:?}", hash_alg);
+        println!("key: {}", hex::encode(&key));
+        println!(
+            "iv: {}",
+            hex::encode(self.private_params.iv.clone().unwrap())
+        );
         if let Some(ref iv) = self.private_params.iv {
             println!("ciphertext: {} {:?}", ciphertext.len(), ciphertext);
             let mut plaintext = ciphertext.to_vec();
-            sym_alg.decrypt_with_iv(&key, iv, &mut plaintext)?;
+            sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
             println!("plaintext: {:?}", plaintext);
             self.from_plaintext(&plaintext)
         } else {
@@ -253,9 +266,15 @@ impl PrivateKey {
                     PublicParams::RSA { ref n, ref e } => {
                         // create an actual openssl key
                         // Sad but true
+                        println!(
+                            "n: {}\ne: {}",
+                            hex::encode(n.to_vec()),
+                            hex::encode(e.to_vec())
+                        );
+
                         let n = BigNum::from_slice(n.to_vec().as_slice())?;
                         let e = BigNum::from_slice(e.to_vec().as_slice())?;
-                        println!("{:?} {:?}", n, e);
+
                         let private_key = RsaPrivateKeyBuilder::new(n, e, d)?
                             .set_factors(p, q)?
                             .build();

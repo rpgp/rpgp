@@ -1,13 +1,41 @@
-use aes_soft::block_cipher_trait::generic_array::GenericArray;
-use aes_soft::{Aes128, Aes192, Aes256};
-use block_modes::block_padding::ZeroPadding;
-use block_modes::{BlockMode, BlockModeIv, Cfb};
+use aes::{Aes128, Aes192, Aes256};
 use blowfish::Blowfish;
+use cfb_mode::Cfb;
 use des::TdesEde3;
 use twofish::Twofish;
 
 use errors::Result;
 
+macro_rules! decrypt {
+    ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
+        let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
+        mode.decrypt($prefix);
+
+        // TODO: proper error
+        // quick check, before decrypting the rest
+        assert_eq!($prefix[$bs - 2], $prefix[$bs], "quick check part 1");
+        assert_eq!($prefix[$bs - 1], $prefix[$bs + 1], "quick check part 2");
+
+        if $resync {
+            unimplemented!();
+        } else {
+            mode.decrypt($data);
+        }
+    }};
+}
+
+macro_rules! decrypt_regular {
+    ($mode:ident, $key:expr, $iv:expr, $ciphertext:expr, $bs:expr) => {{
+        let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
+        mode.decrypt($ciphertext);
+    }};
+}
+macro_rules! encrypt_regular {
+    ($mode:ident, $key:expr, $iv:expr, $plaintext:expr, $bs:expr) => {{
+        let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
+        mode.encrypt($plaintext);
+    }};
+}
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
 /// Available symmetric key algorithms.
@@ -63,70 +91,168 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
-    /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
-    pub fn decrypt(&self, key: &[u8], ciphertext: &mut [u8]) -> Result<()> {
+    /// Uses an IV of all zeroes, as specified in the openpgp cfb mode. Does
+    /// resynchronization.
+    pub fn decrypt<'a>(&self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
+        println!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
-        self.decrypt_with_iv(key, &iv_vec, ciphertext)
+        self.decrypt_with_iv(key, &iv_vec, ciphertext, true)
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
-    pub fn decrypt_with_iv(&self, key: &[u8], iv_vec: &[u8], ciphertext: &mut [u8]) -> Result<()> {
-        let cipher_len = ciphertext.len();
-        let rounds = cipher_len / self.block_size();
-        let end = rounds * self.block_size();
+    /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
+    /// Does not do resynchronization.
+    pub fn decrypt_protected<'a>(&self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
+        println!("{}", hex::encode(&ciphertext));
+        println!("protected decrypt");
+        let iv_vec = vec![0u8; self.block_size()];
+        let cv_len = ciphertext.len();
+        let res = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
+        println!("{}", hex::encode(&res));
+        // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+        let mdc_len = 22;
+        let (data, mdc) = res.split_at(res.len() - mdc_len);
+        println!(
+            "decrypted {}b from {}b ({}|{})",
+            res.len(),
+            cv_len,
+            data.len(),
+            mdc.len()
+        );
+        // TODO: Proper error handling
+        assert_eq!(mdc[0], 0xD3, "invalid MDC tag");
+        assert_eq!(mdc[1], 0x14, "invalid MDC length");
+        // TODO: hash and compare to mdc[2..];
+        println!("mdc: {}", hex::encode(mdc));
 
-        let mut ciphertext_rest = {
-            let mut r = vec![0u8; self.block_size()];
-            &r[0..cipher_len - end].copy_from_slice(&ciphertext[end..]);
-            r
-        };
+        Ok(data)
+    }
+
+    /// Decrypt the data using CFB mode, without padding. Overwrites the input.
+    ///
+    /// OpenPGP CFB mode uses an initialization vector (IV) of all zeros, and
+    /// prefixes the plaintext with BS+2 octets of random data, such that
+    /// octets BS+1 and BS+2 match octets BS-1 and BS.  It does a CFB
+    /// resynchronization after encrypting those BS+2 octets.
+    ///
+    /// Thus, for an algorithm that has a block size of 8 octets (64 bits),
+    /// the IV is 10 octets long and octets 7 and 8 of the IV are the same as
+    /// octets 9 and 10.  For an algorithm with a block size of 16 octets
+    /// (128 bits), the IV is 18 octets long, and octets 17 and 18 replicate
+    /// octets 15 and 16.  Those extra two octets are an easy check for a
+    /// correct key.
+    pub fn decrypt_with_iv<'a>(
+        &self,
+        key: &[u8],
+        iv_vec: &[u8],
+        ciphertext: &'a mut [u8],
+        resync: bool,
+    ) -> Result<&'a [u8]> {
+        let bs = self.block_size();
+
+        let (encrypted_prefix, encrypted_data) = ciphertext.split_at_mut(bs + 2);
 
         {
-            let ciphertext_block = &mut ciphertext[0..end];
-
             match self {
                 SymmetricKeyAlgorithm::Plaintext => {}
                 SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
                 SymmetricKeyAlgorithm::TripleDES => {
-                    let iv = GenericArray::from_slice(&iv_vec);
-                    let mut mode = Cfb::<TdesEde3, ZeroPadding>::new_varkey(key, iv)?;
-                    mode.decrypt_nopad(ciphertext_block)?;
-                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                    decrypt!(
+                        TdesEde3,
+                        key,
+                        &iv_vec,
+                        encrypted_prefix,
+                        encrypted_data,
+                        bs,
+                        resync
+                    );
+                }
+                SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
+                SymmetricKeyAlgorithm::Blowfish => decrypt!(
+                    Blowfish,
+                    key,
+                    &iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
+                SymmetricKeyAlgorithm::AES128 => decrypt!(
+                    Aes128,
+                    key,
+                    &iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
+                SymmetricKeyAlgorithm::AES192 => decrypt!(
+                    Aes192,
+                    key,
+                    &iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
+                SymmetricKeyAlgorithm::AES256 => decrypt!(
+                    Aes256,
+                    key,
+                    &iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
+                SymmetricKeyAlgorithm::Twofish => decrypt!(
+                    Twofish,
+                    key,
+                    &iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
+            }
+        }
+
+        Ok(encrypted_data)
+    }
+
+    /// Decrypt the data using CFB mode, without padding. Overwrites the input.
+    /// This is regular CFB, not OpenPgP CFB.
+    pub fn decrypt_with_iv_regular<'a>(
+        &self,
+        key: &[u8],
+        iv_vec: &[u8],
+        ciphertext: &'a mut [u8],
+    ) -> Result<()> {
+        let bs = self.block_size();
+        {
+            match self {
+                SymmetricKeyAlgorithm::Plaintext => {}
+                SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+                SymmetricKeyAlgorithm::TripleDES => {
+                    decrypt_regular!(TdesEde3, key, &iv_vec, ciphertext, bs);
                 }
                 SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
                 SymmetricKeyAlgorithm::Blowfish => {
-                    let iv = GenericArray::from_slice(&iv_vec);
-                    let mut mode = Cfb::<Blowfish, ZeroPadding>::new_varkey(key, iv)?;
-                    mode.decrypt_nopad(ciphertext_block)?;
-                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                    decrypt_regular!(Blowfish, key, &iv_vec, ciphertext, bs)
                 }
                 SymmetricKeyAlgorithm::AES128 => {
-                    let iv = GenericArray::from_slice(&iv_vec);
-                    let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
-                    mode.decrypt_nopad(ciphertext_block)?;
-                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                    decrypt_regular!(Aes128, key, &iv_vec, ciphertext, bs)
                 }
                 SymmetricKeyAlgorithm::AES192 => {
-                    let iv = GenericArray::from_slice(&iv_vec);
-                    let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
-                    mode.decrypt_nopad(ciphertext_block)?;
-                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                    decrypt_regular!(Aes192, key, &iv_vec, ciphertext, bs)
                 }
                 SymmetricKeyAlgorithm::AES256 => {
-                    let iv = GenericArray::from_slice(&iv_vec);
-                    let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
-                    mode.decrypt_nopad(ciphertext_block)?;
-                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                    decrypt_regular!(Aes256, key, &iv_vec, ciphertext, bs)
                 }
                 SymmetricKeyAlgorithm::Twofish => {
-                    let iv = GenericArray::from_slice(&iv_vec);
-                    let mut mode = Cfb::<Twofish, ZeroPadding>::new_varkey(key, iv)?;
-                    mode.decrypt_nopad(ciphertext_block)?;
-                    mode.decrypt_nopad(&mut ciphertext_rest)?;
+                    decrypt_regular!(Twofish, key, &iv_vec, ciphertext, bs)
                 }
             }
         }
-        &ciphertext[end..].copy_from_slice(&ciphertext_rest[0..cipher_len - end]);
 
         Ok(())
     }
@@ -140,39 +266,22 @@ impl SymmetricKeyAlgorithm {
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     pub fn encrypt_with_iv(&self, key: &[u8], iv_vec: &[u8], plaintext: &mut [u8]) -> Result<()> {
+        // TODO: actual cfb mode used in pgp
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
             SymmetricKeyAlgorithm::TripleDES => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<TdesEde3, ZeroPadding>::new_varkey(key, iv)?;
-                mode.encrypt_nopad(plaintext)?;
+                encrypt_regular!(TdesEde3, key, &iv_vec, plaintext, bs);
             }
             SymmetricKeyAlgorithm::CAST5 => unimplemented!("CAST5 encrypt"),
             SymmetricKeyAlgorithm::Blowfish => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Blowfish, ZeroPadding>::new_varkey(key, iv)?;
-                mode.encrypt_nopad(plaintext)?;
+                encrypt_regular!(Blowfish, key, &iv_vec, plaintext, bs)
             }
-            SymmetricKeyAlgorithm::AES128 => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Aes128, ZeroPadding>::new_varkey(key, iv)?;
-                mode.encrypt_nopad(plaintext)?;
-            }
-            SymmetricKeyAlgorithm::AES192 => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Aes192, ZeroPadding>::new_varkey(key, iv)?;
-                mode.encrypt_nopad(plaintext)?;
-            }
-            SymmetricKeyAlgorithm::AES256 => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Aes256, ZeroPadding>::new_varkey(key, iv)?;
-                mode.encrypt_nopad(plaintext)?;
-            }
+            SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, &iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, &iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, &iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::Twofish => {
-                let iv = GenericArray::from_slice(&iv_vec);
-                let mut mode = Cfb::<Twofish, ZeroPadding>::new_varkey(key, iv)?;
-                mode.encrypt_nopad(plaintext)?;
+                encrypt_regular!(Twofish, key, &iv_vec, plaintext, bs)
             }
         }
         Ok(())
