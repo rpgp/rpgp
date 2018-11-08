@@ -1,39 +1,40 @@
 environment:
-  matrix:
-    # 1.1.0, 64/32 bit
-    - TARGET: i686-pc-windows-gnu
-      BITS: 32
-      MSYS2: 1
-    - TARGET: x86_64-pc-windows-msvc
-      BITS: 64
+  global:
+    RUST_VERSION: stable
+    CRATE_NAME: pgp
 
-    # 1.0.2, 64/32 bit
+  matrix:
+    # MinGW
+    - TARGET: i686-pc-windows-gnu
     - TARGET: x86_64-pc-windows-gnu
-      BITS: 64
-      MSYS2: 1
+
+    # MSVC
     - TARGET: i686-pc-windows-msvc
-      BITS: 32
     - TARGET: x86_64-pc-windows-msvc
-      VCPKG_DEFAULT_TRIPLET: x64-windows
-      VCPKGRS_DYNAMIC: 1
+
+    # Testing other channels
+    - TARGET: x86_64-pc-windows-gnu
+      RUST_VERSION: nightly
+    - TARGET: x86_64-pc-windows-msvc
+      RUST_VERSION: nightly
+
 install:
-  # Install Rust
+  - ps: >-
+      If ($Env:TARGET -eq 'x86_64-pc-windows-gnu') {
+        $Env:PATH += ';C:\msys64\mingw64\bin'
+      } ElseIf ($Env:TARGET -eq 'i686-pc-windows-gnu') {
+        $Env:PATH += ';C:\msys64\mingw32\bin'
+      }
   - curl -sSf -o rustup-init.exe https://win.rustup.rs/
-  - rustup-init.exe -y --default-host %TARGET%
+  - rustup-init.exe -y --default-host %TARGET% --default-toolchain %RUST_VERSION%
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
-  - if defined MSYS2 set PATH=C:\msys64\mingw%BITS%\bin;%PATH%
-  - rustc -V
+  - rustc -Vv
   - cargo -V
-  - if defined VCPKG_DEFAULT_TRIPLET git clone https://github.com/Microsoft/vcpkg c:\projects\vcpkg
-  - if defined VCPKG_DEFAULT_TRIPLET c:\projects\vcpkg\bootstrap-vcpkg.bat
-  - if defined VCPKG_DEFAULT_TRIPLET set VCPKG_ROOT=c:\projects\vcpkg
-  - if defined VCPKG_DEFAULT_TRIPLET echo yes > %VCPKG_ROOT%\Downloads\AlwaysAllowDownloads
 
 build: false
 
-
 test_script:
-  - cargo build --target %TARGET%
+  - cargo build --release --target %TARGET%
   - cargo test --target %TARGET%
 
 cache:
