@@ -1,5 +1,6 @@
-use enum_primitive::FromPrimitive;
 use nom::rest;
+use num_traits::FromPrimitive;
+
 use util::{u16_as_usize, u32_as_usize, u8_as_usize};
 
 use super::types::{Packet, PacketLength, Tag, Version};

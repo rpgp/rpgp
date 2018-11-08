@@ -36,8 +36,7 @@ macro_rules! encrypt_regular {
         mode.encrypt($plaintext);
     }};
 }
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 /// Available symmetric key algorithms.
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
@@ -54,7 +53,6 @@ pub enum SymmetricKeyAlgorithm {
     AES256 = 9,
     /// Twofish with 256-bit key [TWOFISH]
     Twofish = 10,
-}
 }
 
 impl SymmetricKeyAlgorithm {

@@ -34,12 +34,13 @@ block-modes = "^0.1"
 hex = "^0.3"
 cfb-mode = "^0.1"
 flate2 = { version = "1.0.4", default-features = false, features = ["rust_backend"] }
+num-derive = "0.2.3"
+num-traits = "0.2.6"
 
 [dependencies.nom]
 version = "^4.0"
 
 [dev-dependencies]
-num-traits = "0.2.6"
 rand = "0.5.5"
 hex-literal = "^0.1"
 serde = "^1.0"

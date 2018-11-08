@@ -1,6 +1,6 @@
-use enum_primitive::FromPrimitive;
 use nom::{self, be_u16, be_u32, be_u8};
 use num_bigint::BigUint;
+use num_traits::FromPrimitive;
 
 use composed;
 use crypto::hash::HashAlgorithm;
