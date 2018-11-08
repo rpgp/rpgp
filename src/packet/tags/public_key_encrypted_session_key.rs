@@ -1,13 +1,12 @@
 use enum_primitive::FromPrimitive;
 use nom::be_u8;
-use openssl::bn::BigNum;
 
 use errors::Result;
 use packet::types::key::KeyID;
 use packet::types::PublicKeyAlgorithm;
 use util::mpi;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PKESK {
     pub version: u8,
     pub id: KeyID,

@@ -32,6 +32,7 @@ des = "^0.1"
 block-modes = "^0.1"
 hex = "^0.3"
 cfb-mode = "^0.1"
+flate2 = { version = "1.0.4", default-features = false, features = ["rust_backend"] }
 
 [dependencies.nom]
 version = "^4.0"

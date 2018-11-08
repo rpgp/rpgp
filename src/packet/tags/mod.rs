@@ -1,3 +1,4 @@
+pub mod literal;
 pub mod privkey;
 pub mod pubkey;
 pub mod public_key_encrypted_session_key;

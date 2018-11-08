@@ -16,6 +16,7 @@ extern crate cfb_mode;
 extern crate circular;
 extern crate des;
 extern crate digest;
+extern crate flate2;
 extern crate generic_array;
 extern crate itertools;
 extern crate md5;
