@@ -1,7 +1,7 @@
 use std::boxed::Box;
 
 use byteorder::{BigEndian, ReadBytesExt};
-use flate2::read::DeflateDecoder;
+use flate2::read::{DeflateDecoder, ZlibDecoder};
 use num_traits::FromPrimitive;
 use rsa::padding::PaddingScheme;
 
@@ -232,7 +232,10 @@ fn decrypt(
                                 let mut deflater = DeflateDecoder::new(&packet.body[1..]);
                                 Message::from_bytes_many(deflater)
                             }
-                            CompressionAlgorithm::ZLIB => unimplemented!("ZLIB"),
+                            CompressionAlgorithm::ZLIB => {
+                                let mut deflater = ZlibDecoder::new(&packet.body[1..]);
+                                Message::from_bytes_many(deflater)
+                            }
                             CompressionAlgorithm::BZip2 => unimplemented!("BZip2"),
                         }
                     }
@@ -286,6 +289,9 @@ mod tests {
     }
 
     fn test_parse_msg(entry: &str) {
+        // TODO: verify with the verify key
+        // TODO: verify filename
+
         let base_path = "./tests/opengpg-interop/testcases/messages";
 
         let mut file = File::open(format!("{}/{}", base_path, entry)).unwrap();
@@ -347,26 +353,29 @@ mod tests {
     // RSA
     msg_test!(parse_gnupg_msg_v1_003, "gnupg-v1-003");
 
-    // msg_test!(parse_gnupg_msg_v1_4_11_001, "gnupg-v1-4-11-001");
-    // msg_test!(parse_gnupg_msg_v1_4_11_002, "gnupg-v1-4-11-002");
-    // msg_test!(parse_gnupg_msg_v1_4_11_003, "gnupg-v1-4-11-003");
-    // msg_test!(parse_gnupg_msg_v1_4_11_004, "gnupg-v1-4-11-004");
-    // msg_test!(parse_gnupg_msg_v1_4_11_005, "gnupg-v1-4-11-005");
-    // msg_test!(parse_gnupg_msg_v1_4_11_006, "gnupg-v1-4-11_006");
-    // msg_test!(parse_gnupg_msg_v2_0_17_001, "gnupg-v2-0-17-001");
-    // msg_test!(parse_gnupg_msg_v2_0_17_002, "gnupg-v2-0-17-002");
-    // msg_test!(parse_gnupg_msg_v2_0_17_003, "gnupg-v2-0-17-003");
-    // msg_test!(parse_gnupg_msg_v2_0_17_004, "gnupg-v2-0-17-004");
-    // msg_test!(parse_gnupg_msg_v2_0_17_005, "gnupg-v2-0-17-005");
-    // msg_test!(parse_gnupg_msg_v2_0_17_006, "gnupg-v2-0-17-006");
+    msg_test!(parse_gnupg_msg_v1_4_11_001, "gnupg-v1-4-11-001");
+    msg_test!(parse_gnupg_msg_v1_4_11_002, "gnupg-v1-4-11-002");
+    msg_test!(parse_gnupg_msg_v1_4_11_003, "gnupg-v1-4-11-003");
+    msg_test!(parse_gnupg_msg_v1_4_11_004, "gnupg-v1-4-11-004");
+    msg_test!(parse_gnupg_msg_v1_4_11_005, "gnupg-v1-4-11-005");
+    msg_test!(parse_gnupg_msg_v1_4_11_006, "gnupg-v1-4-11-006");
+    msg_test!(parse_gnupg_msg_v2_0_17_001, "gnupg-v2-0-17-001");
+    msg_test!(parse_gnupg_msg_v2_0_17_002, "gnupg-v2-0-17-002");
+    msg_test!(parse_gnupg_msg_v2_0_17_003, "gnupg-v2-0-17-003");
+    msg_test!(parse_gnupg_msg_v2_0_17_004, "gnupg-v2-0-17-004");
+    msg_test!(parse_gnupg_msg_v2_0_17_005, "gnupg-v2-0-17-005");
+    msg_test!(parse_gnupg_msg_v2_0_17_006, "gnupg-v2-0-17-006");
+    // parsing error
     // msg_test!(parse_gnupg_msg_v2_1_5_001, "gnupg-v2-1-5-001");
+    // parsing error
     // msg_test!(parse_gnupg_msg_v2_1_5_002, "gnupg-v2-1-5-002");
+    // parsing error
     // msg_test!(parse_gnupg_msg_v2_1_5_003, "gnupg-v2-1-5-003");
-    // msg_test!(parse_gnupg_msg_v2_10_001, "gnupg-v2-10-001");
-    // msg_test!(parse_gnupg_msg_v2_10_002, "gnupg-v2-10-002");
-    // msg_test!(parse_gnupg_msg_v2_10_003, "gnupg-v2-10-003");
-    // msg_test!(parse_gnupg_msg_v2_10_004, "gnupg-v2-10-004");
-    // msg_test!(parse_gnupg_msg_v2_10_005, "gnupg-v2-10-005");
-    // msg_test!(parse_gnupg_msg_v2_10_006, "gnupg-v2-10-006");
-    // msg_test!(parse_gnupg_msg_v2_10_007, "gnupg-v2-10-007");
+    msg_test!(parse_gnupg_msg_v2_10_001, "gnupg-v2-10-001");
+    msg_test!(parse_gnupg_msg_v2_10_002, "gnupg-v2-10-002");
+    msg_test!(parse_gnupg_msg_v2_10_003, "gnupg-v2-10-003");
+    msg_test!(parse_gnupg_msg_v2_10_004, "gnupg-v2-10-004");
+    msg_test!(parse_gnupg_msg_v2_10_005, "gnupg-v2-10-005");
+    msg_test!(parse_gnupg_msg_v2_10_006, "gnupg-v2-10-006");
+    msg_test!(parse_gnupg_msg_v2_10_007, "gnupg-v2-10-007");
 }
