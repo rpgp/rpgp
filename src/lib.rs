@@ -3,7 +3,7 @@ extern crate nom;
 extern crate base64;
 extern crate byteorder;
 extern crate crc24;
-extern crate openssl;
+extern crate rsa;
 #[macro_use]
 extern crate enum_primitive;
 extern crate chrono;
@@ -20,11 +20,16 @@ extern crate flate2;
 extern crate generic_array;
 extern crate itertools;
 extern crate md5;
+extern crate num_bigint;
 extern crate ripemd160;
 extern crate sha1;
 extern crate sha2;
 extern crate twofish;
 
+#[cfg(test)]
+extern crate num_traits;
+#[cfg(test)]
+extern crate rand;
 #[cfg(test)]
 extern crate serde_json;
 
