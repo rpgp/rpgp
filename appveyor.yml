@@ -1,5 +1,4 @@
 environment:
-  SSL_CERT_FILE: "C:\\OpenSSL\\cacert.pem"
   matrix:
     # 1.1.0, 64/32 bit
     - TARGET: i686-pc-windows-gnu
