@@ -267,7 +267,6 @@ fn decrypt(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use glob::glob;
     use serde_json;
     use std::fs::File;
 
@@ -286,52 +285,87 @@ mod tests {
         textcontent: Option<String>,
     }
 
-    #[test]
-    fn test_parse_pgp_messages() {
+    fn test_parse_msg(entry: &str) {
         let base_path = "./tests/opengpg-interop/testcases/messages";
-        for entry in glob("./tests/opengpg-interop/testcases/messages/gnu*.json").unwrap() {
-            let entry = entry.unwrap();
-            let mut file = File::open(&entry).unwrap();
 
-            let details: Testcase = serde_json::from_reader(&mut file).unwrap();
-            println!("{:?}: {:?}", entry, details);
+        let mut file = File::open(format!("{}/{}", base_path, entry)).unwrap();
 
-            let mut decrypt_key_file =
-                File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
-            let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file).unwrap();
+        let details: Testcase = serde_json::from_reader(&mut file).unwrap();
+        println!("{:?}: {:?}", entry, details);
+
+        let mut decrypt_key_file =
+            File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
+        let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file).unwrap();
+        println!(
+            "decrypt key (ID={}): {:?}",
+            hex::encode(decrypt_key.key_id().unwrap().to_vec()),
+            decrypt_key
+        );
+
+        if let Some(verify_key_str) = details.verify_key.clone() {
+            let mut verify_key_file =
+                File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
+            let verify_key = PublicKey::from_armor_single(&mut verify_key_file).unwrap();
             println!(
-                "decrypt key (ID={}): {:?}",
-                hex::encode(decrypt_key.key_id().unwrap().to_vec()),
-                decrypt_key
-            );
-
-            if let Some(verify_key_str) = details.verify_key.clone() {
-                let mut verify_key_file =
-                    File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
-                let verify_key = PublicKey::from_armor_single(&mut verify_key_file).unwrap();
-                println!(
-                    "verify key (ID={}): {:?}",
-                    hex::encode(verify_key.key_id().unwrap().to_vec()),
-                    verify_key
-                );
-            }
-
-            let file_name = entry.to_str().unwrap().replace(".json", ".asc");
-            let mut cipher_file = File::open(file_name).unwrap();
-
-            let message = Message::from_armor_single(&mut cipher_file).unwrap();
-            println!("message: {:?}", message);
-            let decrypted = message
-                .decrypt(
-                    || "".to_string(),
-                    || details.passphrase.clone(),
-                    &decrypt_key,
-                )
-                .expect("failed to decrypt message");
-            assert_eq!(
-                ::std::str::from_utf8(&decrypted).unwrap(),
-                details.textcontent.unwrap_or_else(|| "".to_string())
+                "verify key (ID={}): {:?}",
+                hex::encode(verify_key.key_id().unwrap().to_vec()),
+                verify_key
             );
         }
+
+        let file_name = entry.replace(".json", ".asc");
+        let mut cipher_file = File::open(format!("{}/{}", base_path, file_name)).unwrap();
+
+        let message = Message::from_armor_single(&mut cipher_file).unwrap();
+        println!("message: {:?}", message);
+        let decrypted = message
+            .decrypt(
+                || "".to_string(),
+                || details.passphrase.clone(),
+                &decrypt_key,
+            )
+            .expect("failed to decrypt message");
+        assert_eq!(
+            ::std::str::from_utf8(&decrypted).unwrap(),
+            details.textcontent.unwrap_or_else(|| "".to_string())
+        );
     }
+
+    macro_rules! msg_test {
+        ($name:ident, $pos:expr) => {
+            #[test]
+            fn $name() {
+                test_parse_msg(&format!("{}.json", $pos));
+            }
+        };
+    }
+
+    msg_test!(parse_gnupg_msg_v1_001, "gnupg-v1-001");
+    // msg_test!(parse_gnupg_msg_v1_002, "gnupg-v1-002");
+    msg_test!(parse_gnupg_msg_v1_003, "gnupg-v1-003");
+
+    // Lots of failures due to missing CAST5 right now
+
+    // msg_test!(parse_gnupg_msg_v1_4_11_001, "gnupg-v1-4-11-001");
+    // msg_test!(parse_gnupg_msg_v1_4_11_002, "gnupg-v1-4-11-002");
+    // msg_test!(parse_gnupg_msg_v1_4_11_003, "gnupg-v1-4-11-003");
+    // msg_test!(parse_gnupg_msg_v1_4_11_004, "gnupg-v1-4-11-004");
+    // msg_test!(parse_gnupg_msg_v1_4_11_005, "gnupg-v1-4-11-005");
+    // msg_test!(parse_gnupg_msg_v1_4_11_006, "gnupg-v1-4-11_006");
+    // msg_test!(parse_gnupg_msg_v2_0_17_001, "gnupg-v2-0-17-001");
+    // msg_test!(parse_gnupg_msg_v2_0_17_002, "gnupg-v2-0-17-002");
+    // msg_test!(parse_gnupg_msg_v2_0_17_003, "gnupg-v2-0-17-003");
+    // msg_test!(parse_gnupg_msg_v2_0_17_004, "gnupg-v2-0-17-004");
+    // msg_test!(parse_gnupg_msg_v2_0_17_005, "gnupg-v2-0-17-005");
+    // msg_test!(parse_gnupg_msg_v2_0_17_006, "gnupg-v2-0-17-006");
+    // msg_test!(parse_gnupg_msg_v2_1_5_001, "gnupg-v2-1-5-001");
+    // msg_test!(parse_gnupg_msg_v2_1_5_002, "gnupg-v2-1-5-002");
+    // msg_test!(parse_gnupg_msg_v2_1_5_003, "gnupg-v2-1-5-003");
+    // msg_test!(parse_gnupg_msg_v2_10_001, "gnupg-v2-10-001");
+    // msg_test!(parse_gnupg_msg_v2_10_002, "gnupg-v2-10-002");
+    // msg_test!(parse_gnupg_msg_v2_10_003, "gnupg-v2-10-003");
+    // msg_test!(parse_gnupg_msg_v2_10_004, "gnupg-v2-10-004");
+    // msg_test!(parse_gnupg_msg_v2_10_005, "gnupg-v2-10-005");
+    // msg_test!(parse_gnupg_msg_v2_10_006, "gnupg-v2-10-006");
+    // msg_test!(parse_gnupg_msg_v2_10_007, "gnupg-v2-10-007");
 }
