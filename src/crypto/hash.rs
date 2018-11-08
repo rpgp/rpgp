@@ -9,8 +9,7 @@ use sha2::{Sha224, Sha256, Sha384, Sha512};
 
 use errors::Result;
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
 pub enum HashAlgorithm {
@@ -21,7 +20,6 @@ pub enum HashAlgorithm {
     SHA384 = 9,
     SHA512 = 10,
     SHA224 = 11,
-}
 }
 
 /// Trait to work around the fact that the `Digest` trait from rustcrypto can not

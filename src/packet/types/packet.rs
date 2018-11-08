@@ -33,8 +33,7 @@ impl From<usize> for PacketLength {
     }
 }
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 pub enum Tag {
     /// Public-Key Encrypted Session Key Packet
     PublicKeyEncryptedSessionKey = 1,
@@ -71,16 +70,13 @@ pub enum Tag {
     /// Modification Detection Code Packet
     ModDetectionCode = 19,
 }
-}
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 pub enum Version {
     /// Old Packet Format
     Old = 0,
     /// New Packet Format
     New = 1,
-}
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -111,8 +107,7 @@ impl UserAttribute {
     }
 }
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 /// Codes for revocation reasons
 pub enum RevocationCode {
     /// No reason specified (key revocations or cert revocations)
@@ -126,28 +121,25 @@ pub enum RevocationCode {
     /// User ID information is no longer valid (cert revocations)
     CertUserIdInvalid = 32,
 }
-}
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 /// Available String-To-Key types
-    pub enum StringToKeyType {
-        Simple = 0,
-        Salted = 1,
-        Reserved = 2,
-        IteratedAndSalted = 3,
-        Private100 = 100,
-        Private101 = 101,
-        Private102 = 102,
-        Private103 = 103,
-        Private104 = 104,
-        Private105 = 105,
-        Private106 = 106,
-        Private107 = 107,
-        Private108 = 108,
-        Private109 = 109,
-        Private110 = 110,
-    }
+pub enum StringToKeyType {
+    Simple = 0,
+    Salted = 1,
+    Reserved = 2,
+    IteratedAndSalted = 3,
+    Private100 = 100,
+    Private101 = 101,
+    Private102 = 102,
+    Private103 = 103,
+    Private104 = 104,
+    Private105 = 105,
+    Private106 = 106,
+    Private107 = 107,
+    Private108 = 108,
+    Private109 = 109,
+    Private110 = 110,
 }
 
 impl StringToKeyType {
@@ -164,8 +156,7 @@ impl StringToKeyType {
     }
 }
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 /// Available signature subpacket types
 pub enum SubpacketType {
     SignatureCreationTime = 2,
@@ -191,7 +182,6 @@ pub enum SubpacketType {
     Features = 30,
     SignatureTarget = 31,
     EmbeddedSignature = 32,
-}
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -226,8 +216,7 @@ pub enum Subpacket {
     ExportableCertification(bool),
 }
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 /// Available compression algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.3
 pub enum CompressionAlgorithm {
@@ -236,10 +225,8 @@ pub enum CompressionAlgorithm {
     ZLIB = 2,
     BZip2 = 3,
 }
-}
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 pub enum SignatureType {
     /// Signature of a binary document.
     /// This means the signer owns it, created it, or certifies that ithas not been modified.
@@ -334,16 +321,13 @@ pub enum SignatureType {
     /// document) that cannot include a target subpacket.
     ThirdParty = 0x50,
 }
-}
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 pub enum SignatureVersion {
     /// Deprecated
     V2 = 2,
     V3 = 3,
     V4 = 4,
-}
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -446,17 +430,14 @@ impl User {
     }
 }
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 pub enum KeyVersion {
     V2 = 2,
     V3 = 3,
     V4 = 4,
 }
-}
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 pub enum PublicKeyAlgorithm {
     /// RSA (Encrypt and Sign) [HAC]
     RSA = 1,
@@ -491,5 +472,4 @@ pub enum PublicKeyAlgorithm {
     Private108 = 108,
     Private109 = 109,
     Private110 = 110,
-}
 }

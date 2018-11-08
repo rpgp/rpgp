@@ -1,5 +1,5 @@
-use enum_primitive::FromPrimitive;
 use nom::be_u8;
+use num_traits::FromPrimitive;
 
 use errors::Result;
 use packet::types::key::KeyID;

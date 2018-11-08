@@ -1,8 +1,8 @@
 use std::boxed::Box;
 
 use byteorder::{BigEndian, ReadBytesExt};
-use enum_primitive::FromPrimitive;
 use flate2::read::DeflateDecoder;
+use num_traits::FromPrimitive;
 use rsa::padding::PaddingScheme;
 
 use composed::key::PrivateKey;

@@ -5,7 +5,7 @@ extern crate byteorder;
 extern crate crc24;
 extern crate rsa;
 #[macro_use]
-extern crate enum_primitive;
+extern crate num_derive;
 extern crate chrono;
 #[macro_use]
 extern crate failure;
@@ -21,13 +21,12 @@ extern crate generic_array;
 extern crate itertools;
 extern crate md5;
 extern crate num_bigint;
+extern crate num_traits;
 extern crate ripemd160;
 extern crate sha1;
 extern crate sha2;
 extern crate twofish;
 
-#[cfg(test)]
-extern crate num_traits;
 #[cfg(test)]
 extern crate rand;
 #[cfg(test)]

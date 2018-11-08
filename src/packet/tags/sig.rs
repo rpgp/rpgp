@@ -1,8 +1,8 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
-use enum_primitive::FromPrimitive;
-use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use std::str;
-use util::mpi;
+
+use chrono::{DateTime, NaiveDateTime, Utc};
+use nom::{be_u16, be_u32, be_u8, rest, IResult};
+use num_traits::FromPrimitive;
 
 use crypto::hash::HashAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
@@ -10,10 +10,9 @@ use packet::types::{
     self, CompressionAlgorithm, PublicKeyAlgorithm, RevocationCode, Signature, SignatureType,
     SignatureVersion, Subpacket, SubpacketType,
 };
-use util::{clone_into_array, packet_length};
+use util::{clone_into_array, mpi, packet_length};
 
-enum_from_primitive!{
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(FromPrimitive)]
 /// Available key flags
 pub enum KeyFlag {
     /// This key may be used to certify other keys.
@@ -30,7 +29,6 @@ pub enum KeyFlag {
     Authentication = 0x20,
     /// The private component of this key may be in the possession of more than one person.
     SharedPrivateKey = 0x80,
-}
 }
 
 /// Convert an epoch timestamp to a `DateTime`

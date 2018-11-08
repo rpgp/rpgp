@@ -1,5 +1,5 @@
-use enum_primitive::FromPrimitive;
 use nom::{self, be_u16, be_u32, be_u8};
+use num_traits::FromPrimitive;
 
 use composed;
 use packet::types::ecc_curve::ecc_curve_from_oid;
