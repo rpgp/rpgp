@@ -46,14 +46,14 @@ named!(
         s2k_typ: be_u8
             >> enc_params:
                 switch!(value!(s2k_typ),
-        // 0 is no encryption
-        0       => value!((None, None, None, None)) |
-        // symmetric key algorithm
-        1...253 => do_parse!(
-               sym_alg: map_opt!(value!(s2k_typ), SymmetricKeyAlgorithm::from_u8)
-            >>      iv: take!(sym_alg.block_size())
-            >> (Some(sym_alg), Some(iv), None, None)
-        ) |
+                        // 0 is no encryption
+                        0       => value!((None, None, None, None)) |
+                        // symmetric key algorithm
+                        1...253 => do_parse!(
+                    sym_alg: map_opt!(value!(s2k_typ), SymmetricKeyAlgorithm::from_u8)
+                 >>      iv: take!(sym_alg.block_size())
+           >> (Some(sym_alg), Some(iv), None, None)
+                ) |
         // symmetric key + string-to-key
         254...255 => do_parse!(
                       sym_alg: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
@@ -61,32 +61,33 @@ named!(
                 >> s2k_params: flat_map!(take!(s2k.param_len()), call!(s2k_param_parser, &s2k))
                 >>         iv: take!(sym_alg.block_size())
                 >> (Some(sym_alg), Some(iv), Some(s2k), Some(s2k_params))
-        )
-    )
-            >> checksum_len:
-                switch!(value!(s2k_typ),
+         )
+    ) >> checksum_len:
+            switch!(value!(s2k_typ),
                      // 20 octect hash at the end, but part of the encrypted part
                      254 => value!(0) |
                      // 2 octet checksum at the end
                      _   => value!(2)
-    ) >> data_len: map!(rest_len, |r| r - checksum_len) >> data: take!(data_len)
-            >> checksum: cond!(checksum_len > 0, take!(checksum_len)) >> ({
-            let (hash, salt, count) = match enc_params.3 {
-                Some((hash, salt, count)) => (Some(hash), salt, count),
-                None => (None, None, None),
-            };
-            EncryptedPrivateParams {
-                data: data.to_vec(),
-                checksum: checksum.map(|c| c.to_vec()),
-                iv: enc_params.1.map(|iv| iv.to_vec()),
-                encryption_algorithm: enc_params.0,
-                string_to_key: enc_params.2,
-                string_to_key_hash: hash,
-                string_to_key_salt: salt,
-                string_to_key_count: count,
-                string_to_key_id: s2k_typ,
-            }
-        })
+    ) >> data_len: map!(rest_len, |r| r - checksum_len)
+            >> data: take!(data_len)
+            >> checksum: cond!(checksum_len > 0, take!(checksum_len))
+            >> ({
+                let (hash, salt, count) = match enc_params.3 {
+                    Some((hash, salt, count)) => (Some(hash), salt, count),
+                    None => (None, None, None),
+                };
+                EncryptedPrivateParams {
+                    data: data.to_vec(),
+                    checksum: checksum.map(|c| c.to_vec()),
+                    iv: enc_params.1.map(|iv| iv.to_vec()),
+                    encryption_algorithm: enc_params.0,
+                    string_to_key: enc_params.2,
+                    string_to_key_hash: hash,
+                    string_to_key_salt: salt,
+                    string_to_key_count: count,
+                    string_to_key_id: s2k_typ,
+                }
+            })
     )
 );
 

@@ -290,20 +290,23 @@ mod tests {
                             plaintext.as_slice(),
                             ciphertext.as_mut_slice(),
                             Padding::NONE,
-                        ).unwrap();
+                        )
+                        .unwrap();
                         let mut new_plaintext = vec![0u8; 256];
                         k.private_decrypt(
                             ciphertext.as_slice(),
                             new_plaintext.as_mut_slice(),
                             Padding::NONE,
-                        ).unwrap();
+                        )
+                        .unwrap();
                         assert_eq!(plaintext, new_plaintext);
                     }
                     _ => panic!("unexpected params type {:?}", unlocked_key),
                 }
                 Ok(())
             },
-        ).unwrap();
+        )
+        .unwrap();
     }
 
     #[test]
@@ -634,13 +637,15 @@ mod tests {
             Path::new(&format!(
                 "./tests/opengpg-interop/testcases/keys/{}.asc",
                 filename
-            )).to_path_buf(),
+            ))
+            .to_path_buf(),
         );
         let json_file = read_file(
             Path::new(&format!(
                 "./tests/opengpg-interop/testcases/keys/{}.json",
                 filename
-            )).to_path_buf(),
+            ))
+            .to_path_buf(),
         );
 
         let mut asc_string = String::new();

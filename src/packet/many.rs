@@ -4,7 +4,7 @@ use std::io::Read;
 
 use super::single;
 use super::types::Packet;
-use errors::Result;
+use errors::{Error, Result};
 
 /// Parse packets, in a streaming fashion from the given reader.
 pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
@@ -16,6 +16,7 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
     let mut b = Buffer::with_capacity(capacity);
 
     let mut packets = Vec::new();
+    let mut needed: Option<Needed> = None;
 
     loop {
         // read some data
@@ -28,17 +29,27 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
             break;
         }
 
-        let needed: Option<Needed>;
+        println!("read {} (needed: {:?})", sz, needed);
+        if needed.is_some() {
+            if sz == 0 {
+                // Cancel if we didn't receive enough bytes from our source.
+                return Err(Error::Incomplete);
+            } else {
+                needed = None;
+            }
+        }
 
         loop {
             let length = {
                 match single::parser(b.data()) {
                     Ok((remaining, p)) => {
+                        println!("got packet {} {:?}", remaining.len(), p);
                         packets.push(p);
                         b.data().offset(remaining)
                     }
                     Err(err) => match err {
                         nom::Err::Incomplete(n) => {
+                            println!("incomplete: {:?}", n);
                             needed = Some(n);
                             break;
                         }

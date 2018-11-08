@@ -29,6 +29,13 @@ impl Deserializable for Message {
         let mut is_edata = false;
 
         for packet in packets.into_iter() {
+            println!(
+                "{:?}: tag={} plen={} version={:?}",
+                packet.tag,
+                packet.tag.clone() as u8,
+                packet.body.len(),
+                packet.version
+            );
             match packet.tag {
                 Tag::Literal => match cur {
                     Some(i) => {
@@ -67,33 +74,36 @@ impl Deserializable for Message {
                     }
                 },
                 Tag::CompressedData => match cur {
-                    Some(i) => if stack[i].is_one_pass_signed() {
-                        // setting the message packet if we are currently parsing a one time pass sigend message
-                        match stack[i] {
-                            Message::Signed {
-                                ref mut one_pass_signed_message,
-                                ..
-                            } => {
-                                if let Some(ref mut opsm) = one_pass_signed_message {
-                                    opsm.message =
-                                        Some(Box::new(Message::Literal(packet.to_owned())));
-                                } else {
-                                    panic!("failed one_pass_signed_message setup");
+                    Some(i) => {
+                        if stack[i].is_one_pass_signed() {
+                            // setting the message packet if we are currently parsing a one time pass sigend message
+                            match stack[i] {
+                                Message::Signed {
+                                    ref mut one_pass_signed_message,
+                                    ..
+                                } => {
+                                    if let Some(ref mut opsm) = one_pass_signed_message {
+                                        opsm.message =
+                                            Some(Box::new(Message::Literal(packet.to_owned())));
+                                    } else {
+                                        panic!("failed one_pass_signed_message setup");
+                                    }
                                 }
+                                _ => panic!("unexpected packet"),
                             }
-                            _ => panic!("unexpected packet"),
-                        }
-                    } else {
-                        match stack[i] {
-                            Message::Signed {
-                                ref mut message, ..
-                            } => {
-                                *message = Some(Box::new(Message::Compressed(packet.to_owned())));
-                                cur = None;
+                        } else {
+                            match stack[i] {
+                                Message::Signed {
+                                    ref mut message, ..
+                                } => {
+                                    *message =
+                                        Some(Box::new(Message::Compressed(packet.to_owned())));
+                                    cur = None;
+                                }
+                                _ => panic!("unexpected packet"),
                             }
-                            _ => panic!("unexpected packet"),
                         }
-                    },
+                    }
                     None => {
                         stack.push(Message::Compressed(packet.to_owned()));
                     }
@@ -106,11 +116,13 @@ impl Deserializable for Message {
                     }
 
                     if cur.is_none() {
+                        println!("DATA={}", hex::encode(packet.body.as_slice()));
                         stack.push(Message::Encrypted {
                             esk: vec![public_key_encrypted_session_key::parse(
                                 packet.body.as_slice(),
                             )?],
                             edata: Vec::new(),
+                            protected: false,
                         });
                         cur = Some(stack.len() - 1);
                     }
@@ -129,18 +141,29 @@ impl Deserializable for Message {
                 //          Symmetrically Encrypted Integrity Protected Data Packet
                 Tag::SymetricEncryptedData | Tag::SymEncryptedProtectedData => {
                     is_edata = true;
-
+                    println!(
+                        "taaag {:?} {:?}",
+                        packet.tag == Tag::SymEncryptedProtectedData,
+                        packet.tag
+                    );
                     if cur.is_none() {
                         stack.push(Message::Encrypted {
                             esk: Vec::new(),
                             edata: vec![packet.to_owned()],
+                            protected: packet.tag == Tag::SymEncryptedProtectedData,
                         });
                         cur = Some(stack.len() - 1);
                     }
 
                     if let Some(i) = cur {
-                        if let Message::Encrypted { ref mut edata, .. } = stack[i] {
+                        if let Message::Encrypted {
+                            ref mut edata,
+                            ref mut protected,
+                            ..
+                        } = stack[i]
+                        {
                             edata.push(packet.to_owned());
+                            *protected = packet.tag == Tag::SymEncryptedProtectedData;
                         } else {
                             panic!("bad edata init");
                         }

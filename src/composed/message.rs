@@ -1,6 +1,6 @@
 use std::boxed::Box;
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use enum_primitive::FromPrimitive;
 use openssl::rsa::Padding;
 
@@ -25,9 +25,11 @@ pub enum Message {
         // actual signature
         signature: Option<Packet>,
     },
+
     Encrypted {
         esk: Vec<PKESK>,
         edata: Vec<Packet>,
+        protected: bool,
     },
 }
 
@@ -53,8 +55,12 @@ impl Message {
                 Some(message) => message.as_ref().decrypt(msg_pw, key_pw, key),
                 None => Ok(Vec::new()),
             },
-            Message::Encrypted { esk, edata } => {
-                println!("unlocked key!");
+            Message::Encrypted {
+                esk,
+                edata,
+                protected,
+            } => {
+                println!("unlocked key! msg protected={}", protected);
 
                 // search for a packet with a key id that we have and that key
                 let mut packet = None;
@@ -93,14 +99,24 @@ impl Message {
 
                 let mut res: Vec<u8> = Vec::new();
                 if let Some(encoding_key) = encoding_key {
+                    println!(
+                        "decrypting using key {}",
+                        hex::encode(encoding_key.key_id().unwrap().to_vec())
+                    );
+
                     encoding_key.unlock(key_pw, |priv_key| {
-                        res = decrypt(priv_key, &packet.mpis, &edata)?;
+                        res = decrypt(priv_key, &packet.mpis, &edata, *protected)?;
                         Ok(())
                     })?;
                 } else if let Some(encoding_key) = encoding_subkey {
+                    println!(
+                        "decrypting using subkey {}",
+                        hex::encode(encoding_key.key_id().unwrap().to_vec())
+                    );
+
                     let mut sym_key = vec![0u8; 8];
                     encoding_key.unlock(key_pw, |priv_key| {
-                        res = decrypt(priv_key, &packet.mpis, &edata)?;
+                        res = decrypt(priv_key, &packet.mpis, &edata, *protected)?;
                         Ok(())
                     })?;
                     println!("symkey {:?}", sym_key);
@@ -129,32 +145,50 @@ impl Message {
     }
 }
 
-fn decrypt(priv_key: &PrivateKeyRepr, mpis: &[Vec<u8>], edata: &[Packet]) -> Result<Vec<u8>> {
+fn decrypt(
+    priv_key: &PrivateKeyRepr,
+    mpis: &[Vec<u8>],
+    edata: &[Packet],
+    protected: bool,
+) -> Result<Vec<u8>> {
     match priv_key {
         &PrivateKeyRepr::RSA(ref priv_key) => {
-            println!("mpis: {:?}", mpis);
-            let mut m = vec![0u8; mpis[0].len()];
-            priv_key.private_decrypt(mpis[0].as_slice(), &mut m, Padding::PKCS1)?;
-            println!("m: {:?}", m);
+            // rsa consist of exactly one mpi
+            let mpi = &mpis[0];
+            println!("RSA m^e mod n: {}", hex::encode(mpi));
+            let mut m = vec![0u8; mpi.len()];
+            priv_key.private_decrypt(mpi, &mut m, Padding::PKCS1)?;
+            println!("m: {}", hex::encode(&m));
             let alg = SymmetricKeyAlgorithm::from_u8(m[0]).unwrap();
             println!("alg: {:?}", alg);
 
-            let key = &m[1..alg.key_size() + 1];
-            assert_eq!(key.len(), alg.key_size());
-            let mut checksum = &m[alg.key_size() + 1..alg.key_size() + 3];
-            println!("{:?} {:?}", key, checksum);
+            let key_size = alg.key_size();
+            let key = &m[1..key_size + 1];
+            let mut checksum = &m[key_size + 1..key_size + 3];
 
-            let checksum = checksum.read_u16::<LittleEndian>()? as usize;
-            let expected_checksum = m.iter().map(|v| *v as usize).sum::<usize>() & 0xffff;
+            // Then a two-octet checksum is appended, which is equal to the
+            // sum of the preceding session key octets, not including the algorithm
+            // identifier, modulo 65536.
+            let checksum = checksum.read_u16::<BigEndian>()? as u32;
+            let expected_checksum = key.iter().map(|v| *v as u32).sum::<u32>() & 0xffff;
 
+            println!("key: {}\nchecksum: {}", hex::encode(&key), checksum);
+            // TODO: proper error handling
             assert_eq!(checksum, expected_checksum, "wrong checksum");
 
+            println!("decrypting {} packets", edata.len());
             for packet in edata {
-                let mut res = packet.body.clone();
-                println!("{:?}", res);
-                alg.decrypt(key, &mut res);
-                println!("{:?}", res);
-                let msg = Message::from_bytes(res.as_slice())?;
+                assert_eq!(packet.body[0], 1, "invalid packet version");
+
+                let mut res = packet.body[1..].to_vec();
+                println!("decrypting protected = {:?}", protected);
+                let decrypted_packet = if protected {
+                    alg.decrypt_protected(key, &mut res)?
+                } else {
+                    alg.decrypt(key, &mut res)?
+                };
+                println!("decoding message");
+                let msg = Message::from_bytes_many(decrypted_packet)?;
                 println!("msg: {:?}", msg);
             }
             Ok(Vec::new())
@@ -199,19 +233,28 @@ mod tests {
             let mut decrypt_key_file =
                 File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
             let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file).unwrap();
-            println!("decrypt key: {:?}", decrypt_key);
+            println!(
+                "decrypt key (ID={}): {:?}",
+                hex::encode(decrypt_key.key_id().unwrap().to_vec()),
+                decrypt_key
+            );
 
             if let Some(verify_key_str) = details.verify_key.clone() {
                 let mut verify_key_file =
                     File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
                 let verify_key = PublicKey::from_armor_single(&mut verify_key_file).unwrap();
-                println!("verify key: {:?}", verify_key);
+                println!(
+                    "verify key (ID={}): {:?}",
+                    hex::encode(verify_key.key_id().unwrap().to_vec()),
+                    verify_key
+                );
             }
 
             let file_name = entry.to_str().unwrap().replace(".json", ".asc");
             let mut cipher_file = File::open(file_name).unwrap();
 
             let message = Message::from_armor_single(&mut cipher_file).unwrap();
+            println!("message: {:?}", message);
             let decrypted = message
                 .decrypt(
                     || "".to_string(),

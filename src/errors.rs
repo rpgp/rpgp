@@ -1,6 +1,7 @@
-use aes_soft::block_cipher_trait;
+use aes::block_cipher_trait;
 use base64;
 use block_modes;
+use cfb_mode;
 use nom;
 use openssl::error::ErrorStack;
 
@@ -42,6 +43,8 @@ pub enum Error {
     BlockMode,
     #[fail(display = "missing key")]
     MissingKey,
+    #[fail(display = "cfb: invalid key iv length")]
+    CfbInvalidKeyIvLength,
 }
 
 impl Error {
@@ -62,6 +65,7 @@ impl Error {
             Error::InvalidKeyLength => 12,
             Error::BlockMode => 13,
             Error::MissingKey => 14,
+            Error::CfbInvalidKeyIvLength => 15,
         }
     }
 }
@@ -114,5 +118,11 @@ impl From<block_cipher_trait::InvalidKeyLength> for Error {
 impl From<block_modes::BlockModeError> for Error {
     fn from(err: block_modes::BlockModeError) -> Error {
         Error::BlockMode
+    }
+}
+
+impl From<cfb_mode::InvalidKeyIvLength> for Error {
+    fn from(err: cfb_mode::InvalidKeyIvLength) -> Error {
+        Error::CfbInvalidKeyIvLength
     }
 }

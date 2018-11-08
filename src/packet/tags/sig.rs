@@ -53,9 +53,9 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
 named!(
     issuer<Subpacket>,
-    map!(complete!(take!(8)), |body| {
-        Subpacket::Issuer(clone_into_array(body))
-    })
+    map!(complete!(take!(8)), |body| Subpacket::Issuer(
+        clone_into_array(body)
+    ))
 );
 
 /// Parse a key expiration time subpacket
@@ -114,9 +114,9 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
 named!(
     exportable_certification<Subpacket>,
-    map!(complete!(be_u8), |v| {
-        Subpacket::ExportableCertification(v == 1)
-    })
+    map!(complete!(be_u8), |v| Subpacket::ExportableCertification(
+        v == 1
+    ))
 );
 
 /// Parse a revocable subpacket
@@ -196,9 +196,9 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
 named!(
     policy_uri<Subpacket>,
-    map!(map_res!(rest, str::from_utf8), |v| {
-        Subpacket::PolicyURI(v.to_string())
-    })
+    map!(map_res!(rest, str::from_utf8), |v| Subpacket::PolicyURI(
+        v.to_string()
+    ))
 );
 
 /// Parse a key flags subpacket
