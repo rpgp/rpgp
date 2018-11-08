@@ -20,6 +20,19 @@ pub struct Packet {
     pub body: Vec<u8>,
 }
 
+/// Represents the packet length.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum PacketLength {
+    Fixed(usize),
+    Indeterminated,
+}
+
+impl From<usize> for PacketLength {
+    fn from(val: usize) -> PacketLength {
+        PacketLength::Fixed(val)
+    }
+}
+
 enum_from_primitive!{
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Tag {

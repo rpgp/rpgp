@@ -29,7 +29,6 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
             break;
         }
 
-        println!("read {} (needed: {:?})", sz, needed);
         if needed.is_some() {
             if sz == 0 {
                 // Cancel if we didn't receive enough bytes from our source.
@@ -43,13 +42,11 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
             let length = {
                 match single::parser(b.data()) {
                     Ok((remaining, p)) => {
-                        println!("got packet {} {:?}", remaining.len(), p);
                         packets.push(p);
                         b.data().offset(remaining)
                     }
                     Err(err) => match err {
                         nom::Err::Incomplete(n) => {
-                            println!("incomplete: {:?}", n);
                             needed = Some(n);
                             break;
                         }

@@ -261,7 +261,7 @@ mod tests {
                     || details.passphrase.clone(),
                     &decrypt_key,
                 )
-                .unwrap();
+                .expect("failed to decrypt message");
             assert_eq!(
                 ::std::str::from_utf8(&decrypted).unwrap(),
                 details.textcontent.unwrap_or_else(|| "".to_string())
