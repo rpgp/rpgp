@@ -1,4 +1,4 @@
-use armor;
+use armor::{self, BlockType};
 use errors::{Error, Result};
 use packet::{self, types};
 use std::io::{Cursor, Read};
@@ -47,10 +47,28 @@ pub trait Deserializable: Sized {
 
     /// Armored ascii data.
     fn from_armor_many(input: impl Read) -> Result<Vec<Self>> {
-        let (_typ, _headers, body) = armor::parse(input)?;
-
+        let (typ, _headers, body) = armor::parse(input)?;
         // TODO: add typ and headers information to the key possibly?
-        Self::from_bytes_many(body.as_slice())
+        match typ {
+            // Standard PGP types
+            BlockType::PublicKey
+            | BlockType::PrivateKey
+            | BlockType::Message
+            | BlockType::MultiPartMessage(_, _)
+            | BlockType::Signature
+            | BlockType::File => {
+                // TODO: check that the result is what it actually said.
+                Self::from_bytes_many(body.as_slice())
+            }
+            BlockType::PublicKeyPKCS1
+            | BlockType::PublicKeyPKCS8
+            | BlockType::PublicKeyOpenssh
+            | BlockType::PrivateKeyPKCS1
+            | BlockType::PrivateKeyPKCS8
+            | BlockType::PrivateKeyOpenssh => {
+                unimplemented_err!("key format {:?}", typ);
+            }
+        }
     }
 
     /// Parse a list of compositions in raw byte format.

@@ -51,6 +51,10 @@ pub enum Error {
     Unsupported(String),
     #[fail(display = "{:?}", _0)]
     Message(String),
+    #[fail(display = "Invalid Packet {:?}", _0)]
+    PacketError(nom::ErrorKind),
+    #[fail(display = "Incomplete Packet")]
+    PacketIncomplete,
 }
 
 impl Error {
@@ -75,6 +79,8 @@ impl Error {
             Error::Unimplemented(_) => 16,
             Error::Unsupported(_) => 17,
             Error::Message(_) => 18,
+            Error::PacketError(_) => 19,
+            Error::PacketIncomplete => 20,
         }
     }
 }

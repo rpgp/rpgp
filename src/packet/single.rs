@@ -50,15 +50,12 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
         // Five-Octet Lengths
         255       => map!(take_bits!(u32, 32), |v| u32_as_usize(v).into())
     )
-    >> ({
-        println!("got packet header new {:?} {:?} {:?}", ver, tag, len);
-        (ver, tag, len)
-    })
+    >> (ver, tag, len)
 )));
 
-/// Parse Packet Headers
+/// Parse Packet
 /// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
-named!(pub parser<Packet>, do_parse!(
+named!(pub parser<Packet>, dbg_dmp!(do_parse!(
        head: alt!(new_packet_header | old_packet_header)
     >> body: switch!(value!(head.2),
         PacketLength::Fixed(length) => take!(length) |
@@ -69,4 +66,4 @@ named!(pub parser<Packet>, do_parse!(
         tag: head.1,
         body: body.to_vec(),
     })
-));
+)));

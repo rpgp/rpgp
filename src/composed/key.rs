@@ -710,4 +710,138 @@ mod tests {
             hex::encode(key.subkeys[0].key.fingerprint())
         );
     }
+
+    fn test_parse_openpgp_key(key: &str) {
+        let f = read_file(Path::new("./tests/openpgp/").join(key));
+        PublicKey::from_armor_many(f).expect(&format!("failed to parse {}", key));
+    }
+
+    fn test_parse_openpgp_key_bin(key: &str) {
+        let f = read_file(Path::new("./tests/openpgp/").join(key));
+        PublicKey::from_bytes_many(f).expect(&format!("failed to parse {}", key));
+    }
+
+    macro_rules! openpgp_key_bin {
+        ($name:ident, $path:expr) => {
+            #[test]
+            fn $name() {
+                test_parse_openpgp_key_bin($path);
+            }
+        };
+    }
+
+    macro_rules! openpgp_key {
+        ($name:ident, $path:expr) => {
+            #[test]
+            fn $name() {
+                test_parse_openpgp_key($path);
+            }
+        };
+    }
+
+    openpgp_key!(
+        key_openpgp_samplekeys_e6,
+        "samplekeys/E657FB607BB4F21C90BB6651BC067AF28BC90111.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_authenticate_only_pub,
+        "samplekeys/authenticate-only.pub.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_authenticate_only_sec,
+        "samplekeys/authenticate-only.sec.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_dda252ebb8ebe1af_1,
+        "samplekeys/dda252ebb8ebe1af-1.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_dda252ebb8ebe1af_2,
+        "samplekeys/dda252ebb8ebe1af-2.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_e2e_p256_1_clr,
+        "samplekeys/e2e-p256-1-clr.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_e2e_p256_1_prt,
+        "samplekeys/e2e-p256-1-prt.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_ecc_sample_1_pub,
+        "samplekeys/ecc-sample-1-pub.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_ecc_sample_1_sec,
+        "samplekeys/ecc-sample-1-sec.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_ecc_sample_2_pub,
+        "samplekeys/ecc-sample-2-pub.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_ecc_sample_2_sec,
+        "samplekeys/ecc-sample-2-sec.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_ecc_sample_3_pub,
+        "samplekeys/ecc-sample-3-pub.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_ecc_sample_3_sec,
+        "samplekeys/ecc-sample-3-sec.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_ed25519_cv25519_sample_1,
+        "samplekeys/ed25519-cv25519-sample-1.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_eddsa_sample_1_pub,
+        "samplekeys/eddsa-sample-1-pub.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_eddsa_sample_1_sec,
+        "samplekeys/eddsa-sample-1-sec.asc"
+    );
+    openpgp_key!(key_openpgp_samplekeys_issue2346, "samplekeys/issue2346.gpg");
+    openpgp_key_bin!(
+        key_openpgp_samplekeys_no_creation_time,
+        "samplekeys/no-creation-time.gpg"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_rsa_primary_auth_only_pub,
+        "samplekeys/rsa-primary-auth-only.pub.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_rsa_primary_auth_only_sec,
+        "samplekeys/rsa-primary-auth-only.sec.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_rsa_rsa_sample_1,
+        "samplekeys/rsa-rsa-sample-1.asc"
+    );
+    openpgp_key!(
+        key_openpgp_samplekeys_silent_running,
+        "samplekeys/silent-running.asc"
+    );
+
+    // PKCS#1
+    // openpgp_key!(key_openpgp_samplekeys_ssh_dsa, "samplekeys/ssh-dsa.key");
+
+    // PKCS#1
+    // openpgp_key!(key_openpgp_samplekeys_ssh_ecdsa, "samplekeys/ssh-ecdsa.key");
+
+    // OpenSSH
+    // openpgp_key!(
+    //     key_openpgp_samplekeys_ssh_ed25519,
+    //     "samplekeys/ssh-ed25519.key"
+    // );
+
+    // PKCS#1
+    // openpgp_key!(key_openpgp_samplekeys_ssh_rsa, "samplekeys/ssh-rsa.key");
+
+    openpgp_key!(
+        key_openpgp_samplekeys_whats_new_in_2_1,
+        "samplekeys/whats-new-in-2.1.asc"
+    );
 }
