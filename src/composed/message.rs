@@ -187,24 +187,24 @@ fn decrypt(
     };
 
     let key_size = alg.key_size();
-    let key = &decrypted_key[1..key_size + 1];
+    let key = &decrypted_key[1..=key_size];
 
     // Then a two-octet checksum is appended, which is equal to the
     // sum of the preceding session key octets, not including the algorithm
     // identifier, modulo 65536.
     let mut checksum = &decrypted_key[key_size + 1..key_size + 3];
-    let checksum = checksum.read_u16::<BigEndian>()? as u32;
-    let expected_checksum = key.iter().map(|v| *v as u32).sum::<u32>() & 0xffff;
+    let checksum = u32::from(checksum.read_u16::<BigEndian>()?);
+    let expected_checksum = key.iter().map(|v| u32::from(*v)).sum::<u32>() & 0xffff;
 
     println!("key: {}\nchecksum: {}", hex::encode(&key), checksum);
-    // TODO: proper error handling
-    assert_eq!(checksum, expected_checksum, "wrong checksum");
+
+    ensure_eq!(checksum, expected_checksum, "wrong checksum");
 
     println!("decrypting {} packets", edata.len());
     let mut messages = Vec::with_capacity(edata.len());
 
     for packet in edata {
-        assert_eq!(packet.body[0], 1, "invalid packet version");
+        ensure_eq!(packet.body[0], 1, "invalid packet version");
 
         let mut res = packet.body[1..].to_vec();
         println!("decrypting protected = {:?}", protected);
@@ -366,10 +366,13 @@ mod tests {
     msg_test!(parse_gnupg_msg_v2_0_17_005, "gnupg-v2-0-17-005");
     msg_test!(parse_gnupg_msg_v2_0_17_006, "gnupg-v2-0-17-006");
     // parsing error
+    // ECDH key
     // msg_test!(parse_gnupg_msg_v2_1_5_001, "gnupg-v2-1-5-001");
     // parsing error
+    // ECDH key
     // msg_test!(parse_gnupg_msg_v2_1_5_002, "gnupg-v2-1-5-002");
     // parsing error
+    // ECDH key
     // msg_test!(parse_gnupg_msg_v2_1_5_003, "gnupg-v2-1-5-003");
     msg_test!(parse_gnupg_msg_v2_10_001, "gnupg-v2-10-001");
     msg_test!(parse_gnupg_msg_v2_10_002, "gnupg-v2-10-002");

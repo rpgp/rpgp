@@ -10,18 +10,6 @@ impl Deserializable for Message {
     /// Parse a composed message.
     /// Ref: https://tools.ietf.org/html/rfc4880#section-11.3
     fn from_packets<'a>(packets: impl IntoIterator<Item = &'a Packet>) -> Result<Vec<Message>> {
-        // stack = [];
-        // cur = none;
-        // is_esk = false;
-        // is_edata = false;
-
-        // literal => stack.push new Literal @;
-        // compressed compressed => stack.push new Compressed @;
-        // signature => cur == OnePassSigned ? close cur @ : stack.push new Signed @;
-        // one_pass_signature => stack.push new OnePassSigned @;
-        // esk => ensure Encrypted && is_esk = true && cur.esk.push @;
-        // edata => ensure Encrypted && is_esk = false && is_edata = true && cur.edata.push @;
-
         let mut stack: Vec<Message> = Vec::new();
         // track a currently open package
         let mut cur: Option<usize> = None;
@@ -45,7 +33,7 @@ impl Deserializable for Message {
                             } => {
                                 *message = Some(Box::new(Message::Literal(packet.to_owned())));
                             }
-                            _ => panic!("unexpected literal"),
+                            _ => bail!("unexpected literal"),
                         }
                     }
                     None => {
@@ -62,7 +50,7 @@ impl Deserializable for Message {
                             } => {
                                 *message = Some(Box::new(Message::Literal(packet.to_owned())));
                             }
-                            _ => panic!("unexpected packet"),
+                            _ => bail!("unexpected packet"),
                         }
                     }
                     None => {
@@ -73,9 +61,7 @@ impl Deserializable for Message {
                 //    ESK :- Public-Key Encrypted Session Key Packet |
                 //           Symmetric-Key Encrypted Session Key Packet.
                 Tag::PublicKeyEncryptedSessionKey | Tag::SymKeyEncryptedSessionKey => {
-                    if is_edata == true {
-                        panic!("edata should not be followed by esk");
-                    }
+                    ensure!(!is_edata, "edata should not be followed by esk");
 
                     if cur.is_none() {
                         stack.push(Message::Encrypted {
@@ -94,7 +80,7 @@ impl Deserializable for Message {
                                 packet.body.as_slice(),
                             )?);
                         } else {
-                            panic!("bad esk init");
+                            bail!("bad esk init");
                         }
                     }
                 }
@@ -111,9 +97,9 @@ impl Deserializable for Message {
                         cur = Some(stack.len() - 1);
                     }
 
-                    if let Some(_) = cur {
+                    if cur.is_some() {
                         let mut el = stack.pop().unwrap();
-                        stack.push(update_message(el, packet));
+                        stack.push(update_message(el, packet)?);
                     }
                 }
                 Tag::Signature => match cur {
@@ -124,7 +110,7 @@ impl Deserializable for Message {
                             *signature = Some(packet.to_owned());
                             cur = None;
                         }
-                        _ => panic!("unexpected signature"),
+                        _ => bail!("unexpected signature"),
                     },
                     None => {
                         stack.push(Message::Signed {
@@ -142,7 +128,7 @@ impl Deserializable for Message {
                     });
                     cur = Some(stack.len() - 1);
                 }
-                _ => panic!("unexpected packet {:?}", packet.tag),
+                _ => bail!("unexpected packet {:?}", packet.tag),
             }
         }
 
@@ -150,14 +136,14 @@ impl Deserializable for Message {
     }
 }
 
-fn update_message(el: Message, packet: &Packet) -> Message {
+fn update_message(el: Message, packet: &Packet) -> Result<Message> {
     match el {
         Message::Encrypted { .. } => update_encrypted(el, packet),
         Message::Signed { .. } => update_signed(el, packet),
-        _ => panic!("bad edata init"),
+        _ => bail!("bad edata init"),
     }
 }
-fn update_encrypted(mut el: Message, packet: &Packet) -> Message {
+fn update_encrypted(mut el: Message, packet: &Packet) -> Result<Message> {
     if let Message::Encrypted {
         ref mut edata,
         ref mut protected,
@@ -168,10 +154,10 @@ fn update_encrypted(mut el: Message, packet: &Packet) -> Message {
         *protected = packet.tag == Tag::SymEncryptedProtectedData;
     }
 
-    el
+    Ok(el)
 }
 
-fn update_signed(el: Message, packet: &Packet) -> Message {
+fn update_signed(el: Message, packet: &Packet) -> Result<Message> {
     if let Message::Signed {
         message,
         signature,
@@ -181,9 +167,11 @@ fn update_signed(el: Message, packet: &Packet) -> Message {
         let new_message = match message {
             Some(msg) => {
                 if let Message::Encrypted { .. } = *msg {
-                    Some(Box::new(update_encrypted((*msg).clone(), packet)))
+                    let res = update_encrypted((*msg).clone(), packet)?;
+
+                    Some(Box::new(res))
                 } else {
-                    panic!("bad edata init in signed message");
+                    bail!("bad edata init in signed message");
                 }
             }
             None => Some(Box::new(Message::Encrypted {
@@ -193,11 +181,11 @@ fn update_signed(el: Message, packet: &Packet) -> Message {
             })),
         };
 
-        Message::Signed {
+        Ok(Message::Signed {
             message: new_message,
             signature,
             one_pass_signature,
-        }
+        })
     } else {
         unreachable!()
     }

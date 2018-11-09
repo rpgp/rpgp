@@ -1,15 +1,15 @@
-use base64;
-use byteorder::{BigEndian, ByteOrder};
-use circular::Buffer;
-use crc24;
-use nom::{
-    self, digit, line_ending, not_line_ending, InputIter, InputLength, Needed, Offset, Slice,
-};
 use std::collections::HashMap;
 use std::io::Read;
 use std::str;
 
+use base64;
+use byteorder::{BigEndian, ByteOrder};
+use circular::Buffer;
+use crc24;
 use errors::{Error, Result};
+use nom::{
+    self, digit, line_ending, not_line_ending, InputIter, InputLength, Needed, Offset, Slice,
+};
 use util::base64_token as body_parser;
 
 /// Armor block types.
@@ -129,10 +129,9 @@ named!(armor_header(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
 ));
 
 /// Read the checksum from an base64 encoded buffer.
-fn read_checksum(input: &[u8]) -> u32 {
-    // TODO: proper error handling
-    let checksum =
-        base64::decode_config(input, base64::MIME).expect("Invalid base64 encoding checksum");
+fn read_checksum(input: &[u8]) -> ::std::io::Result<u32> {
+    let checksum = base64::decode_config(input, base64::MIME)
+        .map_err(|_| ::std::io::ErrorKind::InvalidData)?;
 
     let mut buf = [0; 4];
     let mut i = checksum.len();
@@ -141,7 +140,7 @@ fn read_checksum(input: &[u8]) -> u32 {
         i -= 1;
     }
 
-    BigEndian::read_u32(&buf)
+    Ok(BigEndian::read_u32(&buf))
 }
 
 named!(header_parser(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
@@ -223,7 +222,7 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
             }
 
             let mut needed = None;
-            while read < into_len {
+            'outer: while read < into_len {
                 let l = match self.current_part {
                     Part::Header => match header_parser(b.data()) {
                         Ok((remaining, (typ, header))) => {
@@ -235,7 +234,7 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
                         Err(err) => match err {
                             nom::Err::Incomplete(n) => {
                                 needed = Some(n);
-                                break;
+                                break 'outer;
                             }
                             _ => {
                                 return Err(::std::io::Error::new(
@@ -264,7 +263,7 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
                             Err(err) => match err {
                                 nom::Err::Incomplete(n) => {
                                     needed = Some(n);
-                                    break;
+                                    break 'outer;
                                 }
                                 nom::Err::Error(_) => {
                                     // this happens when there are no more base64 tokens, so lets move
@@ -296,7 +295,7 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
                             }
 
                             if let Some(raw) = checksum {
-                                self.checksum = Some(read_checksum(raw));
+                                self.checksum = Some(read_checksum(raw)?);
                             }
 
                             b.data().offset(remaining)
@@ -304,7 +303,7 @@ impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
                         Err(err) => match err {
                             nom::Err::Incomplete(n) => {
                                 needed = Some(n);
-                                break;
+                                break 'outer;
                             }
                             _ => {
                                 return Err(::std::io::Error::new(

@@ -105,16 +105,6 @@ pub fn bignum_to_mpi(n: &BigUint) -> Vec<u8> {
 /// Parse an mpi and convert it to a `BigUint`.
 named!(pub mpi_big<BigUint>, map!(mpi, BigUint::from_bytes_be));
 
-/// Parse an mpi and convert it to a `u32`.
-named!(pub mpi_u32<u32>, map!(mpi, |val| {
-    assert!(val.len() < 5, "too large for a u32 {:?}", val);
-    // ensure we have enough bytes to decode a u32
-    let mut v = vec![0u8; 4];
-    v[4-val.len()..].copy_from_slice(val);
-
-    BigEndian::read_u32(&v)
-}));
-
 /// Convert a slice into an array
 pub fn clone_into_array<A, T>(slice: &[T]) -> A
 where

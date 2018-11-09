@@ -12,13 +12,12 @@ macro_rules! decrypt {
         let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
         mode.decrypt($prefix);
 
-        // TODO: proper error
         // quick check, before decrypting the rest
-        assert_eq!($prefix[$bs - 2], $prefix[$bs], "quick check part 1");
-        assert_eq!($prefix[$bs - 1], $prefix[$bs + 1], "quick check part 2");
+        ensure_eq!($prefix[$bs - 2], $prefix[$bs], "quick check part 1");
+        ensure_eq!($prefix[$bs - 1], $prefix[$bs + 1], "quick check part 2");
 
         if $resync {
-            unimplemented!();
+            unimplemented_err!("CFB decrypt with resync");
         } else {
             mode.decrypt($data);
         }
@@ -118,9 +117,9 @@ impl SymmetricKeyAlgorithm {
             data.len(),
             mdc.len()
         );
-        // TODO: Proper error handling
-        assert_eq!(mdc[0], 0xD3, "invalid MDC tag");
-        assert_eq!(mdc[1], 0x14, "invalid MDC length");
+
+        ensure_eq!(mdc[0], 0xD3, "invalid MDC tag");
+        ensure_eq!(mdc[1], 0x14, "invalid MDC length");
         // TODO: hash and compare to mdc[2..];
         println!("mdc: {}", hex::encode(mdc));
 

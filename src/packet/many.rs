@@ -31,20 +31,19 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
             break;
         }
 
-        if needed.is_some() {
-            if sz == 0 {
-                if second_round {
-                    // Cancel if we didn't receive enough bytes from our source, the second time around.
-                    return Err(Error::Incomplete);
-                }
-                second_round = true;
+        if needed.is_some() && sz == 0 {
+            if second_round {
+                // Cancel if we didn't receive enough bytes from our source, the second time around.
+                return Err(Error::Incomplete);
             }
+            second_round = true;
         }
 
         loop {
             let length = {
                 match single::parser(b.data()) {
                     Ok((remaining, p)) => {
+                        println!("-- parsed packet {:?} --", p.tag);
                         packets.push(p);
                         b.data().offset(remaining)
                     }

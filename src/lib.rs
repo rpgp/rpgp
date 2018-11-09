@@ -45,6 +45,11 @@ extern crate glob;
 #[cfg(test)]
 extern crate serde;
 
+#[macro_use]
+mod errors;
+mod armor;
+mod packet;
+
 pub mod email;
 pub use composed::key::*;
 pub mod composed;
@@ -52,7 +57,3 @@ pub mod crypto;
 
 // public so it can be used in doc test
 pub mod util;
-
-mod armor;
-mod errors;
-mod packet;
