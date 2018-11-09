@@ -303,9 +303,8 @@ mod tests {
             File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
         let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file).unwrap();
         println!(
-            "decrypt key (ID={}): {:?}",
+            "decrypt key (ID={})",
             hex::encode(decrypt_key.key_id().unwrap().to_vec()),
-            decrypt_key
         );
 
         if let Some(verify_key_str) = details.verify_key.clone() {
@@ -313,9 +312,8 @@ mod tests {
                 File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
             let verify_key = PublicKey::from_armor_single(&mut verify_key_file).unwrap();
             println!(
-                "verify key (ID={}): {:?}",
+                "verify key (ID={})",
                 hex::encode(verify_key.key_id().unwrap().to_vec()),
-                verify_key
             );
         }
 
@@ -324,6 +322,7 @@ mod tests {
 
         let message = Message::from_armor_single(&mut cipher_file).unwrap();
         println!("message: {:?}", message);
+
         let decrypted = message
             .decrypt(
                 || "".to_string(),
@@ -347,38 +346,57 @@ mod tests {
     }
 
     // RSA
-    msg_test!(parse_gnupg_msg_v1_001, "gnupg-v1-001");
+    msg_test!(msg_gnupg_v1_001, "gnupg-v1-001");
     // Elgamal
-    // msg_test!(parse_gnupg_msg_v1_002, "gnupg-v1-002");
+    // msg_test!(msg_gnupg_v1_002, "gnupg-v1-002");
     // RSA
-    msg_test!(parse_gnupg_msg_v1_003, "gnupg-v1-003");
+    msg_test!(msg_gnupg_v1_003, "gnupg-v1-003");
 
-    msg_test!(parse_gnupg_msg_v1_4_11_001, "gnupg-v1-4-11-001");
-    msg_test!(parse_gnupg_msg_v1_4_11_002, "gnupg-v1-4-11-002");
-    msg_test!(parse_gnupg_msg_v1_4_11_003, "gnupg-v1-4-11-003");
-    msg_test!(parse_gnupg_msg_v1_4_11_004, "gnupg-v1-4-11-004");
-    msg_test!(parse_gnupg_msg_v1_4_11_005, "gnupg-v1-4-11-005");
-    msg_test!(parse_gnupg_msg_v1_4_11_006, "gnupg-v1-4-11-006");
-    msg_test!(parse_gnupg_msg_v2_0_17_001, "gnupg-v2-0-17-001");
-    msg_test!(parse_gnupg_msg_v2_0_17_002, "gnupg-v2-0-17-002");
-    msg_test!(parse_gnupg_msg_v2_0_17_003, "gnupg-v2-0-17-003");
-    msg_test!(parse_gnupg_msg_v2_0_17_004, "gnupg-v2-0-17-004");
-    msg_test!(parse_gnupg_msg_v2_0_17_005, "gnupg-v2-0-17-005");
-    msg_test!(parse_gnupg_msg_v2_0_17_006, "gnupg-v2-0-17-006");
+    msg_test!(msg_gnupg_v1_4_11_001, "gnupg-v1-4-11-001");
+    msg_test!(msg_gnupg_v1_4_11_002, "gnupg-v1-4-11-002");
+    msg_test!(msg_gnupg_v1_4_11_003, "gnupg-v1-4-11-003");
+    msg_test!(msg_gnupg_v1_4_11_004, "gnupg-v1-4-11-004");
+    msg_test!(msg_gnupg_v1_4_11_005, "gnupg-v1-4-11-005");
+    msg_test!(msg_gnupg_v1_4_11_006, "gnupg-v1-4-11-006");
+    msg_test!(msg_gnupg_v2_0_17_001, "gnupg-v2-0-17-001");
+    msg_test!(msg_gnupg_v2_0_17_002, "gnupg-v2-0-17-002");
+    msg_test!(msg_gnupg_v2_0_17_003, "gnupg-v2-0-17-003");
+    msg_test!(msg_gnupg_v2_0_17_004, "gnupg-v2-0-17-004");
+    msg_test!(msg_gnupg_v2_0_17_005, "gnupg-v2-0-17-005");
+    msg_test!(msg_gnupg_v2_0_17_006, "gnupg-v2-0-17-006");
     // parsing error
     // ECDH key
-    // msg_test!(parse_gnupg_msg_v2_1_5_001, "gnupg-v2-1-5-001");
+    // msg_test!(msg_gnupg_v2_1_5_001, "gnupg-v2-1-5-001");
     // parsing error
     // ECDH key
-    // msg_test!(parse_gnupg_msg_v2_1_5_002, "gnupg-v2-1-5-002");
+    // msg_test!(msg_gnupg_v2_1_5_002, "gnupg-v2-1-5-002");
     // parsing error
     // ECDH key
-    // msg_test!(parse_gnupg_msg_v2_1_5_003, "gnupg-v2-1-5-003");
-    msg_test!(parse_gnupg_msg_v2_10_001, "gnupg-v2-10-001");
-    msg_test!(parse_gnupg_msg_v2_10_002, "gnupg-v2-10-002");
-    msg_test!(parse_gnupg_msg_v2_10_003, "gnupg-v2-10-003");
-    msg_test!(parse_gnupg_msg_v2_10_004, "gnupg-v2-10-004");
-    msg_test!(parse_gnupg_msg_v2_10_005, "gnupg-v2-10-005");
-    msg_test!(parse_gnupg_msg_v2_10_006, "gnupg-v2-10-006");
-    msg_test!(parse_gnupg_msg_v2_10_007, "gnupg-v2-10-007");
+    // msg_test!(msg_gnupg_v2_1_5_003, "gnupg-v2-1-5-003");
+    msg_test!(msg_gnupg_v2_10_001, "gnupg-v2-10-001");
+    msg_test!(msg_gnupg_v2_10_002, "gnupg-v2-10-002");
+    msg_test!(msg_gnupg_v2_10_003, "gnupg-v2-10-003");
+    msg_test!(msg_gnupg_v2_10_004, "gnupg-v2-10-004");
+    msg_test!(msg_gnupg_v2_10_005, "gnupg-v2-10-005");
+    msg_test!(msg_gnupg_v2_10_006, "gnupg-v2-10-006");
+    msg_test!(msg_gnupg_v2_10_007, "gnupg-v2-10-007");
+
+    // ECDH
+    // msg_test!(msg_e2e_001, "e2e-001");
+    // ECDH
+    // msg_test!(msg_e2e_002, "e2e-001");
+
+    msg_test!(msg_pgp_10_0_001, "pgp-10-0-001");
+    msg_test!(msg_pgp_10_0_002, "pgp-10-0-002");
+    msg_test!(msg_pgp_10_0_003, "pgp-10-0-003");
+    msg_test!(msg_pgp_10_0_004, "pgp-10-0-004");
+    msg_test!(msg_pgp_10_0_005, "pgp-10-0-005");
+    msg_test!(msg_pgp_10_0_006, "pgp-10-0-006");
+    // IDEA
+    // msg_test!(msg_pgp_10_0_007, "pgp-10-0-007");
+
+    // ECDH
+    // msg_test!(msg_openkeychain_001, "openkeychain-001");
+
+    msg_test!(msg_openpgp_001, "openpgp-001");
 }

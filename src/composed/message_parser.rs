@@ -128,6 +128,15 @@ impl Deserializable for Message {
                     });
                     cur = Some(stack.len() - 1);
                 }
+                Tag::Marker => {
+                    // Marker Packets are ignored
+                    // see https://tools.ietf.org/html/rfc4880#section-5.8
+                    ensure_eq!(
+                        &packet.body[..],
+                        &[0x50, 0x47, 0x50][..],
+                        "invalid marker packet body"
+                    );
+                }
                 _ => bail!("unexpected packet {:?}", packet.tag),
             }
         }
