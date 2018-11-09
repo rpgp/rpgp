@@ -64,15 +64,12 @@ macro_rules! key_parser {
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
             /// Currently skips packets it fails to parse.
             fn from_packets_single(packets: &[&Packet]) -> Result<$key_type> {
-                // TODO: actually return errors, don't silently fail (idea, return Result<Vec<Key>> at `parse` level)
-
                 let mut ctr = 0;
                 let packets_len = packets.len();
 
                 // -- One Public-Key packet
-                // TODO: better error management
                 // idea: use Error::UnexpectedPacket(actual, expected)
-                assert_eq!(packets[ctr].tag, $key_tag);
+                ensure_eq!(packets[ctr].tag, $key_tag);
 
                 let primary_key = Self::key_parser(packets[ctr])?;
                 ctr += 1;
@@ -113,7 +110,6 @@ macro_rules! key_parser {
                 while ctr < packets_len {
                     match packets[ctr].tag {
                         Tag::UserID => {
-                            // TODO: better erorr handling
                             let id = tags::userid::parser(packets[ctr].body.as_slice());
                             ctr += 1;
 
@@ -126,7 +122,6 @@ macro_rules! key_parser {
                             users.push(User::new(id, sigs));
                         }
                         Tag::UserAttribute => {
-                            // TODO: better error handling
                             let a = tags::userattr::parser(packets[ctr].body.as_slice());
                             if a.is_err() {
                                 println!("failed to parse {:?}\n{:?}", packets[ctr], a);
@@ -149,14 +144,8 @@ macro_rules! key_parser {
 
                 // -- Only V4 keys should have sub keys
 
-                // TODO: better error handling
                 if ctr != packets_len && primary_key.version() != &KeyVersion::V4 {
-                    panic!(
-                        "no more packets expected {} {} {:?}",
-                        ctr,
-                        packets_len,
-                        &packets[ctr..]
-                    );
+                    bail!("only V4 keys can have subkeys");
                 }
 
                 // -- Zero or more Subkey packets
@@ -176,20 +165,9 @@ macro_rules! key_parser {
                     subkeys.push(<$subkey_type>::new(subkey, sigs));
                 }
 
-                // TODO: better error handling
-                if users.is_empty() {
-                    println!("WARNING: missing user ids");
-                }
+                ensure!(!users.is_empty(), "missing user ids");
 
-                // TODO: better error handling
-                if ctr != packets_len {
-                    panic!(
-                        "failed to process all packets, processed {}/{}\n{:?}",
-                        ctr,
-                        packets_len,
-                        &packets[ctr..]
-                    )
-                }
+                ensure_eq!(ctr, packets_len, "failed to process all packets");
 
                 Ok(<$key_type>::new(
                     primary_key,

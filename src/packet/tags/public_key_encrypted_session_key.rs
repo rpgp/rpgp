@@ -21,11 +21,20 @@ named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Vec<u8>>>, switch!(
     &PublicKeyAlgorithm::RSAEncrypt => map!(mpi, |v| vec![v.to_vec()]) |
     &PublicKeyAlgorithm::Elgamal |
     &PublicKeyAlgorithm::ElgamalSign => do_parse!(
-        first: mpi
-            >> second: mpi
-            >> (vec![first.to_vec(), second.to_vec()])
+          first: mpi
+      >> second: mpi
+      >> (vec![first.to_vec(), second.to_vec()])
+    ) |
+    &PublicKeyAlgorithm::ECDSA => value!(Vec::new())|
+    &PublicKeyAlgorithm::ECDH => do_parse!(
+           a: mpi
+        >> blen: be_u8
+        >> b: take!(blen)
+      >> ({
+          println!("{:?} {:?}", a, b);
+          vec![a.to_vec(), b.to_vec()]
+      })
     )
-    // TODO: handle other algorithms
 ));
 
 /// Parses a Public-Key Encrypted Session Key Packets
@@ -34,14 +43,18 @@ named!(
     parse_inner<PKESK>,
     do_parse!(
         // version, only 3 is allowed
-        // TODO: validate
         version: be_u8
-            // the key id this maps to
-            >> id: map_res!(take!(8), KeyID::from_slice)
-            // the symmetric key algorithm
-            >> alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-            // key algorithm specific data
-            >> mpis: call!(parse_mpis, &alg) >> (PKESK {
+        // the key id this maps to
+        >> id: map_res!(take!(8), KeyID::from_slice)
+        // the symmetric key algorithm
+        >> alg: map_opt!(be_u8, |v| {
+                let a = PublicKeyAlgorithm::from_u8(v);
+                println!("alg {:?}",a);
+                a
+        })
+        // key algorithm specific data
+        >> mpis: call!(parse_mpis, &alg)
+        >> (PKESK {
             version,
             id,
             algorithm: alg,
@@ -50,7 +63,12 @@ named!(
     )
 );
 
+/// Parses a single Public-Key Encrypted Session Key Packet.
 pub fn parse(body: &[u8]) -> Result<PKESK> {
-    let (_, res) = parse_inner(body)?;
-    Ok(res)
+    let (_, pk) = parse_inner(body)?;
+
+    // TODO: move this into a constructor
+    ensure_eq!(pk.version, 3, "invalid version");
+
+    Ok(pk)
 }

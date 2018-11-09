@@ -111,7 +111,7 @@ impl PrivateKey {
         self.primary_key.key_id()
     }
 
-    pub fn unlock<'a, F, G>(&self, pw: F, work: G) -> Result<()>
+    pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
         G: FnOnce(&types::key::PrivateKeyRepr) -> Result<()>,
@@ -142,7 +142,7 @@ impl PrivateSubKey {
         self.key.key_id()
     }
 
-    pub fn unlock<'a, F, G>(&self, pw: F, work: G) -> Result<()>
+    pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
         G: FnOnce(&types::key::PrivateKeyRepr) -> Result<()>,

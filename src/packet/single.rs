@@ -42,15 +42,18 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
         // One-Octet Lengths
         0...191   => value!((olen as usize).into()) |
         // Two-Octet Lengths
-        192...254 => map!(take_bits!(u8, 8), |a| {
+        192...223 => map!(take_bits!(u8, 8), |a| {
             (((olen as usize - 192) << 8) + 192 + a as usize).into()
         }) |
-        // Five-Octet Lengths
-        255       => map!(take_bits!(u32, 32), |v| u32_as_usize(v).into()) |
         // Partial Body Lengths
-        224...254 => map!(take_bits!(u8, 8), |_| unimplemented!("partial body lengths"))
+        224...254 => map!(take_bits!(u8, 8), |_| unimplemented!("partial body lengths")) |
+        // Five-Octet Lengths
+        255       => map!(take_bits!(u32, 32), |v| u32_as_usize(v).into())
     )
-    >> (ver, tag, len)
+    >> ({
+        println!("got packet header new {:?} {:?} {:?}", ver, tag, len);
+        (ver, tag, len)
+    })
 )));
 
 /// Parse Packet Headers
@@ -62,8 +65,8 @@ named!(pub parser<Packet>, do_parse!(
         PacketLength::Indeterminated => call!(rest)
     )
     >> (Packet{
-            version: head.0,
-            tag: head.1,
-            body: body.to_vec(),
-        })
+        version: head.0,
+        tag: head.1,
+        body: body.to_vec(),
+    })
 ));

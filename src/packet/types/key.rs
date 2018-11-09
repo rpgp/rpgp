@@ -22,8 +22,7 @@ pub struct KeyID([u8; 8]);
 
 impl KeyID {
     pub fn from_slice(input: &[u8]) -> Result<KeyID> {
-        // TODO: return an error
-        assert_eq!(input.len(), 8);
+        ensure_eq!(input.len(), 8, "invalid input length");
         let mut r = [0u8; 8];
         r.copy_from_slice(input);
 
@@ -248,7 +247,7 @@ impl PrivateKey {
             println!("plaintext: {:?}", plaintext);
             self.from_plaintext(&plaintext)
         } else {
-            panic!("missing iv");
+            bail!("missing iv");
         }
     }
 
@@ -269,21 +268,21 @@ impl PrivateKey {
                 }
             }
             PublicKeyAlgorithm::DSA => {
-                unimplemented!("implement me");
+                unimplemented_err!("DSA");
             }
             PublicKeyAlgorithm::ECDH => {
-                unimplemented!("implement me");
+                unimplemented_err!("ECDH");
             }
             PublicKeyAlgorithm::ECDSA => {
-                unimplemented!("implemente me");
+                unimplemented_err!("ECDSA");
             }
             PublicKeyAlgorithm::EdDSA => {
-                unimplemented!("implement me");
+                unimplemented_err!("EdDSA");
             }
             PublicKeyAlgorithm::Elgamal => {
-                unimplemented!("implement me");
+                unimplemented_err!("Elgamal");
             }
-            _ => panic!("unsupported algoritm: {:?}", self.algorithm),
+            _ => unsupported_err!("algoritm: {:?}", self.algorithm),
         }
     }
 
@@ -464,7 +463,7 @@ macro_rules! key {
                         Some(KeyID::from_slice(&f[offset..]).unwrap())
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
-                        PublicParams::RSA { n, e: _ } => {
+                        PublicParams::RSA { n, .. } => {
                             let n = n.to_bytes_be();
                             let offset = n.len() - 8;
 

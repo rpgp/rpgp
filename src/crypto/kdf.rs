@@ -16,10 +16,8 @@ pub fn s2k<F>(
 where
     F: FnOnce() -> String,
 {
-    match s2k {
-        &StringToKeyType::Simple
-        | &StringToKeyType::Salted
-        | &StringToKeyType::IteratedAndSalted => {
+    match *s2k {
+        StringToKeyType::Simple | StringToKeyType::Salted | StringToKeyType::IteratedAndSalted => {
             let key_size = sym_alg.key_size();
             let hash_size = hash_alg.digest_size();
             let num_contexts = (key_size + hash_size - 1) / hash_size;
@@ -34,15 +32,15 @@ where
                 let mut hash = hash_alg.new();
                 hash.update(&zeros[..]);
 
-                match s2k {
-                    &StringToKeyType::Simple => {
+                match *s2k {
+                    StringToKeyType::Simple => {
                         hash.update(pw.as_bytes());
                     }
-                    &StringToKeyType::Salted => {
+                    StringToKeyType::Salted => {
                         hash.update(salt.expect("missing salt for salted"));
                         hash.update(pw.as_bytes());
                     }
-                    &StringToKeyType::IteratedAndSalted => {
+                    StringToKeyType::IteratedAndSalted => {
                         let salt = salt.expect("missing salt for iterated");
                         let count = count.expect("missing count for iterated");
                         let octs_per_iter = salt.len() + pw.as_bytes().len();
@@ -70,7 +68,6 @@ where
 
             Ok(ret)
         }
-        // TODO: error
-        _ => panic!("unsupported s2k: {:?}", s2k),
+        _ => unsupported_err!("s2k: {:?}", s2k),
     }
 }

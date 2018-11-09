@@ -45,6 +45,12 @@ pub enum Error {
     MissingKey,
     #[fail(display = "cfb: invalid key iv length")]
     CfbInvalidKeyIvLength,
+    #[fail(display = "Not yet implemented: {:?}", _0)]
+    Unimplemented(String),
+    #[fail(display = "Unsupported: {:?}", _0)]
+    Unsupported(String),
+    #[fail(display = "{:?}", _0)]
+    Message(String),
 }
 
 impl Error {
@@ -66,6 +72,9 @@ impl Error {
             Error::BlockMode => 13,
             Error::MissingKey => 14,
             Error::CfbInvalidKeyIvLength => 15,
+            Error::Unimplemented(_) => 16,
+            Error::Unsupported(_) => 17,
+            Error::Message(_) => 18,
         }
     }
 }
@@ -125,4 +134,78 @@ impl From<cfb_mode::InvalidKeyIvLength> for Error {
     fn from(_: cfb_mode::InvalidKeyIvLength) -> Error {
         Error::CfbInvalidKeyIvLength
     }
+}
+
+#[macro_export]
+macro_rules! unimplemented_err {
+    ($e:expr) => {
+        return Err($crate::errors::Error::Unimplemented($e.to_string()));
+    };
+    ($fmt:expr, $($arg:tt)+) => {
+        return Err($crate::errors::Error::Unimplemented(format!($fmt, $($arg)+)));
+    };
+}
+
+#[macro_export]
+macro_rules! unsupported_err {
+    ($e:expr) => {
+        return Err($crate::errors::Error::Unsupported($e.to_string()));
+    };
+    ($fmt:expr, $($arg:tt)+) => {
+        return Err($crate::errors::Error::Unsupported(format!($fmt, $($arg)+)));
+    };
+}
+
+#[macro_export]
+macro_rules! bail {
+    ($e:expr) => {
+        return Err($crate::errors::Error::Message($e.to_string()));
+    };
+    ($fmt:expr, $($arg:tt)+) => {
+        return Err($crate::errors::Error::Message(format!($fmt, $($arg)+)));
+    };
+}
+
+#[macro_export(local_inner_macros)]
+macro_rules! ensure {
+    ($cond:expr, $e:expr) => {
+        if !($cond) {
+            bail!($e);
+        }
+    };
+    ($cond:expr, $fmt:expr, $($arg:tt)+) => {
+        if !($cond) {
+            bail!($fmt, $($arg)+);
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! ensure_eq {
+    ($left:expr, $right:expr) => ({
+        match (&$left, &$right) {
+            (left_val, right_val) => {
+                if !(*left_val == *right_val) {
+                    bail!(r#"assertion failed: `(left == right)`
+  left: `{:?}`,
+ right: `{:?}`"#, left_val, right_val)
+                }
+            }
+        }
+    });
+    ($left:expr, $right:expr,) => ({
+        ensure_eq!($left, $right)
+    });
+    ($left:expr, $right:expr, $($arg:tt)+) => ({
+        match (&($left), &($right)) {
+            (left_val, right_val) => {
+                if !(*left_val == *right_val) {
+                    bail!(r#"assertion failed: `(left == right)`
+  left: `{:?}`,
+ right: `{:?}`: {}"#, left_val, right_val,
+                           format_args!($($arg)+))
+                }
+            }
+        }
+    });
 }
