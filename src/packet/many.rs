@@ -34,7 +34,7 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
         if needed.is_some() && sz == 0 {
             if second_round {
                 // Cancel if we didn't receive enough bytes from our source, the second time around.
-                return Err(Error::Incomplete);
+                return Err(Error::PacketIncomplete);
             }
             second_round = true;
         }
@@ -52,7 +52,7 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
                             needed = Some(n);
                             break;
                         }
-                        _ => return Err(err.into()),
+                        _ => return Err(Error::PacketError(err.into_error_kind())),
                     },
                 }
             };
