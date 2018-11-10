@@ -1,0 +1,9 @@
+{
+  "type" : "decrypt",
+  "decryptKey": "x25519.sec.asc",
+  "verifyKey": "x25519.pub.asc",
+  "passphrase": "moon",
+  "filename": "",
+  "textcontent": "Oh hi, this is a private message from Light to Night!\n",
+  "keyid": "f25e5f24bb372cfa"
+}

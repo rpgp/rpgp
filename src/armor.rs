@@ -387,6 +387,7 @@ pub fn parse<R: ::std::io::Read>(
     dearmor.read_to_end(&mut bytes)?;
 
     // TODO: streaming base64 decoding
+
     let decoded = base64::decode_config(&bytes, base64::MIME)?;
 
     if let Some(expected) = dearmor.checksum {

@@ -18,6 +18,7 @@ extern crate circular;
 extern crate des;
 extern crate digest;
 extern crate flate2;
+#[macro_use]
 extern crate generic_array;
 extern crate itertools;
 extern crate md5;
@@ -27,6 +28,9 @@ extern crate ripemd160;
 extern crate sha1;
 extern crate sha2;
 extern crate twofish;
+extern crate x25519_dalek;
+#[macro_use]
+extern crate lazy_static;
 
 #[cfg(test)]
 extern crate rand;

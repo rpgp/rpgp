@@ -2,6 +2,8 @@ use nom::{self, be_u16, be_u32, be_u8};
 use num_traits::FromPrimitive;
 
 use composed;
+use crypto::hash::HashAlgorithm;
+use crypto::sym::SymmetricKeyAlgorithm;
 use packet::types::ecc_curve::ecc_curve_from_oid;
 use packet::types::key::*;
 use packet::types::{KeyVersion, PublicKeyAlgorithm};
@@ -23,6 +25,22 @@ named!(
     )
 );
 
+// https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
+named!(
+    eddsa<PublicParams>,
+    do_parse!(
+        // a one-octet size of the following field
+        len: be_u8
+    // octets representing a curve OID
+    >> curve: map_opt!(take!(len), ecc_curve_from_oid)
+    // MPI of an EC point representing a public key
+    >>   q: mpi >> (PublicParams::EdDSA {
+            curve,
+            q: q.to_vec(),
+        })
+    )
+);
+
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 named!(
     ecdh<PublicParams>,
@@ -38,14 +56,15 @@ named!(
     // a one-octet value 01, reserved for future extensions
     >>       tag!(&[1][..])
     // a one-octet hash function ID used with a KDF
-    >> hash: take!(1)
+    >> hash: map_opt!(be_u8, HashAlgorithm::from_u8)
     // a one-octet algorithm ID for the symmetric algorithm used to wrap
     // the symmetric key used for the message encryption
-    >>  alg_sym: take!(1) >> (PublicParams::ECDH {
+    >>  alg_sym: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
+    >> (PublicParams::ECDH {
             curve,
             p,
-            hash: hash[0],
-            alg_sym: alg_sym[0],
+            hash: hash,
+            alg_sym: alg_sym,
         })
     )
 );
@@ -75,7 +94,8 @@ named!(
     do_parse!(n: mpi_big >> e: mpi_big >> (PublicParams::RSA { n, e }))
 );
 
-named_args!(key_from_fields<'a>(typ: &PublicKeyAlgorithm) <PublicParams>, switch!(
+/// Parse the fields of a public key.
+named_args!(pub parse_pub_fields<'a>(typ: &PublicKeyAlgorithm) <PublicParams>, switch!(
     value!(typ),
     &PublicKeyAlgorithm::RSA        |
     &PublicKeyAlgorithm::RSAEncrypt |
@@ -84,14 +104,15 @@ named_args!(key_from_fields<'a>(typ: &PublicKeyAlgorithm) <PublicParams>, switch
     &PublicKeyAlgorithm::ECDSA      => call!(ecdsa)   |
     &PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
     &PublicKeyAlgorithm::Elgamal    |
-    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal)
+    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal) |
+    &PublicKeyAlgorithm::EdDSA       => call!(eddsa)
     // &PublicKeyAlgorithm::DiffieHellman =>
 ));
 
 named_args!(new_public_key_parser<'a>(key_ver: &'a KeyVersion) <PublicKey>, do_parse!(
        created_at: be_u32
     >>        alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
-    >>     params: call!(key_from_fields, &alg)
+    >>     params: call!(parse_pub_fields, &alg)
     >> (PublicKey::new(*key_ver, alg, created_at, None, params))
 ));
 
@@ -99,7 +120,7 @@ named_args!(old_public_key_parser<'a>(key_ver: &'a KeyVersion) <PublicKey>, do_p
         created_at: be_u32
     >>         exp: be_u16
     >>         alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >>      params: call!(key_from_fields, &alg)
+    >>      params: call!(parse_pub_fields, &alg)
     >> (PublicKey::new(*key_ver, alg, created_at, Some(exp), params))
 ));
 

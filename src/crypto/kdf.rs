@@ -7,16 +7,16 @@ use packet::types::StringToKeyType;
 /// Ref: https://tools.ietf.org/html/rfc4880#section-3.7
 pub fn s2k<F>(
     password: F,
-    sym_alg: &SymmetricKeyAlgorithm,
-    s2k: &StringToKeyType,
-    hash_alg: &HashAlgorithm,
+    sym_alg: SymmetricKeyAlgorithm,
+    s2k: StringToKeyType,
+    hash_alg: HashAlgorithm,
     salt: Option<&Vec<u8>>,
     count: Option<&usize>,
 ) -> Result<Vec<u8>>
 where
     F: FnOnce() -> String,
 {
-    match *s2k {
+    match s2k {
         StringToKeyType::Simple | StringToKeyType::Salted | StringToKeyType::IteratedAndSalted => {
             let key_size = sym_alg.key_size();
             let hash_size = hash_alg.digest_size();
@@ -29,10 +29,10 @@ where
             let mut ret = vec![0u8; key_size];
 
             for data in ret.chunks_mut(hash_size) {
-                let mut hash = hash_alg.new();
+                let mut hash = hash_alg.new()?;
                 hash.update(&zeros[..]);
 
-                match *s2k {
+                match s2k {
                     StringToKeyType::Simple => {
                         hash.update(pw.as_bytes());
                     }
@@ -70,4 +70,18 @@ where
         }
         _ => unsupported_err!("s2k: {:?}", s2k),
     }
+}
+
+/// Key Derivation Function for ECDH (as defined in RFC 6637).
+/// https://tools.ietf.org/html/rfc6637#section-7
+pub fn kdf(hash: HashAlgorithm, x: &[u8], length: usize, param: &[u8]) -> Result<Vec<u8>> {
+    let prefix = vec![0, 0, 0, 1];
+
+    let values: Vec<&[u8]> = vec![&prefix, x, param];
+    let data = values.concat();
+
+    let mut digest = hash.digest(&data)?;
+    digest.truncate(length);
+
+    Ok(digest)
 }

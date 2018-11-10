@@ -9,13 +9,16 @@ use sha2::{Sha224, Sha256, Sha384, Sha512};
 
 use errors::Result;
 
-#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
+#[repr(u8)]
 pub enum HashAlgorithm {
+    None = 0,
     MD5 = 1,
     SHA1 = 2,
     RIPEMD160 = 3,
+    HAVAL = 7,
     SHA256 = 8,
     SHA384 = 9,
     SHA512 = 10,
@@ -60,20 +63,21 @@ derive_hasher!(Sha224Hasher, Sha224);
 
 impl HashAlgorithm {
     /// Create a new hasher.
-    pub fn new(&self) -> Box<Hasher> {
+    pub fn new(self) -> Result<Box<Hasher>> {
         match self {
-            HashAlgorithm::MD5 => Box::new(Md5Hasher::default()),
-            HashAlgorithm::SHA1 => Box::new(Sha1Hasher::default()),
-            HashAlgorithm::RIPEMD160 => Box::new(Ripemd160Hasher::default()),
-            HashAlgorithm::SHA256 => Box::new(Sha256Hasher::default()),
-            HashAlgorithm::SHA384 => Box::new(Sha384Hasher::default()),
-            HashAlgorithm::SHA512 => Box::new(Sha512Hasher::default()),
-            HashAlgorithm::SHA224 => Box::new(Sha224Hasher::default()),
+            HashAlgorithm::MD5 => Ok(Box::new(Md5Hasher::default())),
+            HashAlgorithm::SHA1 => Ok(Box::new(Sha1Hasher::default())),
+            HashAlgorithm::RIPEMD160 => Ok(Box::new(Ripemd160Hasher::default())),
+            HashAlgorithm::SHA256 => Ok(Box::new(Sha256Hasher::default())),
+            HashAlgorithm::SHA384 => Ok(Box::new(Sha384Hasher::default())),
+            HashAlgorithm::SHA512 => Ok(Box::new(Sha512Hasher::default())),
+            HashAlgorithm::SHA224 => Ok(Box::new(Sha224Hasher::default())),
+            _ => unimplemented_err!("hasher {:?}", self),
         }
     }
 
     /// Calculate the digest of the given input data.
-    pub fn digest(&self, data: &[u8]) -> Result<Vec<u8>> {
+    pub fn digest(self, data: &[u8]) -> Result<Vec<u8>> {
         Ok(match self {
             HashAlgorithm::MD5 => Md5::digest(data).to_vec(),
             HashAlgorithm::SHA1 => Sha1::digest(data).to_vec(),
@@ -82,11 +86,12 @@ impl HashAlgorithm {
             HashAlgorithm::SHA384 => Sha384::digest(data).to_vec(),
             HashAlgorithm::SHA512 => Sha512::digest(data).to_vec(),
             HashAlgorithm::SHA224 => Sha224::digest(data).to_vec(),
+            _ => unimplemented_err!("hasher {:?}", self),
         })
     }
 
     /// Returns the expected digest size for the given algorithm.
-    pub fn digest_size(&self) -> usize {
+    pub fn digest_size(self) -> usize {
         match self {
             HashAlgorithm::MD5 => <Md5 as FixedOutput>::OutputSize::to_usize(),
             HashAlgorithm::SHA1 => <Sha1 as FixedOutput>::OutputSize::to_usize(),
@@ -95,6 +100,7 @@ impl HashAlgorithm {
             HashAlgorithm::SHA384 => <Sha384 as FixedOutput>::OutputSize::to_usize(),
             HashAlgorithm::SHA512 => <Sha512 as FixedOutput>::OutputSize::to_usize(),
             HashAlgorithm::SHA224 => <Sha224 as FixedOutput>::OutputSize::to_usize(),
+            _ => 0,
         }
     }
 }

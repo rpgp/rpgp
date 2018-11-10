@@ -136,8 +136,8 @@ impl From<block_modes::BlockModeError> for Error {
     }
 }
 
-impl From<cfb_mode::InvalidKeyIvLength> for Error {
-    fn from(_: cfb_mode::InvalidKeyIvLength) -> Error {
+impl From<cfb_mode::stream_cipher::InvalidKeyNonceLength> for Error {
+    fn from(_: cfb_mode::stream_cipher::InvalidKeyNonceLength) -> Error {
         Error::CfbInvalidKeyIvLength
     }
 }

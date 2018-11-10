@@ -92,14 +92,13 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     }
 }
 
-// Convert a BigUint to an MPI for use in packets
+/// Convert a BigUint to an MPI for use in packets.
 pub fn bignum_to_mpi(n: &BigUint) -> Vec<u8> {
     let number = n.to_bytes_be();
-
-    let mut length_buf: [u8; 2] = [0; 2];
-    BigEndian::write_uint(&mut length_buf, n.bits() as u64, 2);
-
-    [length_buf.to_vec(), number].concat()
+    let mut res = vec![0u8; number.len() + 2];
+    BigEndian::write_uint(&mut res[0..2], n.bits() as u64, 2);
+    res[2..].copy_from_slice(&number[..]);
+    res
 }
 
 /// Parse an mpi and convert it to a `BigUint`.

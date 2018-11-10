@@ -1,9 +1,10 @@
 use aes::{Aes128, Aes192, Aes256};
-use blowfish::Blowfish;
+// use blowfish::Blowfish;
 use cast5::Cast5;
+use cfb_mode::stream_cipher::{NewStreamCipher, StreamCipher};
 use cfb_mode::Cfb;
-use des::TdesEde3;
-use twofish::Twofish;
+// use des::TdesEde3;
+// use twofish::Twofish;
 
 use errors::Result;
 
@@ -36,8 +37,9 @@ macro_rules! encrypt_regular {
         mode.encrypt($plaintext);
     }};
 }
-#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Available symmetric key algorithms.
+#[repr(u8)]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
     Plaintext = 0,
@@ -48,6 +50,7 @@ pub enum SymmetricKeyAlgorithm {
     CAST5 = 3,
     /// Blowfish (128 bit key, 16 rounds)
     Blowfish = 4,
+    // 5 & 6 are reserved
     AES128 = 7,
     AES192 = 8,
     AES256 = 9,
@@ -58,7 +61,7 @@ pub enum SymmetricKeyAlgorithm {
 impl SymmetricKeyAlgorithm {
     /// The size of a single block in bytes.
     /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher
-    pub fn block_size(&self) -> usize {
+    pub fn block_size(self) -> usize {
         match self {
             SymmetricKeyAlgorithm::Plaintext => 0,
             SymmetricKeyAlgorithm::IDEA => 8,
@@ -74,7 +77,7 @@ impl SymmetricKeyAlgorithm {
 
     /// The size of a single block in bytes.
     /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher
-    pub fn key_size(&self) -> usize {
+    pub fn key_size(self) -> usize {
         match self {
             SymmetricKeyAlgorithm::Plaintext => 0,
             SymmetricKeyAlgorithm::IDEA => 16,
@@ -91,7 +94,7 @@ impl SymmetricKeyAlgorithm {
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode. Does
     /// resynchronization.
-    pub fn decrypt<'a>(&self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
+    pub fn decrypt<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
         println!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
         self.decrypt_with_iv(key, &iv_vec, ciphertext, true)
@@ -100,7 +103,7 @@ impl SymmetricKeyAlgorithm {
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     /// Does not do resynchronization.
-    pub fn decrypt_protected<'a>(&self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
+    pub fn decrypt_protected<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
         println!("{}", hex::encode(&ciphertext));
         println!("protected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
@@ -140,7 +143,7 @@ impl SymmetricKeyAlgorithm {
     /// octets 15 and 16.  Those extra two octets are an easy check for a
     /// correct key.
     pub fn decrypt_with_iv<'a>(
-        &self,
+        self,
         key: &[u8],
         iv_vec: &[u8],
         ciphertext: &'a mut [u8],
@@ -154,17 +157,18 @@ impl SymmetricKeyAlgorithm {
             match self {
                 SymmetricKeyAlgorithm::Plaintext => {}
                 SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
-                SymmetricKeyAlgorithm::TripleDES => {
-                    decrypt!(
-                        TdesEde3,
-                        key,
-                        &iv_vec,
-                        encrypted_prefix,
-                        encrypted_data,
-                        bs,
-                        resync
-                    );
-                }
+                SymmetricKeyAlgorithm::TripleDES => unimplemented_err!("awaiting upstream changes"),
+                // {
+                //     decrypt!(
+                //         TdesEde3,
+                //         key,
+                //         &iv_vec,
+                //         encrypted_prefix,
+                //         encrypted_data,
+                //         bs,
+                //         resync
+                //     );
+                // }
                 SymmetricKeyAlgorithm::CAST5 => decrypt!(
                     Cast5,
                     key,
@@ -174,15 +178,16 @@ impl SymmetricKeyAlgorithm {
                     bs,
                     resync
                 ),
-                SymmetricKeyAlgorithm::Blowfish => decrypt!(
-                    Blowfish,
-                    key,
-                    &iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
+                SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
+                // decrypt!(
+                //     Blowfish,
+                //     key,
+                //     &iv_vec,
+                //     encrypted_prefix,
+                //     encrypted_data,
+                //     bs,
+                //     resync
+                // ),
                 SymmetricKeyAlgorithm::AES128 => decrypt!(
                     Aes128,
                     key,
@@ -210,15 +215,16 @@ impl SymmetricKeyAlgorithm {
                     bs,
                     resync
                 ),
-                SymmetricKeyAlgorithm::Twofish => decrypt!(
-                    Twofish,
-                    key,
-                    &iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
+                SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream update"),
+                //decrypt!(
+                //     Twofish,
+                //     key,
+                //     &iv_vec,
+                //     encrypted_prefix,
+                //     encrypted_data,
+                //     bs,
+                //     resync
+                // ),
             }
         }
 
@@ -228,7 +234,7 @@ impl SymmetricKeyAlgorithm {
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     /// This is regular CFB, not OpenPgP CFB.
     pub fn decrypt_with_iv_regular<'a>(
-        &self,
+        self,
         key: &[u8],
         iv_vec: &[u8],
         ciphertext: &'a mut [u8],
@@ -238,19 +244,22 @@ impl SymmetricKeyAlgorithm {
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
-            SymmetricKeyAlgorithm::TripleDES => {
-                decrypt_regular!(TdesEde3, key, &iv_vec, ciphertext, bs);
-            }
+            SymmetricKeyAlgorithm::TripleDES => unimplemented_err!("awaiting upstream changes"),
+            // {
+            //     decrypt_regular!(TdesEde3, key, &iv_vec, ciphertext, bs);
+            // }
             SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, &iv_vec, ciphertext, bs),
-            SymmetricKeyAlgorithm::Blowfish => {
-                decrypt_regular!(Blowfish, key, &iv_vec, ciphertext, bs)
-            }
+            SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
+            // {
+            //     decrypt_regular!(Blowfish, key, &iv_vec, ciphertext, bs)
+            // }
             SymmetricKeyAlgorithm::AES128 => decrypt_regular!(Aes128, key, &iv_vec, ciphertext, bs),
             SymmetricKeyAlgorithm::AES192 => decrypt_regular!(Aes192, key, &iv_vec, ciphertext, bs),
             SymmetricKeyAlgorithm::AES256 => decrypt_regular!(Aes256, key, &iv_vec, ciphertext, bs),
-            SymmetricKeyAlgorithm::Twofish => {
-                decrypt_regular!(Twofish, key, &iv_vec, ciphertext, bs)
-            }
+            SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream update"),
+            // {
+            //     decrypt_regular!(Twofish, key, &iv_vec, ciphertext, bs)
+            // }
         }
 
         Ok(())
@@ -258,30 +267,33 @@ impl SymmetricKeyAlgorithm {
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
-    pub fn encrypt(&self, key: &[u8], ciphertext: &mut [u8]) -> Result<()> {
+    pub fn encrypt(self, key: &[u8], ciphertext: &mut [u8]) -> Result<()> {
         let iv_vec = vec![0u8; self.block_size()];
         self.encrypt_with_iv(key, &iv_vec, ciphertext)
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
-    pub fn encrypt_with_iv(&self, key: &[u8], iv_vec: &[u8], plaintext: &mut [u8]) -> Result<()> {
+    pub fn encrypt_with_iv(self, key: &[u8], iv_vec: &[u8], plaintext: &mut [u8]) -> Result<()> {
         // TODO: actual cfb mode used in pgp
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
-            SymmetricKeyAlgorithm::TripleDES => {
-                encrypt_regular!(TdesEde3, key, &iv_vec, plaintext, bs);
-            }
+            SymmetricKeyAlgorithm::TripleDES => unimplemented_err!("awaiting upstream changes"),
+            // {
+            //     encrypt_regular!(TdesEde3, key, &iv_vec, plaintext, bs);
+            // }
             SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, &iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::Blowfish => {
-                encrypt_regular!(Blowfish, key, &iv_vec, plaintext, bs)
-            }
+            SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
+            // {
+            //     encrypt_regular!(Blowfish, key, &iv_vec, plaintext, bs)
+            // }
             SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, &iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, &iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, &iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::Twofish => {
-                encrypt_regular!(Twofish, key, &iv_vec, plaintext, bs)
-            }
+            SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream changes"),
+            // {
+            //     encrypt_regular!(Twofish, key, &iv_vec, plaintext, bs)
+            // }
         }
         Ok(())
     }
@@ -313,8 +325,8 @@ mod tests {
     roundtrip!(roundtrip_aes128, SymmetricKeyAlgorithm::AES128);
     roundtrip!(roundtrip_aes192, SymmetricKeyAlgorithm::AES192);
     roundtrip!(roundtrip_aes256, SymmetricKeyAlgorithm::AES256);
-    roundtrip!(roundtrip_tripledes, SymmetricKeyAlgorithm::TripleDES);
-    roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
-    roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
+    // roundtrip!(roundtrip_tripledes, SymmetricKeyAlgorithm::TripleDES);
+    // roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
+    // roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
     roundtrip!(roundtrip_cast5, SymmetricKeyAlgorithm::CAST5);
 }

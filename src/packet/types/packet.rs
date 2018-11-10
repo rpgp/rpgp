@@ -107,8 +107,9 @@ impl UserAttribute {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Codes for revocation reasons
+#[repr(u8)]
 pub enum RevocationCode {
     /// No reason specified (key revocations or cert revocations)
     NoReason = 0,
@@ -122,8 +123,9 @@ pub enum RevocationCode {
     CertUserIdInvalid = 32,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Available String-To-Key types
+#[repr(u8)]
 pub enum StringToKeyType {
     Simple = 0,
     Salted = 1,
@@ -143,7 +145,7 @@ pub enum StringToKeyType {
 }
 
 impl StringToKeyType {
-    pub fn param_len(&self) -> usize {
+    pub fn param_len(self) -> usize {
         match self {
             // 1 octet hash algorithm.
             StringToKeyType::Simple => 1,
@@ -438,6 +440,7 @@ pub enum KeyVersion {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+#[repr(u8)]
 pub enum PublicKeyAlgorithm {
     /// RSA (Encrypt and Sign) [HAC]
     RSA = 1,
