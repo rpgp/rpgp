@@ -50,7 +50,7 @@ named!(
     // octets representing a curve OID
     >>  curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
-    >>    p: mpi_big
+    >>    p: mpi
     // a one-octet size of the following fields
     >> _len2: be_u8
     // a one-octet value 01, reserved for future extensions
@@ -62,7 +62,7 @@ named!(
     >>  alg_sym: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
     >> (PublicParams::ECDH {
             curve,
-            p,
+            p: p.to_vec(),
             hash: hash,
             alg_sym: alg_sym,
         })

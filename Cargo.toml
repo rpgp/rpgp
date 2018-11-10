@@ -39,6 +39,7 @@ num-traits = "0.2.6"
 cast5 = { git = "https://github.com/dignifiedquire/block-ciphers", branch = "cast5" }
 x25519-dalek = "0.3.0"
 lazy_static = "1.2.0"
+block-padding = "0.1.2"
 
 [dependencies.nom]
 version = "^4.0"

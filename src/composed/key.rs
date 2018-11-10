@@ -844,4 +844,26 @@ mod tests {
         key_openpgp_samplekeys_whats_new_in_2_1,
         "samplekeys/whats-new-in-2.1.asc"
     );
+
+    #[test]
+    #[ignore] // Not implemented yet
+    fn private_x25519_verify() {
+        let f = read_file(Path::new("./tests/openpgpjs/x25519.sec.asc").to_path_buf());
+        let sk = PrivateKey::from_armor_single(f).expect("failed to parse key");
+        assert_eq!(sk.subkeys.len(), 1);
+
+        sk.unlock(
+            || "moon".to_string(),
+            |k| {
+                match k {
+                    types::key::PrivateKeyRepr::ECDH(ref inner_key) => {
+                        assert_eq!(inner_key.hash, HashAlgorithm::SHA256);
+                    }
+                    _ => panic!("invalid key"),
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+    }
 }

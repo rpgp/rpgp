@@ -1,15 +1,13 @@
 use std::boxed::Box;
 
-use byteorder::{BigEndian, ReadBytesExt};
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 use num_traits::FromPrimitive;
-use rsa::padding::PaddingScheme;
-use x25519_dalek::diffie_hellman;
 
 use composed::key::PrivateKey;
 use composed::shared::Deserializable;
-use crypto::ecc::{aes_kw_unwrap, build_ecdh_param};
-use crypto::kdf::kdf;
+use crypto::checksum;
+use crypto::ecc::decrypt_ecdh;
+use crypto::rsa::decrypt_rsa;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
 use packet::tags::literal;
@@ -187,56 +185,35 @@ fn decrypt(
     protected: bool,
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {
-    let (alg, decrypted_key) = match *priv_key {
-        PrivateKeyRepr::RSA(ref priv_key) => {
-            // rsa consist of exactly one mpi
-            let mpi = &mpis[0];
-            println!("RSA m^e mod n: {}", hex::encode(mpi));
-            let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi)?;
-            println!("m: {}", hex::encode(&m));
-            let alg = SymmetricKeyAlgorithm::from_u8(m[0]).unwrap();
-            println!("alg: {:?}", alg);
-            (alg, m)
-        }
+    let decrypted_key = match *priv_key {
+        PrivateKeyRepr::RSA(ref priv_key) => decrypt_rsa(priv_key, mpis, fingerprint)?,
         PrivateKeyRepr::DSA => unimplemented_err!("DSA"),
         PrivateKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
-        PrivateKeyRepr::ECDH(ref priv_key) => {
-            println!("decrypting, ECDH: {:?}", priv_key);
+        PrivateKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
+    };
 
-            // 33 = 0x40 + 32bits
-            ensure_eq!(mpis[0].len(), 33, "invalid public point");
-            let mut their_public = [0u8; 32];
-            their_public.copy_from_slice(&mpis[0][1..]);
+    let alg =
+        SymmetricKeyAlgorithm::from_u8(decrypted_key[0]).expect("invalid symmetric key algorithm");
+    println!("alg: {:?}", alg);
 
-            let param =
-                build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
-            let shared = diffie_hellman(&priv_key.secret, &their_public);
-            let z = kdf(priv_key.hash, &shared, priv_key.alg_sym.key_size(), &param)?;
-            let sym_key = aes_kw_unwrap(&z, &mpis[1])?;
-
-            (priv_key.alg_sym, sym_key)
+    let (key, checksum) = match *priv_key {
+        PrivateKeyRepr::ECDH(_) => {
+            let dec_len = decrypted_key.len();
+            (
+                &decrypted_key[1..dec_len - 2],
+                &decrypted_key[dec_len - 2..],
+            )
+        }
+        _ => {
+            let key_size = alg.key_size();
+            (
+                &decrypted_key[1..=key_size],
+                &decrypted_key[key_size + 1..key_size + 3],
+            )
         }
     };
 
-    let key_size = alg.key_size();
-    let key = &decrypted_key[1..=key_size];
-
-    match *priv_key {
-        PrivateKeyRepr::ECDH(_) => {
-            // TODO: checksum
-        }
-        _ => {
-            // Then a two-octet checksum is appended, which is equal to the
-            // sum of the preceding session key octets, not including the algorithm
-            // identifier, modulo 65536.
-            let mut checksum = &decrypted_key[key_size + 1..key_size + 3];
-            let checksum = u32::from(checksum.read_u16::<BigEndian>()?);
-            let expected_checksum = key.iter().map(|v| u32::from(*v)).sum::<u32>() & 0xffff;
-            println!("key: {}\nchecksum: {}", hex::encode(&key), checksum);
-
-            ensure_eq!(checksum, expected_checksum, "wrong checksum");
-        }
-    }
+    checksum::simple(checksum, key)?;
 
     println!("decrypting {} packets", edata.len());
     let mut messages = Vec::with_capacity(edata.len());

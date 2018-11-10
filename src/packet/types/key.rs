@@ -9,6 +9,7 @@ use sha1::{Digest, Sha1};
 
 use super::ecc_curve::ECCCurve;
 use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
+use crypto::checksum;
 use crypto::hash::HashAlgorithm;
 use crypto::kdf::s2k;
 use crypto::sym::SymmetricKeyAlgorithm;
@@ -74,7 +75,7 @@ pub enum PublicParams {
     },
     ECDH {
         curve: ECCCurve,
-        p: BigUint,
+        p: Vec<u8>,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
     },
@@ -291,7 +292,6 @@ impl PrivateKey {
                 unimplemented_err!("DSA");
             }
             PublicKeyAlgorithm::ECDH => {
-                let (_, d) = ecc_private_params(plaintext)?;
                 match self.public_params {
                     PublicParams::ECDH {
                         ref curve,
@@ -300,15 +300,31 @@ impl PrivateKey {
                         ref alg_sym,
                     } => match *curve {
                         ECCCurve::Curve25519 => {
+                            let (_, (d, hash_checksum)) =
+                                ecc_private_params(plaintext, self.has_checksum())?;
+                            println!("keyid: {}", hex::encode(self.key_id().unwrap().to_vec()));
                             println!(
-                                "decoding {:?}\n {:?}\n {:?}\n {:?}\n {:?}",
-                                p, curve, d, hash, alg_sym
+                                "pkey[0]: {} {} ({})",
+                                hex::encode(d),
+                                curve.name(),
+                                curve.oid_str()
                             );
-                            let secret_bytes = d.to_bytes_be();
-                            ensure_eq!(secret_bytes.len(), 32, "invalid secret");
+                            println!("pkey[1]: {}", hex::encode(&p));
+
+                            // ensure our checksum is good
+                            if let Some(hash_checksum) = hash_checksum {
+                                println!("checksum: {}", hex::encode(hash_checksum));
+                            // checksum::sha1(hash_checksum, d)?;
+                            } else if let Some(ref actual_checksum) = self.private_params.checksum {
+                                checksum::simple(actual_checksum, d)?;
+                            } else {
+                                bail!("missing checksum");
+                            }
+
+                            ensure_eq!(d.len(), 32, "invalid secret");
 
                             let mut secret = [0u8; 32];
-                            secret.copy_from_slice(&secret_bytes[..]);
+                            secret.copy_from_slice(d);
 
                             Ok(PrivateKeyRepr::ECDH(ECDHPrivateKey {
                                 oid: curve.oid(),
@@ -415,7 +431,7 @@ macro_rules! key {
                                 //the octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
                                 //MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
                                                 //a one-octet value 01
@@ -486,7 +502,7 @@ macro_rules! key {
                                 //the octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
                                 //MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
                                                 //a one-octet value 01

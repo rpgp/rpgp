@@ -8,7 +8,7 @@ use crypto::sym::SymmetricKeyAlgorithm;
 use packet::tags::pubkey::parse_pub_fields;
 use packet::types::key::*;
 use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
-use util::{mpi_big, rest_len};
+use util::{mpi, mpi_big, rest_len};
 
 /// Has the given s2k type a salt?
 fn has_salt(typ: StringToKeyType) -> bool {
@@ -136,9 +136,10 @@ named_args!(pub rsa_private_params(has_checksum: bool) <(BigUint, BigUint, BigUi
     >> (d, p, q, u, checksum.map(|c| c.to_vec()))
 ));
 
-named!(pub ecc_private_params<BigUint>, do_parse!(
-       key: mpi_big
-    >> (key)
+named_args!(pub ecc_private_params(has_checksum: bool)<(&[u8], Option<&[u8]>)>, do_parse!(
+       key: mpi
+    >> checksum:  cond!(has_checksum, take!(20))
+    >> (key, checksum)
 ));
 
 impl composed::key::PrivateKey {

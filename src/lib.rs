@@ -31,6 +31,7 @@ extern crate twofish;
 extern crate x25519_dalek;
 #[macro_use]
 extern crate lazy_static;
+extern crate block_padding;
 
 #[cfg(test)]
 extern crate rand;

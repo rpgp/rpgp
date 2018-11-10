@@ -10,12 +10,23 @@ use errors::Result;
 
 macro_rules! decrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
+        println!("key {}", hex::encode($key));
+        println!("iv {}", hex::encode($iv));
+
         let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
         mode.decrypt($prefix);
 
         // quick check, before decrypting the rest
-        ensure_eq!($prefix[$bs - 2], $prefix[$bs], "quick check part 1");
-        ensure_eq!($prefix[$bs - 1], $prefix[$bs + 1], "quick check part 2");
+        ensure_eq!(
+            $prefix[$bs - 2],
+            $prefix[$bs],
+            "cfb decrypt, quick check part 1"
+        );
+        ensure_eq!(
+            $prefix[$bs - 1],
+            $prefix[$bs + 1],
+            "cfb decrypt, quick check part 2"
+        );
 
         if $resync {
             unimplemented_err!("CFB decrypt with resync");
