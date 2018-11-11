@@ -1,6 +1,7 @@
 use aes::block_cipher_trait;
 use base64;
 use block_modes;
+use block_padding;
 use cfb_mode;
 use nom;
 use rsa;
@@ -55,6 +56,8 @@ pub enum Error {
     PacketError(nom::ErrorKind),
     #[fail(display = "Incomplete Packet")]
     PacketIncomplete,
+    #[fail(display = "Unpadding failed")]
+    UnpadError,
 }
 
 impl Error {
@@ -81,6 +84,7 @@ impl Error {
             Error::Message(_) => 18,
             Error::PacketError(_) => 19,
             Error::PacketIncomplete => 20,
+            Error::UnpadError => 21,
         }
     }
 }
@@ -136,9 +140,15 @@ impl From<block_modes::BlockModeError> for Error {
     }
 }
 
-impl From<cfb_mode::InvalidKeyIvLength> for Error {
-    fn from(_: cfb_mode::InvalidKeyIvLength) -> Error {
+impl From<cfb_mode::stream_cipher::InvalidKeyNonceLength> for Error {
+    fn from(_: cfb_mode::stream_cipher::InvalidKeyNonceLength) -> Error {
         Error::CfbInvalidKeyIvLength
+    }
+}
+
+impl From<block_padding::UnpadError> for Error {
+    fn from(_: block_padding::UnpadError) -> Error {
+        Error::UnpadError
     }
 }
 

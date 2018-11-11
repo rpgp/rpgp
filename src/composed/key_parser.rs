@@ -181,7 +181,7 @@ macro_rules! key_parser {
 
             fn key_parser(packet: &Packet) -> Result<$inner_key_type> {
                 let (_, key) = Self::key_packet_parser(packet.body.as_slice()).map_err(|err| {
-                    println!("WARNING: failed to parse pubkey {:?}", err);
+                    println!("WARNING: failed to parse key {:?}", err);
                     match err {
                         Incomplete(n) => {
                             // a size larger than the packet was requested, always invalid

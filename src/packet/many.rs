@@ -84,6 +84,6 @@ mod tests {
         let file = File::open(p).unwrap();
 
         let packets = parser(file).unwrap();
-        assert_eq!(packets.len(), 141945);
+        assert_eq!(packets.len(), 141_945);
     }
 }
