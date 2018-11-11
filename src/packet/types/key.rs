@@ -1,7 +1,6 @@
 use std::fmt;
 
 use byteorder::{BigEndian, ByteOrder};
-use hex;
 use md5::Md5;
 use num_bigint::BigUint;
 use rsa::RSAPrivateKey;
@@ -97,9 +96,11 @@ pub enum PrivateKeyRepr {
     DSA,
     ECDSA,
     ECDH(ECDHPrivateKey),
+    EdDSA(EdDSAPrivateKey),
 }
 
-/// Private key for ECDH with Curve25519, the only combination we currently support.
+/// Private key for ECDH with Curve25519, the only combination we
+// currently support.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ECDHPrivateKey {
     /// The secret point.
@@ -109,6 +110,15 @@ pub struct ECDHPrivateKey {
     pub alg_sym: SymmetricKeyAlgorithm,
 }
 
+/// Private key for EdDSA with Curve25519, the only combination we
+// currently support.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EdDSAPrivateKey {
+    /// The secret point.
+    pub secret: [u8; 32],
+    pub oid: Vec<u8>,
+}
+
 impl fmt::Debug for PrivateKeyRepr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -116,6 +126,7 @@ impl fmt::Debug for PrivateKeyRepr {
             PrivateKeyRepr::DSA => write!(f, "PrivateKeyRepr(DSA)"),
             PrivateKeyRepr::ECDSA => write!(f, "PrivateKeyRepr(ECDSA)"),
             PrivateKeyRepr::ECDH(_) => write!(f, "PrivateKeyRepr(ECDH)"),
+            PrivateKeyRepr::EdDSA(_) => write!(f, "PrivateKeyRepr(EdDSA)"),
         }
     }
 }
@@ -211,18 +222,20 @@ impl PrivateKey {
         G: FnOnce(&PrivateKeyRepr) -> Result<()>,
     {
         let decrypted = if self.private_params.is_encrypted() {
-            self.from_ciphertext(pw, self.private_params.data.as_slice())
+            self.repr_from_ciphertext(pw, self.private_params.data.as_slice())
         } else {
-            self.from_plaintext(self.private_params.data.as_slice())
+            self.repr_from_plaintext(self.private_params.data.as_slice())
         }?;
 
         work(&decrypted)
     }
 
-    fn from_ciphertext<F>(&self, pw: F, ciphertext: &[u8]) -> Result<PrivateKeyRepr>
+    fn repr_from_ciphertext<F>(&self, pw: F, ciphertext: &[u8]) -> Result<PrivateKeyRepr>
     where
         F: FnOnce() -> String,
     {
+        // TODO: don't panic, return errors on missing parts.
+
         let sym_alg = self
             .private_params
             .encryption_algorithm
@@ -247,37 +260,33 @@ impl PrivateKey {
             self.private_params.string_to_key_count.as_ref(),
         )?;
 
-        println!(
-            "salt: {}",
-            hex::encode(self.private_params.string_to_key_salt.clone().unwrap())
-        );
-        println!(
-            "code: {:?}",
-            self.private_params.string_to_key_count.as_ref()
-        );
-        println!("hash alg: {:?}", hash_alg);
-        println!("key: {}", hex::encode(&key));
-        println!(
-            "iv: {}",
-            hex::encode(self.private_params.iv.clone().unwrap())
-        );
-        if let Some(ref iv) = self.private_params.iv {
-            println!("ciphertext: {} {:?}", ciphertext.len(), ciphertext);
-            let mut plaintext = ciphertext.to_vec();
-            sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
-            println!("plaintext: {:?}", plaintext);
-            self.from_plaintext(&plaintext)
+        let iv = self.private_params.iv.as_ref().expect("missing iv");
+
+        // Actual decryption
+        let mut plaintext = ciphertext.to_vec();
+        sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
+
+        // Validate checksum
+        if self.has_checksum() {
+            let split = plaintext.len() - 20;
+            checksum::sha1(&plaintext[split..], &plaintext[..split])?;
+        } else if let Some(ref actual_checksum) = self.private_params.checksum {
+            // we already parsed the checksum when reading the s2k.
+            checksum::simple(actual_checksum, &plaintext)?;
         } else {
-            bail!("missing iv");
+            bail!("missing checksum");
         }
+
+        // Construct details from the now decrypted plaintext information
+        self.repr_from_plaintext(&plaintext)
     }
 
-    fn from_plaintext(&self, plaintext: &[u8]) -> Result<PrivateKeyRepr> {
+    fn repr_from_plaintext(&self, plaintext: &[u8]) -> Result<PrivateKeyRepr> {
         match self.algorithm {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
-                let (_, (d, p, q, _, _)) = rsa_private_params(plaintext, self.has_checksum())?;
+                let (_, (d, p, q, _)) = rsa_private_params(plaintext)?;
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
                         let private_key =
@@ -291,59 +300,52 @@ impl PrivateKey {
             PublicKeyAlgorithm::DSA => {
                 unimplemented_err!("DSA");
             }
-            PublicKeyAlgorithm::ECDH => {
-                match self.public_params {
-                    PublicParams::ECDH {
-                        ref curve,
-                        ref p,
-                        ref hash,
-                        ref alg_sym,
-                    } => match *curve {
-                        ECCCurve::Curve25519 => {
-                            let (_, (d, hash_checksum)) =
-                                ecc_private_params(plaintext, self.has_checksum())?;
-                            println!("keyid: {}", hex::encode(self.key_id().unwrap().to_vec()));
-                            println!(
-                                "pkey[0]: {} {} ({})",
-                                hex::encode(d),
-                                curve.name(),
-                                curve.oid_str()
-                            );
-                            println!("pkey[1]: {}", hex::encode(&p));
+            PublicKeyAlgorithm::ECDH => match self.public_params {
+                PublicParams::ECDH {
+                    ref curve,
+                    ref hash,
+                    ref alg_sym,
+                    ..
+                } => match *curve {
+                    ECCCurve::Curve25519 => {
+                        let (_, d) = ecc_private_params(plaintext)?;
+                        ensure_eq!(d.len(), 32, "invalid secret");
 
-                            // ensure our checksum is good
-                            if let Some(hash_checksum) = hash_checksum {
-                                println!("checksum: {}", hex::encode(hash_checksum));
-                            // checksum::sha1(hash_checksum, d)?;
-                            } else if let Some(ref actual_checksum) = self.private_params.checksum {
-                                checksum::simple(actual_checksum, d)?;
-                            } else {
-                                bail!("missing checksum");
-                            }
+                        let mut secret = [0u8; 32];
+                        secret.copy_from_slice(d);
 
-                            ensure_eq!(d.len(), 32, "invalid secret");
-
-                            let mut secret = [0u8; 32];
-                            secret.copy_from_slice(d);
-
-                            Ok(PrivateKeyRepr::ECDH(ECDHPrivateKey {
-                                oid: curve.oid(),
-                                hash: *hash,
-                                alg_sym: *alg_sym,
-                                secret,
-                            }))
-                        }
-                        _ => unsupported_err!("curve {:?}", curve.to_string()),
-                    },
-                    _ => unreachable!("inconsistent key state"),
-                }
-            }
+                        Ok(PrivateKeyRepr::ECDH(ECDHPrivateKey {
+                            oid: curve.oid(),
+                            hash: *hash,
+                            alg_sym: *alg_sym,
+                            secret,
+                        }))
+                    }
+                    _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
+                },
+                _ => unreachable!("inconsistent key state"),
+            },
             PublicKeyAlgorithm::ECDSA => {
                 unimplemented_err!("ECDSA");
             }
-            PublicKeyAlgorithm::EdDSA => {
-                unimplemented_err!("EdDSA");
-            }
+            PublicKeyAlgorithm::EdDSA => match self.public_params {
+                PublicParams::EdDSA { ref curve, .. } => match *curve {
+                    ECCCurve::Ed25519 => {
+                        let (_, d) = ecc_private_params(plaintext)?;
+                        ensure_eq!(d.len(), 32, "invalid secret");
+
+                        let mut secret = [0u8; 32];
+                        secret.copy_from_slice(d);
+
+                        Ok(PrivateKeyRepr::EdDSA(EdDSAPrivateKey {
+                            oid: curve.oid(),
+                            secret,
+                        }))
+                    }
+                    _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
+                },
+                _ => unreachable!("inconsistent key state"),
+            },
             PublicKeyAlgorithm::Elgamal => {
                 unimplemented_err!("Elgamal");
             }
@@ -355,7 +357,7 @@ impl PrivateKey {
         &self.private_params
     }
 
-    /// Checks if we should expect a sha1 checksum in the encrypted part.
+    /// Checks if we should expect a SHA1 checksum in the encrypted part.
     fn has_checksum(&self) -> bool {
         self.private_params.string_to_key_id == 254
     }

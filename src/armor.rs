@@ -245,6 +245,7 @@ impl<R: ::std::io::Read> Dearmor<R> {
 }
 
 impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
+    #[allow(unused)] // for some reason the compiler thinks `needed` is unneeded.
     fn read(&mut self, into: &mut [u8]) -> ::std::io::Result<usize> {
         // TODO: const/configurable
         let max_capacity = 1024 * 1024 * 1024;

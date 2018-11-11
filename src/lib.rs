@@ -1,3 +1,11 @@
+#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
+#![cfg_attr(feature = "cargo-clippy", warn(clippy::nursery))]
+#![cfg_attr(feature = "cargo-clippy", deny(clippy::style))]
+#![cfg_attr(feature = "cargo-clippy", deny(clippy::complexity))]
+#![cfg_attr(feature = "cargo-clippy", deny(clippy::perf))]
+#![cfg_attr(feature = "cargo-clippy", deny(clippy::correctness))]
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_attribute))]
+
 #[macro_use]
 extern crate nom;
 extern crate base64;

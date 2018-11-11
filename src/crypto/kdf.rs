@@ -29,16 +29,16 @@ where
             let mut ret = vec![0u8; key_size];
 
             for data in ret.chunks_mut(hash_size) {
-                let mut hash = hash_alg.new()?;
-                hash.update(&zeros[..]);
+                let mut hasher = hash_alg.new_hasher()?;
+                hasher.update(&zeros[..]);
 
                 match s2k {
                     StringToKeyType::Simple => {
-                        hash.update(pw.as_bytes());
+                        hasher.update(pw.as_bytes());
                     }
                     StringToKeyType::Salted => {
-                        hash.update(salt.expect("missing salt for salted"));
-                        hash.update(pw.as_bytes());
+                        hasher.update(salt.expect("missing salt for salted"));
+                        hasher.update(pw.as_bytes());
                     }
                     StringToKeyType::IteratedAndSalted => {
                         let salt = salt.expect("missing salt for iterated");
@@ -52,18 +52,18 @@ where
                         data[salt.len()..].clone_from_slice(pw.as_bytes());
 
                         for _ in 0..full {
-                            hash.update(&data);
+                            hasher.update(&data);
                         }
 
                         if tail != 0 {
-                            hash.update(&data[0..tail]);
+                            hasher.update(&data[0..tail]);
                         }
                     }
                     _ => unreachable!(),
                 }
                 zeros.push(0);
                 let l = data.len();
-                data.clone_from_slice(&hash.finish()[0..l]);
+                data.clone_from_slice(&hasher.finish()[0..l]);
             }
 
             Ok(ret)

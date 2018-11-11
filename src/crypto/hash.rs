@@ -63,7 +63,7 @@ derive_hasher!(Sha224Hasher, Sha224);
 
 impl HashAlgorithm {
     /// Create a new hasher.
-    pub fn new(self) -> Result<Box<Hasher>> {
+    pub fn new_hasher(self) -> Result<Box<Hasher>> {
         match self {
             HashAlgorithm::MD5 => Ok(Box::new(Md5Hasher::default())),
             HashAlgorithm::SHA1 => Ok(Box::new(Sha1Hasher::default())),

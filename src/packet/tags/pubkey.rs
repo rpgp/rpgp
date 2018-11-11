@@ -10,43 +10,40 @@ use packet::types::{KeyVersion, PublicKeyAlgorithm};
 use util::{mpi, mpi_big};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(
-    ecdsa<PublicParams>,
-    do_parse!(
-        // a one-octet size of the following field
-        len: be_u8
+#[rustfmt::skip]
+named!(ecdsa<PublicParams>, do_parse!(
+    // a one-octet size of the following field
+         len: be_u8
     // octets representing a curve OID
     >> curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
-    >>   p: mpi >> (PublicParams::ECDSA {
-            curve,
-            p: p.to_vec(),
-        })
-    )
-);
+    >>   p: mpi
+    >> (PublicParams::ECDSA {
+        curve,
+        p: p.to_vec(),
+    })
+));
 
 // https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
-named!(
-    eddsa<PublicParams>,
-    do_parse!(
-        // a one-octet size of the following field
-        len: be_u8
+#[rustfmt::skip]
+named!(eddsa<PublicParams>, do_parse!(
+    // a one-octet size of the following field
+         len: be_u8
     // octets representing a curve OID
     >> curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
-    >>   q: mpi >> (PublicParams::EdDSA {
-            curve,
-            q: q.to_vec(),
-        })
-    )
-);
+    >>   q: mpi
+    >> (PublicParams::EdDSA {
+        curve,
+        q: q.to_vec(),
+    })
+));
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
-named!(
-    ecdh<PublicParams>,
-    do_parse!(
-        // a one-octet size of the following field
-        len: be_u8
+#[rustfmt::skip]
+named!(ecdh<PublicParams>, do_parse!(
+    // a one-octet size of the following field
+          len: be_u8
     // octets representing a curve OID
     >>  curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
@@ -61,38 +58,39 @@ named!(
     // the symmetric key used for the message encryption
     >>  alg_sym: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
     >> (PublicParams::ECDH {
-            curve,
-            p: p.to_vec(),
-            hash: hash,
-            alg_sym: alg_sym,
-        })
-    )
-);
+        curve,
+        p: p.to_vec(),
+        hash: hash,
+        alg_sym: alg_sym,
+    })
+));
 
-named!(
-    elgamal<PublicParams>,
-    do_parse!(
-        // MPI of Elgamal prime p
+#[rustfmt::skip]
+named!(elgamal<PublicParams>, do_parse!(
+    // MPI of Elgamal prime p
         p: mpi_big
     // MPI of Elgamal group generator g
     >> g: mpi_big
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
     >> y: mpi_big
     >> (PublicParams::Elgamal{ p, g, y })
-    )
-);
+));
 
-named!(
-    dsa<PublicParams>,
-    do_parse!(
-        p: mpi_big >> q: mpi_big >> g: mpi_big >> y: mpi_big >> (PublicParams::DSA { p, q, g, y })
-    )
-);
+#[rustfmt::skip]
+named!(dsa<PublicParams>, do_parse!(
+       p: mpi_big
+    >> q: mpi_big
+    >> g: mpi_big
+    >> y: mpi_big
+    >> (PublicParams::DSA { p, q, g, y })
+));
 
-named!(
-    rsa<PublicParams>,
-    do_parse!(n: mpi_big >> e: mpi_big >> (PublicParams::RSA { n, e }))
-);
+#[rustfmt::skip]
+named!(rsa<PublicParams>, do_parse!(
+       n: mpi_big
+    >> e: mpi_big
+    >> (PublicParams::RSA { n, e })
+));
 
 /// Parse the fields of a public key.
 named_args!(pub parse_pub_fields<'a>(typ: &PublicKeyAlgorithm) <PublicParams>, switch!(
@@ -102,6 +100,7 @@ named_args!(pub parse_pub_fields<'a>(typ: &PublicKeyAlgorithm) <PublicParams>, s
     &PublicKeyAlgorithm::RSASign    => call!(rsa)     |
     &PublicKeyAlgorithm::DSA        => call!(dsa)     |
     &PublicKeyAlgorithm::ECDSA      => call!(ecdsa)   |
+
     &PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
     &PublicKeyAlgorithm::Elgamal    |
     &PublicKeyAlgorithm::ElgamalSign => call!(elgamal) |

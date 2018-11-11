@@ -183,6 +183,6 @@ mod tests {
     #[test]
     fn test_asn1_der_object_id_val_enc() {
         assert_eq!(asn1_der_object_id_val_enc(840), vec![0x86, 0x48]);
-        assert_eq!(asn1_der_object_id_val_enc(113549), vec![0x86, 0xf7, 0x0d]);
+        assert_eq!(asn1_der_object_id_val_enc(113_549), vec![0x86, 0xf7, 0x0d]);
     }
 }

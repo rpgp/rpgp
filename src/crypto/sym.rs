@@ -173,7 +173,7 @@ impl SymmetricKeyAlgorithm {
                 //     decrypt!(
                 //         TdesEde3,
                 //         key,
-                //         &iv_vec,
+                //         iv_vec,
                 //         encrypted_prefix,
                 //         encrypted_data,
                 //         bs,
@@ -183,7 +183,7 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::CAST5 => decrypt!(
                     Cast5,
                     key,
-                    &iv_vec,
+                    iv_vec,
                     encrypted_prefix,
                     encrypted_data,
                     bs,
@@ -193,7 +193,7 @@ impl SymmetricKeyAlgorithm {
                 // decrypt!(
                 //     Blowfish,
                 //     key,
-                //     &iv_vec,
+                //     iv_vec,
                 //     encrypted_prefix,
                 //     encrypted_data,
                 //     bs,
@@ -202,7 +202,7 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::AES128 => decrypt!(
                     Aes128,
                     key,
-                    &iv_vec,
+                    iv_vec,
                     encrypted_prefix,
                     encrypted_data,
                     bs,
@@ -211,7 +211,7 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::AES192 => decrypt!(
                     Aes192,
                     key,
-                    &iv_vec,
+                    iv_vec,
                     encrypted_prefix,
                     encrypted_data,
                     bs,
@@ -220,7 +220,7 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::AES256 => decrypt!(
                     Aes256,
                     key,
-                    &iv_vec,
+                    iv_vec,
                     encrypted_prefix,
                     encrypted_data,
                     bs,
@@ -230,7 +230,7 @@ impl SymmetricKeyAlgorithm {
                 //decrypt!(
                 //     Twofish,
                 //     key,
-                //     &iv_vec,
+                //     iv_vec,
                 //     encrypted_prefix,
                 //     encrypted_data,
                 //     bs,
@@ -250,26 +250,30 @@ impl SymmetricKeyAlgorithm {
         iv_vec: &[u8],
         ciphertext: &'a mut [u8],
     ) -> Result<()> {
-        let bs = self.block_size();
-
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
             SymmetricKeyAlgorithm::TripleDES => unimplemented_err!("awaiting upstream changes"),
             // {
-            //     decrypt_regular!(TdesEde3, key, &iv_vec, ciphertext, bs);
+            //     decrypt_regular!(TdesEde3, key, iv_vec, ciphertext, self.block_size());
             // }
-            SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, &iv_vec, ciphertext, bs),
+            SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, iv_vec, ciphertext, bs),
             SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
             // {
-            //     decrypt_regular!(Blowfish, key, &iv_vec, ciphertext, bs)
+            //     decrypt_regular!(Blowfish, key, iv_vec, ciphertext, self.block_size())
             // }
-            SymmetricKeyAlgorithm::AES128 => decrypt_regular!(Aes128, key, &iv_vec, ciphertext, bs),
-            SymmetricKeyAlgorithm::AES192 => decrypt_regular!(Aes192, key, &iv_vec, ciphertext, bs),
-            SymmetricKeyAlgorithm::AES256 => decrypt_regular!(Aes256, key, &iv_vec, ciphertext, bs),
+            SymmetricKeyAlgorithm::AES128 => {
+                decrypt_regular!(Aes128, key, iv_vec, ciphertext, self.block_size())
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                decrypt_regular!(Aes192, key, iv_vec, ciphertext, self.block_size())
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                decrypt_regular!(Aes256, key, iv_vec, ciphertext, self.block_size())
+            }
             SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream update"),
             // {
-            //     decrypt_regular!(Twofish, key, &iv_vec, ciphertext, bs)
+            //     decrypt_regular!(Twofish, key, iv_vec, ciphertext, self.block_size())
             // }
         }
 
@@ -291,19 +295,19 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
             SymmetricKeyAlgorithm::TripleDES => unimplemented_err!("awaiting upstream changes"),
             // {
-            //     encrypt_regular!(TdesEde3, key, &iv_vec, plaintext, bs);
+            //     encrypt_regular!(TdesEde3, key, iv_vec, plaintext, bs);
             // }
-            SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, &iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
             // {
-            //     encrypt_regular!(Blowfish, key, &iv_vec, plaintext, bs)
+            //     encrypt_regular!(Blowfish, key, iv_vec, plaintext, bs)
             // }
-            SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, &iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, &iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, &iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream changes"),
             // {
-            //     encrypt_regular!(Twofish, key, &iv_vec, plaintext, bs)
+            //     encrypt_regular!(Twofish, key, iv_vec, plaintext, bs)
             // }
         }
         Ok(())

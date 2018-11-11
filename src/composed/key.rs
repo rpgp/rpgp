@@ -155,7 +155,7 @@ impl PrivateSubKey {
 mod tests {
     use std::fs::File;
     use std::io::Read;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
 
     use super::*;
 
@@ -171,24 +171,25 @@ mod tests {
     use composed::Deserializable;
     use crypto::hash::HashAlgorithm;
     use crypto::sym::SymmetricKeyAlgorithm;
+    use packet::types::ecc_curve::ECCCurve;
     use packet::types::key;
     use packet::types::{
         CompressionAlgorithm, KeyVersion, PublicKeyAlgorithm, Signature, SignatureType,
         SignatureVersion, StringToKeyType, Subpacket, User, UserAttributeType,
     };
 
-    fn read_file(path: PathBuf) -> File {
+    fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
         // Open the path in read-only mode, returns `io::Result<File>`
         match File::open(&path) {
             // The `description` method of `io::Error` returns a string that
             // describes the error
-            Err(why) => panic!("couldn't open {}: {}", path.display(), why),
+            Err(why) => panic!("couldn't open {:?}: {}", path, why),
             Ok(file) => file,
         }
     }
 
     fn get_test_key(name: &str) -> File {
-        return read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name));
+        read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name))
     }
 
     fn test_parse_dump(i: usize) {
@@ -336,12 +337,12 @@ mod tests {
         match pk.public_params() {
             key::PublicParams::RSA { n, e } => {
                 assert_eq!(n, &primary_n);
-                assert_eq!(e.to_u64().unwrap(), 0x010001);
+                assert_eq!(e.to_u64().unwrap(), 0x0001_0001);
             }
             _ => panic!("wrong public params: {:?}", pk.public_params()),
         }
 
-        assert_eq!(pk.created_at(), 1402070261);
+        assert_eq!(pk.created_at(), 14_0207_0261);
         assert_eq!(pk.expiration(), None);
 
         // TODO: examine subkey details
@@ -504,8 +505,8 @@ mod tests {
         assert_eq!(key.users[1], u2);
         assert_eq!(key.user_attributes.len(), 1);
         let ua = &key.user_attributes[0];
-        match &ua.attr {
-            &UserAttributeType::Image(ref v) => {
+        match ua.attr {
+            UserAttributeType::Image(ref v) => {
                 assert_eq!(v.len(), 1156);
             }
             _ => panic!("not here"),
@@ -558,15 +559,15 @@ mod tests {
             ],
         );
 
-        sig3.key_flags = key_flags.clone();
-        sig3.preferred_symmetric_algs = p_sym_algs.clone();
-        sig3.preferred_compression_algs = p_com_algs.clone();
-        sig3.preferred_hash_algs = p_hash_algs.clone();
+        sig3.key_flags = key_flags;
+        sig3.preferred_symmetric_algs = p_sym_algs;
+        sig3.preferred_compression_algs = p_com_algs;
+        sig3.preferred_hash_algs = p_hash_algs;
 
         sig3.key_server_prefs = vec![128];
         sig3.features = vec![1];
 
-        sig3.unhashed_subpackets.push(issuer.clone());
+        sig3.unhashed_subpackets.push(issuer);
 
         sig3.created = Some(
             DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
@@ -713,12 +714,12 @@ mod tests {
 
     fn test_parse_openpgp_key(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_armor_many(f).expect(&format!("failed to parse {}", key));
+        PublicKey::from_armor_many(f).unwrap_or_else(|_| panic!("failed to parse {}", key));
     }
 
     fn test_parse_openpgp_key_bin(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_bytes_many(f).expect(&format!("failed to parse {}", key));
+        PublicKey::from_bytes_many(f).unwrap_or_else(|_| panic!("failed to parse {}", key));
     }
 
     macro_rules! openpgp_key_bin {
@@ -846,18 +847,20 @@ mod tests {
     );
 
     #[test]
-    #[ignore] // Not implemented yet
     fn private_x25519_verify() {
-        let f = read_file(Path::new("./tests/openpgpjs/x25519.sec.asc").to_path_buf());
+        let f = read_file("./tests/openpgpjs/x25519.sec.asc");
         let sk = PrivateKey::from_armor_single(f).expect("failed to parse key");
         assert_eq!(sk.subkeys.len(), 1);
-
+        assert_eq!(
+            hex::encode(sk.key_id().unwrap().to_vec()).to_uppercase(),
+            "F25E5F24BB372CFA",
+        );
         sk.unlock(
             || "moon".to_string(),
             |k| {
                 match k {
-                    types::key::PrivateKeyRepr::ECDH(ref inner_key) => {
-                        assert_eq!(inner_key.hash, HashAlgorithm::SHA256);
+                    types::key::PrivateKeyRepr::EdDSA(ref inner_key) => {
+                        assert_eq!(inner_key.oid, ECCCurve::Ed25519.oid());
                     }
                     _ => panic!("invalid key"),
                 }

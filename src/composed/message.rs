@@ -106,7 +106,7 @@ impl Message {
                         res = decrypt(
                             priv_key,
                             &packet.mpis,
-                            &edata,
+                            edata,
                             *protected,
                             &encoding_key.fingerprint(),
                         )?;
@@ -123,7 +123,7 @@ impl Message {
                         res = decrypt(
                             priv_key,
                             &packet.mpis,
-                            &edata,
+                            edata,
                             *protected,
                             &encoding_key.fingerprint(),
                         )?;
@@ -190,6 +190,10 @@ fn decrypt(
         PrivateKeyRepr::DSA => unimplemented_err!("DSA"),
         PrivateKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
         PrivateKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
+        PrivateKeyRepr::EdDSA(ref priv_key) => {
+            println!("key: {:?}", priv_key);
+            unimplemented_err!("EdDSA");
+        }
     };
 
     let alg =
@@ -308,7 +312,7 @@ mod tests {
         // TODO: verify with the verify key
         // TODO: verify filename
         let n = format!("{}/{}", base_path, entry);
-        let mut file = File::open(&n).expect(&format!("no file: {}", &n));
+        let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
 
         let details: Testcase = serde_json::from_reader(&mut file).unwrap();
         println!(
