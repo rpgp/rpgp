@@ -13,4 +13,4 @@ cache:
 
 script:
   - cargo build --release
-  - cargo test --all-features
+  - cargo test

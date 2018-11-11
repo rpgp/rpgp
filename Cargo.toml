@@ -37,7 +37,7 @@ flate2 = { version = "1.0.4", default-features = false, features = ["rust_backen
 num-derive = "0.2.3"
 num-traits = "0.2.6"
 cast5 = { git = "https://github.com/dignifiedquire/block-ciphers", branch = "cast5" }
-x25519-dalek = "0.3.0"
+x25519-dalek = { version = "0.3", default-features = false, features = ["std", "u64_backend"] }
 lazy_static = "1.2.0"
 block-padding = "0.1.2"
 
@@ -51,3 +51,7 @@ serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
 glob = "^0.2"
+
+[features]
+default = []
+nightly = ["x25519-dalek/nightly"]
