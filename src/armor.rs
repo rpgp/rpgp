@@ -245,6 +245,7 @@ impl<R: ::std::io::Read> Dearmor<R> {
 }
 
 impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
+    #[allow(unused)] // for some reason the compiler thinks `needed` is unneeded.
     fn read(&mut self, into: &mut [u8]) -> ::std::io::Result<usize> {
         // TODO: const/configurable
         let max_capacity = 1024 * 1024 * 1024;
@@ -387,6 +388,7 @@ pub fn parse<R: ::std::io::Read>(
     dearmor.read_to_end(&mut bytes)?;
 
     // TODO: streaming base64 decoding
+
     let decoded = base64::decode_config(&bytes, base64::MIME)?;
 
     if let Some(expected) = dearmor.checksum {

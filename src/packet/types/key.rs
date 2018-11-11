@@ -1,7 +1,6 @@
 use std::fmt;
 
 use byteorder::{BigEndian, ByteOrder};
-use hex;
 use md5::Md5;
 use num_bigint::BigUint;
 use rsa::RSAPrivateKey;
@@ -9,11 +8,12 @@ use sha1::{Digest, Sha1};
 
 use super::ecc_curve::ECCCurve;
 use super::packet::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
+use crypto::checksum;
 use crypto::hash::HashAlgorithm;
 use crypto::kdf::s2k;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use packet::tags::privkey::rsa_private_params;
+use packet::tags::privkey::{ecc_private_params, rsa_private_params};
 use util::bignum_to_mpi;
 
 /// Represents a KeyID.
@@ -74,14 +74,18 @@ pub enum PublicParams {
     },
     ECDH {
         curve: ECCCurve,
-        p: BigUint,
-        hash: u8,
-        alg_sym: u8,
+        p: Vec<u8>,
+        hash: HashAlgorithm,
+        alg_sym: SymmetricKeyAlgorithm,
     },
     Elgamal {
         p: BigUint,
         g: BigUint,
         y: BigUint,
+    },
+    EdDSA {
+        curve: ECCCurve,
+        q: Vec<u8>,
     },
 }
 
@@ -91,6 +95,28 @@ pub enum PrivateKeyRepr {
     RSA(RSAPrivateKey),
     DSA,
     ECDSA,
+    ECDH(ECDHPrivateKey),
+    EdDSA(EdDSAPrivateKey),
+}
+
+/// Private key for ECDH with Curve25519, the only combination we
+// currently support.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ECDHPrivateKey {
+    /// The secret point.
+    pub secret: [u8; 32],
+    pub hash: HashAlgorithm,
+    pub oid: Vec<u8>,
+    pub alg_sym: SymmetricKeyAlgorithm,
+}
+
+/// Private key for EdDSA with Curve25519, the only combination we
+// currently support.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EdDSAPrivateKey {
+    /// The secret point.
+    pub secret: [u8; 32],
+    pub oid: Vec<u8>,
 }
 
 impl fmt::Debug for PrivateKeyRepr {
@@ -99,6 +125,8 @@ impl fmt::Debug for PrivateKeyRepr {
             PrivateKeyRepr::RSA(_) => write!(f, "PrivateKeyRepr(RSA)"),
             PrivateKeyRepr::DSA => write!(f, "PrivateKeyRepr(DSA)"),
             PrivateKeyRepr::ECDSA => write!(f, "PrivateKeyRepr(ECDSA)"),
+            PrivateKeyRepr::ECDH(_) => write!(f, "PrivateKeyRepr(ECDH)"),
+            PrivateKeyRepr::EdDSA(_) => write!(f, "PrivateKeyRepr(EdDSA)"),
         }
     }
 }
@@ -173,6 +201,10 @@ impl PrivateKey {
         public_params: PublicParams,
         private_params: EncryptedPrivateParams,
     ) -> PrivateKey {
+        println!(
+            "creating priv key: {:?} {:?} {:?} {:?} {:?} {:?}",
+            version, algorithm, created_at, expiration, public_params, private_params
+        );
         PrivateKey {
             version,
             algorithm,
@@ -184,24 +216,26 @@ impl PrivateKey {
     }
 
     /// Unlock the raw data in the secret parameters.
-    pub fn unlock<'a, F, G>(&self, pw: F, work: G) -> Result<()>
+    pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
         G: FnOnce(&PrivateKeyRepr) -> Result<()>,
     {
         let decrypted = if self.private_params.is_encrypted() {
-            self.from_ciphertext(pw, self.private_params.data.as_slice())
+            self.repr_from_ciphertext(pw, self.private_params.data.as_slice())
         } else {
-            self.from_plaintext(self.private_params.data.as_slice())
+            self.repr_from_plaintext(self.private_params.data.as_slice())
         }?;
 
         work(&decrypted)
     }
 
-    fn from_ciphertext<'a, F>(&self, pw: F, ciphertext: &[u8]) -> Result<PrivateKeyRepr>
+    fn repr_from_ciphertext<F>(&self, pw: F, ciphertext: &[u8]) -> Result<PrivateKeyRepr>
     where
         F: FnOnce() -> String,
     {
+        // TODO: don't panic, return errors on missing parts.
+
         let sym_alg = self
             .private_params
             .encryption_algorithm
@@ -219,44 +253,40 @@ impl PrivateKey {
             .expect("missing hash algorithm");
         let key = s2k(
             pw,
-            sym_alg,
-            typ,
-            hash_alg,
+            *sym_alg,
+            *typ,
+            *hash_alg,
             self.private_params.string_to_key_salt.as_ref(),
             self.private_params.string_to_key_count.as_ref(),
         )?;
 
-        println!(
-            "salt: {}",
-            hex::encode(self.private_params.string_to_key_salt.clone().unwrap())
-        );
-        println!(
-            "code: {:?}",
-            self.private_params.string_to_key_count.as_ref()
-        );
-        println!("hash alg: {:?}", hash_alg);
-        println!("key: {}", hex::encode(&key));
-        println!(
-            "iv: {}",
-            hex::encode(self.private_params.iv.clone().unwrap())
-        );
-        if let Some(ref iv) = self.private_params.iv {
-            println!("ciphertext: {} {:?}", ciphertext.len(), ciphertext);
-            let mut plaintext = ciphertext.to_vec();
-            sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
-            println!("plaintext: {:?}", plaintext);
-            self.from_plaintext(&plaintext)
+        let iv = self.private_params.iv.as_ref().expect("missing iv");
+
+        // Actual decryption
+        let mut plaintext = ciphertext.to_vec();
+        sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
+
+        // Validate checksum
+        if self.has_checksum() {
+            let split = plaintext.len() - 20;
+            checksum::sha1(&plaintext[split..], &plaintext[..split])?;
+        } else if let Some(ref actual_checksum) = self.private_params.checksum {
+            // we already parsed the checksum when reading the s2k.
+            checksum::simple(actual_checksum, &plaintext)?;
         } else {
-            bail!("missing iv");
+            bail!("missing checksum");
         }
+
+        // Construct details from the now decrypted plaintext information
+        self.repr_from_plaintext(&plaintext)
     }
 
-    fn from_plaintext(&self, plaintext: &[u8]) -> Result<PrivateKeyRepr> {
+    fn repr_from_plaintext(&self, plaintext: &[u8]) -> Result<PrivateKeyRepr> {
         match self.algorithm {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
-                let (_, (d, p, q, _, _)) = rsa_private_params(plaintext, self.has_checksum())?;
+                let (_, (d, p, q, _)) = rsa_private_params(plaintext)?;
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
                         let private_key =
@@ -270,19 +300,56 @@ impl PrivateKey {
             PublicKeyAlgorithm::DSA => {
                 unimplemented_err!("DSA");
             }
-            PublicKeyAlgorithm::ECDH => {
-                unimplemented_err!("ECDH");
-            }
+            PublicKeyAlgorithm::ECDH => match self.public_params {
+                PublicParams::ECDH {
+                    ref curve,
+                    ref hash,
+                    ref alg_sym,
+                    ..
+                } => match *curve {
+                    ECCCurve::Curve25519 => {
+                        let (_, d) = ecc_private_params(plaintext)?;
+                        ensure_eq!(d.len(), 32, "invalid secret");
+
+                        let mut secret = [0u8; 32];
+                        secret.copy_from_slice(d);
+
+                        Ok(PrivateKeyRepr::ECDH(ECDHPrivateKey {
+                            oid: curve.oid(),
+                            hash: *hash,
+                            alg_sym: *alg_sym,
+                            secret,
+                        }))
+                    }
+                    _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
+                },
+                _ => unreachable!("inconsistent key state"),
+            },
             PublicKeyAlgorithm::ECDSA => {
                 unimplemented_err!("ECDSA");
             }
-            PublicKeyAlgorithm::EdDSA => {
-                unimplemented_err!("EdDSA");
-            }
+            PublicKeyAlgorithm::EdDSA => match self.public_params {
+                PublicParams::EdDSA { ref curve, .. } => match *curve {
+                    ECCCurve::Ed25519 => {
+                        let (_, d) = ecc_private_params(plaintext)?;
+                        ensure_eq!(d.len(), 32, "invalid secret");
+
+                        let mut secret = [0u8; 32];
+                        secret.copy_from_slice(d);
+
+                        Ok(PrivateKeyRepr::EdDSA(EdDSAPrivateKey {
+                            oid: curve.oid(),
+                            secret,
+                        }))
+                    }
+                    _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
+                },
+                _ => unreachable!("inconsistent key state"),
+            },
             PublicKeyAlgorithm::Elgamal => {
                 unimplemented_err!("Elgamal");
             }
-            _ => unsupported_err!("algoritm: {:?}", self.algorithm),
+            _ => unsupported_err!("algorithm: {:?}", self.algorithm),
         }
     }
 
@@ -290,7 +357,7 @@ impl PrivateKey {
         &self.private_params
     }
 
-    /// Checks if we should expect a sha1 checksum in the encrypted part.
+    /// Checks if we should expect a SHA1 checksum in the encrypted part.
     fn has_checksum(&self) -> bool {
         self.private_params.string_to_key_id == 254
     }
@@ -366,20 +433,28 @@ macro_rules! key {
                                 //the octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
                                 //MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
                                                 //a one-octet value 01
                                 packet.push(1);
                                 //a one-octet hash function ID used with a KDF
-                                packet.push(*hash);
+                                packet.push(*hash as u8);
                                 //a one-octet algorithm ID
-                                packet.push(*alg_sym);
+                                packet.push(*alg_sym as u8);
                             }
                             PublicParams::Elgamal { p, g, y } => {
                                 packet.extend(bignum_to_mpi(p));
                                 packet.extend(bignum_to_mpi(g));
                                 packet.extend(bignum_to_mpi(y));
+                            }
+                            PublicParams::EdDSA { curve, q } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&q)));
                             }
                         }
 
@@ -429,20 +504,28 @@ macro_rules! key {
                                 //the octets representing a curve OID
                                 packet.extend(curve.oid().iter().cloned());
                                 //MPI of an EC point representing a public key
-                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
                                 //a one-octet size of the following fields
                                 packet.push(3); // Always 3??
                                                 //a one-octet value 01
                                 packet.push(1);
                                 //a one-octet hash function ID used with a KDF
-                                packet.push(*hash);
+                                packet.push(*hash as u8);
                                 //a one-octet algorithm ID
-                                packet.push(*alg_sym);
+                                packet.push(*alg_sym as u8);
                             }
                             PublicParams::Elgamal { p, g, y } => {
                                 packet.extend(bignum_to_mpi(p));
                                 packet.extend(bignum_to_mpi(g));
                                 packet.extend(bignum_to_mpi(y));
+                            }
+                            PublicParams::EdDSA { curve, q } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&q)));
                             }
                         }
 
