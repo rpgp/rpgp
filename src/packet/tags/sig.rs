@@ -274,7 +274,7 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>,
 ))));
 
 fn unknown_sig<'a>(body: &'a [u8], typ: PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<u8>> {
-    println!("unknown signature type {:?}", typ);
+    info!("unknown signature type {:?}", typ);
     Ok((&b""[..], body.to_vec()))
 }
 

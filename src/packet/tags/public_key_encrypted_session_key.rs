@@ -31,7 +31,7 @@ named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Vec<u8>>>, switch!(
         >> blen: be_u8
         >> b: take!(blen)
       >> ({
-          println!("{:?} {:?}", a, b);
+          info!("{:?} {:?}", a, b);
           vec![a.to_vec(), b.to_vec()]
       })
     )
@@ -49,7 +49,7 @@ named!(
         // the symmetric key algorithm
         >> alg: map_opt!(be_u8, |v| {
                 let a = PublicKeyAlgorithm::from_u8(v);
-                println!("alg {:?}",a);
+                info!("alg {:?}",a);
                 a
         })
         // key algorithm specific data

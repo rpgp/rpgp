@@ -22,8 +22,8 @@ where
             let hash_size = hash_alg.digest_size();
             let num_contexts = (key_size + hash_size - 1) / hash_size;
             let pw = password();
-            println!("{} {} {} {}", key_size, hash_size, num_contexts, pw);
-            println!("{:?} {:?} {:?}", sym_alg, hash_alg, s2k);
+            info!("{} {} {} {}", key_size, hash_size, num_contexts, pw);
+            info!("{:?} {:?} {:?}", sym_alg, hash_alg, s2k);
 
             let mut zeros = Vec::with_capacity(num_contexts + 1);
             let mut ret = vec![0u8; key_size];

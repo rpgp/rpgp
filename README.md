@@ -10,6 +10,17 @@
 
 **Work in progress:** Not usable yet, but hopefully soon
 
+## Developement
+
+To enable debugging, add
+
+```rust
+use pretty_env_logger;
+let _ = pretty_env_logger::try_init();
+```
+
+And then run tests with `RUST_LOG=pgp=info`.
+
 ## LICENSE
 
 MIT or Apache 2.0

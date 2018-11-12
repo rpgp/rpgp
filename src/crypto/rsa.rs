@@ -10,9 +10,9 @@ pub fn decrypt_rsa(
 ) -> Result<Vec<u8>> {
     // rsa consist of exactly one mpi
     let mpi = &mpis[0];
-    println!("RSA m^e mod n: {}", hex::encode(mpi));
+    info!("RSA m^e mod n: {}", hex::encode(mpi));
     let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi)?;
-    println!("m: {}", hex::encode(&m));
+    info!("m: {}", hex::encode(&m));
 
     Ok(m)
 }
