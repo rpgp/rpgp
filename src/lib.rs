@@ -8,7 +8,7 @@
 
 #[macro_use]
 extern crate nom;
-extern crate base64;
+extern crate base64 as base64_crate;
 extern crate byteorder;
 extern crate crc24;
 extern crate rsa;
@@ -40,6 +40,10 @@ extern crate x25519_dalek;
 #[macro_use]
 extern crate lazy_static;
 extern crate block_padding;
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
+extern crate buf_redux;
 
 #[cfg(test)]
 extern crate rand;
@@ -61,6 +65,8 @@ extern crate serde;
 #[macro_use]
 mod errors;
 mod armor;
+mod base64;
+mod base64_decoder;
 mod packet;
 
 pub mod email;

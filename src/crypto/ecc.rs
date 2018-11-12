@@ -31,7 +31,7 @@ pub fn build_ecdh_param(
         alg_sym as u8,
     ];
 
-    println!("kdf params: {}", hex::encode(&kdf_params));
+    info!("kdf params: {}", hex::encode(&kdf_params));
     let oid_len = [oid.len() as u8];
 
     let values: Vec<&[u8]> = vec![
@@ -51,14 +51,14 @@ pub fn decrypt_ecdh(
     mpis: &[Vec<u8>],
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {
-    println!("ECDH decrypt");
-    println!("oid {}", hex::encode(&priv_key.oid));
-    println!("cipher {}", priv_key.alg_sym as u8);
-    println!("hash: {}", priv_key.hash as u8);
-    println!("fingerprint: {}", hex::encode(fingerprint));
+    info!("ECDH decrypt");
+    info!("oid {}", hex::encode(&priv_key.oid));
+    info!("cipher {}", priv_key.alg_sym as u8);
+    info!("hash: {}", priv_key.hash as u8);
+    info!("fingerprint: {}", hex::encode(fingerprint));
 
     let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
-    println!("ecdh kdf param: {}", hex::encode(&param));
+    info!("ecdh kdf param: {}", hex::encode(&param));
 
     // 33 = 0x40 + 32bits
     ensure_eq!(mpis[0].len(), 33, "invalid public point");

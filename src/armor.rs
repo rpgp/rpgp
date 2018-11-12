@@ -1,16 +1,16 @@
 use std::collections::HashMap;
-use std::io::Read;
+use std::io;
+use std::io::prelude::*;
 use std::str;
 
-use base64;
+use base64_crate;
+use buf_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
-use circular::Buffer;
 use crc24;
 use errors::{Error, Result};
-use nom::{
-    self, digit, line_ending, not_line_ending, InputIter, InputLength, Needed, Offset, Slice,
-};
-use util::base64_token as body_parser;
+use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Slice};
+
+use base64_decoder::Base64Decoder;
 
 /// Armor block types.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -54,9 +54,9 @@ named!(
         >> y: opt!(preceded!(tag!("/"), digit))
         >> ({
             // unwraps are safe, as the parser already determined that this is a digit.
-            let x: usize = str::from_utf8(x).unwrap().parse().unwrap();
+            let x: usize = str::from_utf8(x).expect("invalid x").parse().unwrap();
             let y: usize = y
-                .map(|s| str::from_utf8(s).unwrap().parse().unwrap())
+                .map(|s| str::from_utf8(s).expect("invalid y").parse().unwrap())
                 .unwrap_or(0);
 
             BlockType::MultiPartMessage(x, y)
@@ -171,8 +171,8 @@ named!(armor_header(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
 
 /// Read the checksum from an base64 encoded buffer.
 fn read_checksum(input: &[u8]) -> ::std::io::Result<u32> {
-    let checksum = base64::decode_config(input, base64::MIME)
-        .map_err(|_| ::std::io::ErrorKind::InvalidData)?;
+    let checksum = base64_crate::decode_config(input, base64_crate::MIME)
+        .map_err(|_| io::ErrorKind::InvalidData)?;
 
     let mut buf = [0; 4];
     let mut i = checksum.len();
@@ -214,192 +214,187 @@ pub struct Dearmor<R> {
     pub checksum: Option<u32>,
     /// track what we are currently parsing
     current_part: Part,
-    /// internal buffer of data already read from the underlying source
-    buffer: Buffer,
-    /// the underlying data source
-    inner: R,
-    /// the current capacity of our buffer
-    capacity: usize,
+    /// the underlying data source, wrapped in a BufferedReader
+    inner: Option<BufReader<R>>,
+    /// base64 decoder
+    base_decoder: Option<Base64Decoder<BufReader<R>>>,
 }
 
 /// Internal indicator, where in the parsing phase we are
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Part {
     Header,
     Body,
     Footer,
 }
 
-impl<R: ::std::io::Read> Dearmor<R> {
-    pub fn new(input: R) -> Dearmor<R> {
+const CAPACITY: usize = 1024 * 32;
+
+impl<R: Read> Dearmor<R> {
+    pub fn new(input: R) -> Self {
         Dearmor {
             typ: None,
             headers: HashMap::new(),
             checksum: None,
             current_part: Part::Header,
-            buffer: Buffer::with_capacity(32 * 1024),
-            capacity: 32 * 1024,
-            inner: input,
+            base_decoder: None,
+            inner: Some(BufReader::with_capacity(CAPACITY, input)),
         }
+    }
+
+    fn read_header(&mut self, into: &mut [u8]) -> io::Result<usize> {
+        if let Some(ref mut b) = self.inner {
+            b.read_into_buf()?;
+
+            // no data available currently
+            if b.buf_len() == 0 {
+                return Err(io::Error::new(io::ErrorKind::Interrupted, "empty buffer"));
+            }
+
+            let consumed = match header_parser(b.buffer()) {
+                Ok((remaining, (typ, header))) => {
+                    self.typ = Some(typ);
+                    self.headers = header;
+                    self.current_part = Part::Body;
+
+                    b.buf_len() - remaining.len()
+                }
+                Err(nom::Err::Incomplete(_)) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "incomplete parse",
+                    ));
+                }
+                Err(err) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid ascii armor header: {:?}", err),
+                    ));
+                }
+            };
+
+            b.consume(consumed);
+        } else {
+            panic!("invalid state");
+        }
+
+        self.read_body(into)
+    }
+
+    fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
+        println!("parsing body: {}", into.len());
+
+        if self.base_decoder.is_none() {
+            let b = self.inner.take().unwrap();
+            self.base_decoder = Some(Base64Decoder::new(b));
+        }
+
+        let size = if let Some(ref mut base_decoder) = self.base_decoder {
+            base_decoder.read(into)?
+        } else {
+            unreachable!();
+        };
+
+        if size == 0 {
+            // we are done with the body
+            self.current_part = Part::Footer;
+            self.read_footer()
+        } else {
+            Ok(size)
+        }
+    }
+
+    fn read_footer(&mut self) -> io::Result<usize> {
+        if self.base_decoder.is_some() {
+            self.inner = Some(self.base_decoder.take().unwrap().into_inner());
+        }
+
+        println!(
+            "footer: {:?}",
+            ::std::str::from_utf8(self.inner.as_ref().unwrap().buffer())
+        );
+
+        if let Some(ref mut b) = self.inner {
+            b.read_into_buf()?;
+
+            if b.buf_len() == 0 {
+                // we are done here
+                return Ok(0);
+            }
+
+            let consumed = match footer_parser(b.buffer()) {
+                Ok((remaining, (checksum, footer_typ))) => {
+                    if let Some(ref header_typ) = self.typ {
+                        if header_typ != &footer_typ {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!(
+                                    "armor ascii footer does not match header: {:?} != {:?}",
+                                    self.typ, footer_typ
+                                ),
+                            ));
+                        }
+                    }
+
+                    if let Some(raw) = checksum {
+                        self.checksum = Some(read_checksum(raw)?);
+                    }
+
+                    b.buf_len() - remaining.len()
+                }
+                Err(nom::Err::Incomplete(_)) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Interrupted,
+                        "incomplete parse",
+                    ));
+                }
+                Err(err) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("invalid ascii armor footer: {:?}", err),
+                    ));
+                }
+            };
+
+            b.consume(consumed);
+        } else {
+            panic!("invalid state");
+        }
+
+        // We always return zero, as we do not write to the `into` buffer.
+        Ok(0)
     }
 }
 
-impl<R: ::std::io::Read> ::std::io::Read for Dearmor<R> {
-    #[allow(unused)] // for some reason the compiler thinks `needed` is unneeded.
-    fn read(&mut self, into: &mut [u8]) -> ::std::io::Result<usize> {
-        // TODO: const/configurable
-        let max_capacity = 1024 * 1024 * 1024;
-        // how much data have we read into our target `into`
-        let mut read = 0;
-        // how much data do we want to read
-        let into_len = into.len();
+impl<R: Read> Read for Dearmor<R> {
+    fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
+        println!("\n=== read {}", into.len());
 
-        while read < into_len {
-            let b = &mut self.buffer;
-            let sz = self.inner.read(b.space())?;
-            b.fill(sz);
-
-            if b.available_data() == 0 {
-                break;
-            }
-
-            let mut needed = None;
-            'outer: while read < into_len {
-                let l = match self.current_part {
-                    Part::Header => match header_parser(b.data()) {
-                        Ok((remaining, (typ, header))) => {
-                            self.typ = Some(typ);
-                            self.headers = header;
-                            self.current_part = Part::Body;
-                            b.data().offset(remaining)
-                        }
-                        Err(err) => match err {
-                            nom::Err::Incomplete(n) => {
-                                needed = Some(n);
-                                break 'outer;
-                            }
-                            _ => {
-                                return Err(::std::io::Error::new(
-                                    ::std::io::ErrorKind::InvalidData,
-                                    "header parsing failure",
-                                ));
-                            }
-                        },
-                    },
-                    Part::Body => {
-                        let data = if into_len > b.data().len() {
-                            b.data()
-                        } else {
-                            &b.data()[0..into_len]
-                        };
-
-                        match body_parser(data) {
-                            Ok((remaining, bytes)) => {
-                                self.current_part = Part::Body;
-                                into[0..bytes.len()].copy_from_slice(bytes);
-                                let bytes_read = b.data().offset(remaining);
-                                read += bytes_read;
-
-                                bytes_read
-                            }
-                            Err(err) => match err {
-                                nom::Err::Incomplete(n) => {
-                                    needed = Some(n);
-                                    break 'outer;
-                                }
-                                nom::Err::Error(_) => {
-                                    // this happens when there are no more base64 tokens, so lets move
-                                    // to parse the rest
-                                    self.current_part = Part::Footer;
-                                    0
-                                }
-                                nom::Err::Failure(_) => {
-                                    return Err(::std::io::Error::new(
-                                        ::std::io::ErrorKind::InvalidData,
-                                        "body parsing failure",
-                                    ));
-                                }
-                            },
-                        }
-                    }
-                    Part::Footer => match footer_parser(b.data()) {
-                        Ok((remaining, (checksum, footer_typ))) => {
-                            if let Some(ref header_typ) = self.typ {
-                                if header_typ != &footer_typ {
-                                    return Err(::std::io::Error::new(
-                                        ::std::io::ErrorKind::InvalidData,
-                                        format!(
-                                            "missmatch in armor ascii footer: {:?} != {:?}",
-                                            self.typ, footer_typ
-                                        ),
-                                    ));
-                                }
-                            }
-
-                            if let Some(raw) = checksum {
-                                self.checksum = Some(read_checksum(raw)?);
-                            }
-
-                            b.data().offset(remaining)
-                        }
-                        Err(err) => match err {
-                            nom::Err::Incomplete(n) => {
-                                needed = Some(n);
-                                break 'outer;
-                            }
-                            _ => {
-                                return Err(::std::io::Error::new(
-                                    ::std::io::ErrorKind::InvalidData,
-                                    format!("footer parsing failure {:?}", err),
-                                ));
-                            }
-                        },
-                    },
-                };
-
-                b.consume(l);
-
-                // break if we filled the input
-                if read == into_len {
-                    break;
-                }
-
-                if let Some(Needed::Size(sz)) = needed {
-                    if sz > b.capacity() && self.capacity * 2 < max_capacity {
-                        self.capacity *= 2;
-                        b.grow(self.capacity);
-                    }
-                }
-            }
+        match self.current_part {
+            Part::Header => self.read_header(into),
+            Part::Body => self.read_body(into),
+            Part::Footer => self.read_footer(),
         }
-
-        Ok(read)
     }
 }
 
 // helper function to parse all data at once
-pub fn parse<R: ::std::io::Read>(
-    input: R,
-) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
-    let mut dearmor = Dearmor::new(input);
+pub fn parse<R: Read>(mut input: R) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
+    let mut dearmor = Dearmor::new(input.by_ref());
 
     // estimate size
     let mut bytes = Vec::new();
     dearmor.read_to_end(&mut bytes)?;
 
-    // TODO: streaming base64 decoding
-
-    let decoded = base64::decode_config(&bytes, base64::MIME)?;
-
     if let Some(expected) = dearmor.checksum {
-        let actual = crc24::hash_raw(&decoded);
+        let actual = crc24::hash_raw(&bytes);
 
         if expected != actual {
             return Err(Error::InvalidChecksum);
         }
     }
 
-    Ok((dearmor.typ.unwrap(), dearmor.headers, decoded))
+    Ok((dearmor.typ.unwrap(), dearmor.headers, bytes))
 }
 
 #[cfg(test)]
@@ -596,19 +591,19 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         assert_eq!(dec.headers, map);
 
         assert_eq!(read, 5);
-        assert_eq!(res.as_slice(), &b"aGVsb"[..]);
+        assert_eq!(res.as_slice(), &b"hello"[..]);
 
         let read = dec.read(&mut res).unwrap();
         assert_eq!(read, 5);
-        assert_eq!(res.as_slice(), &b"G8gd2"[..]);
+        assert_eq!(res.as_slice(), &b" worl"[..]);
 
         let read = dec.read(&mut res).unwrap();
-        assert_eq!(read, 5);
-        assert_eq!(res.as_slice(), &b"9ybGQ"[..]);
+        assert_eq!(read, 1);
+        assert_eq!(res.as_slice()[0], b'd');
 
         let read = dec.read(&mut res).unwrap();
         assert_eq!(read, 0);
-        assert_eq!(res.as_slice(), &b"9ybGQ"[..]); // unchanged
+        assert_eq!(res.as_slice()[0], b'd'); // unchanged
     }
 
     #[test]
@@ -642,22 +637,6 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
             ),
             "with rest"
         );
-    }
-
-    #[test]
-    fn test_body_parser() {
-        assert_eq!(
-            body_parser(&b"abcabc+==\n=hello"[..]),
-            Ok((&b"==\n=hello"[..], &b"abcabc+"[..]))
-        );
-        assert_eq!(
-            body_parser(&b"abcabc+==\n-other"[..]),
-            Ok((&b"==\n-other"[..], &b"abcabc+"[..]))
-        );
-
-        assert_eq!(body_parser(&b"ab++\n"[..]), Ok((&b""[..], &b"ab++\n"[..])));
-
-        assert_eq!(body_parser(&b"ab"[..]), Ok((&b""[..], &b"ab"[..])));
     }
 
     #[test]

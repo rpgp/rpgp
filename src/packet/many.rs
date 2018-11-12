@@ -43,7 +43,7 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
             let length = {
                 match single::parser(b.data()) {
                     Ok((remaining, p)) => {
-                        println!("-- parsed packet {:?} --", p.tag);
+                        info!("-- parsed packet {:?} --", p.tag);
                         packets.push(p);
                         b.data().offset(remaining)
                     }
