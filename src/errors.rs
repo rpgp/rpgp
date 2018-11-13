@@ -1,5 +1,5 @@
 use aes::block_cipher_trait;
-use base64_crate as base64;
+use base64;
 use block_modes;
 use block_padding;
 use cfb_mode;
