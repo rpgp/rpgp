@@ -25,7 +25,7 @@ impl<R: Read + Seek> Seek for LineReader<R> {
                 if n < 0 {
                     let mut buf = vec![0u8; (-n) as usize];
                     self.inner.seek(pos)?;
-                    self.read(&mut buf)?;
+                    let _ = self.read(&mut buf)?;
                     let linebreaks = buf
                         .into_iter()
                         .filter(|c| *c == b'\r' || *c == b'\n')
@@ -35,7 +35,7 @@ impl<R: Read + Seek> Seek for LineReader<R> {
                 } else {
                     let mut buf = vec![0u8; n as usize];
                     self.inner.seek(io::SeekFrom::Current(-n))?;
-                    self.read(&mut buf)?;
+                    let _ = self.read(&mut buf)?;
                     let linebreaks = buf
                         .into_iter()
                         .filter(|c| *c == b'\r' || *c == b'\n')
@@ -144,7 +144,7 @@ mod tests {
             let c = Cursor::new(&data_with_garbage[..]);
             let mut r = LineReader::new(c);
             let mut buf = vec![0; 33];
-            r.read(&mut buf).unwrap();
+            r.read_exact(&mut buf).unwrap();
 
             assert_eq!(&buf[0..33], &data_with_garbage[0..33]);
         }

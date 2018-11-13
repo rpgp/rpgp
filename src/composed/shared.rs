@@ -49,7 +49,7 @@ pub trait Deserializable: Sized {
     fn from_armor_many<R: Read + Seek>(input: R) -> Result<Vec<Self>> {
         let mut dearmor = armor::Dearmor::new(input);
         dearmor.read_header()?;
-        let typ = dearmor.typ.clone().unwrap();
+        let typ = dearmor.typ.unwrap();
 
         // TODO: add typ and headers information to the key possibly?
         match typ {

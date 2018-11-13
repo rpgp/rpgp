@@ -38,8 +38,8 @@ impl<R: Read + Seek> Read for Base64Reader<R> {
                 let back = -(n as i64) + (i as i64); // - 1
                 self.inner.seek(io::SeekFrom::Current(back))?;
 
-                for j in i..n {
-                    into[j] = 0;
+                for el in into.iter_mut().skip(i) {
+                    *el = 0;
                 }
 
                 return Ok(i);
