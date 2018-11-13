@@ -64,12 +64,9 @@ impl<R: Read + Seek> Read for Base64Decoder<R> {
         if self.inner.buf_len() < 4 {
             let b = &mut self.inner;
 
-            match b.read_into_buf() {
-                Err(err) => {
-                    self.err = Some(copy_err(&err));
-                    return Err(err);
-                }
-                _ => {}
+            if let Err(err) = b.read_into_buf() {
+                self.err = Some(copy_err(&err));
+                return Err(err);
             }
         }
 
@@ -90,7 +87,7 @@ impl<R: Read + Seek> Read for Base64Decoder<R> {
             // copy what we have into `into`
             into[0..n].copy_from_slice(t1);
             // store the rest
-            self.out.write(t2)?;
+            self.out.write_all(t2)?;
 
             (consumed, n)
         } else {

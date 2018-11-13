@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::Cursor;
 use std::io::Read;
 use test::{black_box, Bencher};
@@ -44,6 +44,7 @@ fn bench_message_parse(b: &mut Bencher) {
         let c = Cursor::new(bytes.clone());
         black_box(Message::from_armor_single(c).unwrap())
     });
+    b.bytes = bytes.len() as u64;
     stop_profile();
 }
 
@@ -52,11 +53,12 @@ fn bench_message_decryption_rsa(b: &mut Bencher) {
     let mut decrypt_key_file =
         File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc").unwrap();
     let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file).unwrap();
-    let mut message_file =
-        File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc").unwrap();
+    let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
+    let mut message_file = File::open(message_file_path).unwrap();
     let message = Message::from_armor_single(&mut message_file).unwrap();
 
     start_profile("message_decryption");
+    b.bytes = fs::metadata(message_file_path).unwrap().len();
     b.iter(|| {
         black_box(
             message
