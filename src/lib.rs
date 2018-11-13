@@ -8,7 +8,7 @@
 
 #[macro_use]
 extern crate nom;
-extern crate base64 as base64_crate;
+extern crate base64;
 extern crate byteorder;
 extern crate crc24;
 extern crate rsa;
@@ -65,8 +65,9 @@ extern crate serde;
 #[macro_use]
 mod errors;
 mod armor;
-mod base64;
 mod base64_decoder;
+mod base64_reader;
+mod line_reader;
 mod packet;
 
 pub mod email;

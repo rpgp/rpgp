@@ -3,7 +3,7 @@ use std::io;
 use std::io::prelude::*;
 use std::str;
 
-use base64_crate;
+use base64;
 use buf_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 use crc24;
@@ -11,6 +11,8 @@ use errors::{Error, Result};
 use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Slice};
 
 use base64_decoder::Base64Decoder;
+use base64_reader::Base64Reader;
+use line_reader::LineReader;
 
 /// Armor block types.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -171,8 +173,8 @@ named!(armor_header(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
 
 /// Read the checksum from an base64 encoded buffer.
 fn read_checksum(input: &[u8]) -> ::std::io::Result<u32> {
-    let checksum = base64_crate::decode_config(input, base64_crate::MIME)
-        .map_err(|_| io::ErrorKind::InvalidData)?;
+    let checksum =
+        base64::decode_config(input, base64::STANDARD).map_err(|_| io::ErrorKind::InvalidData)?;
 
     let mut buf = [0; 4];
     let mut i = checksum.len();
@@ -217,7 +219,7 @@ pub struct Dearmor<R> {
     /// the underlying data source, wrapped in a BufferedReader
     inner: Option<BufReader<R>>,
     /// base64 decoder
-    base_decoder: Option<Base64Decoder<BufReader<R>>>,
+    base_decoder: Option<Base64Decoder<Base64Reader<LineReader<BufReader<R>>>>>,
 }
 
 /// Internal indicator, where in the parsing phase we are
@@ -282,11 +284,9 @@ impl<R: Read> Dearmor<R> {
     }
 
     fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        println!("parsing body: {}", into.len());
-
         if self.base_decoder.is_none() {
             let b = self.inner.take().unwrap();
-            self.base_decoder = Some(Base64Decoder::new(b));
+            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(LineReader::new(b))));
         }
 
         let size = if let Some(ref mut base_decoder) = self.base_decoder {
@@ -306,13 +306,16 @@ impl<R: Read> Dearmor<R> {
 
     fn read_footer(&mut self) -> io::Result<usize> {
         if self.base_decoder.is_some() {
-            self.inner = Some(self.base_decoder.take().unwrap().into_inner());
+            self.inner = Some(
+                // don't judge me..
+                self.base_decoder
+                    .take()
+                    .unwrap()
+                    .into_inner()
+                    .into_inner()
+                    .into_inner(),
+            );
         }
-
-        println!(
-            "footer: {:?}",
-            ::std::str::from_utf8(self.inner.as_ref().unwrap().buffer())
-        );
 
         if let Some(ref mut b) = self.inner {
             b.read_into_buf()?;
@@ -368,8 +371,6 @@ impl<R: Read> Dearmor<R> {
 
 impl<R: Read> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        println!("\n=== read {}", into.len());
-
         match self.current_part {
             Part::Header => self.read_header(into),
             Part::Body => self.read_body(into),

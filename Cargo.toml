@@ -13,7 +13,7 @@ keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy
 rsa = { git = "https://github.com/dignifiedquire/rust-rsa", branch = "master" }
 num-bigint = { git = "https://github.com/dignifiedquire/num-bigint", branch = "master" }
 crc24 = "^0.1"
-base64 = "^0.9"
+base64 = "^0.10"
 byteorder = "^1.2"
 enum_primitive = "^0.1"
 chrono = "^0.4"
