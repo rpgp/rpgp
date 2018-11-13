@@ -10,8 +10,8 @@ use errors::Result;
 
 macro_rules! decrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        println!("key {}", hex::encode($key));
-        println!("iv {}", hex::encode($iv));
+        info!("key {}", hex::encode($key));
+        info!("iv {}", hex::encode($iv));
 
         let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
         mode.decrypt($prefix);
@@ -106,7 +106,7 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode. Does
     /// resynchronization.
     pub fn decrypt<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
-        println!("unprotected decrypt");
+        info!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
         self.decrypt_with_iv(key, &iv_vec, ciphertext, true)
     }
@@ -115,16 +115,16 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     /// Does not do resynchronization.
     pub fn decrypt_protected<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
-        println!("{}", hex::encode(&ciphertext));
-        println!("protected decrypt");
+        info!("{}", hex::encode(&ciphertext));
+        info!("protected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
         let cv_len = ciphertext.len();
         let res = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
-        println!("{}", hex::encode(&res));
+        info!("{}", hex::encode(&res));
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
         let mdc_len = 22;
         let (data, mdc) = res.split_at(res.len() - mdc_len);
-        println!(
+        info!(
             "decrypted {}b from {}b ({}|{})",
             res.len(),
             cv_len,
@@ -135,7 +135,7 @@ impl SymmetricKeyAlgorithm {
         ensure_eq!(mdc[0], 0xD3, "invalid MDC tag");
         ensure_eq!(mdc[1], 0x14, "invalid MDC length");
         // TODO: hash and compare to mdc[2..];
-        println!("mdc: {}", hex::encode(mdc));
+        info!("mdc: {}", hex::encode(mdc));
 
         Ok(data)
     }

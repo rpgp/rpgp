@@ -40,6 +40,10 @@ extern crate x25519_dalek;
 #[macro_use]
 extern crate lazy_static;
 extern crate block_padding;
+extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
+extern crate buf_redux;
 
 #[cfg(test)]
 extern crate rand;
@@ -61,6 +65,9 @@ extern crate serde;
 #[macro_use]
 mod errors;
 mod armor;
+mod base64_decoder;
+mod base64_reader;
+mod line_reader;
 mod packet;
 
 pub mod email;

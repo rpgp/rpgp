@@ -1,7 +1,7 @@
 use armor::{self, BlockType};
 use errors::{Error, Result};
 use packet::{self, types};
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Seek};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
@@ -34,7 +34,7 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    fn from_armor_single(input: impl Read) -> Result<Self> {
+    fn from_armor_single<R: Read + Seek>(input: R) -> Result<Self> {
         let el = Self::from_armor_many(input)?;
 
         if el.len() > 1 {
@@ -46,8 +46,11 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    fn from_armor_many(input: impl Read) -> Result<Vec<Self>> {
-        let (typ, _headers, body) = armor::parse(input)?;
+    fn from_armor_many<R: Read + Seek>(input: R) -> Result<Vec<Self>> {
+        let mut dearmor = armor::Dearmor::new(input);
+        dearmor.read_header()?;
+        let typ = dearmor.typ.unwrap();
+
         // TODO: add typ and headers information to the key possibly?
         match typ {
             // Standard PGP types
@@ -58,7 +61,7 @@ pub trait Deserializable: Sized {
             | BlockType::Signature
             | BlockType::File => {
                 // TODO: check that the result is what it actually said.
-                Self::from_bytes_many(body.as_slice())
+                Self::from_bytes_many(dearmor)
             }
             BlockType::PublicKeyPKCS1
             | BlockType::PublicKeyPKCS8

@@ -617,7 +617,7 @@ mod tests {
         key.unlock(
             || "test".to_string(),
             |k| {
-                println!("{:?}", k);
+                info!("{:?}", k);
                 match k {
                     types::key::PrivateKeyRepr::RSA(k) => {
                         assert_eq!(k.e().to_bytes_be(), hex::decode("010001").unwrap().to_vec());

@@ -58,7 +58,7 @@ impl Message {
                 edata,
                 protected,
             } => {
-                println!("unlocked key! msg protected={}", protected);
+                info!("unlocked key! msg protected={}", protected);
 
                 // search for a packet with a key id that we have and that key
                 let mut packet = None;
@@ -66,9 +66,9 @@ impl Message {
                 let mut encoding_subkey = None;
 
                 for esk_packet in esk {
-                    println!("esk packet: {:?}", esk_packet);
-                    println!("{:?}", key.key_id());
-                    println!(
+                    info!("esk packet: {:?}", esk_packet);
+                    info!("{:?}", key.key_id());
+                    info!(
                         "{:?}",
                         key.subkeys.iter().map(|k| k.key_id()).collect::<Vec<_>>()
                     );
@@ -97,7 +97,7 @@ impl Message {
 
                 let mut res = Vec::new();
                 if let Some(encoding_key) = encoding_key {
-                    println!(
+                    info!(
                         "decrypting using key {}",
                         hex::encode(encoding_key.key_id().unwrap().to_vec())
                     );
@@ -113,7 +113,7 @@ impl Message {
                         Ok(())
                     })?;
                 } else if let Some(encoding_key) = encoding_subkey {
-                    println!(
+                    info!(
                         "decrypting using subkey {}",
                         hex::encode(encoding_key.key_id().unwrap().to_vec())
                     );
@@ -129,7 +129,7 @@ impl Message {
                         )?;
                         Ok(())
                     })?;
-                    println!("symkey {:?}", sym_key);
+                    info!("symkey {:?}", sym_key);
                 } else {
                     return Err(Error::MissingKey);
                 }
@@ -191,14 +191,14 @@ fn decrypt(
         PrivateKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
         PrivateKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
         PrivateKeyRepr::EdDSA(ref priv_key) => {
-            println!("key: {:?}", priv_key);
+            info!("key: {:?}", priv_key);
             unimplemented_err!("EdDSA");
         }
     };
 
     let alg =
         SymmetricKeyAlgorithm::from_u8(decrypted_key[0]).expect("invalid symmetric key algorithm");
-    println!("alg: {:?}", alg);
+    info!("alg: {:?}", alg);
 
     let (key, checksum) = match *priv_key {
         PrivateKeyRepr::ECDH(_) => {
@@ -219,27 +219,27 @@ fn decrypt(
 
     checksum::simple(checksum, key)?;
 
-    println!("decrypting {} packets", edata.len());
+    info!("decrypting {} packets", edata.len());
     let mut messages = Vec::with_capacity(edata.len());
 
     for packet in edata {
         ensure_eq!(packet.body[0], 1, "invalid packet version");
 
         let mut res = packet.body[1..].to_vec();
-        println!("decrypting protected = {:?}", protected);
+        info!("decrypting protected = {:?}", protected);
         let decrypted_packet = if protected {
             alg.decrypt_protected(key, &mut res)?
         } else {
             alg.decrypt(key, &mut res)?
         };
-        println!("decoding message");
+        info!("decoding message");
         let msgs = Message::from_bytes_many(decrypted_packet)?
             .into_iter()
             .map(|msg: Message| -> Result<Vec<Message>> {
                 // decompress messages if any are compressed
                 match msg {
                     Message::Compressed(packet) => {
-                        println!("uncompressing message");
+                        info!("uncompressing message");
 
                         match CompressionAlgorithm::from_u8(packet.body[0])
                             .expect("invalid compression algorithm")
@@ -269,7 +269,7 @@ fn decrypt(
             .flatten()
             .collect::<Vec<Message>>();
 
-        println!("msg: {:?}", msgs);
+        info!("msg: {:?}", msgs);
         messages.extend(msgs);
     }
 
@@ -279,7 +279,7 @@ fn decrypt(
     let literal = messages.iter().find(|msg| msg.is_literal()).unwrap();
     if let Message::Literal(packet) = literal.get_literal().unwrap() {
         let (_, l) = literal::parser(&packet.body)?;
-        println!("result: {:?}", l);
+        info!("result: {:?}", l);
         Ok(l.data)
     } else {
         unreachable!();
@@ -315,7 +315,7 @@ mod tests {
         let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
 
         let details: Testcase = serde_json::from_reader(&mut file).unwrap();
-        println!(
+        warn!(
             "Testcase: {}",
             serde_json::to_string_pretty(&details).unwrap()
         );
@@ -326,7 +326,7 @@ mod tests {
             .expect("failed to read decryption key");
         let decrypt_id = hex::encode(decrypt_key.key_id().unwrap().to_vec());
 
-        println!("decrypt key (ID={})", &decrypt_id);
+        info!("decrypt key (ID={})", &decrypt_id);
         if let Some(id) = &details.keyid {
             assert_eq!(id, &decrypt_id, "invalid keyid");
         }
@@ -337,7 +337,7 @@ mod tests {
             let verify_key = PublicKey::from_armor_single(&mut verify_key_file)
                 .expect("failed to read verification key");
             let verify_id = hex::encode(verify_key.key_id().unwrap().to_vec());
-            println!("verify key (ID={})", &verify_id);
+            info!("verify key (ID={})", &verify_id);
             if let Some(id) = &details.keyid {
                 assert_eq!(id, &verify_id, "invalid keyid");
             }
@@ -348,7 +348,7 @@ mod tests {
 
         let message =
             Message::from_armor_single(&mut cipher_file).expect("failed to parse message");
-        println!("message: {:?}", message);
+        info!("message: {:?}", message);
 
         let decrypted = message
             .decrypt(

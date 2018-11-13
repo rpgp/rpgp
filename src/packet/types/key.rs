@@ -201,7 +201,7 @@ impl PrivateKey {
         public_params: PublicParams,
         private_params: EncryptedPrivateParams,
     ) -> PrivateKey {
-        println!(
+        info!(
             "creating priv key: {:?} {:?} {:?} {:?} {:?} {:?}",
             version, algorithm, created_at, expiration, public_params, private_params
         );
