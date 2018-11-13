@@ -7,7 +7,7 @@ pub struct LineReader<R> {
     inner: R,
 }
 
-impl<R: Read> LineReader<R> {
+impl<R: Read + Seek> LineReader<R> {
     pub fn new(input: R) -> Self {
         LineReader { inner: input }
     }
@@ -15,6 +15,37 @@ impl<R: Read> LineReader<R> {
     /// Consume `self` and return the inner reader.
     pub fn into_inner(self) -> R {
         self.inner
+    }
+}
+
+impl<R: Read + Seek> Seek for LineReader<R> {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        match pos {
+            io::SeekFrom::Current(n) => {
+                if n < 0 {
+                    let mut buf = vec![0u8; (-n) as usize];
+                    self.inner.seek(pos)?;
+                    self.read(&mut buf)?;
+                    let linebreaks = buf
+                        .into_iter()
+                        .filter(|c| *c == b'\r' || *c == b'\n')
+                        .count();
+                    self.inner
+                        .seek(io::SeekFrom::Current(n - linebreaks as i64))
+                } else {
+                    let mut buf = vec![0u8; n as usize];
+                    self.inner.seek(io::SeekFrom::Current(-n))?;
+                    self.read(&mut buf)?;
+                    let linebreaks = buf
+                        .into_iter()
+                        .filter(|c| *c == b'\r' || *c == b'\n')
+                        .count();
+                    self.inner
+                        .seek(io::SeekFrom::Current(n - linebreaks as i64))
+                }
+            }
+            _ => unimplemented!(),
+        }
     }
 }
 
