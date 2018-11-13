@@ -9,7 +9,7 @@ pub struct Base64Reader<R> {
     inner: R,
 }
 
-impl<R: Read> Base64Reader<R> {
+impl<R: Read + Seek> Base64Reader<R> {
     pub fn new(input: R) -> Self {
         Base64Reader { inner: input }
     }
@@ -20,13 +20,23 @@ impl<R: Read> Base64Reader<R> {
     }
 }
 
-impl<R: Read> Read for Base64Reader<R> {
+impl<R: Seek> Seek for Base64Reader<R> {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        // Warning: this does not take into account invalid base64 characters, so those are counted with
+        // on the seek. Not sure how to fix yet.
+        self.inner.seek(pos)
+    }
+}
+
+impl<R: Read + Seek> Read for Base64Reader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let n = self.inner.read(into)?;
 
         for i in 0..n {
             if !is_base64_token(into[i]) {
                 // the party is over
+                let back = -(n as i64) + (i as i64); // - 1
+                self.inner.seek(io::SeekFrom::Current(back))?;
 
                 for j in i..n {
                     into[j] = 0;
@@ -122,6 +132,15 @@ mod tests {
             let mut buf = vec![0; 5];
             assert_eq!(r.read(&mut buf).unwrap(), 2);
             assert_eq!(buf, vec![b'K', b'w', 0, 0, 0]);
+        }
+
+        {
+            // Checksum at the end of ascii armor
+            let c = Cursor::new(&b"Kwjk\n=Kwjk"[..]);
+            let mut r = Base64Reader::new(c);
+            let mut buf = vec![0; 10];
+            assert_eq!(r.read(&mut buf).unwrap(), 10);
+            assert_eq!(&buf[..], b"Kwjk\n=Kwjk");
         }
     }
 }

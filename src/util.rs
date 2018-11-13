@@ -31,7 +31,7 @@ pub fn u32_as_usize(a: u32) -> usize {
 
 #[inline]
 pub fn is_base64_token(c: u8) -> bool {
-    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'='
+    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
 }
 
 named!(pub prefixed<CompleteByteSlice, CompleteByteSlice>, do_parse!(

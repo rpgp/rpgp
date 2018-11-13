@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::hash::Hasher;
 use std::io;
 use std::io::prelude::*;
 use std::str;
@@ -7,7 +8,6 @@ use base64;
 use buf_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 use crc24;
-use errors::{Error, Result};
 use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Slice};
 
 use base64_decoder::Base64Decoder;
@@ -15,7 +15,7 @@ use base64_reader::Base64Reader;
 use line_reader::LineReader;
 
 /// Armor block types.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum BlockType {
     /// PGP Public key
     PublicKey,
@@ -109,19 +109,6 @@ named!(
     )
 );
 
-/// Parses a single armor footer line
-named!(
-    armor_footer_line<BlockType>,
-    do_parse!(
-        armor_header_sep
-            >> tag!("END ")
-            >> typ: armor_header_type
-            >> armor_header_sep
-            >> alt_complete!(line_ending | eof!())
-            >> (typ)
-    )
-);
-
 /// Recognizes one or more key tokens.
 fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let input_length = input.input_len();
@@ -172,7 +159,7 @@ named!(armor_header(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
 ));
 
 /// Read the checksum from an base64 encoded buffer.
-fn read_checksum(input: &[u8]) -> ::std::io::Result<u32> {
+fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
     let checksum =
         base64::decode_config(input, base64::STANDARD).map_err(|_| io::ErrorKind::InvalidData)?;
 
@@ -183,9 +170,10 @@ fn read_checksum(input: &[u8]) -> ::std::io::Result<u32> {
         i -= 1;
     }
 
-    Ok(BigEndian::read_u32(&buf))
+    Ok(u64::from(BigEndian::read_u32(&buf)))
 }
 
+#[rustfmt::skip]
 named!(header_parser(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
                take_until!("-----")
     >>   head: armor_header
@@ -193,18 +181,24 @@ named!(header_parser(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
     >> (head.0, head.1)
 ));
 
-named!(
-    footer_parser<(Option<&[u8]>, BlockType)>,
-    do_parse!(
-        // possible padding chars from base64
-        opt!(pair!(many_m_n!(1, 3, tag!("=")), line_ending))
-            >> opt!(line_ending)
-            >> crc: opt!(preceded!(tag!("="), take!(4)))
-            >> many0!(line_ending)
-            >> footer: armor_footer_line
-            >> (crc, footer)
-    )
-);
+#[rustfmt::skip]
+named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
+           crc: opt!(preceded!(tag!("="), take!(4)))
+     >>         many0!(line_ending)
+     >> footer: armor_footer_line
+     >> (crc, footer)
+));
+
+/// Parses a single armor footer line
+#[rustfmt::skip]
+named!(armor_footer_line<BlockType>, do_parse!(
+            armor_header_sep
+    >>      tag!("END ")
+    >> typ: armor_header_type
+    >>      armor_header_sep
+    >>      alt_complete!(line_ending | eof!())
+    >> (typ)
+));
 
 /// Streaming based ascii armor parsing.
 pub struct Dearmor<R> {
@@ -213,13 +207,16 @@ pub struct Dearmor<R> {
     /// The headers found in the armored file.
     pub headers: HashMap<String, String>,
     /// Optional crc checksum
-    pub checksum: Option<u32>,
+    pub checksum: Option<u64>,
     /// track what we are currently parsing
     current_part: Part,
     /// the underlying data source, wrapped in a BufferedReader
     inner: Option<BufReader<R>>,
     /// base64 decoder
     base_decoder: Option<Base64Decoder<Base64Reader<LineReader<BufReader<R>>>>>,
+    /// Are we done?
+    done: bool,
+    crc: crc24::Crc24Hasher,
 }
 
 /// Internal indicator, where in the parsing phase we are
@@ -232,7 +229,7 @@ enum Part {
 
 const CAPACITY: usize = 1024 * 32;
 
-impl<R: Read> Dearmor<R> {
+impl<R: Read + Seek> Dearmor<R> {
     pub fn new(input: R) -> Self {
         Dearmor {
             typ: None,
@@ -241,10 +238,12 @@ impl<R: Read> Dearmor<R> {
             current_part: Part::Header,
             base_decoder: None,
             inner: Some(BufReader::with_capacity(CAPACITY, input)),
+            done: false,
+            crc: Default::default(),
         }
     }
 
-    fn read_header(&mut self, into: &mut [u8]) -> io::Result<usize> {
+    pub fn read_header(&mut self) -> io::Result<()> {
         if let Some(ref mut b) = self.inner {
             b.read_into_buf()?;
 
@@ -280,7 +279,7 @@ impl<R: Read> Dearmor<R> {
             panic!("invalid state");
         }
 
-        self.read_body(into)
+        Ok(())
     }
 
     fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
@@ -300,26 +299,21 @@ impl<R: Read> Dearmor<R> {
             self.current_part = Part::Footer;
             self.read_footer()
         } else {
+            // update the hash
+            self.crc.write(&into[0..size]);
+
             Ok(size)
         }
     }
 
     fn read_footer(&mut self) -> io::Result<usize> {
         if self.base_decoder.is_some() {
-            self.inner = Some(
-                // don't judge me..
-                self.base_decoder
-                    .take()
-                    .unwrap()
-                    .into_inner()
-                    .into_inner()
-                    .into_inner(),
-            );
-        }
+            let decoder = self.base_decoder.take().unwrap();
+            let (r, buffer) = decoder.into_inner_with_buffer();
+            let mut b = BufReader::with_buffer(buffer, r.into_inner().into_inner());
+            b.make_room();
 
-        if let Some(ref mut b) = self.inner {
             b.read_into_buf()?;
-
             if b.buf_len() == 0 {
                 // we are done here
                 return Ok(0);
@@ -360,6 +354,19 @@ impl<R: Read> Dearmor<R> {
             };
 
             b.consume(consumed);
+            self.done = true;
+
+            // check checksum if there is one
+            if let Some(expected) = self.checksum {
+                let actual = self.crc.finish();
+
+                if expected != actual {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "invalid crc24 checksum",
+                    ));
+                }
+            }
         } else {
             panic!("invalid state");
         }
@@ -369,40 +376,42 @@ impl<R: Read> Dearmor<R> {
     }
 }
 
-impl<R: Read> Read for Dearmor<R> {
+impl<R: Read + Seek> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
+        if self.done {
+            return Ok(0);
+        }
+
         match self.current_part {
-            Part::Header => self.read_header(into),
+            Part::Header => {
+                self.read_header()?;
+                self.read_body(into)
+            }
             Part::Body => self.read_body(into),
             Part::Footer => self.read_footer(),
         }
     }
 }
 
-// helper function to parse all data at once
-pub fn parse<R: Read>(mut input: R) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
-    let mut dearmor = Dearmor::new(input.by_ref());
-
-    // estimate size
-    let mut bytes = Vec::new();
-    dearmor.read_to_end(&mut bytes)?;
-
-    if let Some(expected) = dearmor.checksum {
-        let actual = crc24::hash_raw(&bytes);
-
-        if expected != actual {
-            return Err(Error::InvalidChecksum);
-        }
-    }
-
-    Ok((dearmor.typ.unwrap(), dearmor.headers, bytes))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Cursor;
-    use std::io::Read;
+
+    use errors::Result;
+
+    // helper function to parse all data at once
+    pub fn parse<R: Read + Seek>(
+        mut input: R,
+    ) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
+        let mut dearmor = Dearmor::new(input.by_ref());
+
+        // estimate size
+        let mut bytes = Vec::new();
+        dearmor.read_to_end(&mut bytes)?;
+
+        Ok((dearmor.typ.unwrap(), dearmor.headers, bytes))
+    }
 
     #[test]
     fn test_armor_header_line() {
@@ -643,12 +652,27 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
     #[test]
     fn test_footer_parser() {
         assert_eq!(
-            footer_parser(&b"=4JBj\r\n-----END PGP PUBLIC KEY BLOCK-----\r\n"[..]),
+            footer_parser(b"-----END PGP PUBLIC KEY BLOCK-----\n"),
+            Ok((&b""[..], (None, BlockType::PublicKey)))
+        );
+
+        assert_eq!(
+            footer_parser(b"=XyBX-----END PGP PUBLIC KEY BLOCK-----\n"),
+            Ok((&b""[..], (Some(&b"XyBX"[..]), BlockType::PublicKey)))
+        );
+
+        assert_eq!(
+            footer_parser(b"=4JBj\r\n-----END PGP PUBLIC KEY BLOCK-----\r\n"),
             Ok((&b""[..], (Some(&b"4JBj"[..]), BlockType::PublicKey)))
         );
 
         assert_eq!(
-            footer_parser(&b"==\n=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n"[..]),
+            footer_parser(b"\r\n-----END PGP PUBLIC KEY BLOCK-----\r\n"),
+            Ok((&b""[..], (None, BlockType::PublicKey)))
+        );
+
+        assert_eq!(
+            footer_parser(&b"=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n"[..]),
             Ok((&b""[..], (Some(&b"XyBX"[..]), BlockType::PublicKey)))
         );
     }
