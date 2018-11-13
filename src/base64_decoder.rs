@@ -156,7 +156,7 @@ mod tests {
             let mut r = Base64Decoder::new_with_character_set(Cursor::new(encoded_data), cs);
             let mut out = Vec::new();
 
-            r.read_to_end(&mut out).unwrap(); //("failed to decode");
+            r.read_to_end(&mut out).unwrap();
             assert_eq!(data, out);
         }
     }

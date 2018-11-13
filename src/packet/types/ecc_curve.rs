@@ -95,7 +95,8 @@ impl ECCCurve {
         let mut id: Vec<u32> = self
             .oid_str()
             .split('.')
-            .map(|v| v.parse::<u32>().unwrap())
+            // safe as we hard coded these
+            .map(|v| v.parse::<u32>().expect("bad oid string"))
             .collect();
 
         // combine the first two

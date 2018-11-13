@@ -98,7 +98,8 @@ impl Deserializable for Message {
                     }
 
                     if cur.is_some() {
-                        let mut el = stack.pop().unwrap();
+                        // Safe because cur is set.
+                        let mut el = stack.pop().expect("stack in disarray");
                         stack.push(update_message(el, packet)?);
                     }
                 }

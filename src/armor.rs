@@ -12,6 +12,7 @@ use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Sli
 
 use base64_decoder::Base64Decoder;
 use base64_reader::Base64Reader;
+use errors::Result;
 use line_reader::LineReader;
 
 /// Armor block types.
@@ -43,6 +44,13 @@ pub enum BlockType {
 /// Parses a single ascii armor header separator.
 named!(armor_header_sep, tag!("-----"));
 
+#[inline]
+fn parse_digit(x: &[u8]) -> Result<usize> {
+    let s = str::from_utf8(x)?;
+    let digit: usize = s.parse()?;
+    Ok(digit)
+}
+
 /// Parses the type inside of an ascii armor header.
 #[rustfmt::skip]
 named!(
@@ -52,16 +60,10 @@ named!(
       | map!(tag!("PGP PRIVATE KEY BLOCK"), |_| BlockType::PrivateKey)
       | do_parse!(
           tag!("PGP MESSAGE, PART ")
-        >> x: digit
-        >> y: opt!(preceded!(tag!("/"), digit))
+        >> x: map_res!(digit, parse_digit)
+        >> y: opt!(preceded!(tag!("/"), map_res!(digit, parse_digit)))
         >> ({
-            // unwraps are safe, as the parser already determined that this is a digit.
-            let x: usize = str::from_utf8(x).expect("invalid x").parse().unwrap();
-            let y: usize = y
-                .map(|s| str::from_utf8(s).expect("invalid y").parse().unwrap())
-                .unwrap_or(0);
-
-            BlockType::MultiPartMessage(x, y)
+            BlockType::MultiPartMessage(x, y.unwrap_or(0))
         })
       )
       | map!(tag!("PGP MESSAGE"), |_| BlockType::Message)
@@ -284,7 +286,10 @@ impl<R: Read + Seek> Dearmor<R> {
 
     fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
         if self.base_decoder.is_none() {
-            let b = self.inner.take().unwrap();
+            let b = self
+                .inner
+                .take()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
             self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(LineReader::new(b))));
         }
 
@@ -308,7 +313,10 @@ impl<R: Read + Seek> Dearmor<R> {
 
     fn read_footer(&mut self) -> io::Result<usize> {
         if self.base_decoder.is_some() {
-            let decoder = self.base_decoder.take().unwrap();
+            let decoder = self
+                .base_decoder
+                .take()
+                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
             let (r, buffer) = decoder.into_inner_with_buffer();
             let mut b = BufReader::with_buffer(buffer, r.into_inner().into_inner());
             b.make_room();
