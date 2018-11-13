@@ -13,7 +13,7 @@ keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy
 rsa = { git = "https://github.com/dignifiedquire/rust-rsa", branch = "master" }
 num-bigint = { git = "https://github.com/dignifiedquire/num-bigint", branch = "master" }
 crc24 = "^0.1"
-base64 = "^0.9"
+base64 = "^0.10"
 byteorder = "^1.2"
 enum_primitive = "^0.1"
 chrono = "^0.4"
@@ -40,6 +40,9 @@ cast5 = { git = "https://github.com/dignifiedquire/block-ciphers", branch = "cas
 x25519-dalek = { version = "0.3", default-features = false, features = ["std", "u64_backend"] }
 lazy_static = "1.2.0"
 block-padding = "0.1.2"
+log = "0.4.6"
+pretty_env_logger = "0.2.5"
+buf_redux = "0.7.1"
 
 [dependencies.nom]
 version = "^4.0"
@@ -51,7 +54,10 @@ serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
 glob = "^0.2"
+gperftools = { git = "https://github.com/dignifiedquire/rust-gperftools" }
 
 [features]
 default = []
 nightly = ["x25519-dalek/nightly"]
+profile = []
+asm = ["sha2/asm"]

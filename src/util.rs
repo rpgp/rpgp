@@ -1,8 +1,8 @@
 use byteorder::{BigEndian, ByteOrder};
-use nom::types::CompleteStr;
+use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
-    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, Err, IResult, InputIter, InputLength,
-    InputTake, Slice,
+    self, be_u16, be_u32, be_u8, eol, is_alphanumeric, line_ending, Err, IResult, InputIter,
+    InputLength, InputTake, Slice,
 };
 use num_bigint::BigUint;
 use std::convert::AsMut;
@@ -31,8 +31,14 @@ pub fn u32_as_usize(a: u32) -> usize {
 
 #[inline]
 pub fn is_base64_token(c: u8) -> bool {
-    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'\n' || c == b'\r'
+    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
 }
+
+named!(pub prefixed<CompleteByteSlice, CompleteByteSlice>, do_parse!(
+             many0!(line_ending)
+    >> rest: take_while1!(is_base64_token)
+    >> (rest)
+));
 
 /// Recognizes one or more body tokens
 pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {

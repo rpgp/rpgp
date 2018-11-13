@@ -90,7 +90,7 @@ macro_rules! key_parser {
                             _ => {
                                 if primary_key.version() != &KeyVersion::V4 {
                                     // no direct signatures on V2|V3 keys
-                                    println!("WARNING: unexpected signature: {:?}", typ);
+                                    info!("WARNING: unexpected signature: {:?}", typ);
                                 }
                                 sigs.collect()
                             }
@@ -124,7 +124,7 @@ macro_rules! key_parser {
                         Tag::UserAttribute => {
                             let a = tags::userattr::parser(packets[ctr].body.as_slice());
                             if a.is_err() {
-                                println!("failed to parse {:?}\n{:?}", packets[ctr], a);
+                                info!("failed to parse {:?}\n{:?}", packets[ctr], a);
                             }
 
                             let (_, attr) = a?;
@@ -159,7 +159,7 @@ macro_rules! key_parser {
 
                     // TODO: better error handling
                     if sigs.is_empty() {
-                        println!("WARNING: missing signature");
+                        info!("WARNING: missing signature");
                     }
 
                     subkeys.push(<$subkey_type>::new(subkey, sigs));
@@ -181,7 +181,7 @@ macro_rules! key_parser {
 
             fn key_parser(packet: &Packet) -> Result<$inner_key_type> {
                 let (_, key) = Self::key_packet_parser(packet.body.as_slice()).map_err(|err| {
-                    println!("WARNING: failed to parse key {:?}", err);
+                    info!("WARNING: failed to parse key {:?}", err);
                     match err {
                         Incomplete(n) => {
                             // a size larger than the packet was requested, always invalid

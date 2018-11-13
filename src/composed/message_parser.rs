@@ -16,7 +16,7 @@ impl Deserializable for Message {
         let mut is_edata = false;
 
         for packet in packets.into_iter() {
-            println!(
+            info!(
                 "{:?}: tag={} plen={} version={:?}",
                 packet.tag,
                 packet.tag.clone() as u8,
