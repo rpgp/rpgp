@@ -22,7 +22,7 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
 
     loop {
         // read some data
-        let sz = input.read(b.space()).unwrap();
+        let sz = input.read(b.space())?;
         b.fill(sz);
 
         // if there's no more available data in the buffer after a write, that means we reached

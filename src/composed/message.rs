@@ -75,11 +75,24 @@ impl Message {
 
                     // find the key with the matching key id
 
-                    if key.primary_key.key_id().expect("missing key_id") == esk_packet.id {
+                    if key
+                        .primary_key
+                        .key_id()
+                        .ok_or_else(|| format_err!("missing key_id"))?
+                        == esk_packet.id
+                    {
                         encoding_key = Some(&key.primary_key);
                     } else {
-                        encoding_subkey = key.subkeys.iter().find(|subkey| {
-                            subkey.key_id().expect("missing key_id") == esk_packet.id
+                        encoding_subkey = key.subkeys.iter().find_map(|subkey| {
+                            if let Some(id) = subkey.key_id() {
+                                if id == esk_packet.id {
+                                    Some(subkey)
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
                         });
                     }
 
@@ -89,19 +102,10 @@ impl Message {
                     }
                 }
 
-                if packet.is_none() {
-                    return Err(Error::MissingKey);
-                }
-
-                let packet = packet.unwrap();
+                let packet = packet.ok_or_else(|| Error::MissingKey)?;
 
                 let mut res = Vec::new();
                 if let Some(encoding_key) = encoding_key {
-                    info!(
-                        "decrypting using key {}",
-                        hex::encode(encoding_key.key_id().unwrap().to_vec())
-                    );
-
                     encoding_key.unlock(key_pw, |priv_key| {
                         res = decrypt(
                             priv_key,
@@ -113,11 +117,6 @@ impl Message {
                         Ok(())
                     })?;
                 } else if let Some(encoding_key) = encoding_subkey {
-                    info!(
-                        "decrypting using subkey {}",
-                        hex::encode(encoding_key.key_id().unwrap().to_vec())
-                    );
-
                     let mut sym_key = vec![0u8; 8];
                     encoding_key.unlock(key_pw, |priv_key| {
                         res = decrypt(
@@ -190,14 +189,11 @@ fn decrypt(
         PrivateKeyRepr::DSA => unimplemented_err!("DSA"),
         PrivateKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
         PrivateKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
-        PrivateKeyRepr::EdDSA(ref priv_key) => {
-            info!("key: {:?}", priv_key);
-            unimplemented_err!("EdDSA");
-        }
+        PrivateKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
     };
 
-    let alg =
-        SymmetricKeyAlgorithm::from_u8(decrypted_key[0]).expect("invalid symmetric key algorithm");
+    let alg = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
+        .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
     info!("alg: {:?}", alg);
 
     let (key, checksum) = match *priv_key {
@@ -240,10 +236,9 @@ fn decrypt(
                 match msg {
                     Message::Compressed(packet) => {
                         info!("uncompressing message");
-
-                        match CompressionAlgorithm::from_u8(packet.body[0])
-                            .expect("invalid compression algorithm")
-                        {
+                        let compression_alg = CompressionAlgorithm::from_u8(packet.body[0])
+                            .ok_or_else(|| format_err!("invalid compression algorithm"))?;
+                        match compression_alg {
                             CompressionAlgorithm::Uncompressed => {
                                 Message::from_bytes_many(&packet.body[1..])
                             }
@@ -276,8 +271,13 @@ fn decrypt(
     // TODO: validate found signatures
 
     // search for literal data packet and return its value
-    let literal = messages.iter().find(|msg| msg.is_literal()).unwrap();
-    if let Message::Literal(packet) = literal.get_literal().unwrap() {
+    // TODO: handle different types of packets to be decrypted
+    let literal = messages
+        .iter()
+        .find(|msg| msg.is_literal())
+        .ok_or_else(|| format_err!("missing literal message"))?;
+
+    if let Some(Message::Literal(packet)) = literal.get_literal() {
         let (_, l) = literal::parser(&packet.body)?;
         info!("result: {:?}", l);
         Ok(l.data)

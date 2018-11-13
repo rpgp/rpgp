@@ -9,10 +9,10 @@ pub trait Deserializable: Sized {
         let el = Self::from_bytes_many(bytes)?;
 
         if el.len() > 1 {
-            return Err(Error::MultipleKeys);
+            return Err(Error::TooManyPackets);
         }
 
-        el.into_iter().nth(0).ok_or_else(|| Error::NoKey)
+        el.into_iter().nth(0).ok_or_else(|| Error::NoMatchingPacket)
     }
 
     /// Parse a single armor encoded composition.
@@ -20,10 +20,10 @@ pub trait Deserializable: Sized {
         let el = Self::from_string_many(input)?;
 
         if el.len() > 1 {
-            return Err(Error::MultipleKeys);
+            return Err(Error::TooManyPackets);
         }
 
-        el.into_iter().nth(0).ok_or_else(|| Error::NoKey)
+        el.into_iter().nth(0).ok_or_else(|| Error::NoMatchingPacket)
     }
 
     /// Parse an armor encoded list of compositions.
@@ -39,17 +39,20 @@ pub trait Deserializable: Sized {
 
         if el.len() > 1 {
             // TODO: rename to non key specific
-            return Err(Error::MultipleKeys);
+            return Err(Error::TooManyPackets);
         }
 
-        el.into_iter().nth(0).ok_or_else(|| Error::NoKey)
+        el.into_iter().nth(0).ok_or_else(|| Error::NoMatchingPacket)
     }
 
     /// Armored ascii data.
     fn from_armor_many<R: Read + Seek>(input: R) -> Result<Vec<Self>> {
         let mut dearmor = armor::Dearmor::new(input);
         dearmor.read_header()?;
-        let typ = dearmor.typ.unwrap();
+        // Safe to unwrap, as read_header succeeded.
+        let typ = dearmor
+            .typ
+            .ok_or_else(|| format_err!("dearmor failed to retrieve armor type"))?;
 
         // TODO: add typ and headers information to the key possibly?
         match typ {

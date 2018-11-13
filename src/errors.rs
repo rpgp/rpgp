@@ -28,10 +28,10 @@ pub enum Error {
     Base64DecodeError(base64::DecodeError),
     #[fail(display = "requested data size is larger than the packet body")]
     RequestedSizeTooLarge,
-    #[fail(display = "no valid key found")]
-    NoKey,
-    #[fail(display = "more than one key found")]
-    MultipleKeys,
+    #[fail(display = "no matching packet found")]
+    NoMatchingPacket,
+    #[fail(display = "more than one matching packet was found")]
+    TooManyPackets,
     #[fail(display = "rsa error: {:?}", _0)]
     RSAError(rsa::errors::Error),
     #[fail(display = "io error: {:?}", _0)]
@@ -58,6 +58,10 @@ pub enum Error {
     PacketIncomplete,
     #[fail(display = "Unpadding failed")]
     UnpadError,
+    #[fail(display = "Utf8 {:?}", _0)]
+    Utf8Error(::std::str::Utf8Error),
+    #[fail(display = "ParseInt {:?}", _0)]
+    ParseIntError(::std::num::ParseIntError),
 }
 
 impl Error {
@@ -70,8 +74,8 @@ impl Error {
             Error::InvalidChecksum => 4,
             Error::Base64DecodeError(_) => 5,
             Error::RequestedSizeTooLarge => 6,
-            Error::NoKey => 7,
-            Error::MultipleKeys => 8,
+            Error::NoMatchingPacket => 7,
+            Error::TooManyPackets => 8,
             Error::RSAError(_) => 9,
             Error::IOError(_) => 10,
             Error::MissingPackets => 11,
@@ -85,12 +89,20 @@ impl Error {
             Error::PacketError(_) => 19,
             Error::PacketIncomplete => 20,
             Error::UnpadError => 21,
+            Error::Utf8Error(_) => 22,
+            Error::ParseIntError(_) => 23,
         }
     }
 }
 
 impl<'a> From<nom::Err<&'a [u8]>> for Error {
     fn from(err: nom::Err<&'a [u8]>) -> Error {
+        Error::ParsingError(err.into_error_kind())
+    }
+}
+
+impl<'a> From<nom::Err<nom::types::CompleteStr<'a>>> for Error {
+    fn from(err: nom::Err<nom::types::CompleteStr<'a>>) -> Error {
         Error::ParsingError(err.into_error_kind())
     }
 }
@@ -152,6 +164,18 @@ impl From<block_padding::UnpadError> for Error {
     }
 }
 
+impl From<::std::str::Utf8Error> for Error {
+    fn from(err: ::std::str::Utf8Error) -> Error {
+        Error::Utf8Error(err)
+    }
+}
+
+impl From<::std::num::ParseIntError> for Error {
+    fn from(err: ::std::num::ParseIntError) -> Error {
+        Error::ParseIntError(err)
+    }
+}
+
 #[macro_export]
 macro_rules! unimplemented_err {
     ($e:expr) => {
@@ -179,6 +203,16 @@ macro_rules! bail {
     };
     ($fmt:expr, $($arg:tt)+) => {
         return Err($crate::errors::Error::Message(format!($fmt, $($arg)+)));
+    };
+}
+
+#[macro_export]
+macro_rules! format_err {
+    ($e:expr) => {
+        $crate::errors::Error::Message($e.to_string());
+    };
+    ($fmt:expr, $($arg:tt)+) => {
+        $crate::errors::Error::Message(format!($fmt, $($arg)+));
     };
 }
 

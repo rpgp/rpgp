@@ -37,12 +37,15 @@ where
                         hasher.update(pw.as_bytes());
                     }
                     StringToKeyType::Salted => {
-                        hasher.update(salt.expect("missing salt for salted"));
+                        let salt =
+                            salt.ok_or_else(|| format_err!("missing salt for s2k with salt"))?;
+                        hasher.update(salt);
                         hasher.update(pw.as_bytes());
                     }
                     StringToKeyType::IteratedAndSalted => {
-                        let salt = salt.expect("missing salt for iterated");
-                        let count = count.expect("missing count for iterated");
+                        let salt = salt.ok_or_else(|| format_err!("missing salt for iterated"))?;
+                        let count =
+                            count.ok_or_else(|| format_err!("missing count for iterated"))?;
                         let octs_per_iter = salt.len() + pw.as_bytes().len();
                         let mut data = vec![0u8; octs_per_iter];
                         let full = count / octs_per_iter;

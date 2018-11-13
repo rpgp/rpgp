@@ -234,23 +234,21 @@ impl PrivateKey {
     where
         F: FnOnce() -> String,
     {
-        // TODO: don't panic, return errors on missing parts.
-
         let sym_alg = self
             .private_params
             .encryption_algorithm
             .as_ref()
-            .expect("missing encryption alg");
+            .ok_or_else(|| format_err!("missing encryption algorithm"))?;
         let typ = self
             .private_params
             .string_to_key
             .as_ref()
-            .expect("missing s2k method");
+            .ok_or_else(|| format_err!("missing s2k method"))?;
         let hash_alg = self
             .private_params
             .string_to_key_hash
             .as_ref()
-            .expect("missing hash algorithm");
+            .ok_or_else(|| format_err!("missing hash algorithm"))?;
         let key = s2k(
             pw,
             *sym_alg,
@@ -260,7 +258,11 @@ impl PrivateKey {
             self.private_params.string_to_key_count.as_ref(),
         )?;
 
-        let iv = self.private_params.iv.as_ref().expect("missing iv");
+        let iv = self
+            .private_params
+            .iv
+            .as_ref()
+            .ok_or_else(|| format_err!("missing IV"))?;
 
         // Actual decryption
         let mut plaintext = ciphertext.to_vec();
@@ -543,14 +545,14 @@ macro_rules! key {
                         let f = self.fingerprint();
                         let offset = f.len() - 8;
 
-                        Some(KeyID::from_slice(&f[offset..]).unwrap())
+                        KeyID::from_slice(&f[offset..]).ok()
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                         PublicParams::RSA { n, .. } => {
                             let n = n.to_bytes_be();
                             let offset = n.len() - 8;
 
-                            Some(KeyID::from_slice(&n[offset..]).unwrap())
+                            KeyID::from_slice(&n[offset..]).ok()
                         }
                         _ => None,
                     },
