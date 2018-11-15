@@ -72,6 +72,23 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
     Ok(packets)
 }
 
+// fn streamed_decryption() {
+//     // impl Read
+//     let mut in_file = File::open("encrypted.asc").unwrap();
+//     // impl Read
+//     let mut out_file = File::open("decrypted.txt").unwrap();
+//     // impl Read
+//     let mut enc_bytes = Dearmor::new(in_file);
+//     // Iterator<Item = Packet>
+//     let mut enc_packets = PacketParser::new(enc_bytes);
+//     // Iterator<Item = Packet>
+//     let mut dec_packets = Decrypter::new(key, enc_bytes);
+//
+//     for packet in &dec_packets {
+//         io::copy(dec_packets, out_file).unwrap();
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;

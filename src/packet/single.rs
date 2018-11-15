@@ -1,9 +1,16 @@
 use nom::rest;
 use num_traits::FromPrimitive;
 
+use errors::Result;
+use packet::packet_trait::Packet;
+use packet::types::{PacketLength, Tag, Version};
+use packet::{
+    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PublicKey,
+    PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
+    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
+    UserId,
+};
 use util::{u16_as_usize, u32_as_usize, u8_as_usize};
-
-use super::types::{Packet, PacketLength, Tag, Version};
 
 /// Parses an old format packet header
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
@@ -53,17 +60,41 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
     >> (ver, tag, len)
 )));
 
-/// Parse Packet
-/// ref: https://tools.ietf.org/html/rfc4880.html#section-4.2
-named!(pub parser<Packet>, do_parse!(
+/// Parse a single Packet
+/// https://tools.ietf.org/html/rfc4880.html#section-4.2
+#[rustfmt::skip]
+named!(inner_parser<(Tag, &[u8])>, do_parse!(
        head: alt!(new_packet_header | old_packet_header)
     >> body: switch!(value!(head.2),
         PacketLength::Fixed(length) => take!(length) |
         PacketLength::Indeterminated => call!(rest)
     )
-    >> (Packet{
-        version: head.0,
-        tag: head.1,
-        body: body.to_vec(),
-    })
+    >> (head.1, body)
 ));
+
+/// Parses a single packet.
+pub fn parser(input: &[u8]) -> Result<Box<dyn Packet>> {
+    let (tag, body) = inner_parser(input)?;
+
+    let res: Box<dyn Packet> = match tag {
+        PublicKeyEncryptedSessionKey => Box::new(PublicKeyEncryptedSessionKey::from_slice(body)?),
+        Signature => Box::new(Signature::from_slice(body)?),
+        SymKeyEncryptedSessionKey => Box::new(SymKeyEncryptedSessionKey::from_slice(body)?),
+        OnePassSignature => Box::new(OnePassSignature::from_slice(body)?),
+        SecretKey => Box::new(SecretKey::from_slice(body)?),
+        PublicKey => Box::new(PublicKey::from_slice(body)?),
+        SecretSubkey => Box::new(SecretSubkey::from_slice(body)?),
+        CompressedData => Box::new(CompressedData::from_slice(body)?),
+        SymEncryptedData => Box::new(SymEncryptedData::from_slice(body)?),
+        Marker => Box::new(Marker::from_slice(body)?),
+        LiteralData => Box::new(LiteralData::from_slice(body)?),
+        Trust => Box::new(Trust::from_slice(body)?),
+        UserId => Box::new(UserId::from_slice(body)?),
+        PublicSubkey => Box::new(PublicSubkey::from_slice(body)?),
+        UserAttribute => Box::new(UserAttribute::from_slice(body)?),
+        SymEncryptedProtectedData => Box::new(SymEncryptedProtectedData::from_slice(body)?),
+        ModDetectionCode => Box::new(ModDetectionCode::from_slice(body)?),
+    };
+
+    Ok(res)
+}

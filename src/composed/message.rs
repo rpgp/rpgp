@@ -7,26 +7,42 @@ use composed::key::PrivateKey;
 use composed::shared::Deserializable;
 use crypto::checksum;
 use crypto::ecc::decrypt_ecdh;
+use crypto::hash::HashAlgorithm;
 use crypto::rsa::decrypt_rsa;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
 use packet::tags::literal;
 use packet::tags::public_key_encrypted_session_key::PKESK;
-use packet::types::key::PrivateKeyRepr;
-use packet::types::{CompressionAlgorithm, Packet};
+use packet::types::key::{KeyID, PrivateKeyRepr};
+use packet::types::{CompressionAlgorithm, Packet, Signature, Tag, Version};
+
+#[derive(Debug)]
+pub struct Message(Vec<MessagePacket>);
 
 /// A PGP message
 #[derive(Clone, Debug)]
-pub enum Message {
-    Literal(Packet),
-    Compressed(Packet),
+pub enum MessagePacket {
+    Literal {
+        packet_version: Version,
+        packet_tag: Tag,
+        mode: u8,
+        name: String,
+        created: Vec<u8>,
+        data: Vec<u8>,
+    },
+    Compressed {
+        packet_version: Version,
+        packet_tag: Tag,
+        compression_algorithm: CompressionAlgorithm,
+        compressed_data: Vec<u8>,
+    },
     Signed {
         /// nested message
-        message: Option<Box<Message>>,
+        message: Option<Box<MessagePacket>>,
         /// for signature packets that contain a one pass message
-        one_pass_signature: Option<OnePassSignature>,
+        one_pass_signature: Option<OnePassSignaturePacket>,
         // actual signature
-        signature: Option<Packet>,
+        signature: Option<Signature>,
     },
     Encrypted {
         esk: Vec<PKESK>,
@@ -35,8 +51,16 @@ pub enum Message {
     },
 }
 
+/// https://tools.ietf.org/html/rfc4880.html#section-5.4
 #[derive(Debug, Clone)]
-pub struct OnePassSignature(pub Packet);
+pub struct OnePassSignaturePacket {
+    packet_version: Version,
+    packet_tag: Tag,
+    version: u8,
+    hash_algorithm: HashAlgorithm,
+    key_id: KeyID,
+    is_nested: bool,
+}
 
 impl Message {
     /// Decrypt the message using the given password and key.

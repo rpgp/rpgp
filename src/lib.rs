@@ -71,6 +71,7 @@ mod base64_decoder;
 mod base64_reader;
 mod line_reader;
 mod packet;
+mod types;
 
 pub mod email;
 pub use composed::key::*;
