@@ -3,6 +3,7 @@ use num_bigint::BigUint;
 use num_traits::FromPrimitive;
 
 use composed;
+use types::s2k_parser;
 use crypto::hash::HashAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use packet::tags::pubkey::parse_pub_fields;
@@ -10,41 +11,12 @@ use packet::types::key::*;
 use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType};
 use util::{mpi, mpi_big, rest_len};
 
-/// Has the given s2k type a salt?
-fn has_salt(typ: StringToKeyType) -> bool {
-    match typ {
-        StringToKeyType::Salted | StringToKeyType::IteratedAndSalted => true,
-        _ => false,
-    }
-}
-
-/// Has the given s2k type a count?
-fn has_count(typ: StringToKeyType) -> bool {
-    match typ {
-        StringToKeyType::IteratedAndSalted => true,
-        _ => false,
-    }
-}
-
-/// Converts a coded count into the count.
-/// Ref: https://tools.ietf.org/html/rfc4880#section-3.7.1.3
-fn coded_to_count(c: u8) -> usize {
-    let expbias = 6;
-    (16 as usize + (c & 15) as usize) << ((c >> 4) + expbias)
-}
-
-named_args!(s2k_param_parser(typ: StringToKeyType) <(HashAlgorithm, Option<Vec<u8>>, Option<usize>)>, do_parse!(
-       hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
-    >>     salt: cond!(has_salt(typ), map!(take!(8), |v| v.to_vec()))
-    >>    count: cond!(has_count(typ), map!(be_u8, coded_to_count))
-    >> (hash_alg, salt, count)
-));
 
 /// Parse possibly encrypted private fields of a key.
 #[rustfmt::skip]
 named!(parse_enc_priv_fields<EncryptedPrivateParams>, do_parse!(
           s2k_typ: be_u8
-    >> enc_params: switch!(value!(s2k_typ),
+    >> enc_params: switch!(value!(s2k_typ,
         // 0 is no encryption
         0       => value!((None, None, None, None)) |
         // symmetric key algorithm
@@ -56,13 +28,12 @@ named!(parse_enc_priv_fields<EncryptedPrivateParams>, do_parse!(
         // symmetric key + string-to-key
         254...255 => do_parse!(
                   sym_alg: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
-            >>        s2k: map_opt!(be_u8, StringToKeyType::from_u8)
-            >> s2k_params: flat_map!(take!(s2k.param_len()), call!(s2k_param_parser, s2k))
+            >>        s2k: s2k_parser
             >>         iv: take!(sym_alg.block_size())
-            >> (Some(sym_alg), Some(iv), Some(s2k), Some(s2k_params))
+            >> (Some(sym_alg), Some(iv), Some(s2k))
         )
     )
-    >> checksum_len: switch!(value!(s2k_typ),
+    >> checksum_len: switch!(value!(s2k.typ),
         // 20 octect hash at the end, but part of the encrypted part
         254 => value!(0) |
         // 2 octet checksum at the end
@@ -72,20 +43,33 @@ named!(parse_enc_priv_fields<EncryptedPrivateParams>, do_parse!(
     >>     data: take!(data_len)
     >> checksum: cond!(checksum_len > 0, take!(checksum_len))
     >> ({
-        let (hash, salt, count) = match enc_params.3 {
-            Some((hash, salt, count)) => (Some(hash), salt, count),
-            None => (None, None, None),
-        };
-        EncryptedPrivateParams {
-            data: data.to_vec(),
-            checksum: checksum.map(|c| c.to_vec()),
-            iv: enc_params.1.map(|iv| iv.to_vec()),
-            encryption_algorithm: enc_params.0,
-            string_to_key: enc_params.2,
-            string_to_key_hash: hash,
-            string_to_key_salt: salt,
-            string_to_key_count: count,
-            string_to_key_id: s2k_typ,
+        let checksum = checksum.map(|c| c.to_vec());
+        let iv = enc_params.1.map(|iv| iv.to_vec());
+
+        if let Some(s2k) = enc_params.2 {
+            EncryptedPrivateParams {
+                data: data.to_vec(),
+                checksum,
+                iv,
+                encryption_algorithm: enc_params.0,
+                string_to_key: enc_params.2,
+                string_to_key_hash: s2k.hash,
+                string_to_key_salt: s2k.salt,
+                string_to_key_count: s2k.count,
+                string_to_key_id: s2k.typ,
+            }
+        } else {
+            EncryptedPrivateParams {
+                data: data.to_vec(),
+                checksum
+                iv,
+                encryption_algorithm: enc_params.0,
+                string_to_key: enc_params.2,
+                string_to_key_hash: None,
+                string_to_key_salt: None,
+                string_to_key_count: None,
+                string_to_key_id: None,
+            }
         }
     })
 ));

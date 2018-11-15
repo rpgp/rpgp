@@ -79,41 +79,6 @@ pub enum Version {
     New = 1,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
-/// Available String-To-Key types
-#[repr(u8)]
-pub enum StringToKeyType {
-    Simple = 0,
-    Salted = 1,
-    Reserved = 2,
-    IteratedAndSalted = 3,
-    Private100 = 100,
-    Private101 = 101,
-    Private102 = 102,
-    Private103 = 103,
-    Private104 = 104,
-    Private105 = 105,
-    Private106 = 106,
-    Private107 = 107,
-    Private108 = 108,
-    Private109 = 109,
-    Private110 = 110,
-}
-
-impl StringToKeyType {
-    pub fn param_len(self) -> usize {
-        match self {
-            // 1 octet hash algorithm.
-            StringToKeyType::Simple => 1,
-            // Salted has 1 octet hash algorithm and 8 octets salt value.
-            StringToKeyType::Salted => 9,
-            // Salted and iterated has 1 octet hash algorithm, 8 octets salt value and 1 octet count.
-            StringToKeyType::IteratedAndSalted => 10,
-            _ => 0,
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
 /// Available compression algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.3

@@ -15,6 +15,15 @@ impl Packet for Trust {
 }
 
 impl Trust {
+    /// Parses a `Trust` packet from the given slice.
+    pub fn from_slice(input: &[u8]) -> Result<Self> {
+        warn!("Trust packet detected, ignoring");
+
+        Ok(Trust)
+    }
+}
+
+impl Trust {
     fn new() -> Self {
         Trust
     }
