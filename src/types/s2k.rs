@@ -1,5 +1,9 @@
+use nom::be_u8;
+use num_traits::FromPrimitive;
+
 use crypto::hash::HashAlgorithm;
 
+#[derive(Debug)]
 pub struct StringToKey {
     pub typ: StringToKeyType,
     pub hash: HashAlgorithm,
@@ -7,9 +11,9 @@ pub struct StringToKey {
     pub count: Option<usize>,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Available String-To-Key types
 #[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 pub enum StringToKeyType {
     Simple = 0,
     Salted = 1,
@@ -66,9 +70,9 @@ fn coded_to_count(c: u8) -> usize {
 }
 
 #[rustfmt::skip]
-named!(pub s2k_parser<(StringToKey)>, (
+named!(pub s2k_parser<StringToKey>, do_parse!(
              typ: map_opt!(be_u8, StringToKeyType::from_u8)
-        hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
+    >>  hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
     >>      salt: cond!(has_salt(typ), map!(take!(8), |v| v.to_vec()))
     >>     count: cond!(has_count(typ), map!(be_u8, coded_to_count))
     >> (StringToKey {

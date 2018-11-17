@@ -1,5 +1,4 @@
-use packet::packet_trait::Packet;
-use packet::types::Tag;
+use errors::Result;
 
 /// Modification Detection Code Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.14
@@ -18,11 +17,5 @@ impl ModDetectionCode {
         hash.copy_from_slice(input);
 
         Ok(ModDetectionCode { hash })
-    }
-}
-
-impl Packet for ModDetectionCode {
-    fn tag(&self) -> Tag {
-        Tag::ModDetectionCode
     }
 }

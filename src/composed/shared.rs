@@ -1,7 +1,8 @@
+use std::io::{Cursor, Read, Seek};
+
 use armor::{self, BlockType};
 use errors::{Error, Result};
-use packet::{self, types};
-use std::io::{Cursor, Read, Seek};
+use packet::{self, Packet};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
@@ -85,5 +86,5 @@ pub trait Deserializable: Sized {
     }
 
     /// Turn a list of packets into a usable representation.
-    fn from_packets<'a>(impl IntoIterator<Item = &'a types::Packet>) -> Result<Vec<Self>>;
+    fn from_packets(impl IntoIterator<Item = Packet>) -> Result<Vec<Self>>;
 }

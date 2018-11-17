@@ -1,65 +1,75 @@
 use std::boxed::Box;
 
-use flate2::read::{DeflateDecoder, ZlibDecoder};
 use num_traits::FromPrimitive;
 
 use composed::key::PrivateKey;
 use composed::shared::Deserializable;
 use crypto::checksum;
 use crypto::ecc::decrypt_ecdh;
-use crypto::hash::HashAlgorithm;
 use crypto::rsa::decrypt_rsa;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
-use packet::tags::literal;
-use packet::tags::public_key_encrypted_session_key::PKESK;
-use packet::types::key::{KeyID, PrivateKeyRepr};
-use packet::types::{CompressionAlgorithm, Packet, Signature, Tag, Version};
-
-#[derive(Debug)]
-pub struct Message(Vec<MessagePacket>);
+use packet::{
+    CompressedData, LiteralData, OnePassSignature, PublicKeyEncryptedSessionKey, Signature,
+    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
+};
+use types::{KeyId, SecretKeyRepr};
 
 /// A PGP message
+/// https://tools.ietf.org/html/rfc4880.html#section-11.3
 #[derive(Clone, Debug)]
-pub enum MessagePacket {
-    Literal {
-        packet_version: Version,
-        packet_tag: Tag,
-        mode: u8,
-        name: String,
-        created: Vec<u8>,
-        data: Vec<u8>,
-    },
-    Compressed {
-        packet_version: Version,
-        packet_tag: Tag,
-        compression_algorithm: CompressionAlgorithm,
-        compressed_data: Vec<u8>,
-    },
+pub enum Message {
+    Literal(LiteralData),
+    Compressed(CompressedData),
     Signed {
         /// nested message
-        message: Option<Box<MessagePacket>>,
+        message: Option<Box<Message>>,
         /// for signature packets that contain a one pass message
-        one_pass_signature: Option<OnePassSignaturePacket>,
+        one_pass_signature: Option<OnePassSignature>,
         // actual signature
         signature: Option<Signature>,
     },
     Encrypted {
-        esk: Vec<PKESK>,
-        edata: Vec<Packet>,
+        esk: Vec<Esk>,
+        edata: Vec<Edata>,
         protected: bool,
     },
 }
 
-/// https://tools.ietf.org/html/rfc4880.html#section-5.4
-#[derive(Debug, Clone)]
-pub struct OnePassSignaturePacket {
-    packet_version: Version,
-    packet_tag: Tag,
-    version: u8,
-    hash_algorithm: HashAlgorithm,
-    key_id: KeyID,
-    is_nested: bool,
+/// Encrypte Session Key
+/// Public-Key Encrypted Session Key Packet |
+/// Symmetric-Key Encrypted Session Key Packet.
+#[derive(Debug)]
+pub enum Esk {
+    PublicKeyEncryptedSessionKey(PublicKeyEncryptedSessionKey),
+    SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey),
+}
+
+impl Esk {
+    pub fn id(&self) -> &KeyId {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.id(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.id(),
+        }
+    }
+}
+
+/// Encrypted Data
+/// Symmetrically Encrypted Data Packet |
+/// Symmetrically Encrypted Integrity Protected Data Packet
+#[derive(Debug)]
+pub enum Edata {
+    SymEncryptedData(SymEncryptedData),
+    SymEncryptedProtectedData(SymEncryptedProtectedData),
+}
+
+impl Edata {
+    pub fn data(&self) -> &[u8] {
+        match self {
+            Edata::SymEncryptedData(d) => d.data(),
+            Edata::SymEncryptedProtectedData(d) => d.data(),
+        }
+    }
 }
 
 impl Message {
@@ -71,8 +81,8 @@ impl Message {
         G: FnOnce() -> String,
     {
         match self {
-            Message::Compressed(packet) => Ok(packet.body.clone()),
-            Message::Literal(packet) => Ok(packet.body.clone()),
+            Message::Compressed(packet) => Ok(packet.compressed_data().to_vec()),
+            Message::Literal(packet) => Ok(packet.data().to_vec()),
             Message::Signed { message, .. } => match message {
                 Some(message) => message.as_ref().decrypt(msg_pw, key_pw, key),
                 None => Ok(Vec::new()),
@@ -99,17 +109,17 @@ impl Message {
 
                     // find the key with the matching key id
 
-                    if key
+                    if &key
                         .primary_key
                         .key_id()
                         .ok_or_else(|| format_err!("missing key_id"))?
-                        == esk_packet.id
+                        == esk_packet.id()
                     {
                         encoding_key = Some(&key.primary_key);
                     } else {
                         encoding_subkey = key.subkeys.iter().find_map(|subkey| {
                             if let Some(id) = subkey.key_id() {
-                                if id == esk_packet.id {
+                                if &id == esk_packet.id() {
                                     Some(subkey)
                                 } else {
                                     None
@@ -202,18 +212,18 @@ impl Message {
 }
 
 fn decrypt(
-    priv_key: &PrivateKeyRepr,
+    priv_key: &SecretKeyRepr,
     mpis: &[Vec<u8>],
-    edata: &[Packet],
+    edata: &[Edata],
     protected: bool,
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {
     let decrypted_key = match *priv_key {
-        PrivateKeyRepr::RSA(ref priv_key) => decrypt_rsa(priv_key, mpis, fingerprint)?,
-        PrivateKeyRepr::DSA => unimplemented_err!("DSA"),
-        PrivateKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
-        PrivateKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
-        PrivateKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
+        SecretKeyRepr::RSA(ref priv_key) => decrypt_rsa(priv_key, mpis, fingerprint)?,
+        SecretKeyRepr::DSA => unimplemented_err!("DSA"),
+        SecretKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
+        SecretKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
+        SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
     };
 
     let alg = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
@@ -221,7 +231,7 @@ fn decrypt(
     info!("alg: {:?}", alg);
 
     let (key, checksum) = match *priv_key {
-        PrivateKeyRepr::ECDH(_) => {
+        SecretKeyRepr::ECDH(_) => {
             let dec_len = decrypted_key.len();
             (
                 &decrypted_key[1..dec_len - 2],
@@ -243,9 +253,9 @@ fn decrypt(
     let mut messages = Vec::with_capacity(edata.len());
 
     for packet in edata {
-        ensure_eq!(packet.body[0], 1, "invalid packet version");
+        ensure_eq!(packet.data()[0], 1, "invalid packet version");
 
-        let mut res = packet.body[1..].to_vec();
+        let mut res = packet.data()[1..].to_vec();
         info!("decrypting protected = {:?}", protected);
         let decrypted_packet = if protected {
             alg.decrypt_protected(key, &mut res)?
@@ -260,22 +270,8 @@ fn decrypt(
                 match msg {
                     Message::Compressed(packet) => {
                         info!("uncompressing message");
-                        let compression_alg = CompressionAlgorithm::from_u8(packet.body[0])
-                            .ok_or_else(|| format_err!("invalid compression algorithm"))?;
-                        match compression_alg {
-                            CompressionAlgorithm::Uncompressed => {
-                                Message::from_bytes_many(&packet.body[1..])
-                            }
-                            CompressionAlgorithm::ZIP => {
-                                let mut deflater = DeflateDecoder::new(&packet.body[1..]);
-                                Message::from_bytes_many(deflater)
-                            }
-                            CompressionAlgorithm::ZLIB => {
-                                let mut deflater = ZlibDecoder::new(&packet.body[1..]);
-                                Message::from_bytes_many(deflater)
-                            }
-                            CompressionAlgorithm::BZip2 => unimplemented!("BZip2"),
-                        }
+                        let mut deflater = packet.decompress();
+                        Message::from_bytes_many(deflater)
                     }
                     Message::Encrypted { .. } => {
                         unimplemented!("nested encryption is not supported");
@@ -302,9 +298,7 @@ fn decrypt(
         .ok_or_else(|| format_err!("missing literal message"))?;
 
     if let Some(Message::Literal(packet)) = literal.get_literal() {
-        let (_, l) = literal::parser(&packet.body)?;
-        info!("result: {:?}", l);
-        Ok(l.data)
+        Ok(packet.data().to_vec())
     } else {
         unreachable!();
     }

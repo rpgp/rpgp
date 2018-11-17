@@ -1,29 +1,25 @@
-use super::Deserializable;
-use composed::key::{PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
-use errors::{Error, Result};
+use std::iter::IntoIterator;
+
 use itertools::Itertools;
 use nom::Err::Incomplete;
 use nom::Needed;
-use packet::tags;
-use packet::types::{key, KeyVersion, Packet, Signature, SignatureType, Tag, User, UserAttribute};
-use std::iter::IntoIterator;
+use try_from::TryFrom;
+
+use composed::key::{PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
+use composed::Deserializable;
+use errors::{Error, Result};
+use packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
+use types::{KeyVersion, SignedUser, Tag};
 
 /// Take as many consecutive signatures as we can find and try to parse them.
 /// Skips the ones that are not parsed, but they are reflected in the `processed` count that is returned.
-fn take_sigs(packets: &[&Packet]) -> Result<(usize, Vec<Signature>)> {
+fn take_sigs(packets: &[Packet]) -> Result<(usize, Vec<Signature>)> {
     let mut processed = 0;
 
     let sigs: Vec<Signature> = packets
-        .iter()
+        .into_iter()
         .take_while(|packet| packet.tag == Tag::Signature)
-        .map(|packet| {
-            processed += 1;
-            tags::sig::parser(packet.body.as_slice())
-                .map(|(_, sig)| sig)
-                .map_err(|err| err.into())
-        })
-        // TODO: better error handling
-        .filter(|sig| sig.is_ok())
+        .map(|packet| packet.try_into())
         .collect::<Result<_>>()?;
 
     Ok((processed, sigs))
@@ -32,13 +28,11 @@ fn take_sigs(packets: &[&Packet]) -> Result<(usize, Vec<Signature>)> {
 /// This macro generates the parsers matching to the two different types of keys,
 /// public and private.
 macro_rules! key_parser {
-    ( $key_type:ty, $subkey_type:ty, $key_tag:expr, $subkey_tag:expr, $inner_key_type:ty ) => {
+    ( $key_type:ty, $subkey_type:ty, $key_tag:expr, $subkey_tag:expr, $inner_key_type:ty, $inner_subkey_type:ty ) => {
         impl Deserializable for $key_type {
             /// Parse a transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-            fn from_packets<'a>(
-                packets: impl IntoIterator<Item = &'a Packet>,
-            ) -> Result<Vec<$key_type>> {
+            fn from_packets(packets: impl IntoIterator<Item = Packet>) -> Result<Vec<$key_type>> {
                 // This counter tracks which top level key we are in.
                 let mut ctr = 0;
 
@@ -63,7 +57,7 @@ macro_rules! key_parser {
             /// Parse a single transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
             /// Currently skips packets it fails to parse.
-            fn from_packets_single(packets: &[&Packet]) -> Result<$key_type> {
+            fn from_packets_single(packets: &[Packet]) -> Result<$key_type> {
                 let mut ctr = 0;
                 let packets_len = packets.len();
 
@@ -71,7 +65,7 @@ macro_rules! key_parser {
                 // idea: use Error::UnexpectedPacket(actual, expected)
                 ensure_eq!(packets[ctr].tag, $key_tag);
 
-                let primary_key = Self::key_parser(packets[ctr])?;
+                let primary_key: $inner_key_type = packets[ctr].try_into()?;
                 ctr += 1;
 
                 let (cnt, sigs) = take_sigs(&packets[ctr..])?;
@@ -108,9 +102,10 @@ macro_rules! key_parser {
                 let mut user_attributes = vec![];
 
                 while ctr < packets_len {
-                    match packets[ctr].tag {
+                    let tag = packets[ctr].tag();
+                    match tag {
                         Tag::UserID => {
-                            let id = tags::userid::parser(packets[ctr].body.as_slice());
+                            let id: UserId = packets[ctr].try_into()?;
                             ctr += 1;
 
                             // --- zero or more signature packets
@@ -119,15 +114,10 @@ macro_rules! key_parser {
                             let (cnt, sigs) = take_sigs(&packets[ctr..])?;
                             ctr += cnt;
 
-                            users.push(User::new(id, sigs));
+                            users.push(SignedUser::new(id, sigs));
                         }
                         Tag::UserAttribute => {
-                            let a = tags::userattr::parser(packets[ctr].body.as_slice());
-                            if a.is_err() {
-                                info!("failed to parse {:?}\n{:?}", packets[ctr], a);
-                            }
-
-                            let (_, attr) = a?;
+                            let attr: UserAttribute = packets[ctr].try_into()?;
                             ctr += 1;
 
                             // --- zero or more signature packets
@@ -136,7 +126,7 @@ macro_rules! key_parser {
                             let (cnt, sigs) = take_sigs(&packets[ctr..])?;
                             ctr += cnt;
 
-                            user_attributes.push(UserAttribute::new(attr, sigs));
+                            user_attributes.push(SignedUser::new(attr, sigs));
                         }
                         _ => break,
                     }
@@ -151,7 +141,7 @@ macro_rules! key_parser {
                 // -- Zero or more Subkey packets
                 let mut subkeys = vec![];
                 while ctr < packets_len && packets[ctr].tag == $subkey_tag {
-                    let subkey = Self::key_parser(packets[ctr])?;
+                    let subkey: $inner_subkey_type = packets[ctr].try_into()?;
                     ctr += 1;
 
                     let (cnt, sigs) = take_sigs(&packets[ctr..])?;
@@ -210,12 +200,14 @@ key_parser!(
     PrivateSubKey,
     Tag::SecretKey,
     Tag::SecretSubkey,
-    key::PrivateKey
+    packet::SecretKey,
+    packet::SecretSubkey
 );
 key_parser!(
     PublicKey,
     PublicSubKey,
     Tag::PublicKey,
     Tag::PublicSubkey,
-    key::PublicKey
+    packet::PublicKey,
+    packet::PublicSubkey
 );

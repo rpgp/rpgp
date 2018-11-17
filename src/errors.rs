@@ -18,8 +18,8 @@ pub enum Error {
     ParsingError(nom::ErrorKind),
     #[fail(display = "invalid input")]
     InvalidInput,
-    #[fail(display = "incomplete input")]
-    Incomplete,
+    #[fail(display = "incomplete input: {:?}", _0)]
+    Incomplete(nom::Needed),
     #[fail(display = "invalid armor wrappers")]
     InvalidArmorWrappers,
     #[fail(display = "invalid crc24 checksum")]
@@ -69,7 +69,7 @@ impl Error {
         match self {
             Error::ParsingError(_) => 0,
             Error::InvalidInput => 1,
-            Error::Incomplete => 2,
+            Error::Incomplete(_) => 2,
             Error::InvalidArmorWrappers => 3,
             Error::InvalidChecksum => 4,
             Error::Base64DecodeError(_) => 5,
@@ -97,13 +97,19 @@ impl Error {
 
 impl<'a> From<nom::Err<&'a [u8]>> for Error {
     fn from(err: nom::Err<&'a [u8]>) -> Error {
-        Error::ParsingError(err.into_error_kind())
+        match err {
+            nom::Err::Incomplete(n) => Error::Incomplete(n),
+            _ => Error::ParsingError(err.into_error_kind()),
+        }
     }
 }
 
 impl<'a> From<nom::Err<nom::types::CompleteStr<'a>>> for Error {
     fn from(err: nom::Err<nom::types::CompleteStr<'a>>) -> Error {
-        Error::ParsingError(err.into_error_kind())
+        match err {
+            nom::Err::Incomplete(n) => Error::Incomplete(n),
+            _ => Error::ParsingError(err.into_error_kind()),
+        }
     }
 }
 

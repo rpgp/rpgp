@@ -1,5 +1,3 @@
-use packet::types::Tag;
-
 impl_public_key!(PublicKey, Tag::PublicKey);
 impl_public_key!(PublicSubkey, Tag::PublicSubkey);
 

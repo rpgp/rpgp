@@ -1,12 +1,15 @@
+use std::collections::HashMap;
+use std::str;
+
 use chrono::{DateTime, NaiveDateTime, Utc};
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use num_traits::FromPrimitive;
-use std::str;
 
 use crypto::hash::HashAlgorithm;
+use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
-use packet::packet_trait::Packet;
-use packet::types::{CompressionAlgorithm, PublicKeyAlgorithm, Tag};
+use errors::Result;
+use types::CompressionAlgorithm;
 use util::{clone_into_array, mpi, packet_length};
 
 /// Signature Packet
@@ -43,12 +46,6 @@ pub struct Signature {
     trust_signature: Option<u8>,
     regular_expression: Option<String>,
     exportable_certification: bool,
-}
-
-impl Packet for Signature {
-    fn tag(&self) -> Tag {
-        Tag::Signature
-    }
 }
 
 impl Signature {
@@ -508,7 +505,7 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
 named!(
     embedded_sig<Subpacket>,
-    map!(parser, |sig| Subpacket::EmbeddedSignature(Box::new(sig)))
+    map!(parse, |sig| Subpacket::EmbeddedSignature(Box::new(sig)))
 );
 
 fn subpacket<'a>(typ: &SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {

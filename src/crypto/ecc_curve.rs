@@ -1,4 +1,4 @@
-use super::packet::PublicKeyAlgorithm;
+use crypto::public_key::PublicKeyAlgorithm;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ECCCurve {

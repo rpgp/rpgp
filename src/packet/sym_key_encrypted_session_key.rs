@@ -2,12 +2,12 @@ use nom::{be_u8, rest};
 use num_traits::FromPrimitive;
 
 use crypto::sym::SymmetricKeyAlgorithm;
-use packet::packet_trait::Packet;
-use packet::types::Tag;
-use types::{s2k_parser, StringToKey};
+use errors::Result;
+use types::{s2k_parser, KeyId, StringToKey};
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3
+#[derive(Debug)]
 pub struct SymKeyEncryptedSessionKey {
     version: u8,
     sym_algorithm: SymmetricKeyAlgorithm,
@@ -25,18 +25,17 @@ impl SymKeyEncryptedSessionKey {
 
         Ok(pk)
     }
-}
 
-impl Packet for SymKeyEncryptedSessionKey {
-    fn tag(&self) -> Tag {
-        Tag::SymKeyEncryptedSessionKey
+    pub fn id(&self) -> &KeyId {
+        // TODO: figure out how, probably need decryption first?
+        unimplemented!()
     }
 }
 
 #[rustfmt::skip]
-named!(parse<OnePassSignature>, do_parse!(
-              version: be_u8,
-    >>        sym_alg: map_res!(be_u8, SymmetricKeyAlgorithm::from_u8)
+named!(parse<SymKeyEncryptedSessionKey>, do_parse!(
+              version: be_u8
+    >>        sym_alg: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
     >>            s2k: s2k_parser
     >>  encrypted_key: rest
     >> ({
@@ -51,5 +50,5 @@ named!(parse<OnePassSignature>, do_parse!(
             s2k,
             encrypted_key,
         }
-    )
+    })
 ));

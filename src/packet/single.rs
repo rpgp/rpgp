@@ -2,14 +2,14 @@ use nom::rest;
 use num_traits::FromPrimitive;
 
 use errors::Result;
-use packet::packet_trait::Packet;
-use packet::types::{PacketLength, Tag, Version};
+use packet::packet_sum::Packet;
 use packet::{
     CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PublicKey,
     PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
     UserId,
 };
+use types::{PacketLength, Tag, Version};
 use util::{u16_as_usize, u32_as_usize, u8_as_usize};
 
 /// Parses an old format packet header
@@ -73,28 +73,28 @@ named!(inner_parser<(Tag, &[u8])>, do_parse!(
 ));
 
 /// Parses a single packet.
-pub fn parser(input: &[u8]) -> Result<Box<dyn Packet>> {
-    let (tag, body) = inner_parser(input)?;
+pub fn parser<'a>(input: &'a [u8]) -> Result<(&'a [u8], Packet)> {
+    let (rest, (tag, body)) = inner_parser(input)?;
 
-    let res: Box<dyn Packet> = match tag {
-        PublicKeyEncryptedSessionKey => Box::new(PublicKeyEncryptedSessionKey::from_slice(body)?),
-        Signature => Box::new(Signature::from_slice(body)?),
-        SymKeyEncryptedSessionKey => Box::new(SymKeyEncryptedSessionKey::from_slice(body)?),
-        OnePassSignature => Box::new(OnePassSignature::from_slice(body)?),
-        SecretKey => Box::new(SecretKey::from_slice(body)?),
-        PublicKey => Box::new(PublicKey::from_slice(body)?),
-        SecretSubkey => Box::new(SecretSubkey::from_slice(body)?),
-        CompressedData => Box::new(CompressedData::from_slice(body)?),
-        SymEncryptedData => Box::new(SymEncryptedData::from_slice(body)?),
-        Marker => Box::new(Marker::from_slice(body)?),
-        LiteralData => Box::new(LiteralData::from_slice(body)?),
-        Trust => Box::new(Trust::from_slice(body)?),
-        UserId => Box::new(UserId::from_slice(body)?),
-        PublicSubkey => Box::new(PublicSubkey::from_slice(body)?),
-        UserAttribute => Box::new(UserAttribute::from_slice(body)?),
-        SymEncryptedProtectedData => Box::new(SymEncryptedProtectedData::from_slice(body)?),
-        ModDetectionCode => Box::new(ModDetectionCode::from_slice(body)?),
+    let res: Packet = match tag {
+        PublicKeyEncryptedSessionKey => PublicKeyEncryptedSessionKey::from_slice(body)?.into(),
+        Signature => Signature::from_slice(body)?.into(),
+        SymKeyEncryptedSessionKey => SymKeyEncryptedSessionKey::from_slice(body)?.into(),
+        OnePassSignature => OnePassSignature::from_slice(body)?.into(),
+        SecretKey => SecretKey::from_slice(body)?.into(),
+        PublicKey => PublicKey::from_slice(body)?.into(),
+        SecretSubkey => SecretSubkey::from_slice(body)?.into(),
+        CompressedData => CompressedData::from_slice(body)?.into(),
+        SymEncryptedData => SymEncryptedData::from_slice(body)?.into(),
+        Marker => Marker::from_slice(body)?.into(),
+        LiteralData => LiteralData::from_slice(body)?.into(),
+        Trust => Trust::from_slice(body)?.into(),
+        UserId => UserId::from_slice(body)?.into(),
+        PublicSubkey => PublicSubkey::from_slice(body)?.into(),
+        UserAttribute => UserAttribute::from_slice(body)?.into(),
+        SymEncryptedProtectedData => SymEncryptedProtectedData::from_slice(body)?.into(),
+        ModDetectionCode => ModDetectionCode::from_slice(body)?.into(),
     };
 
-    Ok(res)
+    Ok((rest, res))
 }

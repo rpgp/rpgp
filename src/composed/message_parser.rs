@@ -1,15 +1,17 @@
 use std::boxed::Box;
 
-use composed::message::{Message, OnePassSignature};
+use try_from::TryFrom;
+
+use composed::message::Message;
 use composed::Deserializable;
 use errors::Result;
-use packet::tags::public_key_encrypted_session_key;
-use packet::types::{Packet, Tag};
+use packet::Packet;
+use types::Tag;
 
 impl Deserializable for Message {
     /// Parse a composed message.
     /// Ref: https://tools.ietf.org/html/rfc4880#section-11.3
-    fn from_packets<'a>(packets: impl IntoIterator<Item = &'a Packet>) -> Result<Vec<Message>> {
+    fn from_packets(packets: impl IntoIterator<Item = Packet>) -> Result<Vec<Message>> {
         let mut stack: Vec<Message> = Vec::new();
         // track a currently open package
         let mut cur: Option<usize> = None;
@@ -65,9 +67,7 @@ impl Deserializable for Message {
 
                     if cur.is_none() {
                         stack.push(Message::Encrypted {
-                            esk: vec![public_key_encrypted_session_key::parse(
-                                packet.body.as_slice(),
-                            )?],
+                            esk: vec![packet.try_into()?],
                             edata: Vec::new(),
                             protected: false,
                         });
@@ -76,9 +76,7 @@ impl Deserializable for Message {
 
                     if let Some(i) = cur {
                         if let Message::Encrypted { ref mut esk, .. } = stack[i] {
-                            esk.push(public_key_encrypted_session_key::parse(
-                                packet.body.as_slice(),
-                            )?);
+                            esk.push(packet.try_into()?);
                         } else {
                             bail!("bad esk init");
                         }
@@ -124,7 +122,7 @@ impl Deserializable for Message {
                 Tag::OnePassSignature => {
                     stack.push(Message::Signed {
                         message: None,
-                        one_pass_signature: Some(OnePassSignature(packet.to_owned())),
+                        one_pass_signature: Some(packet.try_into()?),
                         signature: None,
                     });
                     cur = Some(stack.len() - 1);

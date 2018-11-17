@@ -1,3 +1,10 @@
+use std::fmt;
+
+use rsa::RSAPrivateKey;
+
+use crypto::hash::HashAlgorithm;
+use crypto::sym::SymmetricKeyAlgorithm;
+
 /// The version of the secret key that is actually exposed to users to do crypto operations.
 pub enum SecretKeyRepr {
     RSA(RSAPrivateKey),

@@ -1,10 +1,8 @@
 use nom::be_u8;
 use num_traits::FromPrimitive;
 
+use crypto::public_key::PublicKeyAlgorithm;
 use errors::Result;
-use packet::packet_trait::Packet;
-use packet::types::PublicKeyAlgorithm;
-use packet::types::Tag;
 use types::KeyId;
 use util::mpi;
 
@@ -27,11 +25,9 @@ impl PublicKeyEncryptedSessionKey {
 
         Ok(pk)
     }
-}
 
-impl Packet for PublicKeyEncryptedSessionKey {
-    fn tag(&self) -> Tag {
-        Tag::PublicKeyEncryptedSessionKey
+    pub fn id(&self) -> &KeyId {
+        &self.id
     }
 }
 

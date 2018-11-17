@@ -46,6 +46,7 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 extern crate buf_redux;
+extern crate try_from;
 
 #[cfg(test)]
 extern crate rand;

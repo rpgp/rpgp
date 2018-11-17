@@ -43,6 +43,7 @@ block-padding = "0.1.2"
 log = "0.4.6"
 pretty_env_logger = "0.2.5"
 buf_redux = "0.7.1"
+try_from = "0.2.2"
 
 [dependencies.nom]
 version = "^4.0"

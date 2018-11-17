@@ -1,212 +1,208 @@
-use std::fmt;
-
-use chrono::prelude::*;
-use rsa::RSAPrivateKey;
-
-use crypto::hash::HashAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use packet::packet_trait::Packet;
-use packet::public_key::PublicParams;
-use packet::types::ecc_curve::ECCCurve;
-use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, Tag};
-
 #[macro_export]
-macro_rules! impl_secret_key {
-    ($name:ty, $tag:ty) => {
-        #[derive(Debug, PartialEq, Eq)]
-        pub struct $name {
-            version: KeyVersion,
-            algorithm: PublicKeyAlgorithm,
-            created_at: DateTime<Utc>,
-            expiration: Option<u16>,
-            public_params: PublicParams,
-            secret_params: EncryptedSecretParams,
-        }
-
-        impl Packet for $name {
-            fn tag(&self) -> Tag {
-                $tag
-            }
-        }
-
+macro_rules! impl_key {
+    ($name:ty) => {
         impl $name {
-            pub fn new(
-                version: KeyVersion,
-                algorithm: PublicKeyAlgorithm,
-                created_at: DateTime<Utc>,
-                expiration: Option<u16>,
-                public_params: PublicParams,
-                secret_params: EncryptedSecretParams,
-            ) -> $name {
-                info!(
-                    "creating priv key: {:?} {:?} {:?} {:?} {:?} {:?}",
-                    version, algorithm, created_at, expiration, public_params, secret_params
-                );
-                $name {
-                    version,
-                    algorithm,
-                    created_at,
-                    expiration,
-                    public_params,
-                    secret_params,
-                }
+            pub fn version(&self) -> &$crate::types::KeyVersion {
+                &self.version
             }
 
-            /// Unlock the raw data in the secret parameters.
-            pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
-            where
-                F: FnOnce() -> String,
-                G: FnOnce(&SecretKeyRepr) -> Result<()>,
-            {
-                let decrypted = if self.secret_params.is_encrypted() {
-                    self.repr_from_ciphertext(pw, self.secret_params.data.as_slice())
-                } else {
-                    self.repr_from_plaintext(self.secret_params.data.as_slice())
-                }?;
-
-                work(&decrypted)
+            pub fn algorithm(&self) -> &$crate::crypto::public_key::PublicKeyAlgorithm {
+                &self.algorithm
             }
 
-            fn repr_from_ciphertext<F>(&self, pw: F, ciphertext: &[u8]) -> Result<SecretKeyRepr>
-            where
-                F: FnOnce() -> String,
-            {
-                let sym_alg = self
-                    .secret_params
-                    .encryption_algorithm
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing encryption algorithm"))?;
-                let typ = self
-                    .secret_params
-                    .string_to_key
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing s2k method"))?;
-                let hash_alg = self
-                    .secret_params
-                    .string_to_key_hash
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing hash algorithm"))?;
-                let key = s2k(
-                    pw,
-                    *sym_alg,
-                    *typ,
-                    *hash_alg,
-                    self.secret_params.string_to_key_salt.as_ref(),
-                    self.secret_params.string_to_key_count.as_ref(),
-                )?;
-
-                let iv = self
-                    .secret_params
-                    .iv
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing IV"))?;
-
-                // Actual decryption
-                let mut plaintext = ciphertext.to_vec();
-                sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
-
-                // Validate checksum
-                if self.has_checksum() {
-                    let split = plaintext.len() - 20;
-                    checksum::sha1(&plaintext[split..], &plaintext[..split])?;
-                } else if let Some(ref actual_checksum) = self.secret_params.checksum {
-                    // we already parsed the checksum when reading the s2k.
-                    checksum::simple(actual_checksum, &plaintext)?;
-                } else {
-                    bail!("missing checksum");
-                }
-
-                // Construct details from the now decrypted plaintext information
-                self.repr_from_plaintext(&plaintext)
+            pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+                &self.created_at
             }
 
-            fn repr_from_plaintext(&self, plaintext: &[u8]) -> Result<SecretKeyRepr> {
-                match self.algorithm {
-                    PublicKeyAlgorithm::RSA
-                    | PublicKeyAlgorithm::RSAEncrypt
-                    | PublicKeyAlgorithm::RSASign => {
-                        let (_, (d, p, q, _)) = rsa_secret_params(plaintext)?;
-                        match self.public_params {
-                            PublicParams::RSA { ref n, ref e } => {
-                                let secret_key = RSAPrivateKey::from_components(
-                                    n.clone(),
-                                    e.clone(),
-                                    d,
-                                    vec![p, q],
-                                );
-                                secret_key.validate()?;
-                                Ok(SecretKeyRepr::RSA(secret_key))
+            pub fn expiration(&self) -> Option<u16> {
+                self.expiration
+            }
+
+            pub fn public_params(&self) -> &$crate::crypto::public_key::PublicParams {
+                &self.public_params
+            }
+
+            /// Returns the fingerprint of this key.
+            pub fn fingerprint(&self) -> Vec<u8> {
+                use byteorder::{BigEndian, ByteOrder};
+                use md5::Md5;
+                use num_bigint::BigUint;
+                use sha1::{Digest, Sha1};
+                use $crate::crypto::public_key::PublicParams;
+                use $crate::types::KeyVersion;
+                use $crate::util::bignum_to_mpi;
+
+                match self.version() {
+                    KeyVersion::V4 => {
+                        // A one-octet version number (4).
+                        let mut packet = Vec::new();
+                        packet.push(4);
+
+                        // A four-octet number denoting the time that the key was created.
+                        let mut time_buf: [u8; 4] = [0; 4];
+                        BigEndian::write_u32(&mut time_buf, self.created_at().timestamp() as u32);
+                        packet.extend_from_slice(&time_buf);
+
+                        // A one-octet number denoting the public-key algorithm of this key.
+                        packet.push(*self.algorithm() as u8);
+
+                        // A series of multiprecision integers comprising the key material.
+                        match &self.public_params {
+                            PublicParams::RSA { n, e } => {
+                                packet.extend(bignum_to_mpi(n));
+                                packet.extend(bignum_to_mpi(e));
                             }
-                            _ => unreachable!("inconsistent key state"),
+                            PublicParams::DSA { p, q, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(q));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
+                            }
+                            PublicParams::ECDSA { curve, p } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
+                            }
+                            PublicParams::ECDH {
+                                curve,
+                                p,
+                                hash,
+                                alg_sym,
+                            } => {
+                                //a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                //the octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
+                                //a one-octet size of the following fields
+                                packet.push(3); // Always 3??
+                                                //a one-octet value 01
+                                packet.push(1);
+                                //a one-octet hash function ID used with a KDF
+                                packet.push(*hash as u8);
+                                //a one-octet algorithm ID
+                                packet.push(*alg_sym as u8);
+                            }
+                            PublicParams::Elgamal { p, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
+                            }
+                            PublicParams::EdDSA { curve, q } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&q)));
+                            }
                         }
-                    }
-                    PublicKeyAlgorithm::DSA => {
-                        unimplemented_err!("DSA");
-                    }
-                    PublicKeyAlgorithm::ECDH => match self.public_params {
-                        PublicParams::ECDH {
-                            ref curve,
-                            ref hash,
-                            ref alg_sym,
-                            ..
-                        } => match *curve {
-                            ECCCurve::Curve25519 => {
-                                let (_, d) = ecc_secret_params(plaintext)?;
-                                ensure_eq!(d.len(), 32, "invalid secret");
 
-                                let mut secret = [0u8; 32];
-                                secret.copy_from_slice(d);
+                        let mut length_buf: [u8; 2] = [0; 2];
+                        BigEndian::write_uint(&mut length_buf, packet.len() as u64, 2);
 
-                                Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
-                                    oid: curve.oid(),
-                                    hash: *hash,
-                                    alg_sym: *alg_sym,
-                                    secret,
-                                }))
+                        let mut h = Sha1::new();
+                        h.input(&[0x99]);
+                        h.input(&length_buf);
+                        h.input(&packet);
+
+                        h.result().to_vec()
+                    }
+
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        let mut h = Md5::new();
+
+                        let mut packet = Vec::new();
+
+                        match &self.public_params {
+                            PublicParams::RSA { n, e } => {
+                                packet.extend(bignum_to_mpi(n));
+                                packet.extend(bignum_to_mpi(e));
                             }
-                            _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
-                        },
-                        _ => unreachable!("inconsistent key state"),
-                    },
-                    PublicKeyAlgorithm::ECDSA => {
-                        unimplemented_err!("ECDSA");
-                    }
-                    PublicKeyAlgorithm::EdDSA => match self.public_params {
-                        PublicParams::EdDSA { ref curve, .. } => match *curve {
-                            ECCCurve::Ed25519 => {
-                                let (_, d) = ecc_secret_params(plaintext)?;
-                                ensure_eq!(d.len(), 32, "invalid secret");
-
-                                let mut secret = [0u8; 32];
-                                secret.copy_from_slice(d);
-
-                                Ok(SecretKeyRepr::EdDSA(EdDSASecretKey {
-                                    oid: curve.oid(),
-                                    secret,
-                                }))
+                            PublicParams::DSA { p, q, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(q));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
                             }
-                            _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-                        },
-                        _ => unreachable!("inconsistent key state"),
-                    },
-                    PublicKeyAlgorithm::Elgamal => {
-                        unimplemented_err!("Elgamal");
+                            PublicParams::ECDSA { curve, p } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
+                            }
+                            PublicParams::ECDH {
+                                curve,
+                                p,
+                                hash,
+                                alg_sym,
+                            } => {
+                                //a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                //the octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                //MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&p)));
+                                //a one-octet size of the following fields
+                                packet.push(3); // Always 3??
+                                                //a one-octet value 01
+                                packet.push(1);
+                                //a one-octet hash function ID used with a KDF
+                                packet.push(*hash as u8);
+                                //a one-octet algorithm ID
+                                packet.push(*alg_sym as u8);
+                            }
+                            PublicParams::Elgamal { p, g, y } => {
+                                packet.extend(bignum_to_mpi(p));
+                                packet.extend(bignum_to_mpi(g));
+                                packet.extend(bignum_to_mpi(y));
+                            }
+                            PublicParams::EdDSA { curve, q } => {
+                                // a one-octet size of the following field
+                                packet.push(curve.oid().len() as u8);
+                                // octets representing a curve OID
+                                packet.extend(curve.oid().iter().cloned());
+                                // MPI of an EC point representing a public key
+                                packet.extend(bignum_to_mpi(&BigUint::from_bytes_be(&q)));
+                            }
+                        }
+
+                        h.input(&packet);
+
+                        h.result().to_vec()
                     }
-                    _ => unsupported_err!("algorithm: {:?}", self.algorithm),
                 }
             }
 
-            pub fn secret_params(&self) -> &EncryptedSecretParams {
-                &self.secret_params
-            }
+            pub fn key_id(&self) -> Option<$crate::types::KeyId> {
+                use $crate::crypto::public_key::PublicParams;
+                use $crate::types::{KeyId, KeyVersion};
 
-            /// Checks if we should expect a SHA1 checksum in the encrypted part.
-            fn has_checksum(&self) -> bool {
-                self.secret_params.string_to_key_id == 254
+                match self.version() {
+                    KeyVersion::V4 => {
+                        // Lower 64 bits
+                        let f = self.fingerprint();
+                        let offset = f.len() - 8;
+
+                        KeyId::from_slice(&f[offset..]).ok()
+                    }
+                    KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
+                        PublicParams::RSA { n, .. } => {
+                            let n = n.to_bytes_be();
+                            let offset = n.len() - 8;
+
+                            KeyId::from_slice(&n[offset..]).ok()
+                        }
+                        _ => None,
+                    },
+                }
             }
         }
-
-        impl_key!($name);
     };
 }

@@ -1,8 +1,8 @@
-use packet::packet_trait::Packet;
-use packet::types::Tag;
+use errors::Result;
 
 /// Symmetrically Encrypted Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.7
+#[derive(Debug)]
 pub struct SymEncryptedData(Vec<u8>);
 
 impl SymEncryptedData {
@@ -10,10 +10,8 @@ impl SymEncryptedData {
     pub fn from_slice(input: &[u8]) -> Result<Self> {
         Ok(SymEncryptedData(input.to_vec()))
     }
-}
 
-impl Packet for SymEncryptedData {
-    fn tag(&self) -> Tag {
-        Tag::SymEncryptedData
+    pub fn data(&self) -> &[u8] {
+        &self.0
     }
 }

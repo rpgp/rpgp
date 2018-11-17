@@ -1,43 +1,31 @@
-use std::fmt;
-
-use chrono::prelude::*;
-use rsa::RSAPrivateKey;
-
-use crypto::hash::HashAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use packet::packet_trait::Packet;
-use packet::public_key::PublicParams;
-use packet::types::ecc_curve::ECCCurve;
-use packet::types::{KeyVersion, PublicKeyAlgorithm, StringToKeyType, Tag};
-
 #[macro_export]
 macro_rules! impl_secret_key {
     ($name:ident, $tag:expr) => {
         #[derive(Debug, PartialEq, Eq)]
         pub struct $name {
-            version: KeyVersion,
-            algorithm: PublicKeyAlgorithm,
-            created_at: DateTime<Utc>,
+            version: $crate::types::KeyVersion,
+            algorithm: $crate::crypto::public_key::PublicKeyAlgorithm,
+            created_at: chrono::DateTime<chrono::Utc>,
             expiration: Option<u16>,
-            public_params: PublicParams,
-            secret_params: EncryptedSecretParams,
-        }
-
-        impl Packet for $name {
-            fn tag(&self) -> Tag {
-                $tag
-            }
+            public_params: $crate::crypto::public_key::PublicParams,
+            secret_params: $crate::types::EncryptedSecretParams,
         }
 
         impl $name {
+            /// Parses a `SecretKey` packet from the given slice.
+            pub fn from_slice(input: &[u8]) -> $crate::errors::Result<Self> {
+                let (_, pk) = $crate::packet::secret_key_parser::parse(input)?;
+
+                Ok(pk.into())
+            }
+
             pub fn new(
-                version: KeyVersion,
-                algorithm: PublicKeyAlgorithm,
-                created_at: DateTime<Utc>,
+                version: $crate::types::KeyVersion,
+                algorithm: $crate::crypto::public_key::PublicKeyAlgorithm,
+                created_at: chrono::DateTime<chrono::Utc>,
                 expiration: Option<u16>,
-                public_params: PublicParams,
-                secret_params: EncryptedSecretParams,
+                public_params: $crate::crypto::public_key::PublicParams,
+                secret_params: $crate::types::EncryptedSecretParams,
             ) -> $name {
                 info!(
                     "creating priv key: {:?} {:?} {:?} {:?} {:?} {:?}",
@@ -54,10 +42,10 @@ macro_rules! impl_secret_key {
             }
 
             /// Unlock the raw data in the secret parameters.
-            pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
+            pub fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
             where
                 F: FnOnce() -> String,
-                G: FnOnce(&SecretKeyRepr) -> Result<()>,
+                G: FnOnce(&$crate::types::SecretKeyRepr) -> $crate::errors::Result<()>,
             {
                 let decrypted = if self.secret_params.is_encrypted() {
                     self.repr_from_ciphertext(pw, self.secret_params.data.as_slice())
@@ -68,10 +56,17 @@ macro_rules! impl_secret_key {
                 work(&decrypted)
             }
 
-            fn repr_from_ciphertext<F>(&self, pw: F, ciphertext: &[u8]) -> Result<SecretKeyRepr>
+            fn repr_from_ciphertext<F>(
+                &self,
+                pw: F,
+                ciphertext: &[u8],
+            ) -> $crate::errors::Result<$crate::types::SecretKeyRepr>
             where
                 F: FnOnce() -> String,
             {
+                use $crate::crypto::checksum;
+                use $crate::crypto::kdf::s2k;
+
                 let sym_alg = self
                     .secret_params
                     .encryption_algorithm
@@ -121,7 +116,16 @@ macro_rules! impl_secret_key {
                 self.repr_from_plaintext(&plaintext)
             }
 
-            fn repr_from_plaintext(&self, plaintext: &[u8]) -> Result<SecretKeyRepr> {
+            fn repr_from_plaintext(
+                &self,
+                plaintext: &[u8],
+            ) -> $crate::errors::Result<$crate::types::SecretKeyRepr> {
+                use rsa::RSAPrivateKey;
+                use $crate::crypto::ecc_curve::ECCCurve;
+                use $crate::crypto::public_key::{PublicKeyAlgorithm, PublicParams};
+                use $crate::packet::secret_key_parser::{ecc_secret_params, rsa_secret_params};
+                use $crate::types::{ECDHSecretKey, EdDSASecretKey, SecretKeyRepr};
+
                 match self.algorithm {
                     PublicKeyAlgorithm::RSA
                     | PublicKeyAlgorithm::RSAEncrypt
@@ -197,7 +201,7 @@ macro_rules! impl_secret_key {
                 }
             }
 
-            pub fn secret_params(&self) -> &EncryptedSecretParams {
+            pub fn secret_params(&self) -> &$crate::types::EncryptedSecretParams {
                 &self.secret_params
             }
 

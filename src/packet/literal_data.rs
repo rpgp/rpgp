@@ -1,9 +1,10 @@
 use std::str;
 
-use nom::{be_u8, rest};
+use chrono::{DateTime, TimeZone, Utc};
+use nom::{be_u32, be_u8, rest};
+use num_traits::FromPrimitive;
 
-use packet::packet_trait::Packet;
-use packet::types::Tag;
+use errors::Result;
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
@@ -11,14 +12,15 @@ use packet::types::Tag;
 pub struct LiteralData {
     mode: DataMode,
     file_name: String,
-    created: Vec<u8>,
+    created: DateTime<Utc>,
     data: Vec<u8>,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, FromPrimitive)]
+#[repr(u8)]
 pub enum DataMode {
-    Binary,
-    Text,
+    Binary = 0x62,
+    Text = 0x74,
 }
 
 impl LiteralData {
@@ -28,25 +30,23 @@ impl LiteralData {
 
         Ok(pk)
     }
-}
 
-impl Packet for LiteralData {
-    fn tag(&self) -> Tag {
-        Tag::Literal
+    pub fn data(&self) -> &[u8] {
+        &self.data
     }
 }
 
 #[rustfmt::skip]
 named!(parse<LiteralData>, do_parse!(
-           mode: be_u8
+           mode: map_opt!(be_u8, DataMode::from_u8)
     >> name_len: be_u8
     >>     name: map_res!(take!(name_len), str::from_utf8)
-    >>  created: take!(4)
+    >>  created: map!(be_u32, |v| Utc.timestamp(v as i64, 0))
     >>     data: rest
     >> (LiteralData {
         mode,
         created: created.to_vec(),
-        name: name.to_string(),
+        file_name: name.to_string(),
         data: data.to_vec(),
     })
 ));

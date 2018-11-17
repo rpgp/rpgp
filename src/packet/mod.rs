@@ -1,9 +1,6 @@
 ///! This module handles everything in relationship to packets.
-pub mod tags;
-pub mod types;
-
 mod many;
-mod packet_trait;
+mod packet_sum;
 mod single;
 
 #[macro_use]
@@ -28,6 +25,9 @@ mod trust;
 mod user_attribute;
 mod user_id;
 
+mod public_key_parser;
+mod secret_key_parser;
+
 pub use self::compressed_data::*;
 pub use self::key::*;
 pub use self::literal_data::*;
@@ -44,3 +44,4 @@ pub use self::user_attribute::*;
 pub use self::user_id::*;
 
 pub use self::many::parser;
+pub use self::packet_sum::*;

@@ -1,10 +1,11 @@
-use circular::Buffer;
-use nom::{self, Needed, Offset};
 use std::io::Read;
 
-use super::single;
-use super::types::Packet;
+use circular::Buffer;
+use nom::{Needed, Offset};
+
 use errors::{Error, Result};
+use packet::packet_sum::Packet;
+use packet::single;
 
 /// Parse packets, in a streaming fashion from the given reader.
 pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
@@ -43,16 +44,16 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
             let length = {
                 match single::parser(b.data()) {
                     Ok((remaining, p)) => {
-                        info!("-- parsed packet {:?} --", p.tag);
+                        info!("-- parsed packet {:?} --", p.tag());
                         packets.push(p);
                         b.data().offset(remaining)
                     }
                     Err(err) => match err {
-                        nom::Err::Incomplete(n) => {
+                        Error::Incomplete(n) => {
                             needed = Some(n);
                             break;
                         }
-                        _ => return Err(Error::PacketError(err.into_error_kind())),
+                        _ => return Err(err),
                     },
                 }
             };
