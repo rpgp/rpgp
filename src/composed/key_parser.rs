@@ -12,7 +12,7 @@ use types::{KeyVersion, SignedUser, SignedUserAttribute, Tag};
 /// This macro generates the parsers matching to the two different types of keys,
 /// public and private.
 macro_rules! key_parser {
-    ( $key_type:ty, $subkey_type:ty, $key_tag:expr, $subkey_tag:expr, $inner_key_type:ty, $inner_subkey_type:ty ) => {
+    ( $key_type:ty, $key_tag:expr, $inner_key_type:ty, $( ($subkey_tag:ident, $inner_subkey_type:ty, $subkey_type:ty, $subkey_container:ident) ),* ) => {
         impl Deserializable for $key_type {
             /// Parse a transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
@@ -31,6 +31,7 @@ macro_rules! key_parser {
                     })
                     .into_iter()
                     .map(|(_, packets)| Self::from_packets_single(packets))
+                    .filter(|packet| packet.is_ok())
                     .collect::<Result<_>>()
             }
         }
@@ -45,14 +46,17 @@ macro_rules! key_parser {
 
                 // -- One Public-Key packet
                 // idea: use Error::UnexpectedPacket(actual, expected)
-                let primary_key: $inner_key_type = packets
+                let next = packets
                     .next()
-                    .ok_or_else(|| format_err!("missing primary key"))?
-                    .try_into()?;
+                    .ok_or_else(|| format_err!("missing primary key"))?;
+                info!("  primary key: {:?}", next);
+                let primary_key: Result<$inner_key_type> = next.try_into();
+                info!("{:?}", primary_key);
+                let primary_key = primary_key?;
 
                 // -- Zero or more revocation signatures
                 // -- followed by zero or more direct signatures in V4 keys
-
+                info!("  signatures");
                 let mut revocation_signatures = Vec::new();
                 let mut direct_signatures = Vec::new();
 
@@ -75,7 +79,7 @@ macro_rules! key_parser {
 
                 // -- Zero or more User ID packets
                 // -- Zero or more User Attribute packets
-
+                info!("  user");
                 let mut users = Vec::new();
                 let mut user_attributes = Vec::new();
 
@@ -125,34 +129,53 @@ macro_rules! key_parser {
                 ensure!(!users.is_empty(), "missing user ids");
 
                 // -- Zero or more Subkey packets
-                let mut subkeys = vec![];
+                $(
+                    let mut $subkey_container = vec![];
+                )*
 
+                info!("  subkeys");
                 if packets.peek().is_some() {
                     // -- Only V4 keys should have sub keys
                     if primary_key.version() != &KeyVersion::V4 {
                         bail!("only V4 keys can have subkeys");
                     }
 
-                    while let Some(true) = packets.peek().map(|packet| packet.tag() == $subkey_tag)
+                    while let Some(true) = packets.peek().map(|packet| {
+                        $( packet.tag() == Tag::$subkey_tag || )* false
+                    })
                     {
                         let packet = packets.next().expect("peeked");
-                        let subkey: $inner_subkey_type = packet.try_into()?;
-                        let mut sigs = Vec::new();
-                        while let Some(true) =
-                            packets.peek().map(|packet| packet.tag() == Tag::Signature)
-                        {
-                            let packet = packets.next().expect("peeked");
-                            sigs.push(packet.try_into()?);
-                        }
+                        match packet.tag() {
+                            $(
+                                Tag::$subkey_tag => {
+                                    let subkey: $inner_subkey_type = packet.try_into()?;
+                                    let mut sigs = Vec::new();
+                                    while let Some(true) =
+                                        packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                                    {
+                                        let packet = packets.next().expect("peeked");
+                                        sigs.push(packet.try_into()?);
+                                    }
 
-                        // TODO: better error handling
-                        if sigs.is_empty() {
-                            info!("WARNING: missing signature");
-                        }
+                                    // TODO: better error handling
+                                    if sigs.is_empty() {
+                                        info!("WARNING: missing signature");
+                                    }
 
-                        subkeys.push(<$subkey_type>::new(subkey, sigs));
+                                    $subkey_container.push(<$subkey_type>::new(subkey, sigs));
+                                }
+                            )*
+                             _ => unreachable!()
+                        }
                     }
-                    ensure!(packets.next().is_none(), "failed to process all packets");
+
+                    if packets.peek().is_some() {
+                        info!("rest packets");
+                        while let Some(packet) = packets.next() {
+                            info!("{:?}", packet);
+                        }
+                        bail!("failed to process all packets")
+                    }
                 }
 
                 Ok(<$key_type>::new(
@@ -161,7 +184,7 @@ macro_rules! key_parser {
                     direct_signatures,
                     users,
                     user_attributes,
-                    subkeys,
+                    $( $subkey_container, )*
                 ))
             }
         }
@@ -170,17 +193,31 @@ macro_rules! key_parser {
 
 key_parser!(
     PrivateKey,
-    PrivateSubKey,
     Tag::SecretKey,
-    Tag::SecretSubkey,
     packet::SecretKey,
-    packet::SecretSubkey
+    // secret keys, can contain both public and secret subkeys
+    (
+        PublicSubkey,
+        packet::PublicSubkey,
+        PublicSubKey,
+        public_subkeys
+    ),
+    (
+        SecretSubkey,
+        packet::SecretSubkey,
+        PrivateSubKey,
+        private_subkeys
+    )
 );
+
 key_parser!(
     PublicKey,
-    PublicSubKey,
     Tag::PublicKey,
-    Tag::PublicSubkey,
     packet::PublicKey,
-    packet::PublicSubkey
+    (
+        PublicSubkey,
+        packet::PublicSubkey,
+        PublicSubKey,
+        public_subkeys
+    )
 );

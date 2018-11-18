@@ -15,7 +15,7 @@ pub struct PublicKey {
     pub direct_signatures: Vec<packet::Signature>,
     pub users: Vec<SignedUser>,
     pub user_attributes: Vec<SignedUserAttribute>,
-    pub subkeys: Vec<PublicSubKey>,
+    pub public_subkeys: Vec<PublicSubKey>,
 }
 
 impl PublicKey {
@@ -25,7 +25,7 @@ impl PublicKey {
         direct_signatures: Vec<packet::Signature>,
         users: Vec<SignedUser>,
         user_attributes: Vec<SignedUserAttribute>,
-        subkeys: Vec<PublicSubKey>,
+        public_subkeys: Vec<PublicSubKey>,
     ) -> PublicKey {
         PublicKey {
             primary_key,
@@ -33,7 +33,7 @@ impl PublicKey {
             direct_signatures,
             users,
             user_attributes,
-            subkeys,
+            public_subkeys,
         }
     }
 
@@ -79,7 +79,8 @@ pub struct PrivateKey {
     pub direct_signatures: Vec<packet::Signature>,
     pub users: Vec<SignedUser>,
     pub user_attributes: Vec<SignedUserAttribute>,
-    pub subkeys: Vec<PrivateSubKey>,
+    pub public_subkeys: Vec<PublicSubKey>,
+    pub private_subkeys: Vec<PrivateSubKey>,
 }
 
 impl PrivateKey {
@@ -89,7 +90,8 @@ impl PrivateKey {
         direct_signatures: Vec<packet::Signature>,
         users: Vec<SignedUser>,
         user_attributes: Vec<SignedUserAttribute>,
-        subkeys: Vec<PrivateSubKey>,
+        public_subkeys: Vec<PublicSubKey>,
+        private_subkeys: Vec<PrivateSubKey>,
     ) -> PrivateKey {
         PrivateKey {
             primary_key,
@@ -97,7 +99,8 @@ impl PrivateKey {
             direct_signatures,
             users,
             user_attributes,
-            subkeys,
+            public_subkeys,
+            private_subkeys,
         }
     }
 
@@ -191,6 +194,9 @@ mod tests {
     }
 
     fn test_parse_dump(i: usize) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
         PublicKey::from_bytes_many(f).unwrap();
     }
@@ -344,7 +350,7 @@ mod tests {
         assert_eq!(pk.expiration(), None);
 
         // TODO: examine subkey details
-        assert_eq!(key.subkeys.len(), 1, "missing subkey");
+        assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
         let mut sig1 = Signature::new(
             SignatureVersion::V4,
@@ -697,7 +703,7 @@ mod tests {
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
                 .unwrap()["expected_fingerprint"],
-            hex::encode(key.subkeys[0].key.fingerprint())
+            hex::encode(key.public_subkeys[0].key.fingerprint())
         );
 
         let (json, key) = get_test_fingerprint("e2e-001");
@@ -706,7 +712,7 @@ mod tests {
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
                 .unwrap()["expected_fingerprint"],
-            hex::encode(key.subkeys[0].key.fingerprint())
+            hex::encode(key.public_subkeys[0].key.fingerprint())
         );
     }
 
@@ -718,18 +724,18 @@ mod tests {
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
                 .unwrap()["expected_fingerprint"],
-            hex::encode(key.subkeys[0].key.fingerprint())
+            hex::encode(key.public_subkeys[0].key.fingerprint())
         );
     }
 
     fn test_parse_openpgp_key(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_armor_many(f).unwrap_or_else(|_| panic!("failed to parse {}", key));
+        PublicKey::from_armor_many(f).unwrap();
     }
 
     fn test_parse_openpgp_key_bin(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_bytes_many(f).unwrap_or_else(|_| panic!("failed to parse {}", key));
+        PublicKey::from_bytes_many(f).unwrap();
     }
 
     macro_rules! openpgp_key_bin {
@@ -860,7 +866,7 @@ mod tests {
     fn private_x25519_verify() {
         let f = read_file("./tests/openpgpjs/x25519.sec.asc");
         let sk = PrivateKey::from_armor_single(f).expect("failed to parse key");
-        assert_eq!(sk.subkeys.len(), 1);
+        assert_eq!(sk.private_subkeys.len(), 1);
         assert_eq!(
             hex::encode(sk.key_id().unwrap().to_vec()).to_uppercase(),
             "F25E5F24BB372CFA",

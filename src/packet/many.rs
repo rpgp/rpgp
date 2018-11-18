@@ -43,9 +43,14 @@ pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
         loop {
             let length = {
                 match single::parser(b.data()) {
-                    Ok((remaining, p)) => {
+                    Ok((remaining, Ok(p))) => {
                         info!("-- parsed packet {:?} --", p.tag());
                         packets.push(p);
+                        b.data().offset(remaining)
+                    }
+                    Ok((remaining, Err(err))) => {
+                        warn!("parse error: {:?}", err);
+                        // for now we are simply skipping invalid packets
                         b.data().offset(remaining)
                     }
                     Err(err) => match err {

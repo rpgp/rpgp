@@ -62,6 +62,8 @@ pub enum Error {
     Utf8Error(::std::str::Utf8Error),
     #[fail(display = "ParseInt {:?}", _0)]
     ParseIntError(::std::num::ParseIntError),
+    #[fail(display = "Invalid Packet Content {:?}", _0)]
+    InvalidPacketContent(Box<Error>),
 }
 
 impl Error {
@@ -91,6 +93,7 @@ impl Error {
             Error::UnpadError => 21,
             Error::Utf8Error(_) => 22,
             Error::ParseIntError(_) => 23,
+            Error::InvalidPacketContent(_) => 24,
         }
     }
 }

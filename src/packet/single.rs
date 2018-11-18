@@ -1,7 +1,7 @@
 use nom::rest;
 use num_traits::FromPrimitive;
 
-use errors::Result;
+use errors::{Error, Result};
 use packet::packet_sum::Packet;
 use packet::{
     CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PublicKey,
@@ -32,7 +32,7 @@ named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
         2 => map!(take_bits!(u32, 32), |val| u32_as_usize(val).into()) |
         3 => value!(PacketLength::Indeterminated)
     )
-    >> (ver, tag, len)
+    >> ({ info!("new {:?} {:?} {:?}", ver, tag, len); (ver, tag, len)})
 )));
 
 /// Parses a new format packet header
@@ -57,7 +57,7 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
         // Five-Octet Lengths
         255       => map!(take_bits!(u32, 32), |v| u32_as_usize(v).into())
     )
-    >> (ver, tag, len)
+    >> ({ info!("new {:?} {:?} {:?}", ver, tag, len); (ver, tag, len)})
 )));
 
 /// Parse a single Packet
@@ -73,28 +73,38 @@ named!(inner_parser<(Tag, &[u8])>, do_parse!(
 ));
 
 /// Parses a single packet.
-pub fn parser<'a>(input: &'a [u8]) -> Result<(&'a [u8], Packet)> {
+pub fn parser<'a>(input: &'a [u8]) -> Result<(&'a [u8], Result<Packet>)> {
+    info!("parsing packet ({})", input.len());
     let (rest, (tag, body)) = inner_parser(input)?;
 
-    let res: Packet = match tag {
-        Tag::PublicKeyEncryptedSessionKey => PublicKeyEncryptedSessionKey::from_slice(body)?.into(),
-        Tag::Signature => Signature::from_slice(body)?.into(),
-        Tag::SymKeyEncryptedSessionKey => SymKeyEncryptedSessionKey::from_slice(body)?.into(),
-        Tag::OnePassSignature => OnePassSignature::from_slice(body)?.into(),
-        Tag::SecretKey => SecretKey::from_slice(body)?.into(),
-        Tag::PublicKey => PublicKey::from_slice(body)?.into(),
-        Tag::SecretSubkey => SecretSubkey::from_slice(body)?.into(),
-        Tag::CompressedData => CompressedData::from_slice(body)?.into(),
-        Tag::SymEncryptedData => SymEncryptedData::from_slice(body)?.into(),
-        Tag::Marker => Marker::from_slice(body)?.into(),
-        Tag::LiteralData => LiteralData::from_slice(body)?.into(),
-        Tag::Trust => Trust::from_slice(body)?.into(),
-        Tag::UserId => UserId::from_slice(body)?.into(),
-        Tag::PublicSubkey => PublicSubkey::from_slice(body)?.into(),
-        Tag::UserAttribute => UserAttribute::from_slice(body)?.into(),
-        Tag::SymEncryptedProtectedData => SymEncryptedProtectedData::from_slice(body)?.into(),
-        Tag::ModDetectionCode => ModDetectionCode::from_slice(body)?.into(),
+    let res: Result<Packet> = match tag {
+        Tag::PublicKeyEncryptedSessionKey => {
+            PublicKeyEncryptedSessionKey::from_slice(body).map(|r| r.into())
+        }
+        Tag::Signature => Signature::from_slice(body).map(|r| r.into()),
+        Tag::SymKeyEncryptedSessionKey => {
+            SymKeyEncryptedSessionKey::from_slice(body).map(|r| r.into())
+        }
+        Tag::OnePassSignature => OnePassSignature::from_slice(body).map(|r| r.into()),
+        Tag::SecretKey => SecretKey::from_slice(body).map(|r| r.into()),
+        Tag::PublicKey => PublicKey::from_slice(body).map(|r| r.into()),
+        Tag::SecretSubkey => SecretSubkey::from_slice(body).map(|r| r.into()),
+        Tag::CompressedData => CompressedData::from_slice(body).map(|r| r.into()),
+        Tag::SymEncryptedData => SymEncryptedData::from_slice(body).map(|r| r.into()),
+        Tag::Marker => Marker::from_slice(body).map(|r| r.into()),
+        Tag::LiteralData => LiteralData::from_slice(body).map(|r| r.into()),
+        Tag::Trust => Trust::from_slice(body).map(|r| r.into()),
+        Tag::UserId => UserId::from_slice(body).map(|r| r.into()),
+        Tag::PublicSubkey => PublicSubkey::from_slice(body).map(|r| r.into()),
+        Tag::UserAttribute => UserAttribute::from_slice(body).map(|r| r.into()),
+        Tag::SymEncryptedProtectedData => {
+            SymEncryptedProtectedData::from_slice(body).map(|r| r.into())
+        }
+        Tag::ModDetectionCode => ModDetectionCode::from_slice(body).map(|r| r.into()),
     };
 
-    Ok((rest, res))
+    match res {
+        Ok(res) => Ok((rest, Ok(res))),
+        Err(err) => Ok((rest, Err(Error::InvalidPacketContent(Box::new(err))))),
+    }
 }

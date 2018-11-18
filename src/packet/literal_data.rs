@@ -1,10 +1,9 @@
-use std::str;
-
 use chrono::{DateTime, TimeZone, Utc};
 use nom::{be_u32, be_u8, rest};
 use num_traits::FromPrimitive;
 
 use errors::Result;
+use util::read_string_lossy;
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
@@ -19,8 +18,10 @@ pub struct LiteralData {
 #[derive(Debug, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
 pub enum DataMode {
-    Binary = 0x62,
-    Text = 0x74,
+    Binary = b'b',
+    Text = b't',
+    Utf8 = b'u',
+    Mime = b'm',
 }
 
 impl LiteralData {
@@ -40,13 +41,13 @@ impl LiteralData {
 named!(parse<LiteralData>, do_parse!(
            mode: map_opt!(be_u8, DataMode::from_u8)
     >> name_len: be_u8
-    >>     name: map_res!(take!(name_len), str::from_utf8)
+    >>     name: map!(take!(name_len), read_string_lossy)
     >>  created: map!(be_u32, |v| Utc.timestamp(v as i64, 0))
     >>     data: rest
     >> (LiteralData {
         mode,
         created,
-        file_name: name.to_string(),
+        file_name: name,
         data: data.to_vec(),
     })
 ));

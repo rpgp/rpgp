@@ -166,7 +166,10 @@ impl Message {
                     info!("{:?}", key.key_id());
                     info!(
                         "{:?}",
-                        key.subkeys.iter().map(|k| k.key_id()).collect::<Vec<_>>()
+                        key.private_subkeys
+                            .iter()
+                            .map(|k| k.key_id())
+                            .collect::<Vec<_>>()
                     );
 
                     // find the key with the matching key id
@@ -179,7 +182,7 @@ impl Message {
                     {
                         encoding_key = Some(&key.primary_key);
                     } else {
-                        encoding_subkey = key.subkeys.iter().find_map(|subkey| {
+                        encoding_subkey = key.private_subkeys.iter().find_map(|subkey| {
                             if let Some(id) = subkey.key_id() {
                                 if &id == esk_packet.id() {
                                     Some(subkey)
@@ -387,8 +390,6 @@ mod tests {
     }
 
     fn test_parse_msg(entry: &str, base_path: &str) {
-        use pretty_env_logger;
-        let _ = pretty_env_logger::try_init();
         // TODO: verify with the verify key
         // TODO: verify filename
         let n = format!("{}/{}", base_path, entry);
