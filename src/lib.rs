@@ -5,8 +5,14 @@
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::perf))]
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::correctness))]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_attribute))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::result_unwrap_used))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::option_unwrap_used))]
+#![cfg_attr(
+    all(feature = "cargo-clippy", not(test)),
+    deny(clippy::result_unwrap_used)
+)]
+#![cfg_attr(
+    all(feature = "cargo-clippy", not(test)),
+    deny(clippy::option_unwrap_used)
+)]
 
 #[macro_use]
 extern crate nom;
@@ -50,6 +56,8 @@ extern crate try_from;
 
 #[cfg(test)]
 extern crate rand;
+#[cfg(test)]
+extern crate regex;
 #[cfg(test)]
 extern crate serde_json;
 

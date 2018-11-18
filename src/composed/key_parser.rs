@@ -171,7 +171,7 @@ macro_rules! key_parser {
 
                     if packets.peek().is_some() {
                         info!("rest packets");
-                        while let Some(packet) = packets.next() {
+                        for packet in packets {
                             info!("{:?}", packet);
                         }
                         bail!("failed to process all packets")

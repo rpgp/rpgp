@@ -81,7 +81,8 @@ pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
 pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let (number, len) = be_u16(input)?;
 
-    let len_actual = (u32::from(len) + 7) >> 3;
+    let bits = u32::from(len);
+    let len_actual = ((bits + 7) >> 3) as u32;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
         Err(Err::Error(error_position!(
@@ -121,17 +122,18 @@ where
     a
 }
 
+#[rustfmt::skip]
 named!(pub packet_length<usize>, do_parse!(
        olen: be_u8
     >>  len: switch!(value!(olen),
-    // One-Octet Lengths
-    0...191   => value!(olen as usize) |
-    // Two-Octet Lengths
-    192...254 => map!(be_u8, |a| {
-       ((olen as usize - 192) << 8) + 192 + a as usize
-    }) |
-    // Five-Octet Lengths
-    255       => map!(be_u32, u32_as_usize)
+                     // One-Octet Lengths
+                     0...191   => value!(olen as usize) |
+                     // Two-Octet Lengths
+                     192...254 => map!(be_u8, |a| {
+                         ((olen as usize - 192) << 8) + 192 + a as usize
+                     }) |
+                     // Five-Octet Lengths
+                     255       => map!(be_u32, u32_as_usize)
     )
     >> (len)
 ));
@@ -223,7 +225,7 @@ mod tests {
     fn test_read_string_lossy() {
         assert_eq!(read_string_lossy(b"hello"), "hello".to_string());
         assert_eq!(
-            read_string_lossy(&vec![
+            read_string_lossy(&[
                 74, 252, 114, 103, 101, 110, 32, 77, 97, 114, 115, 99, 104, 97, 108, 108, 32, 60,
                 106, 117, 101, 114, 103, 101, 110, 46, 109, 97, 114, 115, 99, 104, 97, 108, 108,
                 64, 112, 114, 111, 109, 112, 116, 46, 100, 101, 62

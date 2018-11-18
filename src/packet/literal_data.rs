@@ -42,7 +42,7 @@ named!(parse<LiteralData>, do_parse!(
            mode: map_opt!(be_u8, DataMode::from_u8)
     >> name_len: be_u8
     >>     name: map!(take!(name_len), read_string_lossy)
-    >>  created: map!(be_u32, |v| Utc.timestamp(v as i64, 0))
+    >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
     >>     data: rest
     >> (LiteralData {
         mode,

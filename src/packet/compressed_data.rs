@@ -43,7 +43,7 @@ impl CompressedData {
         })
     }
 
-    pub fn decompress<'a>(&'a self) -> Decompressor<&'a [u8]> {
+    pub fn decompress(&self) -> Decompressor<&[u8]> {
         match self.compression_algorithm {
             CompressionAlgorithm::Uncompressed => {
                 Decompressor::Uncompressed(Cursor::new(&self.compressed_data[..]))

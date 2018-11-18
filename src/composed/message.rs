@@ -18,6 +18,7 @@ use types::{KeyId, SecretKeyRepr};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))] // TODO: fix me
 #[derive(Clone, Debug)]
 pub enum Message {
     Literal(LiteralData),

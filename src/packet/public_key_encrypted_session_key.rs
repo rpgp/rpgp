@@ -35,6 +35,7 @@ impl PublicKeyEncryptedSessionKey {
     }
 }
 
+#[rustfmt::skip]
 named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Vec<u8>>>, switch!(
     value!(alg),
     &PublicKeyAlgorithm::RSA |
@@ -51,10 +52,9 @@ named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Vec<u8>>>, switch!(
            a: mpi
         >> blen: be_u8
         >> b: take!(blen)
-      >> ({
-          info!("{:?} {:?}", a, b);
-          vec![a.to_vec(), b.to_vec()]
-      })
+        >> ({
+            vec![a.to_vec(), b.to_vec()]
+        })
     )
 ));
 

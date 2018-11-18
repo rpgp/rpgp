@@ -44,7 +44,7 @@ named!(parse<SymKeyEncryptedSessionKey>, do_parse!(
     >>            s2k: s2k_parser
     >>  encrypted_key: rest
     >> ({
-        let encrypted_key = if encrypted_key.len() == 0 {
+        let encrypted_key = if encrypted_key.is_empty() {
             None
         } else {
             Some(encrypted_key.to_vec())
