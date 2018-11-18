@@ -30,33 +30,25 @@ pub enum Packet {
 impl Packet {
     /// Returns the tag for this packet type.
     pub fn tag(&self) -> Tag {
-        // TODO: return tag
-        unimplemented!()
-    }
-}
-
-macro_rules! impl_try_from_into {
-    ($enum_name:ident, $( $name:ident => $variant_type:ty ),*) => {
-       $(
-           impl $crate::try_from::TryFrom<$enum_name> for $variant_type {
-               // TODO: Proper error
-               type Err = ();
-
-               fn try_from(other: $enum_name) -> Result<$variant_type, Self::Err> {
-                   if let $enum_name::$name(value) = other {
-                       Ok(value)
-                   } else {
-                       Err(())
-                   }
-               }
-           }
-
-           impl From<$variant_type> for $enum_name {
-               fn from(other: $variant_type) -> $enum_name {
-                   $enum_name::$name(other)
-               }
-           }
-       )*
+        match self {
+            Packet::CompressedData(_) => Tag::CompressedData,
+            Packet::PublicKey(_) => Tag::PublicKey,
+            Packet::PublicSubkey(_) => Tag::PublicSubkey,
+            Packet::SecretKey(_) => Tag::SecretKey,
+            Packet::SecretSubkey(_) => Tag::SecretSubkey,
+            Packet::LiteralData(_) => Tag::LiteralData,
+            Packet::Marker(_) => Tag::Marker,
+            Packet::ModDetectionCode(_) => Tag::ModDetectionCode,
+            Packet::OnePassSignature(_) => Tag::OnePassSignature,
+            Packet::PublicKeyEncryptedSessionKey(_) => Tag::PublicKeyEncryptedSessionKey,
+            Packet::Signature(_) => Tag::Signature,
+            Packet::SymEncryptedData(_) => Tag::SymEncryptedData,
+            Packet::SymEncryptedProtectedData(_) => Tag::SymEncryptedProtectedData,
+            Packet::SymKeyEncryptedSessionKey(_) => Tag::SymKeyEncryptedSessionKey,
+            Packet::Trust(_) => Tag::Trust,
+            Packet::UserAttribute(_) => Tag::UserAttribute,
+            Packet::UserId(_) => Tag::UserId,
+        }
     }
 }
 

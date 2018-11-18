@@ -82,7 +82,7 @@ pub trait Deserializable: Sized {
     fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
         let packets = packet::parser(bytes)?;
 
-        Self::from_packets(&packets)
+        Self::from_packets(packets)
     }
 
     /// Turn a list of packets into a usable representation.

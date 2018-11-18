@@ -1,4 +1,4 @@
-use chrono::{TimeZone, Utc};
+use chrono::{DateTime, TimeZone, Utc};
 use nom::{be_u16, be_u32, be_u8};
 use num_traits::FromPrimitive;
 
@@ -6,7 +6,6 @@ use crypto::ecc_curve::ecc_curve_from_oid;
 use crypto::hash::HashAlgorithm;
 use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
 use crypto::sym::SymmetricKeyAlgorithm;
-use packet::PublicKey;
 use types::KeyVersion;
 use util::{mpi, mpi_big};
 
@@ -109,30 +108,36 @@ named_args!(pub parse_pub_fields<'a>(typ: &PublicKeyAlgorithm) <PublicParams>, s
     // &PublicKeyAlgorithm::DiffieHellman =>
 ));
 
-named_args!(new_public_key_parser<'a>(key_ver: &'a KeyVersion) <PublicKey>, do_parse!(
+named_args!(new_public_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
        created_at: map!(be_u32, |v| Utc.timestamp(v as i64, 0))
     >>        alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
     >>     params: call!(parse_pub_fields, &alg)
-    >> (PublicKey::new(*key_ver, alg, created_at, None, params))
+    >> (*key_ver, alg, created_at, None, params)
 ));
 
-named_args!(old_public_key_parser<'a>(key_ver: &'a KeyVersion) <PublicKey>, do_parse!(
+named_args!(old_public_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
         created_at: map!(be_u32, |v| Utc.timestamp(v as i64, 0))
     >>         exp: be_u16
     >>         alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>      params: call!(parse_pub_fields, &alg)
-    >> (PublicKey::new(*key_ver, alg, created_at, Some(exp), params))
+    >> (*key_ver, alg, created_at, Some(exp), params)
 ));
 
 /// Parse a public key packet (Tag 6)
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
 #[rustfmt::skip]
-named!(pub(crate) parse<PublicKey>, do_parse!(
+named!(pub(crate) parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
        key_ver: map_opt!(be_u8, KeyVersion::from_u8)
     >>     key: switch!(value!(&key_ver),
-                        &KeyVersion::V2 => call!(old_public_key_parser, &key_ver) |
-                        &KeyVersion::V3 => call!(old_public_key_parser, &key_ver) |
-                        &KeyVersion::V4 => call!(new_public_key_parser, &key_ver)
+                        &KeyVersion::V2 => call!(
+                            old_public_key_parser, &key_ver
+                        ) |
+                        &KeyVersion::V3 => call!(
+                            old_public_key_parser, &key_ver
+                        ) |
+                        &KeyVersion::V4 => call!(
+                            new_public_key_parser, &key_ver
+                        )
         )
     >> (key)
 ));

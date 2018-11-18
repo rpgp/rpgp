@@ -2,7 +2,7 @@ use errors::Result;
 
 /// Symmetrically Encrypted Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.7
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymEncryptedData(Vec<u8>);
 
 impl SymEncryptedData {

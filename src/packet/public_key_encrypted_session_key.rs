@@ -29,6 +29,10 @@ impl PublicKeyEncryptedSessionKey {
     pub fn id(&self) -> &KeyId {
         &self.id
     }
+
+    pub fn mpis(&self) -> &[Vec<u8>] {
+        &self.mpis
+    }
 }
 
 named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Vec<u8>>>, switch!(

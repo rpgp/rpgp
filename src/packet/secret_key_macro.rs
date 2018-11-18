@@ -14,31 +14,17 @@ macro_rules! impl_secret_key {
         impl $name {
             /// Parses a `SecretKey` packet from the given slice.
             pub fn from_slice(input: &[u8]) -> $crate::errors::Result<Self> {
-                let (_, pk) = $crate::packet::secret_key_parser::parse(input)?;
-
-                Ok(pk.into())
-            }
-
-            pub fn new(
-                version: $crate::types::KeyVersion,
-                algorithm: $crate::crypto::public_key::PublicKeyAlgorithm,
-                created_at: chrono::DateTime<chrono::Utc>,
-                expiration: Option<u16>,
-                public_params: $crate::crypto::public_key::PublicParams,
-                secret_params: $crate::types::EncryptedSecretParams,
-            ) -> $name {
-                info!(
-                    "creating priv key: {:?} {:?} {:?} {:?} {:?} {:?}",
-                    version, algorithm, created_at, expiration, public_params, secret_params
-                );
-                $name {
+                let (_, details) = $crate::packet::secret_key_parser::parse(input)?;
+                let (version, algorithm, created_at, expiration, public_params, secret_params) =
+                    details;
+                Ok($name {
                     version,
                     algorithm,
                     created_at,
                     expiration,
                     public_params,
                     secret_params,
-                }
+                })
             }
 
             /// Unlock the raw data in the secret parameters.
@@ -72,23 +58,18 @@ macro_rules! impl_secret_key {
                     .encryption_algorithm
                     .as_ref()
                     .ok_or_else(|| format_err!("missing encryption algorithm"))?;
-                let typ = self
+                let s2k_details = self
                     .secret_params
                     .string_to_key
                     .as_ref()
-                    .ok_or_else(|| format_err!("missing s2k method"))?;
-                let hash_alg = self
-                    .secret_params
-                    .string_to_key_hash
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing hash algorithm"))?;
+                    .ok_or_else(|| format_err!("missing s2k"))?;
                 let key = s2k(
                     pw,
                     *sym_alg,
-                    *typ,
-                    *hash_alg,
-                    self.secret_params.string_to_key_salt.as_ref(),
-                    self.secret_params.string_to_key_count.as_ref(),
+                    s2k_details.typ,
+                    s2k_details.hash,
+                    s2k_details.salt.as_ref(),
+                    s2k_details.count.as_ref(),
                 )?;
 
                 let iv = self

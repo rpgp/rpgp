@@ -9,43 +9,43 @@ use crypto::hash::HashAlgorithm;
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use types::CompressionAlgorithm;
+use types::{self, CompressionAlgorithm};
 use util::{clone_into_array, mpi, packet_length};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Signature {
-    version: SignatureVersion,
-    typ: SignatureType,
-    pub_alg: PublicKeyAlgorithm,
-    hash_alg: HashAlgorithm,
-    key_expiration_time: Option<DateTime<Utc>>,
-    signature_expiration_time: Option<DateTime<Utc>>,
-    unhashed_subpackets: Vec<Subpacket>,
-    created: Option<DateTime<Utc>>,
-    issuer: Option<[u8; 8]>,
-    preferred_symmetric_algs: Vec<SymmetricKeyAlgorithm>,
-    preferred_hash_algs: Vec<HashAlgorithm>,
-    preferred_compression_algs: Vec<CompressionAlgorithm>,
-    key_server_prefs: Vec<u8>,
-    key_flags: Vec<u8>,
-    features: Vec<u8>,
-    revocation_reason_code: Option<RevocationCode>,
-    revocation_reason_string: Option<String>,
-    is_primary: bool,
-    is_revocable: bool,
-    embedded_signature: Option<Box<Signature>>,
-    preferred_key_server: Option<String>,
-    notations: HashMap<String, String>,
-    revocation_key: Option<RevocationKey>,
-    signers_userid: Option<String>,
-    signed_hash_value: Vec<u8>,
-    signature: Vec<u8>,
-    policy_uri: Option<String>,
-    trust_signature: Option<u8>,
-    regular_expression: Option<String>,
-    exportable_certification: bool,
+    pub version: SignatureVersion,
+    pub typ: SignatureType,
+    pub pub_alg: PublicKeyAlgorithm,
+    pub hash_alg: HashAlgorithm,
+    pub key_expiration_time: Option<DateTime<Utc>>,
+    pub signature_expiration_time: Option<DateTime<Utc>>,
+    pub unhashed_subpackets: Vec<Subpacket>,
+    pub created: Option<DateTime<Utc>>,
+    pub issuer: Option<[u8; 8]>,
+    pub preferred_symmetric_algs: Vec<SymmetricKeyAlgorithm>,
+    pub preferred_hash_algs: Vec<HashAlgorithm>,
+    pub preferred_compression_algs: Vec<CompressionAlgorithm>,
+    pub key_server_prefs: Vec<u8>,
+    pub key_flags: Vec<u8>,
+    pub features: Vec<u8>,
+    pub revocation_reason_code: Option<RevocationCode>,
+    pub revocation_reason_string: Option<String>,
+    pub is_primary: bool,
+    pub is_revocable: bool,
+    pub embedded_signature: Option<Box<Signature>>,
+    pub preferred_key_server: Option<String>,
+    pub notations: HashMap<String, String>,
+    pub revocation_key: Option<types::RevocationKey>,
+    pub signers_userid: Option<String>,
+    pub signed_hash_value: Vec<u8>,
+    pub signature: Vec<u8>,
+    pub policy_uri: Option<String>,
+    pub trust_signature: Option<u8>,
+    pub regular_expression: Option<String>,
+    pub exportable_certification: bool,
 }
 
 impl Signature {
@@ -97,9 +97,14 @@ impl Signature {
             exportable_certification: true,
         }
     }
+
+    pub fn typ(&self) -> SignatureType {
+        self.typ
+    }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+#[repr(u8)]
 pub enum SignatureVersion {
     /// Deprecated
     V2 = 2,
@@ -107,7 +112,7 @@ pub enum SignatureVersion {
     V4 = 4,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
 pub enum SignatureType {
     /// Signature of a binary document.
@@ -278,13 +283,6 @@ pub enum RevocationCode {
     KeyRetired = 3,
     /// User ID information is no longer valid (cert revocations)
     CertUserIdInvalid = 32,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct RevocationKey {
-    pub class: u8,
-    pub algorithm: PublicKeyAlgorithm,
-    pub fingerprint: [u8; 20],
 }
 
 #[derive(FromPrimitive)]
@@ -681,7 +679,7 @@ named!(v4_parser<Signature>, do_parse!(
                     sig.notations.insert(name, value);
                 }
                 RevocationKey(class, algorithm, fingerprint) => {
-                    sig.revocation_key = Some(RevocationKey {
+                    sig.revocation_key = Some(types::RevocationKey {
                         class,
                         algorithm,
                         fingerprint,

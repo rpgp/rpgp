@@ -1,6 +1,7 @@
 use std::boxed::Box;
 
 use num_traits::FromPrimitive;
+use try_from::TryFrom;
 
 use composed::key::PrivateKey;
 use composed::shared::Deserializable;
@@ -10,7 +11,7 @@ use crypto::rsa::decrypt_rsa;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
 use packet::{
-    CompressedData, LiteralData, OnePassSignature, PublicKeyEncryptedSessionKey, Signature,
+    CompressedData, LiteralData, OnePassSignature, Packet, PublicKeyEncryptedSessionKey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use types::{KeyId, SecretKeyRepr};
@@ -39,11 +40,17 @@ pub enum Message {
 /// Encrypte Session Key
 /// Public-Key Encrypted Session Key Packet |
 /// Symmetric-Key Encrypted Session Key Packet.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Esk {
     PublicKeyEncryptedSessionKey(PublicKeyEncryptedSessionKey),
     SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey),
 }
+
+impl_try_from_into!(
+    Esk,
+    PublicKeyEncryptedSessionKey => PublicKeyEncryptedSessionKey,
+    SymKeyEncryptedSessionKey => SymKeyEncryptedSessionKey
+);
 
 impl Esk {
     pub fn id(&self) -> &KeyId {
@@ -52,15 +59,70 @@ impl Esk {
             Esk::SymKeyEncryptedSessionKey(k) => k.id(),
         }
     }
+
+    pub fn mpis(&self) -> &[Vec<u8>] {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.mpis(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.mpis(),
+        }
+    }
+}
+
+impl TryFrom<Packet> for Esk {
+    type Err = Error;
+
+    fn try_from(other: Packet) -> Result<Esk> {
+        match other {
+            Packet::PublicKeyEncryptedSessionKey(k) => Ok(Esk::PublicKeyEncryptedSessionKey(k)),
+            Packet::SymKeyEncryptedSessionKey(k) => Ok(Esk::SymKeyEncryptedSessionKey(k)),
+            _ => Err(format_err!("not a valid edata packet: {:?}", other)),
+        }
+    }
+}
+
+impl From<Esk> for Packet {
+    fn from(other: Esk) -> Packet {
+        match other {
+            Esk::PublicKeyEncryptedSessionKey(k) => Packet::PublicKeyEncryptedSessionKey(k),
+            Esk::SymKeyEncryptedSessionKey(k) => Packet::SymKeyEncryptedSessionKey(k),
+        }
+    }
 }
 
 /// Encrypted Data
 /// Symmetrically Encrypted Data Packet |
 /// Symmetrically Encrypted Integrity Protected Data Packet
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Edata {
     SymEncryptedData(SymEncryptedData),
     SymEncryptedProtectedData(SymEncryptedProtectedData),
+}
+
+impl_try_from_into!(
+    Edata,
+    SymEncryptedData => SymEncryptedData,
+    SymEncryptedProtectedData => SymEncryptedProtectedData
+);
+
+impl TryFrom<Packet> for Edata {
+    type Err = Error;
+
+    fn try_from(other: Packet) -> Result<Edata> {
+        match other {
+            Packet::SymEncryptedData(d) => Ok(Edata::SymEncryptedData(d)),
+            Packet::SymEncryptedProtectedData(d) => Ok(Edata::SymEncryptedProtectedData(d)),
+            _ => Err(format_err!("not a valid edata packet: {:?}", other)),
+        }
+    }
+}
+
+impl From<Edata> for Packet {
+    fn from(other: Edata) -> Packet {
+        match other {
+            Edata::SymEncryptedData(d) => Packet::SymEncryptedData(d),
+            Edata::SymEncryptedProtectedData(d) => Packet::SymEncryptedProtectedData(d),
+        }
+    }
 }
 
 impl Edata {
@@ -143,7 +205,7 @@ impl Message {
                     encoding_key.unlock(key_pw, |priv_key| {
                         res = decrypt(
                             priv_key,
-                            &packet.mpis,
+                            packet.mpis(),
                             edata,
                             *protected,
                             &encoding_key.fingerprint(),
@@ -155,7 +217,7 @@ impl Message {
                     encoding_key.unlock(key_pw, |priv_key| {
                         res = decrypt(
                             priv_key,
-                            &packet.mpis,
+                            packet.mpis(),
                             edata,
                             *protected,
                             &encoding_key.fingerprint(),

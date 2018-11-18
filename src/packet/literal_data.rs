@@ -45,7 +45,7 @@ named!(parse<LiteralData>, do_parse!(
     >>     data: rest
     >> (LiteralData {
         mode,
-        created: created.to_vec(),
+        created,
         file_name: name.to_string(),
         data: data.to_vec(),
     })

@@ -56,7 +56,7 @@ pub struct PublicSubKey {
 }
 
 impl PublicSubKey {
-    pub fn new(key: packet::PublicKey, signatures: Vec<packet::Signature>) -> PublicSubKey {
+    pub fn new(key: packet::PublicSubkey, signatures: Vec<packet::Signature>) -> PublicSubKey {
         PublicSubKey { key, signatures }
     }
 
@@ -173,7 +173,7 @@ mod tests {
     use crypto::hash::HashAlgorithm;
     use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
     use crypto::sym::SymmetricKeyAlgorithm;
-    use packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute};
+    use packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId};
     use types::{CompressionAlgorithm, KeyVersion, SecretKeyRepr, SignedUser, StringToKeyType};
 
     fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -273,7 +273,7 @@ mod tests {
         assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
 
         assert_eq!(
-            pkey.private_params().checksum,
+            pkey.secret_params().checksum,
             Some(hex::decode("2c46").unwrap())
         );
 
@@ -340,7 +340,7 @@ mod tests {
             _ => panic!("wrong public params: {:?}", pk.public_params()),
         }
 
-        assert_eq!(pk.created_at(), 14_0207_0261);
+        assert_eq!(pk.created_at().timestamp(), 14_0207_0261);
         assert_eq!(pk.expiration(), None);
 
         // TODO: examine subkey details
@@ -431,7 +431,10 @@ mod tests {
 
         sig1.unhashed_subpackets.push(issuer.clone());
 
-        let u1 = SignedUser::new("john doe (test) <johndoe@example.com>", vec![sig1]);
+        let u1 = SignedUser::new(
+            UserId::from_str("john doe (test) <johndoe@example.com>"),
+            vec![sig1],
+        );
 
         let mut sig2 = Signature::new(
             SignatureVersion::V4,
@@ -496,7 +499,10 @@ mod tests {
 
         sig2.unhashed_subpackets.push(issuer.clone());
 
-        let u2 = SignedUser::new("john doe <johndoe@seconddomain.com>", vec![sig2]);
+        let u2 = SignedUser::new(
+            UserId::from_str("john doe <johndoe@seconddomain.com>"),
+            vec![sig2],
+        );
 
         assert_eq!(key.users.len(), 2);
         assert_eq!(key.users[0], u1);
@@ -587,7 +593,7 @@ mod tests {
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
 
-        let pp = key.primary_key.private_params().clone();
+        let pp = key.primary_key.secret_params().clone();
 
         assert_eq!(
             pp.iv,
@@ -599,15 +605,21 @@ mod tests {
         );
 
         assert_eq!(
-            pp.string_to_key_salt,
+            pp.string_to_key.as_ref().unwrap().salt,
             Some(hex::decode("CB18E77884F2F055").unwrap().to_vec())
         );
 
-        assert_eq!(pp.string_to_key, Some(StringToKeyType::IteratedAndSalted));
+        assert_eq!(
+            pp.string_to_key.as_ref().unwrap().typ,
+            StringToKeyType::IteratedAndSalted
+        );
 
-        assert_eq!(pp.string_to_key_count, Some(65536));
+        assert_eq!(pp.string_to_key.as_ref().unwrap().count, Some(65536));
 
-        assert_eq!(pp.string_to_key_hash, Some(HashAlgorithm::SHA256));
+        assert_eq!(
+            pp.string_to_key.as_ref().unwrap().hash,
+            HashAlgorithm::SHA256
+        );
 
         assert_eq!(pp.encryption_algorithm, Some(SymmetricKeyAlgorithm::AES128));
         assert_eq!(pp.string_to_key_id, 254);

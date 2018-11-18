@@ -184,3 +184,29 @@ mod tests {
     #[test]
     fn test_bignum_to_mpi() {}
 }
+
+#[macro_export]
+macro_rules! impl_try_from_into {
+    ($enum_name:ident, $( $name:ident => $variant_type:ty ),*) => {
+       $(
+           impl $crate::try_from::TryFrom<$enum_name> for $variant_type {
+               // TODO: Proper error
+               type Err = $crate::errors::Error;
+
+               fn try_from(other: $enum_name) -> ::std::result::Result<$variant_type, Self::Err> {
+                   if let $enum_name::$name(value) = other {
+                       Ok(value)
+                   } else {
+                      Err(format_err!("invalid packet type: {:?}", other))
+                   }
+               }
+           }
+
+           impl From<$variant_type> for $enum_name {
+               fn from(other: $variant_type) -> $enum_name {
+                   $enum_name::$name(other)
+               }
+           }
+       )*
+    }
+}

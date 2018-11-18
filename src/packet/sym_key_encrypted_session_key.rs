@@ -7,7 +7,7 @@ use types::{s2k_parser, KeyId, StringToKey};
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SymKeyEncryptedSessionKey {
     version: u8,
     sym_algorithm: SymmetricKeyAlgorithm,
@@ -27,6 +27,11 @@ impl SymKeyEncryptedSessionKey {
     }
 
     pub fn id(&self) -> &KeyId {
+        // TODO: figure out how, probably need decryption first?
+        unimplemented!()
+    }
+
+    pub fn mpis(&self) -> &[Vec<u8>] {
         // TODO: figure out how, probably need decryption first?
         unimplemented!()
     }
