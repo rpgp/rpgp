@@ -5,8 +5,14 @@
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::perf))]
 #![cfg_attr(feature = "cargo-clippy", deny(clippy::correctness))]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_attribute))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::result_unwrap_used))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::option_unwrap_used))]
+#![cfg_attr(
+    all(feature = "cargo-clippy", not(test)),
+    deny(clippy::result_unwrap_used)
+)]
+#![cfg_attr(
+    all(feature = "cargo-clippy", not(test)),
+    deny(clippy::option_unwrap_used)
+)]
 
 #[macro_use]
 extern crate nom;
@@ -46,9 +52,12 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 extern crate buf_redux;
+extern crate try_from;
 
 #[cfg(test)]
 extern crate rand;
+#[cfg(test)]
+extern crate regex;
 #[cfg(test)]
 extern crate serde_json;
 
@@ -64,6 +73,10 @@ extern crate glob;
 #[cfg(test)]
 extern crate serde;
 
+// public so it can be used in doc test
+#[macro_use]
+pub mod util;
+
 #[macro_use]
 mod errors;
 mod armor;
@@ -71,11 +84,9 @@ mod base64_decoder;
 mod base64_reader;
 mod line_reader;
 mod packet;
+mod types;
 
 pub mod email;
 pub use composed::key::*;
 pub mod composed;
 pub mod crypto;
-
-// public so it can be used in doc test
-pub mod util;

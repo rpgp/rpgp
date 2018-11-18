@@ -6,6 +6,7 @@ use cfb_mode::Cfb;
 // use des::TdesEde3;
 // use twofish::Twofish;
 
+use crypto::checksum;
 use errors::Result;
 
 macro_rules! decrypt {
@@ -108,7 +109,7 @@ impl SymmetricKeyAlgorithm {
     pub fn decrypt<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
         info!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
-        self.decrypt_with_iv(key, &iv_vec, ciphertext, true)
+        Ok(self.decrypt_with_iv(key, &iv_vec, ciphertext, true)?.1)
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
@@ -119,7 +120,7 @@ impl SymmetricKeyAlgorithm {
         info!("protected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
         let cv_len = ciphertext.len();
-        let res = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
+        let (prefix, res) = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
         info!("{}", hex::encode(&res));
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
         let mdc_len = 22;
@@ -134,7 +135,9 @@ impl SymmetricKeyAlgorithm {
 
         ensure_eq!(mdc[0], 0xD3, "invalid MDC tag");
         ensure_eq!(mdc[1], 0x14, "invalid MDC length");
-        // TODO: hash and compare to mdc[2..];
+
+        checksum::sha1(&mdc[2..], &[prefix, data, &mdc[0..2]].concat())?;
+
         info!("mdc: {}", hex::encode(mdc));
 
         Ok(data)
@@ -159,7 +162,7 @@ impl SymmetricKeyAlgorithm {
         iv_vec: &[u8],
         ciphertext: &'a mut [u8],
         resync: bool,
-    ) -> Result<&'a [u8]> {
+    ) -> Result<(&'a [u8], &'a [u8])> {
         let bs = self.block_size();
 
         let (encrypted_prefix, encrypted_data) = ciphertext.split_at_mut(bs + 2);
@@ -239,7 +242,7 @@ impl SymmetricKeyAlgorithm {
             }
         }
 
-        Ok(encrypted_data)
+        Ok((encrypted_prefix, encrypted_data))
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.

@@ -1,7 +1,7 @@
 use crypto::hash::HashAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use packet::types::StringToKeyType;
+use types::StringToKeyType;
 
 /// String-To-Key methods are used to convert a given password string into a key.
 /// Ref: https://tools.ietf.org/html/rfc4880#section-3.7

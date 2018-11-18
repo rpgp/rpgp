@@ -1,61 +1,38 @@
-use super::Deserializable;
-use composed::key::{PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
-use errors::{Error, Result};
-use itertools::Itertools;
-use nom::Err::Incomplete;
-use nom::Needed;
-use packet::tags;
-use packet::types::{key, KeyVersion, Packet, Signature, SignatureType, Tag, User, UserAttribute};
 use std::iter::IntoIterator;
 
-/// Take as many consecutive signatures as we can find and try to parse them.
-/// Skips the ones that are not parsed, but they are reflected in the `processed` count that is returned.
-fn take_sigs(packets: &[&Packet]) -> Result<(usize, Vec<Signature>)> {
-    let mut processed = 0;
+use itertools::Itertools;
+use try_from::TryInto;
 
-    let sigs: Vec<Signature> = packets
-        .iter()
-        .take_while(|packet| packet.tag == Tag::Signature)
-        .map(|packet| {
-            processed += 1;
-            tags::sig::parser(packet.body.as_slice())
-                .map(|(_, sig)| sig)
-                .map_err(|err| err.into())
-        })
-        // TODO: better error handling
-        .filter(|sig| sig.is_ok())
-        .collect::<Result<_>>()?;
-
-    Ok((processed, sigs))
-}
+use composed::key::{PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
+use composed::Deserializable;
+use errors::Result;
+use packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
+use types::{KeyVersion, SignedUser, SignedUserAttribute, Tag};
 
 /// This macro generates the parsers matching to the two different types of keys,
 /// public and private.
 macro_rules! key_parser {
-    ( $key_type:ty, $subkey_type:ty, $key_tag:expr, $subkey_tag:expr, $inner_key_type:ty ) => {
+    ( $key_type:ty, $key_tag:expr, $inner_key_type:ty, $( ($subkey_tag:ident, $inner_subkey_type:ty, $subkey_type:ty, $subkey_container:ident) ),* ) => {
         impl Deserializable for $key_type {
             /// Parse a transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-            fn from_packets<'a>(
-                packets: impl IntoIterator<Item = &'a Packet>,
-            ) -> Result<Vec<$key_type>> {
+            fn from_packets(packets: impl IntoIterator<Item = Packet>) -> Result<Vec<$key_type>> {
                 // This counter tracks which top level key we are in.
                 let mut ctr = 0;
 
                 packets
                     .into_iter()
                     .group_by(|packet| {
-                        if packet.tag == $key_tag {
+                        if packet.tag() == $key_tag {
                             ctr += 1;
                         }
 
                         ctr
                     })
                     .into_iter()
-                    .map(|(_, packets)| Self::from_packets_single(&packets.collect::<Vec<_>>()))
-                    // TODO: better error handling
-                    .filter(|v| v.is_ok())
-                    .collect()
+                    .map(|(_, packets)| Self::from_packets_single(packets))
+                    .filter(|packet| packet.is_ok())
+                    .collect::<Result<_>>()
             }
         }
 
@@ -63,111 +40,143 @@ macro_rules! key_parser {
             /// Parse a single transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
             /// Currently skips packets it fails to parse.
-            fn from_packets_single(packets: &[&Packet]) -> Result<$key_type> {
-                let mut ctr = 0;
-                let packets_len = packets.len();
+            fn from_packets_single(packets: impl IntoIterator<Item = Packet>) -> Result<$key_type> {
+                info!("parsing key");
+                let mut packets = packets.into_iter().peekable();
 
                 // -- One Public-Key packet
                 // idea: use Error::UnexpectedPacket(actual, expected)
-                ensure_eq!(packets[ctr].tag, $key_tag);
-
-                let primary_key = Self::key_parser(packets[ctr])?;
-                ctr += 1;
-
-                let (cnt, sigs) = take_sigs(&packets[ctr..])?;
-                ctr += cnt;
+                let next = packets
+                    .next()
+                    .ok_or_else(|| format_err!("missing primary key"))?;
+                info!("  primary key: {:?}", next);
+                let primary_key: Result<$inner_key_type> = next.try_into();
+                info!("{:?}", primary_key);
+                let primary_key = primary_key?;
 
                 // -- Zero or more revocation signatures
                 // -- followed by zero or more direct signatures in V4 keys
+                info!("  signatures");
+                let mut revocation_signatures = Vec::new();
+                let mut direct_signatures = Vec::new();
 
-                let mut grouped_sigs: Vec<_> = sigs
-                    .into_iter()
-                    .group_by(|sig| sig.typ.clone())
-                    .into_iter()
-                    .map(|(typ, sigs)| {
-                        match typ {
-                            SignatureType::KeyRevocation => sigs.collect(),
-                            _ => {
-                                if primary_key.version() != &KeyVersion::V4 {
-                                    // no direct signatures on V2|V3 keys
-                                    info!("WARNING: unexpected signature: {:?}", typ);
-                                }
-                                sigs.collect()
-                            }
+                while let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::Signature) {
+                    let packet = packets.next().expect("peeked");
+                    info!("parsing signature {:?}", packet.tag());
+                    let sig: Signature = packet.try_into()?;
+                    let typ = sig.typ();
+
+                    if typ == SignatureType::KeyRevocation {
+                        revocation_signatures.push(sig);
+                    } else {
+                        if primary_key.version() != &KeyVersion::V4 {
+                            // no direct signatures on V2|V3 keys
+                            info!("WARNING: unexpected signature: {:?}", typ);
                         }
-                    })
-                    .collect();
-
-                let revocation_signatures = grouped_sigs.pop().unwrap_or_else(Vec::new);
-                let direct_signatures = grouped_sigs.pop().unwrap_or_else(Vec::new);
+                        direct_signatures.push(sig);
+                    }
+                }
 
                 // -- Zero or more User ID packets
                 // -- Zero or more User Attribute packets
+                info!("  user");
+                let mut users = Vec::new();
+                let mut user_attributes = Vec::new();
 
-                let mut users = vec![];
-                let mut user_attributes = vec![];
-
-                while ctr < packets_len {
-                    match packets[ctr].tag {
-                        Tag::UserID => {
-                            let id = tags::userid::parser(packets[ctr].body.as_slice());
-                            ctr += 1;
-
+                while let Some(true) = packets
+                    .peek()
+                    .map(|packet| packet.tag() == Tag::UserId || packet.tag() == Tag::UserAttribute)
+                {
+                    let packet = packets.next().expect("peeked");
+                    let tag = packet.tag();
+                    info!("parsing user data: {:?}", tag);
+                    match tag {
+                        Tag::UserId => {
+                            let id: UserId = packet.try_into()?;
                             // --- zero or more signature packets
 
                             // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
-                            let (cnt, sigs) = take_sigs(&packets[ctr..])?;
-                            ctr += cnt;
-
-                            users.push(User::new(id, sigs));
-                        }
-                        Tag::UserAttribute => {
-                            let a = tags::userattr::parser(packets[ctr].body.as_slice());
-                            if a.is_err() {
-                                info!("failed to parse {:?}\n{:?}", packets[ctr], a);
+                            let mut sigs = Vec::new();
+                            while let Some(true) =
+                                packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                            {
+                                let packet = packets.next().expect("peeked");
+                                sigs.push(packet.try_into()?);
                             }
 
-                            let (_, attr) = a?;
-                            ctr += 1;
+                            users.push(SignedUser::new(id, sigs));
+                        }
+                        Tag::UserAttribute => {
+                            let attr: UserAttribute = packet.try_into()?;
 
                             // --- zero or more signature packets
 
                             // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
-                            let (cnt, sigs) = take_sigs(&packets[ctr..])?;
-                            ctr += cnt;
+                            let mut sigs = Vec::new();
+                            while let Some(true) =
+                                packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                            {
+                                let packet = packets.next().expect("peeked");
+                                sigs.push(packet.try_into()?);
+                            }
 
-                            user_attributes.push(UserAttribute::new(attr, sigs));
+                            user_attributes.push(SignedUserAttribute::new(attr, sigs));
                         }
                         _ => break,
                     }
                 }
 
-                // -- Only V4 keys should have sub keys
-
-                if ctr != packets_len && primary_key.version() != &KeyVersion::V4 {
-                    bail!("only V4 keys can have subkeys");
-                }
-
-                // -- Zero or more Subkey packets
-                let mut subkeys = vec![];
-                while ctr < packets_len && packets[ctr].tag == $subkey_tag {
-                    let subkey = Self::key_parser(packets[ctr])?;
-                    ctr += 1;
-
-                    let (cnt, sigs) = take_sigs(&packets[ctr..])?;
-                    ctr += cnt;
-
-                    // TODO: better error handling
-                    if sigs.is_empty() {
-                        info!("WARNING: missing signature");
-                    }
-
-                    subkeys.push(<$subkey_type>::new(subkey, sigs));
-                }
-
                 ensure!(!users.is_empty(), "missing user ids");
 
-                ensure_eq!(ctr, packets_len, "failed to process all packets");
+                // -- Zero or more Subkey packets
+                $(
+                    let mut $subkey_container = vec![];
+                )*
+
+                info!("  subkeys");
+                if packets.peek().is_some() {
+                    // -- Only V4 keys should have sub keys
+                    if primary_key.version() != &KeyVersion::V4 {
+                        bail!("only V4 keys can have subkeys");
+                    }
+
+                    while let Some(true) = packets.peek().map(|packet| {
+                        $( packet.tag() == Tag::$subkey_tag || )* false
+                    })
+                    {
+                        let packet = packets.next().expect("peeked");
+                        match packet.tag() {
+                            $(
+                                Tag::$subkey_tag => {
+                                    let subkey: $inner_subkey_type = packet.try_into()?;
+                                    let mut sigs = Vec::new();
+                                    while let Some(true) =
+                                        packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                                    {
+                                        let packet = packets.next().expect("peeked");
+                                        sigs.push(packet.try_into()?);
+                                    }
+
+                                    // TODO: better error handling
+                                    if sigs.is_empty() {
+                                        info!("WARNING: missing signature");
+                                    }
+
+                                    $subkey_container.push(<$subkey_type>::new(subkey, sigs));
+                                }
+                            )*
+                             _ => unreachable!()
+                        }
+                    }
+
+                    if packets.peek().is_some() {
+                        info!("rest packets");
+                        for packet in packets {
+                            info!("{:?}", packet);
+                        }
+                        bail!("failed to process all packets")
+                    }
+                }
 
                 Ok(<$key_type>::new(
                     primary_key,
@@ -175,31 +184,8 @@ macro_rules! key_parser {
                     direct_signatures,
                     users,
                     user_attributes,
-                    subkeys,
+                    $( $subkey_container, )*
                 ))
-            }
-
-            fn key_parser(packet: &Packet) -> Result<$inner_key_type> {
-                let (_, key) = Self::key_packet_parser(packet.body.as_slice()).map_err(|err| {
-                    info!("WARNING: failed to parse key {:?}", err);
-                    match err {
-                        Incomplete(n) => {
-                            // a size larger than the packet was requested, always invalid
-                            if let Needed::Size(size) = n {
-                                if size > packet.body.len() {
-                                    Error::RequestedSizeTooLarge
-                                } else {
-                                    err.into()
-                                }
-                            } else {
-                                err.into()
-                            }
-                        }
-                        _ => err.into(),
-                    }
-                })?;
-
-                Ok(key)
             }
         }
     };
@@ -207,15 +193,31 @@ macro_rules! key_parser {
 
 key_parser!(
     PrivateKey,
-    PrivateSubKey,
     Tag::SecretKey,
-    Tag::SecretSubkey,
-    key::PrivateKey
+    packet::SecretKey,
+    // secret keys, can contain both public and secret subkeys
+    (
+        PublicSubkey,
+        packet::PublicSubkey,
+        PublicSubKey,
+        public_subkeys
+    ),
+    (
+        SecretSubkey,
+        packet::SecretSubkey,
+        PrivateSubKey,
+        private_subkeys
+    )
 );
+
 key_parser!(
     PublicKey,
-    PublicSubKey,
     Tag::PublicKey,
-    Tag::PublicSubkey,
-    key::PublicKey
+    packet::PublicKey,
+    (
+        PublicSubkey,
+        packet::PublicSubkey,
+        PublicSubKey,
+        public_subkeys
+    )
 );
