@@ -43,6 +43,7 @@ block-padding = "0.1.2"
 log = "0.4.6"
 pretty_env_logger = "0.2.5"
 buf_redux = "0.7.1"
+try_from = "0.2.2"
 
 [dependencies.nom]
 version = "^4.0"
@@ -55,6 +56,7 @@ serde_derive = "^1.0"
 serde_json = "^1.0"
 glob = "^0.2"
 gperftools = { git = "https://github.com/dignifiedquire/rust-gperftools" }
+regex = "1.0.6"
 
 [features]
 default = []

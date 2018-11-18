@@ -5,10 +5,10 @@ use x25519_dalek::diffie_hellman;
 use crypto::aes_kw;
 use crypto::hash::HashAlgorithm;
 use crypto::kdf::kdf;
+use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use packet::types::key::ECDHPrivateKey;
-use packet::types::PublicKeyAlgorithm;
+use types::ECDHSecretKey;
 
 // 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -47,7 +47,7 @@ pub fn build_ecdh_param(
 }
 
 pub fn decrypt_ecdh(
-    priv_key: &ECDHPrivateKey,
+    priv_key: &ECDHSecretKey,
     mpis: &[Vec<u8>],
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {

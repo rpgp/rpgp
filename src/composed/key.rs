@@ -1,6 +1,6 @@
 use errors::Result;
-use packet::types;
-use packet::types::key::KeyID;
+use packet;
+use types::{KeyId, SecretKeyRepr, SignedUser, SignedUserAttribute};
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 
@@ -10,22 +10,22 @@ use packet::types::key::KeyID;
 /// Represents a Public PGP key.
 #[derive(Debug, PartialEq, Eq)]
 pub struct PublicKey {
-    pub primary_key: types::key::PublicKey,
-    pub revocation_signatures: Vec<types::Signature>,
-    pub direct_signatures: Vec<types::Signature>,
-    pub users: Vec<types::User>,
-    pub user_attributes: Vec<types::UserAttribute>,
-    pub subkeys: Vec<PublicSubKey>,
+    pub primary_key: packet::PublicKey,
+    pub revocation_signatures: Vec<packet::Signature>,
+    pub direct_signatures: Vec<packet::Signature>,
+    pub users: Vec<SignedUser>,
+    pub user_attributes: Vec<SignedUserAttribute>,
+    pub public_subkeys: Vec<PublicSubKey>,
 }
 
 impl PublicKey {
     pub fn new(
-        primary_key: types::key::PublicKey,
-        revocation_signatures: Vec<types::Signature>,
-        direct_signatures: Vec<types::Signature>,
-        users: Vec<types::User>,
-        user_attributes: Vec<types::UserAttribute>,
-        subkeys: Vec<PublicSubKey>,
+        primary_key: packet::PublicKey,
+        revocation_signatures: Vec<packet::Signature>,
+        direct_signatures: Vec<packet::Signature>,
+        users: Vec<SignedUser>,
+        user_attributes: Vec<SignedUserAttribute>,
+        public_subkeys: Vec<PublicSubKey>,
     ) -> PublicKey {
         PublicKey {
             primary_key,
@@ -33,7 +33,7 @@ impl PublicKey {
             direct_signatures,
             users,
             user_attributes,
-            subkeys,
+            public_subkeys,
         }
     }
 
@@ -43,7 +43,7 @@ impl PublicKey {
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Option<KeyID> {
+    pub fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
 }
@@ -51,12 +51,12 @@ impl PublicKey {
 /// Represents a Public PGP SubKey.
 #[derive(Debug, PartialEq, Eq)]
 pub struct PublicSubKey {
-    pub key: types::key::PublicKey,
-    pub signatures: Vec<types::Signature>,
+    pub key: packet::PublicSubkey,
+    pub signatures: Vec<packet::Signature>,
 }
 
 impl PublicSubKey {
-    pub fn new(key: types::key::PublicKey, signatures: Vec<types::Signature>) -> PublicSubKey {
+    pub fn new(key: packet::PublicSubkey, signatures: Vec<packet::Signature>) -> PublicSubKey {
         PublicSubKey { key, signatures }
     }
 
@@ -66,7 +66,7 @@ impl PublicSubKey {
     }
 
     /// Returns the Key ID of the key.
-    pub fn key_id(&self) -> Option<KeyID> {
+    pub fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
 }
@@ -74,22 +74,24 @@ impl PublicSubKey {
 /// Represents a Private PGP key.
 #[derive(Debug, PartialEq, Eq)]
 pub struct PrivateKey {
-    pub primary_key: types::key::PrivateKey,
-    pub revocation_signatures: Vec<types::Signature>,
-    pub direct_signatures: Vec<types::Signature>,
-    pub users: Vec<types::User>,
-    pub user_attributes: Vec<types::UserAttribute>,
-    pub subkeys: Vec<PrivateSubKey>,
+    pub primary_key: packet::SecretKey,
+    pub revocation_signatures: Vec<packet::Signature>,
+    pub direct_signatures: Vec<packet::Signature>,
+    pub users: Vec<SignedUser>,
+    pub user_attributes: Vec<SignedUserAttribute>,
+    pub public_subkeys: Vec<PublicSubKey>,
+    pub private_subkeys: Vec<PrivateSubKey>,
 }
 
 impl PrivateKey {
     pub fn new(
-        primary_key: types::key::PrivateKey,
-        revocation_signatures: Vec<types::Signature>,
-        direct_signatures: Vec<types::Signature>,
-        users: Vec<types::User>,
-        user_attributes: Vec<types::UserAttribute>,
-        subkeys: Vec<PrivateSubKey>,
+        primary_key: packet::SecretKey,
+        revocation_signatures: Vec<packet::Signature>,
+        direct_signatures: Vec<packet::Signature>,
+        users: Vec<SignedUser>,
+        user_attributes: Vec<SignedUserAttribute>,
+        public_subkeys: Vec<PublicSubKey>,
+        private_subkeys: Vec<PrivateSubKey>,
     ) -> PrivateKey {
         PrivateKey {
             primary_key,
@@ -97,7 +99,8 @@ impl PrivateKey {
             direct_signatures,
             users,
             user_attributes,
-            subkeys,
+            public_subkeys,
+            private_subkeys,
         }
     }
 
@@ -107,14 +110,14 @@ impl PrivateKey {
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Option<KeyID> {
+    pub fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
 
     pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&types::key::PrivateKeyRepr) -> Result<()>,
+        G: FnOnce(&SecretKeyRepr) -> Result<()>,
     {
         self.primary_key.unlock(pw, work)
     }
@@ -123,12 +126,12 @@ impl PrivateKey {
 /// Represents a composed private PGP SubKey.
 #[derive(Debug, PartialEq, Eq)]
 pub struct PrivateSubKey {
-    pub key: types::key::PrivateKey,
-    pub signatures: Vec<types::Signature>,
+    pub key: packet::SecretSubkey,
+    pub signatures: Vec<packet::Signature>,
 }
 
 impl PrivateSubKey {
-    pub fn new(key: types::key::PrivateKey, signatures: Vec<types::Signature>) -> PrivateSubKey {
+    pub fn new(key: packet::SecretSubkey, signatures: Vec<packet::Signature>) -> PrivateSubKey {
         PrivateSubKey { key, signatures }
     }
 
@@ -138,14 +141,14 @@ impl PrivateSubKey {
     }
 
     /// Returns the Key ID of the key.
-    pub fn key_id(&self) -> Option<KeyID> {
+    pub fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
 
     pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&types::key::PrivateKeyRepr) -> Result<()>,
+        G: FnOnce(&SecretKeyRepr) -> Result<()>,
     {
         self.key.unlock(pw, work)
     }
@@ -169,14 +172,12 @@ mod tests {
     use serde_json;
 
     use composed::Deserializable;
+    use crypto::ecc_curve::ECCCurve;
     use crypto::hash::HashAlgorithm;
+    use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
     use crypto::sym::SymmetricKeyAlgorithm;
-    use packet::types::ecc_curve::ECCCurve;
-    use packet::types::key;
-    use packet::types::{
-        CompressionAlgorithm, KeyVersion, PublicKeyAlgorithm, Signature, SignatureType,
-        SignatureVersion, StringToKeyType, Subpacket, User, UserAttributeType,
-    };
+    use packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId};
+    use types::{CompressionAlgorithm, KeyVersion, SecretKeyRepr, SignedUser, StringToKeyType};
 
     fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
         // Open the path in read-only mode, returns `io::Result<File>`
@@ -275,7 +276,7 @@ mod tests {
         assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
 
         assert_eq!(
-            pkey.private_params().checksum,
+            pkey.secret_params().checksum,
             Some(hex::decode("2c46").unwrap())
         );
 
@@ -283,7 +284,7 @@ mod tests {
             || "".to_string(),
             |unlocked_key| {
                 match unlocked_key {
-                    types::key::PrivateKeyRepr::RSA(k) => {
+                    SecretKeyRepr::RSA(k) => {
                         assert_eq!(k.d().bits(), 2044);
                         assert_eq!(k.primes()[0].bits(), 1024);
                         assert_eq!(k.primes()[1].bits(), 1024);
@@ -335,18 +336,18 @@ mod tests {
         assert_eq!(pk.algorithm(), &PublicKeyAlgorithm::RSA);
 
         match pk.public_params() {
-            key::PublicParams::RSA { n, e } => {
+            PublicParams::RSA { n, e } => {
                 assert_eq!(n, &primary_n);
                 assert_eq!(e.to_u64().unwrap(), 0x0001_0001);
             }
             _ => panic!("wrong public params: {:?}", pk.public_params()),
         }
 
-        assert_eq!(pk.created_at(), 14_0207_0261);
+        assert_eq!(pk.created_at().timestamp(), 14_0207_0261);
         assert_eq!(pk.expiration(), None);
 
         // TODO: examine subkey details
-        assert_eq!(key.subkeys.len(), 1, "missing subkey");
+        assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
         let mut sig1 = Signature::new(
             SignatureVersion::V4,
@@ -433,7 +434,10 @@ mod tests {
 
         sig1.unhashed_subpackets.push(issuer.clone());
 
-        let u1 = User::new("john doe (test) <johndoe@example.com>", vec![sig1]);
+        let u1 = SignedUser::new(
+            UserId::from_str("john doe (test) <johndoe@example.com>"),
+            vec![sig1],
+        );
 
         let mut sig2 = Signature::new(
             SignatureVersion::V4,
@@ -498,7 +502,10 @@ mod tests {
 
         sig2.unhashed_subpackets.push(issuer.clone());
 
-        let u2 = User::new("john doe <johndoe@seconddomain.com>", vec![sig2]);
+        let u2 = SignedUser::new(
+            UserId::from_str("john doe <johndoe@seconddomain.com>"),
+            vec![sig2],
+        );
 
         assert_eq!(key.users.len(), 2);
         assert_eq!(key.users[0], u1);
@@ -506,7 +513,7 @@ mod tests {
         assert_eq!(key.user_attributes.len(), 1);
         let ua = &key.user_attributes[0];
         match ua.attr {
-            UserAttributeType::Image(ref v) => {
+            UserAttribute::Image(ref v) => {
                 assert_eq!(v.len(), 1156);
             }
             _ => panic!("not here"),
@@ -589,7 +596,7 @@ mod tests {
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
 
-        let pp = key.primary_key.private_params().clone();
+        let pp = key.primary_key.secret_params().clone();
 
         assert_eq!(
             pp.iv,
@@ -601,15 +608,21 @@ mod tests {
         );
 
         assert_eq!(
-            pp.string_to_key_salt,
+            pp.string_to_key.as_ref().unwrap().salt,
             Some(hex::decode("CB18E77884F2F055").unwrap().to_vec())
         );
 
-        assert_eq!(pp.string_to_key, Some(StringToKeyType::IteratedAndSalted));
+        assert_eq!(
+            pp.string_to_key.as_ref().unwrap().typ,
+            StringToKeyType::IteratedAndSalted
+        );
 
-        assert_eq!(pp.string_to_key_count, Some(65536));
+        assert_eq!(pp.string_to_key.as_ref().unwrap().count, Some(65536));
 
-        assert_eq!(pp.string_to_key_hash, Some(HashAlgorithm::SHA256));
+        assert_eq!(
+            pp.string_to_key.as_ref().unwrap().hash,
+            HashAlgorithm::SHA256
+        );
 
         assert_eq!(pp.encryption_algorithm, Some(SymmetricKeyAlgorithm::AES128));
         assert_eq!(pp.string_to_key_id, 254);
@@ -619,7 +632,7 @@ mod tests {
             |k| {
                 info!("{:?}", k);
                 match k {
-                    types::key::PrivateKeyRepr::RSA(k) => {
+                    SecretKeyRepr::RSA(k) => {
                         assert_eq!(k.e().to_bytes_be(), hex::decode("010001").unwrap().to_vec());
                         assert_eq!(k.n().to_bytes_be(), hex::decode("9AF89C08A8EA84B5363268BAC8A06821194163CBCEEED2D921F5F3BDD192528911C7B1E515DCE8865409E161DBBBD8A4688C56C1E7DFCF639D9623E3175B1BCA86B1D12AE4E4FBF9A5B7D5493F468DA744F4ACFC4D13AD2D83398FFC20D7DF02DF82F3BC05F92EDC41B3C478638A053726586AAAC57E2B66C04F9775716A0C71").unwrap().to_vec());
                         assert_eq!(k.d().to_bytes_be(), hex::decode("33DE47E3421E1442CE9BFA9FA1ACC68D657594604FA7719CC91817F78D604B0DA38CD206D9D571621C589E3DF19CA2BB0C5F045EAC2C25AEB2BCE0D00E2E29538F8239F8A499EAF872497809E524A9EDA88E7ECEE78DF722E33DD62C9E204FE0F90DCF6F4247D1F7C8CE3BB3F0A4BAB23CFD95D41BC8A39C22C99D5BC38BC51D").unwrap().to_vec());
@@ -687,7 +700,7 @@ mod tests {
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
                 .unwrap()["expected_fingerprint"],
-            hex::encode(key.subkeys[0].key.fingerprint())
+            hex::encode(key.public_subkeys[0].key.fingerprint())
         );
 
         let (json, key) = get_test_fingerprint("e2e-001");
@@ -696,7 +709,7 @@ mod tests {
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
                 .unwrap()["expected_fingerprint"],
-            hex::encode(key.subkeys[0].key.fingerprint())
+            hex::encode(key.public_subkeys[0].key.fingerprint())
         );
     }
 
@@ -708,18 +721,18 @@ mod tests {
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
                 .unwrap()["expected_fingerprint"],
-            hex::encode(key.subkeys[0].key.fingerprint())
+            hex::encode(key.public_subkeys[0].key.fingerprint())
         );
     }
 
     fn test_parse_openpgp_key(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_armor_many(f).unwrap_or_else(|_| panic!("failed to parse {}", key));
+        PublicKey::from_armor_many(f).unwrap();
     }
 
     fn test_parse_openpgp_key_bin(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_bytes_many(f).unwrap_or_else(|_| panic!("failed to parse {}", key));
+        PublicKey::from_bytes_many(f).unwrap();
     }
 
     macro_rules! openpgp_key_bin {
@@ -850,7 +863,7 @@ mod tests {
     fn private_x25519_verify() {
         let f = read_file("./tests/openpgpjs/x25519.sec.asc");
         let sk = PrivateKey::from_armor_single(f).expect("failed to parse key");
-        assert_eq!(sk.subkeys.len(), 1);
+        assert_eq!(sk.private_subkeys.len(), 1);
         assert_eq!(
             hex::encode(sk.key_id().unwrap().to_vec()).to_uppercase(),
             "F25E5F24BB372CFA",
@@ -859,7 +872,7 @@ mod tests {
             || "moon".to_string(),
             |k| {
                 match k {
-                    types::key::PrivateKeyRepr::EdDSA(ref inner_key) => {
+                    SecretKeyRepr::EdDSA(ref inner_key) => {
                         assert_eq!(inner_key.oid, ECCCurve::Ed25519.oid());
                     }
                     _ => panic!("invalid key"),

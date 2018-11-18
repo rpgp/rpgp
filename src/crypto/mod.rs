@@ -1,8 +1,10 @@
 pub mod aes_kw;
 pub mod checksum;
 pub mod ecc;
+pub mod ecc_curve;
 pub mod hash;
 pub mod kdf;
 pub mod pkcs5;
+pub mod public_key;
 pub mod rsa;
 pub mod sym;

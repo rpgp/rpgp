@@ -1,7 +1,7 @@
 use std::boxed::Box;
 
-use flate2::read::{DeflateDecoder, ZlibDecoder};
 use num_traits::FromPrimitive;
+use try_from::TryFrom;
 
 use composed::key::PrivateKey;
 use composed::shared::Deserializable;
@@ -10,33 +10,130 @@ use crypto::ecc::decrypt_ecdh;
 use crypto::rsa::decrypt_rsa;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
-use packet::tags::literal;
-use packet::tags::public_key_encrypted_session_key::PKESK;
-use packet::types::key::PrivateKeyRepr;
-use packet::types::{CompressionAlgorithm, Packet};
+use packet::{
+    CompressedData, LiteralData, OnePassSignature, Packet, PublicKeyEncryptedSessionKey, Signature,
+    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
+};
+use types::{KeyId, SecretKeyRepr};
 
 /// A PGP message
+/// https://tools.ietf.org/html/rfc4880.html#section-11.3
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))] // TODO: fix me
 #[derive(Clone, Debug)]
 pub enum Message {
-    Literal(Packet),
-    Compressed(Packet),
+    Literal(LiteralData),
+    Compressed(CompressedData),
     Signed {
         /// nested message
         message: Option<Box<Message>>,
         /// for signature packets that contain a one pass message
         one_pass_signature: Option<OnePassSignature>,
         // actual signature
-        signature: Option<Packet>,
+        signature: Option<Signature>,
     },
     Encrypted {
-        esk: Vec<PKESK>,
-        edata: Vec<Packet>,
+        esk: Vec<Esk>,
+        edata: Vec<Edata>,
         protected: bool,
     },
 }
 
+/// Encrypte Session Key
+/// Public-Key Encrypted Session Key Packet |
+/// Symmetric-Key Encrypted Session Key Packet.
 #[derive(Debug, Clone)]
-pub struct OnePassSignature(pub Packet);
+pub enum Esk {
+    PublicKeyEncryptedSessionKey(PublicKeyEncryptedSessionKey),
+    SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey),
+}
+
+impl_try_from_into!(
+    Esk,
+    PublicKeyEncryptedSessionKey => PublicKeyEncryptedSessionKey,
+    SymKeyEncryptedSessionKey => SymKeyEncryptedSessionKey
+);
+
+impl Esk {
+    pub fn id(&self) -> &KeyId {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.id(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.id(),
+        }
+    }
+
+    pub fn mpis(&self) -> &[Vec<u8>] {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.mpis(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.mpis(),
+        }
+    }
+}
+
+impl TryFrom<Packet> for Esk {
+    type Err = Error;
+
+    fn try_from(other: Packet) -> Result<Esk> {
+        match other {
+            Packet::PublicKeyEncryptedSessionKey(k) => Ok(Esk::PublicKeyEncryptedSessionKey(k)),
+            Packet::SymKeyEncryptedSessionKey(k) => Ok(Esk::SymKeyEncryptedSessionKey(k)),
+            _ => Err(format_err!("not a valid edata packet: {:?}", other)),
+        }
+    }
+}
+
+impl From<Esk> for Packet {
+    fn from(other: Esk) -> Packet {
+        match other {
+            Esk::PublicKeyEncryptedSessionKey(k) => Packet::PublicKeyEncryptedSessionKey(k),
+            Esk::SymKeyEncryptedSessionKey(k) => Packet::SymKeyEncryptedSessionKey(k),
+        }
+    }
+}
+
+/// Encrypted Data
+/// Symmetrically Encrypted Data Packet |
+/// Symmetrically Encrypted Integrity Protected Data Packet
+#[derive(Debug, Clone)]
+pub enum Edata {
+    SymEncryptedData(SymEncryptedData),
+    SymEncryptedProtectedData(SymEncryptedProtectedData),
+}
+
+impl_try_from_into!(
+    Edata,
+    SymEncryptedData => SymEncryptedData,
+    SymEncryptedProtectedData => SymEncryptedProtectedData
+);
+
+impl TryFrom<Packet> for Edata {
+    type Err = Error;
+
+    fn try_from(other: Packet) -> Result<Edata> {
+        match other {
+            Packet::SymEncryptedData(d) => Ok(Edata::SymEncryptedData(d)),
+            Packet::SymEncryptedProtectedData(d) => Ok(Edata::SymEncryptedProtectedData(d)),
+            _ => Err(format_err!("not a valid edata packet: {:?}", other)),
+        }
+    }
+}
+
+impl From<Edata> for Packet {
+    fn from(other: Edata) -> Packet {
+        match other {
+            Edata::SymEncryptedData(d) => Packet::SymEncryptedData(d),
+            Edata::SymEncryptedProtectedData(d) => Packet::SymEncryptedProtectedData(d),
+        }
+    }
+}
+
+impl Edata {
+    pub fn data(&self) -> &[u8] {
+        match self {
+            Edata::SymEncryptedData(d) => d.data(),
+            Edata::SymEncryptedProtectedData(d) => d.data(),
+        }
+    }
+}
 
 impl Message {
     /// Decrypt the message using the given password and key.
@@ -47,8 +144,8 @@ impl Message {
         G: FnOnce() -> String,
     {
         match self {
-            Message::Compressed(packet) => Ok(packet.body.clone()),
-            Message::Literal(packet) => Ok(packet.body.clone()),
+            Message::Compressed(packet) => Ok(packet.compressed_data().to_vec()),
+            Message::Literal(packet) => Ok(packet.data().to_vec()),
             Message::Signed { message, .. } => match message {
                 Some(message) => message.as_ref().decrypt(msg_pw, key_pw, key),
                 None => Ok(Vec::new()),
@@ -70,22 +167,25 @@ impl Message {
                     info!("{:?}", key.key_id());
                     info!(
                         "{:?}",
-                        key.subkeys.iter().map(|k| k.key_id()).collect::<Vec<_>>()
+                        key.private_subkeys
+                            .iter()
+                            .map(|k| k.key_id())
+                            .collect::<Vec<_>>()
                     );
 
                     // find the key with the matching key id
 
-                    if key
+                    if &key
                         .primary_key
                         .key_id()
                         .ok_or_else(|| format_err!("missing key_id"))?
-                        == esk_packet.id
+                        == esk_packet.id()
                     {
                         encoding_key = Some(&key.primary_key);
                     } else {
-                        encoding_subkey = key.subkeys.iter().find_map(|subkey| {
+                        encoding_subkey = key.private_subkeys.iter().find_map(|subkey| {
                             if let Some(id) = subkey.key_id() {
-                                if id == esk_packet.id {
+                                if &id == esk_packet.id() {
                                     Some(subkey)
                                 } else {
                                     None
@@ -109,7 +209,7 @@ impl Message {
                     encoding_key.unlock(key_pw, |priv_key| {
                         res = decrypt(
                             priv_key,
-                            &packet.mpis,
+                            packet.mpis(),
                             edata,
                             *protected,
                             &encoding_key.fingerprint(),
@@ -121,7 +221,7 @@ impl Message {
                     encoding_key.unlock(key_pw, |priv_key| {
                         res = decrypt(
                             priv_key,
-                            &packet.mpis,
+                            packet.mpis(),
                             edata,
                             *protected,
                             &encoding_key.fingerprint(),
@@ -178,18 +278,18 @@ impl Message {
 }
 
 fn decrypt(
-    priv_key: &PrivateKeyRepr,
+    priv_key: &SecretKeyRepr,
     mpis: &[Vec<u8>],
-    edata: &[Packet],
+    edata: &[Edata],
     protected: bool,
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {
     let decrypted_key = match *priv_key {
-        PrivateKeyRepr::RSA(ref priv_key) => decrypt_rsa(priv_key, mpis, fingerprint)?,
-        PrivateKeyRepr::DSA => unimplemented_err!("DSA"),
-        PrivateKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
-        PrivateKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
-        PrivateKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
+        SecretKeyRepr::RSA(ref priv_key) => decrypt_rsa(priv_key, mpis, fingerprint)?,
+        SecretKeyRepr::DSA => unimplemented_err!("DSA"),
+        SecretKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
+        SecretKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
+        SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
     };
 
     let alg = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
@@ -197,7 +297,7 @@ fn decrypt(
     info!("alg: {:?}", alg);
 
     let (key, checksum) = match *priv_key {
-        PrivateKeyRepr::ECDH(_) => {
+        SecretKeyRepr::ECDH(_) => {
             let dec_len = decrypted_key.len();
             (
                 &decrypted_key[1..dec_len - 2],
@@ -219,9 +319,7 @@ fn decrypt(
     let mut messages = Vec::with_capacity(edata.len());
 
     for packet in edata {
-        ensure_eq!(packet.body[0], 1, "invalid packet version");
-
-        let mut res = packet.body[1..].to_vec();
+        let mut res = packet.data()[..].to_vec();
         info!("decrypting protected = {:?}", protected);
         let decrypted_packet = if protected {
             alg.decrypt_protected(key, &mut res)?
@@ -236,22 +334,8 @@ fn decrypt(
                 match msg {
                     Message::Compressed(packet) => {
                         info!("uncompressing message");
-                        let compression_alg = CompressionAlgorithm::from_u8(packet.body[0])
-                            .ok_or_else(|| format_err!("invalid compression algorithm"))?;
-                        match compression_alg {
-                            CompressionAlgorithm::Uncompressed => {
-                                Message::from_bytes_many(&packet.body[1..])
-                            }
-                            CompressionAlgorithm::ZIP => {
-                                let mut deflater = DeflateDecoder::new(&packet.body[1..]);
-                                Message::from_bytes_many(deflater)
-                            }
-                            CompressionAlgorithm::ZLIB => {
-                                let mut deflater = ZlibDecoder::new(&packet.body[1..]);
-                                Message::from_bytes_many(deflater)
-                            }
-                            CompressionAlgorithm::BZip2 => unimplemented!("BZip2"),
-                        }
+                        let mut deflater = packet.decompress();
+                        Message::from_bytes_many(deflater)
                     }
                     Message::Encrypted { .. } => {
                         unimplemented!("nested encryption is not supported");
@@ -278,9 +362,7 @@ fn decrypt(
         .ok_or_else(|| format_err!("missing literal message"))?;
 
     if let Some(Message::Literal(packet)) = literal.get_literal() {
-        let (_, l) = literal::parser(&packet.body)?;
-        info!("result: {:?}", l);
-        Ok(l.data)
+        Ok(packet.data().to_vec())
     } else {
         unreachable!();
     }
@@ -315,7 +397,7 @@ mod tests {
         let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
 
         let details: Testcase = serde_json::from_reader(&mut file).unwrap();
-        warn!(
+        info!(
             "Testcase: {}",
             serde_json::to_string_pretty(&details).unwrap()
         );
