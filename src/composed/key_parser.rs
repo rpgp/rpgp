@@ -31,9 +31,7 @@ macro_rules! key_parser {
                     })
                     .into_iter()
                     .map(|(_, packets)| Self::from_packets_single(packets))
-                    // TODO: better error handling
-                    .filter(|v| v.is_ok())
-                    .collect()
+                    .collect::<Result<_>>()
             }
         }
 
@@ -42,7 +40,8 @@ macro_rules! key_parser {
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
             /// Currently skips packets it fails to parse.
             fn from_packets_single(packets: impl IntoIterator<Item = Packet>) -> Result<$key_type> {
-                let mut packets = packets.into_iter();
+                info!("parsing key");
+                let mut packets = packets.into_iter().peekable();
 
                 // -- One Public-Key packet
                 // idea: use Error::UnexpectedPacket(actual, expected)
@@ -57,22 +56,20 @@ macro_rules! key_parser {
                 let mut revocation_signatures = Vec::new();
                 let mut direct_signatures = Vec::new();
 
-                while let Some(packet) = packets.next() {
-                    if packet.tag() == Tag::Signature {
-                        let sig: Signature = packet.try_into()?;
-                        let typ = sig.typ();
+                while let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::Signature) {
+                    let packet = packets.next().expect("peeked");
+                    info!("parsing signature {:?}", packet.tag());
+                    let sig: Signature = packet.try_into()?;
+                    let typ = sig.typ();
 
-                        if typ == SignatureType::KeyRevocation {
-                            revocation_signatures.push(sig);
-                        } else {
-                            if primary_key.version() != &KeyVersion::V4 {
-                                // no direct signatures on V2|V3 keys
-                                info!("WARNING: unexpected signature: {:?}", typ);
-                            }
-                            direct_signatures.push(sig);
-                        }
+                    if typ == SignatureType::KeyRevocation {
+                        revocation_signatures.push(sig);
                     } else {
-                        break;
+                        if primary_key.version() != &KeyVersion::V4 {
+                            // no direct signatures on V2|V3 keys
+                            info!("WARNING: unexpected signature: {:?}", typ);
+                        }
+                        direct_signatures.push(sig);
                     }
                 }
 
@@ -82,8 +79,13 @@ macro_rules! key_parser {
                 let mut users = Vec::new();
                 let mut user_attributes = Vec::new();
 
-                while let Some(packet) = packets.next() {
+                while let Some(true) = packets
+                    .peek()
+                    .map(|packet| packet.tag() == Tag::UserId || packet.tag() == Tag::UserAttribute)
+                {
+                    let packet = packets.next().expect("peeked");
                     let tag = packet.tag();
+                    info!("parsing user data: {:?}", tag);
                     match tag {
                         Tag::UserId => {
                             let id: UserId = packet.try_into()?;
@@ -91,12 +93,11 @@ macro_rules! key_parser {
 
                             // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
                             let mut sigs = Vec::new();
-                            while let Some(packet) = packets.next() {
-                                if packet.tag() == Tag::Signature {
-                                    sigs.push(packet.try_into()?);
-                                } else {
-                                    break;
-                                }
+                            while let Some(true) =
+                                packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                            {
+                                let packet = packets.next().expect("peeked");
+                                sigs.push(packet.try_into()?);
                             }
 
                             users.push(SignedUser::new(id, sigs));
@@ -108,12 +109,11 @@ macro_rules! key_parser {
 
                             // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
                             let mut sigs = Vec::new();
-                            while let Some(packet) = packets.next() {
-                                if packet.tag() == Tag::Signature {
-                                    sigs.push(packet.try_into()?);
-                                } else {
-                                    break;
-                                }
+                            while let Some(true) =
+                                packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                            {
+                                let packet = packets.next().expect("peeked");
+                                sigs.push(packet.try_into()?);
                             }
 
                             user_attributes.push(SignedUserAttribute::new(attr, sigs));
@@ -122,49 +122,27 @@ macro_rules! key_parser {
                     }
                 }
 
+                ensure!(!users.is_empty(), "missing user ids");
+
                 // -- Zero or more Subkey packets
                 let mut subkeys = vec![];
 
-                if let Some(packet) = packets.next() {
+                if packets.peek().is_some() {
                     // -- Only V4 keys should have sub keys
                     if primary_key.version() != &KeyVersion::V4 {
                         bail!("only V4 keys can have subkeys");
                     }
 
-                    // Process the element we just pulled out
+                    while let Some(true) = packets.peek().map(|packet| packet.tag() == $subkey_tag)
                     {
-                        let subkey: $inner_subkey_type = packet.try_into()?;
-
-                        let mut sigs = Vec::new();
-                        while let Some(packet) = packets.next() {
-                            if packet.tag() == Tag::Signature {
-                                sigs.push(packet.try_into()?);
-                            } else {
-                                break;
-                            }
-                        }
-
-                        // TODO: better error handling
-                        if sigs.is_empty() {
-                            info!("WARNING: missing signature");
-                        }
-
-                        subkeys.push(<$subkey_type>::new(subkey, sigs));
-                    }
-
-                    while let Some(packet) = packets.next() {
-                        if packet.tag() != $subkey_tag {
-                            break;
-                        }
-
+                        let packet = packets.next().expect("peeked");
                         let subkey: $inner_subkey_type = packet.try_into()?;
                         let mut sigs = Vec::new();
-                        while let Some(packet) = packets.next() {
-                            if packet.tag() == Tag::Signature {
-                                sigs.push(packet.try_into()?);
-                            } else {
-                                break;
-                            }
+                        while let Some(true) =
+                            packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                        {
+                            let packet = packets.next().expect("peeked");
+                            sigs.push(packet.try_into()?);
                         }
 
                         // TODO: better error handling
@@ -176,8 +154,6 @@ macro_rules! key_parser {
                     }
                     ensure!(packets.next().is_none(), "failed to process all packets");
                 }
-
-                ensure!(!users.is_empty(), "missing user ids");
 
                 Ok(<$key_type>::new(
                     primary_key,

@@ -315,9 +315,7 @@ fn decrypt(
     let mut messages = Vec::with_capacity(edata.len());
 
     for packet in edata {
-        ensure_eq!(packet.data()[0], 1, "invalid packet version");
-
-        let mut res = packet.data()[1..].to_vec();
+        let mut res = packet.data()[..].to_vec();
         info!("decrypting protected = {:?}", protected);
         let decrypted_packet = if protected {
             alg.decrypt_protected(key, &mut res)?
@@ -389,13 +387,15 @@ mod tests {
     }
 
     fn test_parse_msg(entry: &str, base_path: &str) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
         // TODO: verify with the verify key
         // TODO: verify filename
         let n = format!("{}/{}", base_path, entry);
         let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
 
         let details: Testcase = serde_json::from_reader(&mut file).unwrap();
-        warn!(
+        info!(
             "Testcase: {}",
             serde_json::to_string_pretty(&details).unwrap()
         );

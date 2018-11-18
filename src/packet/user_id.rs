@@ -1,6 +1,7 @@
 use std::str;
 
 use errors::Result;
+use util::read_string_lossy;
 
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
@@ -10,9 +11,9 @@ pub struct UserId(String);
 impl UserId {
     /// Parses a `UserId` packet from the given slice.
     pub fn from_slice(input: &[u8]) -> Result<Self> {
-        let id = str::from_utf8(input)?;
+        let id = read_string_lossy(input);
 
-        Ok(UserId(id.to_string()))
+        Ok(UserId(id))
     }
 
     pub fn from_str(input: &str) -> Self {

@@ -39,7 +39,6 @@ pub trait Deserializable: Sized {
         let el = Self::from_armor_many(input)?;
 
         if el.len() > 1 {
-            // TODO: rename to non key specific
             return Err(Error::TooManyPackets);
         }
 
