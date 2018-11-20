@@ -195,7 +195,7 @@ mod tests {
 
     fn test_parse_dump(i: usize) {
         let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
-        PublicKey::from_bytes_many(f).unwrap();
+        PublicKey::from_bytes_many(f);
     }
 
     #[test]
@@ -732,7 +732,7 @@ mod tests {
 
     fn test_parse_openpgp_key_bin(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_bytes_many(f).unwrap();
+        PublicKey::from_bytes_many(f);
     }
 
     macro_rules! openpgp_key_bin {

@@ -14,7 +14,7 @@ use packet::{
     CompressedData, LiteralData, OnePassSignature, Packet, PublicKeyEncryptedSessionKey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
-use types::{KeyId, SecretKeyRepr};
+use types::{KeyId, SecretKeyRepr, Tag};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
@@ -29,12 +29,11 @@ pub enum Message {
         /// for signature packets that contain a one pass message
         one_pass_signature: Option<OnePassSignature>,
         // actual signature
-        signature: Option<Signature>,
+        signature: Signature,
     },
     Encrypted {
         esk: Vec<Esk>,
         edata: Vec<Edata>,
-        protected: bool,
     },
 }
 
@@ -65,6 +64,13 @@ impl Esk {
         match self {
             Esk::PublicKeyEncryptedSessionKey(k) => k.mpis(),
             Esk::SymKeyEncryptedSessionKey(k) => k.mpis(),
+        }
+    }
+
+    pub fn tag(&self) -> Tag {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(_) => Tag::PublicKeyEncryptedSessionKey,
+            Esk::SymKeyEncryptedSessionKey(_) => Tag::SymKeyEncryptedSessionKey,
         }
     }
 }
@@ -133,6 +139,13 @@ impl Edata {
             Edata::SymEncryptedProtectedData(d) => d.data(),
         }
     }
+
+    pub fn tag(&self) -> Tag {
+        match self {
+            Edata::SymEncryptedData(_) => Tag::SymEncryptedData,
+            Edata::SymEncryptedProtectedData(_) => Tag::SymEncryptedProtectedData,
+        }
+    }
 }
 
 impl Message {
@@ -150,13 +163,7 @@ impl Message {
                 Some(message) => message.as_ref().decrypt(msg_pw, key_pw, key),
                 None => Ok(Vec::new()),
             },
-            Message::Encrypted {
-                esk,
-                edata,
-                protected,
-            } => {
-                info!("unlocked key! msg protected={}", protected);
-
+            Message::Encrypted { esk, edata } => {
                 // search for a packet with a key id that we have and that key
                 let mut packet = None;
                 let mut encoding_key = None;
@@ -207,25 +214,13 @@ impl Message {
                 let mut res = Vec::new();
                 if let Some(encoding_key) = encoding_key {
                     encoding_key.unlock(key_pw, |priv_key| {
-                        res = decrypt(
-                            priv_key,
-                            packet.mpis(),
-                            edata,
-                            *protected,
-                            &encoding_key.fingerprint(),
-                        )?;
+                        res = decrypt(priv_key, packet.mpis(), edata, &encoding_key.fingerprint())?;
                         Ok(())
                     })?;
                 } else if let Some(encoding_key) = encoding_subkey {
                     let mut sym_key = vec![0u8; 8];
                     encoding_key.unlock(key_pw, |priv_key| {
-                        res = decrypt(
-                            priv_key,
-                            packet.mpis(),
-                            edata,
-                            *protected,
-                            &encoding_key.fingerprint(),
-                        )?;
+                        res = decrypt(priv_key, packet.mpis(), edata, &encoding_key.fingerprint())?;
                         Ok(())
                     })?;
                     info!("symkey {:?}", sym_key);
@@ -281,7 +276,6 @@ fn decrypt(
     priv_key: &SecretKeyRepr,
     mpis: &[Vec<u8>],
     edata: &[Edata],
-    protected: bool,
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {
     let decrypted_key = match *priv_key {
@@ -320,22 +314,23 @@ fn decrypt(
 
     for packet in edata {
         let mut res = packet.data()[..].to_vec();
+        let protected = packet.tag() == Tag::SymEncryptedProtectedData;
         info!("decrypting protected = {:?}", protected);
-        let decrypted_packet = if protected {
+        let decrypted_packet: &[u8] = if protected {
             alg.decrypt_protected(key, &mut res)?
         } else {
             alg.decrypt(key, &mut res)?
         };
         info!("decoding message");
-        let msgs = Message::from_bytes_many(decrypted_packet)?
-            .into_iter()
-            .map(|msg: Message| -> Result<Vec<Message>> {
+        let msgs = Message::from_bytes_many(decrypted_packet)
+            .map(|msg: Result<Message>| -> Result<Vec<Message>> {
+                let msg = msg?;
                 // decompress messages if any are compressed
                 match msg {
                     Message::Compressed(packet) => {
                         info!("uncompressing message");
                         let mut deflater = packet.decompress();
-                        Message::from_bytes_many(deflater)
+                        Message::from_bytes_many(deflater).collect::<Result<Vec<Message>>>()
                     }
                     Message::Encrypted { .. } => {
                         unimplemented!("nested encryption is not supported");

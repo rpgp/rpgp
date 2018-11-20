@@ -1,4 +1,5 @@
 use std::boxed::Box;
+use std::iter::Peekable;
 
 use try_from::TryInto;
 
@@ -8,186 +9,155 @@ use errors::Result;
 use packet::Packet;
 use types::Tag;
 
+pub struct MessageParser<I: Sized + Iterator<Item = Packet>> {
+    source: Peekable<I>,
+}
+
+fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<Message>> {
+    while let Some(packet) = packets.by_ref().next() {
+        // for packet in packets.by_ref() {
+        info!("{:?}: ", packet);
+        let tag = packet.tag();
+        match tag {
+            Tag::LiteralData => {
+                return match packet.try_into() {
+                    Ok(p) => Some(Ok(Message::Literal(p))),
+                    Err(err) => Some(Err(err)),
+                }
+            }
+            Tag::CompressedData => {
+                return match packet.try_into() {
+                    Ok(p) => Some(Ok(Message::Compressed(p))),
+                    Err(err) => Some(Err(err)),
+                }
+            }
+            //    ESK :- Public-Key Encrypted Session Key Packet |
+            //           Symmetric-Key Encrypted Session Key Packet.
+            Tag::PublicKeyEncryptedSessionKey | Tag::SymKeyEncryptedSessionKey => {
+                return match packet.try_into() {
+                    Ok(p) => {
+                        let mut esk = vec![p];
+                        let mut edata = Vec::new();
+
+                        // while ESK take em
+                        while let Some(true) = packets.peek().map(|p| {
+                            p.tag() == Tag::PublicKeyEncryptedSessionKey
+                                || p.tag() == Tag::SymKeyEncryptedSessionKey
+                        }) {
+                            esk.push(packets.next().expect("peeked").try_into().expect("peeked"));
+                        }
+
+                        // while edata take em
+                        while let Some(true) = packets.peek().map(|p| {
+                            p.tag() == Tag::SymEncryptedData
+                                || p.tag() == Tag::SymEncryptedProtectedData
+                        }) {
+                            edata.push(packets.next().expect("peeked").try_into().expect("peeked"));
+                        }
+
+                        Some(Ok(Message::Encrypted { esk, edata }))
+                    }
+                    Err(err) => Some(Err(err)),
+                };
+            }
+            //    Encrypted Data :- Symmetrically Encrypted Data Packet |
+            //          Symmetrically Encrypted Integrity Protected Data Packet
+            Tag::SymEncryptedData | Tag::SymEncryptedProtectedData => {
+                return match packet.try_into() {
+                    Ok(p) => {
+                        let esk = Vec::new();
+                        let mut edata = vec![p];
+
+                        // while edata take em
+                        while let Some(true) = packets.peek().map(|p| {
+                            p.tag() == Tag::SymEncryptedData
+                                || p.tag() == Tag::SymEncryptedProtectedData
+                        }) {
+                            edata.push(packets.next().expect("peeked").try_into().expect("peeked"));
+                        }
+
+                        Some(Ok(Message::Encrypted { esk, edata }))
+                    }
+                    Err(err) => Some(Err(err)),
+                };
+            }
+            Tag::Signature => {
+                return match packet.try_into() {
+                    Ok(signature) => {
+                        let m = next(packets.by_ref());
+                        let message = if let Some(Err(err)) = m {
+                            return Some(Err(err));
+                        } else {
+                            m.map(|m| Box::new(m.expect("already checked")))
+                        };
+
+                        Some(Ok(Message::Signed {
+                            message,
+                            one_pass_signature: None,
+                            signature,
+                        }))
+                    }
+                    Err(err) => Some(Err(err)),
+                }
+            }
+            Tag::OnePassSignature => {
+                return match packet.try_into() {
+                    Ok(p) => {
+                        let one_pass_signature = Some(p);
+                        let m = next(packets.by_ref());
+                        let message = if let Some(Err(err)) = m {
+                            return Some(Err(err));
+                        } else {
+                            m.map(|m| Box::new(m.expect("already checked")))
+                        };
+
+                        let signature =
+                            if let Some(true) = packets.peek().map(|p| p.tag() == Tag::Signature) {
+                                packets.next().expect("peeked").try_into().expect("peeked")
+                            } else {
+                                return Some(Err(format_err!(
+                                    "missing signature for, one pass signature"
+                                )));
+                            };
+
+                        Some(Ok(Message::Signed {
+                            message,
+                            one_pass_signature,
+                            signature,
+                        }))
+                    }
+                    Err(err) => Some(Err(err)),
+                };
+            }
+            Tag::Marker => {
+                // Marker Packets are ignored
+                // see https://tools.ietf.org/html/rfc4880#section-5.8
+            }
+            _ => {
+                return Some(Err(format_err!("unexpected packet {:?}", packet.tag())));
+            }
+        }
+    }
+
+    None
+}
+
+impl<I: Sized + Iterator<Item = Packet>> Iterator for MessageParser<I> {
+    type Item = Result<Message>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        next(self.source.by_ref())
+    }
+}
+
 impl Deserializable for Message {
     /// Parse a composed message.
     /// Ref: https://tools.ietf.org/html/rfc4880#section-11.3
-    fn from_packets(packets: impl IntoIterator<Item = Packet>) -> Result<Vec<Message>> {
-        let mut stack: Vec<Message> = Vec::new();
-        // track a currently open package
-        let mut cur: Option<usize> = None;
-        let mut is_edata = false;
-
-        for packet in packets.into_iter() {
-            info!("{:?}: ", packet);
-            let tag = packet.tag();
-            match tag {
-                Tag::LiteralData => match cur {
-                    Some(i) => {
-                        // setting the message packet if we are currently parsing a sigend message
-                        match stack[i] {
-                            Message::Signed {
-                                ref mut message, ..
-                            } => {
-                                *message = Some(Box::new(Message::Literal(packet.try_into()?)));
-                            }
-                            _ => bail!("unexpected literal"),
-                        }
-                    }
-                    None => {
-                        // just a regular literal message
-                        stack.push(Message::Literal(packet.try_into()?));
-                    }
-                },
-                Tag::CompressedData => match cur {
-                    Some(i) => {
-                        // setting the message packet if we are currently parsing a signed message
-                        match stack[i] {
-                            Message::Signed {
-                                ref mut message, ..
-                            } => {
-                                *message = Some(Box::new(Message::Literal(packet.try_into()?)));
-                            }
-                            _ => bail!("unexpected packet"),
-                        }
-                    }
-                    None => {
-                        // just a regular compressed mesage
-                        stack.push(Message::Compressed(packet.try_into()?));
-                    }
-                },
-                //    ESK :- Public-Key Encrypted Session Key Packet |
-                //           Symmetric-Key Encrypted Session Key Packet.
-                Tag::PublicKeyEncryptedSessionKey | Tag::SymKeyEncryptedSessionKey => {
-                    ensure!(!is_edata, "edata should not be followed by esk");
-
-                    if cur.is_none() {
-                        stack.push(Message::Encrypted {
-                            esk: vec![packet.try_into()?],
-                            edata: Vec::new(),
-                            protected: false,
-                        });
-                        cur = Some(stack.len() - 1);
-                    } else if let Some(i) = cur {
-                        if let Message::Encrypted { ref mut esk, .. } = stack[i] {
-                            esk.push(packet.try_into()?);
-                        } else {
-                            bail!("bad esk init");
-                        }
-                    }
-                }
-                //    Encrypted Data :- Symmetrically Encrypted Data Packet |
-                //          Symmetrically Encrypted Integrity Protected Data Packet
-                Tag::SymEncryptedData | Tag::SymEncryptedProtectedData => {
-                    is_edata = true;
-                    match cur {
-                        Some(_) => {
-                            // Safe because cur is set.
-                            let mut el = stack.pop().expect("stack in disarray");
-                            stack.push(update_message(el, packet)?);
-                        }
-                        None => {
-                            let protected = packet.tag() == Tag::SymEncryptedProtectedData;
-                            stack.push(Message::Encrypted {
-                                esk: Vec::new(),
-                                edata: vec![packet.try_into()?],
-                                protected,
-                            });
-                            cur = Some(stack.len() - 1);
-                        }
-                    }
-                }
-                Tag::Signature => match cur {
-                    Some(i) => match stack[i] {
-                        Message::Signed {
-                            ref mut signature, ..
-                        } => {
-                            *signature = Some(packet.try_into()?);
-                            cur = None;
-                        }
-                        _ => bail!("unexpected signature"),
-                    },
-                    None => {
-                        stack.push(Message::Signed {
-                            message: None,
-                            one_pass_signature: None,
-                            signature: Some(packet.try_into()?),
-                        });
-                    }
-                },
-                Tag::OnePassSignature => {
-                    stack.push(Message::Signed {
-                        message: None,
-                        one_pass_signature: Some(packet.try_into()?),
-                        signature: None,
-                    });
-                    cur = Some(stack.len() - 1);
-                }
-                Tag::Marker => {
-                    // Marker Packets are ignored
-                    // see https://tools.ietf.org/html/rfc4880#section-5.8
-                }
-                _ => bail!("unexpected packet {:?}", packet.tag()),
-            }
-        }
-
-        Ok(stack)
-    }
-}
-
-fn update_message(el: Message, packet: Packet) -> Result<Message> {
-    match el {
-        Message::Encrypted { .. } => update_encrypted(el, packet),
-        Message::Signed { .. } => update_signed(el, packet),
-        _ => bail!("bad edata init"),
-    }
-}
-fn update_encrypted(mut el: Message, packet: Packet) -> Result<Message> {
-    if let Message::Encrypted {
-        ref mut edata,
-        ref mut protected,
-        ..
-    } = el
-    {
-        *protected = packet.tag() == Tag::SymEncryptedProtectedData;
-        edata.push(packet.try_into()?);
-    }
-
-    Ok(el)
-}
-
-fn update_signed(el: Message, packet: Packet) -> Result<Message> {
-    if let Message::Signed {
-        message,
-        signature,
-        one_pass_signature,
-    } = el
-    {
-        let new_message = match message {
-            Some(msg) => {
-                if let Message::Encrypted { .. } = *msg {
-                    let res = update_encrypted((*msg).clone(), packet)?;
-
-                    Some(Box::new(res))
-                } else {
-                    bail!("bad edata init in signed message");
-                }
-            }
-            None => {
-                let protected = packet.tag() == Tag::SymEncryptedProtectedData;
-                Some(Box::new(Message::Encrypted {
-                    esk: Vec::new(),
-                    edata: vec![packet.try_into()?],
-                    protected,
-                }))
-            }
-        };
-
-        Ok(Message::Signed {
-            message: new_message,
-            signature,
-            one_pass_signature,
+    fn from_packets<'a>(
+        packets: impl Iterator<Item = Packet> + 'a,
+    ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
+        Box::new(MessageParser {
+            source: packets.peekable(),
         })
-    } else {
-        unreachable!()
     }
 }
