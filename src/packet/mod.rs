@@ -43,5 +43,5 @@ pub use self::trust::*;
 pub use self::user_attribute::*;
 pub use self::user_id::*;
 
-pub use self::many::parser;
+pub use self::many::*;
 pub use self::packet_sum::*;

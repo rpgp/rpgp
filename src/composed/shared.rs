@@ -2,7 +2,7 @@ use std::io::{Cursor, Read, Seek};
 
 use armor::{self, BlockType};
 use errors::{Error, Result};
-use packet::{self, Packet};
+use packet::{Packet, PacketParser};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
@@ -79,8 +79,9 @@ pub trait Deserializable: Sized {
 
     /// Parse a list of compositions in raw byte format.
     fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
-        let packets = packet::parser(bytes)?;
-
+        let packets = PacketParser::new(bytes)
+            .filter(|p| p.is_ok()) // for now we are skipping any packets that we failed to parse
+            .map(|p| p.expect("filtered"));
         Self::from_packets(packets)
     }
 

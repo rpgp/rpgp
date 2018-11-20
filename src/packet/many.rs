@@ -7,75 +7,85 @@ use errors::{Error, Result};
 use packet::packet_sum::Packet;
 use packet::single;
 
-/// Parse packets, in a streaming fashion from the given reader.
-pub fn parser(mut input: impl Read) -> Result<Vec<Packet>> {
-    // maximum size of our buffer
-    let max_capacity = 1024 * 1024 * 1024;
-    // the inital capacity of our buffer
-    // TODO: use a better value than a random guess
-    let mut capacity = 1024;
-    let mut b = Buffer::with_capacity(capacity);
+const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
-    let mut packets = Vec::new();
-    let mut needed: Option<Needed> = None;
+pub struct PacketParser<R> {
+    inner: R,
+    capacity: usize,
+    buffer: Buffer,
+}
 
-    let mut second_round = false;
-
-    loop {
-        // read some data
-        let sz = input.read(b.space())?;
-        b.fill(sz);
-
-        // if there's no more available data in the buffer after a write, that means we reached
-        // the end of the input
-        if b.available_data() == 0 {
-            break;
+impl<R: Read> PacketParser<R> {
+    pub fn new(inner: R) -> Self {
+        PacketParser {
+            inner,
+            // the inital capacity of our buffer
+            // TODO: use a better value than a random guess
+            capacity: 1024,
+            buffer: Buffer::with_capacity(1024),
         }
+    }
+}
 
-        if needed.is_some() && sz == 0 {
-            if second_round {
-                // Cancel if we didn't receive enough bytes from our source, the second time around.
-                return Err(Error::PacketIncomplete);
-            }
-            second_round = true;
-        }
+impl<R: Read> Iterator for PacketParser<R> {
+    type Item = Result<Packet>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let b = &mut self.buffer;
+        let mut needed: Option<Needed> = None;
+        let mut second_round = false;
 
         loop {
-            let length = {
-                match single::parser(b.data()) {
-                    Ok((remaining, Ok(p))) => {
-                        info!("-- parsed packet {:?} --", p.tag());
-                        packets.push(p);
-                        b.data().offset(remaining)
-                    }
-                    Ok((remaining, Err(err))) => {
-                        warn!("parse error: {:?}", err);
-                        // for now we are simply skipping invalid packets
-                        b.data().offset(remaining)
-                    }
-                    Err(err) => match err {
-                        Error::Incomplete(n) => {
-                            needed = Some(n);
-                            break;
-                        }
-                        _ => return Err(err),
-                    },
+            // read some data
+            let sz = match self.inner.read(b.space()) {
+                Ok(sz) => sz,
+                Err(_) => {
+                    return None;
                 }
             };
+            b.fill(sz);
 
-            b.consume(length);
-        }
+            // If there's no more available data in the buffer after a write, that means we reached
+            // the end of the input.
+            if b.available_data() == 0 {
+                return None;
+            }
 
-        // if the parser returned `Incomplete`, and it needs more data than the buffer can hold, we grow the buffer.
-        if let Some(Needed::Size(sz)) = needed {
-            if sz > b.capacity() && capacity * 2 < max_capacity {
-                capacity *= 2;
-                b.grow(capacity);
+            if needed.is_some() && sz == 0 {
+                if second_round {
+                    // Cancel if we didn't receive enough bytes from our source, the second time around.
+                    return Some(Err(Error::PacketIncomplete));
+                }
+                second_round = true;
+            }
+
+            let res = match single::parser(b.data()).map(|(r, p)| (b.data().offset(r), p)) {
+                Ok((l, p)) => Some((l, p)),
+                Err(err) => match err {
+                    Error::Incomplete(n) => {
+                        needed = Some(n);
+                        None
+                    }
+                    _ => return Some(Err(err)),
+                },
+            };
+
+            if let Some((length, p)) = res {
+                info!("got packet: {:?}", p);
+                b.consume(length);
+                return Some(p);
+            }
+
+            // if the parser returned `Incomplete`, and it needs more data than the buffer can hold, we grow the buffer.
+            if let Some(Needed::Size(sz)) = needed {
+                if sz > b.capacity() && self.capacity * 2 < MAX_CAPACITY {
+                    self.capacity *= 2;
+                    let capacity = self.capacity;
+                    b.grow(capacity);
+                }
             }
         }
     }
-
-    Ok(packets)
 }
 
 #[cfg(test)]
@@ -131,9 +141,11 @@ mod tests {
                 offset != &"38544535".to_string() // bad attribute size
             });
 
-        let actual_tags = parser(file).unwrap();
-        for ((_offset, tag, e), packet) in expected_tags.zip(actual_tags.iter()) {
+        let actual_tags = PacketParser::new(file).filter(|p| p.is_ok());
+        for ((_offset, tag, e), packet) in expected_tags.zip(actual_tags) {
             let e = e.as_ref().unwrap();
+            let packet = packet.unwrap();
+
             // println!("\n-- checking: {:?} {}", packet.tag(), e);
 
             let tag = Tag::from_u8(tag.parse().unwrap()).unwrap();
