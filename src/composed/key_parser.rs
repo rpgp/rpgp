@@ -1,6 +1,5 @@
-use std::iter::IntoIterator;
+use std::iter::Peekable;
 
-use itertools::Itertools;
 use try_from::TryInto;
 
 use composed::key::{PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
@@ -9,78 +8,45 @@ use errors::Result;
 use packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
 use types::{KeyVersion, SignedUser, SignedUserAttribute, Tag};
 
+macro_rules! err_opt {
+    ($e:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err(err) => return Some(Err(err)),
+        }
+    };
+}
+
 /// This macro generates the parsers matching to the two different types of keys,
 /// public and private.
 macro_rules! key_parser {
     ( $key_type:ty, $key_type_parser: ident, $key_tag:expr, $inner_key_type:ty, $( ($subkey_tag:ident, $inner_subkey_type:ty, $subkey_type:ty, $subkey_container:ident) ),* ) => {
-        pub struct $key_type_parser {
-            inner: Vec<Result<$key_type>>,
+        /// Parse a transferable keys from the given packets.
+        /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+        pub struct $key_type_parser<I: Sized + Iterator<Item = Packet>> {
+            inner: Peekable<I>,
         }
 
-        impl $key_type_parser {
-            pub fn new(inner: Vec<Result<$key_type>>) -> Self {
-                $key_type_parser {
-                    inner,
-                }
-            }
-        }
-
-        impl Iterator for $key_type_parser {
+        impl<I: Sized + Iterator<Item = Packet>> Iterator for $key_type_parser<I> {
             type Item = Result<$key_type>;
 
             fn next(&mut self) -> Option<Self::Item> {
-                if self.inner.is_empty() {
-                    return None;
-                }
-
-                Some(self.inner.remove(0))
-            }
-        }
-
-        impl Deserializable for $key_type {
-            /// Parse a transferable key from packets.
-            /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-            fn from_packets<'a>(
-                packets: impl Iterator<Item = Packet> + 'a,
-            ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
-                // This counter tracks which top level key we are in.
-                let mut ctr = 0;
-
-                let p = packets
-                    .into_iter()
-                    .group_by(|packet| {
-                        if packet.tag() == $key_tag {
-                            ctr += 1;
-                        }
-
-                        ctr
-                    })
-                    .into_iter()
-                    .map(|(_, packets)| Self::from_packets_single(packets))
-                    .filter(|packet| packet.is_ok())
-                    .collect();
-
-                Box::new($key_type_parser::new(p))
-            }
-        }
-
-        impl $key_type {
-            /// Parse a single transferable key from packets.
-            /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-            /// Currently skips packets it fails to parse.
-            fn from_packets_single(packets: impl IntoIterator<Item = Packet>) -> Result<$key_type> {
-                info!("parsing key");
-                let mut packets = packets.into_iter().peekable();
+                let packets = self.inner.by_ref();
 
                 // -- One Public-Key packet
                 // idea: use Error::UnexpectedPacket(actual, expected)
-                let next = packets
-                    .next()
-                    .ok_or_else(|| format_err!("missing primary key"))?;
+                match packets.peek() {
+                    Some(p) => {
+                        if p.tag() != $key_tag {
+                            return Some(Err(format_err!("unexpected packet: expected {:?}, got {:?}", $key_tag, p.tag())));
+                        }
+                    }
+                    None => return None
+                }
+
+                let next = packets.next().expect("peeked");
                 info!("  primary key: {:?}", next);
-                let primary_key: Result<$inner_key_type> = next.try_into();
-                info!("{:?}", primary_key);
-                let primary_key = primary_key?;
+                let primary_key: $inner_key_type = err_opt!(next.try_into());
 
                 // -- Zero or more revocation signatures
                 // -- followed by zero or more direct signatures in V4 keys
@@ -91,7 +57,7 @@ macro_rules! key_parser {
                 while let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::Signature) {
                     let packet = packets.next().expect("peeked");
                     info!("parsing signature {:?}", packet.tag());
-                    let sig: Signature = packet.try_into()?;
+                    let sig: Signature = err_opt!(packet.try_into());
                     let typ = sig.typ();
 
                     if typ == SignatureType::KeyRevocation {
@@ -120,7 +86,7 @@ macro_rules! key_parser {
                     info!("parsing user data: {:?}", tag);
                     match tag {
                         Tag::UserId => {
-                            let id: UserId = packet.try_into()?;
+                            let id: UserId = err_opt!(packet.try_into());
                             // --- zero or more signature packets
 
                             // TODO: validate signature types: https://tools.ietf.org/html/rfc4880#section-5.2.1
@@ -129,13 +95,13 @@ macro_rules! key_parser {
                                 packets.peek().map(|packet| packet.tag() == Tag::Signature)
                             {
                                 let packet = packets.next().expect("peeked");
-                                sigs.push(packet.try_into()?);
+                                sigs.push(err_opt!(packet.try_into()));
                             }
 
                             users.push(SignedUser::new(id, sigs));
                         }
                         Tag::UserAttribute => {
-                            let attr: UserAttribute = packet.try_into()?;
+                            let attr: UserAttribute = err_opt!(packet.try_into());
 
                             // --- zero or more signature packets
 
@@ -145,7 +111,7 @@ macro_rules! key_parser {
                                 packets.peek().map(|packet| packet.tag() == Tag::Signature)
                             {
                                 let packet = packets.next().expect("peeked");
-                                sigs.push(packet.try_into()?);
+                                sigs.push(err_opt!(packet.try_into()));
                             }
 
                             user_attributes.push(SignedUserAttribute::new(attr, sigs));
@@ -154,7 +120,9 @@ macro_rules! key_parser {
                     }
                 }
 
-                ensure!(!users.is_empty(), "missing user ids");
+                if users.is_empty() {
+                    return Some(Err(format_err!("missing user ids")));
+                }
 
                 // -- Zero or more Subkey packets
                 $(
@@ -162,58 +130,61 @@ macro_rules! key_parser {
                 )*
 
                 info!("  subkeys");
-                if packets.peek().is_some() {
+
+                while let Some(true) = packets.peek().map(|packet| {
+                    $( packet.tag() == Tag::$subkey_tag || )* false
+                })
+                {
                     // -- Only V4 keys should have sub keys
                     if primary_key.version() != &KeyVersion::V4 {
-                        bail!("only V4 keys can have subkeys");
+                        return Some(Err(format_err!("only V4 keys can have subkeys")));
                     }
 
-                    while let Some(true) = packets.peek().map(|packet| {
-                        $( packet.tag() == Tag::$subkey_tag || )* false
-                    })
-                    {
-                        let packet = packets.next().expect("peeked");
-                        match packet.tag() {
-                            $(
-                                Tag::$subkey_tag => {
-                                    let subkey: $inner_subkey_type = packet.try_into()?;
-                                    let mut sigs = Vec::new();
-                                    while let Some(true) =
-                                        packets.peek().map(|packet| packet.tag() == Tag::Signature)
-                                    {
-                                        let packet = packets.next().expect("peeked");
-                                        sigs.push(packet.try_into()?);
-                                    }
-
-                                    // TODO: better error handling
-                                    if sigs.is_empty() {
-                                        info!("WARNING: missing signature");
-                                    }
-
-                                    $subkey_container.push(<$subkey_type>::new(subkey, sigs));
+                    let packet = packets.next().expect("peeked");
+                    match packet.tag() {
+                        $(
+                            Tag::$subkey_tag => {
+                                let subkey: $inner_subkey_type = err_opt!(packet.try_into());
+                                let mut sigs = Vec::new();
+                                while let Some(true) =
+                                    packets.peek().map(|packet| packet.tag() == Tag::Signature)
+                                {
+                                    let packet = packets.next().expect("peeked");
+                                    sigs.push(err_opt!(packet.try_into()));
                                 }
-                            )*
-                             _ => unreachable!()
-                        }
-                    }
 
-                    if packets.peek().is_some() {
-                        info!("rest packets");
-                        for packet in packets {
-                            info!("{:?}", packet);
-                        }
-                        bail!("failed to process all packets")
+                                // TODO: better error handling
+                                if sigs.is_empty() {
+                                    info!("WARNING: missing signature");
+                                }
+
+                                $subkey_container.push(<$subkey_type>::new(subkey, sigs));
+                            }
+                        )*
+                            _ => unreachable!()
                     }
                 }
 
-                Ok(<$key_type>::new(
+                Some(Ok(<$key_type>::new(
                     primary_key,
                     revocation_signatures,
                     direct_signatures,
                     users,
                     user_attributes,
                     $( $subkey_container, )*
-                ))
+                )))
+            }
+        }
+
+        impl Deserializable for $key_type {
+            /// Parse a transferable key from packets.
+            /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+            fn from_packets<'a>(
+                packets: impl Iterator<Item = Packet> + 'a,
+            ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
+                Box::new($key_type_parser {
+                    inner: packets.peekable(),
+                })
             }
         }
     };
