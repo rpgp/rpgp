@@ -65,7 +65,14 @@ pub trait Deserializable: Sized {
     /// Parse a list of compositions in raw byte format.
     fn from_bytes_many<'a>(bytes: impl Read + 'a) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
         let packets = PacketParser::new(bytes)
-            .filter(|p| p.is_ok()) // for now we are skipping any packets that we failed to parse
+            .filter(|p| {
+                // for now we are skipping any packets that we failed to parse
+                if !p.is_ok() {
+                    warn!("skipping packet: {:?}", p);
+                }
+
+                p.is_ok()
+            })
             .map(|p| p.expect("filtered"));
 
         Self::from_packets(packets)
