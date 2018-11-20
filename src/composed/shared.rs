@@ -7,46 +7,31 @@ use packet::{Packet, PacketParser};
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
     fn from_bytes(bytes: impl Read) -> Result<Self> {
-        let el = Self::from_bytes_many(bytes)?;
-
-        if el.len() > 1 {
-            return Err(Error::TooManyPackets);
-        }
-
-        el.into_iter().nth(0).ok_or_else(|| Error::NoMatchingPacket)
+        let mut el = Self::from_bytes_many(bytes);
+        el.nth(0).ok_or_else(|| Error::NoMatchingPacket)?
     }
 
     /// Parse a single armor encoded composition.
     fn from_string(input: &str) -> Result<Self> {
-        let el = Self::from_string_many(input)?;
-
-        if el.len() > 1 {
-            return Err(Error::TooManyPackets);
-        }
-
-        el.into_iter().nth(0).ok_or_else(|| Error::NoMatchingPacket)
+        let mut el = Self::from_string_many(input)?;
+        el.nth(0).ok_or_else(|| Error::NoMatchingPacket)?
     }
 
     /// Parse an armor encoded list of compositions.
-    fn from_string_many(input: &str) -> Result<Vec<Self>> {
-        let mut c = Cursor::new(input);
-
-        Self::from_armor_many(&mut c)
+    fn from_string_many<'a>(input: &'a str) -> Result<Box<dyn Iterator<Item = Result<Self>> + 'a>> {
+        Self::from_armor_many(Cursor::new(input))
     }
 
     /// Armored ascii data.
     fn from_armor_single<R: Read + Seek>(input: R) -> Result<Self> {
-        let el = Self::from_armor_many(input)?;
-
-        if el.len() > 1 {
-            return Err(Error::TooManyPackets);
-        }
-
-        el.into_iter().nth(0).ok_or_else(|| Error::NoMatchingPacket)
+        let mut el = Self::from_armor_many(input)?;
+        el.nth(0).ok_or_else(|| Error::NoMatchingPacket)?
     }
 
     /// Armored ascii data.
-    fn from_armor_many<R: Read + Seek>(input: R) -> Result<Vec<Self>> {
+    fn from_armor_many<'a, R: Read + Seek + 'a>(
+        input: R,
+    ) -> Result<Box<dyn Iterator<Item = Result<Self>> + 'a>> {
         let mut dearmor = armor::Dearmor::new(input);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
@@ -64,7 +49,7 @@ pub trait Deserializable: Sized {
             | BlockType::Signature
             | BlockType::File => {
                 // TODO: check that the result is what it actually said.
-                Self::from_bytes_many(dearmor)
+                Ok(Self::from_bytes_many(dearmor))
             }
             BlockType::PublicKeyPKCS1
             | BlockType::PublicKeyPKCS8
@@ -78,13 +63,16 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a list of compositions in raw byte format.
-    fn from_bytes_many(bytes: impl Read) -> Result<Vec<Self>> {
+    fn from_bytes_many<'a>(bytes: impl Read + 'a) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
         let packets = PacketParser::new(bytes)
             .filter(|p| p.is_ok()) // for now we are skipping any packets that we failed to parse
             .map(|p| p.expect("filtered"));
+
         Self::from_packets(packets)
     }
 
     /// Turn a list of packets into a usable representation.
-    fn from_packets(impl IntoIterator<Item = Packet>) -> Result<Vec<Self>>;
+    fn from_packets<'a>(
+        packets: impl Iterator<Item = Packet> + 'a,
+    ) -> Box<dyn Iterator<Item = Result<Self>> + 'a>;
 }
