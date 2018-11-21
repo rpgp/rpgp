@@ -21,9 +21,19 @@ macro_rules! impl_key {
             pub fn public_params(&self) -> &$crate::crypto::public_key::PublicParams {
                 &self.public_params
             }
+        }
+        impl $crate::types::KeyTrait for &$name {
+            fn fingerprint(&self) -> Vec<u8> {
+                (*self).fingerprint()
+            }
+            fn key_id(&self) -> Option<$crate::types::KeyId> {
+                (*self).key_id()
+            }
+        }
 
+        impl $crate::types::KeyTrait for $name {
             /// Returns the fingerprint of this key.
-            pub fn fingerprint(&self) -> Vec<u8> {
+            fn fingerprint(&self) -> Vec<u8> {
                 use byteorder::{BigEndian, ByteOrder};
                 use md5::Md5;
                 use num_bigint::BigUint;
@@ -180,7 +190,7 @@ macro_rules! impl_key {
                 }
             }
 
-            pub fn key_id(&self) -> Option<$crate::types::KeyId> {
+            fn key_id(&self) -> Option<$crate::types::KeyId> {
                 use $crate::crypto::public_key::PublicParams;
                 use $crate::types::{KeyId, KeyVersion};
 

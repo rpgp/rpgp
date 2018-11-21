@@ -8,15 +8,6 @@ use errors::Result;
 use packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
 use types::{KeyVersion, SignedUser, SignedUserAttribute, Tag};
 
-macro_rules! err_opt {
-    ($e:expr) => {
-        match $e {
-            Ok(v) => v,
-            Err(err) => return Some(Err(err)),
-        }
-    };
-}
-
 /// This macro generates the parsers matching to the two different types of keys,
 /// public and private.
 macro_rules! key_parser {
