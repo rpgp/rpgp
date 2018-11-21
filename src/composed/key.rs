@@ -1,6 +1,6 @@
 use errors::Result;
 use packet;
-use types::{KeyId, SecretKeyRepr, SignedUser, SignedUserAttribute};
+use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser, SignedUserAttribute};
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 
@@ -36,14 +36,28 @@ impl PublicKey {
             public_subkeys,
         }
     }
+}
 
+impl KeyTrait for PublicKey {
     /// Returns the fingerprint of the associated primary key.
-    pub fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> Option<KeyId> {
+        self.primary_key.key_id()
+    }
+}
+
+impl KeyTrait for &PublicKey {
+    /// Returns the fingerprint of the associated primary key.
+    fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
+    }
+
+    /// Returns the Key ID of the associated primary key.
+    fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
 }
@@ -59,14 +73,28 @@ impl PublicSubKey {
     pub fn new(key: packet::PublicSubkey, signatures: Vec<packet::Signature>) -> PublicSubKey {
         PublicSubKey { key, signatures }
     }
+}
 
+impl KeyTrait for PublicSubKey {
     /// Returns the fingerprint of the key.
-    pub fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
     }
 
     /// Returns the Key ID of the key.
-    pub fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> Option<KeyId> {
+        self.key.key_id()
+    }
+}
+
+impl KeyTrait for &PublicSubKey {
+    /// Returns the fingerprint of the key.
+    fn fingerprint(&self) -> Vec<u8> {
+        self.key.fingerprint()
+    }
+
+    /// Returns the Key ID of the key.
+    fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
 }
@@ -103,18 +131,43 @@ impl PrivateKey {
             private_subkeys,
         }
     }
-
+}
+impl KeyTrait for PrivateKey {
     /// Returns the fingerprint of the associated primary key.
-    pub fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
 
     /// Returns the Key ID of the associated primary key.
-    pub fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
+}
 
-    pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
+impl KeyTrait for &PrivateKey {
+    /// Returns the fingerprint of the associated primary key.
+    fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
+    }
+
+    /// Returns the Key ID of the associated primary key.
+    fn key_id(&self) -> Option<KeyId> {
+        self.primary_key.key_id()
+    }
+}
+
+impl SecretKeyTrait for PrivateKey {
+    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
+    where
+        F: FnOnce() -> String,
+        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+    {
+        self.primary_key.unlock(pw, work)
+    }
+}
+
+impl SecretKeyTrait for &PrivateKey {
+    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
         G: FnOnce(&SecretKeyRepr) -> Result<()>,
@@ -134,18 +187,34 @@ impl PrivateSubKey {
     pub fn new(key: packet::SecretSubkey, signatures: Vec<packet::Signature>) -> PrivateSubKey {
         PrivateSubKey { key, signatures }
     }
+}
 
+impl KeyTrait for PrivateSubKey {
     /// Returns the fingerprint of the key.
-    pub fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
     }
 
     /// Returns the Key ID of the key.
-    pub fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
+}
 
-    pub fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
+impl KeyTrait for &PrivateSubKey {
+    /// Returns the fingerprint of the key.
+    fn fingerprint(&self) -> Vec<u8> {
+        self.key.fingerprint()
+    }
+
+    /// Returns the Key ID of the key.
+    fn key_id(&self) -> Option<KeyId> {
+        self.key.key_id()
+    }
+}
+
+impl SecretKeyTrait for PrivateSubKey {
+    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
         G: FnOnce(&SecretKeyRepr) -> Result<()>,
@@ -154,6 +223,15 @@ impl PrivateSubKey {
     }
 }
 
+impl SecretKeyTrait for &PrivateSubKey {
+    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
+    where
+        F: FnOnce() -> String,
+        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+    {
+        self.key.unlock(pw, work)
+    }
+}
 #[cfg(test)]
 mod tests {
     use std::fs::File;

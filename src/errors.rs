@@ -268,3 +268,13 @@ macro_rules! ensure_eq {
         }
     });
 }
+
+#[macro_export]
+macro_rules! err_opt {
+    ($e:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err(err) => return Some(Err(err)),
+        }
+    };
+}

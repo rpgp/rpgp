@@ -1,4 +1,5 @@
 use std::boxed::Box;
+use std::io::Cursor;
 
 use num_traits::FromPrimitive;
 use try_from::TryFrom;
@@ -14,7 +15,7 @@ use packet::{
     CompressedData, LiteralData, OnePassSignature, Packet, PublicKeyEncryptedSessionKey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
-use types::{KeyId, SecretKeyRepr, Tag};
+use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
@@ -151,17 +152,23 @@ impl Edata {
 impl Message {
     /// Decrypt the message using the given password and key.
     // TODO: allow for multiple keys to be passed in
-    pub fn decrypt<F, G>(&self, msg_pw: F, key_pw: G, key: &PrivateKey) -> Result<Vec<u8>>
+    pub fn decrypt<'a, F, G>(
+        &'a self,
+        msg_pw: F,
+        key_pw: G,
+        key: &PrivateKey,
+    ) -> Result<MessageDecrypter<'a>>
     where
         F: FnOnce() -> String,
         G: FnOnce() -> String,
     {
         match self {
-            Message::Compressed(packet) => Ok(packet.compressed_data().to_vec()),
-            Message::Literal(packet) => Ok(packet.data().to_vec()),
+            Message::Compressed(_) | Message::Literal(_) => {
+                bail!("not encrypted");
+            }
             Message::Signed { message, .. } => match message {
                 Some(message) => message.as_ref().decrypt(msg_pw, key_pw, key),
-                None => Ok(Vec::new()),
+                None => bail!("not encrypted"),
             },
             Message::Encrypted { esk, edata } => {
                 // search for a packet with a key id that we have and that key
@@ -211,24 +218,13 @@ impl Message {
 
                 let packet = packet.ok_or_else(|| Error::MissingKey)?;
 
-                let mut res = Vec::new();
                 if let Some(encoding_key) = encoding_key {
-                    encoding_key.unlock(key_pw, |priv_key| {
-                        res = decrypt(priv_key, packet.mpis(), edata, &encoding_key.fingerprint())?;
-                        Ok(())
-                    })?;
+                    MessageDecrypter::new(encoding_key, key_pw, packet.mpis(), edata)
                 } else if let Some(encoding_key) = encoding_subkey {
-                    let mut sym_key = vec![0u8; 8];
-                    encoding_key.unlock(key_pw, |priv_key| {
-                        res = decrypt(priv_key, packet.mpis(), edata, &encoding_key.fingerprint())?;
-                        Ok(())
-                    })?;
-                    info!("symkey {:?}", sym_key);
+                    MessageDecrypter::new(encoding_key, key_pw, packet.mpis(), edata)
                 } else {
-                    return Err(Error::MissingKey);
+                    Err(Error::MissingKey)
                 }
-
-                Ok(res)
             }
         }
     }
@@ -272,94 +268,113 @@ impl Message {
     }
 }
 
-fn decrypt(
-    priv_key: &SecretKeyRepr,
-    mpis: &[Vec<u8>],
-    edata: &[Edata],
-    fingerprint: &[u8],
-) -> Result<Vec<u8>> {
-    let decrypted_key = match *priv_key {
-        SecretKeyRepr::RSA(ref priv_key) => decrypt_rsa(priv_key, mpis, fingerprint)?,
-        SecretKeyRepr::DSA => unimplemented_err!("DSA"),
-        SecretKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
-        SecretKeyRepr::ECDH(ref priv_key) => decrypt_ecdh(priv_key, mpis, fingerprint)?,
-        SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
-    };
+pub struct MessageDecrypter<'a> {
+    key: Vec<u8>,
+    alg: SymmetricKeyAlgorithm,
+    edata: &'a [Edata],
+    // position in the edata slice
+    pos: usize,
+    // the current msgs that are already decrypted
+    current_msgs: Option<Box<dyn Iterator<Item = Result<Message>>>>,
+}
 
-    let alg = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
-        .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
-    info!("alg: {:?}", alg);
+impl<'a> MessageDecrypter<'a> {
+    pub fn new<F>(
+        locked_key: impl SecretKeyTrait + KeyTrait,
+        key_pw: F,
+        mpis: &'a [Vec<u8>],
+        edata: &'a [Edata],
+    ) -> Result<Self>
+    where
+        F: FnOnce() -> String,
+    {
+        let mut key: Vec<u8> = Vec::new();
+        let mut alg: Option<SymmetricKeyAlgorithm> = None;
 
-    let (key, checksum) = match *priv_key {
-        SecretKeyRepr::ECDH(_) => {
-            let dec_len = decrypted_key.len();
-            (
-                &decrypted_key[1..dec_len - 2],
-                &decrypted_key[dec_len - 2..],
-            )
-        }
-        _ => {
-            let key_size = alg.key_size();
-            (
-                &decrypted_key[1..=key_size],
-                &decrypted_key[key_size + 1..key_size + 3],
-            )
-        }
-    };
-
-    checksum::simple(checksum, key)?;
-
-    info!("decrypting {} packets", edata.len());
-    let mut messages = Vec::with_capacity(edata.len());
-
-    for packet in edata {
-        let mut res = packet.data()[..].to_vec();
-        let protected = packet.tag() == Tag::SymEncryptedProtectedData;
-        info!("decrypting protected = {:?}", protected);
-        let decrypted_packet: &[u8] = if protected {
-            alg.decrypt_protected(key, &mut res)?
-        } else {
-            alg.decrypt(key, &mut res)?
-        };
-        info!("decoding message");
-        let msgs = Message::from_bytes_many(decrypted_packet)
-            .map(|msg: Result<Message>| -> Result<Vec<Message>> {
-                let msg = msg?;
-                // decompress messages if any are compressed
-                match msg {
-                    Message::Compressed(packet) => {
-                        info!("uncompressing message");
-                        let mut deflater = packet.decompress();
-                        Message::from_bytes_many(deflater).collect::<Result<Vec<Message>>>()
-                    }
-                    Message::Encrypted { .. } => {
-                        unimplemented!("nested encryption is not supported");
-                    }
-                    Message::Literal { .. } | Message::Signed { .. } => Ok(vec![msg]),
+        locked_key.unlock(key_pw, |priv_key| {
+            let decrypted_key = match *priv_key {
+                SecretKeyRepr::RSA(ref priv_key) => {
+                    decrypt_rsa(priv_key, mpis, &locked_key.fingerprint())?
                 }
-            })
-            .collect::<Result<Vec<Vec<Message>>>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<Message>>();
+                SecretKeyRepr::DSA => unimplemented_err!("DSA"),
+                SecretKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
+                SecretKeyRepr::ECDH(ref priv_key) => {
+                    decrypt_ecdh(priv_key, mpis, &locked_key.fingerprint())?
+                }
+                SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
+            };
+            let algorithm = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
+                .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
+            alg = Some(algorithm);
+            info!("alg: {:?}", alg);
 
-        info!("msg: {:?}", msgs);
-        messages.extend(msgs);
+            let (k, checksum) = match *priv_key {
+                SecretKeyRepr::ECDH(_) => {
+                    let dec_len = decrypted_key.len();
+                    (
+                        &decrypted_key[1..dec_len - 2],
+                        &decrypted_key[dec_len - 2..],
+                    )
+                }
+                _ => {
+                    let key_size = algorithm.key_size();
+                    (
+                        &decrypted_key[1..=key_size],
+                        &decrypted_key[key_size + 1..key_size + 3],
+                    )
+                }
+            };
+
+            key = k.to_vec();
+            checksum::simple(checksum, k)?;
+
+            Ok(())
+        })?;
+
+        Ok(MessageDecrypter {
+            key,
+            alg: alg.expect("failed to unlock"),
+            edata,
+            pos: 0,
+            current_msgs: None,
+        })
     }
+}
 
-    // TODO: validate found signatures
+impl<'a> Iterator for MessageDecrypter<'a> {
+    type Item = Result<Message>;
 
-    // search for literal data packet and return its value
-    // TODO: handle different types of packets to be decrypted
-    let literal = messages
-        .iter()
-        .find(|msg| msg.is_literal())
-        .ok_or_else(|| format_err!("missing literal message"))?;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pos >= self.edata.len() && self.current_msgs.is_none() {
+            return None;
+        }
 
-    if let Some(Message::Literal(packet)) = literal.get_literal() {
-        Ok(packet.data().to_vec())
-    } else {
-        unreachable!();
+        if self.current_msgs.is_none() {
+            // need to decrypt another packet
+            let packet = &self.edata[self.pos];
+            self.pos += 1;
+
+            let mut res = packet.data()[..].to_vec();
+            let protected = packet.tag() == Tag::SymEncryptedProtectedData;
+
+            info!("decrypting protected = {:?}", protected);
+
+            let decrypted_packet: &[u8] = if protected {
+                err_opt!(self.alg.decrypt_protected(&self.key, &mut res))
+            } else {
+                err_opt!(self.alg.decrypt(&self.key, &mut res))
+            };
+
+            self.current_msgs = Some(Message::from_bytes_many(Cursor::new(
+                decrypted_packet.to_vec(),
+            )));
+        };
+
+        let mut msgs = self.current_msgs.take().expect("just checked");
+        let next = msgs.next();
+        self.current_msgs = Some(msgs);
+
+        next
     }
 }
 
@@ -427,17 +442,45 @@ mod tests {
             Message::from_armor_single(&mut cipher_file).expect("failed to parse message");
         info!("message: {:?}", message);
 
-        let decrypted = message
-            .decrypt(
-                || "".to_string(),
-                || details.passphrase.clone(),
-                &decrypt_key,
-            )
-            .expect("failed to decrypt message");
-        assert_eq!(
-            ::std::str::from_utf8(&decrypted).unwrap(),
-            details.textcontent.unwrap_or_else(|| "".to_string())
-        );
+        match message {
+            Message::Encrypted { .. } => {
+                let decrypted = message
+                    .decrypt(
+                        || "".to_string(),
+                        || details.passphrase.clone(),
+                        &decrypt_key,
+                    )
+                    .expect("failed to decrypt message")
+                    .next()
+                    .expect("no mesage")
+                    .expect("message decryption failed");
+
+                let raw = match decrypted {
+                    Message::Literal(msg) => msg,
+                    Message::Compressed(msg) => {
+                        let m = Message::from_bytes(msg.decompress()).unwrap();
+
+                        if let Message::Literal(msg) = m.get_literal().unwrap() {
+                            msg.clone()
+                        } else {
+                            panic!("unexpected message type: {:?}", m)
+                        }
+                    }
+                    _ => panic!("unexpected message type: {:?}", decrypted),
+                };
+
+                assert_eq!(
+                    ::std::str::from_utf8(raw.data()).unwrap(),
+                    details.textcontent.unwrap_or_else(|| "".to_string())
+                );
+            }
+            Message::Signed { .. } => {
+                // TODO: check signature
+            }
+            _ => {
+                // TODO: some other checks?
+            }
+        }
     }
 
     macro_rules! msg_test {
