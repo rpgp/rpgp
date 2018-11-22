@@ -4,6 +4,13 @@ services: docker
 
 matrix:
   fast_finish: true
+  allow_failures:
+  # This is sad, and unclear if our fault or sth else. Might be related to
+  # https://bugs.launchpad.net/ubuntu/+source/qemu/+bug/1357226
+  - env: TARGET=aarch64-linux-android
+  - env: TARGET=arm-linux-androideabi
+  - env: TARGET=armv7-linux-androideabi
+  - env: TARGET=x86_64-linux-android
   include:
   - name: "rustfmt"
     install: rustup component add rustfmt-preview

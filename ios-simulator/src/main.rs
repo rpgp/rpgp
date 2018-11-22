@@ -16,6 +16,9 @@
 // (https://github.com/snipsco/dinghy): cargo dinghy install, then cargo dinghy
 // test.
 
+extern crate fs_extra;
+
+use fs_extra::dir::{copy, CopyOptions};
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
@@ -41,6 +44,12 @@ fn package_as_simulator_app(crate_name: &str, test_binary_path: &Path) {
         test_binary_path,
         Path::new("ios_simulator_app").join(crate_name)
     ));
+
+    let mut opts = CopyOptions::new();
+    opts.copy_inside = true;
+    opts.skip_exist = true;
+
+    t!(copy("./tests", "./ios_simulator_app/tests", &opts));
 
     let mut f = t!(File::create("ios_simulator_app/Info.plist"));
     t!(f.write_all(
