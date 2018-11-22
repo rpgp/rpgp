@@ -1,25 +1,27 @@
 environment:
-  global:
-    RUST_VERSION: stable
-    CRATE_NAME: pgp
-
   matrix:
     # MinGW
     - TARGET: i686-pc-windows-gnu
+      MYSYS_BITS: 32
     - TARGET: x86_64-pc-windows-gnu
+      MYSYS_BITS: 64
 
     # MSVC
     - TARGET: i686-pc-windows-msvc
+      ARCH: x86
+      VS: C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat
     - TARGET: x86_64-pc-windows-msvc
+      ARCH: amd64
+      VS: C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat
 
 install:
-  # Install rust, x86_64-pc-windows-msvc host
-  - appveyor-retry appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
-  - rustup-init.exe -y --default-host x86_64-pc-windows-msvc --default-toolchain nightly
-  - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
-  - if NOT "%TARGET%" == "x86_64-pc-windows-msvc" rustup target add %TARGET%
-  - rustc -vV
-  - cargo -vV
+  - ps: Start-FileDownload "https://static.rust-lang.org/dist/rust-nightly-${env:TARGET}.exe"
+  - rust-nightly-%TARGET%.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
+  - if defined VS call "%VS%" %ARCH%
+  - set PATH=%PATH%;C:\Program Files (x86)\Rust\bin
+  - if defined MSYS_BITS set PATH=%PATH%;C:\msys64\mingw%MSYS_BITS%\bin
+  - rustc -V
+  - cargo -V
 
 build: false
 
