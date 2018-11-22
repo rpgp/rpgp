@@ -4,7 +4,6 @@
 
 > Rust implementation of PGP. Following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440).
 
-[Documentation](https://docs.rs/pgp)
 
 ## Warning
 
@@ -84,5 +83,3 @@ dual licensed as above, without any additional terms or conditions.
 [license]: https://github.com/dignifiedquire/pgp/blob/master/license.md
 [crate-shield]: https://img.shields.io/crates/v/pgp.svg?style=flat-square
 [crate]: https://crates.io/crates/pgp
-
-[![Build Status](https://travis-ci.org/dignifiedquire/pgp.svg?branch=master)](https://travis-ci.org/dignifiedquire/pgp) [![Build status](https://ci.appveyor.com/api/projects/status/d1knobws948pyynk/branch/master?svg=true)](https://ci.appveyor.com/project/dignifiedquire/pgp/branch/master)
