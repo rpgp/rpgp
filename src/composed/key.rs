@@ -50,7 +50,7 @@ impl KeyTrait for PublicKey {
     }
 }
 
-impl KeyTrait for &PublicKey {
+impl<'a> KeyTrait for &'a PublicKey {
     /// Returns the fingerprint of the associated primary key.
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
@@ -87,7 +87,7 @@ impl KeyTrait for PublicSubKey {
     }
 }
 
-impl KeyTrait for &PublicSubKey {
+impl<'a> KeyTrait for &'a PublicSubKey {
     /// Returns the fingerprint of the key.
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
@@ -144,7 +144,7 @@ impl KeyTrait for PrivateKey {
     }
 }
 
-impl KeyTrait for &PrivateKey {
+impl<'a> KeyTrait for &'a PrivateKey {
     /// Returns the fingerprint of the associated primary key.
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
@@ -166,7 +166,7 @@ impl SecretKeyTrait for PrivateKey {
     }
 }
 
-impl SecretKeyTrait for &PrivateKey {
+impl<'a> SecretKeyTrait for &'a PrivateKey {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
@@ -201,7 +201,7 @@ impl KeyTrait for PrivateSubKey {
     }
 }
 
-impl KeyTrait for &PrivateSubKey {
+impl<'a> KeyTrait for &'a PrivateSubKey {
     /// Returns the fingerprint of the key.
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
@@ -223,7 +223,7 @@ impl SecretKeyTrait for PrivateSubKey {
     }
 }
 
-impl SecretKeyTrait for &PrivateSubKey {
+impl<'a> SecretKeyTrait for &'a PrivateSubKey {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,

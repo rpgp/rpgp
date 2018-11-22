@@ -22,7 +22,7 @@ macro_rules! impl_key {
                 &self.public_params
             }
         }
-        impl $crate::types::KeyTrait for &$name {
+        impl<'a> $crate::types::KeyTrait for &'a $name {
             fn fingerprint(&self) -> Vec<u8> {
                 (*self).fingerprint()
             }
