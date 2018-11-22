@@ -2,13 +2,10 @@
 
 set -ex
 
-export RUST_TEST_THREADS=1
 export RUST_BACKTRACE=1
 export RUST_TEST_NOCAPTURE=1
 export OPT="--target=$TARGET"
 export OPT_RELEASE="--release ${OPT}"
-export OPT_ND="--no-default-features ${OPT}"
-export OPT_RELEASE_ND="--no-default-features ${OPT_RELEASE}"
 
 # Select cargo command: use cross by default
 export CARGO_CMD=cross
@@ -50,15 +47,9 @@ fi
 $CARGO_CMD $CARGO_SUBCMD $OPT
 $CARGO_CMD $CARGO_SUBCMD $OPT_RELEASE
 
-$CARGO_CMD $CARGO_SUBCMD $OPT_ND
-! find target/ -name *.rlib -exec nm {} \; | grep "std"
-$CARGO_CMD clean
-$CARGO_CMD $CARGO_SUBCMD $OPT_RELEASE_ND
-! find target/ -name *.rlib -exec nm {} \; | grep "std"
-
 if [[ $TRAVIS_RUST_VERSION == "nightly" ]]; then
-    $CARGO_CMD $CARGO_SUBCMD --features "nightly" $OPT_ND
-    $CARGO_CMD $CARGO_SUBCMD --features "nightly" $OPT_RELEASE_ND
+    $CARGO_CMD $CARGO_SUBCMD --features "nightly" $OPT
+    $CARGO_CMD $CARGO_SUBCMD --features "nightly" $OPT_RELEASE
 fi
 
 # Run documentation and clippy:
