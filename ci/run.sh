@@ -17,9 +17,9 @@ if [[ $TARGET = *"windows"* ]] || [[ $TARGET == "x86_64-unknown-linux-gnu" ]] ||
 fi
 
 # Install cross if necessary:
-# if [[ $CARGO_CMD == "cross" ]]; then
-#    cargo install cross
-#fi
+if [[ $CARGO_CMD == "cross" ]]; then
+   cargo install cross
+fi
 
 # Use iOS simulator for those targets that support it:
 if [[ $TARGET = *"ios"* ]]; then
