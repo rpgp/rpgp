@@ -1,16 +1,75 @@
-sudo: false
 language: rust
-rust:
-  - stable
-  - nightly
+rust: nightly
+services: docker
 
-os:
-  - osx
-  - linux
-
-cache:
-  cargo: true
+matrix:
+  fast_finish: true
+  include:
+  - name: "rustfmt"
+    install: rustup component add rustfmt-preview
+    script: cargo fmt --all -- --check
+  - name: "clippy"
+    install: rustup component add clippy-preview
+    script: cargo clippy
+    addons:
+      apt:
+        packages:
+        - libcurl4-openssl-dev
+        - libelf-dev
+        - libdw-dev
+        - binutils-dev
+        - cmake
+  - env: TARGET=aarch64-unknown-linux-gnu
+  - env: TARGET=arm-unknown-linux-gnueabi
+  - env: TARGET=arm-unknown-linux-musleabi
+  - env: TARGET=armv7-unknown-linux-gnueabihf
+  - env: TARGET=armv7-unknown-linux-musleabihf
+  - env: TARGET=i586-unknown-linux-gnu
+  - env: TARGET=i686-unknown-linux-gnu
+  - env: TARGET=i686-unknown-linux-musl
+  - env: TARGET=mips-unknown-linux-gnu
+  - env: TARGET=mips64-unknown-linux-gnuabi64
+  - env: TARGET=mips64el-unknown-linux-gnuabi64
+  - env: TARGET=mipsel-unknown-linux-gnu
+  - env: TARGET=powerpc-unknown-linux-gnu
+  - env: TARGET=powerpc64-unknown-linux-gnu
+  - env: TARGET=powerpc64le-unknown-linux-gnu
+  - env: TARGET=x86_64-unknown-linux-gnu
+  - env: TARGET=x86_64-unknown-linux-gnu
+    rust: stable
+  - env: TARGET=x86_64-unknown-linux-musl
+  - env: TARGET=aarch64-linux-android
+  - env: TARGET=arm-linux-androideabi
+  - env: TARGET=armv7-linux-androideabi
+  - env: TARGET=x86_64-linux-android
+  - env: TARGET=i686-apple-darwin
+    os: osx
+  - env: TARGET=x86_64-apple-darwin
+    os: osx
+    osx_image: xcode9.2
+  - env: TARGET=i386-apple-ios
+    os: osx
+    osx_image: xcode9.2
+  - env: TARGET=x86_64-apple-ios
+    os: osx
+    osx_image: xcode9.2
+  - env: TARGET=aarch64-apple-ios NORUN=1
+    os: osx
+    osx_image: xcode9.2
+  - env: TARGET=armv7-apple-ios NORUN=1
+    os: osx
+    osx_image: xcode9.2
+  - env: TARGET=armv7s-apple-ios NORUN=1
+    os: osx
+    osx_image: xcode9.2
+  - env: TARGET=i686-unknown-freebsd NORUN=1
+  - env: TARGET=x86_64-unknown-freebsd NORUN=1
+  - env: TARGET=x86_64-unknown-netbsd NORUN=1
+  - env: TARGET=x86_64-sun-solaris NORUN=1
 
 script:
-  - cargo build --release
-  - cargo test
+  - ci/run.sh
+
+notifications:
+  email:
+    on_success: never

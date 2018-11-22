@@ -12,35 +12,20 @@ environment:
     - TARGET: i686-pc-windows-msvc
     - TARGET: x86_64-pc-windows-msvc
 
-    # Testing other channels
-    - TARGET: x86_64-pc-windows-gnu
-      RUST_VERSION: nightly
-    - TARGET: x86_64-pc-windows-msvc
-      RUST_VERSION: nightly
-
 install:
-  - ps: >-
-      If ($Env:TARGET -eq 'x86_64-pc-windows-gnu') {
-        $Env:PATH += ';C:\msys64\mingw64\bin'
-      } ElseIf ($Env:TARGET -eq 'i686-pc-windows-gnu') {
-        $Env:PATH += ';C:\msys64\mingw32\bin'
-      }
-  - curl -sSf -o rustup-init.exe https://win.rustup.rs/
-  - rustup-init.exe -y --default-host %TARGET% --default-toolchain %RUST_VERSION%
+  # Install rust, x86_64-pc-windows-msvc host
+  - appveyor-retry appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
+  - rustup-init.exe -y --default-host x86_64-pc-windows-msvc --default-toolchain nightly
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
-  - rustc -Vv
-  - cargo -V
+  - if NOT "%TARGET%" == "x86_64-pc-windows-msvc" rustup target add %TARGET%
+  - rustc -vV
+  - cargo -vV
 
 build: false
 
 test_script:
-  - cargo build --release --target %TARGET%
-  - cargo test --target %TARGET%
+- C:\msys64\usr\bin\sh ci\run.sh
 
 cache:
   - target
   - C:\Users\appveyor\.cargo\registry
-
-clone_script:
-  - cmd: git clone -q --recursive --branch=%APPVEYOR_REPO_BRANCH% https://github.com/%APPVEYOR_REPO_NAME%.git %APPVEYOR_BUILD_FOLDER%
-  - cmd: git checkout -qf %APPVEYOR_REPO_COMMIT%
