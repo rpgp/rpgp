@@ -23,7 +23,7 @@ fi
 
 # Use iOS simulator for those targets that support it:
 if [[ $TARGET = *"ios"* ]]; then
-    export RUSTFLAGS=-Clink-arg=-mios-simulator-version-min=7.0
+    # export RUSTFLAGS=-Clink-arg=-mios-simulator-version-min=7.0
     cargo build --manifest-path ios-simulator/Cargo.toml --release
     export CARGO_TARGET_X86_64_APPLE_IOS_RUNNER=$(pwd)/ios-simulator/target/release/ios-simulator
     export CARGO_TARGET_I386_APPLE_IOS_RUNNER=$(pwd)/ios-simulator/target/release/ios-simulator
@@ -48,16 +48,7 @@ fi
 $CARGO_CMD $CARGO_SUBCMD $OPT
 $CARGO_CMD $CARGO_SUBCMD $OPT_RELEASE
 
-if [[ $TRAVIS_RUST_VERSION == "nightly" ]]; then
-    $CARGO_CMD $CARGO_SUBCMD --features "nightly" $OPT
-    $CARGO_CMD $CARGO_SUBCMD --features "nightly" $OPT_RELEASE
-fi
-
 # Run documentation and clippy:
 if [[ $CARGO_CMD == "cargo" ]] && [[ $TARGET != *"ios"* ]]; then
     cargo doc
-    if [[ $TRAVIS_RUST_VERSION == "nightly" ]]; then
-        rustup component add clippy-preview
-        cargo clippy
-    fi
 fi
