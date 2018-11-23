@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str;
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use num_traits::FromPrimitive;
 
@@ -9,7 +9,7 @@ use crypto::hash::HashAlgorithm;
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use types::{self, CompressionAlgorithm};
+use types::{self, CompressionAlgorithm, KeyId};
 use util::{clone_into_array, mpi, packet_length, read_string_lossy};
 
 /// Signature Packet
@@ -24,7 +24,7 @@ pub struct Signature {
     pub signature_expiration_time: Option<DateTime<Utc>>,
     pub unhashed_subpackets: Vec<Subpacket>,
     pub created: Option<DateTime<Utc>>,
-    pub issuer: Option<[u8; 8]>,
+    pub issuer: Option<KeyId>,
     pub preferred_symmetric_algs: Vec<SymmetricKeyAlgorithm>,
     pub preferred_hash_algs: Vec<HashAlgorithm>,
     pub preferred_compression_algs: Vec<CompressionAlgorithm>,
@@ -246,7 +246,7 @@ pub enum Subpacket {
     SignatureExpirationTime(DateTime<Utc>),
     /// When the key is going to expire
     KeyExpirationTime(DateTime<Utc>),
-    Issuer([u8; 8]),
+    Issuer(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
     PreferredSymmetricAlgorithms(Vec<SymmetricKeyAlgorithm>),
     /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
@@ -326,9 +326,10 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
 named!(
     issuer<Subpacket>,
-    map!(complete!(take!(8)), |body| Subpacket::Issuer(
-        clone_into_array(body)
-    ))
+    map!(
+        map_res!(complete!(take!(8)), KeyId::from_slice),
+        Subpacket::Issuer
+    )
 );
 
 /// Parse a key expiration time subpacket
@@ -605,27 +606,35 @@ named!(v2_parser<Signature>, do_parse!(
 #[rustfmt::skip]
 named!(v3_parser<Signature>, do_parse!(
     // One-octet length of following hashed material. MUST be 5.
-            tag!(&[5])
+                 tag!(&[5])
     // One-octet signature type.
-    >> typ: map_opt!(be_u8, SignatureType::from_u8)
-    // TODO:
-    // -
-    //   -
-    //   - Four-octet creation time.
-    //   - Eight-octet Key ID of signer.
-    //  - One-octet public-key algorithm.
-    //      - One-octet hash algorithm.
-    //      - Two-octet field holding left 16 bits of signed hash value.
-    //      - One or more multiprecision integers comprising the signature.
-    //        This portion is algorithm specific, as described below.)
-    >> (Signature::new(
-        SignatureVersion::V3,
-        typ,
-        PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA1,
-        vec![],
-        vec![],
-    ))
+    >>      typ: map_opt!(be_u8, SignatureType::from_u8)
+    // Four-octet creation time.
+    >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
+    // Eight-octet Key ID of signer.
+    >>   issuer: map_res!(take!(8), KeyId::from_slice)
+    // One-octet public-key algorithm.
+    >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+    // One-octet hash algorithm.
+    >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
+    // Two-octet field holding left 16 bits of signed hash value.
+    >>  ls_hash: take!(2)
+    // One or more multiprecision integers comprising the signature.
+    >>      sig: call!(actual_signature, &pub_alg)
+    >> ({
+        let mut s = Signature::new(
+            SignatureVersion::V3,
+            typ,
+            pub_alg,
+            hash_alg,
+            ls_hash.to_vec(),
+            sig.to_vec(),
+        );
+        s.created = Some(created);
+        s.issuer = Some(issuer);
+
+        s
+    })
 ));
 
 /// Parse a v4 signature packet

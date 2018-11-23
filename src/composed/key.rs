@@ -494,7 +494,9 @@ mod tests {
             HashAlgorithm::SHA512,
             HashAlgorithm::SHA224,
         ];
-        let issuer = Subpacket::Issuer([0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]);
+        let issuer = Subpacket::Issuer(
+            KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
+        );
 
         sig1.created = Some(
             DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
