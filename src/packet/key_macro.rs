@@ -22,6 +22,7 @@ macro_rules! impl_key {
                 &self.public_params
             }
         }
+
         impl<'a> $crate::types::KeyTrait for &'a $name {
             fn fingerprint(&self) -> Vec<u8> {
                 (*self).fingerprint()
@@ -211,6 +212,45 @@ macro_rules! impl_key {
                         }
                         _ => None,
                     },
+                }
+            }
+        }
+
+        impl<'a> $crate::types::PublicKeyTrait for &'a$name {
+            fn verify(
+                &self,
+                hash: $crate::crypto::hash::HashAlgorithm,
+                hashed: &[u8],
+                sig: &[u8],
+            ) -> $crate::errors::Result<()> {
+                (*self).verify(hash, hashed, sig)
+            }
+        }
+
+        impl $crate::types::PublicKeyTrait for $name {
+            fn verify(
+                &self,
+                hash: $crate::crypto::hash::HashAlgorithm,
+                hashed: &[u8],
+                sig: &[u8],
+            ) -> $crate::errors::Result<()> {
+                use try_from::TryInto;
+                use $crate::crypto::public_key::PublicParams;
+
+                match self.public_params {
+                    PublicParams::RSA { ref n, ref e } => {
+                        use rsa::padding::PaddingScheme;
+
+                        let key = rsa::RSAPublicKey::new(n.clone(), e.clone())?;
+                        let rsa_hash_raw = hash.try_into();
+
+                        let rsa_hash: Option<rsa::hash::Hashes> =
+                            rsa_hash_raw.map(|v| Some(v)).unwrap_or_else(|_| None);
+
+                        key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], sig)
+                            .map_err(|err| err.into())
+                    }
+                    _ => unimplemented_err!("verify with algorithm: {:?}", self.algorithm),
                 }
             }
         }

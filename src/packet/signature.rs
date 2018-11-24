@@ -2,14 +2,15 @@ use std::collections::HashMap;
 use std::str;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use digest::Digest;
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use num_traits::FromPrimitive;
 
-use crypto::hash::HashAlgorithm;
+use crypto::hash::{HashAlgorithm, Hasher};
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use types::{self, CompressionAlgorithm, KeyId};
+use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait};
 use util::{clone_into_array, mpi, packet_length, read_string_lossy};
 
 /// Signature Packet
@@ -98,8 +99,43 @@ impl Signature {
         }
     }
 
+    /// Returns what kind of signature this is.
     pub fn typ(&self) -> SignatureType {
         self.typ
+    }
+
+    /// Verify this signature.
+    pub fn verify(&self, key: &impl PublicKeyTrait, data: &[u8]) -> Result<()> {
+        let mut hasher = self.hash_alg.new_hasher()?;
+        self.hash_data_to_sign(&mut hasher, data);
+        hasher.update(&self.signature);
+        hasher.update(&self.trailer());
+
+        key.verify(self.hash_alg, &hasher.finish()[..], &self.signature)
+    }
+
+    /// Verifies a certificate siganture type.
+    pub fn verify_certificate(&self) -> Result<()> {
+        unimplemented!();
+    }
+
+    fn hash_data_to_sign(&self, hasher: &mut Box<dyn Hasher>, data: &[u8]) {
+        unimplemented!();
+    }
+
+    fn trailer(&self) -> Vec<u8> {
+        unimplemented!();
+    }
+
+    /// Returns if the signature is a certificate or not.
+    pub fn is_certificate(&self) -> bool {
+        match self.typ {
+            SignatureType::CertGeneric
+            | SignatureType::CertPersona
+            | SignatureType::CertCasual
+            | SignatureType::CertPositive => true,
+            _ => false,
+        }
     }
 }
 
