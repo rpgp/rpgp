@@ -242,10 +242,7 @@ macro_rules! impl_key {
                         use rsa::padding::PaddingScheme;
 
                         let key = rsa::RSAPublicKey::new(n.clone(), e.clone())?;
-                        let rsa_hash_raw = hash.try_into();
-
-                        let rsa_hash: Option<rsa::hash::Hashes> =
-                            rsa_hash_raw.map(|v| Some(v)).unwrap_or_else(|_| None);
+                        let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
 
                         key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], sig)
                             .map_err(|err| err.into())
