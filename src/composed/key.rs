@@ -427,7 +427,31 @@ mod tests {
         // TODO: examine subkey details
         assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
-        let mut sig1 = Signature::new(
+        let issuer = Subpacket::Issuer(
+            KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
+        );
+        let key_flags = vec![3];
+        let p_sym_algs = vec![
+            SymmetricKeyAlgorithm::AES256,
+            SymmetricKeyAlgorithm::AES192,
+            SymmetricKeyAlgorithm::AES128,
+            SymmetricKeyAlgorithm::CAST5,
+            SymmetricKeyAlgorithm::TripleDES,
+        ];
+        let p_com_algs = vec![
+            CompressionAlgorithm::ZLIB,
+            CompressionAlgorithm::BZip2,
+            CompressionAlgorithm::ZIP,
+        ];
+        let p_hash_algs = vec![
+            HashAlgorithm::SHA256,
+            HashAlgorithm::SHA1,
+            HashAlgorithm::SHA384,
+            HashAlgorithm::SHA512,
+            HashAlgorithm::SHA224,
+        ];
+
+        let sig1 = Signature::new(
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
@@ -472,54 +496,28 @@ mod tests {
                 0xd1, 0xcd, 0xb4, 0x56, 0xb3, 0x9a, 0x92, 0x0c, 0x4c, 0x0e, 0x40, 0x8d, 0xf3, 0x4d,
                 0xb9, 0x49, 0x6f, 0x55, 0xc6, 0xb9, 0xf5, 0x1a,
             ],
+            vec![
+                Subpacket::SignatureCreationTime(
+                    DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
+                        .expect("failed to parse static time")
+                        .with_timezone(&Utc),
+                ),
+                Subpacket::KeyFlags(key_flags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
+                Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
+                Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
+                Subpacket::Features(vec![1]),
+                Subpacket::KeyServerPreferences(vec![128]),
+            ],
+            vec![issuer.clone()],
         );
-
-        let key_flags = vec![3];
-        let p_sym_algs = vec![
-            SymmetricKeyAlgorithm::AES256,
-            SymmetricKeyAlgorithm::AES192,
-            SymmetricKeyAlgorithm::AES128,
-            SymmetricKeyAlgorithm::CAST5,
-            SymmetricKeyAlgorithm::TripleDES,
-        ];
-        let p_com_algs = vec![
-            CompressionAlgorithm::ZLIB,
-            CompressionAlgorithm::BZip2,
-            CompressionAlgorithm::ZIP,
-        ];
-        let p_hash_algs = vec![
-            HashAlgorithm::SHA256,
-            HashAlgorithm::SHA1,
-            HashAlgorithm::SHA384,
-            HashAlgorithm::SHA512,
-            HashAlgorithm::SHA224,
-        ];
-        let issuer = Subpacket::Issuer(
-            KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
-        );
-
-        sig1.created = Some(
-            DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
-                .expect("failed to parse static time")
-                .with_timezone(&Utc),
-        );
-
-        sig1.key_flags = key_flags.clone();
-        sig1.preferred_symmetric_algs = p_sym_algs.clone();
-        sig1.preferred_compression_algs = p_com_algs.clone();
-        sig1.preferred_hash_algs = p_hash_algs.clone();
-
-        sig1.key_server_prefs = vec![128];
-        sig1.features = vec![1];
-
-        sig1.unhashed_subpackets.push(issuer.clone());
 
         let u1 = SignedUser::new(
             UserId::from_str("john doe (test) <johndoe@example.com>"),
             vec![sig1],
         );
 
-        let mut sig2 = Signature::new(
+        let sig2 = Signature::new(
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
@@ -564,23 +562,21 @@ mod tests {
                 0xba, 0x8b, 0xe0, 0xe4, 0x6b, 0x77, 0x0f, 0x35, 0xcb, 0x3f, 0x3e, 0xf5, 0x98, 0x37,
                 0x99, 0xed, 0x79, 0xd8, 0x76, 0xdf, 0x13, 0x9e,
             ],
+            vec![
+                Subpacket::SignatureCreationTime(
+                    DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
+                        .expect("failed to parse static time")
+                        .with_timezone(&Utc),
+                ),
+                Subpacket::KeyFlags(key_flags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
+                Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
+                Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
+                Subpacket::Features(vec![1]),
+                Subpacket::KeyServerPreferences(vec![128]),
+            ],
+            vec![issuer.clone()],
         );
-
-        sig2.created = Some(
-            DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
-                .expect("failed to parse static time")
-                .with_timezone(&Utc),
-        );
-
-        sig2.key_flags = key_flags.clone();
-        sig2.preferred_symmetric_algs = p_sym_algs.clone();
-        sig2.preferred_compression_algs = p_com_algs.clone();
-        sig2.preferred_hash_algs = p_hash_algs.clone();
-
-        sig2.key_server_prefs = vec![128];
-        sig2.features = vec![1];
-
-        sig2.unhashed_subpackets.push(issuer.clone());
 
         let u2 = SignedUser::new(
             UserId::from_str("john doe <johndoe@seconddomain.com>"),
@@ -599,7 +595,7 @@ mod tests {
             _ => panic!("not here"),
         }
 
-        let mut sig3 = Signature::new(
+        let sig3 = Signature::new(
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
@@ -644,22 +640,20 @@ mod tests {
                 0x2e, 0xa2, 0xda, 0x81, 0xe2, 0x9c, 0xab, 0x22, 0x41, 0x02, 0xcc, 0x2f, 0xca, 0xc5,
                 0xf7, 0x26, 0x65, 0x7d, 0x0b, 0xcc, 0xab, 0x26,
             ],
-        );
-
-        sig3.key_flags = key_flags;
-        sig3.preferred_symmetric_algs = p_sym_algs;
-        sig3.preferred_compression_algs = p_com_algs;
-        sig3.preferred_hash_algs = p_hash_algs;
-
-        sig3.key_server_prefs = vec![128];
-        sig3.features = vec![1];
-
-        sig3.unhashed_subpackets.push(issuer);
-
-        sig3.created = Some(
-            DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
-                .expect("failed to parse static time")
-                .with_timezone(&Utc),
+            vec![
+                Subpacket::SignatureCreationTime(
+                    DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
+                        .expect("failed to parse static time")
+                        .with_timezone(&Utc),
+                ),
+                Subpacket::KeyFlags(key_flags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
+                Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
+                Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
+                Subpacket::Features(vec![1]),
+                Subpacket::KeyServerPreferences(vec![128]),
+            ],
+            vec![issuer.clone()],
         );
 
         assert_eq!(ua.signatures, vec![sig3]);

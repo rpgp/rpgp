@@ -90,3 +90,5 @@ pub mod email;
 pub use composed::key::*;
 pub mod composed;
 pub mod crypto;
+pub mod de;
+pub mod ser;

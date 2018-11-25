@@ -1,6 +1,7 @@
 use nom::rest;
 use num_traits::FromPrimitive;
 
+use de::Deserialize;
 use errors::{Error, Result};
 use packet::packet_sum::Packet;
 use packet::{
