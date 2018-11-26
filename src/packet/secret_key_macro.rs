@@ -3,6 +3,7 @@ macro_rules! impl_secret_key {
     ($name:ident, $tag:expr) => {
         #[derive(Debug, PartialEq, Eq)]
         pub struct $name {
+            packet_version: $crate::types::Version,
             version: $crate::types::KeyVersion,
             algorithm: $crate::crypto::public_key::PublicKeyAlgorithm,
             created_at: chrono::DateTime<chrono::Utc>,
@@ -13,11 +14,15 @@ macro_rules! impl_secret_key {
 
         impl $name {
             /// Parses a `SecretKey` packet from the given slice.
-            pub fn from_slice(input: &[u8]) -> $crate::errors::Result<Self> {
+            pub fn from_slice(
+                packet_version: $crate::types::Version,
+                input: &[u8],
+            ) -> $crate::errors::Result<Self> {
                 let (_, details) = $crate::packet::secret_key_parser::parse(input)?;
                 let (version, algorithm, created_at, expiration, public_params, secret_params) =
                     details;
                 Ok($name {
+                    packet_version,
                     version,
                     algorithm,
                     created_at,
@@ -174,6 +179,10 @@ macro_rules! impl_secret_key {
             /// Checks if we should expect a SHA1 checksum in the encrypted part.
             fn has_checksum(&self) -> bool {
                 self.secret_params.string_to_key_id == 254
+            }
+
+            pub fn packet_version(&self) -> $crate::types::Version {
+                self.packet_version
             }
         }
 

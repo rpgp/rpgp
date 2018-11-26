@@ -4,10 +4,11 @@ use flate2::read::{DeflateDecoder, ZlibDecoder};
 use num_traits::FromPrimitive;
 
 use errors::Result;
-use types::CompressionAlgorithm;
+use types::{CompressionAlgorithm, Version};
 
 #[derive(Debug, Clone)]
 pub struct CompressedData {
+    packet_version: Version,
     compression_algorithm: CompressionAlgorithm,
     compressed_data: Vec<u8>,
 }
@@ -31,13 +32,18 @@ impl<'a> Read for Decompressor<&'a [u8]> {
 }
 
 impl CompressedData {
+    pub fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
     /// Parses a `CompressedData` packet from the given slice.
-    pub fn from_slice(input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         ensure!(input.len() > 1, "input too short");
 
         let alg = CompressionAlgorithm::from_u8(input[0])
             .ok_or_else(|| format_err!("invalid compression algorithm"))?;
         Ok(CompressedData {
+            packet_version,
             compression_algorithm: alg,
             compressed_data: input[1..].to_vec(),
         })

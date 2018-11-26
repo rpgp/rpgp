@@ -1,3 +1,7 @@
+use std::convert::AsMut;
+use std::io;
+use std::ops::{Range, RangeFrom, RangeTo};
+
 use byteorder::{BigEndian, ByteOrder};
 use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
@@ -5,8 +9,6 @@ use nom::{
     InputLength, InputTake, Slice,
 };
 use num_bigint::BigUint;
-use std::convert::AsMut;
-use std::ops::{Range, RangeFrom, RangeTo};
 
 use errors;
 
@@ -106,6 +108,20 @@ pub fn bignum_to_mpi(n: &BigUint) -> Vec<u8> {
     BigEndian::write_uint(&mut res[0..2], n.bits() as u64, 2);
     res[2..].copy_from_slice(&number[..]);
     res
+}
+
+/// Returns the bit length of a given slice.
+pub fn bit_size(val: &[u8]) -> usize {
+    (val.len() * 8) - val[0].leading_zeros() as usize
+}
+
+pub fn write_mpi(val: &[u8], w: &mut impl io::Write) -> errors::Result<()> {
+    let size = bit_size(val);
+
+    w.write_all(&[(size >> 8) as u8, size as u8])?;
+    w.write_all(val)?;
+
+    Ok(())
 }
 
 /// Parse an mpi and convert it to a `BigUint`.

@@ -4,6 +4,12 @@ use errors::Result;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct KeyId([u8; 8]);
 
+impl AsRef<[u8]> for KeyId {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 impl KeyId {
     pub fn from_slice(input: &[u8]) -> Result<KeyId> {
         ensure_eq!(input.len(), 8, "invalid input length");
