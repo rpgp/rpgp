@@ -48,14 +48,12 @@ named!(issuer<Subpacket>, map!(
 
 /// Parse a key expiration time subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
-named!(
-    key_expiration<Subpacket>,
-    map!(
-        // 4-octet time field
-        be_u32,
-        |date| Subpacket::KeyExpirationTime(dt_from_timestamp(date))
-    )
-);
+#[rustfmt::skip]
+named!(key_expiration<Subpacket>, map!(
+    // 4-octet time field
+    be_u32,
+    |date| Subpacket::KeyExpirationTime(dt_from_timestamp(date))
+));
 
 /// Parse a preferred symmetric algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
@@ -83,14 +81,12 @@ named!(pref_com_alg<Subpacket>,do_parse!(
 
 /// Parse a signature expiration time subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
-named!(
-    signature_expiration_time<Subpacket>,
-    map!(
-        // 4-octet time field
-        be_u32,
-        |date| Subpacket::SignatureExpirationTime(dt_from_timestamp(date))
-    )
-);
+#[rustfmt::skip]
+named!(signature_expiration_time<Subpacket>, map!(
+    // 4-octet time field
+    be_u32,
+    |date| Subpacket::SignatureExpirationTime(dt_from_timestamp(date))
+));
 
 /// Parse a exportable certification subpacket.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
@@ -119,12 +115,10 @@ named!(trust_signature<Subpacket>, do_parse!(
 
 /// Parse a regular expression subpacket.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
-named!(
-    regular_expression<Subpacket>,
-    map!(map_res!(rest, str::from_utf8), |v| {
-        Subpacket::RegularExpression(v.to_string())
-    })
-);
+#[rustfmt::skip]
+named!(regular_expression<Subpacket>, map!(
+    map!(rest, read_string_lossy), Subpacket::RegularExpression
+));
 
 /// Parse a revocation key subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
@@ -177,12 +171,10 @@ named!(
 
 /// Parse a policy URI subpacket.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
-named!(
-    policy_uri<Subpacket>,
-    map!(map_res!(rest, str::from_utf8), |v| Subpacket::PolicyURI(
-        v.to_string()
-    ))
-);
+#[rustfmt::skip]
+named!(policy_uri<Subpacket>, map!(
+    map!(rest, read_string_lossy), Subpacket::PolicyURI
+));
 
 /// Parse a key flags subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.21
@@ -210,6 +202,15 @@ named!(rev_reason<Subpacket>, do_parse!(
          code: map_opt!(be_u8, RevocationCode::from_u8)
     >> reason: map!(rest, read_string_lossy)
     >> (Subpacket::RevocationReason(code, reason))
+));
+
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.25
+#[rustfmt::skip]
+named!(sig_target<Subpacket>, do_parse!(
+        pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+    >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
+    >>     hash: rest
+    >> (Subpacket::SignatureTarget(pub_alg, hash_alg, hash.to_vec()))
 ));
 
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
@@ -243,7 +244,7 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
         SignersUserID => signers_userid(body),
         RevocationReason => rev_reason(body),
         Features => features(body),
-        SignatureTarget => unimplemented!("{:?}", typ),
+        SignatureTarget => sig_target(body),
         EmbeddedSignature => embedded_sig(body),
         Experimental => Ok((&body[..], Subpacket::Experimental(body.to_vec()))),
     };

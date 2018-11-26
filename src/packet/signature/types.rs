@@ -461,6 +461,7 @@ pub enum Subpacket {
     RegularExpression(String),
     ExportableCertification(bool),
     Experimental(Vec<u8>),
+    SignatureTarget(PublicKeyAlgorithm, HashAlgorithm, Vec<u8>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
