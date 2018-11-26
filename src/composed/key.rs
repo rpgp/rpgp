@@ -255,7 +255,9 @@ mod tests {
     use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
     use crypto::sym::SymmetricKeyAlgorithm;
     use packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId};
-    use types::{CompressionAlgorithm, KeyVersion, SecretKeyRepr, SignedUser, StringToKeyType};
+    use types::{
+        CompressionAlgorithm, KeyVersion, SecretKeyRepr, SignedUser, StringToKeyType, Version,
+    };
 
     fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
         // Open the path in read-only mode, returns `io::Result<File>`
@@ -452,12 +454,13 @@ mod tests {
         ];
 
         let sig1 = Signature::new(
+            Version::Old,
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
             vec![0x7c, 0x63],
-            vec![
+            vec![vec![
                 0x15, 0xb5, 0x4f, 0xca, 0x11, 0x7f, 0x1b, 0x1d, 0xc0, 0x7a, 0x05, 0x97, 0x25, 0x10,
                 0x4b, 0x6a, 0x76, 0x12, 0xf8, 0x89, 0x48, 0x76, 0x74, 0xeb, 0x8b, 0x22, 0xcf, 0xeb,
                 0x95, 0x80, 0x70, 0x97, 0x1b, 0x92, 0x7e, 0x35, 0x8f, 0x5d, 0xc8, 0xae, 0x22, 0x0d,
@@ -495,7 +498,7 @@ mod tests {
                 0xbd, 0x1f, 0x26, 0x92, 0xda, 0x85, 0x52, 0x71, 0x15, 0x9d, 0x7e, 0xa4, 0x7e, 0xc2,
                 0xd1, 0xcd, 0xb4, 0x56, 0xb3, 0x9a, 0x92, 0x0c, 0x4c, 0x0e, 0x40, 0x8d, 0xf3, 0x4d,
                 0xb9, 0x49, 0x6f, 0x55, 0xc6, 0xb9, 0xf5, 0x1a,
-            ],
+            ]],
             vec![
                 Subpacket::SignatureCreationTime(
                     DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
@@ -513,17 +516,18 @@ mod tests {
         );
 
         let u1 = SignedUser::new(
-            UserId::from_str("john doe (test) <johndoe@example.com>"),
+            UserId::from_str(Version::Old, "john doe (test) <johndoe@example.com>"),
             vec![sig1],
         );
 
         let sig2 = Signature::new(
+            Version::Old,
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
             vec![0xca, 0x6c],
-            vec![
+            vec![vec![
                 0x49, 0xa0, 0xb5, 0x41, 0xbd, 0x33, 0xa8, 0xda, 0xda, 0x6e, 0xb1, 0xe5, 0x28, 0x74,
                 0x18, 0xee, 0x39, 0xc8, 0x8d, 0xfd, 0x39, 0xe8, 0x3b, 0x09, 0xdc, 0x9d, 0x04, 0x91,
                 0x5d, 0x66, 0xb8, 0x1d, 0x04, 0x0a, 0x90, 0xe7, 0xa6, 0x84, 0x9b, 0xb1, 0x06, 0x4f,
@@ -561,7 +565,7 @@ mod tests {
                 0x5a, 0xe8, 0x4a, 0x93, 0x98, 0xf3, 0xe2, 0xdb, 0xbc, 0x9f, 0xb1, 0x83, 0x92, 0x8b,
                 0xba, 0x8b, 0xe0, 0xe4, 0x6b, 0x77, 0x0f, 0x35, 0xcb, 0x3f, 0x3e, 0xf5, 0x98, 0x37,
                 0x99, 0xed, 0x79, 0xd8, 0x76, 0xdf, 0x13, 0x9e,
-            ],
+            ]],
             vec![
                 Subpacket::SignatureCreationTime(
                     DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
@@ -579,7 +583,7 @@ mod tests {
         );
 
         let u2 = SignedUser::new(
-            UserId::from_str("john doe <johndoe@seconddomain.com>"),
+            UserId::from_str(Version::Old, "john doe <johndoe@seconddomain.com>"),
             vec![sig2],
         );
 
@@ -589,19 +593,20 @@ mod tests {
         assert_eq!(key.user_attributes.len(), 1);
         let ua = &key.user_attributes[0];
         match ua.attr {
-            UserAttribute::Image(ref v) => {
-                assert_eq!(v.len(), 1156);
+            UserAttribute::Image { ref data, .. } => {
+                assert_eq!(data.len(), 1156);
             }
             _ => panic!("not here"),
         }
 
         let sig3 = Signature::new(
+            Version::Old,
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
             vec![0x02, 0x0c],
-            vec![
+            vec![vec![
                 0x5b, 0x4b, 0xeb, 0xff, 0x1a, 0x89, 0xc2, 0xe1, 0x80, 0x20, 0x26, 0x3b, 0xf4, 0x4d,
                 0x2d, 0x46, 0xba, 0x96, 0x78, 0xb2, 0x88, 0xf8, 0xf9, 0xd5, 0xf1, 0x5f, 0x7d, 0x45,
                 0xeb, 0xbc, 0x25, 0x2e, 0x1b, 0x2f, 0x8e, 0xd4, 0xa9, 0x6e, 0x64, 0xfa, 0x97, 0x09,
@@ -639,7 +644,7 @@ mod tests {
                 0xbb, 0xa0, 0x5e, 0x76, 0xd6, 0x01, 0xe1, 0xa4, 0x9a, 0x14, 0x43, 0xcd, 0x99, 0xa0,
                 0x2e, 0xa2, 0xda, 0x81, 0xe2, 0x9c, 0xab, 0x22, 0x41, 0x02, 0xcc, 0x2f, 0xca, 0xc5,
                 0xf7, 0x26, 0x65, 0x7d, 0x0b, 0xcc, 0xab, 0x26,
-            ],
+            ]],
             vec![
                 Subpacket::SignatureCreationTime(
                     DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")

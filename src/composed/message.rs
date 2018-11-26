@@ -460,6 +460,10 @@ mod tests {
                     Message::Compressed(msg) => {
                         let m = Message::from_bytes(msg.decompress()).unwrap();
 
+                        if let Message::Signed { signature, .. } = &m {
+                            println!("signature: {:?}", signature);
+                        }
+
                         if let Message::Literal(msg) = m.get_literal().unwrap() {
                             msg.clone()
                         } else {
@@ -474,8 +478,8 @@ mod tests {
                     details.textcontent.unwrap_or_else(|| "".to_string())
                 );
             }
-            Message::Signed { .. } => {
-                // TODO: check signature
+            Message::Signed { signature, .. } => {
+                println!("signature: {:?}", signature);
             }
             _ => {
                 // TODO: some other checks?

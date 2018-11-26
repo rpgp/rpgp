@@ -4,18 +4,19 @@ use crypto::hash::{HashAlgorithm, Hasher};
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait};
+use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Signature {
+    packet_version: Version,
     pub version: SignatureVersion,
     pub typ: SignatureType,
     pub pub_alg: PublicKeyAlgorithm,
     pub hash_alg: HashAlgorithm,
     pub signed_hash_value: Vec<u8>,
-    pub signature: Vec<u8>,
+    pub signature: Vec<Vec<u8>>,
 
     // only set on V2 and V3 keys
     pub created: Option<DateTime<Utc>>,
@@ -27,16 +28,18 @@ pub struct Signature {
 
 impl Signature {
     pub fn new(
+        packet_version: Version,
         version: SignatureVersion,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         signed_hash_value: Vec<u8>,
-        signature: Vec<u8>,
+        signature: Vec<Vec<u8>>,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
     ) -> Self {
         Signature {
+            packet_version,
             version,
             typ,
             pub_alg,
@@ -55,14 +58,22 @@ impl Signature {
         self.typ
     }
 
+    pub fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
     /// Verify this signature.
     pub fn verify(&self, key: &impl PublicKeyTrait, data: &[u8]) -> Result<()> {
         let mut hasher = self.hash_alg.new_hasher()?;
         self.hash_data_to_sign(&mut *hasher, data);
-        hasher.update(&self.signature);
+        hasher.update(&self.signature.concat());
         hasher.update(&self.trailer());
 
-        key.verify(self.hash_alg, &hasher.finish()[..], &self.signature)
+        key.verify(
+            self.hash_alg,
+            &hasher.finish()[..],
+            &self.signature.concat(),
+        )
     }
 
     /// Verifies a certificate siganture type.
@@ -389,8 +400,9 @@ pub enum SignatureType {
     ThirdParty = 0x50,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Available signature subpacket types
+#[repr(u8)]
 pub enum SubpacketType {
     SignatureCreationTime = 2,
     SignatureExpirationTime = 3,
@@ -402,12 +414,12 @@ pub enum SubpacketType {
     PreferredSymmetricAlgorithms = 11,
     RevocationKey = 12,
     Issuer = 16,
-    NotationData = 20,
+    Notation = 20,
     PreferredHashAlgorithms = 21,
     PreferredCompressionAlgorithms = 22,
     KeyServerPreferences = 23,
     PreferredKeyServer = 24,
-    PrimaryUserID = 25,
+    PrimaryUserId = 25,
     PolicyURI = 26,
     KeyFlags = 27,
     SignersUserID = 28,

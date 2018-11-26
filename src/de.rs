@@ -1,5 +1,6 @@
 use errors::Result;
+use types::Version;
 
 pub trait Deserialize: Sized {
-    fn from_slice(&[u8]) -> Result<Self>;
+    fn from_slice(Version, &[u8]) -> Result<Self>;
 }

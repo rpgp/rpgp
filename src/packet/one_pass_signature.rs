@@ -5,12 +5,13 @@ use crypto::hash::HashAlgorithm;
 use crypto::public_key::PublicKeyAlgorithm;
 use errors::Result;
 use packet::signature::SignatureType;
-use types::KeyId;
+use types::{KeyId, Version};
 
 /// One-Pass Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.4
 #[derive(Debug, Clone)]
 pub struct OnePassSignature {
+    packet_version: Version,
     version: u8,
     typ: SignatureType,
     hash_algorithm: HashAlgorithm,
@@ -21,15 +22,19 @@ pub struct OnePassSignature {
 
 impl OnePassSignature {
     /// Parses a `OnePassSignature` packet from the given slice.
-    pub fn from_slice(input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(input)?;
+    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+        let (_, pk) = parse(input, packet_version)?;
 
         Ok(pk)
+    }
+
+    pub fn packet_version(&self) -> Version {
+        self.packet_version
     }
 }
 
 #[rustfmt::skip]
-named!(parse<OnePassSignature>, do_parse!(
+named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
          version: be_u8
     >>       typ: map_opt!(be_u8, SignatureType::from_u8)
     >>      hash: map_opt!(be_u8, HashAlgorithm::from_u8)
@@ -37,6 +42,7 @@ named!(parse<OnePassSignature>, do_parse!(
     >>    key_id: map_res!(take!(8), KeyId::from_slice)
     >> is_nested: map!(be_u8, |v| v > 0)
     >> (OnePassSignature {
+        packet_version,
         version,
         typ,
         hash_algorithm: hash,

@@ -3,12 +3,13 @@ use num_traits::FromPrimitive;
 
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use types::{s2k_parser, KeyId, StringToKey};
+use types::{s2k_parser, KeyId, StringToKey, Version};
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3
 #[derive(Debug, Clone)]
 pub struct SymKeyEncryptedSessionKey {
+    packet_version: Version,
     version: u8,
     sym_algorithm: SymmetricKeyAlgorithm,
     s2k: StringToKey,
@@ -17,11 +18,13 @@ pub struct SymKeyEncryptedSessionKey {
 
 impl SymKeyEncryptedSessionKey {
     /// Parses a `SymKeyEncryptedSessionKey` packet from the given slice.
-    pub fn from_slice(input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(input)?;
+    pub fn from_slice(version: Version, input: &[u8]) -> Result<Self> {
+        let (_, pk) = parse(input, version)?;
 
-        // TODO: openpgpjs has a version 5, investigate!
-        ensure_eq!(pk.version, 0x04, "Version 4 is the only known version");
+        ensure!(
+            pk.version == 0x04 || pk.version == 0x05,
+            "Version 4 and 5 are the only known version"
+        );
 
         Ok(pk)
     }
@@ -35,10 +38,14 @@ impl SymKeyEncryptedSessionKey {
         // TODO: figure out how, probably need decryption first?
         unimplemented!()
     }
+
+    pub fn packet_version(&self) -> Version {
+        self.packet_version
+    }
 }
 
 #[rustfmt::skip]
-named!(parse<SymKeyEncryptedSessionKey>, do_parse!(
+named_args!(parse(packet_version: Version) <SymKeyEncryptedSessionKey>, do_parse!(
               version: be_u8
     >>        sym_alg: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
     >>            s2k: s2k_parser
@@ -50,6 +57,7 @@ named!(parse<SymKeyEncryptedSessionKey>, do_parse!(
             Some(encrypted_key.to_vec())
         };
         SymKeyEncryptedSessionKey {
+            packet_version,
             version,
             sym_algorithm: sym_alg,
             s2k,

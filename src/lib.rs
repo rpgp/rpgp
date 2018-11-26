@@ -72,6 +72,9 @@ extern crate serde_derive;
 extern crate glob;
 #[cfg(test)]
 extern crate serde;
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
 
 // public so it can be used in doc test
 #[macro_use]
