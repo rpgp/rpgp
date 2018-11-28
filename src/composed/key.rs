@@ -244,7 +244,7 @@ mod tests {
     use hex;
     use num_bigint::BigUint;
     use num_traits::cast::ToPrimitive;
-    use rand::thread_rng;
+    use rand::OsRng;
     use rsa::padding::PaddingScheme;
     use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
     use serde_json;
@@ -344,7 +344,7 @@ mod tests {
         let mut file = read_file(p.to_path_buf());
 
         let mut buf = vec![];
-        file.read_to_end(&mut buf).unwrap();
+        file.read_to_end(&mut buf).expect("failed to read file");
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
@@ -355,7 +355,7 @@ mod tests {
 
         assert_eq!(
             pkey.secret_params().checksum,
-            Some(hex::decode("2c46").unwrap())
+            Some(hex::decode("2c46").expect("failed hex encoding"))
         );
 
         pkey.unlock(
@@ -369,19 +369,19 @@ mod tests {
 
                         // test basic encrypt decrypt
                         let plaintext = vec![2u8; 128];
-                        let mut rng = thread_rng();
+                        let mut rng = OsRng::new().expect("failed to create randomness");
 
                         let ciphertext = {
                             // TODO: fix this in rust-rsa
                             let k: RSAPrivateKey = k.clone();
                             let pk: RSAPublicKey = k.into();
                             pk.encrypt(&mut rng, PaddingScheme::PKCS1v15, plaintext.as_slice())
-                                .unwrap()
+                                .expect("failed to encrypt")
                         };
 
                         let new_plaintext = k
                             .decrypt(PaddingScheme::PKCS1v15, ciphertext.as_slice())
-                            .unwrap();
+                            .expect("failed to decrypt");
                         assert_eq!(plaintext, new_plaintext);
                     }
                     _ => panic!("unexpected params type {:?}", unlocked_key),
@@ -389,7 +389,7 @@ mod tests {
                 Ok(())
             },
         )
-        .unwrap();
+        .expect("failed to unlock");
     }
 
     #[test]
