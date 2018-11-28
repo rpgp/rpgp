@@ -1,8 +1,12 @@
+use std::io;
+
+use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, TimeZone, Utc};
 use nom::{be_u32, be_u8, rest};
 use num_traits::FromPrimitive;
 
 use errors::Result;
+use ser::Serialize;
 use types::Version;
 use util::read_string_lossy;
 
@@ -40,6 +44,23 @@ impl LiteralData {
 
     pub fn packet_version(&self) -> Version {
         self.packet_version
+    }
+}
+
+impl Serialize for LiteralData {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        let name = self.file_name.as_bytes();
+        writer.write_all(&[self.mode as u8, name.len() as u8])?;
+        writer.write_u32::<BigEndian>(self.created.timestamp() as u32)?;
+
+        match self.mode {
+            DataMode::Binary => {
+                writer.write_all(&self.data)?;
+            }
+            _ => unimplemented!("mode: {:?}", self.mode),
+        }
+
+        Ok(())
     }
 }
 

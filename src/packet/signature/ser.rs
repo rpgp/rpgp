@@ -111,6 +111,12 @@ impl Subpacket {
                 let val = if *is_exportable { 1 } else { 0 };
                 writer.write_all(&[val])?;
             }
+            Subpacket::IssuerFingerprint(fp) => {
+                writer.write_all(fp)?;
+            }
+            Subpacket::PreferredAeadAlgorithms(algs) => {
+                writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
+            }
             Subpacket::Experimental(body) => {
                 writer.write_all(body)?;
             }
@@ -155,6 +161,8 @@ impl Subpacket {
             Subpacket::TrustSignature(_, _) => 2,
             Subpacket::RegularExpression(regexp) => regexp.as_bytes().len(),
             Subpacket::ExportableCertification(_) => 1,
+            Subpacket::IssuerFingerprint(fp) => fp.len(),
+            Subpacket::PreferredAeadAlgorithms(algs) => algs.len(),
             Subpacket::Experimental(body) => body.len(),
             Subpacket::SignatureTarget(_, _, hash) => 2 + hash.len(),
         };
@@ -190,6 +198,8 @@ impl Subpacket {
             Subpacket::TrustSignature(_, _) => SubpacketType::TrustSignature,
             Subpacket::RegularExpression(_) => SubpacketType::RegularExpression,
             Subpacket::ExportableCertification(_) => SubpacketType::ExportableCertification,
+            Subpacket::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
+            Subpacket::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
             Subpacket::Experimental(_) => SubpacketType::Experimental,
             Subpacket::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
         }
@@ -262,7 +272,6 @@ mod tests {
     use std::io::Read;
     use std::path::Path;
 
-    use de::Deserialize;
     use packet::{Packet, PacketParser};
     use ser::Serialize;
 
@@ -287,9 +296,7 @@ mod tests {
             bytes
         };
 
-        // Note: for now we ignore the top level two bytes, as we write new style packets
-        // but some of the sources are old style packets.
-        assert_eq!(&bytes[0..], &serialized[0..], "failed to roundtrip");
+        assert_eq!(bytes, serialized, "failed to roundtrip");
     }
 
     #[test]

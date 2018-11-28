@@ -4,6 +4,7 @@ use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use num_traits::FromPrimitive;
 
+use crypto::aead::AeadAlgorithm;
 use crypto::hash::HashAlgorithm;
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
@@ -219,6 +220,20 @@ named!(embedded_sig<Subpacket>, map!(call!(parse, Version::New), |sig| {
     Subpacket::EmbeddedSignature(Box::new(sig))
 }));
 
+/// Parse an issuer subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
+#[rustfmt::skip]
+named!(issuer_fingerprint<Subpacket>,
+    map!(rest, |v| Subpacket::IssuerFingerprint(v.to_vec()))
+);
+
+/// Parse a preferred aead subpacket
+#[rustfmt::skip]
+named!(preferred_aead<Subpacket>, do_parse!(
+       algs: many0!(complete!(map_opt!(be_u8, AeadAlgorithm::from_u8)))
+    >> (Subpacket::PreferredAeadAlgorithms(algs))
+));
+
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
 
@@ -246,6 +261,8 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
         Features => features(body),
         SignatureTarget => sig_target(body),
         EmbeddedSignature => embedded_sig(body),
+        IssuerFingerprint => issuer_fingerprint(body),
+        PreferredAead => preferred_aead(body),
         Experimental => Ok((&body[..], Subpacket::Experimental(body.to_vec()))),
     };
 

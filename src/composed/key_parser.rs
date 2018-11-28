@@ -66,7 +66,10 @@ macro_rules! key_parser {
 
                 while let Some(true) = packets
                     .peek()
-                    .map(|packet| packet.tag() == Tag::UserId || packet.tag() == Tag::UserAttribute)
+                    .map(|packet| {
+                        info!("peek {:?}", packet.tag());
+                        packet.tag() == Tag::UserId || packet.tag() == Tag::UserAttribute
+                    })
                 {
                     let packet = packets.next().expect("peeked");
                     let tag = packet.tag();

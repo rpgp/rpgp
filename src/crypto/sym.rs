@@ -49,8 +49,9 @@ macro_rules! encrypt_regular {
         mode.encrypt($plaintext);
     }};
 }
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+
 /// Available symmetric key algorithms.
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
