@@ -11,7 +11,7 @@ keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy
 
 [dependencies]
 rsa = { git = "https://github.com/dignifiedquire/rust-rsa", branch = "master" }
-num-bigint = { git = "https://github.com/dignifiedquire/num-bigint", branch = "master" }
+num-bigint-dig = { version = "0.2", features = ["rand", "i128", "u64_digit"] }
 crc24 = "^0.1"
 base64 = "^0.10"
 byteorder = "^1.2"

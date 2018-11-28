@@ -38,7 +38,7 @@ extern crate flate2;
 extern crate generic_array;
 extern crate itertools;
 extern crate md5;
-extern crate num_bigint;
+extern crate num_bigint_dig as num_bigint;
 extern crate num_traits;
 extern crate ripemd160;
 extern crate sha1;

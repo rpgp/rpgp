@@ -50,10 +50,10 @@ matrix:
   - env: TARGET=x86_64-apple-darwin
     os: osx
     osx_image: xcode9.2
-  - env: TARGET=i386-apple-ios
+  - env: TARGET=i386-apple-ios  NORUN=1
     os: osx
     osx_image: xcode9.2
-  - env: TARGET=x86_64-apple-ios
+  - env: TARGET=x86_64-apple-ios NORUN=1
     os: osx
     osx_image: xcode9.2
   - env: TARGET=aarch64-apple-ios NORUN=1
