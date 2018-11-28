@@ -221,7 +221,7 @@ macro_rules! impl_key {
                 &self,
                 hash: $crate::crypto::hash::HashAlgorithm,
                 hashed: &[u8],
-                sig: &[u8],
+                sig: &[Vec<u8>],
             ) -> $crate::errors::Result<()> {
                 (*self).verify(hash, hashed, sig)
             }
@@ -232,20 +232,48 @@ macro_rules! impl_key {
                 &self,
                 hash: $crate::crypto::hash::HashAlgorithm,
                 hashed: &[u8],
-                sig: &[u8],
+                sig: &[Vec<u8>],
             ) -> $crate::errors::Result<()> {
                 use try_from::TryInto;
                 use $crate::crypto::public_key::PublicParams;
+
+
+                info!("verify data: {}", hex::encode(&hashed));
+                info!("verify sig: {:?}", sig);
 
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
                         use rsa::padding::PaddingScheme;
 
+                        let sig = sig.concat();
                         let key = rsa::RSAPublicKey::new(n.clone(), e.clone())?;
                         let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
 
-                        key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], sig)
+                        info!("n: {}", hex::encode(n.to_bytes_be()));
+                        info!("e: {}", hex::encode(e.to_bytes_be()));
+                        key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], &sig)
                             .map_err(|err| err.into())
+                    }
+                    PublicParams::EdDSA { ref curve, ref q } => match *curve {
+                        $crate::crypto::ecc_curve::ECCCurve::Ed25519 => {
+                            ensure_eq!(sig.len(), 2);
+
+                            let r = &sig[0];
+                            let s = &sig[1];
+
+                            ensure_eq!(r.len(), 32);
+                            ensure_eq!(s.len(), 32);
+                            ensure_eq!(q.len(), 33);
+                            ensure_eq!(q[0], 0x40);
+
+                            // TODO: unwraps to ? and implement the errors
+                            let pk = ed25519_dalek::PublicKey::from_bytes(&q[1..]).expect("invalid pubkey");
+                            let sig = ed25519_dalek::Signature::from_bytes(&sig.concat()).expect("malformed sig");
+
+                            pk.verify::<sha2::Sha512>(hashed, &sig).expect("invalid sig");
+                            Ok(())
+                        }
+                        _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
                     }
                     _ => unimplemented_err!("verify with algorithm: {:?}", self.algorithm),
                 }

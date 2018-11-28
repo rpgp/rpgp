@@ -961,4 +961,25 @@ mod tests {
         )
         .unwrap();
     }
+
+    #[test]
+    fn pub_x25519_little_verify() {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
+        let f = read_file("./tests/openpgpjs/x25519-little.pub.asc");
+        let pk = PublicKey::from_armor_single(f).expect("failed to parse key");
+        assert_eq!(pk.public_subkeys.len(), 1);
+        assert_eq!(
+            hex::encode(pk.key_id().unwrap().to_vec()).to_uppercase(),
+            "C062C165CA61C215",
+        );
+
+        assert_eq!(
+            hex::encode(pk.public_subkeys[0].key_id().unwrap().to_vec()).to_uppercase(),
+            "A586D1DD06BD97BC",
+        );
+        assert_eq!(pk.users.len(), 1);
+        assert_eq!(pk.users[0].id.id(), "Hi <hi@hel.lo>");
+    }
 }

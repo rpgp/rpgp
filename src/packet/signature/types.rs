@@ -1,9 +1,12 @@
+use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
 
+use crypto::aead::AeadAlgorithm;
 use crypto::hash::{HashAlgorithm, Hasher};
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
+use ser::Serialize;
 use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Version};
 
 /// Signature Packet
@@ -65,15 +68,14 @@ impl Signature {
     /// Verify this signature.
     pub fn verify(&self, key: &impl PublicKeyTrait, data: &[u8]) -> Result<()> {
         let mut hasher = self.hash_alg.new_hasher()?;
-        self.hash_data_to_sign(&mut *hasher, data);
-        hasher.update(&self.signature.concat());
-        hasher.update(&self.trailer());
 
-        key.verify(
-            self.hash_alg,
-            &hasher.finish()[..],
-            &self.signature.concat(),
-        )
+        self.hash_data_to_sign(&mut *hasher, data)?;
+        let len = self.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.trailer(len));
+
+        let hash = &hasher.finish()[..];
+
+        key.verify(self.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a certificate siganture type.
@@ -81,12 +83,80 @@ impl Signature {
         unimplemented!();
     }
 
-    fn hash_data_to_sign(&self, hasher: &mut dyn Hasher, data: &[u8]) {
-        unimplemented!();
+    /// Calcluate the serialized version of this packet, but only the part relevant for hashing.
+    fn hash_signature_data(&self, hasher: &mut dyn Hasher) -> Result<usize> {
+        match self.version {
+            SignatureVersion::V2 | SignatureVersion::V3 => {
+                unimplemented_err!("v2 and v3 are not there yet");
+            }
+            SignatureVersion::V4 | SignatureVersion::V5 => {
+                // TODO: validate this is the right thing to do for v5
+                // TODO: reduce duplication with serialization code
+
+                let mut res = vec![
+                    // version
+                    self.version as u8,
+                    // type
+                    self.typ as u8,
+                    // public algorithm
+                    self.pub_alg as u8,
+                    // hash algorithm
+                    self.hash_alg as u8,
+                    // will be filled with the length
+                    0u8,
+                    0u8,
+                ];
+
+                // hashed subpackets
+                let mut hashed_subpackets = Vec::new();
+                for packet in &self.hashed_subpackets {
+                    packet.to_writer(&mut hashed_subpackets)?;
+                }
+
+                BigEndian::write_u16(&mut res[4..6], hashed_subpackets.len() as u16);
+                res.extend(hashed_subpackets);
+
+                hasher.update(&res);
+
+                Ok(res.len())
+            }
+        }
     }
 
-    fn trailer(&self) -> Vec<u8> {
-        unimplemented!();
+    fn hash_data_to_sign(&self, hasher: &mut dyn Hasher, data: &[u8]) -> Result<usize> {
+        match self.typ {
+            SignatureType::Binary => {
+                hasher.update(data);
+                Ok(data.len())
+            }
+            SignatureType::Text => unimplemented_err!("Text"),
+            SignatureType::Standalone => unimplemented_err!("Standalone"),
+            SignatureType::CertGeneric => unimplemented_err!("CertGeneric"),
+            SignatureType::CertPersona => unimplemented_err!("CertPersona"),
+            SignatureType::CertCasual => unimplemented_err!("CertCasual"),
+            SignatureType::CertPositive => unimplemented_err!("CertPositive"),
+            SignatureType::SubkeyBinding => unimplemented_err!("SubkeyBinding"),
+            SignatureType::KeyBinding => unimplemented_err!("KeyBinding"),
+            SignatureType::Key => unimplemented_err!("Key"),
+            SignatureType::KeyRevocation => unimplemented_err!("KeyRevocation"),
+            SignatureType::CertRevocation => unimplemented_err!("CertRevocation"),
+            SignatureType::Timestamp => unimplemented_err!("Timestamp"),
+            SignatureType::ThirdParty => unimplemented_err!("ThirdParty"),
+            SignatureType::SubkeyRevocation => unimplemented_err!("SubkeyRevocation"),
+        }
+    }
+
+    fn trailer(&self, len: usize) -> Vec<u8> {
+        match self.version {
+            SignatureVersion::V2 | SignatureVersion::V3 => {
+                unimplemented!("trailer for v2 and v3 signatures");
+            }
+            SignatureVersion::V4 | SignatureVersion::V5 => {
+                let mut trailer = vec![0x04, 0xFF, 0, 0, 0, 0];
+                BigEndian::write_u32(&mut trailer[2..], len as u32);
+                trailer
+            }
+        }
     }
 
     /// Returns if the signature is a certificate or not.
@@ -427,6 +497,8 @@ pub enum SubpacketType {
     Features = 30,
     SignatureTarget = 31,
     EmbeddedSignature = 32,
+    IssuerFingerprint = 33,
+    PreferredAead = 34,
     Experimental = 100,
 }
 
@@ -460,6 +532,8 @@ pub enum Subpacket {
     TrustSignature(u8, u8),
     RegularExpression(String),
     ExportableCertification(bool),
+    IssuerFingerprint(Vec<u8>),
+    PreferredAeadAlgorithms(Vec<AeadAlgorithm>),
     Experimental(Vec<u8>),
     SignatureTarget(PublicKeyAlgorithm, HashAlgorithm, Vec<u8>),
 }

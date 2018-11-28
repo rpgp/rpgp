@@ -30,4 +30,8 @@ impl UserId {
     pub fn packet_version(&self) -> Version {
         self.packet_version
     }
+
+    pub fn id(&self) -> &str {
+        self.id.as_str()
+    }
 }
