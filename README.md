@@ -85,8 +85,8 @@ dual licensed as above, without any additional terms or conditions.
 
 [travis-shield]: https://img.shields.io/travis/dignifiedquire/rpgp.svg?style=flat-square
 [travis]: https://travis-ci.org/dignifiedquire/rpgp
-[appveyor-shield]: https://img.shields.io/appveyor/ci/dignifiedquire/pgp.svg?style=flat-square
-[appveyor]: https://ci.appveyor.com/api/projects/status/d1knobws948pyynk/branch/master
+[appveyor-shield]: https://ci.appveyor.com/api/projects/status/99y4f73itv7yvt93/branch/master?style=flat-square
+[appveyor]: https://ci.appveyor.com/project/dignifiedquire/pgp/branch/master
 [docs-shield]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
 [docs]: https://docs.rs/crate/pgp/
 [license-shield]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
