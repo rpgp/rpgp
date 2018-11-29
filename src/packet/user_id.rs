@@ -1,6 +1,8 @@
+use std::io;
 use std::str;
 
 use errors::Result;
+use ser::Serialize;
 use types::Version;
 use util::read_string_lossy;
 
@@ -33,5 +35,13 @@ impl UserId {
 
     pub fn id(&self) -> &str {
         self.id.as_str()
+    }
+}
+
+impl Serialize for UserId {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(self.id.as_bytes())?;
+
+        Ok(())
     }
 }

@@ -184,15 +184,39 @@ macro_rules! impl_secret_key {
             pub fn packet_version(&self) -> $crate::types::Version {
                 self.packet_version
             }
-        }
 
-        impl<'a> $crate::types::SecretKeyTrait for &'a $name {
-            fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
-            where
-                F: FnOnce() -> String,
-                G: FnOnce(&$crate::types::SecretKeyRepr) -> $crate::errors::Result<()>,
-            {
-                (*self).unlock(pw, work)
+            fn to_writer_old<W: std::io::Write>(
+                &self,
+                writer: &mut W,
+            ) -> $crate::errors::Result<()> {
+                use byteorder::{BigEndian, WriteBytesExt};
+                use $crate::ser::Serialize;
+
+                writer.write_u32::<BigEndian>(self.created_at.timestamp() as u32)?;
+                writer.write_u16::<BigEndian>(
+                    self.expiration
+                        .expect("old key versions have an expiration"),
+                )?;
+                writer.write_all(&[self.algorithm as u8])?;
+                self.public_params.to_writer(writer)?;
+                self.secret_params.to_writer(writer)?;
+
+                Ok(())
+            }
+
+            fn to_writer_new<W: std::io::Write>(
+                &self,
+                writer: &mut W,
+            ) -> $crate::errors::Result<()> {
+                use byteorder::{BigEndian, WriteBytesExt};
+                use $crate::ser::Serialize;
+
+                writer.write_u32::<BigEndian>(self.created_at.timestamp() as u32)?;
+                writer.write_all(&[self.algorithm as u8])?;
+                self.public_params.to_writer(writer)?;
+                self.secret_params.to_writer(writer)?;
+
+                Ok(())
             }
         }
 
@@ -210,6 +234,19 @@ macro_rules! impl_secret_key {
                 }?;
 
                 work(&decrypted)
+            }
+        }
+
+        impl $crate::ser::Serialize for $name {
+            fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> $crate::errors::Result<()> {
+                writer.write_all(&[self.version as u8])?;
+
+                match self.version {
+                    $crate::types::KeyVersion::V2 | $crate::types::KeyVersion::V3 => {
+                        self.to_writer_old(writer)
+                    }
+                    $crate::types::KeyVersion::V4 => self.to_writer_new(writer),
+                }
             }
         }
 

@@ -23,15 +23,6 @@ macro_rules! impl_key {
             }
         }
 
-        impl<'a> $crate::types::KeyTrait for &'a $name {
-            fn fingerprint(&self) -> Vec<u8> {
-                (*self).fingerprint()
-            }
-            fn key_id(&self) -> Option<$crate::types::KeyId> {
-                (*self).key_id()
-            }
-        }
-
         impl $crate::types::KeyTrait for $name {
             /// Returns the fingerprint of this key.
             fn fingerprint(&self) -> Vec<u8> {
@@ -214,21 +205,14 @@ macro_rules! impl_key {
                     },
                 }
             }
-        }
 
-        impl<'a> $crate::types::PublicKeyTrait for &'a$name {
-            fn verify(
-                &self,
-                hash: $crate::crypto::hash::HashAlgorithm,
-                hashed: &[u8],
-                sig: &[Vec<u8>],
-            ) -> $crate::errors::Result<()> {
-                (*self).verify(hash, hashed, sig)
+            fn verify(&self) -> $crate::errors::Result<()> {
+                unimplemented!("verify");
             }
         }
 
         impl $crate::types::PublicKeyTrait for $name {
-            fn verify(
+            fn verify_signature(
                 &self,
                 hash: $crate::crypto::hash::HashAlgorithm,
                 hashed: &[u8],
@@ -237,9 +221,8 @@ macro_rules! impl_key {
                 use try_from::TryInto;
                 use $crate::crypto::public_key::PublicParams;
 
-
                 info!("verify data: {}", hex::encode(&hashed));
-                info!("verify sig: {:?}", sig);
+                info!("verify sig: {}", hex::encode(&sig.concat()));
 
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
@@ -251,8 +234,13 @@ macro_rules! impl_key {
 
                         info!("n: {}", hex::encode(n.to_bytes_be()));
                         info!("e: {}", hex::encode(e.to_bytes_be()));
-                        key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], &sig)
-                            .map_err(|err| err.into())
+                        key.verify(
+                            PaddingScheme::PKCS1v15,
+                            rsa_hash.as_ref(),
+                            &hashed[..],
+                            &sig,
+                        )
+                        .map_err(|err| err.into())
                     }
                     PublicParams::EdDSA { ref curve, ref q } => match *curve {
                         $crate::crypto::ecc_curve::ECCCurve::Ed25519 => {
@@ -267,14 +255,17 @@ macro_rules! impl_key {
                             ensure_eq!(q[0], 0x40);
 
                             // TODO: unwraps to ? and implement the errors
-                            let pk = ed25519_dalek::PublicKey::from_bytes(&q[1..]).expect("invalid pubkey");
-                            let sig = ed25519_dalek::Signature::from_bytes(&sig.concat()).expect("malformed sig");
+                            let pk = ed25519_dalek::PublicKey::from_bytes(&q[1..])
+                                .expect("invalid pubkey");
+                            let sig = ed25519_dalek::Signature::from_bytes(&sig.concat())
+                                .expect("malformed sig");
 
-                            pk.verify::<sha2::Sha512>(hashed, &sig).expect("invalid sig");
+                            pk.verify::<sha2::Sha512>(hashed, &sig)
+                                .expect("invalid sig");
                             Ok(())
                         }
                         _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-                    }
+                    },
                     _ => unimplemented_err!("verify with algorithm: {:?}", self.algorithm),
                 }
             }

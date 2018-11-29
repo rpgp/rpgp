@@ -1,8 +1,13 @@
+use std::io;
+
 use num_bigint::BigUint;
 
 use crypto::ecc_curve::ECCCurve;
 use crypto::hash::HashAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
+use errors::Result;
+use ser::Serialize;
+use util::{write_bignum_mpi, write_mpi};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 #[repr(u8)]
@@ -74,4 +79,72 @@ pub enum PublicParams {
         curve: ECCCurve,
         q: Vec<u8>,
     },
+}
+
+impl Serialize for PublicParams {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            PublicParams::RSA { ref n, ref e } => {
+                write_bignum_mpi(n, writer)?;
+                write_bignum_mpi(e, writer)?;
+            }
+            PublicParams::DSA {
+                ref p,
+                ref q,
+                ref g,
+                ref y,
+            } => {
+                write_bignum_mpi(p, writer)?;
+                write_bignum_mpi(q, writer)?;
+                write_bignum_mpi(g, writer)?;
+                write_bignum_mpi(y, writer)?;
+            }
+            PublicParams::ECDSA { ref curve, ref p } => {
+                let oid = curve.oid();
+                writer.write_all(&[oid.len() as u8])?;
+                writer.write_all(&oid)?;
+
+                write_mpi(p, writer)?;
+            }
+            PublicParams::ECDH {
+                ref curve,
+                ref p,
+                ref hash,
+                ref alg_sym,
+            } => {
+                let oid = curve.oid();
+                writer.write_all(&[oid.len() as u8])?;
+                writer.write_all(&oid)?;
+
+                write_mpi(p, writer)?;
+
+                writer.write_all(&[
+                    // len of the following fields
+                    0x03,
+                    // fixed tag
+                    0x01,
+                    *hash as u8,
+                    *alg_sym as u8,
+                ])?;
+            }
+            PublicParams::Elgamal {
+                ref p,
+                ref g,
+                ref y,
+            } => {
+                write_bignum_mpi(p, writer)?;
+                write_bignum_mpi(g, writer)?;
+                write_bignum_mpi(y, writer)?;
+            }
+            PublicParams::EdDSA { ref curve, ref q } => {
+                let oid = curve.oid();
+                writer.write_all(&[oid.len() as u8])?;
+                writer.write_all(&oid)?;
+
+                write_mpi(q, writer)?;
+            }
+        }
+
+        Ok(())
+    }
 }
