@@ -31,10 +31,20 @@ untested). The following targets are known to work and pass all tests:
 * powerpc64le-unknown-linux-gnu
 * x86_64-unknown-linux-gnu
 * x86_64-unknown-linux-musl
+
+### Android
+
+> Note: currently not always passing on CI, but likely working.
+
 * aarch64-linux-android
 * arm-linux-androideabi
 * armv7-linux-androideabi
 * x86_64-linux-android
+
+### iOS
+
+> Note: currently only building on CI, but likely working.
+
 * i386-apple-ios
 * x86_64-apple-ios
 * armv7-apple-ios
@@ -73,13 +83,13 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in pgp by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
-[travis-shield]: https://img.shields.io/travis/dignifiedquire/pgp.svg?style=flat-square
-[travis]: https://travis-ci.org/dignifiedquire/pgp
+[travis-shield]: https://img.shields.io/travis/dignifiedquire/rpgp.svg?style=flat-square
+[travis]: https://travis-ci.org/dignifiedquire/rpgp
 [appveyor-shield]: https://img.shields.io/appveyor/ci/dignifiedquire/pgp.svg?style=flat-square
 [appveyor]: https://ci.appveyor.com/api/projects/status/d1knobws948pyynk/branch/master
 [docs-shield]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
 [docs]: https://docs.rs/crate/pgp/
 [license-shield]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
-[license]: https://github.com/dignifiedquire/pgp/blob/master/license.md
+[license]: https://github.com/dignifiedquire/rpgp/blob/master/LICENSE.md
 [crate-shield]: https://img.shields.io/crates/v/pgp.svg?style=flat-square
 [crate]: https://crates.io/crates/pgp
