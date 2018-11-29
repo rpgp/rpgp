@@ -1,5 +1,10 @@
+use std::io;
+
 use crypto::sym::SymmetricKeyAlgorithm;
+use errors::Result;
+use ser::Serialize;
 use types::StringToKey;
+use util::{write_bignum_mpi, write_mpi};
 
 /// A list of params that are used to represent the values of possibly encrypted key, from imports and exports.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,5 +37,17 @@ impl EncryptedSecretParams {
 
     pub fn is_encrypted(&self) -> bool {
         self.string_to_key_id != 0
+    }
+}
+
+impl Serialize for EncryptedSecretParams {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        // TODO:
+        // s2k typ
+        // enc_params
+        // data
+        // checksum
+
+        Ok(())
     }
 }

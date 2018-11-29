@@ -78,6 +78,7 @@ pub fn parser<'a>(input: &'a [u8]) -> Result<(&'a [u8], Result<Packet>)> {
     info!("parsing packet ({})", input.len());
     let (rest, (ver, tag, body)) = inner_parser(input)?;
 
+    info!("packet body: {}", hex::encode(body));
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
             PublicKeyEncryptedSessionKey::from_slice(ver, body).map(|r| r.into())

@@ -1,5 +1,8 @@
+use std::io;
+
 use errors::Result;
 use packet;
+use ser::Serialize;
 use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser, SignedUserAttribute};
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
@@ -36,29 +39,64 @@ impl PublicKey {
             public_subkeys,
         }
     }
+
+    fn verify_users(&self) -> Result<()> {
+        for user in &self.users {
+            user.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+    fn verify_attributes(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_subkeys(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_primary_key(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_revocation_signatures(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_direct_signatures(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
 }
 
 impl KeyTrait for PublicKey {
-    /// Returns the fingerprint of the associated primary key.
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
 
-    /// Returns the Key ID of the associated primary key.
     fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
+    }
+
+    fn verify(&self) -> Result<()> {
+        self.verify_users()?;
+        self.verify_attributes()?;
+        self.verify_subkeys()?;
+        self.verify_primary_key()?;
+        self.verify_revocation_signatures()?;
+        self.verify_direct_signatures()?;
+
+        Ok(())
     }
 }
 
-impl<'a> KeyTrait for &'a PublicKey {
-    /// Returns the fingerprint of the associated primary key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.primary_key.key_id()
+impl Serialize for PublicKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
@@ -85,17 +123,20 @@ impl KeyTrait for PublicSubKey {
     fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
+
+    fn verify(&self) -> Result<()> {
+        ensure!(self.signatures.len() > 0, "missing subkey bindings");
+        for sig in &self.signatures {
+            sig.verify_key_binding(&self.key)?;
+        }
+
+        Ok(())
+    }
 }
 
-impl<'a> KeyTrait for &'a PublicSubKey {
-    /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.key.fingerprint()
-    }
-
-    /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.key.key_id()
+impl Serialize for PublicSubKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
@@ -131,7 +172,46 @@ impl PrivateKey {
             private_subkeys,
         }
     }
+
+    fn verify_users(&self) -> Result<()> {
+        for user in &self.users {
+            user.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_attributes(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_public_subkeys(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_private_subkeys(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_primary_key(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_revocation_signatures(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
+
+    fn verify_direct_signatures(&self) -> Result<()> {
+        // TODO: implement
+        Ok(())
+    }
 }
+
 impl KeyTrait for PrivateKey {
     /// Returns the fingerprint of the associated primary key.
     fn fingerprint(&self) -> Vec<u8> {
@@ -142,31 +222,27 @@ impl KeyTrait for PrivateKey {
     fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
+
+    fn verify(&self) -> Result<()> {
+        self.verify_users()?;
+        self.verify_attributes()?;
+        self.verify_public_subkeys()?;
+        self.verify_private_subkeys()?;
+        self.verify_primary_key()?;
+        self.verify_revocation_signatures()?;
+        self.verify_direct_signatures()?;
+
+        Ok(())
+    }
 }
 
-impl<'a> KeyTrait for &'a PrivateKey {
-    /// Returns the fingerprint of the associated primary key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.primary_key.key_id()
+impl Serialize for PrivateKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
 impl SecretKeyTrait for PrivateKey {
-    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
-    {
-        self.primary_key.unlock(pw, work)
-    }
-}
-
-impl<'a> SecretKeyTrait for &'a PrivateKey {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
@@ -199,17 +275,21 @@ impl KeyTrait for PrivateSubKey {
     fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
+
+    fn verify(&self) -> Result<()> {
+        ensure!(self.signatures.len() > 0, "missing subkey bindings");
+
+        for sig in &self.signatures {
+            sig.verify_key_binding(&self.key)?;
+        }
+
+        Ok(())
+    }
 }
 
-impl<'a> KeyTrait for &'a PrivateSubKey {
-    /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.key.fingerprint()
-    }
-
-    /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.key.key_id()
+impl Serialize for PrivateSubKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
@@ -223,15 +303,6 @@ impl SecretKeyTrait for PrivateSubKey {
     }
 }
 
-impl<'a> SecretKeyTrait for &'a PrivateSubKey {
-    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
-    {
-        self.key.unlock(pw, work)
-    }
-}
 #[cfg(test)]
 mod tests {
     use std::fs::File;
@@ -254,6 +325,7 @@ mod tests {
     use crypto::hash::HashAlgorithm;
     use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
     use crypto::sym::SymmetricKeyAlgorithm;
+    use errors::Error;
     use packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId};
     use types::{
         CompressionAlgorithm, KeyVersion, SecretKeyRepr, SignedUser, StringToKeyType, Version,
@@ -336,7 +408,16 @@ mod tests {
             file.read_to_end(&mut buf).unwrap();
 
             let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-            PublicKey::from_string(input).expect("failed to parse key");
+            let pk = PublicKey::from_string(input).expect("failed to parse key");
+            match pk.verify() {
+                // Skip these for now
+                Err(Error::Unimplemented(err)) => {
+                    warn!("verification failed: {:?}", err);
+                }
+                Err(err) => panic!("{:?}", err),
+                // all good
+                Ok(_) => {}
+            }
         }
     }
 
@@ -350,6 +431,7 @@ mod tests {
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
+        key.verify().expect("invalid key");
 
         let pkey = key.primary_key;
         assert_eq!(pkey.version(), &KeyVersion::V4);
@@ -398,6 +480,7 @@ mod tests {
     fn test_parse_details() {
         let file = File::open("./tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
         let key = PublicKey::from_armor_single(file).expect("failed to parse key");
+        key.verify().expect("invalid key");
 
         assert_eq!(
             hex::encode(key.primary_key.fingerprint()),
@@ -674,6 +757,7 @@ mod tests {
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
+        key.verify().expect("invalid key");
 
         let pp = key.primary_key.secret_params().clone();
 
@@ -744,6 +828,7 @@ mod tests {
         let mut asc_string = String::new();
         asc.read_to_string(&mut asc_string).unwrap();
         let key = PublicKey::from_string(&asc_string).unwrap();
+        key.verify().expect("invalid key");
 
         let json: serde_json::Value = serde_json::from_reader(json_file).unwrap();
 
@@ -806,12 +891,22 @@ mod tests {
 
     fn test_parse_openpgp_key(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_armor_many(f).unwrap();
+        let pk = PublicKey::from_armor_many(f).unwrap();
+        for key in pk {
+            key.expect("failed to parse key")
+                .verify()
+                .expect("invalid key");
+        }
     }
 
     fn test_parse_openpgp_key_bin(key: &str) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_bytes_many(f);
+        let pk = PublicKey::from_bytes_many(f);
+        for key in pk {
+            key.expect("failed to parse key")
+                .verify()
+                .expect("invalid key");
+        }
     }
 
     macro_rules! openpgp_key_bin {
@@ -942,6 +1037,7 @@ mod tests {
     fn private_x25519_verify() {
         let f = read_file("./tests/openpgpjs/x25519.sec.asc");
         let sk = PrivateKey::from_armor_single(f).expect("failed to parse key");
+        sk.verify().expect("invalid key");
         assert_eq!(sk.private_subkeys.len(), 1);
         assert_eq!(
             hex::encode(sk.key_id().unwrap().to_vec()).to_uppercase(),
@@ -969,6 +1065,7 @@ mod tests {
 
         let f = read_file("./tests/openpgpjs/x25519-little.pub.asc");
         let pk = PublicKey::from_armor_single(f).expect("failed to parse key");
+        pk.verify().expect("invalid key");
         assert_eq!(pk.public_subkeys.len(), 1);
         assert_eq!(
             hex::encode(pk.key_id().unwrap().to_vec()).to_uppercase(),

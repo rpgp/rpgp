@@ -6,6 +6,7 @@ use crypto::hash::{HashAlgorithm, Hasher};
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
+use packet::UserId;
 use ser::Serialize;
 use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Version};
 
@@ -75,12 +76,55 @@ impl Signature {
 
         let hash = &hasher.finish()[..];
 
-        key.verify(self.hash_alg, hash, &self.signature)
+        key.verify_signature(self.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a certificate siganture type.
-    pub fn verify_certificate(&self) -> Result<()> {
-        unimplemented!();
+    pub fn verify_user_id_certificate(&self, key: &impl PublicKeyTrait, id: &UserId) -> Result<()> {
+        let mut hasher = self.hash_alg.new_hasher()?;
+
+        match self.version {
+            SignatureVersion::V2 | SignatureVersion::V3 => {
+                unimplemented_err!("v2, v3");
+            }
+            SignatureVersion::V4 | SignatureVersion::V5 => {
+                let mut key_buf = Vec::new();
+                key.to_writer(&mut key_buf)?;
+
+                let mut packet_buf = Vec::new();
+                id.to_writer(&mut packet_buf)?;
+
+                let mut prefix_buf = [0xB4, 0u8, 0u8, 0u8, 0u8];
+                BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
+
+                info!("k: {}", hex::encode(&key_buf));
+                info!("p: {}", hex::encode(&prefix_buf));
+                info!("p: {}", hex::encode(&packet_buf));
+
+                // old style packet header for the key
+                hasher.update(&[0x99]);
+                hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
+                // the actual key
+                hasher.update(&key_buf);
+
+                // prefixes
+                hasher.update(&prefix_buf);
+
+                // the packet content
+                hasher.update(&packet_buf);
+
+                let len = self.hash_signature_data(&mut *hasher)?;
+                hasher.update(&self.trailer(len));
+            }
+        }
+
+        let hash = &hasher.finish()[..];
+        key.verify_signature(self.hash_alg, hash, &self.signature)
+    }
+
+    /// Verifies a key binding.
+    pub fn verify_key_binding(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        unimplemented!("");
     }
 
     /// Calcluate the serialized version of this packet, but only the part relevant for hashing.

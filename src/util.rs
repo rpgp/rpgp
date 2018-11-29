@@ -115,6 +115,14 @@ pub fn bit_size(val: &[u8]) -> usize {
     (val.len() * 8) - val[0].leading_zeros() as usize
 }
 
+pub fn write_bignum_mpi(n: &BigUint, w: &mut impl io::Write) -> errors::Result<()> {
+    let size = n.bits();
+    w.write_all(&[(size >> 8) as u8, size as u8])?;
+    w.write_all(&n.to_bytes_be())?;
+
+    Ok(())
+}
+
 pub fn write_mpi(val: &[u8], w: &mut impl io::Write) -> errors::Result<()> {
     let size = bit_size(val);
 
