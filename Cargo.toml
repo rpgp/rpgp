@@ -4,8 +4,8 @@ version = "0.1.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 description = "PGP implementation in Rust"
 license = "MIT OR Apache-2.0"
-homepage = "https://github.com/dignifiedquire/pgp"
-repository = "https://github.com/dignifiedquire/pgp"
+homepage = "https://github.com/dignifiedquire/rpgp"
+repository = "https://github.com/dignifiedquire/rpgp"
 
 keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy"]
 
