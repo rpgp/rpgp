@@ -280,7 +280,7 @@ pub struct MessageDecrypter<'a> {
 
 impl<'a> MessageDecrypter<'a> {
     pub fn new<F>(
-        locked_key: impl SecretKeyTrait + KeyTrait,
+        locked_key: &(impl SecretKeyTrait + KeyTrait),
         key_pw: F,
         mpis: &'a [Vec<u8>],
         edata: &'a [Edata],

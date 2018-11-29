@@ -177,7 +177,7 @@ macro_rules! impl_secret_key {
             }
         }
 
-        impl $crate::types::SecretKeyTrait for &$name {
+        impl<'a> $crate::types::SecretKeyTrait for &'a $name {
             fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
             where
                 F: FnOnce() -> String,

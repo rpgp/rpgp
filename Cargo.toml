@@ -11,7 +11,7 @@ keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy
 
 [dependencies]
 rsa = { git = "https://github.com/dignifiedquire/rust-rsa", branch = "master" }
-num-bigint = { git = "https://github.com/dignifiedquire/num-bigint", branch = "master" }
+num-bigint-dig = { version = "0.2", features = ["rand", "i128", "u64_digit"] }
 crc24 = "^0.1"
 base64 = "^0.10"
 byteorder = "^1.2"
@@ -42,7 +42,8 @@ lazy_static = "1.2.0"
 block-padding = "0.1.2"
 log = "0.4.6"
 pretty_env_logger = "0.2.5"
-buf_redux = "0.7.1"
+buf_redux = { version = "0.8.1", default-features = false }
+
 try_from = "0.2.2"
 
 [dependencies.nom]
