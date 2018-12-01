@@ -1,5 +1,4 @@
-use std::io;
-use std::str;
+use std::{fmt, io, str};
 
 use errors::Result;
 use ser::Serialize;
@@ -43,5 +42,11 @@ impl Serialize for UserId {
         writer.write_all(self.id.as_bytes())?;
 
         Ok(())
+    }
+}
+
+impl fmt::Display for UserId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "User ID: \"{}\"", self.id)
     }
 }

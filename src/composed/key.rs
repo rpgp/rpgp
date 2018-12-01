@@ -1,9 +1,11 @@
-use std::io;
+use std::{io, iter};
 
+use armor::{self, BlockType};
+use composed::shared::Deserializable;
 use errors::Result;
-use packet;
+use packet::{self, Packet, PacketParser};
 use ser::Serialize;
-use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser, SignedUserAttribute};
+use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser, SignedUserAttribute, Tag};
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 
@@ -30,6 +32,41 @@ impl PublicKey {
         user_attributes: Vec<SignedUserAttribute>,
         public_subkeys: Vec<PublicSubKey>,
     ) -> PublicKey {
+        let users = users
+            .into_iter()
+            .filter(|user| {
+                if user.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", user.id);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        let user_attributes = user_attributes
+            .into_iter()
+            .filter(|attr| {
+                if attr.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", attr.attr);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        let public_subkeys = public_subkeys
+            .into_iter()
+            .filter(|key| {
+                if key.signatures.is_empty() {
+                    warn!("ignoring unsigned {:?}", key.key);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PublicKey {
             primary_key,
             revocation_signatures,
@@ -162,6 +199,53 @@ impl PrivateKey {
         public_subkeys: Vec<PublicSubKey>,
         private_subkeys: Vec<PrivateSubKey>,
     ) -> PrivateKey {
+        let users = users
+            .into_iter()
+            .filter(|user| {
+                if user.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", user.id);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        let user_attributes = user_attributes
+            .into_iter()
+            .filter(|attr| {
+                if attr.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", attr.attr);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        let public_subkeys = public_subkeys
+            .into_iter()
+            .filter(|key| {
+                if key.signatures.is_empty() {
+                    warn!("ignoring unsigned {:?}", key.key);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        let private_subkeys = private_subkeys
+            .into_iter()
+            .filter(|key| {
+                if key.signatures.is_empty() {
+                    warn!("ignoring unsigned {:?}", key.key);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PrivateKey {
             primary_key,
             revocation_signatures,
@@ -301,6 +385,119 @@ impl SecretKeyTrait for PrivateSubKey {
     {
         self.key.unlock(pw, work)
     }
+}
+
+pub enum PublicOrPrivate {
+    Public(PublicKey),
+    Private(PrivateKey),
+}
+
+impl Serialize for PublicOrPrivate {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            PublicOrPrivate::Public(k) => k.to_writer(writer),
+            PublicOrPrivate::Private(k) => k.to_writer(writer),
+        }
+    }
+}
+
+impl KeyTrait for PublicOrPrivate {
+    /// Returns the fingerprint of the key.
+    fn fingerprint(&self) -> Vec<u8> {
+        match self {
+            PublicOrPrivate::Public(k) => k.fingerprint(),
+            PublicOrPrivate::Private(k) => k.fingerprint(),
+        }
+    }
+
+    /// Returns the Key ID of the key.
+    fn key_id(&self) -> Option<KeyId> {
+        match self {
+            PublicOrPrivate::Public(k) => k.key_id(),
+            PublicOrPrivate::Private(k) => k.key_id(),
+        }
+    }
+
+    fn verify(&self) -> Result<()> {
+        match self {
+            PublicOrPrivate::Public(k) => k.verify(),
+            PublicOrPrivate::Private(k) => k.verify(),
+        }
+    }
+}
+
+pub struct PubPrivIterator<I: Sized + Iterator<Item = Packet>> {
+    inner: iter::Peekable<I>,
+}
+
+impl<I: Sized + Iterator<Item = Packet>> Iterator for PubPrivIterator<I> {
+    type Item = Result<PublicOrPrivate>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let packets = self.inner.by_ref();
+        if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::SecretKey) {
+            let p: Option<Result<PrivateKey>> = PrivateKey::from_packets(packets).nth(0);
+            p.map(|key| key.map(|k| PublicOrPrivate::Private(k)))
+        } else if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::PublicKey) {
+            let p: Option<Result<PublicKey>> = PublicKey::from_packets(packets).nth(0);
+            p.map(|key| key.map(|k| PublicOrPrivate::Public(k)))
+        } else {
+            None
+        }
+    }
+}
+
+/// Parses a list of secret and public keys from ascii armored text.
+pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
+    input: R,
+) -> Result<Box<dyn Iterator<Item = Result<PublicOrPrivate>> + 'a>> {
+    let mut dearmor = armor::Dearmor::new(input);
+    dearmor.read_header()?;
+    // Safe to unwrap, as read_header succeeded.
+    let typ = dearmor
+        .typ
+        .ok_or_else(|| format_err!("dearmor failed to retrieve armor type"))?;
+
+    // TODO: add typ and headers information to the key possibly?
+    match typ {
+        // Standard PGP types
+        BlockType::PublicKey
+        | BlockType::PrivateKey
+        | BlockType::Message
+        | BlockType::MultiPartMessage(_, _)
+        | BlockType::Signature
+        | BlockType::File => {
+            // TODO: check that the result is what it actually said.
+            Ok(from_bytes_many(dearmor))
+        }
+        BlockType::PublicKeyPKCS1
+        | BlockType::PublicKeyPKCS8
+        | BlockType::PublicKeyOpenssh
+        | BlockType::PrivateKeyPKCS1
+        | BlockType::PrivateKeyPKCS8
+        | BlockType::PrivateKeyOpenssh => {
+            unimplemented_err!("key format {:?}", typ);
+        }
+    }
+}
+
+/// Parses a list of secret and public keys from raw bytes.
+pub fn from_bytes_many<'a>(
+    bytes: impl io::Read + 'a,
+) -> Box<dyn Iterator<Item = Result<PublicOrPrivate>> + 'a> {
+    let packets = PacketParser::new(bytes)
+        .filter_map(|p| {
+            // for now we are skipping any packets that we failed to parse
+            if p.is_ok() {
+                p.ok()
+            } else {
+                warn!("skipping packet: {:?}", p);
+                None
+            }
+        })
+        .peekable();
+
+    Box::new(PubPrivIterator { inner: packets })
 }
 
 #[cfg(test)]
@@ -889,148 +1086,180 @@ mod tests {
         );
     }
 
-    fn test_parse_openpgp_key(key: &str) {
+    fn test_parse_openpgp_key(key: &str, verify: bool) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        let pk = PublicKey::from_armor_many(f).unwrap();
+        let pk = from_armor_many(f).unwrap();
         for key in pk {
-            key.expect("failed to parse key")
-                .verify()
-                .expect("invalid key");
+            let parsed = key.expect("failed to parse key");
+            if verify {
+                parsed.verify().expect("invalid key");
+            }
         }
     }
 
-    fn test_parse_openpgp_key_bin(key: &str) {
+    fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        let pk = PublicKey::from_bytes_many(f);
+        let pk = from_bytes_many(f);
         for key in pk {
-            key.expect("failed to parse key")
-                .verify()
-                .expect("invalid key");
+            let parsed = key.expect("failed to parse key");
+            if verify {
+                parsed.verify().expect("invalid key");
+            }
         }
     }
 
     macro_rules! openpgp_key_bin {
-        ($name:ident, $path:expr) => {
+        ($name:ident, $path:expr, $verify:expr) => {
             #[test]
             fn $name() {
-                test_parse_openpgp_key_bin($path);
+                test_parse_openpgp_key_bin($path, $verify);
             }
         };
     }
 
     macro_rules! openpgp_key {
-        ($name:ident, $path:expr) => {
+        ($name:ident, $path:expr, $verify:expr) => {
             #[test]
             fn $name() {
-                test_parse_openpgp_key($path);
+                test_parse_openpgp_key($path, $verify);
             }
         };
     }
 
     openpgp_key!(
         key_openpgp_samplekeys_e6,
-        "samplekeys/E657FB607BB4F21C90BB6651BC067AF28BC90111.asc"
+        "samplekeys/E657FB607BB4F21C90BB6651BC067AF28BC90111.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_authenticate_only_pub,
-        "samplekeys/authenticate-only.pub.asc"
+        "samplekeys/authenticate-only.pub.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_authenticate_only_sec,
-        "samplekeys/authenticate-only.sec.asc"
+        "samplekeys/authenticate-only.sec.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_dda252ebb8ebe1af_1,
-        "samplekeys/dda252ebb8ebe1af-1.asc"
+        "samplekeys/dda252ebb8ebe1af-1.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_dda252ebb8ebe1af_2,
-        "samplekeys/dda252ebb8ebe1af-2.asc"
+        "samplekeys/dda252ebb8ebe1af-2.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_e2e_p256_1_clr,
-        "samplekeys/e2e-p256-1-clr.asc"
+        "samplekeys/e2e-p256-1-clr.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_e2e_p256_1_prt,
-        "samplekeys/e2e-p256-1-prt.asc"
+        "samplekeys/e2e-p256-1-prt.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_1_pub,
-        "samplekeys/ecc-sample-1-pub.asc"
+        "samplekeys/ecc-sample-1-pub.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_1_sec,
-        "samplekeys/ecc-sample-1-sec.asc"
+        "samplekeys/ecc-sample-1-sec.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_2_pub,
-        "samplekeys/ecc-sample-2-pub.asc"
+        "samplekeys/ecc-sample-2-pub.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_2_sec,
-        "samplekeys/ecc-sample-2-sec.asc"
+        "samplekeys/ecc-sample-2-sec.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_3_pub,
-        "samplekeys/ecc-sample-3-pub.asc"
+        "samplekeys/ecc-sample-3-pub.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_3_sec,
-        "samplekeys/ecc-sample-3-sec.asc"
+        "samplekeys/ecc-sample-3-sec.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ed25519_cv25519_sample_1,
-        "samplekeys/ed25519-cv25519-sample-1.asc"
+        "samplekeys/ed25519-cv25519-sample-1.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_eddsa_sample_1_pub,
-        "samplekeys/eddsa-sample-1-pub.asc"
+        "samplekeys/eddsa-sample-1-pub.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_eddsa_sample_1_sec,
-        "samplekeys/eddsa-sample-1-sec.asc"
+        "samplekeys/eddsa-sample-1-sec.asc",
+        true
     );
-    openpgp_key!(key_openpgp_samplekeys_issue2346, "samplekeys/issue2346.gpg");
+    openpgp_key!(
+        key_openpgp_samplekeys_issue2346,
+        "samplekeys/issue2346.gpg",
+        true
+    );
     openpgp_key_bin!(
         key_openpgp_samplekeys_no_creation_time,
-        "samplekeys/no-creation-time.gpg"
+        "samplekeys/no-creation-time.gpg",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_rsa_primary_auth_only_pub,
-        "samplekeys/rsa-primary-auth-only.pub.asc"
+        "samplekeys/rsa-primary-auth-only.pub.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_rsa_primary_auth_only_sec,
-        "samplekeys/rsa-primary-auth-only.sec.asc"
+        "samplekeys/rsa-primary-auth-only.sec.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_rsa_rsa_sample_1,
-        "samplekeys/rsa-rsa-sample-1.asc"
+        "samplekeys/rsa-rsa-sample-1.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_silent_running,
-        "samplekeys/silent-running.asc"
+        "samplekeys/silent-running.asc",
+        true
     );
 
     // PKCS#1
-    // openpgp_key!(key_openpgp_samplekeys_ssh_dsa, "samplekeys/ssh-dsa.key");
+    // openpgp_key!(key_openpgp_samplekeys_ssh_dsa, "samplekeys/ssh-dsa.key", true);
 
     // PKCS#1
-    // openpgp_key!(key_openpgp_samplekeys_ssh_ecdsa, "samplekeys/ssh-ecdsa.key");
+    // openpgp_key!(key_openpgp_samplekeys_ssh_ecdsa, "samplekeys/ssh-ecdsa.key", true);
 
     // OpenSSH
     // openpgp_key!(
     //     key_openpgp_samplekeys_ssh_ed25519,
-    //     "samplekeys/ssh-ed25519.key"
+    //     "samplekeys/ssh-ed25519.key",
+    //     true
     // );
 
     // PKCS#1
-    // openpgp_key!(key_openpgp_samplekeys_ssh_rsa, "samplekeys/ssh-rsa.key");
+    // openpgp_key!(key_openpgp_samplekeys_ssh_rsa, "samplekeys/ssh-rsa.key", true);
 
     openpgp_key!(
         key_openpgp_samplekeys_whats_new_in_2_1,
-        "samplekeys/whats-new-in-2.1.asc"
+        "samplekeys/whats-new-in-2.1.asc",
+        false
     );
 
     #[test]
