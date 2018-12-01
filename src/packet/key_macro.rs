@@ -266,7 +266,23 @@ macro_rules! impl_key {
                         }
                         _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
                     },
-                    _ => unimplemented_err!("verify with algorithm: {:?}", self.algorithm),
+                    PublicParams::ECDSA { ref curve, .. } => {
+                        unimplemented_err!("verify ECDSA: {:?}", curve);
+                    }
+                    PublicParams::ECDH {
+                        ref curve,
+                        ref hash,
+                        ref alg_sym,
+                        ..
+                    } => {
+                        unimplemented_err!("verify ECDH: {:?} {:?} {:?}", curve, hash, alg_sym);
+                    }
+                    PublicParams::Elgamal { .. } => {
+                        unimplemented_err!("verify Elgamal");
+                    }
+                    PublicParams::DSA { .. } => {
+                        unimplemented_err!("verify DSA");
+                    }
                 }
             }
         }

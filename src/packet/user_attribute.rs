@@ -1,3 +1,5 @@
+use std::fmt;
+
 use nom::{be_u8, le_u16, rest};
 
 use errors::Result;
@@ -38,6 +40,19 @@ impl UserAttribute {
         match self {
             UserAttribute::Image { packet_version, .. } => *packet_version,
             UserAttribute::Unknown { packet_version, .. } => *packet_version,
+        }
+    }
+}
+
+impl fmt::Display for UserAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UserAttribute::Image { data, .. } => {
+                write!(f, "User Attribute: Image (len: {})", data.len())
+            }
+            UserAttribute::Unknown { typ, data, .. } => {
+                write!(f, "User Attribute: typ: {} (len: {})", typ, data.len())
+            }
         }
     }
 }

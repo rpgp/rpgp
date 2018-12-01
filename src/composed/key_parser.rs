@@ -21,7 +21,6 @@ macro_rules! key_parser {
                 let packets = self.inner.by_ref();
 
                 // -- One Public-Key packet
-                // idea: use Error::UnexpectedPacket(actual, expected)
                 match packets.peek() {
                     Some(p) => {
                         if p.tag() != $key_tag {
@@ -123,7 +122,7 @@ macro_rules! key_parser {
                 }
 
                 if users.is_empty() {
-                    return Some(Err(format_err!("missing user ids")));
+                    warn!("missing user ids");
                 }
 
                 // -- Zero or more Subkey packets
@@ -159,10 +158,6 @@ macro_rules! key_parser {
                                     }
 
                                     sigs.push(sig);
-                                }
-
-                                if sigs.is_empty() {
-                                    return Some(Err(format_err!("Missing signature for subkey")));
                                 }
 
                                 $subkey_container.push(<$subkey_type>::new(subkey, sigs));
