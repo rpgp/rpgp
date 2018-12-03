@@ -1,3 +1,5 @@
+use std::fmt;
+
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
 
@@ -11,7 +13,7 @@ use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Tag, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub struct Signature {
     packet_version: Version,
     pub version: SignatureVersion,
@@ -662,4 +664,22 @@ pub enum KeyFlag {
     Authentication = 0x20,
     /// The private component of this key may be in the possession of more than one person.
     SharedPrivateKey = 0x80,
+}
+
+impl fmt::Debug for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Signature")
+            .field("packet_version", &self.packet_version)
+            .field("version", &self.version)
+            .field("typ", &self.typ)
+            .field("pub_alg", &self.pub_alg)
+            .field("hash_alg", &self.hash_alg)
+            .field("signed_hash_value", &hex::encode(&self.signed_hash_value))
+            .field("signature", &hex::encode(&self.signature.concat()))
+            .field("created", &self.created)
+            .field("issuer", &self.issuer)
+            .field("unhashed_subpackets", &self.unhashed_subpackets)
+            .field("hashed_subpackets", &self.hashed_subpackets)
+            .finish()
+    }
 }

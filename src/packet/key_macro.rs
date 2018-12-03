@@ -249,15 +249,20 @@ macro_rules! impl_key {
                             let r = &sig[0];
                             let s = &sig[1];
 
-                            ensure_eq!(r.len(), 32);
-                            ensure_eq!(s.len(), 32);
-                            ensure_eq!(q.len(), 33);
-                            ensure_eq!(q[0], 0x40);
+                            ensure!(r.len() < 33, "invalid R (len)");
+                            ensure!(s.len() < 33, "invalid S (len)");
+                            ensure_eq!(q.len(), 33, "invalid Q (len)");
+                            ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
 
                             // TODO: unwraps to ? and implement the errors
                             let pk = ed25519_dalek::PublicKey::from_bytes(&q[1..])
                                 .expect("invalid pubkey");
-                            let sig = ed25519_dalek::Signature::from_bytes(&sig.concat())
+                            let mut sig_bytes = vec![0u8; 64];
+                            // add padding if the values were encoded short
+                            sig_bytes[(32 - r.len())..32].copy_from_slice(r);
+                            sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
+
+                            let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes)
                                 .expect("malformed sig");
 
                             pk.verify::<sha2::Sha512>(hashed, &sig)
