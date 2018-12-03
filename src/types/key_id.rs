@@ -1,7 +1,10 @@
+use std::fmt;
+
 use errors::Result;
+use hex;
 
 /// Represents a Key ID.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct KeyId([u8; 8]);
 
 impl AsRef<[u8]> for KeyId {
@@ -21,5 +24,11 @@ impl KeyId {
 
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
+    }
+}
+
+impl fmt::Debug for KeyId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "KeyId({})", hex::encode(self.as_ref()))
     }
 }

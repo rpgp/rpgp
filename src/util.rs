@@ -2,7 +2,7 @@ use std::convert::AsMut;
 use std::io;
 use std::ops::{Range, RangeFrom, RangeTo};
 
-use byteorder::{BigEndian, ByteOrder};
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
     self, be_u16, be_u32, be_u8, eol, is_alphanumeric, line_ending, Err, IResult, InputIter,
@@ -162,6 +162,18 @@ named!(pub packet_length<usize>, do_parse!(
     >> (len)
 ));
 
+pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
+    if len < 192 {
+        writer.write_all(&[len as u8])?;
+    } else if len < 8384 {
+        writer.write_all(&[(((len - 192) / 256) + 192) as u8, ((len - 192) % 256) as u8])?;
+    } else {
+        writer.write_u32::<BigEndian>(len as u32)?;
+    }
+
+    Ok(())
+}
+
 pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
     alt!(input, eof!() | eol)
 }
@@ -204,16 +216,12 @@ macro_rules! impl_try_from_into {
     }
 }
 
-pub fn read_string_lossy(raw: &[u8]) -> String {
-    // first try utf8
-    match ::std::str::from_utf8(raw) {
-        Ok(s) => s.to_string(),
-        Err(_) => {
-            // now try chars
-            // this might be lossy, that is okay
-            raw.iter().map(|c| *c as char).collect::<String>()
-        }
-    }
+pub fn write_string(val: &str) -> Vec<u8> {
+    val.chars().map(|c| c as u8).collect()
+}
+
+pub fn read_string(raw: &[u8]) -> String {
+    raw.iter().map(|c| *c as char).collect::<String>()
 }
 
 #[cfg(test)]
@@ -246,15 +254,33 @@ mod tests {
     }
 
     #[test]
-    fn test_read_string_lossy() {
-        assert_eq!(read_string_lossy(b"hello"), "hello".to_string());
+    fn test_read_string() {
+        assert_eq!(read_string(b"hello"), "hello".to_string());
         assert_eq!(
-            read_string_lossy(&[
+            read_string(&[
                 74, 252, 114, 103, 101, 110, 32, 77, 97, 114, 115, 99, 104, 97, 108, 108, 32, 60,
                 106, 117, 101, 114, 103, 101, 110, 46, 109, 97, 114, 115, 99, 104, 97, 108, 108,
                 64, 112, 114, 111, 109, 112, 116, 46, 100, 101, 62
             ]),
             "Jürgen Marschall <juergen.marschall@prompt.de>".to_string()
         );
+    }
+
+    #[test]
+    fn test_write_string() {
+        let val = vec![
+            74, 252, 114, 103, 101, 110, 32, 77, 97, 114, 115, 99, 104, 97, 108, 108, 32, 60, 106,
+            117, 101, 114, 103, 101, 110, 46, 109, 97, 114, 115, 99, 104, 97, 108, 108, 64, 112,
+            114, 111, 109, 112, 116, 46, 100, 101, 62,
+        ];
+
+        assert_eq!(write_string(&read_string(&val)), val);
+    }
+
+    #[test]
+    fn test_write_packet_len() {
+        let mut res = Vec::new();
+        write_packet_len(1173, &mut res).unwrap();
+        assert_eq!(res, vec![0xc3, 0xd5]);
     }
 }

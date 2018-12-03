@@ -12,7 +12,7 @@ use de::Deserialize;
 use errors::Result;
 use packet::signature::types::*;
 use types::{CompressionAlgorithm, KeyId, RevocationKey, Version};
-use util::{clone_into_array, mpi, packet_length, read_string_lossy};
+use util::{clone_into_array, mpi, packet_length, read_string};
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -118,7 +118,7 @@ named!(trust_signature<Subpacket>, do_parse!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
 #[rustfmt::skip]
 named!(regular_expression<Subpacket>, map!(
-    map!(rest, read_string_lossy), Subpacket::RegularExpression
+    map!(rest, read_string), Subpacket::RegularExpression
 ));
 
 /// Parse a revocation key subpacket
@@ -144,8 +144,8 @@ named!(notation_data<Subpacket>, do_parse!(
     >>            tag!(&[0, 0, 0])
     >>  name_len: be_u16
     >> value_len: be_u16
-    >>      name: map!(take!(name_len), read_string_lossy)
-    >>     value: map!(take!(value_len), read_string_lossy)
+    >>      name: map!(take!(name_len), read_string)
+    >>     value: map!(take!(value_len), read_string)
     >> (Subpacket::Notation(Notation { readable, name, value }))
 ));
 
@@ -174,7 +174,7 @@ named!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
 #[rustfmt::skip]
 named!(policy_uri<Subpacket>, map!(
-    map!(rest, read_string_lossy), Subpacket::PolicyURI
+    map!(rest, read_string), Subpacket::PolicyURI
 ));
 
 /// Parse a key flags subpacket
@@ -201,7 +201,7 @@ fn features(body: &[u8]) -> IResult<&[u8], Subpacket> {
 #[rustfmt::skip]
 named!(rev_reason<Subpacket>, do_parse!(
          code: map_opt!(be_u8, RevocationCode::from_u8)
-    >> reason: map!(rest, read_string_lossy)
+    >> reason: map!(rest, read_string)
     >> (Subpacket::RevocationReason(code, reason))
 ));
 
@@ -338,7 +338,7 @@ named_args!(v3_parser(packet_version: Version, version: SignatureVersion) <Signa
             typ,
             pub_alg,
             hash_alg,
-            ls_hash.to_vec(),
+            clone_into_array(ls_hash),
             sig,
             vec![],
             vec![],
@@ -379,7 +379,7 @@ named_args!(v4_parser(packet_version: Version, version: SignatureVersion) <Signa
         typ,
         pub_alg,
         hash_alg,
-        ls_hash.to_vec(),
+        clone_into_array(ls_hash),
         sig,
         hsub,
         usub,

@@ -1,10 +1,12 @@
-use std::fmt;
+use std::{fmt, io};
 
+use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{be_u8, le_u16, rest};
 
 use errors::Result;
+use ser::Serialize;
 use types::Version;
-use util::packet_length;
+use util::{packet_length, write_packet_len};
 
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
@@ -12,6 +14,7 @@ use util::packet_length;
 pub enum UserAttribute {
     Image {
         packet_version: Version,
+        header: Vec<u8>,
         data: Vec<u8>,
     },
     Unknown {
@@ -42,6 +45,19 @@ impl UserAttribute {
             UserAttribute::Unknown { packet_version, .. } => *packet_version,
         }
     }
+
+    pub fn packet_len(&self) -> usize {
+        match self {
+            UserAttribute::Image { ref data, .. } => {
+                // typ + image header + data length
+                1 + 16 + data.len()
+            }
+            UserAttribute::Unknown { ref data, .. } => {
+                // typ + data length
+                1 + data.len()
+            }
+        }
+    }
 }
 
 impl fmt::Display for UserAttribute {
@@ -58,30 +74,15 @@ impl fmt::Display for UserAttribute {
 }
 
 #[rustfmt::skip]
-named!(image_header<(u8, u8)>, do_parse!(
-    // version
-        version: be_u8
-    // format
-    >>   format: switch!(value!(version),
-                       1 => call!(be_u8) |
-                       _ => value!(0)
-    )
-    // skip the rest
-    >>           rest
-    >> (version, format)
-));
-
-#[rustfmt::skip]
 named_args!(image(packet_version: Version) <UserAttribute>, do_parse!(
-        // header length (should be 0x1000)
-        // little endian, for historical reasons..
-        header_len: le_u16
-    >>     _header: flat_map!(take!(header_len - 2), image_header)
-    // TODO: use header information
+    // little endian, for historical reasons..
+       header_len: le_u16
+    >>     header: take!(header_len - 2)
     // the actual image is the rest
     >>         img: rest
     >> (UserAttribute::Image {
         packet_version,
+        header: header.to_vec(),
         data: img.to_vec()
     })
 ));
@@ -102,3 +103,30 @@ named_args!(parse(packet_version: Version) <UserAttribute>, do_parse!(
         ))
     >> (attr)
 ));
+
+impl Serialize for UserAttribute {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        write_packet_len(self.packet_len(), writer)?;
+
+        match self {
+            UserAttribute::Image {
+                ref data,
+                ref header,
+                ..
+            } => {
+                // typ: image
+                writer.write_all(&[0x01])?;
+                writer.write_u16::<LittleEndian>((header.len() + 2) as u16)?;
+                writer.write_all(header)?;
+
+                // actual data
+                writer.write_all(data)?;
+            }
+            UserAttribute::Unknown { ref data, typ, .. } => {
+                writer.write_all(&[*typ])?;
+                writer.write_all(data)?;
+            }
+        }
+        Ok(())
+    }
+}

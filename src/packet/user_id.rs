@@ -3,7 +3,7 @@ use std::{fmt, io, str};
 use errors::Result;
 use ser::Serialize;
 use types::Version;
-use util::read_string_lossy;
+use util::{read_string, write_string};
 
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
@@ -16,7 +16,7 @@ pub struct UserId {
 impl UserId {
     /// Parses a `UserId` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let id = read_string_lossy(input);
+        let id = read_string(input);
 
         Ok(UserId { packet_version, id })
     }
@@ -39,7 +39,7 @@ impl UserId {
 
 impl Serialize for UserId {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(self.id.as_bytes())?;
+        writer.write_all(&write_string(&self.id))?;
 
         Ok(())
     }

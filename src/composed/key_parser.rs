@@ -16,23 +16,25 @@ macro_rules! key_parser {
             fn next(&mut self) -> Option<Self::Item> {
                 use try_from::TryInto;
                 use $crate::packet::{self, Signature, SignatureType, UserAttribute, UserId};
-                use $crate::types::{KeyVersion, SignedUser, SignedUserAttribute, Tag};
+                use $crate::types::{KeyVersion, SignedUser, SignedUserAttribute, Tag, KeyTrait};
 
                 let packets = self.inner.by_ref();
 
                 // -- One Public-Key packet
-                match packets.peek() {
-                    Some(p) => {
-                        if p.tag() != $key_tag {
-                            return Some(Err(format_err!("unexpected packet: expected {:?}, got {:?}", $key_tag, p.tag())));
-                        }
-                    }
-                    None => return None
+
+                // ignore random other packets until we find something useful
+                while let Some(true) = packets.peek().map(|p| p.tag() != $key_tag) {
+                    let p = packets.next().expect("peeked");
+                    warn!("ignoring unexpected packet: expected {:?}, got {:?}", $key_tag, p.tag());
                 }
 
-                let next = packets.next().expect("peeked");
-                info!("  primary key: {:?}", next);
+                let next = match packets.next() {
+                    Some(n) => n,
+                    None => return None
+                };
+                info!("  primary key: {:#?}", next);
                 let primary_key: $inner_key_type = err_opt!(next.try_into());
+                info!("  {:?}", primary_key.key_id());
 
                 // -- Zero or more revocation signatures
                 // -- followed by zero or more direct signatures in V4 keys
@@ -87,10 +89,6 @@ macro_rules! key_parser {
                                 let packet = packets.next().expect("peeked");
                                 let sig: Signature = err_opt!(packet.try_into());
 
-                                if !sig.is_certificate() {
-                                    return Some(Err(format_err!("unexpected signature type: {:?} following UserID packet", sig.typ)));
-                                }
-
                                 sigs.push(sig);
                             }
 
@@ -107,10 +105,6 @@ macro_rules! key_parser {
                             {
                                 let packet = packets.next().expect("peeked");
                                 let sig: Signature = err_opt!(packet.try_into());
-
-                                if !sig.is_certificate() {
-                                    return Some(Err(format_err!("unexpected signature type: {:?} following UserAttribute packet", sig.typ)));
-                                }
 
                                 sigs.push(sig);
                             }
@@ -152,11 +146,6 @@ macro_rules! key_parser {
                                 {
                                     let packet = packets.next().expect("peeked");
                                     let sig: Signature = err_opt!(packet.try_into());
-
-                                    if sig.typ != SignatureType::SubkeyBinding && sig.typ != SignatureType::SubkeyRevocation {
-                                        return Some(Err(format_err!("unexpected signature: {:?} after Subkey packet", sig.typ)));
-                                    }
-
                                     sigs.push(sig);
                                 }
 

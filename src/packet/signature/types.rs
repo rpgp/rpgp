@@ -6,9 +6,8 @@ use crypto::hash::{HashAlgorithm, Hasher};
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use packet::UserId;
 use ser::Serialize;
-use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Version};
+use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Tag, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
@@ -19,7 +18,7 @@ pub struct Signature {
     pub typ: SignatureType,
     pub pub_alg: PublicKeyAlgorithm,
     pub hash_alg: HashAlgorithm,
-    pub signed_hash_value: Vec<u8>,
+    pub signed_hash_value: [u8; 2],
     pub signature: Vec<Vec<u8>>,
 
     // only set on V2 and V3 keys
@@ -37,7 +36,7 @@ impl Signature {
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
-        signed_hash_value: Vec<u8>,
+        signed_hash_value: [u8; 2],
         signature: Vec<Vec<u8>>,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
@@ -68,6 +67,12 @@ impl Signature {
 
     /// Verify this signature.
     pub fn verify(&self, key: &impl PublicKeyTrait, data: &[u8]) -> Result<()> {
+        if let Some(key_id) = key.key_id() {
+            if let Some(issuer) = self.issuer() {
+                ensure_eq!(&key_id, issuer, "validating with the wrong key");
+            }
+        }
+
         let mut hasher = self.hash_alg.new_hasher()?;
 
         self.hash_data_to_sign(&mut *hasher, data)?;
@@ -75,12 +80,24 @@ impl Signature {
         hasher.update(&self.trailer(len));
 
         let hash = &hasher.finish()[..];
+        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
 
         key.verify_signature(self.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a certificate siganture type.
-    pub fn verify_user_id_certificate(&self, key: &impl PublicKeyTrait, id: &UserId) -> Result<()> {
+    pub fn verify_certificate(
+        &self,
+        key: &impl PublicKeyTrait,
+        tag: Tag,
+        id: &impl Serialize,
+    ) -> Result<()> {
+        if let Some(key_id) = key.key_id() {
+            if let Some(issuer) = self.issuer() {
+                ensure_eq!(&key_id, issuer, "validating with the wrong key");
+            }
+        }
+
         let mut hasher = self.hash_alg.new_hasher()?;
 
         match self.version {
@@ -94,12 +111,22 @@ impl Signature {
                 let mut packet_buf = Vec::new();
                 id.to_writer(&mut packet_buf)?;
 
-                let mut prefix_buf = [0xB4, 0u8, 0u8, 0u8, 0u8];
+                let prefix = match tag {
+                    Tag::UserId => 0xB4,
+                    Tag::UserAttribute => 0xD1,
+                    _ => bail!("invalid tag for certificate validation: {:?}", tag),
+                };
+
+                let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
                 BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
 
-                info!("k: {}", hex::encode(&key_buf));
-                info!("p: {}", hex::encode(&prefix_buf));
-                info!("p: {}", hex::encode(&packet_buf));
+                info!(
+                    "key:    ({:?}), {}",
+                    key.key_id().unwrap(),
+                    hex::encode(&key_buf)
+                );
+                info!("prefix: {}", hex::encode(&prefix_buf));
+                info!("packet: {}", hex::encode(&packet_buf));
 
                 // old style packet header for the key
                 hasher.update(&[0x99]);
@@ -119,12 +146,20 @@ impl Signature {
         }
 
         let hash = &hasher.finish()[..];
+        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
+
         key.verify_signature(self.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a key binding.
     pub fn verify_key_binding(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        unimplemented!("");
+        if let Some(key_id) = key.key_id() {
+            if let Some(issuer) = self.issuer() {
+                ensure_eq!(&key_id, issuer, "validating with the wrong key");
+            }
+        }
+
+        unimplemented!("key binding");
     }
 
     /// Calcluate the serialized version of this packet, but only the part relevant for hashing.
@@ -209,7 +244,8 @@ impl Signature {
             SignatureType::CertGeneric
             | SignatureType::CertPersona
             | SignatureType::CertCasual
-            | SignatureType::CertPositive => true,
+            | SignatureType::CertPositive
+            | SignatureType::CertRevocation => true,
             _ => false,
         }
     }
@@ -247,6 +283,10 @@ impl Signature {
     }
 
     pub fn issuer(&self) -> Option<&KeyId> {
+        if self.issuer.is_some() {
+            return self.issuer.as_ref();
+        }
+
         self.subpackets().find_map(|p| match p {
             Subpacket::Issuer(id) => Some(id),
             _ => None,

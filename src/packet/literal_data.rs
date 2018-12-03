@@ -8,7 +8,7 @@ use num_traits::FromPrimitive;
 use errors::Result;
 use ser::Serialize;
 use types::Version;
-use util::read_string_lossy;
+use util::{read_string, write_string};
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
@@ -49,7 +49,7 @@ impl LiteralData {
 
 impl Serialize for LiteralData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        let name = self.file_name.as_bytes();
+        let name = write_string(&self.file_name);
         writer.write_all(&[self.mode as u8, name.len() as u8])?;
         writer.write_u32::<BigEndian>(self.created.timestamp() as u32)?;
 
@@ -68,7 +68,7 @@ impl Serialize for LiteralData {
 named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
            mode: map_opt!(be_u8, DataMode::from_u8)
     >> name_len: be_u8
-    >>     name: map!(take!(name_len), read_string_lossy)
+    >>     name: map!(take!(name_len), read_string)
     >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
     >>     data: rest
     >> (LiteralData {
