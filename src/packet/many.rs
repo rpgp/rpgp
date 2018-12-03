@@ -31,7 +31,6 @@ impl<R: Read> Iterator for PacketParser<R> {
     type Item = Result<Packet>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        info!("next");
         let b = &mut self.buffer;
         let mut needed: Option<Needed> = None;
         let mut second_round = false;
@@ -77,7 +76,7 @@ impl<R: Read> Iterator for PacketParser<R> {
             };
 
             if let Some((length, p)) = res {
-                info!("got packet: {:?} {}", p, length);
+                info!("got packet: {:#?} {}", p, length);
                 b.consume(length);
                 return Some(p);
             }

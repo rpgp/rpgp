@@ -33,7 +33,7 @@ named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
         2 => map!(take_bits!(u32, 32), |val| u32_as_usize(val).into()) |
         3 => value!(PacketLength::Indeterminated)
     )
-    >> ({ info!("new {:?} {:?} {:?}", ver, tag, len); (ver, tag, len)})
+    >> ({ info!("old {:?} {:?} {:?}", ver, tag, len); (ver, tag, len)})
 )));
 
 /// Parses a new format packet header
