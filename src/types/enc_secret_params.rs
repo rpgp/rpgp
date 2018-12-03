@@ -4,7 +4,6 @@ use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
 use ser::Serialize;
 use types::StringToKey;
-use util::{write_bignum_mpi, write_mpi};
 
 /// A list of params that are used to represent the values of possibly encrypted key, from imports and exports.
 #[derive(Debug, Clone, PartialEq, Eq)]

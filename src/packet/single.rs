@@ -108,7 +108,7 @@ pub fn parser<'a>(input: &'a [u8]) -> Result<(&'a [u8], Result<Packet>)> {
     match res {
         Ok(res) => Ok((rest, Ok(res))),
         Err(err) => {
-            warn!("invalid packet: {:?} {:?}\n{:?}", err, tag, body);
+            warn!("invalid packet: {:?} {:?}\n{}", err, tag, hex::encode(body));
             Ok((rest, Err(Error::InvalidPacketContent(Box::new(err)))))
         }
     }

@@ -5,7 +5,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use errors::Result;
 use packet::signature::types::*;
 use ser::Serialize;
-use util::write_mpi;
+use util::{write_mpi, write_packet_len, write_string};
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -14,18 +14,6 @@ impl Serialize for Signature {
             SignatureVersion::V4 | SignatureVersion::V5 => self.to_writer_v4(writer),
         }
     }
-}
-
-fn write_packet_len(len: usize, writer: &mut impl io::Write) -> Result<()> {
-    if len < 192 {
-        writer.write_all(&[len as u8])?;
-    } else if len < 8384 {
-        writer.write_all(&[((len - 192) / 255 + 192) as u8, ((len - 192) % 255) as u8])?;
-    } else {
-        writer.write_u32::<BigEndian>(len as u32)?;
-    }
-
-    Ok(())
 }
 
 impl Subpacket {
@@ -63,7 +51,7 @@ impl Subpacket {
             }
             Subpacket::RevocationReason(code, reason) => {
                 writer.write_all(&[*code as u8])?;
-                writer.write_all(reason.as_bytes())?;
+                writer.write_all(&write_string(&reason))?;
             }
             Subpacket::IsPrimary(is_primary) => {
                 let val = if *is_primary { 1u8 } else { 0u8 };
@@ -77,19 +65,19 @@ impl Subpacket {
                 (*inner_sig).to_writer(writer)?;
             }
             Subpacket::PreferredKeyServer(server) => {
-                writer.write_all(server.as_bytes())?;
+                writer.write_all(&write_string(&server))?;
             }
             Subpacket::Notation(notation) => {
                 let is_readable = if notation.readable { 0x80 } else { 0 };
                 writer.write_all(&[is_readable, 0, 0, 0])?;
 
-                let name_bytes = notation.name.as_bytes();
+                let name_bytes = write_string(&notation.name);
                 writer.write_u16::<BigEndian>(name_bytes.len() as u16)?;
-                writer.write_all(name_bytes)?;
+                writer.write_all(&name_bytes)?;
 
-                let value_bytes = notation.value.as_bytes();
+                let value_bytes = write_string(&notation.value);
                 writer.write_u16::<BigEndian>(value_bytes.len() as u16)?;
-                writer.write_all(value_bytes)?;
+                writer.write_all(&value_bytes)?;
             }
             Subpacket::RevocationKey(rev_key) => {
                 writer.write_all(&[rev_key.class, rev_key.algorithm as u8])?;
@@ -99,13 +87,13 @@ impl Subpacket {
                 writer.write_all(body.as_ref())?;
             }
             Subpacket::PolicyURI(uri) => {
-                writer.write_all(uri.as_bytes())?;
+                writer.write_all(&write_string(&uri))?;
             }
             Subpacket::TrustSignature(depth, value) => {
                 writer.write_all(&[*depth, *value])?;
             }
             Subpacket::RegularExpression(regexp) => {
-                writer.write_all(regexp.as_bytes())?;
+                writer.write_all(&write_string(regexp))?;
             }
             Subpacket::ExportableCertification(is_exportable) => {
                 let val = if *is_exportable { 1 } else { 0 };
@@ -141,7 +129,7 @@ impl Subpacket {
             Subpacket::KeyServerPreferences(prefs) => prefs.len(),
             Subpacket::KeyFlags(flags) => flags.len(),
             Subpacket::Features(features) => features.len(),
-            Subpacket::RevocationReason(_, reason) => 1 + reason.as_bytes().len(),
+            Subpacket::RevocationReason(_, reason) => 1 + reason.chars().count(),
             Subpacket::IsPrimary(_) => 1,
             Subpacket::Revocable(_) => 1,
             Subpacket::EmbeddedSignature(sig) => {
@@ -150,8 +138,8 @@ impl Subpacket {
                 (*sig).to_writer(&mut buf)?;
                 buf.len()
             }
-            Subpacket::PreferredKeyServer(server) => server.as_bytes().len(),
-            Subpacket::Notation(n) => 4 + n.name.as_bytes().len() + n.value.as_bytes().len(),
+            Subpacket::PreferredKeyServer(server) => server.chars().count(),
+            Subpacket::Notation(n) => 4 + n.name.chars().count() + n.value.chars().count(),
             Subpacket::RevocationKey(_) => 22,
             Subpacket::SignersUserID(body) => {
                 let bytes: &[u8] = body.as_ref();

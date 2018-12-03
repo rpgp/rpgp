@@ -3,7 +3,7 @@ use std::{io, iter};
 use armor::{self, BlockType};
 use composed::shared::Deserializable;
 use errors::Result;
-use packet::{self, Packet, PacketParser};
+use packet::{self, Packet, PacketParser, SignatureType};
 use ser::Serialize;
 use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser, SignedUserAttribute, Tag};
 
@@ -84,8 +84,12 @@ impl PublicKey {
 
         Ok(())
     }
+
     fn verify_attributes(&self) -> Result<()> {
-        // TODO: implement
+        for attr in &self.user_attributes {
+            attr.verify(&self.primary_key)?;
+        }
+
         Ok(())
     }
 
@@ -120,6 +124,13 @@ impl KeyTrait for PublicKey {
     }
 
     fn verify(&self) -> Result<()> {
+        info!(
+            "verifying PublicKey ({:?})",
+            self.primary_key.key_id().unwrap()
+        );
+        for s in &self.public_subkeys {
+            info!("subkey {:?}", s.key_id().unwrap());
+        }
         self.verify_users()?;
         self.verify_attributes()?;
         self.verify_subkeys()?;
@@ -146,6 +157,23 @@ pub struct PublicSubKey {
 
 impl PublicSubKey {
     pub fn new(key: packet::PublicSubkey, signatures: Vec<packet::Signature>) -> PublicSubKey {
+        let signatures = signatures
+            .into_iter()
+            .filter(|sig| {
+                if sig.typ != SignatureType::SubkeyBinding
+                    && sig.typ != SignatureType::SubkeyRevocation
+                {
+                    warn!(
+                        "ignoring unexpected signature {:?} after Subkey packet",
+                        sig.typ
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PublicSubKey { key, signatures }
     }
 }
@@ -266,7 +294,10 @@ impl PrivateKey {
     }
 
     fn verify_attributes(&self) -> Result<()> {
-        // TODO: implement
+        for attr in &self.user_attributes {
+            attr.verify(&self.primary_key)?;
+        }
+
         Ok(())
     }
 
@@ -345,6 +376,23 @@ pub struct PrivateSubKey {
 
 impl PrivateSubKey {
     pub fn new(key: packet::SecretSubkey, signatures: Vec<packet::Signature>) -> PrivateSubKey {
+        let signatures = signatures
+            .into_iter()
+            .filter(|sig| {
+                if sig.typ != SignatureType::SubkeyBinding
+                    && sig.typ != SignatureType::SubkeyRevocation
+                {
+                    warn!(
+                        "ignoring unexpected signature {:?} after Subkey packet",
+                        sig.typ
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PrivateSubKey { key, signatures }
     }
 }
@@ -543,8 +591,22 @@ mod tests {
     }
 
     fn test_parse_dump(i: usize) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
-        PublicKey::from_bytes_many(f);
+        let keys = PublicKey::from_bytes_many(f);
+        for key in keys {
+            match key.expect("failed to parse key").verify() {
+                // Skip these for now
+                Err(Error::Unimplemented(err)) => {
+                    warn!("verification failed: {:?}", err);
+                }
+                Err(err) => panic!("{:?}", err),
+                // all good
+                Ok(_) => {}
+            }
+        }
     }
 
     #[test]
@@ -675,6 +737,9 @@ mod tests {
 
     #[test]
     fn test_parse_details() {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let file = File::open("./tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
         let key = PublicKey::from_armor_single(file).expect("failed to parse key");
         key.verify().expect("invalid key");
@@ -739,7 +804,7 @@ mod tests {
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
-            vec![0x7c, 0x63],
+            [0x7c, 0x63],
             vec![vec![
                 0x15, 0xb5, 0x4f, 0xca, 0x11, 0x7f, 0x1b, 0x1d, 0xc0, 0x7a, 0x05, 0x97, 0x25, 0x10,
                 0x4b, 0x6a, 0x76, 0x12, 0xf8, 0x89, 0x48, 0x76, 0x74, 0xeb, 0x8b, 0x22, 0xcf, 0xeb,
@@ -806,7 +871,7 @@ mod tests {
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
-            vec![0xca, 0x6c],
+            [0xca, 0x6c],
             vec![vec![
                 0x49, 0xa0, 0xb5, 0x41, 0xbd, 0x33, 0xa8, 0xda, 0xda, 0x6e, 0xb1, 0xe5, 0x28, 0x74,
                 0x18, 0xee, 0x39, 0xc8, 0x8d, 0xfd, 0x39, 0xe8, 0x3b, 0x09, 0xdc, 0x9d, 0x04, 0x91,
@@ -885,7 +950,7 @@ mod tests {
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
-            vec![0x02, 0x0c],
+            [0x02, 0x0c],
             vec![vec![
                 0x5b, 0x4b, 0xeb, 0xff, 0x1a, 0x89, 0xc2, 0xe1, 0x80, 0x20, 0x26, 0x3b, 0xf4, 0x4d,
                 0x2d, 0x46, 0xba, 0x96, 0x78, 0xb2, 0x88, 0xf8, 0xf9, 0xd5, 0xf1, 0x5f, 0x7d, 0x45,
@@ -1025,7 +1090,6 @@ mod tests {
         let mut asc_string = String::new();
         asc.read_to_string(&mut asc_string).unwrap();
         let key = PublicKey::from_string(&asc_string).unwrap();
-        key.verify().expect("invalid key");
 
         let json: serde_json::Value = serde_json::from_reader(json_file).unwrap();
 
@@ -1035,6 +1099,7 @@ mod tests {
     #[test]
     fn test_fingerprint_rsa() {
         let (json, key) = get_test_fingerprint("gnupg-v1-003");
+        key.verify().expect("invalid key");
 
         assert_eq!(json["expected_fingerprint"], hex::encode(key.fingerprint()));
     }
@@ -1056,6 +1121,7 @@ mod tests {
     #[test]
     fn test_fingerprint_ecdh() {
         let (json, key) = get_test_fingerprint("gnupg-v1-001");
+        // can't verify: DSA
 
         assert_eq!(
             json["expected_subkeys"].as_array().unwrap()[0]
@@ -1065,7 +1131,7 @@ mod tests {
         );
 
         let (json, key) = get_test_fingerprint("e2e-001");
-
+        // can't verify: ECDSA: P256
         assert_eq!(
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
@@ -1087,9 +1153,6 @@ mod tests {
     }
 
     fn test_parse_openpgp_key(key: &str, verify: bool) {
-        use pretty_env_logger;
-        let _ = pretty_env_logger::try_init();
-
         let f = read_file(Path::new("./tests/openpgp/").join(key));
         let pk = from_armor_many(f).unwrap();
         for key in pk {
@@ -1289,9 +1352,6 @@ mod tests {
 
     #[test]
     fn pub_x25519_little_verify() {
-        use pretty_env_logger;
-        let _ = pretty_env_logger::try_init();
-
         let f = read_file("./tests/openpgpjs/x25519-little.pub.asc");
         let pk = PublicKey::from_armor_single(f).expect("failed to parse key");
         pk.verify().expect("invalid key");
