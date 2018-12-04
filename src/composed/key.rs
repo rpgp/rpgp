@@ -634,60 +634,60 @@ mod tests {
     #[test]
     #[ignore]
     fn test_parse_dumps_0() {
-        test_parse_dump(0, 17799);
+        test_parse_dump(0, 18525);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_1() {
-        test_parse_dump(1, 17633);
+        test_parse_dump(1, 18392);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_2() {
-        test_parse_dump(2, 17793);
+        test_parse_dump(2, 18507);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_3() {
-        test_parse_dump(3, 17795);
+        test_parse_dump(3, 18539);
     }
     #[test]
     #[ignore]
     fn test_parse_dumps_4() {
-        test_parse_dump(4, 17824);
+        test_parse_dump(4, 18476);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_5() {
-        test_parse_dump(5, 17738);
+        test_parse_dump(5, 18447);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_6() {
-        test_parse_dump(6, 17821);
+        test_parse_dump(6, 18502);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_7() {
-        test_parse_dump(7, 17845);
+        test_parse_dump(7, 18550);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_8() {
-        test_parse_dump(8, 17819);
+        test_parse_dump(8, 18513);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_9() {
-        test_parse_dump(9, 17744);
+        test_parse_dump(9, 18436);
     }
 
     #[test]
