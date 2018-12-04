@@ -1,3 +1,4 @@
+pub mod aead;
 pub mod aes_kw;
 pub mod checksum;
 pub mod ecc;
@@ -7,4 +8,5 @@ pub mod kdf;
 pub mod pkcs5;
 pub mod public_key;
 pub mod rsa;
+pub mod signature;
 pub mod sym;

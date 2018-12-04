@@ -15,11 +15,10 @@ use packet::{
     CompressedData, LiteralData, OnePassSignature, Packet, PublicKeyEncryptedSessionKey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
-use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
+use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))] // TODO: fix me
 #[derive(Clone, Debug)]
 pub enum Message {
     Literal(LiteralData),
@@ -46,6 +45,15 @@ pub enum Esk {
     PublicKeyEncryptedSessionKey(PublicKeyEncryptedSessionKey),
     SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey),
 }
+
+// impl Serialize for Esk {
+//     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+//         match self {
+//             Esk::PublicKeyEncryptedSessionKey(k) => k.to_writer(writer),
+//             Esk::SymKeyEncryptedSessionKey(k) => k.to_writer(writer),
+//         }
+//     }
+// }
 
 impl_try_from_into!(
     Esk,
@@ -106,6 +114,15 @@ pub enum Edata {
     SymEncryptedProtectedData(SymEncryptedProtectedData),
 }
 
+// impl Serialize for Edata {
+//     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+//         match self {
+//             Edata::SymEncryptedData(d) => d.to_writer(writer),
+//             Edata::SymEncryptedProtectedData(d) => d.to_writer(writer),
+//         }
+//     }
+// }
+
 impl_try_from_into!(
     Edata,
     SymEncryptedData => SymEncryptedData,
@@ -149,7 +166,64 @@ impl Edata {
     }
 }
 
+// impl Serialize for Message {
+//     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+//         match self {
+//             Message::Literal(l) => l.to_writer(writer),
+//             Message::Compressed(c) => c.to_writer(writer),
+//             Message::Signed {
+//                 message,
+//                 one_pass_signature,
+//                 signature,
+//             } => {
+//                 if let Some(ops) = one_pass_signature {
+//                     ops.to_writer(writer)?;
+//                 }
+//                 if let Some(message) = message {
+//                     (**message).to_writer(writer)?;
+//                 }
+
+//                 signature.to_writer(writer)
+//             }
+//             Message::Encrypted { esk, edata } => {
+//                 for e in esk {
+//                     e.to_writer(writer)?;
+//                 }
+//                 for e in edata {
+//                     e.to_writer(writer)?;
+//                 }
+
+//                 Ok(())
+//             }
+//         }
+//     }
+// }
+
 impl Message {
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        match self {
+            Message::Signed {
+                signature, message, ..
+            } => {
+                if let Some(message) = message {
+                    match **message {
+                        Message::Literal(ref m) => signature.verify(key, m.data()),
+                        _ => unimplemented_err!("verify for {:?}", *message),
+                    }
+                } else {
+                    unimplemented_err!("no message, what to do?");
+                }
+            }
+            Message::Compressed(m) => {
+                let msg = Message::from_bytes(m.decompress())?;
+                msg.verify(key)
+            }
+            // Nothing to do for others.
+            // TODO: should this return an error?
+            _ => Ok(()),
+        }
+    }
+
     /// Decrypt the message using the given password and key.
     // TODO: allow for multiple keys to be passed in
     pub fn decrypt<'a, F, G>(
@@ -401,7 +475,6 @@ mod tests {
     }
 
     fn test_parse_msg(entry: &str, base_path: &str) {
-        // TODO: verify with the verify key
         // TODO: verify filename
         let n = format!("{}/{}", base_path, entry);
         let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
@@ -416,6 +489,8 @@ mod tests {
             File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
         let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file)
             .expect("failed to read decryption key");
+        decrypt_key.verify().expect("invalid decryption key");
+
         let decrypt_id = hex::encode(decrypt_key.key_id().unwrap().to_vec());
 
         info!("decrypt key (ID={})", &decrypt_id);
@@ -423,17 +498,19 @@ mod tests {
             assert_eq!(id, &decrypt_id, "invalid keyid");
         }
 
-        if let Some(verify_key_str) = details.verify_key.clone() {
+        let verify_key = if let Some(verify_key_str) = details.verify_key.clone() {
             let mut verify_key_file =
                 File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
             let verify_key = PublicKey::from_armor_single(&mut verify_key_file)
                 .expect("failed to read verification key");
+            verify_key.verify().expect("invalid verification key");
+
             let verify_id = hex::encode(verify_key.key_id().unwrap().to_vec());
             info!("verify key (ID={})", &verify_id);
-            if let Some(id) = &details.keyid {
-                assert_eq!(id, &verify_id, "invalid keyid");
-            }
-        }
+            Some(verify_key)
+        } else {
+            None
+        };
 
         let file_name = entry.replace(".json", ".asc");
         let mut cipher_file = File::open(format!("{}/{}", base_path, file_name)).unwrap();
@@ -455,6 +532,12 @@ mod tests {
                     .expect("no mesage")
                     .expect("message decryption failed");
 
+                if let Some(verify_key) = verify_key {
+                    decrypted
+                        .verify(&verify_key.primary_key)
+                        .expect("message verification failed");
+                }
+
                 let raw = match decrypted {
                     Message::Literal(msg) => msg,
                     Message::Compressed(msg) => {
@@ -474,8 +557,8 @@ mod tests {
                     details.textcontent.unwrap_or_else(|| "".to_string())
                 );
             }
-            Message::Signed { .. } => {
-                // TODO: check signature
+            Message::Signed { signature, .. } => {
+                println!("signature: {:?}", signature);
             }
             _ => {
                 // TODO: some other checks?

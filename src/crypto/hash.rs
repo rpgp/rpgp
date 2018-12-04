@@ -1,5 +1,8 @@
 use std::boxed::Box;
 
+use rsa::hash::Hashes;
+use try_from::TryInto;
+
 use digest::{Digest, FixedOutput};
 use generic_array::typenum::Unsigned;
 use md5::Md5;
@@ -7,7 +10,7 @@ use ripemd160::Ripemd160;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 
-use errors::Result;
+use errors::{Error, Result};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Available hash algorithms.
@@ -18,11 +21,27 @@ pub enum HashAlgorithm {
     MD5 = 1,
     SHA1 = 2,
     RIPEMD160 = 3,
-    HAVAL = 7,
     SHA256 = 8,
     SHA384 = 9,
     SHA512 = 10,
     SHA224 = 11,
+}
+
+impl TryInto<Hashes> for HashAlgorithm {
+    type Err = Error;
+
+    fn try_into(self) -> Result<Hashes> {
+        match self {
+            HashAlgorithm::None => Err(format_err!("none")),
+            HashAlgorithm::MD5 => Ok(Hashes::MD5),
+            HashAlgorithm::SHA1 => Ok(Hashes::SHA1),
+            HashAlgorithm::RIPEMD160 => Ok(Hashes::RIPEMD160),
+            HashAlgorithm::SHA256 => Ok(Hashes::SHA256),
+            HashAlgorithm::SHA384 => Ok(Hashes::SHA384),
+            HashAlgorithm::SHA512 => Ok(Hashes::SHA512),
+            HashAlgorithm::SHA224 => Ok(Hashes::SHA224),
+        }
+    }
 }
 
 /// Trait to work around the fact that the `Digest` trait from rustcrypto can not

@@ -7,6 +7,7 @@ export RUST_BACKTRACE=1
 export RUST_TEST_NOCAPTURE=1
 export OPT="--target=$TARGET"
 export OPT_RELEASE="--release ${OPT}"
+export OPT_RELEASE_IGNORED="--release ${OPT} -- --ignored"
 
 # Select cargo command: use cross by default
 export CARGO_CMD=cross
@@ -42,11 +43,13 @@ else
     # If the tests should be run, always dump all test output.
     export OPT="${OPT} "
     export OPT_RELEASE="${OPT_RELEASE} "
+    export OPT_RELEASE_IGNORED="${OPT_RELEASE_IGNORED} "
 fi
 
 # Run all the test configurations:
 $CARGO_CMD $CARGO_SUBCMD $OPT
 $CARGO_CMD $CARGO_SUBCMD $OPT_RELEASE
+$CARGO_CMD $CARGO_SUBCMD $OPT_RELEASE_IGNORED
 
 # Run documentation and clippy:
 if [[ $CARGO_CMD == "cargo" ]] && [[ $TARGET != *"ios"* ]]; then

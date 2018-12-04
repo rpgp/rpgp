@@ -36,6 +36,7 @@ extern crate digest;
 extern crate flate2;
 #[macro_use]
 extern crate generic_array;
+extern crate ed25519_dalek;
 extern crate itertools;
 extern crate md5;
 extern crate num_bigint_dig as num_bigint;
@@ -72,6 +73,9 @@ extern crate serde_derive;
 extern crate glob;
 #[cfg(test)]
 extern crate serde;
+#[cfg(test)]
+#[macro_use]
+extern crate pretty_assertions;
 
 // public so it can be used in doc test
 #[macro_use]
@@ -90,3 +94,5 @@ pub mod email;
 pub use composed::key::*;
 pub mod composed;
 pub mod crypto;
+pub mod de;
+pub mod ser;
