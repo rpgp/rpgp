@@ -84,64 +84,30 @@ fn test_parse_dump(i: usize, expected_count: usize) {
     assert_eq!(expected_count, count);
 }
 
-#[test]
-#[ignore]
-fn test_parse_dumps_0() {
-    test_parse_dump(0, 18525);
+macro_rules! parse_dumps {
+    ( $( ($name:ident, $num:expr, $count:expr), )* ) => {
+        $(
+            #[test]
+            #[ignore]
+            fn $name() {
+                test_parse_dump($num, $count);
+            }
+        )*
+    };
 }
 
-#[test]
-#[ignore]
-fn test_parse_dumps_1() {
-    test_parse_dump(1, 18392);
-}
-
-#[test]
-#[ignore]
-fn test_parse_dumps_2() {
-    test_parse_dump(2, 18507);
-}
-
-#[test]
-#[ignore]
-fn test_parse_dumps_3() {
-    test_parse_dump(3, 18539);
-}
-#[test]
-#[ignore]
-fn test_parse_dumps_4() {
-    test_parse_dump(4, 18476);
-}
-
-#[test]
-#[ignore]
-fn test_parse_dumps_5() {
-    test_parse_dump(5, 18447);
-}
-
-#[test]
-#[ignore]
-fn test_parse_dumps_6() {
-    test_parse_dump(6, 18502);
-}
-
-#[test]
-#[ignore]
-fn test_parse_dumps_7() {
-    test_parse_dump(7, 18550);
-}
-
-#[test]
-#[ignore]
-fn test_parse_dumps_8() {
-    test_parse_dump(8, 18513);
-}
-
-#[test]
-#[ignore]
-fn test_parse_dumps_9() {
-    test_parse_dump(9, 18436);
-}
+parse_dumps!(
+    (test_parse_dumps_0, 0, 19252),
+    (test_parse_dumps_1, 1, 19179),
+    (test_parse_dumps_2, 2, 19240),
+    (test_parse_dumps_3, 3, 19288),
+    (test_parse_dumps_4, 4, 19199),
+    (test_parse_dumps_5, 5, 19210),
+    (test_parse_dumps_6, 6, 19249),
+    (test_parse_dumps_7, 7, 19335),
+    (test_parse_dumps_8, 8, 19275),
+    (test_parse_dumps_9, 9, 19186),
+);
 
 #[test]
 fn test_parse_gnupg_v1() {
