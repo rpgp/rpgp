@@ -102,12 +102,18 @@ impl PublicKey {
     }
 
     fn verify_revocation_signatures(&self) -> Result<()> {
-        // TODO: implement
+        for sig in &self.revocation_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
         Ok(())
     }
 
     fn verify_direct_signatures(&self) -> Result<()> {
-        // TODO: implement
+        for sig in &self.direct_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
         Ok(())
     }
 
@@ -308,12 +314,18 @@ impl PrivateKey {
     }
 
     fn verify_revocation_signatures(&self) -> Result<()> {
-        // TODO: implement
+        for sig in &self.revocation_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
         Ok(())
     }
 
     fn verify_direct_signatures(&self) -> Result<()> {
-        // TODO: implement
+        for sig in &self.direct_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
         Ok(())
     }
 
@@ -583,13 +595,12 @@ mod tests {
         read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name))
     }
 
-    fn test_parse_dump(i: usize, expected_count: usize, invalid_count: usize) {
+    fn test_parse_dump(i: usize, expected_count: usize) {
         use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
         let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
 
-        let mut invalid = 0;
         let count = PublicKey::from_bytes_many(f)
             .filter(|key| {
                 let key = key.as_ref().expect("failed to parse key");
@@ -609,7 +620,6 @@ mod tests {
                             hex::encode(&key.key_id().unwrap()),
                             err
                         );
-                        invalid += 1;
                         false
                     }
                     // all good
@@ -619,66 +629,65 @@ mod tests {
             .count();
 
         assert_eq!(expected_count, count);
-        assert_eq!(invalid_count, invalid);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_0() {
-        test_parse_dump(0, 16894, 3468);
+        test_parse_dump(0, 17799);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_1() {
-        test_parse_dump(1, 16713, 3625);
+        test_parse_dump(1, 17633);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_2() {
-        test_parse_dump(2, 16829, 3532);
+        test_parse_dump(2, 17793);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_3() {
-        test_parse_dump(3, 16826, 3533);
+        test_parse_dump(3, 17795);
     }
     #[test]
     #[ignore]
     fn test_parse_dumps_4() {
-        test_parse_dump(4, 16866, 3530);
+        test_parse_dump(4, 17824);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_5() {
-        test_parse_dump(5, 16820, 3538);
+        test_parse_dump(5, 17738);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_6() {
-        test_parse_dump(6, 16923, 3448);
+        test_parse_dump(6, 17821);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_7() {
-        test_parse_dump(7, 16880, 3480);
+        test_parse_dump(7, 17845);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_8() {
-        test_parse_dump(8, 16894, 3492);
+        test_parse_dump(8, 17819);
     }
 
     #[test]
     #[ignore]
     fn test_parse_dumps_9() {
-        test_parse_dump(9, 16764, 3648);
+        test_parse_dump(9, 17744);
     }
 
     #[test]

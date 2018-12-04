@@ -72,7 +72,13 @@ impl Signature {
     pub fn verify(&self, key: &impl PublicKeyTrait, data: &[u8]) -> Result<()> {
         if let Some(key_id) = key.key_id() {
             if let Some(issuer) = self.issuer() {
-                ensure_eq!(&key_id, issuer, "validating with the wrong key");
+                if &key_id != issuer {
+                    // TODO: should this be an actual error?
+                    warn!(
+                        "validating signature with a non matching Key ID {:?} != {:?}",
+                        &key_id, issuer
+                    );
+                }
             }
         }
 
@@ -99,7 +105,13 @@ impl Signature {
 
         if let Some(key_id) = key.key_id() {
             if let Some(issuer) = self.issuer() {
-                ensure_eq!(&key_id, issuer, "validating with the wrong key");
+                if &key_id != issuer {
+                    // TODO: should this be an actual error?
+                    warn!(
+                        "validating certificate with a non matching Key ID {:?} != {:?}",
+                        &key_id, issuer
+                    );
+                }
             }
         }
 
@@ -169,7 +181,13 @@ impl Signature {
 
         if let Some(key_id) = signing_key.key_id() {
             if let Some(issuer) = self.issuer() {
-                ensure_eq!(&key_id, issuer, "validating with the wrong key");
+                if &key_id != issuer {
+                    // TODO: should this be an actual error?
+                    warn!(
+                        "validating key binding with a non matching Key ID {:?} != {:?}",
+                        &key_id, issuer
+                    );
+                }
             }
         }
 
@@ -205,6 +223,44 @@ impl Signature {
         ensure_eq!(&self.signed_hash_value, &hash[0..2]);
 
         signing_key.verify_signature(self.hash_alg, hash, &self.signature)
+    }
+
+    /// Verifies a direct key signature or a revocatio.
+    pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        info!("verifying key (revocation): {:#?} - {:#?}", self, key);
+
+        if let Some(key_id) = key.key_id() {
+            if let Some(issuer) = self.issuer() {
+                if &key_id != issuer {
+                    // TODO: should this be an actual error?
+                    warn!(
+                        "validating key (revocation) with a non matching Key ID {:?} != {:?}",
+                        &key_id, issuer
+                    );
+                }
+            }
+        }
+
+        let mut hasher = self.hash_alg.new_hasher()?;
+
+        {
+            let mut key_buf = Vec::new();
+            key.to_writer(&mut key_buf)?;
+
+            // old style packet header for the key
+            hasher.update(&[0x99]);
+            hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
+            // the actual key
+            hasher.update(&key_buf);
+        }
+
+        let len = self.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.trailer(len));
+
+        let hash = &hasher.finish()[..];
+        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
+
+        key.verify_signature(self.hash_alg, hash, &self.signature)
     }
 
     /// Calcluate the serialized version of this packet, but only the part relevant for hashing.
