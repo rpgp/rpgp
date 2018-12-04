@@ -4,7 +4,7 @@ use std::io::Cursor;
 use num_traits::FromPrimitive;
 use try_from::TryFrom;
 
-use composed::key::PrivateKey;
+use composed::key::SignedSecretKey;
 use composed::shared::Deserializable;
 use crypto::checksum;
 use crypto::ecc::decrypt_ecdh;
@@ -230,7 +230,7 @@ impl Message {
         &'a self,
         msg_pw: F,
         key_pw: G,
-        key: &PrivateKey,
+        key: &SignedSecretKey,
     ) -> Result<MessageDecrypter<'a>>
     where
         F: FnOnce() -> String,
@@ -255,7 +255,7 @@ impl Message {
                     info!("{:?}", key.key_id());
                     info!(
                         "{:?}",
-                        key.private_subkeys
+                        key.secret_subkeys
                             .iter()
                             .map(|k| k.key_id())
                             .collect::<Vec<_>>()
@@ -271,7 +271,7 @@ impl Message {
                     {
                         encoding_key = Some(&key.primary_key);
                     } else {
-                        encoding_subkey = key.private_subkeys.iter().find_map(|subkey| {
+                        encoding_subkey = key.secret_subkeys.iter().find_map(|subkey| {
                             if let Some(id) = subkey.key_id() {
                                 if &id == esk_packet.id() {
                                     Some(subkey)
@@ -458,7 +458,7 @@ mod tests {
     use serde_json;
     use std::fs::File;
 
-    use composed::key::{PrivateKey, PublicKey};
+    use composed::key::{SignedPublicKey, SignedSecretKey};
     use composed::Deserializable;
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -487,7 +487,7 @@ mod tests {
 
         let mut decrypt_key_file =
             File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
-        let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file)
+        let decrypt_key = SignedSecretKey::from_armor_single(&mut decrypt_key_file)
             .expect("failed to read decryption key");
         decrypt_key.verify().expect("invalid decryption key");
 
@@ -501,7 +501,7 @@ mod tests {
         let verify_key = if let Some(verify_key_str) = details.verify_key.clone() {
             let mut verify_key_file =
                 File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
-            let verify_key = PublicKey::from_armor_single(&mut verify_key_file)
+            let verify_key = SignedPublicKey::from_armor_single(&mut verify_key_file)
                 .expect("failed to read verification key");
             verify_key.verify().expect("invalid verification key");
 

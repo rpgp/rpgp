@@ -82,15 +82,14 @@ extern crate pretty_assertions;
 pub mod util;
 
 #[macro_use]
-mod errors;
-mod armor;
-mod base64_decoder;
-mod base64_reader;
-mod line_reader;
-mod packet;
-mod types;
-
+pub mod errors;
+pub mod armor;
+pub mod base64_decoder;
+pub mod base64_reader;
 pub mod email;
+pub mod line_reader;
+pub mod packet;
+pub mod types;
 pub use composed::key::*;
 pub mod composed;
 pub mod crypto;
