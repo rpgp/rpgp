@@ -475,7 +475,6 @@ mod tests {
     }
 
     fn test_parse_msg(entry: &str, base_path: &str) {
-        // TODO: verify with the verify key
         // TODO: verify filename
         let n = format!("{}/{}", base_path, entry);
         let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
@@ -490,6 +489,8 @@ mod tests {
             File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
         let decrypt_key = PrivateKey::from_armor_single(&mut decrypt_key_file)
             .expect("failed to read decryption key");
+        decrypt_key.verify().expect("invalid decryption key");
+
         let decrypt_id = hex::encode(decrypt_key.key_id().unwrap().to_vec());
 
         info!("decrypt key (ID={})", &decrypt_id);
@@ -502,6 +503,8 @@ mod tests {
                 File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
             let verify_key = PublicKey::from_armor_single(&mut verify_key_file)
                 .expect("failed to read verification key");
+            verify_key.verify().expect("invalid verification key");
+
             let verify_id = hex::encode(verify_key.key_id().unwrap().to_vec());
             info!("verify key (ID={})", &verify_id);
             Some(verify_key)
