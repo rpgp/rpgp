@@ -95,6 +95,8 @@ impl Signature {
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()> {
+        info!("verifying certificate");
+
         if let Some(key_id) = key.key_id() {
             if let Some(issuer) = self.issuer() {
                 ensure_eq!(&key_id, issuer, "validating with the wrong key");
@@ -155,14 +157,54 @@ impl Signature {
     }
 
     /// Verifies a key binding.
-    pub fn verify_key_binding(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        if let Some(key_id) = key.key_id() {
+    pub fn verify_key_binding(
+        &self,
+        signing_key: &impl PublicKeyTrait,
+        key: &impl PublicKeyTrait,
+    ) -> Result<()> {
+        info!(
+            "verifying key binding: {:#?} - {:#?} - {:#?}",
+            self, signing_key, key
+        );
+
+        if let Some(key_id) = signing_key.key_id() {
             if let Some(issuer) = self.issuer() {
                 ensure_eq!(&key_id, issuer, "validating with the wrong key");
             }
         }
 
-        unimplemented!("key binding");
+        let mut hasher = self.hash_alg.new_hasher()?;
+
+        // Signing Key
+        {
+            let mut key_buf = Vec::new();
+            signing_key.to_writer(&mut key_buf)?;
+
+            // old style packet header for the key
+            hasher.update(&[0x99]);
+            hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
+            // the actual key
+            hasher.update(&key_buf);
+        }
+        // Key being bound
+        {
+            let mut key_buf = Vec::new();
+            key.to_writer(&mut key_buf)?;
+
+            // old style packet header for the key
+            hasher.update(&[0x99]);
+            hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
+            // the actual key
+            hasher.update(&key_buf);
+        }
+
+        let len = self.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.trailer(len));
+
+        let hash = &hasher.finish()[..];
+        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
+
+        signing_key.verify_signature(self.hash_alg, hash, &self.signature)
     }
 
     /// Calcluate the serialized version of this packet, but only the part relevant for hashing.

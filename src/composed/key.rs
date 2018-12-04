@@ -5,12 +5,12 @@ use composed::shared::Deserializable;
 use errors::Result;
 use packet::{self, Packet, PacketParser, SignatureType};
 use ser::Serialize;
-use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser, SignedUserAttribute, Tag};
+use types::{
+    KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser,
+    SignedUserAttribute, Tag,
+};
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
-
-// TODO: make armor parsing streaming
-// TODO: rename armor parser to dearmor
 
 /// Represents a Public PGP key.
 #[derive(Debug, PartialEq, Eq)]
@@ -93,13 +93,11 @@ impl PublicKey {
         Ok(())
     }
 
-    fn verify_subkeys(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
-    }
+    fn verify_public_subkeys(&self) -> Result<()> {
+        for subkey in &self.public_subkeys {
+            subkey.verify(&self.primary_key)?;
+        }
 
-    fn verify_primary_key(&self) -> Result<()> {
-        // TODO: implement
         Ok(())
     }
 
@@ -112,6 +110,16 @@ impl PublicKey {
         // TODO: implement
         Ok(())
     }
+
+    pub fn verify(&self) -> Result<()> {
+        self.verify_users()?;
+        self.verify_attributes()?;
+        self.verify_public_subkeys()?;
+        self.verify_revocation_signatures()?;
+        self.verify_direct_signatures()?;
+
+        Ok(())
+    }
 }
 
 impl KeyTrait for PublicKey {
@@ -121,17 +129,6 @@ impl KeyTrait for PublicKey {
 
     fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
-    }
-
-    fn verify(&self) -> Result<()> {
-        self.verify_users()?;
-        self.verify_attributes()?;
-        self.verify_subkeys()?;
-        self.verify_primary_key()?;
-        self.verify_revocation_signatures()?;
-        self.verify_direct_signatures()?;
-
-        Ok(())
     }
 }
 
@@ -169,6 +166,15 @@ impl PublicSubKey {
 
         PublicSubKey { key, signatures }
     }
+
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
+        for sig in &self.signatures {
+            sig.verify_key_binding(key, &self.key)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl KeyTrait for PublicSubKey {
@@ -180,15 +186,6 @@ impl KeyTrait for PublicSubKey {
     /// Returns the Key ID of the key.
     fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
-    }
-
-    fn verify(&self) -> Result<()> {
-        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
-        for sig in &self.signatures {
-            sig.verify_key_binding(&self.key)?;
-        }
-
-        Ok(())
     }
 }
 
@@ -295,17 +292,18 @@ impl PrivateKey {
     }
 
     fn verify_public_subkeys(&self) -> Result<()> {
-        // TODO: implement
+        for subkey in &self.public_subkeys {
+            subkey.verify(&self.primary_key)?;
+        }
+
         Ok(())
     }
 
     fn verify_private_subkeys(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
-    }
+        for subkey in &self.private_subkeys {
+            subkey.verify(&self.primary_key)?;
+        }
 
-    fn verify_primary_key(&self) -> Result<()> {
-        // TODO: implement
         Ok(())
     }
 
@@ -316,6 +314,17 @@ impl PrivateKey {
 
     fn verify_direct_signatures(&self) -> Result<()> {
         // TODO: implement
+        Ok(())
+    }
+
+    pub fn verify(&self) -> Result<()> {
+        self.verify_users()?;
+        self.verify_attributes()?;
+        self.verify_public_subkeys()?;
+        self.verify_private_subkeys()?;
+        self.verify_revocation_signatures()?;
+        self.verify_direct_signatures()?;
+
         Ok(())
     }
 }
@@ -329,18 +338,6 @@ impl KeyTrait for PrivateKey {
     /// Returns the Key ID of the associated primary key.
     fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
-    }
-
-    fn verify(&self) -> Result<()> {
-        self.verify_users()?;
-        self.verify_attributes()?;
-        self.verify_public_subkeys()?;
-        self.verify_private_subkeys()?;
-        self.verify_primary_key()?;
-        self.verify_revocation_signatures()?;
-        self.verify_direct_signatures()?;
-
-        Ok(())
     }
 }
 
@@ -388,6 +385,16 @@ impl PrivateSubKey {
 
         PrivateSubKey { key, signatures }
     }
+
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
+
+        for sig in &self.signatures {
+            sig.verify_key_binding(key, &self.key)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl KeyTrait for PrivateSubKey {
@@ -399,16 +406,6 @@ impl KeyTrait for PrivateSubKey {
     /// Returns the Key ID of the key.
     fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
-    }
-
-    fn verify(&self) -> Result<()> {
-        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
-
-        for sig in &self.signatures {
-            sig.verify_key_binding(&self.key)?;
-        }
-
-        Ok(())
     }
 }
 
@@ -428,9 +425,19 @@ impl SecretKeyTrait for PrivateSubKey {
     }
 }
 
+#[derive(Debug)]
 pub enum PublicOrPrivate {
     Public(PublicKey),
     Private(PrivateKey),
+}
+
+impl PublicOrPrivate {
+    pub fn verify(&self) -> Result<()> {
+        match self {
+            PublicOrPrivate::Public(k) => k.verify(),
+            PublicOrPrivate::Private(k) => k.verify(),
+        }
+    }
 }
 
 impl Serialize for PublicOrPrivate {
@@ -456,13 +463,6 @@ impl KeyTrait for PublicOrPrivate {
         match self {
             PublicOrPrivate::Public(k) => k.key_id(),
             PublicOrPrivate::Private(k) => k.key_id(),
-        }
-    }
-
-    fn verify(&self) -> Result<()> {
-        match self {
-            PublicOrPrivate::Public(k) => k.verify(),
-            PublicOrPrivate::Private(k) => k.verify(),
         }
     }
 }
@@ -1176,6 +1176,9 @@ mod tests {
     }
 
     fn test_parse_openpgp_key(key: &str, verify: bool) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let f = read_file(Path::new("./tests/openpgp/").join(key));
         let pk = from_armor_many(f).unwrap();
         for key in pk {
