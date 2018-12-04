@@ -3,6 +3,7 @@ use base64;
 use block_modes;
 use block_padding;
 use cfb_mode;
+use ed25519_dalek::SignatureError;
 use nom;
 use rsa;
 
@@ -64,6 +65,8 @@ pub enum Error {
     ParseIntError(::std::num::ParseIntError),
     #[fail(display = "Invalid Packet Content {:?}", _0)]
     InvalidPacketContent(Box<Error>),
+    #[fail(display = "Ed25519 {:?}", _0)]
+    Ed25519SignatureError(SignatureError),
 }
 
 impl Error {
@@ -94,6 +97,7 @@ impl Error {
             Error::Utf8Error(_) => 22,
             Error::ParseIntError(_) => 23,
             Error::InvalidPacketContent(_) => 24,
+            Error::Ed25519SignatureError(_) => 25,
         }
     }
 }
@@ -182,6 +186,12 @@ impl From<::std::str::Utf8Error> for Error {
 impl From<::std::num::ParseIntError> for Error {
     fn from(err: ::std::num::ParseIntError) -> Error {
         Error::ParseIntError(err)
+    }
+}
+
+impl From<SignatureError> for Error {
+    fn from(err: SignatureError) -> Error {
+        Error::Ed25519SignatureError(err)
     }
 }
 

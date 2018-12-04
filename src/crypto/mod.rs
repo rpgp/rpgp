@@ -8,4 +8,5 @@ pub mod kdf;
 pub mod pkcs5;
 pub mod public_key;
 pub mod rsa;
+pub mod signature;
 pub mod sym;
