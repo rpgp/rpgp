@@ -116,18 +116,30 @@ impl Signature {
         }
 
         let mut hasher = self.hash_alg.new_hasher()?;
+        let mut key_buf = Vec::new();
+        key.to_writer(&mut key_buf)?;
+
+        let mut packet_buf = Vec::new();
+        id.to_writer(&mut packet_buf)?;
+
+        info!(
+            "key:    ({:?}), {}",
+            key.key_id().expect("key_id should be there"),
+            hex::encode(&key_buf)
+        );
+        info!("packet: {}", hex::encode(&packet_buf));
+
+        // old style packet header for the key
+        hasher.update(&[0x99]);
+        hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
+        // the actual key
+        hasher.update(&key_buf);
 
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
-                unimplemented_err!("v2, v3");
+                // Nothing to do
             }
             SignatureVersion::V4 | SignatureVersion::V5 => {
-                let mut key_buf = Vec::new();
-                key.to_writer(&mut key_buf)?;
-
-                let mut packet_buf = Vec::new();
-                id.to_writer(&mut packet_buf)?;
-
                 let prefix = match tag {
                     Tag::UserId => 0xB4,
                     Tag::UserAttribute => 0xD1,
@@ -136,31 +148,18 @@ impl Signature {
 
                 let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
                 BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
-
-                info!(
-                    "key:    ({:?}), {}",
-                    key.key_id().expect("key_id should be there"),
-                    hex::encode(&key_buf)
-                );
                 info!("prefix: {}", hex::encode(&prefix_buf));
-                info!("packet: {}", hex::encode(&packet_buf));
-
-                // old style packet header for the key
-                hasher.update(&[0x99]);
-                hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
-                // the actual key
-                hasher.update(&key_buf);
 
                 // prefixes
                 hasher.update(&prefix_buf);
-
-                // the packet content
-                hasher.update(&packet_buf);
-
-                let len = self.hash_signature_data(&mut *hasher)?;
-                hasher.update(&self.trailer(len));
             }
         }
+
+        // the packet content
+        hasher.update(&packet_buf);
+
+        let len = self.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.trailer(len));
 
         let hash = &hasher.finish()[..];
         ensure_eq!(&self.signed_hash_value, &hash[0..2]);
@@ -267,7 +266,19 @@ impl Signature {
     fn hash_signature_data(&self, hasher: &mut dyn Hasher) -> Result<usize> {
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
-                unimplemented_err!("v2 and v3 are not there yet");
+                let mut buf = [0u8; 5];
+                buf[0] = self.typ as u8;
+                BigEndian::write_u32(
+                    &mut buf[1..],
+                    self.created
+                        .expect("must exist for a v3 signature")
+                        .timestamp() as u32,
+                );
+
+                hasher.update(&buf);
+
+                // no trailer
+                Ok(0)
             }
             SignatureVersion::V4 | SignatureVersion::V5 => {
                 // TODO: validate this is the right thing to do for v5
@@ -329,7 +340,8 @@ impl Signature {
     fn trailer(&self, len: usize) -> Vec<u8> {
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
-                unimplemented!("trailer for v2 and v3 signatures");
+                // Nothing to do
+                Vec::new()
             }
             SignatureVersion::V4 | SignatureVersion::V5 => {
                 let mut trailer = vec![0x04, 0xFF, 0, 0, 0, 0];
