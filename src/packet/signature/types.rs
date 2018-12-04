@@ -2,6 +2,7 @@ use std::fmt;
 
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
+use num_traits::FromPrimitive;
 
 use crypto::aead::AeadAlgorithm;
 use crypto::hash::{HashAlgorithm, Hasher};
@@ -667,36 +668,121 @@ pub enum SignatureType {
     ThirdParty = 0x50,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 /// Available signature subpacket types
-#[repr(u8)]
 pub enum SubpacketType {
-    SignatureCreationTime = 2,
-    SignatureExpirationTime = 3,
-    ExportableCertification = 4,
-    TrustSignature = 5,
-    RegularExpression = 6,
-    Revocable = 7,
-    KeyExpirationTime = 9,
-    PreferredSymmetricAlgorithms = 11,
-    RevocationKey = 12,
-    Issuer = 16,
-    Notation = 20,
-    PreferredHashAlgorithms = 21,
-    PreferredCompressionAlgorithms = 22,
-    KeyServerPreferences = 23,
-    PreferredKeyServer = 24,
-    PrimaryUserId = 25,
-    PolicyURI = 26,
-    KeyFlags = 27,
-    SignersUserID = 28,
-    RevocationReason = 29,
-    Features = 30,
-    SignatureTarget = 31,
-    EmbeddedSignature = 32,
-    IssuerFingerprint = 33,
-    PreferredAead = 34,
-    Experimental = 100,
+    SignatureCreationTime,
+    SignatureExpirationTime,
+    ExportableCertification,
+    TrustSignature,
+    RegularExpression,
+    Revocable,
+    KeyExpirationTime,
+    PreferredSymmetricAlgorithms,
+    RevocationKey,
+    Issuer,
+    Notation,
+    PreferredHashAlgorithms,
+    PreferredCompressionAlgorithms,
+    KeyServerPreferences,
+    PreferredKeyServer,
+    PrimaryUserId,
+    PolicyURI,
+    KeyFlags,
+    SignersUserID,
+    RevocationReason,
+    Features,
+    SignatureTarget,
+    EmbeddedSignature,
+    IssuerFingerprint,
+    PreferredAead,
+    Experimental(u8),
+    Other(u8),
+}
+
+impl Into<u8> for SubpacketType {
+    #[inline]
+    fn into(self) -> u8 {
+        match self {
+            SubpacketType::SignatureCreationTime => 2,
+            SubpacketType::SignatureExpirationTime => 3,
+            SubpacketType::ExportableCertification => 4,
+            SubpacketType::TrustSignature => 5,
+            SubpacketType::RegularExpression => 6,
+            SubpacketType::Revocable => 7,
+            SubpacketType::KeyExpirationTime => 9,
+            SubpacketType::PreferredSymmetricAlgorithms => 11,
+            SubpacketType::RevocationKey => 12,
+            SubpacketType::Issuer => 16,
+            SubpacketType::Notation => 20,
+            SubpacketType::PreferredHashAlgorithms => 21,
+            SubpacketType::PreferredCompressionAlgorithms => 22,
+            SubpacketType::KeyServerPreferences => 23,
+            SubpacketType::PreferredKeyServer => 24,
+            SubpacketType::PrimaryUserId => 25,
+            SubpacketType::PolicyURI => 26,
+            SubpacketType::KeyFlags => 27,
+            SubpacketType::SignersUserID => 28,
+            SubpacketType::RevocationReason => 29,
+            SubpacketType::Features => 30,
+            SubpacketType::SignatureTarget => 31,
+            SubpacketType::EmbeddedSignature => 32,
+            SubpacketType::IssuerFingerprint => 33,
+            SubpacketType::PreferredAead => 34,
+            SubpacketType::Experimental(n) => n,
+            SubpacketType::Other(n) => n,
+        }
+    }
+}
+
+impl FromPrimitive for SubpacketType {
+    #[inline]
+    fn from_i64(n: i64) -> Option<Self> {
+        if n > 0 && n < 256 {
+            Self::from_u64(n as u64)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    fn from_u64(n: u64) -> Option<Self> {
+        if n > 255 {
+            None
+        } else {
+            let m = match n {
+                2 => SubpacketType::SignatureCreationTime,
+                3 => SubpacketType::SignatureExpirationTime,
+                4 => SubpacketType::ExportableCertification,
+                5 => SubpacketType::TrustSignature,
+                6 => SubpacketType::RegularExpression,
+                7 => SubpacketType::Revocable,
+                9 => SubpacketType::KeyExpirationTime,
+                11 => SubpacketType::PreferredSymmetricAlgorithms,
+                12 => SubpacketType::RevocationKey,
+                16 => SubpacketType::Issuer,
+                20 => SubpacketType::Notation,
+                21 => SubpacketType::PreferredHashAlgorithms,
+                22 => SubpacketType::PreferredCompressionAlgorithms,
+                23 => SubpacketType::KeyServerPreferences,
+                24 => SubpacketType::PreferredKeyServer,
+                25 => SubpacketType::PrimaryUserId,
+                26 => SubpacketType::PolicyURI,
+                27 => SubpacketType::KeyFlags,
+                28 => SubpacketType::SignersUserID,
+                29 => SubpacketType::RevocationReason,
+                30 => SubpacketType::Features,
+                31 => SubpacketType::SignatureTarget,
+                32 => SubpacketType::EmbeddedSignature,
+                33 => SubpacketType::IssuerFingerprint,
+                34 => SubpacketType::PreferredAead,
+                100...110 => SubpacketType::Experimental(n as u8),
+                _ => SubpacketType::Other(n as u8),
+            };
+
+            Some(m)
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -731,7 +817,8 @@ pub enum Subpacket {
     ExportableCertification(bool),
     IssuerFingerprint(Vec<u8>),
     PreferredAeadAlgorithms(Vec<AeadAlgorithm>),
-    Experimental(Vec<u8>),
+    Experimental(u8, Vec<u8>),
+    Other(u8, Vec<u8>),
     SignatureTarget(PublicKeyAlgorithm, HashAlgorithm, Vec<u8>),
 }
 

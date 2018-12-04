@@ -6,11 +6,11 @@ use nom::{be_u8, le_u16, rest};
 use errors::Result;
 use ser::Serialize;
 use types::Version;
-use util::{packet_length, write_packet_len};
+use util::{packet_length, write_packet_length};
 
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum UserAttribute {
     Image {
         packet_version: Version,
@@ -101,12 +101,16 @@ named_args!(parse(packet_version: Version) <UserAttribute>, do_parse!(
                     data: data.to_vec()
                 })
         ))
-    >> (attr)
+    >> ({
+        info!("attr with len {}", len);
+        attr
+    })
 ));
 
 impl Serialize for UserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_len(self.packet_len(), writer)?;
+        info!("write_packet_len {}", self.packet_len());
+        write_packet_length(self.packet_len(), writer)?;
 
         match self {
             UserAttribute::Image {
@@ -128,5 +132,26 @@ impl Serialize for UserAttribute {
             }
         }
         Ok(())
+    }
+}
+
+impl fmt::Debug for UserAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UserAttribute::Image {
+                ref header,
+                ref data,
+                ..
+            } => f
+                .debug_struct("UserAttribute::Image")
+                .field("header", &hex::encode(header))
+                .field("data", &hex::encode(data))
+                .finish(),
+            UserAttribute::Unknown { typ, ref data, .. } => f
+                .debug_struct("UserAttribute::Image")
+                .field("type", &hex::encode(&[*typ]))
+                .field("data", &hex::encode(data))
+                .finish(),
+        }
     }
 }

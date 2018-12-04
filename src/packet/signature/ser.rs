@@ -5,10 +5,12 @@ use byteorder::{BigEndian, WriteBytesExt};
 use errors::Result;
 use packet::signature::types::*;
 use ser::Serialize;
-use util::{write_mpi, write_packet_len, write_string};
+use util::{write_mpi, write_packet_length, write_string};
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(&[self.version as u8])?;
+
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
             SignatureVersion::V4 | SignatureVersion::V5 => self.to_writer_v4(writer),
@@ -105,7 +107,10 @@ impl Subpacket {
             Subpacket::PreferredAeadAlgorithms(algs) => {
                 writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
             }
-            Subpacket::Experimental(body) => {
+            Subpacket::Experimental(_, body) => {
+                writer.write_all(body)?;
+            }
+            Subpacket::Other(_, body) => {
                 writer.write_all(body)?;
             }
             Subpacket::SignatureTarget(pub_alg, hash_alg, hash) => {
@@ -151,7 +156,8 @@ impl Subpacket {
             Subpacket::ExportableCertification(_) => 1,
             Subpacket::IssuerFingerprint(fp) => fp.len(),
             Subpacket::PreferredAeadAlgorithms(algs) => algs.len(),
-            Subpacket::Experimental(body) => body.len(),
+            Subpacket::Experimental(_, body) => body.len(),
+            Subpacket::Other(_, body) => body.len(),
             Subpacket::SignatureTarget(_, _, hash) => 2 + hash.len(),
         };
 
@@ -188,7 +194,8 @@ impl Subpacket {
             Subpacket::ExportableCertification(_) => SubpacketType::ExportableCertification,
             Subpacket::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
             Subpacket::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
-            Subpacket::Experimental(_) => SubpacketType::Experimental,
+            Subpacket::Experimental(n, _) => SubpacketType::Experimental(*n),
+            Subpacket::Other(n, _) => SubpacketType::Other(*n),
             Subpacket::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
         }
     }
@@ -196,8 +203,8 @@ impl Subpacket {
 
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_len(1 + self.body_len()?, writer)?;
-        writer.write_all(&[self.typ() as u8])?;
+        write_packet_length(1 + self.body_len()?, writer)?;
+        writer.write_all(&[self.typ().into()])?;
         self.body_to_writer(writer)?;
 
         Ok(())
@@ -205,16 +212,49 @@ impl Serialize for Subpacket {
 }
 
 impl Signature {
-    /// Serializes a v2or v3 signature.
+    /// Serializes a v2 or v3 signature.
     fn to_writer_v3<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        writer.write_all(&[
+            // tag
+            0x05,
+            // type
+            self.typ as u8,
+        ])?;
+
+        writer.write_u32::<BigEndian>(
+            self.created
+                .expect("must exist for a v3 signature")
+                .timestamp() as u32,
+        )?;
+
+        writer.write_all(
+            self.issuer
+                .as_ref()
+                .expect("must exist for a v3 signature")
+                .as_ref(),
+        )?;
+        writer.write_all(&[
+            // public algorithm
+            self.pub_alg as u8,
+            // hash algorithm
+            self.hash_alg as u8,
+        ])?;
+
+        // signed hash value
+        writer.write_all(&self.signed_hash_value)?;
+
+        // the actual signature
+        for val in &self.signature {
+            info!("writing: {}", hex::encode(val));
+            write_mpi(val, writer)?;
+        }
+
+        Ok(())
     }
 
     /// Serializes a v4 or v5 signature.
     fn to_writer_v4<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[
-            // version
-            self.version as u8,
             // type
             self.typ as u8,
             // public algorithm

@@ -162,6 +162,20 @@ named!(pub packet_length<usize>, do_parse!(
     >> (len)
 ));
 
+/// Write packet length, including the prefix.
+pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
+    if len < 192 {
+        // nothing
+    } else if len < 8384 {
+        // nothing
+    } else {
+        writer.write_all(&[0xFF])?;
+    }
+
+    write_packet_len(len, writer)
+}
+
+/// Write the raw packet length.
 pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
     if len < 192 {
         writer.write_all(&[len as u8])?;
@@ -287,6 +301,12 @@ mod tests {
     fn test_write_packet_len() {
         let mut res = Vec::new();
         write_packet_len(1173, &mut res).unwrap();
-        assert_eq!(res, vec![0xc3, 0xd5]);
+        assert_eq!(hex::encode(res), "c3d5");
+    }
+    #[test]
+    fn test_write_packet_length() {
+        let mut res = Vec::new();
+        write_packet_length(12870, &mut res).unwrap();
+        assert_eq!(hex::encode(res), "ff00003246");
     }
 }

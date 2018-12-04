@@ -236,6 +236,7 @@ named!(preferred_aead<Subpacket>, do_parse!(
 
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
+    info!("parsing subpacket: {:?} {}", typ, hex::encode(body));
 
     let res = match typ {
         SignatureCreationTime => signature_creation_time(body),
@@ -263,7 +264,8 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
         EmbeddedSignature => embedded_sig(body),
         IssuerFingerprint => issuer_fingerprint(body),
         PreferredAead => preferred_aead(body),
-        Experimental => Ok((&body[..], Subpacket::Experimental(body.to_vec()))),
+        Experimental(n) => Ok((&body[..], Subpacket::Experimental(n, body.to_vec()))),
+        Other(n) => Ok((&body[..], Subpacket::Other(n, body.to_vec()))),
     };
 
     if res.is_err() {
@@ -305,10 +307,8 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Vec<u8
     &PublicKeyAlgorithm::Private107 |
     &PublicKeyAlgorithm::Private108 |
     &PublicKeyAlgorithm::Private109 |
-    &PublicKeyAlgorithm::Private110  => value!(Vec::new()) |
-    // everybody else gets nothing
-    // TODO: handle this better
-    _ => value!(Vec::new())
+    &PublicKeyAlgorithm::Private110  => map!(call!(mpi), |v| vec![v.to_vec()]) |
+    _ => map!(call!(mpi), |v| vec![v.to_vec()])
 ));
 
 /// Parse a v2 or v3 signature packet
