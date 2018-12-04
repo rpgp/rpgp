@@ -21,6 +21,10 @@ macro_rules! impl_key {
             pub fn public_params(&self) -> &$crate::crypto::public_key::PublicParams {
                 &self.public_params
             }
+
+            pub fn verify(&self) -> $crate::errors::Result<()> {
+                unimplemented!("verify");
+            }
         }
 
         impl $crate::types::KeyTrait for $name {
@@ -204,10 +208,6 @@ macro_rules! impl_key {
                         _ => None,
                     },
                 }
-            }
-
-            fn verify(&self) -> $crate::errors::Result<()> {
-                unimplemented!("verify");
             }
         }
 
