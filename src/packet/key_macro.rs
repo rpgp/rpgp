@@ -21,13 +21,9 @@ macro_rules! impl_key {
             pub fn public_params(&self) -> &$crate::crypto::public_key::PublicParams {
                 &self.public_params
             }
-        }
-        impl<'a> $crate::types::KeyTrait for &'a $name {
-            fn fingerprint(&self) -> Vec<u8> {
-                (*self).fingerprint()
-            }
-            fn key_id(&self) -> Option<$crate::types::KeyId> {
-                (*self).key_id()
+
+            pub fn verify(&self) -> $crate::errors::Result<()> {
+                unimplemented!("verify");
             }
         }
 
@@ -211,6 +207,46 @@ macro_rules! impl_key {
                         }
                         _ => None,
                     },
+                }
+            }
+        }
+
+        impl $crate::types::PublicKeyTrait for $name {
+            fn verify_signature(
+                &self,
+                hash: $crate::crypto::hash::HashAlgorithm,
+                hashed: &[u8],
+                sig: &[Vec<u8>],
+            ) -> $crate::errors::Result<()> {
+                use $crate::crypto::public_key::PublicParams;
+
+                info!("verify data: {}", hex::encode(&hashed));
+                info!("verify sig: {}", hex::encode(&sig.concat()));
+
+                match self.public_params {
+                    PublicParams::RSA { ref n, ref e } => {
+                        $crate::crypto::signature::verify_rsa(n, e, hash, hashed, &sig.concat())
+                    }
+                    PublicParams::EdDSA { ref curve, ref q } => {
+                        $crate::crypto::signature::verify_eddsa(curve, q, hash, hashed, sig)
+                    }
+                    PublicParams::ECDSA { ref curve, .. } => {
+                        unimplemented_err!("verify ECDSA: {:?}", curve);
+                    }
+                    PublicParams::ECDH {
+                        ref curve,
+                        ref hash,
+                        ref alg_sym,
+                        ..
+                    } => {
+                        unimplemented_err!("verify ECDH: {:?} {:?} {:?}", curve, hash, alg_sym);
+                    }
+                    PublicParams::Elgamal { .. } => {
+                        unimplemented_err!("verify Elgamal");
+                    }
+                    PublicParams::DSA { .. } => {
+                        unimplemented_err!("verify DSA");
+                    }
                 }
             }
         }

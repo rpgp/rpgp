@@ -39,7 +39,8 @@ impl<R: Read> Iterator for PacketParser<R> {
             // read some data
             let sz = match self.inner.read(b.space()) {
                 Ok(sz) => sz,
-                Err(_) => {
+                Err(err) => {
+                    warn!("failed to read {:?}", err);
                     return None;
                 }
             };
@@ -63,15 +64,19 @@ impl<R: Read> Iterator for PacketParser<R> {
                 Ok((l, p)) => Some((l, p)),
                 Err(err) => match err {
                     Error::Incomplete(n) => {
+                        info!("incomplete {:?}", n);
                         needed = Some(n);
                         None
                     }
-                    _ => return Some(Err(err)),
+                    _ => {
+                        warn!("parsing error {:?}", err);
+                        return Some(Err(err));
+                    }
                 },
             };
 
             if let Some((length, p)) = res {
-                info!("got packet: {:?}", p);
+                info!("got packet: {:#?} {}", p, length);
                 b.consume(length);
                 return Some(p);
             }

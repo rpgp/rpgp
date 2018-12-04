@@ -1,11 +1,16 @@
+use std::{io, iter};
+
+use armor::{self, BlockType};
+use composed::shared::Deserializable;
 use errors::Result;
-use packet;
-use types::{KeyId, KeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser, SignedUserAttribute};
+use packet::{self, Packet, PacketParser, SignatureType};
+use ser::Serialize;
+use types::{
+    KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait, SignedUser,
+    SignedUserAttribute, Tag,
+};
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
-
-// TODO: make armor parsing streaming
-// TODO: rename armor parser to dearmor
 
 /// Represents a Public PGP key.
 #[derive(Debug, PartialEq, Eq)]
@@ -27,6 +32,41 @@ impl PublicKey {
         user_attributes: Vec<SignedUserAttribute>,
         public_subkeys: Vec<PublicSubKey>,
     ) -> PublicKey {
+        let users = users
+            .into_iter()
+            .filter(|user| {
+                if user.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", user.id);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        let user_attributes = user_attributes
+            .into_iter()
+            .filter(|attr| {
+                if attr.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", attr.attr);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        let public_subkeys = public_subkeys
+            .into_iter()
+            .filter(|key| {
+                if key.signatures.is_empty() {
+                    warn!("ignoring unsigned {:?}", key.key);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PublicKey {
             primary_key,
             revocation_signatures,
@@ -36,29 +76,71 @@ impl PublicKey {
             public_subkeys,
         }
     }
+
+    fn verify_users(&self) -> Result<()> {
+        for user in &self.users {
+            user.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_attributes(&self) -> Result<()> {
+        for attr in &self.user_attributes {
+            attr.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_public_subkeys(&self) -> Result<()> {
+        for subkey in &self.public_subkeys {
+            subkey.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_revocation_signatures(&self) -> Result<()> {
+        for sig in &self.revocation_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_direct_signatures(&self) -> Result<()> {
+        for sig in &self.direct_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn verify(&self) -> Result<()> {
+        self.verify_users()?;
+        self.verify_attributes()?;
+        self.verify_public_subkeys()?;
+        self.verify_revocation_signatures()?;
+        self.verify_direct_signatures()?;
+
+        Ok(())
+    }
 }
 
 impl KeyTrait for PublicKey {
-    /// Returns the fingerprint of the associated primary key.
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
 
-    /// Returns the Key ID of the associated primary key.
     fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
 }
 
-impl<'a> KeyTrait for &'a PublicKey {
-    /// Returns the fingerprint of the associated primary key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.primary_key.key_id()
+impl Serialize for PublicKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
@@ -71,7 +153,33 @@ pub struct PublicSubKey {
 
 impl PublicSubKey {
     pub fn new(key: packet::PublicSubkey, signatures: Vec<packet::Signature>) -> PublicSubKey {
+        let signatures = signatures
+            .into_iter()
+            .filter(|sig| {
+                if sig.typ != SignatureType::SubkeyBinding
+                    && sig.typ != SignatureType::SubkeyRevocation
+                {
+                    warn!(
+                        "ignoring unexpected signature {:?} after Subkey packet",
+                        sig.typ
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PublicSubKey { key, signatures }
+    }
+
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
+        for sig in &self.signatures {
+            sig.verify_key_binding(key, &self.key)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -87,15 +195,9 @@ impl KeyTrait for PublicSubKey {
     }
 }
 
-impl<'a> KeyTrait for &'a PublicSubKey {
-    /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.key.fingerprint()
-    }
-
-    /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.key.key_id()
+impl Serialize for PublicSubKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
@@ -121,6 +223,53 @@ impl PrivateKey {
         public_subkeys: Vec<PublicSubKey>,
         private_subkeys: Vec<PrivateSubKey>,
     ) -> PrivateKey {
+        let users = users
+            .into_iter()
+            .filter(|user| {
+                if user.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", user.id);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+        let user_attributes = user_attributes
+            .into_iter()
+            .filter(|attr| {
+                if attr.signatures.is_empty() {
+                    warn!("ignoring unsigned {}", attr.attr);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        let public_subkeys = public_subkeys
+            .into_iter()
+            .filter(|key| {
+                if key.signatures.is_empty() {
+                    warn!("ignoring unsigned {:?}", key.key);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        let private_subkeys = private_subkeys
+            .into_iter()
+            .filter(|key| {
+                if key.signatures.is_empty() {
+                    warn!("ignoring unsigned {:?}", key.key);
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PrivateKey {
             primary_key,
             revocation_signatures,
@@ -131,7 +280,67 @@ impl PrivateKey {
             private_subkeys,
         }
     }
+
+    fn verify_users(&self) -> Result<()> {
+        for user in &self.users {
+            user.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_attributes(&self) -> Result<()> {
+        for attr in &self.user_attributes {
+            attr.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_public_subkeys(&self) -> Result<()> {
+        for subkey in &self.public_subkeys {
+            subkey.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_private_subkeys(&self) -> Result<()> {
+        for subkey in &self.private_subkeys {
+            subkey.verify(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_revocation_signatures(&self) -> Result<()> {
+        for sig in &self.revocation_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    fn verify_direct_signatures(&self) -> Result<()> {
+        for sig in &self.direct_signatures {
+            sig.verify_key(&self.primary_key)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn verify(&self) -> Result<()> {
+        self.verify_users()?;
+        self.verify_attributes()?;
+        self.verify_public_subkeys()?;
+        self.verify_private_subkeys()?;
+        self.verify_revocation_signatures()?;
+        self.verify_direct_signatures()?;
+
+        Ok(())
+    }
 }
+
 impl KeyTrait for PrivateKey {
     /// Returns the fingerprint of the associated primary key.
     fn fingerprint(&self) -> Vec<u8> {
@@ -144,29 +353,13 @@ impl KeyTrait for PrivateKey {
     }
 }
 
-impl<'a> KeyTrait for &'a PrivateKey {
-    /// Returns the fingerprint of the associated primary key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.primary_key.key_id()
+impl Serialize for PrivateKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
 impl SecretKeyTrait for PrivateKey {
-    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
-    {
-        self.primary_key.unlock(pw, work)
-    }
-}
-
-impl<'a> SecretKeyTrait for &'a PrivateKey {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
@@ -185,7 +378,34 @@ pub struct PrivateSubKey {
 
 impl PrivateSubKey {
     pub fn new(key: packet::SecretSubkey, signatures: Vec<packet::Signature>) -> PrivateSubKey {
+        let signatures = signatures
+            .into_iter()
+            .filter(|sig| {
+                if sig.typ != SignatureType::SubkeyBinding
+                    && sig.typ != SignatureType::SubkeyRevocation
+                {
+                    warn!(
+                        "ignoring unexpected signature {:?} after Subkey packet",
+                        sig.typ
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
         PrivateSubKey { key, signatures }
+    }
+
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
+
+        for sig in &self.signatures {
+            sig.verify_key_binding(key, &self.key)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -201,15 +421,9 @@ impl KeyTrait for PrivateSubKey {
     }
 }
 
-impl<'a> KeyTrait for &'a PrivateSubKey {
-    /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.key.fingerprint()
-    }
-
-    /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
-        self.key.key_id()
+impl Serialize for PrivateSubKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
     }
 }
 
@@ -223,15 +437,122 @@ impl SecretKeyTrait for PrivateSubKey {
     }
 }
 
-impl<'a> SecretKeyTrait for &'a PrivateSubKey {
-    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
-    {
-        self.key.unlock(pw, work)
+#[derive(Debug)]
+pub enum PublicOrPrivate {
+    Public(PublicKey),
+    Private(PrivateKey),
+}
+
+impl PublicOrPrivate {
+    pub fn verify(&self) -> Result<()> {
+        match self {
+            PublicOrPrivate::Public(k) => k.verify(),
+            PublicOrPrivate::Private(k) => k.verify(),
+        }
     }
 }
+
+impl Serialize for PublicOrPrivate {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            PublicOrPrivate::Public(k) => k.to_writer(writer),
+            PublicOrPrivate::Private(k) => k.to_writer(writer),
+        }
+    }
+}
+
+impl KeyTrait for PublicOrPrivate {
+    /// Returns the fingerprint of the key.
+    fn fingerprint(&self) -> Vec<u8> {
+        match self {
+            PublicOrPrivate::Public(k) => k.fingerprint(),
+            PublicOrPrivate::Private(k) => k.fingerprint(),
+        }
+    }
+
+    /// Returns the Key ID of the key.
+    fn key_id(&self) -> Option<KeyId> {
+        match self {
+            PublicOrPrivate::Public(k) => k.key_id(),
+            PublicOrPrivate::Private(k) => k.key_id(),
+        }
+    }
+}
+
+pub struct PubPrivIterator<I: Sized + Iterator<Item = Packet>> {
+    inner: iter::Peekable<I>,
+}
+
+impl<I: Sized + Iterator<Item = Packet>> Iterator for PubPrivIterator<I> {
+    type Item = Result<PublicOrPrivate>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let packets = self.inner.by_ref();
+        if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::SecretKey) {
+            let p: Option<Result<PrivateKey>> = PrivateKey::from_packets(packets).nth(0);
+            p.map(|key| key.map(PublicOrPrivate::Private))
+        } else if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::PublicKey) {
+            let p: Option<Result<PublicKey>> = PublicKey::from_packets(packets).nth(0);
+            p.map(|key| key.map(PublicOrPrivate::Public))
+        } else {
+            None
+        }
+    }
+}
+
+/// Parses a list of secret and public keys from ascii armored text.
+pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
+    input: R,
+) -> Result<Box<dyn Iterator<Item = Result<PublicOrPrivate>> + 'a>> {
+    let mut dearmor = armor::Dearmor::new(input);
+    dearmor.read_header()?;
+    // Safe to unwrap, as read_header succeeded.
+    let typ = dearmor
+        .typ
+        .ok_or_else(|| format_err!("dearmor failed to retrieve armor type"))?;
+
+    // TODO: add typ and headers information to the key possibly?
+    match typ {
+        // Standard PGP types
+        BlockType::PublicKey
+        | BlockType::PrivateKey
+        | BlockType::Message
+        | BlockType::MultiPartMessage(_, _)
+        | BlockType::Signature
+        | BlockType::File => {
+            // TODO: check that the result is what it actually said.
+            Ok(from_bytes_many(dearmor))
+        }
+        BlockType::PublicKeyPKCS1
+        | BlockType::PublicKeyPKCS8
+        | BlockType::PublicKeyOpenssh
+        | BlockType::PrivateKeyPKCS1
+        | BlockType::PrivateKeyPKCS8
+        | BlockType::PrivateKeyOpenssh => {
+            unimplemented_err!("key format {:?}", typ);
+        }
+    }
+}
+
+/// Parses a list of secret and public keys from raw bytes.
+pub fn from_bytes_many<'a>(
+    bytes: impl io::Read + 'a,
+) -> Box<dyn Iterator<Item = Result<PublicOrPrivate>> + 'a> {
+    let packets = PacketParser::new(bytes)
+        .filter_map(|p| {
+            // for now we are skipping any packets that we failed to parse
+            if p.is_ok() {
+                p.ok()
+            } else {
+                warn!("skipping packet: {:?}", p);
+                None
+            }
+        })
+        .peekable();
+
+    Box::new(PubPrivIterator { inner: packets })
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs::File;
@@ -254,8 +575,11 @@ mod tests {
     use crypto::hash::HashAlgorithm;
     use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
     use crypto::sym::SymmetricKeyAlgorithm;
+    use errors::Error;
     use packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId};
-    use types::{CompressionAlgorithm, KeyVersion, SecretKeyRepr, SignedUser, StringToKeyType};
+    use types::{
+        CompressionAlgorithm, KeyVersion, SecretKeyRepr, SignedUser, StringToKeyType, Version,
+    };
 
     fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
         // Open the path in read-only mode, returns `io::Result<File>`
@@ -271,58 +595,99 @@ mod tests {
         read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name))
     }
 
-    fn test_parse_dump(i: usize) {
+    fn test_parse_dump(i: usize, expected_count: usize) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
-        PublicKey::from_bytes_many(f);
+
+        let count = PublicKey::from_bytes_many(f)
+            .filter(|key| {
+                let key = key.as_ref().expect("failed to parse key");
+                match key.verify() {
+                    // Skip these for now
+                    Err(Error::Unimplemented(err)) => {
+                        if err == "verify DSA" {
+                            true
+                        } else {
+                            warn!("unimplemented: {:?}", err);
+                            false
+                        }
+                    }
+                    Err(err) => {
+                        warn!(
+                            "verification failed: public key {}: {:?}",
+                            hex::encode(&key.key_id().unwrap()),
+                            err
+                        );
+                        false
+                    }
+                    // all good
+                    Ok(_) => true,
+                }
+            })
+            .count();
+
+        assert_eq!(expected_count, count);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_0() {
-        test_parse_dump(0);
+        test_parse_dump(0, 18525);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_1() {
-        test_parse_dump(1);
+        test_parse_dump(1, 18392);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_2() {
-        test_parse_dump(2);
+        test_parse_dump(2, 18507);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_3() {
-        test_parse_dump(3);
+        test_parse_dump(3, 18539);
     }
     #[test]
+    #[ignore]
     fn test_parse_dumps_4() {
-        test_parse_dump(4);
+        test_parse_dump(4, 18476);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_5() {
-        test_parse_dump(5);
+        test_parse_dump(5, 18447);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_6() {
-        test_parse_dump(6);
+        test_parse_dump(6, 18502);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_7() {
-        test_parse_dump(7);
+        test_parse_dump(7, 18550);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_8() {
-        test_parse_dump(8);
+        test_parse_dump(8, 18513);
     }
 
     #[test]
+    #[ignore]
     fn test_parse_dumps_9() {
-        test_parse_dump(9);
+        test_parse_dump(9, 18436);
     }
 
     #[test]
@@ -334,7 +699,16 @@ mod tests {
             file.read_to_end(&mut buf).unwrap();
 
             let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-            PublicKey::from_string(input).expect("failed to parse key");
+            let pk = PublicKey::from_string(input).expect("failed to parse key");
+            match pk.verify() {
+                // Skip these for now
+                Err(Error::Unimplemented(err)) => {
+                    warn!("verification failed: {:?}", err);
+                }
+                Err(err) => panic!("{:?}", err),
+                // all good
+                Ok(_) => {}
+            }
         }
     }
 
@@ -348,6 +722,7 @@ mod tests {
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
+        key.verify().expect("invalid key");
 
         let pkey = key.primary_key;
         assert_eq!(pkey.version(), &KeyVersion::V4);
@@ -394,8 +769,12 @@ mod tests {
 
     #[test]
     fn test_parse_details() {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let file = File::open("./tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
         let key = PublicKey::from_armor_single(file).expect("failed to parse key");
+        key.verify().expect("invalid key");
 
         assert_eq!(
             hex::encode(key.primary_key.fingerprint()),
@@ -427,13 +806,38 @@ mod tests {
         // TODO: examine subkey details
         assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
-        let mut sig1 = Signature::new(
+        let issuer = Subpacket::Issuer(
+            KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
+        );
+        let key_flags = vec![3];
+        let p_sym_algs = vec![
+            SymmetricKeyAlgorithm::AES256,
+            SymmetricKeyAlgorithm::AES192,
+            SymmetricKeyAlgorithm::AES128,
+            SymmetricKeyAlgorithm::CAST5,
+            SymmetricKeyAlgorithm::TripleDES,
+        ];
+        let p_com_algs = vec![
+            CompressionAlgorithm::ZLIB,
+            CompressionAlgorithm::BZip2,
+            CompressionAlgorithm::ZIP,
+        ];
+        let p_hash_algs = vec![
+            HashAlgorithm::SHA256,
+            HashAlgorithm::SHA1,
+            HashAlgorithm::SHA384,
+            HashAlgorithm::SHA512,
+            HashAlgorithm::SHA224,
+        ];
+
+        let sig1 = Signature::new(
+            Version::Old,
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
-            vec![0x7c, 0x63],
-            vec![
+            [0x7c, 0x63],
+            vec![vec![
                 0x15, 0xb5, 0x4f, 0xca, 0x11, 0x7f, 0x1b, 0x1d, 0xc0, 0x7a, 0x05, 0x97, 0x25, 0x10,
                 0x4b, 0x6a, 0x76, 0x12, 0xf8, 0x89, 0x48, 0x76, 0x74, 0xeb, 0x8b, 0x22, 0xcf, 0xeb,
                 0x95, 0x80, 0x70, 0x97, 0x1b, 0x92, 0x7e, 0x35, 0x8f, 0x5d, 0xc8, 0xae, 0x22, 0x0d,
@@ -471,59 +875,36 @@ mod tests {
                 0xbd, 0x1f, 0x26, 0x92, 0xda, 0x85, 0x52, 0x71, 0x15, 0x9d, 0x7e, 0xa4, 0x7e, 0xc2,
                 0xd1, 0xcd, 0xb4, 0x56, 0xb3, 0x9a, 0x92, 0x0c, 0x4c, 0x0e, 0x40, 0x8d, 0xf3, 0x4d,
                 0xb9, 0x49, 0x6f, 0x55, 0xc6, 0xb9, 0xf5, 0x1a,
+            ]],
+            vec![
+                Subpacket::SignatureCreationTime(
+                    DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
+                        .expect("failed to parse static time")
+                        .with_timezone(&Utc),
+                ),
+                Subpacket::KeyFlags(key_flags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
+                Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
+                Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
+                Subpacket::Features(vec![1]),
+                Subpacket::KeyServerPreferences(vec![128]),
             ],
+            vec![issuer.clone()],
         );
-
-        let key_flags = vec![3];
-        let p_sym_algs = vec![
-            SymmetricKeyAlgorithm::AES256,
-            SymmetricKeyAlgorithm::AES192,
-            SymmetricKeyAlgorithm::AES128,
-            SymmetricKeyAlgorithm::CAST5,
-            SymmetricKeyAlgorithm::TripleDES,
-        ];
-        let p_com_algs = vec![
-            CompressionAlgorithm::ZLIB,
-            CompressionAlgorithm::BZip2,
-            CompressionAlgorithm::ZIP,
-        ];
-        let p_hash_algs = vec![
-            HashAlgorithm::SHA256,
-            HashAlgorithm::SHA1,
-            HashAlgorithm::SHA384,
-            HashAlgorithm::SHA512,
-            HashAlgorithm::SHA224,
-        ];
-        let issuer = Subpacket::Issuer([0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]);
-
-        sig1.created = Some(
-            DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
-                .expect("failed to parse static time")
-                .with_timezone(&Utc),
-        );
-
-        sig1.key_flags = key_flags.clone();
-        sig1.preferred_symmetric_algs = p_sym_algs.clone();
-        sig1.preferred_compression_algs = p_com_algs.clone();
-        sig1.preferred_hash_algs = p_hash_algs.clone();
-
-        sig1.key_server_prefs = vec![128];
-        sig1.features = vec![1];
-
-        sig1.unhashed_subpackets.push(issuer.clone());
 
         let u1 = SignedUser::new(
-            UserId::from_str("john doe (test) <johndoe@example.com>"),
+            UserId::from_str(Version::Old, "john doe (test) <johndoe@example.com>"),
             vec![sig1],
         );
 
-        let mut sig2 = Signature::new(
+        let sig2 = Signature::new(
+            Version::Old,
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
-            vec![0xca, 0x6c],
-            vec![
+            [0xca, 0x6c],
+            vec![vec![
                 0x49, 0xa0, 0xb5, 0x41, 0xbd, 0x33, 0xa8, 0xda, 0xda, 0x6e, 0xb1, 0xe5, 0x28, 0x74,
                 0x18, 0xee, 0x39, 0xc8, 0x8d, 0xfd, 0x39, 0xe8, 0x3b, 0x09, 0xdc, 0x9d, 0x04, 0x91,
                 0x5d, 0x66, 0xb8, 0x1d, 0x04, 0x0a, 0x90, 0xe7, 0xa6, 0x84, 0x9b, 0xb1, 0x06, 0x4f,
@@ -561,27 +942,25 @@ mod tests {
                 0x5a, 0xe8, 0x4a, 0x93, 0x98, 0xf3, 0xe2, 0xdb, 0xbc, 0x9f, 0xb1, 0x83, 0x92, 0x8b,
                 0xba, 0x8b, 0xe0, 0xe4, 0x6b, 0x77, 0x0f, 0x35, 0xcb, 0x3f, 0x3e, 0xf5, 0x98, 0x37,
                 0x99, 0xed, 0x79, 0xd8, 0x76, 0xdf, 0x13, 0x9e,
+            ]],
+            vec![
+                Subpacket::SignatureCreationTime(
+                    DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
+                        .expect("failed to parse static time")
+                        .with_timezone(&Utc),
+                ),
+                Subpacket::KeyFlags(key_flags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
+                Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
+                Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
+                Subpacket::Features(vec![1]),
+                Subpacket::KeyServerPreferences(vec![128]),
             ],
+            vec![issuer.clone()],
         );
-
-        sig2.created = Some(
-            DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
-                .expect("failed to parse static time")
-                .with_timezone(&Utc),
-        );
-
-        sig2.key_flags = key_flags.clone();
-        sig2.preferred_symmetric_algs = p_sym_algs.clone();
-        sig2.preferred_compression_algs = p_com_algs.clone();
-        sig2.preferred_hash_algs = p_hash_algs.clone();
-
-        sig2.key_server_prefs = vec![128];
-        sig2.features = vec![1];
-
-        sig2.unhashed_subpackets.push(issuer.clone());
 
         let u2 = SignedUser::new(
-            UserId::from_str("john doe <johndoe@seconddomain.com>"),
+            UserId::from_str(Version::Old, "john doe <johndoe@seconddomain.com>"),
             vec![sig2],
         );
 
@@ -591,19 +970,20 @@ mod tests {
         assert_eq!(key.user_attributes.len(), 1);
         let ua = &key.user_attributes[0];
         match ua.attr {
-            UserAttribute::Image(ref v) => {
-                assert_eq!(v.len(), 1156);
+            UserAttribute::Image { ref data, .. } => {
+                assert_eq!(data.len(), 1156);
             }
             _ => panic!("not here"),
         }
 
-        let mut sig3 = Signature::new(
+        let sig3 = Signature::new(
+            Version::Old,
             SignatureVersion::V4,
             SignatureType::CertPositive,
             PublicKeyAlgorithm::RSA,
             HashAlgorithm::SHA1,
-            vec![0x02, 0x0c],
-            vec![
+            [0x02, 0x0c],
+            vec![vec![
                 0x5b, 0x4b, 0xeb, 0xff, 0x1a, 0x89, 0xc2, 0xe1, 0x80, 0x20, 0x26, 0x3b, 0xf4, 0x4d,
                 0x2d, 0x46, 0xba, 0x96, 0x78, 0xb2, 0x88, 0xf8, 0xf9, 0xd5, 0xf1, 0x5f, 0x7d, 0x45,
                 0xeb, 0xbc, 0x25, 0x2e, 0x1b, 0x2f, 0x8e, 0xd4, 0xa9, 0x6e, 0x64, 0xfa, 0x97, 0x09,
@@ -641,23 +1021,21 @@ mod tests {
                 0xbb, 0xa0, 0x5e, 0x76, 0xd6, 0x01, 0xe1, 0xa4, 0x9a, 0x14, 0x43, 0xcd, 0x99, 0xa0,
                 0x2e, 0xa2, 0xda, 0x81, 0xe2, 0x9c, 0xab, 0x22, 0x41, 0x02, 0xcc, 0x2f, 0xca, 0xc5,
                 0xf7, 0x26, 0x65, 0x7d, 0x0b, 0xcc, 0xab, 0x26,
+            ]],
+            vec![
+                Subpacket::SignatureCreationTime(
+                    DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
+                        .expect("failed to parse static time")
+                        .with_timezone(&Utc),
+                ),
+                Subpacket::KeyFlags(key_flags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
+                Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
+                Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
+                Subpacket::Features(vec![1]),
+                Subpacket::KeyServerPreferences(vec![128]),
             ],
-        );
-
-        sig3.key_flags = key_flags;
-        sig3.preferred_symmetric_algs = p_sym_algs;
-        sig3.preferred_compression_algs = p_com_algs;
-        sig3.preferred_hash_algs = p_hash_algs;
-
-        sig3.key_server_prefs = vec![128];
-        sig3.features = vec![1];
-
-        sig3.unhashed_subpackets.push(issuer);
-
-        sig3.created = Some(
-            DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
-                .expect("failed to parse static time")
-                .with_timezone(&Utc),
+            vec![issuer.clone()],
         );
 
         assert_eq!(ua.signatures, vec![sig3]);
@@ -673,6 +1051,7 @@ mod tests {
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
         let key = PrivateKey::from_string(input).expect("failed to parse key");
+        key.verify().expect("invalid key");
 
         let pp = key.primary_key.secret_params().clone();
 
@@ -752,6 +1131,7 @@ mod tests {
     #[test]
     fn test_fingerprint_rsa() {
         let (json, key) = get_test_fingerprint("gnupg-v1-003");
+        key.verify().expect("invalid key");
 
         assert_eq!(json["expected_fingerprint"], hex::encode(key.fingerprint()));
     }
@@ -773,6 +1153,7 @@ mod tests {
     #[test]
     fn test_fingerprint_ecdh() {
         let (json, key) = get_test_fingerprint("gnupg-v1-001");
+        // can't verify: DSA
 
         assert_eq!(
             json["expected_subkeys"].as_array().unwrap()[0]
@@ -782,7 +1163,7 @@ mod tests {
         );
 
         let (json, key) = get_test_fingerprint("e2e-001");
-
+        // can't verify: ECDSA: P256
         assert_eq!(
             json["expected_subkeys"].as_array().unwrap()[0]
                 .as_object()
@@ -803,144 +1184,187 @@ mod tests {
         );
     }
 
-    fn test_parse_openpgp_key(key: &str) {
+    fn test_parse_openpgp_key(key: &str, verify: bool) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_armor_many(f).unwrap();
+        let pk = from_armor_many(f).unwrap();
+        for key in pk {
+            let parsed = key.expect("failed to parse key");
+            if verify {
+                parsed.verify().expect("invalid key");
+            }
+        }
     }
 
-    fn test_parse_openpgp_key_bin(key: &str) {
+    fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
         let f = read_file(Path::new("./tests/openpgp/").join(key));
-        PublicKey::from_bytes_many(f);
+        let pk = from_bytes_many(f);
+        for key in pk {
+            let parsed = key.expect("failed to parse key");
+            if verify {
+                parsed.verify().expect("invalid key");
+            }
+        }
     }
 
     macro_rules! openpgp_key_bin {
-        ($name:ident, $path:expr) => {
+        ($name:ident, $path:expr, $verify:expr) => {
             #[test]
             fn $name() {
-                test_parse_openpgp_key_bin($path);
+                test_parse_openpgp_key_bin($path, $verify);
             }
         };
     }
 
     macro_rules! openpgp_key {
-        ($name:ident, $path:expr) => {
+        ($name:ident, $path:expr, $verify:expr) => {
             #[test]
             fn $name() {
-                test_parse_openpgp_key($path);
+                test_parse_openpgp_key($path, $verify);
             }
         };
     }
 
     openpgp_key!(
         key_openpgp_samplekeys_e6,
-        "samplekeys/E657FB607BB4F21C90BB6651BC067AF28BC90111.asc"
+        "samplekeys/E657FB607BB4F21C90BB6651BC067AF28BC90111.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_authenticate_only_pub,
-        "samplekeys/authenticate-only.pub.asc"
+        "samplekeys/authenticate-only.pub.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_authenticate_only_sec,
-        "samplekeys/authenticate-only.sec.asc"
+        "samplekeys/authenticate-only.sec.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_dda252ebb8ebe1af_1,
-        "samplekeys/dda252ebb8ebe1af-1.asc"
+        "samplekeys/dda252ebb8ebe1af-1.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_dda252ebb8ebe1af_2,
-        "samplekeys/dda252ebb8ebe1af-2.asc"
+        "samplekeys/dda252ebb8ebe1af-2.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_e2e_p256_1_clr,
-        "samplekeys/e2e-p256-1-clr.asc"
+        "samplekeys/e2e-p256-1-clr.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_e2e_p256_1_prt,
-        "samplekeys/e2e-p256-1-prt.asc"
+        "samplekeys/e2e-p256-1-prt.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_1_pub,
-        "samplekeys/ecc-sample-1-pub.asc"
+        "samplekeys/ecc-sample-1-pub.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_1_sec,
-        "samplekeys/ecc-sample-1-sec.asc"
+        "samplekeys/ecc-sample-1-sec.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_2_pub,
-        "samplekeys/ecc-sample-2-pub.asc"
+        "samplekeys/ecc-sample-2-pub.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_2_sec,
-        "samplekeys/ecc-sample-2-sec.asc"
+        "samplekeys/ecc-sample-2-sec.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_3_pub,
-        "samplekeys/ecc-sample-3-pub.asc"
+        "samplekeys/ecc-sample-3-pub.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ecc_sample_3_sec,
-        "samplekeys/ecc-sample-3-sec.asc"
+        "samplekeys/ecc-sample-3-sec.asc",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_ed25519_cv25519_sample_1,
-        "samplekeys/ed25519-cv25519-sample-1.asc"
+        "samplekeys/ed25519-cv25519-sample-1.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_eddsa_sample_1_pub,
-        "samplekeys/eddsa-sample-1-pub.asc"
+        "samplekeys/eddsa-sample-1-pub.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_eddsa_sample_1_sec,
-        "samplekeys/eddsa-sample-1-sec.asc"
+        "samplekeys/eddsa-sample-1-sec.asc",
+        true
     );
-    openpgp_key!(key_openpgp_samplekeys_issue2346, "samplekeys/issue2346.gpg");
+    openpgp_key!(
+        key_openpgp_samplekeys_issue2346,
+        "samplekeys/issue2346.gpg",
+        true
+    );
     openpgp_key_bin!(
         key_openpgp_samplekeys_no_creation_time,
-        "samplekeys/no-creation-time.gpg"
+        "samplekeys/no-creation-time.gpg",
+        false
     );
     openpgp_key!(
         key_openpgp_samplekeys_rsa_primary_auth_only_pub,
-        "samplekeys/rsa-primary-auth-only.pub.asc"
+        "samplekeys/rsa-primary-auth-only.pub.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_rsa_primary_auth_only_sec,
-        "samplekeys/rsa-primary-auth-only.sec.asc"
+        "samplekeys/rsa-primary-auth-only.sec.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_rsa_rsa_sample_1,
-        "samplekeys/rsa-rsa-sample-1.asc"
+        "samplekeys/rsa-rsa-sample-1.asc",
+        true
     );
     openpgp_key!(
         key_openpgp_samplekeys_silent_running,
-        "samplekeys/silent-running.asc"
+        "samplekeys/silent-running.asc",
+        true
     );
 
     // PKCS#1
-    // openpgp_key!(key_openpgp_samplekeys_ssh_dsa, "samplekeys/ssh-dsa.key");
+    // openpgp_key!(key_openpgp_samplekeys_ssh_dsa, "samplekeys/ssh-dsa.key", true);
 
     // PKCS#1
-    // openpgp_key!(key_openpgp_samplekeys_ssh_ecdsa, "samplekeys/ssh-ecdsa.key");
+    // openpgp_key!(key_openpgp_samplekeys_ssh_ecdsa, "samplekeys/ssh-ecdsa.key", true);
 
     // OpenSSH
     // openpgp_key!(
     //     key_openpgp_samplekeys_ssh_ed25519,
-    //     "samplekeys/ssh-ed25519.key"
+    //     "samplekeys/ssh-ed25519.key",
+    //     true
     // );
 
     // PKCS#1
-    // openpgp_key!(key_openpgp_samplekeys_ssh_rsa, "samplekeys/ssh-rsa.key");
+    // openpgp_key!(key_openpgp_samplekeys_ssh_rsa, "samplekeys/ssh-rsa.key", true);
 
     openpgp_key!(
         key_openpgp_samplekeys_whats_new_in_2_1,
-        "samplekeys/whats-new-in-2.1.asc"
+        "samplekeys/whats-new-in-2.1.asc",
+        false
     );
 
     #[test]
     fn private_x25519_verify() {
         let f = read_file("./tests/openpgpjs/x25519.sec.asc");
         let sk = PrivateKey::from_armor_single(f).expect("failed to parse key");
+        sk.verify().expect("invalid key");
         assert_eq!(sk.private_subkeys.len(), 1);
         assert_eq!(
             hex::encode(sk.key_id().unwrap().to_vec()).to_uppercase(),
@@ -959,5 +1383,24 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn pub_x25519_little_verify() {
+        let f = read_file("./tests/openpgpjs/x25519-little.pub.asc");
+        let pk = PublicKey::from_armor_single(f).expect("failed to parse key");
+        pk.verify().expect("invalid key");
+        assert_eq!(pk.public_subkeys.len(), 1);
+        assert_eq!(
+            hex::encode(pk.key_id().unwrap().to_vec()).to_uppercase(),
+            "C062C165CA61C215",
+        );
+
+        assert_eq!(
+            hex::encode(pk.public_subkeys[0].key_id().unwrap().to_vec()).to_uppercase(),
+            "A586D1DD06BD97BC",
+        );
+        assert_eq!(pk.users.len(), 1);
+        assert_eq!(pk.users[0].id.id(), "Hi <hi@hel.lo>");
     }
 }
