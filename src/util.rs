@@ -164,9 +164,7 @@ named!(pub packet_length<usize>, do_parse!(
 
 /// Write packet length, including the prefix.
 pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
-    if len < 192 {
-        // nothing
-    } else if len < 8384 {
+    if len < 8384 {
         // nothing
     } else {
         writer.write_all(&[0xFF])?;
