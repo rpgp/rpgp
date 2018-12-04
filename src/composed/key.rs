@@ -124,13 +124,6 @@ impl KeyTrait for PublicKey {
     }
 
     fn verify(&self) -> Result<()> {
-        info!(
-            "verifying PublicKey ({:?})",
-            self.primary_key.key_id().unwrap()
-        );
-        for s in &self.public_subkeys {
-            info!("subkey {:?}", s.key_id().unwrap());
-        }
         self.verify_users()?;
         self.verify_attributes()?;
         self.verify_subkeys()?;
@@ -190,7 +183,7 @@ impl KeyTrait for PublicSubKey {
     }
 
     fn verify(&self) -> Result<()> {
-        ensure!(self.signatures.len() > 0, "missing subkey bindings");
+        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
         for sig in &self.signatures {
             sig.verify_key_binding(&self.key)?;
         }
@@ -409,7 +402,7 @@ impl KeyTrait for PrivateSubKey {
     }
 
     fn verify(&self) -> Result<()> {
-        ensure!(self.signatures.len() > 0, "missing subkey bindings");
+        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
         for sig in &self.signatures {
             sig.verify_key_binding(&self.key)?;
@@ -485,10 +478,10 @@ impl<I: Sized + Iterator<Item = Packet>> Iterator for PubPrivIterator<I> {
         let packets = self.inner.by_ref();
         if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::SecretKey) {
             let p: Option<Result<PrivateKey>> = PrivateKey::from_packets(packets).nth(0);
-            p.map(|key| key.map(|k| PublicOrPrivate::Private(k)))
+            p.map(|key| key.map(PublicOrPrivate::Private))
         } else if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::PublicKey) {
             let p: Option<Result<PublicKey>> = PublicKey::from_packets(packets).nth(0);
-            p.map(|key| key.map(|k| PublicOrPrivate::Public(k)))
+            p.map(|key| key.map(PublicOrPrivate::Public))
         } else {
             None
         }
