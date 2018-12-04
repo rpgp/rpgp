@@ -218,7 +218,6 @@ macro_rules! impl_key {
                 hashed: &[u8],
                 sig: &[Vec<u8>],
             ) -> $crate::errors::Result<()> {
-                use try_from::TryInto;
                 use $crate::crypto::public_key::PublicParams;
 
                 info!("verify data: {}", hex::encode(&hashed));
@@ -226,51 +225,11 @@ macro_rules! impl_key {
 
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
-                        use rsa::padding::PaddingScheme;
-
-                        let sig = sig.concat();
-                        let key = rsa::RSAPublicKey::new(n.clone(), e.clone())?;
-                        let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
-
-                        info!("n: {}", hex::encode(n.to_bytes_be()));
-                        info!("e: {}", hex::encode(e.to_bytes_be()));
-                        key.verify(
-                            PaddingScheme::PKCS1v15,
-                            rsa_hash.as_ref(),
-                            &hashed[..],
-                            &sig,
-                        )
-                        .map_err(|err| err.into())
+                        $crate::crypto::signature::verify_rsa(n, e, hash, hashed, &sig.concat())
                     }
-                    PublicParams::EdDSA { ref curve, ref q } => match *curve {
-                        $crate::crypto::ecc_curve::ECCCurve::Ed25519 => {
-                            ensure_eq!(sig.len(), 2);
-
-                            let r = &sig[0];
-                            let s = &sig[1];
-
-                            ensure!(r.len() < 33, "invalid R (len)");
-                            ensure!(s.len() < 33, "invalid S (len)");
-                            ensure_eq!(q.len(), 33, "invalid Q (len)");
-                            ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
-
-                            // TODO: unwraps to ? and implement the errors
-                            let pk = ed25519_dalek::PublicKey::from_bytes(&q[1..])
-                                .expect("invalid pubkey");
-                            let mut sig_bytes = vec![0u8; 64];
-                            // add padding if the values were encoded short
-                            sig_bytes[(32 - r.len())..32].copy_from_slice(r);
-                            sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
-
-                            let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes)
-                                .expect("malformed sig");
-
-                            pk.verify::<sha2::Sha512>(hashed, &sig)
-                                .expect("invalid sig");
-                            Ok(())
-                        }
-                        _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-                    },
+                    PublicParams::EdDSA { ref curve, ref q } => {
+                        $crate::crypto::signature::verify_eddsa(curve, q, hash, hashed, sig)
+                    }
                     PublicParams::ECDSA { ref curve, .. } => {
                         unimplemented_err!("verify ECDSA: {:?}", curve);
                     }
