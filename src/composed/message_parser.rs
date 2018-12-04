@@ -23,13 +23,13 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                 return match packet.try_into() {
                     Ok(p) => Some(Ok(Message::Literal(p))),
                     Err(err) => Some(Err(err)),
-                }
+                };
             }
             Tag::CompressedData => {
                 return match packet.try_into() {
                     Ok(p) => Some(Ok(Message::Compressed(p))),
                     Err(err) => Some(Err(err)),
-                }
+                };
             }
             //    ESK :- Public-Key Encrypted Session Key Packet |
             //           Symmetric-Key Encrypted Session Key Packet.
@@ -98,7 +98,7 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                         }))
                     }
                     Err(err) => Some(Err(err)),
-                }
+                };
             }
             Tag::OnePassSignature => {
                 return match packet.try_into() {
