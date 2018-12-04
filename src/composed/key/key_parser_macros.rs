@@ -1,7 +1,6 @@
-use composed::{PrivateKey, PrivateSubKey, PublicKey, PublicSubKey};
-
 /// This macro generates the parsers matching to the two different types of keys,
-/// public and private.
+/// public and secret.
+#[macro_export]
 macro_rules! key_parser {
     ( $key_type:ty, $key_type_parser: ident, $key_tag:expr, $inner_key_type:ty, $( ($subkey_tag:ident, $inner_subkey_type:ty, $subkey_type:ty, $subkey_container:ident) ),* ) => {
         /// Parse a transferable keys from the given packets.
@@ -158,10 +157,12 @@ macro_rules! key_parser {
 
                 Some(Ok(<$key_type>::new(
                     primary_key,
-                    revocation_signatures,
-                    direct_signatures,
-                    users,
-                    user_attributes,
+                    $crate::composed::key::SignedKeyDetails::new(
+                        revocation_signatures,
+                        direct_signatures,
+                        users,
+                        user_attributes,
+                    ),
                     $( $subkey_container, )*
                 )))
             }
@@ -180,36 +181,3 @@ macro_rules! key_parser {
         }
     };
 }
-
-key_parser!(
-    PrivateKey,
-    PrivateKeyParser,
-    Tag::SecretKey,
-    packet::SecretKey,
-    // secret keys, can contain both public and secret subkeys
-    (
-        PublicSubkey,
-        packet::PublicSubkey,
-        PublicSubKey,
-        public_subkeys
-    ),
-    (
-        SecretSubkey,
-        packet::SecretSubkey,
-        PrivateSubKey,
-        private_subkeys
-    )
-);
-
-key_parser!(
-    PublicKey,
-    PublicKeyParser,
-    Tag::PublicKey,
-    packet::PublicKey,
-    (
-        PublicSubkey,
-        packet::PublicSubkey,
-        PublicSubKey,
-        public_subkeys
-    )
-);
