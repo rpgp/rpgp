@@ -25,7 +25,7 @@ pub fn verify_rsa(
         padding::PaddingScheme::PKCS1v15,
         rsa_hash.as_ref(),
         &hashed[..],
-        &sig,
+        sig,
     )
     .map_err(|err| err.into())
 }

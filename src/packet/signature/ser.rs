@@ -51,7 +51,7 @@ impl Subpacket {
             }
             Subpacket::RevocationReason(code, reason) => {
                 writer.write_all(&[*code as u8])?;
-                writer.write_all(&write_string(&reason))?;
+                writer.write_all(&write_string(reason))?;
             }
             Subpacket::IsPrimary(is_primary) => {
                 let val = if *is_primary { 1u8 } else { 0u8 };
@@ -65,7 +65,7 @@ impl Subpacket {
                 (*inner_sig).to_writer(writer)?;
             }
             Subpacket::PreferredKeyServer(server) => {
-                writer.write_all(&write_string(&server))?;
+                writer.write_all(&write_string(server))?;
             }
             Subpacket::Notation(notation) => {
                 let is_readable = if notation.readable { 0x80 } else { 0 };
@@ -87,7 +87,7 @@ impl Subpacket {
                 writer.write_all(body.as_ref())?;
             }
             Subpacket::PolicyURI(uri) => {
-                writer.write_all(&write_string(&uri))?;
+                writer.write_all(&write_string(uri))?;
             }
             Subpacket::TrustSignature(depth, value) => {
                 writer.write_all(&[*depth, *value])?;

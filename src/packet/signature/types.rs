@@ -32,6 +32,7 @@ pub struct Signature {
 }
 
 impl Signature {
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::complexity))]
     pub fn new(
         packet_version: Version,
         version: SignatureVersion,
@@ -124,7 +125,7 @@ impl Signature {
 
                 info!(
                     "key:    ({:?}), {}",
-                    key.key_id().unwrap(),
+                    key.key_id().expect("key_id should be there"),
                     hex::encode(&key_buf)
                 );
                 info!("prefix: {}", hex::encode(&prefix_buf));
