@@ -79,6 +79,8 @@ pub enum Version {
 
 impl Version {
     pub fn write_header(self, writer: &mut impl io::Write, tag: u8, len: usize) -> Result<()> {
+        info!("write_header {:?} {} {}", self, tag, len);
+
         match self {
             Version::Old => {
                 if len < 256 {
@@ -117,4 +119,19 @@ pub enum KeyVersion {
     V2 = 2,
     V3 = 3,
     V4 = 4,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_write_header() {
+        let mut buf = Vec::new();
+        Version::New
+            .write_header(&mut buf, Tag::UserAttribute as u8, 12875)
+            .unwrap();
+
+        assert_eq!(hex::encode(buf), "d1ff0000324b");
+    }
 }

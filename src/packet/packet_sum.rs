@@ -108,11 +108,11 @@ impl Serialize for Packet {
         let mut buf = Vec::new();
         match self {
             // Packet::CompressedData(p) => p.to_writer(&mut buf)?,
-            // Packet::PublicKey(p) => p.to_writer(&mut buf)?,
-            // Packet::PublicSubkey(p) => p.to_writer(&mut buf)?,
-            // Packet::SecretKey(p) => p.to_writer(&mut buf)?,
-            // Packet::SecretSubkey(p) => p.to_writer(&mut buf)?,
-            // Packet::LiteralData(p) => p.to_writer(&mut buf)?,
+            Packet::PublicKey(p) => p.to_writer(&mut buf)?,
+            Packet::PublicSubkey(p) => p.to_writer(&mut buf)?,
+            Packet::SecretKey(p) => p.to_writer(&mut buf)?,
+            Packet::SecretSubkey(p) => p.to_writer(&mut buf)?,
+            Packet::LiteralData(p) => p.to_writer(&mut buf)?,
             // Packet::Marker(p) => p.to_writer(&mut buf)?,
             // Packet::ModDetectionCode(p) => p.to_writer(&mut buf)?,
             // Packet::OnePassSignature(p) => p.to_writer(&mut buf)?,
@@ -122,8 +122,8 @@ impl Serialize for Packet {
             // Packet::SymEncryptedProtectedData(p) => p.to_writer(&mut buf)?,
             // Packet::SymKeyEncryptedSessionKey(p) => p.to_writer(&mut buf)?,
             // Packet::Trust(p) => p.to_writer(&mut buf)?,
-            // Packet::UserAttribute(p) => p.to_writer(&mut buf)?,
-            // Packet::UserId(p) => p.to_writer(&mut buf)?,
+            Packet::UserAttribute(p) => p.to_writer(&mut buf)?,
+            Packet::UserId(p) => p.to_writer(&mut buf)?,
             _ => unimplemented_err!("serialization for {:?}", self.tag()),
         }
 
@@ -131,6 +131,7 @@ impl Serialize for Packet {
         packet_version.write_header(writer, self.tag() as u8, buf.len())?;
 
         // the actual packet body
+        info!("buf: {}", hex::encode(&buf));
         writer.write_all(&buf)?;
 
         Ok(())

@@ -99,10 +99,55 @@ mod tests {
     use num_traits::FromPrimitive;
     use regex::Regex;
     use std::fs::File;
-    use std::io::{BufRead, BufReader};
+    use std::io::{BufRead, BufReader, Seek, SeekFrom};
     use std::path::Path;
 
+    use ser::Serialize;
     use types::Tag;
+
+    #[test]
+    fn test_packet_roundtrip() {
+        // use pretty_env_logger;
+        // let _ = pretty_env_logger::try_init();
+
+        let p = Path::new("./tests/sks-dump/0001.pgp");
+        let file = File::open(&p).unwrap();
+
+        let mut bytes = File::open(&p).unwrap();
+
+        let packets = PacketParser::new(file);
+
+        for (i, packet) in packets.take(1000).enumerate() {
+            // packets we need to skip, because they are not canoncial
+            if i == 556 {
+                bytes.seek(SeekFrom::Current(6 + 2224)).unwrap();
+                continue;
+            }
+
+            if i == 805 {
+                // invalid packet
+                bytes.seek(SeekFrom::Current(6 + 95)).unwrap();
+                continue;
+            }
+            if i == 806 {
+                // non canoncial length encoding
+                bytes.seek(SeekFrom::Current(6 + 6495)).unwrap();
+                continue;
+            }
+
+            // println!("packet: {}", i);
+
+            let packet = packet.expect("invalid packet");
+            let mut buf = Vec::new();
+            packet
+                .to_writer(&mut buf)
+                .expect("failed to serialize packet");
+
+            let mut expected_buf = vec![0u8; buf.len()];
+            assert_eq!(bytes.read(&mut expected_buf).unwrap(), buf.len());
+            assert_eq!(hex::encode(buf), hex::encode(expected_buf));
+        }
+    }
 
     #[test]
     fn test_many_parser() {
