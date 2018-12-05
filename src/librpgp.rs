@@ -10,6 +10,9 @@ use libc;
 use composed::key::{from_armor_many, PublicOrSecret};
 use types::KeyTrait;
 
+/// Creates an in-memory representation of a PGP key, based on the armor file given.
+/// The returned pointer should be stored, and reused when calling methods "on" this key.
+/// When done with it [rpgp_key_drop] should be called, to free the memory.
 #[no_mangle]
 pub extern "C" fn rpgp_key_from_armor(raw: *const u8, len: libc::size_t) -> *mut PublicOrSecret {
     let bytes = unsafe { from_raw_parts(raw, len) };
@@ -22,6 +25,8 @@ pub extern "C" fn rpgp_key_from_armor(raw: *const u8, len: libc::size_t) -> *mut
     _key
 }
 
+/// Returns the KeyID for the passed in key. The caller is responsible to `free` the returned
+/// memory.
 #[no_mangle]
 pub extern "C" fn rpgp_key_id(ptr: *mut PublicOrSecret) -> *mut c_char {
     let key = unsafe { &mut *ptr };
@@ -30,6 +35,7 @@ pub extern "C" fn rpgp_key_id(ptr: *mut PublicOrSecret) -> *mut c_char {
     id.into_raw()
 }
 
+/// Frees the memory of the passed in key, making the pointer invalid after this method was called.
 #[no_mangle]
 pub extern "C" fn rpgp_key_drop(ptr: *mut PublicOrSecret) {
     let key: Box<PublicOrSecret> = unsafe { transmute(ptr) };
