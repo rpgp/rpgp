@@ -78,6 +78,8 @@ extern crate serde;
 #[macro_use]
 extern crate pretty_assertions;
 
+extern crate libc;
+
 // public so it can be used in doc test
 #[macro_use]
 pub mod util;
@@ -98,3 +100,5 @@ pub mod de;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod ser;
+
+pub mod librpgp;
