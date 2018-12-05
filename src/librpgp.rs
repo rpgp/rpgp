@@ -25,8 +25,7 @@ pub extern "C" fn rpgp_key_from_armor(raw: *const u8, len: libc::size_t) -> *mut
     _key
 }
 
-/// Returns the KeyID for the passed in key. The caller is responsible to `free` the returned
-/// memory.
+/// Returns the KeyID for the passed in key. The caller is responsible to call [rpgp_free_string] with the returned memory, to free it.
 #[no_mangle]
 pub extern "C" fn rpgp_key_id(ptr: *mut PublicOrSecret) -> *mut c_char {
     let key = unsafe { &mut *ptr };
@@ -39,5 +38,12 @@ pub extern "C" fn rpgp_key_id(ptr: *mut PublicOrSecret) -> *mut c_char {
 #[no_mangle]
 pub extern "C" fn rpgp_key_drop(ptr: *mut PublicOrSecret) {
     let key: Box<PublicOrSecret> = unsafe { transmute(ptr) };
+    // Drop
+}
+
+/// Free string, that was created by rpgp.
+#[no_mangle]
+pub extern "C" fn rpgp_free_string(p: *mut c_char) {
+    let _ = unsafe { CString::from_raw(p) };
     // Drop
 }
