@@ -23,9 +23,15 @@ pub extern "C" fn rpgp_key_from_armor(raw: *const u8, len: libc::size_t) -> *mut
 }
 
 #[no_mangle]
-pub extern "C" fn rpgp_key_id(ptr: *mut PublicOrSecret) -> *const c_char {
+pub extern "C" fn rpgp_key_id(ptr: *mut PublicOrSecret) -> *mut c_char {
     let key = unsafe { &mut *ptr };
     let id = CString::new(hex::encode(key.key_id().unwrap())).unwrap();
 
-    id.as_ptr()
+    id.into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn rpgp_key_drop(ptr: *mut PublicOrSecret) {
+    let key: Box<PublicOrSecret> = unsafe { transmute(ptr) };
+    // Drop
 }
