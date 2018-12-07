@@ -658,4 +658,12 @@ mod tests {
         println!("message: {:#?}", message);
         // TODO: verify and decrypt message
     }
+
+    #[test]
+    fn msg_regression_01() {
+        let mut msg_file = File::open("./tests/regression-01.asc").unwrap();
+        let message = Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+        println!("message: {:#?}", message);
+        // TODO: verify and decrypt message
+    }
 }
