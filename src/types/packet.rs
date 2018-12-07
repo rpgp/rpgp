@@ -21,6 +21,7 @@ pub struct Packet {
 pub enum PacketLength {
     Fixed(usize),
     Indeterminated,
+    Partial(usize),
 }
 
 impl From<usize> for PacketLength {

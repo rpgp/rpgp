@@ -650,4 +650,12 @@ mod tests {
     }
 
     msg_test_js!(msg_openpgpjs_x25519, "x25519");
+
+    #[test]
+    fn msg_partial_body_len() {
+        let mut msg_file = File::open("./tests/partial.asc").unwrap();
+        let message = Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+        println!("message: {:#?}", message);
+        // TODO: verify and decrypt message
+    }
 }
