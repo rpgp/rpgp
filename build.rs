@@ -21,7 +21,7 @@ fn main() {
             res.write_to_file("libpgp.h");
         }
         Err(err) => {
-            eprintln!("unable to generate bindings: {:?}", err);
+            eprintln!("unable to generate bindings: {:#?}", err);
             std::process::exit(1);
         }
     }

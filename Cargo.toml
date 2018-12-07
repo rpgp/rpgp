@@ -81,3 +81,10 @@ default = []
 nightly = ["x25519-dalek/nightly", "rsa/nightly"]
 profile = ["gperftools"]
 asm = ["sha2/asm"]
+
+[profile.release]
+debuginfo = 0
+opt-level = "s"
+panic = "abort"
+codegen-units = 1
+lto = "thin"
