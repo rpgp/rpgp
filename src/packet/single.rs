@@ -59,6 +59,10 @@ named!(read_packet_len(&[u8]) -> PacketLength, do_parse!(
 ));
 
 fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], Vec<&'a [u8]>> {
+    if input.len() < len {
+        return Err(Err::Incomplete(nom::Needed::Size(len)));
+    }
+
     let mut out = Vec::new();
     out.push(&input[0..len]);
 
