@@ -9,12 +9,13 @@ use crypto::hash::{HashAlgorithm, Hasher};
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
+use packet::PacketTrait;
 use ser::Serialize;
 use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Tag, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Signature {
     packet_version: Version,
     pub version: SignatureVersion,
@@ -63,10 +64,6 @@ impl Signature {
     /// Returns what kind of signature this is.
     pub fn typ(&self) -> SignatureType {
         self.typ
-    }
-
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
     }
 
     /// Verify this signature.
@@ -879,5 +876,15 @@ impl fmt::Debug for Signature {
             .field("unhashed_subpackets", &self.unhashed_subpackets)
             .field("hashed_subpackets", &self.hashed_subpackets)
             .finish()
+    }
+}
+
+impl PacketTrait for Signature {
+    fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::Signature
     }
 }

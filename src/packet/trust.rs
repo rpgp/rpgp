@@ -1,12 +1,16 @@
+use std::io;
+
 use errors::Result;
-use types::Version;
+use packet::PacketTrait;
+use ser::Serialize;
+use types::{Tag, Version};
 
 /// Trust Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.10
 /// Trust packets SHOULD NOT be emitted to output streams that are
 /// transferred to other users, and they SHOULD be ignored on any input
 /// other than local keyring files.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Trust {
     packet_version: Version,
 }
@@ -18,8 +22,20 @@ impl Trust {
 
         Ok(Trust { packet_version })
     }
+}
 
-    pub fn packet_version(&self) -> Version {
+impl Serialize for Trust {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
+    }
+}
+
+impl PacketTrait for Trust {
+    fn packet_version(&self) -> Version {
         self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::Trust
     }
 }

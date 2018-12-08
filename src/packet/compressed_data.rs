@@ -4,9 +4,11 @@ use flate2::read::{DeflateDecoder, ZlibDecoder};
 use num_traits::FromPrimitive;
 
 use errors::Result;
-use types::{CompressionAlgorithm, Version};
+use packet::PacketTrait;
+use ser::Serialize;
+use types::{CompressionAlgorithm, Tag, Version};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompressedData {
     packet_version: Version,
     compression_algorithm: CompressionAlgorithm,
@@ -32,10 +34,6 @@ impl<'a> Read for Decompressor<&'a [u8]> {
 }
 
 impl CompressedData {
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
     /// Parses a `CompressedData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         ensure!(input.len() > 1, "input too short");
@@ -66,5 +64,21 @@ impl CompressedData {
 
     pub fn compressed_data(&self) -> &[u8] {
         &self.compressed_data
+    }
+}
+
+impl Serialize for CompressedData {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
+    }
+}
+
+impl PacketTrait for CompressedData {
+    fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::Trust
     }
 }

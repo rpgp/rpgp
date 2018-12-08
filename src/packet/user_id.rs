@@ -1,13 +1,14 @@
 use std::{fmt, io, str};
 
 use errors::Result;
+use packet::PacketTrait;
 use ser::Serialize;
-use types::Version;
+use types::{Tag, Version};
 use util::{read_string, write_string};
 
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserId {
     packet_version: Version,
     id: String,
@@ -28,10 +29,6 @@ impl UserId {
         }
     }
 
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
     pub fn id(&self) -> &str {
         self.id.as_str()
     }
@@ -48,5 +45,15 @@ impl Serialize for UserId {
 impl fmt::Display for UserId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "User ID: \"{}\"", self.id)
+    }
+}
+
+impl PacketTrait for UserId {
+    fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::UserId
     }
 }

@@ -181,10 +181,6 @@ macro_rules! impl_secret_key {
                 self.secret_params.string_to_key_id == 254
             }
 
-            pub fn packet_version(&self) -> $crate::types::Version {
-                self.packet_version
-            }
-
             fn to_writer_old<W: std::io::Write>(
                 &self,
                 writer: &mut W,
@@ -247,6 +243,16 @@ macro_rules! impl_secret_key {
                     }
                     $crate::types::KeyVersion::V4 => self.to_writer_new(writer),
                 }
+            }
+        }
+
+        impl $crate::packet::PacketTrait for $name {
+            fn packet_version(&self) -> $crate::types::Version {
+                self.packet_version
+            }
+
+            fn tag(&self) -> $crate::types::Tag {
+                $tag
             }
         }
 

@@ -1,12 +1,16 @@
+use std::io;
+
 use errors::Result;
-use types::Version;
+use packet::PacketTrait;
+use ser::Serialize;
+use types::{Tag, Version};
 
 /// PGP as UTF-8 octets.
 const PGP: [u8; 3] = [0x50, 0x47, 0x50];
 
 /// Marker Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.8
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Marker {
     packet_version: Version,
 }
@@ -21,5 +25,22 @@ impl Marker {
 
     pub fn packet_version(&self) -> Version {
         self.packet_version
+    }
+}
+
+impl Serialize for Marker {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(&PGP[..])?;
+        Ok(())
+    }
+}
+
+impl PacketTrait for Marker {
+    fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::Marker
     }
 }
