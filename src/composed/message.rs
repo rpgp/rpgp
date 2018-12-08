@@ -1,6 +1,7 @@
 use std::boxed::Box;
-use std::io::Cursor;
+use std::io::{self, Cursor};
 
+use generic_array::typenum::U64;
 use num_traits::FromPrimitive;
 use try_from::TryFrom;
 
@@ -11,15 +12,18 @@ use crypto::ecc::decrypt_ecdh;
 use crypto::rsa::decrypt_rsa;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
+use line_writer::{LineBreak, LineWriter};
 use packet::{
-    CompressedData, LiteralData, OnePassSignature, Packet, PublicKeyEncryptedSessionKey, Signature,
-    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
+    write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
+    PublicKeyEncryptedSessionKey, Signature, SymEncryptedData, SymEncryptedProtectedData,
+    SymKeyEncryptedSessionKey,
 };
+use ser::Serialize;
 use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Message {
     Literal(LiteralData),
     Compressed(CompressedData),
@@ -40,20 +44,20 @@ pub enum Message {
 /// Encrypte Session Key
 /// Public-Key Encrypted Session Key Packet |
 /// Symmetric-Key Encrypted Session Key Packet.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Esk {
     PublicKeyEncryptedSessionKey(PublicKeyEncryptedSessionKey),
     SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey),
 }
 
-// impl Serialize for Esk {
-//     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-//         match self {
-//             Esk::PublicKeyEncryptedSessionKey(k) => k.to_writer(writer),
-//             Esk::SymKeyEncryptedSessionKey(k) => k.to_writer(writer),
-//         }
-//     }
-// }
+impl Serialize for Esk {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => write_packet(writer, k),
+            Esk::SymKeyEncryptedSessionKey(k) => write_packet(writer, k),
+        }
+    }
+}
 
 impl_try_from_into!(
     Esk,
@@ -108,20 +112,20 @@ impl From<Esk> for Packet {
 /// Encrypted Data
 /// Symmetrically Encrypted Data Packet |
 /// Symmetrically Encrypted Integrity Protected Data Packet
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Edata {
     SymEncryptedData(SymEncryptedData),
     SymEncryptedProtectedData(SymEncryptedProtectedData),
 }
 
-// impl Serialize for Edata {
-//     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-//         match self {
-//             Edata::SymEncryptedData(d) => d.to_writer(writer),
-//             Edata::SymEncryptedProtectedData(d) => d.to_writer(writer),
-//         }
-//     }
-// }
+impl Serialize for Edata {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            Edata::SymEncryptedData(d) => write_packet(writer, d),
+            Edata::SymEncryptedProtectedData(d) => write_packet(writer, d),
+        }
+    }
+}
 
 impl_try_from_into!(
     Edata,
@@ -166,38 +170,38 @@ impl Edata {
     }
 }
 
-// impl Serialize for Message {
-//     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-//         match self {
-//             Message::Literal(l) => l.to_writer(writer),
-//             Message::Compressed(c) => c.to_writer(writer),
-//             Message::Signed {
-//                 message,
-//                 one_pass_signature,
-//                 signature,
-//             } => {
-//                 if let Some(ops) = one_pass_signature {
-//                     ops.to_writer(writer)?;
-//                 }
-//                 if let Some(message) = message {
-//                     (**message).to_writer(writer)?;
-//                 }
+impl Serialize for Message {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            Message::Literal(l) => write_packet(writer, l),
+            Message::Compressed(c) => write_packet(writer, c),
+            Message::Signed {
+                message,
+                one_pass_signature,
+                signature,
+            } => {
+                if let Some(ops) = one_pass_signature {
+                    write_packet(writer, ops)?;
+                }
+                if let Some(message) = message {
+                    (**message).to_writer(writer)?;
+                }
 
-//                 signature.to_writer(writer)
-//             }
-//             Message::Encrypted { esk, edata } => {
-//                 for e in esk {
-//                     e.to_writer(writer)?;
-//                 }
-//                 for e in edata {
-//                     e.to_writer(writer)?;
-//                 }
+                write_packet(writer, signature)
+            }
+            Message::Encrypted { esk, edata } => {
+                for e in esk {
+                    e.to_writer(writer)?;
+                }
+                for e in edata {
+                    e.to_writer(writer)?;
+                }
 
-//                 Ok(())
-//             }
-//         }
-//     }
-// }
+                Ok(())
+            }
+        }
+    }
+}
 
 impl Message {
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
@@ -339,6 +343,36 @@ impl Message {
             }
             _ => None,
         }
+    }
+
+    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
+        writer.write_all(&b"-----BEGIN PGP MESSAGE-----\n"[..])?;
+
+        // TODO: headers
+
+        // write the base64 encoded content
+        {
+            let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
+            let mut enc = base64::write::EncoderWriter::new(&mut line_wrapper, base64::STANDARD);
+            self.to_writer(&mut enc)?;
+        }
+        // TODO: CRC24
+
+        writer.write_all(&b"\n-----END PGP MESSAGE-----\n"[..])?;
+
+        Ok(())
+    }
+
+    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+
+        self.to_armored_writer(&mut buf)?;
+
+        Ok(buf)
+    }
+
+    pub fn to_armored_string(&self) -> Result<String> {
+        Ok(::std::str::from_utf8(&self.to_armored_bytes()?)?.to_string())
     }
 }
 
@@ -513,13 +547,14 @@ mod tests {
         };
 
         let file_name = entry.replace(".json", ".asc");
-        let mut cipher_file = File::open(format!("{}/{}", base_path, file_name)).unwrap();
+        let cipher_file_path = format!("{}/{}", base_path, file_name);
+        let mut cipher_file = File::open(&cipher_file_path).unwrap();
 
         let message =
             Message::from_armor_single(&mut cipher_file).expect("failed to parse message");
-        info!("message: {:?}", message);
+        info!("message: {:?}", &message);
 
-        match message {
+        match &message {
             Message::Encrypted { .. } => {
                 let decrypted = message
                     .decrypt(
@@ -564,6 +599,19 @@ mod tests {
                 // TODO: some other checks?
             }
         }
+
+        // serialize and check we get the same thing
+        let serialized = message.to_armored_bytes().unwrap();
+
+        // let mut cipher_file = File::open(&cipher_file_path).unwrap();
+        // let mut expected_bytes = String::new();
+        // cipher_file.read_to_string(&mut expected_bytes).unwrap();
+        // assert_eq!(serialized, expected_bytes);
+
+        // and parse them again
+        let message2 =
+            Message::from_armor_single(Cursor::new(&serialized)).expect("failed to parse round2");
+        assert_eq!(message, message2);
     }
 
     macro_rules! msg_test {

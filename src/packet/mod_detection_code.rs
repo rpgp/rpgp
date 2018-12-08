@@ -1,9 +1,13 @@
+use std::io;
+
 use errors::Result;
-use types::Version;
+use packet::PacketTrait;
+use ser::Serialize;
+use types::{Tag, Version};
 
 /// Modification Detection Code Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.14
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModDetectionCode {
     packet_version: Version,
     /// 20 byte SHA1 hash of the preceeding plaintext data.
@@ -23,8 +27,20 @@ impl ModDetectionCode {
             hash,
         })
     }
+}
 
-    pub fn packet_version(&self) -> Version {
+impl Serialize for ModDetectionCode {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
+    }
+}
+
+impl PacketTrait for ModDetectionCode {
+    fn packet_version(&self) -> Version {
         self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::ModDetectionCode
     }
 }

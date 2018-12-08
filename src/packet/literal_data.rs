@@ -6,13 +6,14 @@ use nom::{be_u32, be_u8, rest};
 use num_traits::FromPrimitive;
 
 use errors::Result;
+use packet::PacketTrait;
 use ser::Serialize;
-use types::Version;
+use types::{Tag, Version};
 use util::{read_string, write_string};
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiteralData {
     packet_version: Version,
     mode: DataMode,
@@ -21,7 +22,7 @@ pub struct LiteralData {
     data: Vec<u8>,
 }
 
-#[derive(Debug, Copy, Clone, FromPrimitive)]
+#[derive(Debug, Copy, Clone, FromPrimitive, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DataMode {
     Binary = b'b',
@@ -40,10 +41,6 @@ impl LiteralData {
 
     pub fn data(&self) -> &[u8] {
         &self.data
-    }
-
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
     }
 }
 
@@ -79,3 +76,13 @@ named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
         data: data.to_vec(),
     })
 ));
+
+impl PacketTrait for LiteralData {
+    fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::LiteralData
+    }
+}

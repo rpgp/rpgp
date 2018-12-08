@@ -4,13 +4,14 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{be_u8, le_u16, rest};
 
 use errors::Result;
+use packet::PacketTrait;
 use ser::Serialize;
-use types::Version;
+use types::{Tag, Version};
 use util::{packet_length, write_packet_length};
 
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum UserAttribute {
     Image {
         packet_version: Version,
@@ -36,13 +37,6 @@ impl UserAttribute {
         match *self {
             UserAttribute::Image { .. } => 1,
             UserAttribute::Unknown { typ, .. } => typ,
-        }
-    }
-
-    pub fn packet_version(&self) -> Version {
-        match self {
-            UserAttribute::Image { packet_version, .. } => *packet_version,
-            UserAttribute::Unknown { packet_version, .. } => *packet_version,
         }
     }
 
@@ -153,5 +147,18 @@ impl fmt::Debug for UserAttribute {
                 .field("data", &hex::encode(data))
                 .finish(),
         }
+    }
+}
+
+impl PacketTrait for UserAttribute {
+    fn packet_version(&self) -> Version {
+        match self {
+            UserAttribute::Image { packet_version, .. } => *packet_version,
+            UserAttribute::Unknown { packet_version, .. } => *packet_version,
+        }
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::UserAttribute
     }
 }

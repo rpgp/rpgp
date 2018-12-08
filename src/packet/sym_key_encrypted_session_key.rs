@@ -1,13 +1,17 @@
+use std::io;
+
 use nom::{be_u8, rest};
 use num_traits::FromPrimitive;
 
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use types::{s2k_parser, KeyId, StringToKey, Version};
+use packet::PacketTrait;
+use ser::Serialize;
+use types::{s2k_parser, KeyId, StringToKey, Tag, Version};
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymKeyEncryptedSessionKey {
     packet_version: Version,
     version: u8,
@@ -65,3 +69,19 @@ named_args!(parse(packet_version: Version) <SymKeyEncryptedSessionKey>, do_parse
         }
     })
 ));
+
+impl Serialize for SymKeyEncryptedSessionKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        unimplemented!()
+    }
+}
+
+impl PacketTrait for SymKeyEncryptedSessionKey {
+    fn packet_version(&self) -> Version {
+        self.packet_version
+    }
+
+    fn tag(&self) -> Tag {
+        Tag::SymKeyEncryptedSessionKey
+    }
+}

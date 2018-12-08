@@ -103,37 +103,53 @@ impl_try_from_into!(
 // TODO: move to its own file
 impl Serialize for Packet {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        let packet_version = self.packet_version();
-
-        let mut buf = Vec::new();
         match self {
-            // Packet::CompressedData(p) => p.to_writer(&mut buf)?,
-            Packet::PublicKey(p) => p.to_writer(&mut buf)?,
-            Packet::PublicSubkey(p) => p.to_writer(&mut buf)?,
-            Packet::SecretKey(p) => p.to_writer(&mut buf)?,
-            Packet::SecretSubkey(p) => p.to_writer(&mut buf)?,
-            Packet::LiteralData(p) => p.to_writer(&mut buf)?,
-            // Packet::Marker(p) => p.to_writer(&mut buf)?,
-            // Packet::ModDetectionCode(p) => p.to_writer(&mut buf)?,
-            // Packet::OnePassSignature(p) => p.to_writer(&mut buf)?,
-            // Packet::PublicKeyEncryptedSessionKey(p) => p.to_writer(&mut buf)?,
-            Packet::Signature(p) => p.to_writer(&mut buf)?,
-            // Packet::SymEncryptedData(p) => p.to_writer(&mut buf)?,
-            // Packet::SymEncryptedProtectedData(p) => p.to_writer(&mut buf)?,
-            // Packet::SymKeyEncryptedSessionKey(p) => p.to_writer(&mut buf)?,
-            // Packet::Trust(p) => p.to_writer(&mut buf)?,
-            Packet::UserAttribute(p) => p.to_writer(&mut buf)?,
-            Packet::UserId(p) => p.to_writer(&mut buf)?,
-            _ => unimplemented_err!("serialization for {:?}", self.tag()),
+            Packet::CompressedData(p) => write_packet(writer, &p),
+            Packet::PublicKey(p) => write_packet(writer, &p),
+            Packet::PublicSubkey(p) => write_packet(writer, &p),
+            Packet::SecretKey(p) => write_packet(writer, &p),
+            Packet::SecretSubkey(p) => write_packet(writer, &p),
+            Packet::LiteralData(p) => write_packet(writer, &p),
+            Packet::Marker(p) => write_packet(writer, &p),
+            Packet::ModDetectionCode(p) => write_packet(writer, &p),
+            Packet::OnePassSignature(p) => write_packet(writer, &p),
+            Packet::PublicKeyEncryptedSessionKey(p) => write_packet(writer, &p),
+            Packet::Signature(p) => write_packet(writer, &p),
+            Packet::SymEncryptedData(p) => write_packet(writer, &p),
+            Packet::SymEncryptedProtectedData(p) => write_packet(writer, &p),
+            Packet::SymKeyEncryptedSessionKey(p) => write_packet(writer, &p),
+            Packet::Trust(p) => write_packet(writer, &p),
+            Packet::UserAttribute(p) => write_packet(writer, &p),
+            Packet::UserId(p) => write_packet(writer, &p),
         }
-
-        // header
-        packet_version.write_header(writer, self.tag() as u8, buf.len())?;
-
-        // the actual packet body
-        info!("buf: {}", hex::encode(&buf));
-        writer.write_all(&buf)?;
-
-        Ok(())
     }
+}
+
+pub trait PacketTrait: Serialize {
+    fn packet_version(&self) -> Version;
+    fn tag(&self) -> Tag;
+}
+
+impl<'a, T: 'a + PacketTrait> PacketTrait for &'a T {
+    fn packet_version(&self) -> Version {
+        (*self).packet_version()
+    }
+
+    fn tag(&self) -> Tag {
+        (*self).tag()
+    }
+}
+
+pub fn write_packet(writer: &mut impl io::Write, packet: &impl PacketTrait) -> Result<()> {
+    let packet_version = packet.packet_version();
+    let mut buf = Vec::new();
+    packet.to_writer(&mut buf)?;
+
+    // header
+    packet_version.write_header(writer, packet.tag() as u8, buf.len())?;
+
+    // the actual packet body
+    writer.write_all(&buf)?;
+
+    Ok(())
 }
