@@ -7,4 +7,7 @@ pub enum CompressionAlgorithm {
     ZIP = 1,
     ZLIB = 2,
     BZip2 = 3,
+
+    /// Do not use, just for compatability with GnuPG.
+    Private10 = 110,
 }

@@ -219,7 +219,7 @@ impl Message {
                 }
             }
             Message::Compressed(m) => {
-                let msg = Message::from_bytes(m.decompress())?;
+                let msg = Message::from_bytes(m.decompress()?)?;
                 msg.verify(key)
             }
             // Nothing to do for others.
@@ -573,10 +573,26 @@ mod tests {
                         .expect("message verification failed");
                 }
 
+                // serialize and check we get the same thing
+                let serialized = decrypted.to_armored_bytes().unwrap();
+
+                // and parse them again
+                let decrypted2 = Message::from_armor_single(Cursor::new(&serialized))
+                    .expect("failed to parse round2");
+                assert_eq!(decrypted, decrypted2);
+
                 let raw = match decrypted {
                     Message::Literal(msg) => msg,
                     Message::Compressed(msg) => {
-                        let m = Message::from_bytes(msg.decompress()).unwrap();
+                        let m = Message::from_bytes(msg.decompress().unwrap()).unwrap();
+
+                        // serialize and check we get the same thing
+                        let serialized = m.to_armored_bytes().unwrap();
+
+                        // and parse them again
+                        let m2 = Message::from_armor_single(Cursor::new(&serialized))
+                            .expect("failed to parse round3");
+                        assert_eq!(m, m2);
 
                         if let Message::Literal(msg) = m.get_literal().unwrap() {
                             msg.clone()

@@ -31,7 +31,8 @@ impl ModDetectionCode {
 
 impl Serialize for ModDetectionCode {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        writer.write_all(&self.hash[..])?;
+        Ok(())
     }
 }
 

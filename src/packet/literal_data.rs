@@ -6,6 +6,8 @@ use nom::{be_u32, be_u8, rest};
 use num_traits::FromPrimitive;
 
 use errors::Result;
+use line_writer::LineBreak;
+use normalize_lines::Normalized;
 use packet::PacketTrait;
 use ser::Serialize;
 use types::{Tag, Version};
@@ -19,6 +21,8 @@ pub struct LiteralData {
     mode: DataMode,
     file_name: String,
     created: DateTime<Utc>,
+    /// Raw data, stored normalized to CRLF line endings, to make signing and verification
+    /// simpler.
     data: Vec<u8>,
 }
 
@@ -32,6 +36,21 @@ pub enum DataMode {
 }
 
 impl LiteralData {
+    /// Creates a literal data packet from the given string. Normalizes line endings.
+    pub fn from_str(file_name: &str, raw_data: &str) -> Self {
+        let data = Normalized::new(raw_data.chars(), LineBreak::Crlf)
+            .map(|c| c as u8)
+            .collect();
+
+        LiteralData {
+            packet_version: Version::New,
+            mode: DataMode::Utf8,
+            file_name: file_name.to_owned(),
+            created: Utc::now(),
+            data,
+        }
+    }
+
     /// Parses a `LiteralData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(input, packet_version)?;
@@ -48,14 +67,12 @@ impl Serialize for LiteralData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let name = write_string(&self.file_name);
         writer.write_all(&[self.mode as u8, name.len() as u8])?;
+        writer.write_all(&name)?;
         writer.write_u32::<BigEndian>(self.created.timestamp() as u32)?;
 
-        match self.mode {
-            DataMode::Binary => {
-                writer.write_all(&self.data)?;
-            }
-            _ => unimplemented!("mode: {:?}", self.mode),
-        }
+        // Line endings are stored internally normalized, so we do not need to worry
+        // about changing them here.
+        writer.write_all(&self.data)?;
 
         Ok(())
     }
@@ -69,11 +86,11 @@ named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
     >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
     >>     data: rest
     >> (LiteralData {
-        packet_version,
-        mode,
-        created,
-        file_name: name,
-        data: data.to_vec(),
+            packet_version,
+            mode,
+            created,
+            file_name: name,
+            data: data.to_vec(),
     })
 ));
 

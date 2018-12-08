@@ -32,7 +32,6 @@ impl SymKeyEncryptedSessionKey {
 
         Ok(pk)
     }
-
     pub fn id(&self) -> &KeyId {
         // TODO: figure out how, probably need decryption first?
         unimplemented!()
@@ -41,10 +40,6 @@ impl SymKeyEncryptedSessionKey {
     pub fn mpis(&self) -> &[Vec<u8>] {
         // TODO: figure out how, probably need decryption first?
         unimplemented!()
-    }
-
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
     }
 }
 
@@ -72,7 +67,14 @@ named_args!(parse(packet_version: Version) <SymKeyEncryptedSessionKey>, do_parse
 
 impl Serialize for SymKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        writer.write_all(&[self.version, self.sym_algorithm as u8])?;
+        self.s2k.to_writer(writer)?;
+
+        if let Some(ref key) = self.encrypted_key {
+            writer.write_all(key)?;
+        }
+
+        Ok(())
     }
 }
 
