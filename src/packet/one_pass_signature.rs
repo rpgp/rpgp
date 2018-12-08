@@ -58,7 +58,16 @@ named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        writer.write_all(&[
+            self.version,
+            self.typ as u8,
+            self.hash_algorithm as u8,
+            self.pub_algorithm as u8,
+        ])?;
+        writer.write_all(self.key_id.as_ref())?;
+        writer.write_all(&[self.is_nested as u8])?;
+
+        Ok(())
     }
 }
 

@@ -100,6 +100,10 @@ pub enum SymmetricKeyAlgorithm {
     AES256 = 9,
     /// Twofish with 256-bit key [TWOFISH]
     Twofish = 10,
+    Camellia128 = 11,
+    Camellia192 = 12,
+    Camellia256 = 13,
+    Private10 = 110,
 }
 
 impl SymmetricKeyAlgorithm {
@@ -116,6 +120,10 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::AES192 => 16,
             SymmetricKeyAlgorithm::AES256 => 16,
             SymmetricKeyAlgorithm::Twofish => 16,
+            SymmetricKeyAlgorithm::Camellia128 => 16,
+            SymmetricKeyAlgorithm::Camellia192 => 16,
+            SymmetricKeyAlgorithm::Camellia256 => 16,
+            SymmetricKeyAlgorithm::Private10 => 0,
         }
     }
 
@@ -132,6 +140,10 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::AES192 => 24,
             SymmetricKeyAlgorithm::AES256 => 32,
             SymmetricKeyAlgorithm::Twofish => 32,
+            SymmetricKeyAlgorithm::Camellia128 => 16,
+            SymmetricKeyAlgorithm::Camellia192 => 24,
+            SymmetricKeyAlgorithm::Camellia256 => 32,
+            SymmetricKeyAlgorithm::Private10 => 0,
         }
     }
 
@@ -271,6 +283,18 @@ impl SymmetricKeyAlgorithm {
                 //     bs,
                 //     resync
                 // ),
+                SymmetricKeyAlgorithm::Camellia128 => {
+                    unimplemented_err!("Camellia 128 not yet available")
+                }
+                SymmetricKeyAlgorithm::Camellia192 => {
+                    unimplemented_err!("Camellia 192 not yet available")
+                }
+                SymmetricKeyAlgorithm::Camellia256 => {
+                    unimplemented_err!("Camellia 256 not yet available")
+                }
+                SymmetricKeyAlgorithm::Private10 => unimplemented_err!(
+                    "Private10 should not be used, and only exist for compatability"
+                ),
             }
         }
 
@@ -314,6 +338,18 @@ impl SymmetricKeyAlgorithm {
             // {
             //     decrypt_regular!(Twofish, key, iv_vec, ciphertext, self.block_size())
             // }
+            SymmetricKeyAlgorithm::Camellia128 => {
+                unimplemented_err!("Camellia 128 not yet available")
+            }
+            SymmetricKeyAlgorithm::Camellia192 => {
+                unimplemented_err!("Camellia 192 not yet available")
+            }
+            SymmetricKeyAlgorithm::Camellia256 => {
+                unimplemented_err!("Camellia 256 not yet available")
+            }
+            SymmetricKeyAlgorithm::Private10 => {
+                unimplemented_err!("Private10 should not be used, and only exist for compatability")
+            }
         }
 
         Ok(())
@@ -440,6 +476,18 @@ impl SymmetricKeyAlgorithm {
                 //     bs,
                 //     resync
                 // ),
+                SymmetricKeyAlgorithm::Camellia128 => {
+                    unimplemented_err!("Camellia 128 not yet available")
+                }
+                SymmetricKeyAlgorithm::Camellia192 => {
+                    unimplemented_err!("Camellia 192 not yet available")
+                }
+                SymmetricKeyAlgorithm::Camellia256 => {
+                    unimplemented_err!("Camellia 256 not yet available")
+                }
+                SymmetricKeyAlgorithm::Private10 => unimplemented_err!(
+                    "Private10 should not be used, and only exist for compatability"
+                ),
             }
         }
 
@@ -472,6 +520,18 @@ impl SymmetricKeyAlgorithm {
             // {
             //     encrypt_regular!(Twofish, key, iv_vec, plaintext, bs)
             // }
+            SymmetricKeyAlgorithm::Camellia128 => {
+                unimplemented_err!("Camellia 128 not yet available")
+            }
+            SymmetricKeyAlgorithm::Camellia192 => {
+                unimplemented_err!("Camellia 192 not yet available")
+            }
+            SymmetricKeyAlgorithm::Camellia256 => {
+                unimplemented_err!("Camellia 256 not yet available")
+            }
+            SymmetricKeyAlgorithm::Private10 => {
+                unimplemented_err!("Private10 should not be used, and only exist for compatability")
+            }
         }
         Ok(())
     }

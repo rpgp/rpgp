@@ -59,7 +59,7 @@ macro_rules! impl_secret_key {
                     s2k_details.typ,
                     s2k_details.hash,
                     s2k_details.salt.as_ref(),
-                    s2k_details.count.as_ref(),
+                    s2k_details.count().as_ref(),
                 )?;
 
                 let iv = self

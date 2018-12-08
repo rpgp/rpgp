@@ -25,6 +25,9 @@ pub enum HashAlgorithm {
     SHA384 = 9,
     SHA512 = 10,
     SHA224 = 11,
+
+    /// Do not use, just for compatability with GnuPG.
+    Private10 = 110,
 }
 
 impl TryInto<Hashes> for HashAlgorithm {
@@ -40,6 +43,7 @@ impl TryInto<Hashes> for HashAlgorithm {
             HashAlgorithm::SHA384 => Ok(Hashes::SHA384),
             HashAlgorithm::SHA512 => Ok(Hashes::SHA512),
             HashAlgorithm::SHA224 => Ok(Hashes::SHA224),
+            HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
         }
     }
 }
@@ -105,7 +109,8 @@ impl HashAlgorithm {
             HashAlgorithm::SHA384 => Sha384::digest(data).to_vec(),
             HashAlgorithm::SHA512 => Sha512::digest(data).to_vec(),
             HashAlgorithm::SHA224 => Sha224::digest(data).to_vec(),
-            _ => unimplemented_err!("hasher {:?}", self),
+            HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+            _ => unimplemented_err!("hasher: {:?}", self),
         })
     }
 

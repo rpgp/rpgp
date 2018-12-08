@@ -53,6 +53,7 @@ extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 extern crate buf_redux;
+extern crate hex;
 extern crate try_from;
 
 #[cfg(test)]
@@ -61,10 +62,6 @@ extern crate rand;
 extern crate regex;
 #[cfg(test)]
 extern crate serde_json;
-
-// #[cfg(test)]
-extern crate hex;
-
 #[cfg(test)]
 #[macro_use]
 extern crate serde_derive;
@@ -95,4 +92,5 @@ pub mod composed;
 pub mod crypto;
 pub mod de;
 pub mod line_writer;
+pub mod normalize_lines;
 pub mod ser;

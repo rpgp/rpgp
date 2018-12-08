@@ -97,16 +97,16 @@ macro_rules! parse_dumps {
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 19252),
-    (test_parse_dumps_1, 1, 19179),
-    (test_parse_dumps_2, 2, 19240),
-    (test_parse_dumps_3, 3, 19288),
-    (test_parse_dumps_4, 4, 19199),
-    (test_parse_dumps_5, 5, 19210),
-    (test_parse_dumps_6, 6, 19249),
-    (test_parse_dumps_7, 7, 19335),
-    (test_parse_dumps_8, 8, 19275),
-    (test_parse_dumps_9, 9, 19186),
+    (test_parse_dumps_0, 0, 19306),
+    (test_parse_dumps_1, 1, 19239),
+    (test_parse_dumps_2, 2, 19282),
+    (test_parse_dumps_3, 3, 19337),
+    (test_parse_dumps_4, 4, 19251),
+    (test_parse_dumps_5, 5, 19273),
+    (test_parse_dumps_6, 6, 19290),
+    (test_parse_dumps_7, 7, 19381),
+    (test_parse_dumps_8, 8, 19312),
+    (test_parse_dumps_9, 9, 19248),
 );
 
 #[test]
@@ -493,7 +493,7 @@ fn encrypted_private_key() {
         StringToKeyType::IteratedAndSalted
     );
 
-    assert_eq!(pp.string_to_key.as_ref().unwrap().count, Some(65536));
+    assert_eq!(pp.string_to_key.as_ref().unwrap().count, Some(96));
 
     assert_eq!(
         pp.string_to_key.as_ref().unwrap().hash,

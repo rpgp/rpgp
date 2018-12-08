@@ -28,7 +28,7 @@ impl<'a> Read for Decompressor<&'a [u8]> {
             Decompressor::Uncompressed(ref mut c) => c.read(into),
             Decompressor::Zip(ref mut c) => c.read(into),
             Decompressor::Zlib(ref mut c) => c.read(into),
-            Decompressor::Bzip2 => unimplemented!(),
+            Decompressor::Bzip2 => unimplemented!("bzip2"),
         }
     }
 }
@@ -47,18 +47,19 @@ impl CompressedData {
         })
     }
 
-    pub fn decompress(&self) -> Decompressor<&[u8]> {
+    pub fn decompress(&self) -> Result<Decompressor<&[u8]>> {
         match self.compression_algorithm {
-            CompressionAlgorithm::Uncompressed => {
-                Decompressor::Uncompressed(Cursor::new(&self.compressed_data[..]))
-            }
-            CompressionAlgorithm::ZIP => {
-                Decompressor::Zip(DeflateDecoder::new(&self.compressed_data[..]))
-            }
-            CompressionAlgorithm::ZLIB => {
-                Decompressor::Zlib(ZlibDecoder::new(&self.compressed_data[..]))
-            }
-            CompressionAlgorithm::BZip2 => unimplemented!("BZip2"),
+            CompressionAlgorithm::Uncompressed => Ok(Decompressor::Uncompressed(Cursor::new(
+                &self.compressed_data[..],
+            ))),
+            CompressionAlgorithm::ZIP => Ok(Decompressor::Zip(DeflateDecoder::new(
+                &self.compressed_data[..],
+            ))),
+            CompressionAlgorithm::ZLIB => Ok(Decompressor::Zlib(ZlibDecoder::new(
+                &self.compressed_data[..],
+            ))),
+            CompressionAlgorithm::BZip2 => unimplemented_err!("BZip2"),
+            CompressionAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
         }
     }
 
@@ -69,7 +70,10 @@ impl CompressedData {
 
 impl Serialize for CompressedData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        writer.write_all(&[self.compression_algorithm as u8])?;
+        writer.write_all(&self.compressed_data)?;
+
+        Ok(())
     }
 }
 
@@ -79,6 +83,6 @@ impl PacketTrait for CompressedData {
     }
 
     fn tag(&self) -> Tag {
-        Tag::Trust
+        Tag::CompressedData
     }
 }

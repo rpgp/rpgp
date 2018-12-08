@@ -29,7 +29,8 @@ impl SymEncryptedData {
 
 impl Serialize for SymEncryptedData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        writer.write_all(&self.data)?;
+        Ok(())
     }
 }
 

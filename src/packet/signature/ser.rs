@@ -75,10 +75,11 @@ impl Subpacket {
 
                 let name_bytes = write_string(&notation.name);
                 writer.write_u16::<BigEndian>(name_bytes.len() as u16)?;
-                writer.write_all(&name_bytes)?;
 
                 let value_bytes = write_string(&notation.value);
                 writer.write_u16::<BigEndian>(value_bytes.len() as u16)?;
+
+                writer.write_all(&name_bytes)?;
                 writer.write_all(&value_bytes)?;
             }
             Subpacket::RevocationKey(rev_key) => {
@@ -144,7 +145,7 @@ impl Subpacket {
                 buf.len()
             }
             Subpacket::PreferredKeyServer(server) => server.chars().count(),
-            Subpacket::Notation(n) => 4 + n.name.chars().count() + n.value.chars().count(),
+            Subpacket::Notation(n) => 4 + 2 + 2 + n.name.chars().count() + n.value.chars().count(),
             Subpacket::RevocationKey(_) => 22,
             Subpacket::SignersUserID(body) => {
                 let bytes: &[u8] = body.as_ref();
