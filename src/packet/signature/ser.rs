@@ -287,6 +287,7 @@ impl Signature {
 
         // the actual signature
         for val in &self.signature {
+            info!("writing: {}", hex::encode(val));
             write_mpi(val, writer)?;
         }
 
