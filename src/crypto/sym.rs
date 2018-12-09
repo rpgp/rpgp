@@ -6,6 +6,7 @@ use cfb_mode::Cfb;
 use des::TdesEde3;
 use sha1::{Digest, Sha1};
 // use twofish::Twofish;
+use rand::{OsRng, RngCore};
 
 use crypto::checksum;
 use errors::Result;
@@ -48,10 +49,6 @@ macro_rules! encrypt {
         info!("key {}", hex::encode($key));
         info!("iv {}", hex::encode($iv));
         info!("prefix {}", hex::encode(&$prefix));
-
-        // add quick check
-        $prefix[$bs] = $prefix[$bs - 2];
-        $prefix[$bs + 1] = $prefix[$bs - 1];
 
         let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
         mode.encrypt($prefix);
@@ -363,15 +360,19 @@ impl SymmetricKeyAlgorithm {
         let iv_vec = vec![0u8; self.block_size()];
 
         let bs = self.block_size();
-        let prefix = vec![0u8; bs + 2];
-        // TODO: fill with something else than 0
+        let mut rng = OsRng::new().expect("no randomness available from the system");
 
-        let prefix_len = prefix.len();
+        let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
 
         let mut ciphertext = vec![0u8; prefix_len + plaintext_len];
         // prefix
-        ciphertext[0..prefix_len].copy_from_slice(&prefix);
+        rng.fill_bytes(&mut ciphertext[..bs]);
+
+        // add quick check
+        ciphertext[bs] = ciphertext[bs - 2];
+        ciphertext[bs + 1] = ciphertext[bs - 1];
+
         // plaintext
         ciphertext[prefix_len..].copy_from_slice(plaintext);
 
@@ -388,22 +389,27 @@ impl SymmetricKeyAlgorithm {
         let mdc_len = 22;
 
         let bs = self.block_size();
-        let prefix = vec![0u8; bs + 2];
-        // TODO: fill with something else than 0
+        let mut rng = OsRng::new().expect("no randomness available from the system");
 
-        let prefix_len = prefix.len();
+        let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
 
         let mut ciphertext = vec![0u8; prefix_len + plaintext_len + mdc_len];
+
         // prefix
-        ciphertext[0..prefix_len].copy_from_slice(&prefix);
+        rng.fill_bytes(&mut ciphertext[..bs]);
+
+        // add quick check
+        ciphertext[bs] = ciphertext[bs - 2];
+        ciphertext[bs + 1] = ciphertext[bs - 1];
+
         // plaintext
         ciphertext[prefix_len..(prefix_len + plaintext_len)].copy_from_slice(plaintext);
         // mdc header
         ciphertext[prefix_len + plaintext_len] = 0xD3;
         ciphertext[prefix_len + plaintext_len + 1] = 0x14;
         // mdc body
-        let checksum = &Sha1::digest(&ciphertext[0..(prefix_len + plaintext_len + 2)])[0..20];
+        let checksum = &Sha1::digest(&ciphertext[..(prefix_len + plaintext_len + 2)])[..20];
         ciphertext[(prefix_len + plaintext_len + 2)..].copy_from_slice(checksum);
 
         info!(
