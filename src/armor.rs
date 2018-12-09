@@ -185,8 +185,20 @@ named!(header_parser(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
 
 #[rustfmt::skip]
 named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
-           crc: opt!(preceded!(tag!("="), take!(4)))
-     >>         many0!(line_ending)
+           crc: alt!(do_parse!(
+                            tag!("=")
+                    >> crc: take!(4)
+                    >>      many0!(line_ending)
+                    >>      tag!("--")
+                    >> ({ Some(crc) })
+                ) |
+                   do_parse!(
+                          many0!(tag!("="))
+                       >> many0!(line_ending)
+                       >> tag!("--")
+                       >> (None)
+                   )
+                )
      >> footer: armor_footer_line
      >> (crc, footer)
 ));
@@ -194,8 +206,8 @@ named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
 /// Parses a single armor footer line
 #[rustfmt::skip]
 named!(armor_footer_line<BlockType>, do_parse!(
-            armor_header_sep
-    >>      tag!("END ")
+            // only 3, because we parse two already
+            tag!("---END ")
     >> typ: armor_header_type
     >>      armor_header_sep
     >>      alt_complete!(line_ending | eof!())
@@ -246,6 +258,7 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     pub fn read_header(&mut self) -> io::Result<()> {
+        info!("read_header");
         if let Some(ref mut b) = self.inner {
             b.read_into_buf()?;
 
@@ -269,6 +282,7 @@ impl<R: Read + Seek> Dearmor<R> {
                     ));
                 }
                 Err(err) => {
+                    self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!("invalid ascii armor header: {:?}", err),
@@ -285,11 +299,12 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
+        info!("read_body");
         if self.base_decoder.is_none() {
-            let b = self
-                .inner
-                .take()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
+            let b = self.inner.take().ok_or_else(|| {
+                self.done = true;
+                io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state")
+            })?;
             self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(LineReader::new(b))));
         }
 
@@ -312,6 +327,7 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     fn read_footer(&mut self) -> io::Result<usize> {
+        info!("read_footer");
         if self.base_decoder.is_some() {
             let decoder = self
                 .base_decoder
@@ -331,6 +347,7 @@ impl<R: Read + Seek> Dearmor<R> {
                 Ok((remaining, (checksum, footer_typ))) => {
                     if let Some(ref header_typ) = self.typ {
                         if header_typ != &footer_typ {
+                            self.done = true;
                             return Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
                                 format!(
@@ -348,12 +365,18 @@ impl<R: Read + Seek> Dearmor<R> {
                     b.buf_len() - remaining.len()
                 }
                 Err(nom::Err::Incomplete(_)) => {
+                    self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::Interrupted,
                         "incomplete parse",
                     ));
                 }
                 Err(err) => {
+                    warn!(
+                        "invalid ascii armor footer: `{:?}`",
+                        ::std::str::from_utf8(b.buffer())
+                    );
+                    self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!("invalid ascii armor footer: {:?}", err),
@@ -665,8 +688,13 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            footer_parser(b"=XyBX-----END PGP PUBLIC KEY BLOCK-----\n"),
-            Ok((&b""[..], (Some(&b"XyBX"[..]), BlockType::PublicKey)))
+            footer_parser(b"=-----END PGP PUBLIC KEY BLOCK-----\n"),
+            Ok((&b""[..], (None, BlockType::PublicKey)))
+        );
+
+        assert_eq!(
+            footer_parser(b"=4JBj-----END PGP PUBLIC KEY BLOCK-----\r\n"),
+            Ok((&b""[..], (Some(&b"4JBj"[..]), BlockType::PublicKey)))
         );
 
         assert_eq!(

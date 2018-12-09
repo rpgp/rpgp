@@ -307,4 +307,30 @@ mod tests {
         write_packet_length(12870, &mut res).unwrap();
         assert_eq!(hex::encode(res), "ff00003246");
     }
+
+    #[test]
+    fn test_bignum_mpi() {
+        let n = hex::decode("b4a71b058ac8aa1ddc453ab2663331c38f7645542815ac189a9af56d0e07a615469d3e08849650e03026d49259423cf00d089931cd700fd3a6e940bf83c81406e142a4b0a86f00738c7e1a9ff1b709f6bccc6cf900d0113a8e62e53d63be0a05105755b9efc6a4098c362c73fb422d40187d8e2382e88624d72caffceb13cec8fa0079c7d17883a46a1336471ab5be8cbb555c5d330d7fadb43318fa73b584edac312fa3302886bb5d04a05da3be2676c1fb94b3cf5c19d598659c3a7728ebab95f71721b662ac46aa9910726fe576d438f789c5ce2448f54546f254da814bcae1c35ee44b171e870ffa6403167a10e68573bdf155549274b431ff8e2418b627").unwrap();
+
+        let n_big = BigUint::from_bytes_be(&n);
+        let n_encoded = bignum_to_mpi(&n_big);
+        let (rest, n_big2) = mpi_big(&n_encoded).unwrap();
+        assert_eq!(rest.len(), 0);
+        assert_eq!(n_big, n_big2);
+
+        let mut buf = Vec::new();
+        write_mpi(&n, &mut buf).unwrap();
+        let (rest, n_big3) = mpi_big(&buf).unwrap();
+        assert_eq!(rest.len(), 0);
+        assert_eq!(n_big, n_big3);
+
+        let mut buf = Vec::new();
+        write_bignum_mpi(&n_big, &mut buf).unwrap();
+
+        assert_eq!(&buf, &hex::decode("0800b4a71b058ac8aa1ddc453ab2663331c38f7645542815ac189a9af56d0e07a615469d3e08849650e03026d49259423cf00d089931cd700fd3a6e940bf83c81406e142a4b0a86f00738c7e1a9ff1b709f6bccc6cf900d0113a8e62e53d63be0a05105755b9efc6a4098c362c73fb422d40187d8e2382e88624d72caffceb13cec8fa0079c7d17883a46a1336471ab5be8cbb555c5d330d7fadb43318fa73b584edac312fa3302886bb5d04a05da3be2676c1fb94b3cf5c19d598659c3a7728ebab95f71721b662ac46aa9910726fe576d438f789c5ce2448f54546f254da814bcae1c35ee44b171e870ffa6403167a10e68573bdf155549274b431ff8e2418b627").unwrap());
+
+        let (rest, n_big4) = mpi_big(&buf).unwrap();
+        assert_eq!(rest.len(), 0);
+        assert_eq!(n_big, n_big4);
+    }
 }

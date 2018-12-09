@@ -87,7 +87,11 @@ impl Signature {
         hasher.update(&self.trailer(len));
 
         let hash = &hasher.finish()[..];
-        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
+        ensure_eq!(
+            &self.signed_hash_value,
+            &hash[0..2],
+            "invalid signed hash value"
+        );
 
         key.verify_signature(self.hash_alg, hash, &self.signature)
     }
@@ -99,7 +103,7 @@ impl Signature {
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()> {
-        info!("verifying certificate");
+        info!("verifying certificate {:#?}", self);
 
         if let Some(key_id) = key.key_id() {
             if let Some(issuer) = self.issuer() {
@@ -115,7 +119,7 @@ impl Signature {
 
         let mut hasher = self.hash_alg.new_hasher()?;
         let mut key_buf = Vec::new();
-        key.to_writer(&mut key_buf)?;
+        key.to_writer_old(&mut key_buf)?;
 
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
@@ -127,10 +131,6 @@ impl Signature {
         );
         info!("packet: {}", hex::encode(&packet_buf));
 
-        // old style packet header for the key
-        hasher.update(&[0x99]);
-        hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
-        // the actual key
         hasher.update(&key_buf);
 
         match self.version {
@@ -160,7 +160,11 @@ impl Signature {
         hasher.update(&self.trailer(len));
 
         let hash = &hasher.finish()[..];
-        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
+        ensure_eq!(
+            &self.signed_hash_value,
+            &hash[0..2],
+            "invalid signed hash value"
+        );
 
         key.verify_signature(self.hash_alg, hash, &self.signature)
     }
@@ -193,23 +197,15 @@ impl Signature {
         // Signing Key
         {
             let mut key_buf = Vec::new();
-            signing_key.to_writer(&mut key_buf)?;
+            signing_key.to_writer_old(&mut key_buf)?;
 
-            // old style packet header for the key
-            hasher.update(&[0x99]);
-            hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
-            // the actual key
             hasher.update(&key_buf);
         }
         // Key being bound
         {
             let mut key_buf = Vec::new();
-            key.to_writer(&mut key_buf)?;
+            key.to_writer_old(&mut key_buf)?;
 
-            // old style packet header for the key
-            hasher.update(&[0x99]);
-            hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
-            // the actual key
             hasher.update(&key_buf);
         }
 
@@ -217,7 +213,11 @@ impl Signature {
         hasher.update(&self.trailer(len));
 
         let hash = &hasher.finish()[..];
-        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
+        ensure_eq!(
+            &self.signed_hash_value,
+            &hash[0..2],
+            "invalid signed hash value"
+        );
 
         signing_key.verify_signature(self.hash_alg, hash, &self.signature)
     }
@@ -242,12 +242,8 @@ impl Signature {
 
         {
             let mut key_buf = Vec::new();
-            key.to_writer(&mut key_buf)?;
+            key.to_writer_old(&mut key_buf)?;
 
-            // old style packet header for the key
-            hasher.update(&[0x99]);
-            hasher.update(&[(key_buf.len() >> 8) as u8, key_buf.len() as u8]);
-            // the actual key
             hasher.update(&key_buf);
         }
 
@@ -255,7 +251,11 @@ impl Signature {
         hasher.update(&self.trailer(len));
 
         let hash = &hasher.finish()[..];
-        ensure_eq!(&self.signed_hash_value, &hash[0..2]);
+        ensure_eq!(
+            &self.signed_hash_value,
+            &hash[0..2],
+            "invalid signed hash value"
+        );
 
         key.verify_signature(self.hash_alg, hash, &self.signature)
     }

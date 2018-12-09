@@ -13,6 +13,7 @@ pub struct PacketParser<R> {
     inner: R,
     capacity: usize,
     buffer: Buffer,
+    failed: bool,
 }
 
 impl<R: Read> PacketParser<R> {
@@ -23,6 +24,7 @@ impl<R: Read> PacketParser<R> {
             // TODO: use a better value than a random guess
             capacity: 1024,
             buffer: Buffer::with_capacity(1024),
+            failed: false,
         }
     }
 }
@@ -31,6 +33,10 @@ impl<R: Read> Iterator for PacketParser<R> {
     type Item = Result<Packet>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.failed {
+            return None;
+        }
+
         let b = &mut self.buffer;
         let mut needed: Option<Needed> = None;
         let mut second_round = false;
@@ -55,6 +61,7 @@ impl<R: Read> Iterator for PacketParser<R> {
             if needed.is_some() && sz == 0 {
                 if second_round {
                     // Cancel if we didn't receive enough bytes from our source, the second time around.
+                    b.reset();
                     return Some(Err(Error::PacketIncomplete));
                 }
                 second_round = true;
@@ -70,6 +77,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                     }
                     _ => {
                         warn!("parsing error {:?}", err);
+                        self.failed = true;
                         return Some(Err(err));
                     }
                 },

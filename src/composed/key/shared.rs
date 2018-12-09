@@ -95,7 +95,29 @@ impl SignedKeyDetails {
     }
 }
 
-#[derive(Debug)]
+impl Serialize for SignedKeyDetails {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        for sig in &self.revocation_signatures {
+            packet::write_packet(writer, sig)?;
+        }
+
+        for sig in &self.direct_signatures {
+            packet::write_packet(writer, sig)?;
+        }
+
+        for user in &self.users {
+            user.to_writer(writer)?;
+        }
+
+        for attr in &self.user_attributes {
+            attr.to_writer(writer)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum PublicOrSecret {
     Public(SignedPublicKey),
     Secret(SignedSecretKey),
@@ -106,6 +128,27 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.verify(),
             PublicOrSecret::Secret(k) => k.verify(),
+        }
+    }
+
+    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
+        match self {
+            PublicOrSecret::Public(k) => k.to_armored_writer(writer),
+            PublicOrSecret::Secret(k) => k.to_armored_writer(writer),
+        }
+    }
+
+    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
+        match self {
+            PublicOrSecret::Public(k) => k.to_armored_bytes(),
+            PublicOrSecret::Secret(k) => k.to_armored_bytes(),
+        }
+    }
+
+    pub fn to_armored_string(&self) -> Result<String> {
+        match self {
+            PublicOrSecret::Public(k) => k.to_armored_string(),
+            PublicOrSecret::Secret(k) => k.to_armored_string(),
         }
     }
 }

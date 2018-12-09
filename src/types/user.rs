@@ -1,5 +1,8 @@
+use std::io;
+
 use errors::Result;
-use packet::{Signature, UserAttribute, UserId};
+use packet::{write_packet, Signature, UserAttribute, UserId};
+use ser::Serialize;
 use types::{PublicKeyTrait, Tag};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -41,6 +44,17 @@ impl SignedUser {
     }
 }
 
+impl Serialize for SignedUser {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        write_packet(writer, &self.id)?;
+        for sig in &self.signatures {
+            write_packet(writer, sig)?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedUserAttribute {
     pub attr: UserAttribute,
@@ -74,6 +88,17 @@ impl SignedUserAttribute {
 
         for signature in &self.signatures {
             signature.verify_certificate(key, Tag::UserAttribute, &self.attr)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl Serialize for SignedUserAttribute {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        write_packet(writer, &self.attr)?;
+        for sig in &self.signatures {
+            write_packet(writer, sig)?;
         }
 
         Ok(())
