@@ -57,8 +57,22 @@ fn test_parse_dump(i: usize, expected_count: usize) {
     let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
 
     let count = SignedPublicKey::from_bytes_many(f)
-        .filter(|key| {
+        .enumerate()
+        .filter(|(_i, key)| {
+            // println!("key {}", i);
             let key = key.as_ref().expect("failed to parse key");
+
+            // roundtrip
+            {
+                // serialize and check we get the same thing
+                let serialized = key.to_armored_bytes().unwrap();
+
+                // and parse them again
+                let key2 = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
+                    .expect("failed to parse round2");
+                assert_eq!(key, &key2);
+            }
+
             match key.verify() {
                 // Skip these for now
                 Err(Error::Unimplemented(err)) => {
