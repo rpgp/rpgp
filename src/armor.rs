@@ -314,7 +314,7 @@ impl<R: Read + Seek> Dearmor<R> {
             unreachable!();
         };
 
-        if size == 0 {
+        if size == 0 && !into.is_empty() {
             // we are done with the body
             self.current_part = Part::Footer;
             self.read_footer()
