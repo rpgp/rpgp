@@ -54,10 +54,9 @@ extern crate pretty_env_logger;
 extern crate log;
 extern crate buf_redux;
 extern crate hex;
+extern crate rand;
 extern crate try_from;
 
-#[cfg(test)]
-extern crate rand;
 #[cfg(test)]
 extern crate regex;
 #[cfg(test)]
