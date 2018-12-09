@@ -2,7 +2,9 @@ use std::io;
 
 use composed::key::SignedKeyDetails;
 use errors::Result;
-use packet::{self, SignatureType};
+use generic_array::typenum::U64;
+use line_writer::{LineBreak, LineWriter};
+use packet::{self, write_packet, SignatureType};
 use ser::Serialize;
 use types::{KeyId, KeyTrait, PublicKeyTrait};
 
@@ -66,6 +68,36 @@ impl SignedPublicKey {
 
         Ok(())
     }
+
+    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
+        writer.write_all(&b"-----BEGIN PGP PUBLIC KEY BLOCK-----\n"[..])?;
+
+        // TODO: headers
+
+        // write the base64 encoded content
+        {
+            let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
+            let mut enc = base64::write::EncoderWriter::new(&mut line_wrapper, base64::STANDARD);
+            self.to_writer(&mut enc)?;
+        }
+        // TODO: CRC24
+
+        writer.write_all(&b"\n-----END PGP PUBLIC KEY BLOCK-----\n"[..])?;
+
+        Ok(())
+    }
+
+    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+
+        self.to_armored_writer(&mut buf)?;
+
+        Ok(buf)
+    }
+
+    pub fn to_armored_string(&self) -> Result<String> {
+        Ok(::std::str::from_utf8(&self.to_armored_bytes()?)?.to_string())
+    }
 }
 
 impl KeyTrait for SignedPublicKey {
@@ -80,7 +112,13 @@ impl KeyTrait for SignedPublicKey {
 
 impl Serialize for SignedPublicKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        write_packet(writer, &self.primary_key)?;
+        self.details.to_writer(writer)?;
+        for ps in &self.public_subkeys {
+            ps.to_writer(writer)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -137,6 +175,11 @@ impl KeyTrait for SignedPublicSubKey {
 
 impl Serialize for SignedPublicSubKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        unimplemented!()
+        write_packet(writer, &self.key)?;
+        for sig in &self.signatures {
+            write_packet(writer, sig)?;
+        }
+
+        Ok(())
     }
 }

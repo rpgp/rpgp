@@ -50,7 +50,7 @@ macro_rules! key_parser {
                     if typ == SignatureType::KeyRevocation {
                         revocation_signatures.push(sig);
                     } else {
-                        if primary_key.version() != &KeyVersion::V4 {
+                        if primary_key.version() != KeyVersion::V4 {
                             // no direct signatures on V2|V3 keys
                             info!("WARNING: unexpected signature: {:?}", typ);
                         }
@@ -130,7 +130,7 @@ macro_rules! key_parser {
                 })
                 {
                     // -- Only V4 keys should have sub keys
-                    if primary_key.version() != &KeyVersion::V4 {
+                    if primary_key.version() != KeyVersion::V4 {
                         return Some(Err(format_err!("only V4 keys can have subkeys")));
                     }
 
