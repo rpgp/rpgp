@@ -6,6 +6,7 @@ use nom::{Needed, Offset};
 use errors::{Error, Result};
 use packet::packet_sum::Packet;
 use packet::single;
+use types::PacketLength;
 
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
@@ -40,10 +41,11 @@ impl<R: Read> Iterator for PacketParser<R> {
         let b = &mut self.buffer;
         let mut needed: Option<Needed> = None;
         let mut second_round = false;
+        let inner = &mut self.inner;
 
         loop {
             // read some data
-            let sz = match self.inner.read(b.space()) {
+            let sz = match inner.read(b.space()) {
                 Ok(sz) => sz,
                 Err(err) => {
                     warn!("failed to read {:?}", err);
@@ -67,8 +69,34 @@ impl<R: Read> Iterator for PacketParser<R> {
                 second_round = true;
             }
 
-            let res = match single::parser(b.data()).map(|(r, p)| (b.data().offset(r), p)) {
-                Ok((l, p)) => Some((l, p)),
+            let res = match {
+                match single::parser(b.data()) {
+                    Ok(v) => Ok(v),
+                    Err(err) => Err(err.into()),
+                }
+            }
+            .and_then(|(rest, (ver, tag, packet_length, body))| {
+                if packet_length == PacketLength::Indeterminated {
+                    // Indeterminated length packet
+                    let mut body = rest.to_vec();
+                    inner.read_to_end(&mut body)?;
+                    let p = single::body_parser(ver, tag, &body);
+
+                    Ok((rest.len() + body.len(), p))
+                } else {
+                    // Regular packet
+                    let p = if body.len() == 1 {
+                        // Most packets will only have a single element,
+                        // so no need to allocate
+                        single::body_parser(ver, tag, &body[0][..])
+                    } else {
+                        single::body_parser(ver, tag, &body.concat())
+                    };
+
+                    Ok((b.data().offset(rest), p))
+                }
+            }) {
+                Ok(val) => Some(val),
                 Err(err) => match err {
                     Error::Incomplete(n) => {
                         info!("incomplete {:?}", n);

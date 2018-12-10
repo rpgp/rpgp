@@ -1,7 +1,7 @@
 // comes from inside somewhere of nom
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_let_if_seq))]
 
-use nom::{self, be_u32, be_u8, rest, Err, IResult};
+use nom::{self, be_u32, be_u8, Err, IResult};
 use num_traits::FromPrimitive;
 
 use de::Deserialize;
@@ -123,25 +123,18 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
 /// Parse a single Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-4.2
 #[rustfmt::skip]
-named!(inner_parser<(Version, Tag, Vec<&[u8]>)>, do_parse!(
+named!(pub parser<(Version, Tag, PacketLength, Vec<&[u8]>)>, do_parse!(
        head: alt!(new_packet_header | old_packet_header)
-    >> body: switch!(value!(head.2),
-        PacketLength::Fixed(length)   => map!(take!(length), |v| vec![v]) |
-        PacketLength::Indeterminated  => map!(call!(rest), |v| vec![v])   |
-        PacketLength::Partial(length) => call!(read_partial_bodies, length)
+    >> body: switch!(value!(&head.2),
+        PacketLength::Fixed(length)   => map!(take!(*length), |v| vec![v]) |
+        PacketLength::Indeterminated  => value!(Vec::new()) |
+        PacketLength::Partial(length) => call!(read_partial_bodies, *length)
     )
-    >> (head.0, head.1, body)
+    >> (head.0, head.1, head.2, body)
 ));
 
-/// Parses a single packet.
-pub fn parser<'a>(input: &'a [u8]) -> Result<(&'a [u8], Result<Packet>)> {
-    info!("parsing packet ({})", input.len());
-    let (rest, (ver, tag, body)) = inner_parser(input)?;
-
-    let body = &body.concat();
-
+pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
     info!("packet body: {}", hex::encode(body));
-    info!("header: {}", hex::encode(&input[0..10]));
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
             PublicKeyEncryptedSessionKey::from_slice(ver, body).map(|r| r.into())
@@ -169,10 +162,10 @@ pub fn parser<'a>(input: &'a [u8]) -> Result<(&'a [u8], Result<Packet>)> {
     };
 
     match res {
-        Ok(res) => Ok((rest, Ok(res))),
+        Ok(res) => Ok(res),
         Err(err) => {
             warn!("invalid packet: {:?} {:?}\n{}", err, tag, hex::encode(body));
-            Ok((rest, Err(Error::InvalidPacketContent(Box::new(err)))))
+            Err(Error::InvalidPacketContent(Box::new(err)))
         }
     }
 }
