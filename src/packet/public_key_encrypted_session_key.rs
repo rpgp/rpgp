@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt, io};
 
 use nom::be_u8;
 use num_traits::FromPrimitive;
@@ -12,7 +12,7 @@ use util::{mpi, write_mpi};
 
 /// Public Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.1
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PublicKeyEncryptedSessionKey {
     packet_version: Version,
     version: u8,
@@ -126,5 +126,27 @@ impl PacketTrait for PublicKeyEncryptedSessionKey {
 
     fn tag(&self) -> Tag {
         Tag::PublicKeyEncryptedSessionKey
+    }
+}
+
+impl fmt::Debug for PublicKeyEncryptedSessionKey {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("PublicKeyEncryptedSessionKey")
+            .field("packet_version", &self.packet_version)
+            .field("version", &self.version)
+            .field("id", &self.id)
+            .field("algorithm", &self.algorithm)
+            .field(
+                "mpis",
+                &format!(
+                    "[{}]",
+                    self.mpis
+                        .iter()
+                        .map(hex::encode)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+            .finish()
     }
 }
