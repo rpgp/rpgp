@@ -205,8 +205,6 @@ mod tests {
         let packets = PacketParser::new(file);
 
         for (i, packet) in packets.take(2000).enumerate() {
-            println!("packet: {}", i);
-
             // packets we need to skip, because we can not roundtrip them for some reason
             if let Some((_, size)) = skips.iter().find(|(j, _)| *j == i) {
                 bytes.seek(SeekFrom::Current(*size)).unwrap();
