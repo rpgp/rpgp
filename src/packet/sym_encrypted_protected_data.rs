@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt, io};
 
 use errors::Result;
 use packet::PacketTrait;
@@ -7,7 +7,7 @@ use types::{Tag, Version};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SymEncryptedProtectedData {
     packet_version: Version,
     data: Vec<u8>,
@@ -46,5 +46,14 @@ impl PacketTrait for SymEncryptedProtectedData {
 
     fn tag(&self) -> Tag {
         Tag::SymEncryptedProtectedData
+    }
+}
+
+impl fmt::Debug for SymEncryptedProtectedData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("SymEncryptedProtectedData")
+            .field("packet_version", &self.packet_version)
+            .field("data", &hex::encode(&self.data))
+            .finish()
     }
 }

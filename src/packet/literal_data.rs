@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, TimeZone, Utc};
@@ -15,7 +15,7 @@ use util::{read_string, write_string};
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct LiteralData {
     packet_version: Version,
     mode: DataMode,
@@ -61,6 +61,14 @@ impl LiteralData {
     pub fn data(&self) -> &[u8] {
         &self.data
     }
+
+    /// Convert the data to a string, if appropriate for the type.
+    pub fn to_string(&self) -> Option<String> {
+        match self.mode {
+            DataMode::Binary => None,
+            _ => Some(self.data.iter().map(|c| *c as char).collect()),
+        }
+    }
 }
 
 impl Serialize for LiteralData {
@@ -101,5 +109,17 @@ impl PacketTrait for LiteralData {
 
     fn tag(&self) -> Tag {
         Tag::LiteralData
+    }
+}
+
+impl fmt::Debug for LiteralData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("LiteralData")
+            .field("packet_version", &self.packet_version)
+            .field("mode", &self.mode)
+            .field("created", &self.created)
+            .field("file_name", &self.file_name)
+            .field("data", &hex::encode(&self.data))
+            .finish()
     }
 }

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::{self, Cursor, Read};
 
 use flate2::read::{DeflateDecoder, ZlibDecoder};
@@ -8,7 +9,7 @@ use packet::PacketTrait;
 use ser::Serialize;
 use types::{CompressionAlgorithm, Tag, Version};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct CompressedData {
     packet_version: Version,
     compression_algorithm: CompressionAlgorithm,
@@ -48,6 +49,7 @@ impl CompressedData {
     }
 
     pub fn decompress(&self) -> Result<Decompressor<&[u8]>> {
+        println!("deflate\n{}\n", hex::encode(&self.compressed_data[..]));
         match self.compression_algorithm {
             CompressionAlgorithm::Uncompressed => Ok(Decompressor::Uncompressed(Cursor::new(
                 &self.compressed_data[..],
@@ -84,5 +86,15 @@ impl PacketTrait for CompressedData {
 
     fn tag(&self) -> Tag {
         Tag::CompressedData
+    }
+}
+
+impl fmt::Debug for CompressedData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("CompressedData")
+            .field("packet_version", &self.packet_version)
+            .field("compression_algorithm", &self.compression_algorithm)
+            .field("compressed_data", &hex::encode(&self.compressed_data))
+            .finish()
     }
 }
