@@ -49,7 +49,6 @@ impl CompressedData {
     }
 
     pub fn decompress(&self) -> Result<Decompressor<&[u8]>> {
-        println!("deflate\n{}\n", hex::encode(&self.compressed_data[..]));
         match self.compression_algorithm {
             CompressionAlgorithm::Uncompressed => Ok(Decompressor::Uncompressed(Cursor::new(
                 &self.compressed_data[..],
