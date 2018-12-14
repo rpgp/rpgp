@@ -10,9 +10,15 @@ fn main() {
     let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 
     let target_path = PathBuf::from("target");
+    let target_triple = env::var("TARGET").unwrap();
 
-    // TODO: check for target, only needed on macOS (and iOS?)
-    let libs_priv = "-framework Security -framework Foundation";
+    // macOS or iOS
+    let libs_priv = if target_triple.contains("apple") || target_triple.contains("darwin") {
+        // needed for OsRng
+        "-framework Security -framework Foundation"
+    } else {
+        ""
+    };
 
     let pkg_config = format!(
         include_str!("pgp.pc.in"),
