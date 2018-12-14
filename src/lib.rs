@@ -100,5 +100,3 @@ pub mod de;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod ser;
-
-pub mod librpgp;

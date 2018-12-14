@@ -1,0 +1,22 @@
+[package]
+name = "pgp-ffi"
+version = "0.1.0"
+homepage = "https://github.com/dignifiedquire/rpgp"
+description = "PGP implementation in Rust"
+authors = ["dignifiedquire <dignifiedquire@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+pgp = { path = "../" }
+hex = "*"
+libc = "*"
+
+[build-dependencies]
+cbindgen = "0.6.7"
+
+[profile.release]
+debuginfo = 0
+opt-level = "s"
+panic = "abort"
+codegen-units = 1
+lto = "thin"
