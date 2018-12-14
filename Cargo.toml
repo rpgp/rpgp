@@ -9,8 +9,6 @@ repository = "https://github.com/dignifiedquire/rpgp"
 
 keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy"]
 
-[lib]
-crate-type = ["rlib", "cdylib", "staticlib"]
 
 [dependencies]
 num-bigint = { version = "0.3", features = ["rand", "i128", "u64_digit", "prime"] , package = "num-bigint-dig" }

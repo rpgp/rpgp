@@ -6,6 +6,9 @@ description = "PGP implementation in Rust"
 authors = ["dignifiedquire <dignifiedquire@users.noreply.github.com>"]
 edition = "2018"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 pgp = { path = "../" }
 hex = "*"
