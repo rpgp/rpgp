@@ -25,7 +25,7 @@ fn main() {
     );
 
     fs::create_dir_all(target_path.join("pkgconfig")).unwrap();
-    fs::File::create(target_path.join("pkgconfig").join("distinst.pc.stub"))
+    fs::File::create(target_path.join("pkgconfig").join("pgp.pc"))
         .unwrap()
         .write_all(&pkg_config.as_bytes())
         .unwrap();

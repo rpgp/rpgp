@@ -35,11 +35,13 @@ all: clean build install
 build:
 	cargo build --release
 
-install:
+install: build
 	install -d $(DESTDIR)$(PREFIX)/lib/
 	install -m 644 target/release/libpgp_ffi$(soext) $(DESTDIR)$(PREFIX)/lib/libpgp$(soext)
 	install -d $(DESTDIR)$(PREFIX)/include/
 	install -m 644 libpgp.h $(DESTDIR)$(PREFIX)/include/
+	install -d $(DESTDIR)$(PREFIX)/share/pkconfig
+	install -m 644 target/pkgconfig/pgp.pc $(DESTDIR)$(PREFIX)/include/
 
 clean:
 	rm libpgp.h
