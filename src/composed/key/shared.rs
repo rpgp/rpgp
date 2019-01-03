@@ -1,6 +1,7 @@
 use std::io;
 
 use composed::key::{SignedPublicKey, SignedSecretKey};
+use crypto::public_key::PublicKeyAlgorithm;
 use errors::Result;
 use packet;
 use ser::Serialize;
@@ -176,6 +177,13 @@ impl KeyTrait for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.key_id(),
             PublicOrSecret::Secret(k) => k.key_id(),
+        }
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        match self {
+            PublicOrSecret::Public(k) => k.algorithm(),
+            PublicOrSecret::Secret(k) => k.algorithm(),
         }
     }
 }

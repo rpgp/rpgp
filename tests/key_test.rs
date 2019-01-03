@@ -172,7 +172,7 @@ fn test_parse_openpgp_sample_rsa_private() {
 
     let pkey = key.primary_key;
     assert_eq!(pkey.version(), KeyVersion::V4);
-    assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
+    assert_eq!(pkey.algorithm(), PublicKeyAlgorithm::RSA);
 
     assert_eq!(
         pkey.secret_params().checksum,
@@ -236,7 +236,7 @@ fn test_parse_details() {
 
     let pk = key.primary_key;
     assert_eq!(pk.version(), KeyVersion::V4);
-    assert_eq!(pk.algorithm(), &PublicKeyAlgorithm::RSA);
+    assert_eq!(pk.algorithm(), PublicKeyAlgorithm::RSA);
 
     match pk.public_params() {
         PublicParams::RSA { n, e } => {

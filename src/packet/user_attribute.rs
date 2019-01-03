@@ -1,12 +1,14 @@
 use std::{fmt, io};
 
+use chrono::Utc;
+
 use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{be_u8, le_u16, rest};
 
 use errors::Result;
-use packet::PacketTrait;
+use packet::{PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket};
 use ser::Serialize;
-use types::{Tag, Version};
+use types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
 use util::{packet_length, write_packet_length};
 
 /// User Attribute Packet
@@ -51,6 +53,24 @@ impl UserAttribute {
                 1 + data.len()
             }
         }
+    }
+
+    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUserAttribute>
+    where
+        F: FnOnce() -> String,
+    {
+        let config = SignatureConfigBuilder::default()
+            .typ(SignatureType::CertGeneric)
+            .pub_alg(key.algorithm())
+            .hashed_subpackets(vec![Subpacket::SignatureCreationTime(Utc::now())])
+            .unhashed_subpackets(vec![Subpacket::Issuer(
+                key.key_id().expect("missing key id"),
+            )])
+            .build()?;
+
+        let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;
+
+        Ok(SignedUserAttribute::new(self.clone(), vec![sig]))
     }
 }
 

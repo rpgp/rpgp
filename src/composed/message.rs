@@ -566,7 +566,7 @@ mod tests {
                     )
                     .expect("failed to decrypt message")
                     .next()
-                    .expect("no mesage")
+                    .expect("no message")
                     .expect("message decryption failed");
 
                 if let Some(verify_key) = verify_key {
@@ -611,6 +611,7 @@ mod tests {
             }
             _ => {
                 // TODO: some other checks?
+                panic!("this test should not have anything else?");
             }
         }
 

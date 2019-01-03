@@ -195,6 +195,12 @@ impl From<SignatureError> for Error {
     }
 }
 
+impl From<String> for Error {
+    fn from(err: String) -> Error {
+        Error::Message(err)
+    }
+}
+
 #[macro_export]
 macro_rules! unimplemented_err {
     ($e:expr) => {

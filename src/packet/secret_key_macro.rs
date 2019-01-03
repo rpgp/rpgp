@@ -1,10 +1,10 @@
 #[macro_export]
 macro_rules! impl_secret_key {
     ($name:ident, $tag:expr, $details:ident) => {
-        #[derive(Debug, PartialEq, Eq)]
+        #[derive(Debug, PartialEq, Eq, Clone)]
         pub struct $name {
-            details: $crate::packet::$details,
-            secret_params: $crate::types::EncryptedSecretParams,
+            pub(crate) details: $crate::packet::$details,
+            pub(crate) secret_params: $crate::types::EncryptedSecretParams,
         }
 
         impl $name {
@@ -31,10 +31,6 @@ macro_rules! impl_secret_key {
 
             pub fn version(&self) -> $crate::types::KeyVersion {
                 self.details.version()
-            }
-
-            pub fn algorithm(&self) -> &$crate::crypto::public_key::PublicKeyAlgorithm {
-                &self.details.algorithm()
             }
 
             pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
@@ -116,7 +112,7 @@ macro_rules! impl_secret_key {
                 use $crate::crypto::ecc_curve::ECCCurve;
                 use $crate::crypto::public_key::{PublicKeyAlgorithm, PublicParams};
                 use $crate::packet::secret_key_parser::{ecc_secret_params, rsa_secret_params};
-                use $crate::types::{ECDHSecretKey, EdDSASecretKey, SecretKeyRepr};
+                use $crate::types::{ECDHSecretKey, EdDSASecretKey, KeyTrait, SecretKeyRepr};
 
                 match self.algorithm() {
                     PublicKeyAlgorithm::RSA
@@ -225,6 +221,37 @@ macro_rules! impl_secret_key {
 
                 Ok(())
             }
+
+            pub fn sign<F>(
+                &self,
+                key: &impl $crate::types::SecretKeyTrait,
+                key_pw: F,
+            ) -> $crate::errors::Result<$crate::packet::Signature>
+            where
+                F: FnOnce() -> String,
+            {
+                let mut config = $crate::packet::SignatureConfigBuilder::default();
+                match $tag {
+                    $crate::types::Tag::SecretKey => {
+                        config.typ($crate::packet::SignatureType::KeyBinding);
+                    }
+                    $crate::types::Tag::SecretSubkey => {
+                        config.typ($crate::packet::SignatureType::SubkeyBinding);
+                    }
+                    _ => panic!("invalid tag"),
+                };
+
+                config
+                    .pub_alg(key.algorithm())
+                    .hashed_subpackets(vec![$crate::packet::Subpacket::SignatureCreationTime(
+                        chrono::Utc::now(),
+                    )])
+                    .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(
+                        key.key_id().expect("missing key id"),
+                    )])
+                    .build()?
+                    .sign_key(key, key_pw, &self)
+            }
         }
 
         impl $crate::types::SecretKeyTrait for $name {
@@ -241,6 +268,49 @@ macro_rules! impl_secret_key {
                 }?;
 
                 work(&decrypted)
+            }
+
+            fn create_signature<F>(
+                &self,
+                key_pw: F,
+                hash: $crate::crypto::hash::HashAlgorithm,
+                data: &[u8],
+            ) -> $crate::errors::Result<Vec<Vec<u8>>>
+            where
+                F: FnOnce() -> String,
+            {
+                use $crate::crypto::ecc_curve::ECCCurve;
+                use $crate::crypto::public_key::PublicParams;
+                use $crate::types::SecretKeyRepr;
+
+                info!("signing data: {}", hex::encode(&data));
+
+                let mut signature: Option<Vec<Vec<u8>>> = None;
+                self.unlock(key_pw, |priv_key| {
+                    info!("unlocked key");
+                    let sig = match *priv_key {
+                        SecretKeyRepr::RSA(ref priv_key) => {
+                            $crate::crypto::signature::sign_rsa(priv_key, hash, data)
+                        }
+                        SecretKeyRepr::DSA => unimplemented_err!(" sign DSA"),
+                        SecretKeyRepr::ECDSA => unimplemented_err!("sign ECDSA"),
+                        SecretKeyRepr::ECDH(_) => unimplemented_err!("sign ECDH"),
+                        SecretKeyRepr::EdDSA(ref priv_key) => match self.public_params() {
+                            PublicParams::EdDSA { ref curve, ref q } => match *curve {
+                                ECCCurve::Ed25519 => {
+                                    $crate::crypto::signature::sign_eddsa(q, priv_key, hash, data)
+                                }
+                                _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
+                            },
+                            _ => unreachable!("inconsistent key state"),
+                        },
+                    }?;
+
+                    signature = Some(sig);
+                    Ok(())
+                })?;
+
+                signature.ok_or_else(|| unreachable!())
             }
         }
 
@@ -290,7 +360,7 @@ macro_rules! impl_secret_key {
                         packet.extend_from_slice(&time_buf);
 
                         // A one-octet number denoting the public-key algorithm of this key.
-                        packet.push(*self.algorithm() as u8);
+                        packet.push(self.algorithm() as u8);
 
                         // A series of multiprecision integers comprising the key material.
                         match &self.public_params() {
@@ -448,6 +518,10 @@ macro_rules! impl_secret_key {
                         _ => None,
                     },
                 }
+            }
+
+            fn algorithm(&self) -> $crate::crypto::public_key::PublicKeyAlgorithm {
+                self.details.algorithm()
             }
         }
 

@@ -19,7 +19,7 @@ impl SignedUser {
                 if !sig.is_certificate() {
                     warn!(
                         "ignoring unexpected signature {:?} after User ID packet",
-                        sig.typ
+                        sig.typ()
                     );
                     false
                 } else {
@@ -69,7 +69,7 @@ impl SignedUserAttribute {
                 if !sig.is_certificate() {
                     warn!(
                         "ignoring unexpected signature {:?} after User Attribute packet",
-                        sig.typ
+                        sig.typ()
                     );
                     false
                 } else {

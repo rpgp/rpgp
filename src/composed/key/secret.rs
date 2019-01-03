@@ -1,6 +1,8 @@
 use std::io;
 
 use composed::key::{SignedKeyDetails, SignedPublicSubKey};
+use crypto::hash::HashAlgorithm;
+use crypto::public_key::PublicKeyAlgorithm;
 use errors::Result;
 use generic_array::typenum::U64;
 use line_writer::{LineBreak, LineWriter};
@@ -103,6 +105,7 @@ impl SignedSecretKey {
         writer.write_all(&b"-----BEGIN PGP PRIVATE KEY BLOCK-----\n"[..])?;
 
         // TODO: headers
+        writer.write_all(&b"\n"[..])?;
 
         // write the base64 encoded content
         {
@@ -140,6 +143,10 @@ impl KeyTrait for SignedSecretKey {
     fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.primary_key.algorithm()
+    }
 }
 
 impl Serialize for SignedSecretKey {
@@ -166,6 +173,28 @@ impl SecretKeyTrait for SignedSecretKey {
     {
         self.primary_key.unlock(pw, work)
     }
+
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<Vec<Vec<u8>>>
+    where
+        F: FnOnce() -> String,
+    {
+        self.primary_key.create_signature(key_pw, hash, data)
+    }
+}
+
+impl PublicKeyTrait for SignedSecretKey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+        self.primary_key.verify_signature(hash, data, sig)
+    }
+
+    fn to_writer_old(&self, _writer: &mut impl io::Write) -> Result<()> {
+        unimplemented!("")
+    }
 }
 
 /// Represents a composed secret PGP SubKey.
@@ -180,12 +209,12 @@ impl SignedSecretSubKey {
         let signatures = signatures
             .into_iter()
             .filter(|sig| {
-                if sig.typ != SignatureType::SubkeyBinding
-                    && sig.typ != SignatureType::SubkeyRevocation
+                if sig.typ() != SignatureType::SubkeyBinding
+                    && sig.typ() != SignatureType::SubkeyRevocation
                 {
                     warn!(
                         "ignoring unexpected signature {:?} after Subkey packet",
-                        sig.typ
+                        sig.typ()
                     );
                     false
                 } else {
@@ -218,6 +247,10 @@ impl KeyTrait for SignedSecretSubKey {
     fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.key.algorithm()
+    }
 }
 
 impl Serialize for SignedSecretSubKey {
@@ -238,5 +271,27 @@ impl SecretKeyTrait for SignedSecretSubKey {
         G: FnOnce(&SecretKeyRepr) -> Result<()>,
     {
         self.key.unlock(pw, work)
+    }
+
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<Vec<Vec<u8>>>
+    where
+        F: FnOnce() -> String,
+    {
+        self.key.create_signature(key_pw, hash, data)
+    }
+}
+
+impl PublicKeyTrait for SignedSecretSubKey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+        self.key.verify_signature(hash, data, sig)
+    }
+
+    fn to_writer_old(&self, _writer: &mut impl io::Write) -> Result<()> {
+        unimplemented!("")
     }
 }

@@ -30,6 +30,12 @@ pub enum HashAlgorithm {
     Private10 = 110,
 }
 
+impl Default for HashAlgorithm {
+    fn default() -> Self {
+        HashAlgorithm::SHA512
+    }
+}
+
 impl TryInto<Hashes> for HashAlgorithm {
     type Err = Error;
 

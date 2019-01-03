@@ -1,9 +1,11 @@
 use std::{fmt, io, str};
 
+use chrono::Utc;
+
 use errors::Result;
-use packet::PacketTrait;
+use packet::{PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket};
 use ser::Serialize;
-use types::{Tag, Version};
+use types::{SecretKeyTrait, SignedUser, Tag, Version};
 use util::{read_string, write_string};
 
 /// User ID Packet
@@ -31,6 +33,24 @@ impl UserId {
 
     pub fn id(&self) -> &str {
         self.id.as_str()
+    }
+
+    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUser>
+    where
+        F: FnOnce() -> String,
+    {
+        let config = SignatureConfigBuilder::default()
+            .typ(SignatureType::CertGeneric)
+            .pub_alg(key.algorithm())
+            .hashed_subpackets(vec![Subpacket::SignatureCreationTime(Utc::now())])
+            .unhashed_subpackets(vec![Subpacket::Issuer(
+                key.key_id().expect("missing key id"),
+            )])
+            .build()?;
+
+        let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;
+
+        Ok(SignedUser::new(self.clone(), vec![sig]))
     }
 }
 

@@ -1,6 +1,7 @@
 use std::io;
 
 use composed::key::SignedKeyDetails;
+use crypto::public_key::PublicKeyAlgorithm;
 use errors::Result;
 use generic_array::typenum::U64;
 use line_writer::{LineBreak, LineWriter};
@@ -108,6 +109,10 @@ impl KeyTrait for SignedPublicKey {
     fn key_id(&self) -> Option<KeyId> {
         self.primary_key.key_id()
     }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.primary_key.algorithm()
+    }
 }
 
 impl Serialize for SignedPublicKey {
@@ -134,12 +139,12 @@ impl SignedPublicSubKey {
         let signatures = signatures
             .into_iter()
             .filter(|sig| {
-                if sig.typ != SignatureType::SubkeyBinding
-                    && sig.typ != SignatureType::SubkeyRevocation
+                if sig.typ() != SignatureType::SubkeyBinding
+                    && sig.typ() != SignatureType::SubkeyRevocation
                 {
                     warn!(
                         "ignoring unexpected signature {:?} after Subkey packet",
-                        sig.typ
+                        sig.typ()
                     );
                     false
                 } else {
@@ -170,6 +175,10 @@ impl KeyTrait for SignedPublicSubKey {
     /// Returns the Key ID of the key.
     fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.key.algorithm()
     }
 }
 

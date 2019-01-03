@@ -78,6 +78,12 @@ pub enum Version {
     New = 1,
 }
 
+impl Default for Version {
+    fn default() -> Self {
+        Version::New
+    }
+}
+
 impl Version {
     pub fn write_header(self, writer: &mut impl io::Write, tag: u8, len: usize) -> Result<()> {
         info!("write_header {:?} {} {}", self, tag, len);
@@ -100,8 +106,10 @@ impl Version {
                 if len < 192 {
                     writer.write_all(&[len as u8])?;
                 } else if len < 8384 {
-                    writer
-                        .write_all(&[((len - 192) / 256 + 192) as u8, ((len - 192) % 256) as u8])?;
+                    writer.write_all(&[
+                        (((len - 192) >> 8) + 192) as u8,
+                        ((len - 192) & 0xFF) as u8,
+                    ])?;
                 } else {
                     writer.write_all(&[255])?;
                     writer.write_u32::<BigEndian>(len as u32)?;
@@ -120,6 +128,12 @@ pub enum KeyVersion {
     V2 = 2,
     V3 = 3,
     V4 = 4,
+}
+
+impl Default for KeyVersion {
+    fn default() -> Self {
+        KeyVersion::V4
+    }
 }
 
 #[cfg(test)]
