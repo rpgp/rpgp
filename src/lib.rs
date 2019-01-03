@@ -56,6 +56,8 @@ extern crate buf_redux;
 extern crate hex;
 extern crate rand;
 extern crate try_from;
+#[macro_use]
+extern crate derive_builder;
 
 #[cfg(test)]
 extern crate regex;
@@ -90,6 +92,7 @@ pub use composed::key::*;
 pub mod composed;
 pub mod crypto;
 pub mod de;
+pub mod key;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod ser;

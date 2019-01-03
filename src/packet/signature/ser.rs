@@ -4,14 +4,15 @@ use byteorder::{BigEndian, WriteBytesExt};
 
 use errors::Result;
 use packet::signature::types::*;
+use packet::signature::SignatureConfig;
 use ser::Serialize;
 use util::{write_mpi, write_packet_length, write_string};
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[self.version as u8])?;
+        writer.write_all(&[self.config.version as u8])?;
 
-        match self.version {
+        match self.config.version {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
             SignatureVersion::V4 | SignatureVersion::V5 => self.to_writer_v4(writer),
         }
@@ -212,7 +213,7 @@ impl Serialize for Subpacket {
     }
 }
 
-impl Signature {
+impl SignatureConfig {
     /// Serializes a v2 or v3 signature.
     fn to_writer_v3<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[
@@ -240,15 +241,6 @@ impl Signature {
             // hash algorithm
             self.hash_alg as u8,
         ])?;
-
-        // signed hash value
-        writer.write_all(&self.signed_hash_value)?;
-
-        // the actual signature
-        for val in &self.signature {
-            info!("writing: {}", hex::encode(val));
-            write_mpi(val, writer)?;
-        }
 
         Ok(())
     }
@@ -281,6 +273,31 @@ impl Signature {
 
         writer.write_u16::<BigEndian>(unhashed_subpackets.len() as u16)?;
         writer.write_all(&unhashed_subpackets)?;
+
+        Ok(())
+    }
+}
+
+impl Signature {
+    /// Serializes a v2 or v3 signature.
+    fn to_writer_v3<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.config.to_writer_v3(writer)?;
+
+        // signed hash value
+        writer.write_all(&self.signed_hash_value)?;
+
+        // the actual signature
+        for val in &self.signature {
+            info!("writing: {}", hex::encode(val));
+            write_mpi(val, writer)?;
+        }
+
+        Ok(())
+    }
+
+    /// Serializes a v4 or v5 signature.
+    fn to_writer_v4<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.config.to_writer_v4(writer)?;
 
         // signed hash value
         writer.write_all(&self.signed_hash_value)?;

@@ -5,10 +5,11 @@ use chrono::{DateTime, Utc};
 use num_traits::FromPrimitive;
 
 use crypto::aead::AeadAlgorithm;
-use crypto::hash::{HashAlgorithm, Hasher};
+use crypto::hash::HashAlgorithm;
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
+use packet::signature::SignatureConfig;
 use packet::PacketTrait;
 use ser::Serialize;
 use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Tag, Version};
@@ -18,19 +19,11 @@ use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Tag, Version};
 #[derive(Clone, PartialEq, Eq)]
 pub struct Signature {
     packet_version: Version,
-    pub version: SignatureVersion,
-    pub typ: SignatureType,
-    pub pub_alg: PublicKeyAlgorithm,
-    pub hash_alg: HashAlgorithm,
+
+    pub config: SignatureConfig,
+
     pub signed_hash_value: [u8; 2],
     pub signature: Vec<Vec<u8>>,
-
-    // only set on V2 and V3 keys
-    pub created: Option<DateTime<Utc>>,
-    pub issuer: Option<KeyId>,
-
-    pub unhashed_subpackets: Vec<Subpacket>,
-    pub hashed_subpackets: Vec<Subpacket>,
 }
 
 impl Signature {
@@ -48,22 +41,35 @@ impl Signature {
     ) -> Self {
         Signature {
             packet_version,
-            version,
-            typ,
-            pub_alg,
-            hash_alg,
+            config: SignatureConfig::new_v4(
+                version,
+                typ,
+                pub_alg,
+                hash_alg,
+                hashed_subpackets,
+                unhashed_subpackets,
+            ),
             signed_hash_value,
             signature,
-            hashed_subpackets,
-            unhashed_subpackets,
-            issuer: None,
-            created: None,
+        }
+    }
+
+    pub fn from_config(
+        config: SignatureConfig,
+        signed_hash_value: [u8; 2],
+        signature: Vec<Vec<u8>>,
+    ) -> Self {
+        Signature {
+            packet_version: Default::default(),
+            config,
+            signed_hash_value,
+            signature,
         }
     }
 
     /// Returns what kind of signature this is.
     pub fn typ(&self) -> SignatureType {
-        self.typ
+        self.config.typ()
     }
 
     /// Verify this signature.
@@ -80,11 +86,11 @@ impl Signature {
             }
         }
 
-        let mut hasher = self.hash_alg.new_hasher()?;
+        let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        self.hash_data_to_sign(&mut *hasher, data)?;
-        let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        self.config.hash_data_to_sign(&mut *hasher, data)?;
+        let len = self.config.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.config.trailer(len));
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -93,7 +99,7 @@ impl Signature {
             "invalid signed hash value"
         );
 
-        key.verify_signature(self.hash_alg, hash, &self.signature)
+        key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a certificate siganture type.
@@ -117,7 +123,7 @@ impl Signature {
             }
         }
 
-        let mut hasher = self.hash_alg.new_hasher()?;
+        let mut hasher = self.config.hash_alg.new_hasher()?;
         let mut key_buf = Vec::new();
         key.to_writer_old(&mut key_buf)?;
 
@@ -133,7 +139,7 @@ impl Signature {
 
         hasher.update(&key_buf);
 
-        match self.version {
+        match self.config.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
                 // Nothing to do
             }
@@ -156,8 +162,8 @@ impl Signature {
         // the packet content
         hasher.update(&packet_buf);
 
-        let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        let len = self.config.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.config.trailer(len));
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -166,7 +172,7 @@ impl Signature {
             "invalid signed hash value"
         );
 
-        key.verify_signature(self.hash_alg, hash, &self.signature)
+        key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a key binding.
@@ -192,7 +198,7 @@ impl Signature {
             }
         }
 
-        let mut hasher = self.hash_alg.new_hasher()?;
+        let mut hasher = self.config.hash_alg.new_hasher()?;
 
         // Signing Key
         {
@@ -209,8 +215,8 @@ impl Signature {
             hasher.update(&key_buf);
         }
 
-        let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        let len = self.config.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.config.trailer(len));
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -219,10 +225,10 @@ impl Signature {
             "invalid signed hash value"
         );
 
-        signing_key.verify_signature(self.hash_alg, hash, &self.signature)
+        signing_key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
-    /// Verifies a direct key signature or a revocatio.
+    /// Verifies a direct key signature or a revocation.
     pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
         info!("verifying key (revocation): {:#?} - {:#?}", self, key);
 
@@ -238,7 +244,7 @@ impl Signature {
             }
         }
 
-        let mut hasher = self.hash_alg.new_hasher()?;
+        let mut hasher = self.config.hash_alg.new_hasher()?;
 
         {
             let mut key_buf = Vec::new();
@@ -247,8 +253,8 @@ impl Signature {
             hasher.update(&key_buf);
         }
 
-        let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        let len = self.config.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.config.trailer(len));
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -257,115 +263,17 @@ impl Signature {
             "invalid signed hash value"
         );
 
-        key.verify_signature(self.hash_alg, hash, &self.signature)
-    }
-
-    /// Calcluate the serialized version of this packet, but only the part relevant for hashing.
-    fn hash_signature_data(&self, hasher: &mut dyn Hasher) -> Result<usize> {
-        match self.version {
-            SignatureVersion::V2 | SignatureVersion::V3 => {
-                let mut buf = [0u8; 5];
-                buf[0] = self.typ as u8;
-                BigEndian::write_u32(
-                    &mut buf[1..],
-                    self.created
-                        .expect("must exist for a v3 signature")
-                        .timestamp() as u32,
-                );
-
-                hasher.update(&buf);
-
-                // no trailer
-                Ok(0)
-            }
-            SignatureVersion::V4 | SignatureVersion::V5 => {
-                // TODO: validate this is the right thing to do for v5
-                // TODO: reduce duplication with serialization code
-
-                let mut res = vec![
-                    // version
-                    self.version as u8,
-                    // type
-                    self.typ as u8,
-                    // public algorithm
-                    self.pub_alg as u8,
-                    // hash algorithm
-                    self.hash_alg as u8,
-                    // will be filled with the length
-                    0u8,
-                    0u8,
-                ];
-
-                // hashed subpackets
-                let mut hashed_subpackets = Vec::new();
-                for packet in &self.hashed_subpackets {
-                    packet.to_writer(&mut hashed_subpackets)?;
-                }
-
-                BigEndian::write_u16(&mut res[4..6], hashed_subpackets.len() as u16);
-                res.extend(hashed_subpackets);
-
-                hasher.update(&res);
-
-                Ok(res.len())
-            }
-        }
-    }
-
-    fn hash_data_to_sign(&self, hasher: &mut dyn Hasher, data: &[u8]) -> Result<usize> {
-        match self.typ {
-            SignatureType::Binary => {
-                hasher.update(data);
-                Ok(data.len())
-            }
-            SignatureType::Text => unimplemented_err!("Text"),
-            SignatureType::Standalone => unimplemented_err!("Standalone"),
-            SignatureType::CertGeneric => unimplemented_err!("CertGeneric"),
-            SignatureType::CertPersona => unimplemented_err!("CertPersona"),
-            SignatureType::CertCasual => unimplemented_err!("CertCasual"),
-            SignatureType::CertPositive => unimplemented_err!("CertPositive"),
-            SignatureType::SubkeyBinding => unimplemented_err!("SubkeyBinding"),
-            SignatureType::KeyBinding => unimplemented_err!("KeyBinding"),
-            SignatureType::Key => unimplemented_err!("Key"),
-            SignatureType::KeyRevocation => unimplemented_err!("KeyRevocation"),
-            SignatureType::CertRevocation => unimplemented_err!("CertRevocation"),
-            SignatureType::Timestamp => unimplemented_err!("Timestamp"),
-            SignatureType::ThirdParty => unimplemented_err!("ThirdParty"),
-            SignatureType::SubkeyRevocation => unimplemented_err!("SubkeyRevocation"),
-        }
-    }
-
-    fn trailer(&self, len: usize) -> Vec<u8> {
-        match self.version {
-            SignatureVersion::V2 | SignatureVersion::V3 => {
-                // Nothing to do
-                Vec::new()
-            }
-            SignatureVersion::V4 | SignatureVersion::V5 => {
-                let mut trailer = vec![0x04, 0xFF, 0, 0, 0, 0];
-                BigEndian::write_u32(&mut trailer[2..], len as u32);
-                trailer
-            }
-        }
+        key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
     /// Returns if the signature is a certificate or not.
     pub fn is_certificate(&self) -> bool {
-        match self.typ {
-            SignatureType::CertGeneric
-            | SignatureType::CertPersona
-            | SignatureType::CertCasual
-            | SignatureType::CertPositive
-            | SignatureType::CertRevocation => true,
-            _ => false,
-        }
+        self.config.is_certificate()
     }
 
     /// Returns an iterator over all subpackets of this signature.
     fn subpackets(&self) -> impl Iterator<Item = &Subpacket> {
-        self.hashed_subpackets
-            .iter()
-            .chain(self.unhashed_subpackets.iter())
+        self.config.subpackets()
     }
 
     pub fn key_expiration_time(&self) -> Option<&DateTime<Utc>> {
@@ -383,25 +291,11 @@ impl Signature {
     }
 
     pub fn created(&self) -> Option<&DateTime<Utc>> {
-        if self.created.is_some() {
-            return self.created.as_ref();
-        }
-
-        self.subpackets().find_map(|p| match p {
-            Subpacket::SignatureCreationTime(d) => Some(d),
-            _ => None,
-        })
+        self.config.created()
     }
 
     pub fn issuer(&self) -> Option<&KeyId> {
-        if self.issuer.is_some() {
-            return self.issuer.as_ref();
-        }
-
-        self.subpackets().find_map(|p| match p {
-            Subpacket::Issuer(id) => Some(id),
-            _ => None,
-        })
+        self.config.issuer()
     }
 
     pub fn preferred_symmetric_algs(&self) -> &[SymmetricKeyAlgorithm] {
@@ -566,6 +460,12 @@ pub enum SignatureVersion {
     V3 = 3,
     V4 = 4,
     V5 = 5,
+}
+
+impl Default for SignatureVersion {
+    fn default() -> Self {
+        SignatureVersion::V4
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
@@ -865,16 +765,9 @@ impl fmt::Debug for Signature {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Signature")
             .field("packet_version", &self.packet_version)
-            .field("version", &self.version)
-            .field("typ", &self.typ)
-            .field("pub_alg", &self.pub_alg)
-            .field("hash_alg", &self.hash_alg)
+            .field("config", &self.config)
             .field("signed_hash_value", &hex::encode(&self.signed_hash_value))
             .field("signature", &hex::encode(&self.signature.concat()))
-            .field("created", &self.created)
-            .field("issuer", &self.issuer)
-            .field("unhashed_subpackets", &self.unhashed_subpackets)
-            .field("hashed_subpackets", &self.hashed_subpackets)
             .finish()
     }
 }

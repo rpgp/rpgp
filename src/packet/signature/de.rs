@@ -344,8 +344,8 @@ named_args!(v3_parser(packet_version: Version, version: SignatureVersion) <Signa
             vec![],
         );
 
-        s.created = Some(created);
-        s.issuer = Some(issuer);
+        s.config.created = Some(created);
+        s.config.issuer = Some(issuer);
 
         s
     })

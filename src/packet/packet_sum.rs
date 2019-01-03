@@ -144,6 +144,12 @@ pub fn write_packet(writer: &mut impl io::Write, packet: &impl PacketTrait) -> R
     let packet_version = packet.packet_version();
     let mut buf = Vec::new();
     packet.to_writer(&mut buf)?;
+    info!(
+        "write_packet {:?} {:?} (len: {})",
+        &packet_version,
+        packet.tag(),
+        buf.len()
+    );
 
     // header
     packet_version.write_header(writer, packet.tag() as u8, buf.len())?;

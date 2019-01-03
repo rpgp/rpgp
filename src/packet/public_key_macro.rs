@@ -1,14 +1,14 @@
 #[macro_export]
 macro_rules! impl_public_key {
     ($name:ident, $tag:expr) => {
-        #[derive(Debug, PartialEq, Eq)]
+        #[derive(Debug, PartialEq, Eq, Clone)]
         pub struct $name {
-            packet_version: $crate::types::Version,
-            version: $crate::types::KeyVersion,
-            algorithm: $crate::crypto::public_key::PublicKeyAlgorithm,
-            created_at: chrono::DateTime<chrono::Utc>,
-            expiration: Option<u16>,
-            public_params: $crate::crypto::public_key::PublicParams,
+            pub(crate) packet_version: $crate::types::Version,
+            pub(crate) version: $crate::types::KeyVersion,
+            pub(crate) algorithm: $crate::crypto::public_key::PublicKeyAlgorithm,
+            pub(crate) created_at: chrono::DateTime<chrono::Utc>,
+            pub(crate) expiration: Option<u16>,
+            pub(crate) public_params: $crate::crypto::public_key::PublicParams,
         }
 
         impl $name {
@@ -31,10 +31,6 @@ macro_rules! impl_public_key {
 
             pub fn version(&self) -> $crate::types::KeyVersion {
                 self.version
-            }
-
-            pub fn algorithm(&self) -> &$crate::crypto::public_key::PublicKeyAlgorithm {
-                &self.algorithm
             }
 
             pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
@@ -84,6 +80,37 @@ macro_rules! impl_public_key {
 
                 Ok(())
             }
+
+            pub fn sign<F>(
+                &self,
+                key: &impl $crate::types::SecretKeyTrait,
+                key_pw: F,
+            ) -> $crate::errors::Result<$crate::packet::Signature>
+            where
+                F: FnOnce() -> String,
+            {
+                let mut config = $crate::packet::SignatureConfigBuilder::default();
+                match $tag {
+                    $crate::types::Tag::PublicKey => {
+                        config.typ($crate::packet::SignatureType::KeyBinding);
+                    }
+                    $crate::types::Tag::PublicSubkey => {
+                        config.typ($crate::packet::SignatureType::SubkeyBinding);
+                    }
+                    _ => panic!("invalid tag"),
+                };
+
+                config
+                    .pub_alg(key.algorithm())
+                    .hashed_subpackets(vec![$crate::packet::Subpacket::SignatureCreationTime(
+                        chrono::Utc::now(),
+                    )])
+                    .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(
+                        key.key_id().expect("missing key id"),
+                    )])
+                    .build()?
+                    .sign_key(key, key_pw, &self)
+            }
         }
 
         impl $crate::ser::Serialize for $name {
@@ -132,7 +159,7 @@ macro_rules! impl_public_key {
                         packet.extend_from_slice(&time_buf);
 
                         // A one-octet number denoting the public-key algorithm of this key.
-                        packet.push(*self.algorithm() as u8);
+                        packet.push(self.algorithm() as u8);
 
                         // A series of multiprecision integers comprising the key material.
                         match &self.public_params {
@@ -290,6 +317,10 @@ macro_rules! impl_public_key {
                         _ => None,
                     },
                 }
+            }
+
+            fn algorithm(&self) -> $crate::crypto::public_key::PublicKeyAlgorithm {
+                self.algorithm
             }
         }
 

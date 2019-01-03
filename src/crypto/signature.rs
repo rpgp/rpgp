@@ -5,7 +5,8 @@ use try_from::TryInto;
 use crypto::ecc_curve::ECCCurve;
 use crypto::hash::HashAlgorithm;
 use errors::Result;
-use rsa::{self, padding, RSAPublicKey};
+use rsa::{self, padding, RSAPrivateKey, RSAPublicKey};
+use types::EdDSASecretKey;
 
 /// Verify a RSA, PKCS1v15 padded signature.
 pub fn verify_rsa(
@@ -27,6 +28,14 @@ pub fn verify_rsa(
         sig,
     )
     .map_err(|err| err.into())
+}
+
+/// Sign using RSA, with PKCS1v15 padding.
+pub fn sign_rsa(key: &RSAPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
+    let sig = key.sign(padding::PaddingScheme::PKCS1v15, rsa_hash.as_ref(), digest)?;
+
+    Ok(vec![sig])
 }
 
 /// Verify an EdDSA signature.
@@ -63,4 +72,28 @@ pub fn verify_eddsa(
         }
         _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
     }
+}
+
+/// Sign using RSA, with PKCS1v15 padding.
+pub fn sign_eddsa(
+    q: &[u8],
+    secret_key: &EdDSASecretKey,
+    _hash: HashAlgorithm,
+    digest: &[u8],
+) -> Result<Vec<Vec<u8>>> {
+    ensure_eq!(q.len(), 33, "invalid Q (len)");
+    ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
+
+    let mut kp_bytes = vec![0u8; 64];
+    kp_bytes[..32].copy_from_slice(&secret_key.secret);
+    kp_bytes[32..].copy_from_slice(&q[1..]);
+    let kp = ed25519_dalek::Keypair::from_bytes(&kp_bytes)?;
+
+    let signature = kp.sign::<sha2::Sha512>(digest);
+    let bytes = signature.to_bytes();
+
+    let r = bytes[..32].to_vec();
+    let s = bytes[32..].to_vec();
+
+    Ok(vec![r, s])
 }
