@@ -20,7 +20,7 @@ use util::write_bignum_mpi;
 pub struct PublicKey {
     primary_key: packet::PublicKey,
     details: KeyDetails,
-    public_subkeys: Vec<PublicSubKey>,
+    public_subkeys: Vec<PublicSubkey>,
 }
 
 /// User facing interface to work with a secret key.
@@ -28,8 +28,8 @@ pub struct PublicKey {
 pub struct SecretKey {
     primary_key: packet::SecretKey,
     details: KeyDetails,
-    public_subkeys: Vec<PublicSubKey>,
-    secret_subkeys: Vec<SecretSubKey>,
+    public_subkeys: Vec<PublicSubkey>,
+    secret_subkeys: Vec<SecretSubkey>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -39,12 +39,12 @@ pub struct KeyDetails {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct PublicSubKey {
+pub struct PublicSubkey {
     key: packet::PublicSubkey,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct SecretSubKey {
+pub struct SecretSubkey {
     key: packet::SecretSubkey,
 }
 
@@ -91,7 +91,7 @@ impl PublicKey {
     }
 }
 
-impl PublicSubKey {
+impl PublicSubkey {
     pub fn sign<F>(
         &self,
         sec_key: &impl SecretKeyTrait,
@@ -129,7 +129,7 @@ impl SecretKey {
     }
 }
 
-impl SecretSubKey {
+impl SecretSubkey {
     pub fn sign<F>(
         &self,
         sec_key: &impl SecretKeyTrait,
@@ -149,6 +149,42 @@ impl SecretSubKey {
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct SecretKeyParams {
     key_type: KeyType,
+
+    #[builder(default)]
+    can_sign: bool,
+    #[builder(default)]
+    can_create_certificates: bool,
+    #[builder(default)]
+    can_encrypt: bool,
+
+    #[builder(default)]
+    user_ids: Vec<String>,
+    #[builder(default)]
+    user_attributes: Vec<UserAttribute>,
+    #[builder(default)]
+    passphrase: String,
+    #[builder(default = "chrono::Utc::now()")]
+    created_at: chrono::DateTime<chrono::Utc>,
+    #[builder(default)]
+    packet_version: types::Version,
+    #[builder(default)]
+    version: types::KeyVersion,
+    #[builder(default)]
+    expiration: Option<Duration>,
+
+    subkeys: Vec<SubkeyParams>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Builder)]
+pub struct SubkeyParams {
+    key_type: KeyType,
+
+    #[builder(default)]
+    can_sign: bool,
+    #[builder(default)]
+    can_create_certificates: bool,
+    #[builder(default)]
+    can_encrypt: bool,
 
     #[builder(default)]
     user_ids: Vec<String>,
@@ -192,11 +228,20 @@ impl SecretKeyParamsBuilder {
         }
         self
     }
+
+    pub fn subkey<VALUE: Into<SubkeyParams>>(&mut self, value: VALUE) -> &mut Self {
+        if let Some(ref mut subkeys) = self.subkeys {
+            subkeys.push(value.into());
+        } else {
+            self.subkeys = Some(vec![value.into()]);
+        }
+        self
+    }
 }
 
 impl SecretKeyParams {
     pub fn generate(self) -> errors::Result<SecretKey> {
-        let (public_params, secret_params) = self.key_type.generate(self.passphrase)?;
+        let (public_params, secret_params) = self.key_type.generate(&self.passphrase)?;
         let primary_key = packet::SecretKey {
             details: packet::PublicKey {
                 packet_version: self.packet_version,
@@ -219,7 +264,27 @@ impl SecretKeyParams {
                 user_attributes: self.user_attributes,
             },
             public_subkeys: Default::default(),
-            secret_subkeys: Default::default(),
+            secret_subkeys: self
+                .subkeys
+                .iter()
+                .map(|subkey| {
+                    let (public_params, secret_params) =
+                        subkey.key_type.generate(&subkey.passphrase)?;
+                    Ok(SecretSubkey {
+                        key: packet::SecretSubkey {
+                            details: packet::PublicSubkey {
+                                packet_version: subkey.packet_version,
+                                version: subkey.version,
+                                algorithm: subkey.key_type.to_alg(),
+                                created_at: subkey.created_at,
+                                expiration: subkey.expiration.map(|v| v.as_secs() as u16),
+                                public_params,
+                            },
+                            secret_params,
+                        },
+                    })
+                })
+                .collect::<errors::Result<Vec<_>>>()?,
         })
     }
 }
@@ -239,7 +304,7 @@ impl KeyType {
 
     pub fn generate(
         &self,
-        passphrase: String,
+        passphrase: &str,
     ) -> errors::Result<(PublicParams, types::EncryptedSecretParams)> {
         match self {
             KeyType::Rsa(bit_size) => {
@@ -286,8 +351,17 @@ mod tests {
 
         let key_params = SecretKeyParamsBuilder::default()
             .key_type(KeyType::Rsa(2048))
+            .can_create_certificates(true)
+            .can_sign(true)
             .user_id("Me <me@mail.com>")
             .passphrase("hello".into())
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .key_type(KeyType::Rsa(2048))
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
             .build()
             .unwrap();
 
