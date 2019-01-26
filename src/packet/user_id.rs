@@ -3,7 +3,7 @@ use std::{fmt, io, str};
 use chrono::Utc;
 
 use errors::Result;
-use packet::{PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket};
+use packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use ser::Serialize;
 use types::{SecretKeyTrait, SignedUser, Tag, Version};
 use util::{read_string, write_string};
@@ -51,6 +51,10 @@ impl UserId {
         let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;
 
         Ok(SignedUser::new(self.clone(), vec![sig]))
+    }
+
+    pub fn into_signed(self, sig: Signature) -> SignedUser {
+        SignedUser::new(self, vec![sig])
     }
 }
 

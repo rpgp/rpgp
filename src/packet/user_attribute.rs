@@ -6,7 +6,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{be_u8, le_u16, rest};
 
 use errors::Result;
-use packet::{PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket};
+use packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use ser::Serialize;
 use types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
 use util::{packet_length, write_packet_length};
@@ -71,6 +71,10 @@ impl UserAttribute {
         let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;
 
         Ok(SignedUserAttribute::new(self.clone(), vec![sig]))
+    }
+
+    pub fn into_signed(self, sig: Signature) -> SignedUserAttribute {
+        SignedUserAttribute::new(self, vec![sig])
     }
 }
 

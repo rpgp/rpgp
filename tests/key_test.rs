@@ -30,7 +30,9 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::{PublicKeyAlgorithm, PublicParams};
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::errors::Error;
-use pgp::packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId};
+use pgp::packet::{
+    KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId,
+};
 use pgp::types::{
     CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, SecretKeyRepr, SecretKeyTrait, SignedUser,
     StringToKeyType, Version,
@@ -255,7 +257,7 @@ fn test_parse_details() {
     let issuer = Subpacket::Issuer(
         KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
     );
-    let key_flags = vec![3];
+    let key_flags: Vec<u8> = KeyFlags(0x03).into();
     let p_sym_algs = vec![
         SymmetricKeyAlgorithm::AES256,
         SymmetricKeyAlgorithm::AES192,

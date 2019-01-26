@@ -47,6 +47,7 @@ buf_redux = { version = "0.8.1", default-features = false }
 try_from = "^0.3"
 rand = "0.5.5"
 derive_builder = "0.7.0"
+bitfield = "0.13.1"
 
 [dependencies.nom]
 version = "^4.0"

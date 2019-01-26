@@ -1,11 +1,10 @@
 use std::io;
 
+use armor;
 use composed::key::{SignedKeyDetails, SignedPublicSubKey};
 use crypto::hash::HashAlgorithm;
 use crypto::public_key::PublicKeyAlgorithm;
 use errors::Result;
-use generic_array::typenum::U64;
-use line_writer::{LineBreak, LineWriter};
 use packet::{self, write_packet, SignatureType};
 use ser::Serialize;
 use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait};
@@ -102,22 +101,7 @@ impl SignedSecretKey {
     }
 
     pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        writer.write_all(&b"-----BEGIN PGP PRIVATE KEY BLOCK-----\n"[..])?;
-
-        // TODO: headers
-        writer.write_all(&b"\n"[..])?;
-
-        // write the base64 encoded content
-        {
-            let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
-            let mut enc = base64::write::EncoderWriter::new(&mut line_wrapper, base64::STANDARD);
-            self.to_writer(&mut enc)?;
-        }
-        // TODO: CRC24
-
-        writer.write_all(&b"\n-----END PGP PRIVATE KEY BLOCK-----\n"[..])?;
-
-        Ok(())
+        armor::write(self, "PRIVATE KEY", writer)
     }
 
     pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
