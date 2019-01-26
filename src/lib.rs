@@ -58,6 +58,8 @@ extern crate rand;
 extern crate try_from;
 #[macro_use]
 extern crate derive_builder;
+#[macro_use]
+extern crate bitfield;
 
 #[cfg(test)]
 extern crate regex;

@@ -219,6 +219,7 @@ mod tests {
 
             let mut expected_buf = vec![0u8; buf.len()];
             assert_eq!(bytes.read(&mut expected_buf).unwrap(), buf.len());
+            // println!("\n-- packet: {} expected size: {}", i, expected_buf.len());
 
             if buf != expected_buf {
                 assert_eq!(hex::encode(buf), hex::encode(expected_buf));

@@ -334,13 +334,13 @@ impl Signature {
             .unwrap_or_else(|| &[][..])
     }
 
-    pub fn key_flags(&self) -> &[u8] {
+    pub fn key_flags(&self) -> KeyFlags {
         self.subpackets()
             .find_map(|p| match p {
-                Subpacket::KeyFlags(d) => Some(&d[..]),
+                Subpacket::KeyFlags(d) => Some(d[..].into()),
                 _ => None,
             })
-            .unwrap_or_else(|| &[][..])
+            .unwrap_or_default()
     }
 
     pub fn features(&self) -> &[u8] {
@@ -719,6 +719,36 @@ pub enum Subpacket {
     SignatureTarget(PublicKeyAlgorithm, HashAlgorithm, Vec<u8>),
 }
 
+bitfield! {
+    #[derive(Default, PartialEq, Eq, Copy, Clone)]
+    pub struct KeyFlags(u8);
+    impl Debug;
+
+    pub certify, set_certify: 0;
+    pub sign, set_sign: 1;
+    pub encrypt_comms, set_encrypt_comms: 2;
+    pub encrypt_storage, set_encrypt_storage: 3;
+    pub shared, set_shared: 4;
+    pub authentication, set_authentication: 5;
+    pub group, set_group: 7;
+}
+
+impl<'a> From<&'a [u8]> for KeyFlags {
+    fn from(other: &'a [u8]) -> Self {
+        if other.len() == 0 {
+            Default::default()
+        } else {
+            KeyFlags(other[0])
+        }
+    }
+}
+
+impl From<KeyFlags> for Vec<u8> {
+    fn from(flags: KeyFlags) -> Self {
+        vec![flags.0]
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Notation {
     pub readable: bool,
@@ -742,25 +772,6 @@ pub enum RevocationCode {
     CertUserIdInvalid = 32,
 }
 
-#[derive(FromPrimitive)]
-/// Available key flags
-pub enum KeyFlag {
-    /// This key may be used to certify other keys.
-    CertifyKeys = 0x01,
-    /// This key may be used to sign data.
-    SignData = 0x02,
-    /// This key may be used to encrypt communications.
-    EncryptCommunication = 0x04,
-    /// This key may be used to encrypt storage.
-    EncryptStorage = 0x08,
-    /// The private component of this key may have been split by a secret-sharing mechanism.
-    SplitPrivateKey = 0x10,
-    /// This key may be used for authentication.
-    Authentication = 0x20,
-    /// The private component of this key may be in the possession of more than one person.
-    SharedPrivateKey = 0x80,
-}
-
 impl fmt::Debug for Signature {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Signature")
@@ -779,5 +790,45 @@ impl PacketTrait for Signature {
 
     fn tag(&self) -> Tag {
         Tag::Signature
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keyflags() {
+        let flags: KeyFlags = Default::default();
+        assert_eq!(flags.0, 0x00);
+
+        let mut flags = KeyFlags::default();
+        flags.set_certify(true);
+        assert!(flags.certify());
+        assert_eq!(flags.0, 0x01);
+
+        let mut flags = KeyFlags::default();
+        flags.set_sign(true);
+        assert_eq!(flags.0, 0x02);
+
+        let mut flags = KeyFlags::default();
+        flags.set_encrypt_comms(true);
+        assert_eq!(flags.0, 0x04);
+
+        let mut flags = KeyFlags::default();
+        flags.set_encrypt_storage(true);
+        assert_eq!(flags.0, 0x08);
+
+        let mut flags = KeyFlags::default();
+        flags.set_shared(true);
+        assert_eq!(flags.0, 0x10);
+
+        let mut flags = KeyFlags::default();
+        flags.set_authentication(true);
+        assert_eq!(flags.0, 0x20);
+
+        let mut flags = KeyFlags::default();
+        flags.set_group(true);
+        assert_eq!(flags.0, 0x80);
     }
 }

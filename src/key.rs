@@ -1,18 +1,22 @@
-use std::time::Duration;
-
 use chrono;
 use rand::OsRng;
 use rsa::math::ModInverse;
 use rsa::{self, PublicKey as PublicKeyTrait};
+use std::time::Duration;
 
 use composed::{
     SignedKeyDetails, SignedPublicKey, SignedPublicSubKey, SignedSecretKey, SignedSecretSubKey,
 };
 use crypto;
+use crypto::hash::HashAlgorithm;
 use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
+use crypto::sym::SymmetricKeyAlgorithm;
 use errors;
-use packet::{self, UserAttribute, UserId};
-use types::{self, SecretKeyTrait};
+use packet::{
+    self, KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, UserAttribute,
+    UserId,
+};
+use types::{self, CompressionAlgorithm, KeyTrait, SecretKeyTrait};
 use util::write_bignum_mpi;
 
 /// User facing interface to work with a public key.
@@ -34,114 +38,220 @@ pub struct SecretKey {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct KeyDetails {
+    primary_user_id: UserId,
     user_ids: Vec<UserId>,
     user_attributes: Vec<UserAttribute>,
+    keyflags: KeyFlags,
+    preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
+    preferred_hash_algorithms: Vec<HashAlgorithm>,
+    preferred_compression_algorithms: Vec<CompressionAlgorithm>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct PublicSubkey {
     key: packet::PublicSubkey,
+    keyflags: KeyFlags,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct SecretSubkey {
     key: packet::SecretSubkey,
+    keyflags: KeyFlags,
 }
 
 impl KeyDetails {
-    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> errors::Result<SignedKeyDetails>
+    pub fn sign<F>(self, key: &impl SecretKeyTrait, key_pw: F) -> errors::Result<SignedKeyDetails>
     where
         F: (FnOnce() -> String) + Clone,
     {
+        let keyflags: Vec<u8> = self.keyflags.into();
+        let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
+        let preferred_hash_algorithms = self.preferred_hash_algorithms;
+        let preferred_compression_algorithms = self.preferred_compression_algorithms;
+
+        let mut users = vec![];
+
+        // primary user id
+        {
+            let id = self.primary_user_id;
+            let config = SignatureConfigBuilder::default()
+                .typ(SignatureType::CertGeneric)
+                .pub_alg(key.algorithm())
+                .hashed_subpackets(vec![
+                    Subpacket::IsPrimary(true),
+                    Subpacket::SignatureCreationTime(chrono::Utc::now()),
+                    Subpacket::KeyFlags(keyflags.clone()),
+                    Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
+                    Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
+                    Subpacket::PreferredCompressionAlgorithms(
+                        preferred_compression_algorithms.clone(),
+                    ),
+                ])
+                .unhashed_subpackets(vec![Subpacket::Issuer(
+                    key.key_id().expect("missing key id"),
+                )])
+                .build()?;
+
+            let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
+
+            users.push(id.into_signed(sig));
+        }
+
+        // othe user ids
+
+        users.extend(
+            self.user_ids
+                .into_iter()
+                .map(|id| {
+                    let config = SignatureConfigBuilder::default()
+                        .typ(SignatureType::CertGeneric)
+                        .pub_alg(key.algorithm())
+                        .hashed_subpackets(vec![
+                            Subpacket::SignatureCreationTime(chrono::Utc::now()),
+                            Subpacket::KeyFlags(keyflags.clone()),
+                            Subpacket::PreferredSymmetricAlgorithms(
+                                preferred_symmetric_algorithms.clone(),
+                            ),
+                            Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
+                            Subpacket::PreferredCompressionAlgorithms(
+                                preferred_compression_algorithms.clone(),
+                            ),
+                        ])
+                        .unhashed_subpackets(vec![Subpacket::Issuer(
+                            key.key_id().expect("missing key id"),
+                        )])
+                        .build()?;
+
+                    let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
+
+                    Ok(id.into_signed(sig))
+                })
+                .collect::<errors::Result<Vec<_>>>()?,
+        );
+
+        let user_attributes = self
+            .user_attributes
+            .into_iter()
+            .map(|u| u.sign(key, key_pw.clone()))
+            .collect::<errors::Result<Vec<_>>>()?;
+
         Ok(SignedKeyDetails {
             revocation_signatures: Default::default(),
             direct_signatures: Default::default(),
-            users: self
-                .user_ids
-                .iter()
-                .map(|u| u.sign(key, key_pw.clone()))
-                .collect::<errors::Result<Vec<_>>>()?,
-            user_attributes: self
-                .user_attributes
-                .iter()
-                .map(|u| u.sign(key, key_pw.clone()))
-                .collect::<errors::Result<Vec<_>>>()?,
+            users,
+            user_attributes,
         })
     }
 }
 
 impl PublicKey {
     pub fn sign<F>(
-        &self,
+        self,
         sec_key: &mut impl SecretKeyTrait,
         key_pw: F,
     ) -> errors::Result<SignedPublicKey>
     where
         F: (FnOnce() -> String) + Clone,
     {
+        let primary_key = self.primary_key;
+        let details = self.details.sign(sec_key, key_pw.clone())?;
+        let public_subkeys = self
+            .public_subkeys
+            .into_iter()
+            .map(|k| k.sign(sec_key, key_pw.clone()))
+            .collect::<errors::Result<Vec<_>>>()?;
+
         Ok(SignedPublicKey {
-            primary_key: self.primary_key.clone(),
-            details: self.details.sign(sec_key, key_pw.clone())?,
-            public_subkeys: self
-                .public_subkeys
-                .iter()
-                .map(|k| k.sign(sec_key, key_pw.clone()))
-                .collect::<errors::Result<Vec<_>>>()?,
+            primary_key,
+            details,
+            public_subkeys,
         })
     }
 }
 
 impl PublicSubkey {
     pub fn sign<F>(
-        &self,
+        self,
         sec_key: &impl SecretKeyTrait,
         key_pw: F,
     ) -> errors::Result<SignedPublicSubKey>
     where
         F: (FnOnce() -> String) + Clone,
     {
-        Ok(SignedPublicSubKey {
-            key: self.key.clone(),
-            signatures: vec![self.key.sign(sec_key, key_pw)?],
-        })
+        let key = self.key;
+        let hashed_subpackets = vec![
+            Subpacket::SignatureCreationTime(chrono::Utc::now()),
+            Subpacket::KeyFlags(self.keyflags.into()),
+        ];
+
+        let config = SignatureConfigBuilder::default()
+            .typ(SignatureType::SubkeyBinding)
+            .pub_alg(key.algorithm())
+            .hashed_subpackets(hashed_subpackets)
+            .unhashed_subpackets(vec![Subpacket::Issuer(
+                sec_key.key_id().expect("missing key id"),
+            )])
+            .build()?;
+
+        let signatures = vec![config.sign_key(sec_key, key_pw, &key)?];
+
+        Ok(SignedPublicSubKey { key, signatures })
     }
 }
 
 impl SecretKey {
-    pub fn sign<F>(&self, key_pw: F) -> errors::Result<SignedSecretKey>
+    pub fn sign<F>(self, key_pw: F) -> errors::Result<SignedSecretKey>
     where
         F: (FnOnce() -> String) + Clone,
     {
+        let primary_key = self.primary_key;
+        let details = self.details.sign(&primary_key, key_pw.clone())?;
+        let public_subkeys = self
+            .public_subkeys
+            .into_iter()
+            .map(|k| k.sign(&primary_key, key_pw.clone()))
+            .collect::<errors::Result<Vec<_>>>()?;
+        let secret_subkeys = self
+            .secret_subkeys
+            .into_iter()
+            .map(|k| k.sign(&primary_key, key_pw.clone()))
+            .collect::<errors::Result<Vec<_>>>()?;
+
         Ok(SignedSecretKey {
-            primary_key: self.primary_key.clone(),
-            details: self.details.sign(&self.primary_key, key_pw.clone())?,
-            public_subkeys: self
-                .public_subkeys
-                .iter()
-                .map(|k| k.sign(&self.primary_key, key_pw.clone()))
-                .collect::<errors::Result<Vec<_>>>()?,
-            secret_subkeys: self
-                .secret_subkeys
-                .iter()
-                .map(|k| k.sign(&self.primary_key, key_pw.clone()))
-                .collect::<errors::Result<Vec<_>>>()?,
+            primary_key,
+            details,
+            public_subkeys,
+            secret_subkeys,
         })
     }
 }
 
 impl SecretSubkey {
     pub fn sign<F>(
-        &self,
+        self,
         sec_key: &impl SecretKeyTrait,
         key_pw: F,
     ) -> errors::Result<SignedSecretSubKey>
     where
         F: (FnOnce() -> String) + Clone,
     {
-        Ok(SignedSecretSubKey {
-            key: self.key.clone(),
-            signatures: vec![self.key.sign(sec_key, key_pw)?],
-        })
+        let key = self.key;
+        let hashed_subpackets = vec![
+            Subpacket::SignatureCreationTime(chrono::Utc::now()),
+            Subpacket::KeyFlags(self.keyflags.into()),
+        ];
+
+        let config = SignatureConfigBuilder::default()
+            .typ(SignatureType::SubkeyBinding)
+            .pub_alg(key.algorithm())
+            .hashed_subpackets(hashed_subpackets)
+            .unhashed_subpackets(vec![Subpacket::Issuer(
+                sec_key.key_id().expect("missing key id"),
+            )])
+            .build()?;
+        let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
+
+        Ok(SignedSecretSubKey { key, signatures })
     }
 }
 
@@ -150,12 +260,27 @@ impl SecretSubkey {
 pub struct SecretKeyParams {
     key_type: KeyType,
 
+    // -- Keyflags
     #[builder(default)]
     can_sign: bool,
     #[builder(default)]
     can_create_certificates: bool,
     #[builder(default)]
     can_encrypt: bool,
+
+    // -- Preferences
+    /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
+    #[builder(default)]
+    preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
+    /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
+    #[builder(default)]
+    preferred_hash_algorithms: Vec<HashAlgorithm>,
+    /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
+    #[builder(default)]
+    preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+
+    #[builder]
+    primary_user_id: String,
 
     #[builder(default)]
     user_ids: Vec<String>,
@@ -187,7 +312,7 @@ pub struct SubkeyParams {
     can_encrypt: bool,
 
     #[builder(default)]
-    user_ids: Vec<String>,
+    user_ids: Vec<UserId>,
     #[builder(default)]
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
@@ -211,10 +336,6 @@ impl SecretKeyParamsBuilder {
                 }
             }
             _ => {}
-        }
-
-        if self.user_ids.is_none() {
-            return Err("Please specify at least one User Id".to_string());
         }
 
         Ok(())
@@ -253,23 +374,41 @@ impl SecretKeyParams {
             },
             secret_params,
         };
+
+        let mut keyflags = KeyFlags::default();
+        keyflags.set_certify(self.can_create_certificates);
+        keyflags.set_encrypt_comms(self.can_encrypt);
+        keyflags.set_encrypt_storage(self.can_encrypt);
+        keyflags.set_sign(self.can_sign);
+
         Ok(SecretKey {
             primary_key,
             details: KeyDetails {
+                primary_user_id: UserId::from_str(Default::default(), &self.primary_user_id),
                 user_ids: self
                     .user_ids
                     .iter()
                     .map(|m| UserId::from_str(Default::default(), m))
                     .collect(),
                 user_attributes: self.user_attributes,
+                keyflags,
+                preferred_symmetric_algorithms: self.preferred_symmetric_algorithms,
+                preferred_hash_algorithms: self.preferred_hash_algorithms,
+                preferred_compression_algorithms: self.preferred_compression_algorithms,
             },
             public_subkeys: Default::default(),
             secret_subkeys: self
                 .subkeys
-                .iter()
+                .into_iter()
                 .map(|subkey| {
                     let (public_params, secret_params) =
                         subkey.key_type.generate(&subkey.passphrase)?;
+                    let mut keyflags = KeyFlags::default();
+                    keyflags.set_certify(subkey.can_create_certificates);
+                    keyflags.set_encrypt_comms(subkey.can_encrypt);
+                    keyflags.set_encrypt_storage(subkey.can_encrypt);
+                    keyflags.set_sign(subkey.can_sign);
+
                     Ok(SecretSubkey {
                         key: packet::SecretSubkey {
                             details: packet::PublicSubkey {
@@ -282,6 +421,7 @@ impl SecretKeyParams {
                             },
                             secret_params,
                         },
+                        keyflags,
                     })
                 })
                 .collect::<errors::Result<Vec<_>>>()?,
@@ -353,8 +493,24 @@ mod tests {
             .key_type(KeyType::Rsa(2048))
             .can_create_certificates(true)
             .can_sign(true)
-            .user_id("Me <me@mail.com>")
+            .primary_user_id("Me <me@mail.com>".into())
             .passphrase("hello".into())
+            .preferred_symmetric_algorithms(vec![
+                SymmetricKeyAlgorithm::AES256,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES128,
+            ])
+            .preferred_hash_algorithms(vec![
+                HashAlgorithm::SHA256,
+                HashAlgorithm::SHA384,
+                HashAlgorithm::SHA512,
+                HashAlgorithm::SHA224,
+                HashAlgorithm::SHA1,
+            ])
+            .preferred_compression_algorithms(vec![
+                CompressionAlgorithm::ZLIB,
+                CompressionAlgorithm::ZIP,
+            ])
             .subkey(
                 SubkeyParamsBuilder::default()
                     .key_type(KeyType::Rsa(2048))
@@ -368,18 +524,21 @@ mod tests {
         let key = key_params
             .generate()
             .expect("failed to generate secret key");
-        println!("{:#?}", key);
+        // println!("{:#?}", key);
 
         let signed_key = key.sign(|| "hello".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string()
             .expect("failed to serialize key");
+        let bytes = signed_key.to_bytes().unwrap();
 
-        println!("{}", hex::encode(signed_key.to_bytes().unwrap()));
-        ::std::fs::write("sample.asc", &armor).unwrap();
+        // println!("{}", hex::encode(&bytes));
 
-        // let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        ::std::fs::write("sample2.asc", &armor).unwrap();
+        ::std::fs::write("sample2.bin", &bytes).unwrap();
+
+        let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
         // assert_eq!(signed_key, signed_key2);
     }
 }

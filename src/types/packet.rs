@@ -148,5 +148,19 @@ mod tests {
             .unwrap();
 
         assert_eq!(hex::encode(buf), "d1ff0000324b");
+
+        let mut buf = Vec::new();
+        Version::New
+            .write_header(&mut buf, Tag::Signature as u8, 302)
+            .unwrap();
+
+        assert_eq!(hex::encode(buf), "c2c06e");
+
+        let mut buf = Vec::new();
+        Version::New
+            .write_header(&mut buf, Tag::Signature as u8, 303)
+            .unwrap();
+
+        assert_eq!(hex::encode(buf), "c2c06f");
     }
 }
