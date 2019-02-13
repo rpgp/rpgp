@@ -1,13 +1,20 @@
-# PGP in Rust
+# rPGP
 
 [![crates.io version][crate-shield]][crate] [![Travis build status][travis-shield]][travis] [![Appveyor build status][appveyor-shield]][appveyor] [![Docs][docs-shield]][docs] [![License][license-shield]][license]
 
-> Rust implementation of PGP. Following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440).
+> Pure rust implementation of OpenPGP. Following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440).
 
 
-## Warning
 
-**Work in progress:** Not usable yet, but hopefully soon
+> ⚠️ **WARNING:** This library has **not** been audited, so be careful.
+
+
+
+## Status
+
+You can find the details of the currently supported features in [this status document](STATUS.md)
+
+
 
 
 ## Platform Support
