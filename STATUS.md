@@ -12,7 +12,7 @@ Symbols:
   - [x] Old Format (v3)
   - [x] New Format (v4)
   - [ ] 🚧 New New Format (v5)
-- [x] ASII Armor
+- [x] ASCII Armor
   - [x] Reading
   - [x] Writing
 - [ ] Cleartext Signature Framework
