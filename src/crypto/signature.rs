@@ -1,6 +1,5 @@
 use ed25519_dalek;
 use num_bigint::BigUint;
-use sha2;
 use try_from::TryInto;
 
 use crypto::ecc_curve::ECCCurve;
@@ -58,7 +57,7 @@ pub fn verify_eddsa(
 
             let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes)?;
 
-            pk.verify::<sha2::Sha512>(hashed, &sig)?;
+            pk.verify(hashed, &sig)?;
 
             Ok(())
         }

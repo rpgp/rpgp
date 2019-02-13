@@ -37,8 +37,8 @@ flate2 = { version = "^1.0", default-features = false, features = ["rust_backend
 num-derive = "0.2.3"
 num-traits = "0.2.6"
 cast5 = { git = "https://github.com/dignifiedquire/block-ciphers", branch = "cast5" }
-x25519-dalek = { version = "0.3", default-features = false, features = ["std", "u64_backend"] }
-ed25519-dalek = { version = "1.0.0-pre.0", default-features = false, features = ["std", "u64_backend"] }
+x25519-dalek = { version = "0.4", default-features = false, features = ["std", "u64_backend"] }
+ed25519-dalek = { version = "1.0.0-pre.1", default-features = false, features = ["std", "u64_backend"] }
 lazy_static = "1.2.0"
 block-padding = "0.1.2"
 log = "0.4.6"

@@ -1,6 +1,6 @@
 use block_padding::{Padding, Pkcs7};
 use hex;
-use x25519_dalek::diffie_hellman;
+use x25519_dalek::x25519;
 
 use crypto::aes_kw;
 use crypto::hash::HashAlgorithm;
@@ -82,7 +82,9 @@ pub fn decrypt_ecdh(
     private_key_arr[..].copy_from_slice(&private_key_le);
 
     // derive shared secret
-    let shared_secret = diffie_hellman(&private_key_arr, &ephemeral_public_key_arr);
+    // let shared_secret =
+    // EphemeralSecret::diffie_hellman(&private_key_arr, &ephemeral_public_key_arr);
+    let shared_secret = x25519(private_key_arr, ephemeral_public_key_arr);
 
     // Perform key derivation
     let z = kdf(
