@@ -1,13 +1,16 @@
+use std::time::Duration;
+
 use chrono;
 use rand::OsRng;
 use rsa::math::ModInverse;
 use rsa::{self, PublicKey as PublicKeyTrait};
-use std::time::Duration;
+use sha2::Sha512;
 
 use composed::{
     SignedKeyDetails, SignedPublicKey, SignedPublicSubKey, SignedSecretKey, SignedSecretSubKey,
 };
 use crypto;
+use crypto::ecc_curve::ECCCurve;
 use crypto::hash::HashAlgorithm;
 use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
 use crypto::sym::SymmetricKeyAlgorithm;
@@ -17,7 +20,7 @@ use packet::{
     UserId,
 };
 use types::{self, CompressionAlgorithm, KeyTrait, SecretKeyTrait};
-use util::write_bignum_mpi;
+use util::{write_bignum_mpi, write_mpi};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq)]
@@ -297,6 +300,7 @@ pub struct SecretKeyParams {
     #[builder(default)]
     expiration: Option<Duration>,
 
+    #[builder(default)]
     subkeys: Vec<SubkeyParams>,
 }
 
@@ -332,7 +336,21 @@ impl SecretKeyParamsBuilder {
         match self.key_type {
             Some(KeyType::Rsa(size)) => {
                 if size < 2048 {
-                    return Err("Keys with less than 2048bits are considered insecure".to_string());
+                    return Err("Keys with less than 2048bits are considered insecure".into());
+                }
+            }
+            Some(KeyType::EdDSA) => {
+                if let Some(can_encrypt) = self.can_encrypt {
+                    if can_encrypt {
+                        return Err("EdDSA can only be used for signing keys".into());
+                    }
+                }
+            }
+            Some(KeyType::ECDH) => {
+                if let Some(can_sign) = self.can_sign {
+                    if can_sign {
+                        return Err("ECDH can only be used for encryption keys".into());
+                    }
                 }
             }
             _ => {}
@@ -431,14 +449,20 @@ impl SecretKeyParams {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyType {
-    // bit size
+    /// Encryption & Signing with RSA an the given bitsize.
     Rsa(usize),
+    /// Encrypting with curev 25519
+    ECDH,
+    /// Signing with curve 25519
+    EdDSA,
 }
 
 impl KeyType {
     pub fn to_alg(&self) -> PublicKeyAlgorithm {
         match self {
             KeyType::Rsa(_) => PublicKeyAlgorithm::RSA,
+            KeyType::ECDH => PublicKeyAlgorithm::ECDH,
+            KeyType::EdDSA => PublicKeyAlgorithm::EdDSA,
         }
     }
 
@@ -446,9 +470,10 @@ impl KeyType {
         &self,
         passphrase: &str,
     ) -> errors::Result<(PublicParams, types::EncryptedSecretParams)> {
+        let mut rng = OsRng::new().expect("no system rng available");
+
         match self {
             KeyType::Rsa(bit_size) => {
-                let mut rng = OsRng::new().expect("no system rng available");
                 let key = rsa::RSAPrivateKey::new(&mut rng, *bit_size)?;
 
                 // TODO: encrypt with iterated and salted
@@ -473,6 +498,58 @@ impl KeyType {
                     types::EncryptedSecretParams::new_plaintext(data, Some(checksum)),
                 ))
             }
+            KeyType::ECDH => {
+                // ECDH could be a different curve, for not it is always curve 25519
+                let keypair = ed25519_dalek::Keypair::generate::<Sha512, _>(&mut rng);
+                let bytes = keypair.to_bytes();
+
+                // secret key
+                let q = &bytes[..32];
+                // public key
+                let mut p = Vec::with_capacity(33);
+                p.push(0x40);
+                p.extend_from_slice(&bytes[32..]);
+
+                let mut data = Vec::new();
+                write_mpi(q, &mut data)?;
+
+                let checksum = crypto::checksum::calculate_simple(&data);
+
+                Ok((
+                    PublicParams::ECDH {
+                        curve: ECCCurve::Curve25519,
+                        p,
+                        // TODO: make these configurable and/or check for good defaults
+                        hash: HashAlgorithm::SHA512,
+                        alg_sym: SymmetricKeyAlgorithm::AES256,
+                    },
+                    types::EncryptedSecretParams::new_plaintext(data, Some(checksum)),
+                ))
+            }
+            KeyType::EdDSA => {
+                let keypair = ed25519_dalek::Keypair::generate::<Sha512, _>(&mut rng);
+                let bytes = keypair.to_bytes();
+
+                // secret key
+                let p = &bytes[..32];
+                // public key
+                let mut q = Vec::with_capacity(33);
+                q.push(0x40);
+                q.extend_from_slice(&bytes[32..]);
+
+                let mut data = Vec::new();
+                write_mpi(p, &mut data)?;
+
+                let checksum = crypto::checksum::calculate_simple(&data);
+
+                Ok((
+                    PublicParams::EdDSA {
+                        curve: ECCCurve::Ed25519,
+                        q,
+                    },
+                    types::EncryptedSecretParams::new_plaintext(data, Some(checksum)),
+                ))
+            }
         }
     }
 }
@@ -482,7 +559,6 @@ mod tests {
     use super::*;
 
     use composed::Deserializable;
-    use ser::Serialize;
 
     #[test]
     fn test_key_gen_rsa_2048() {
@@ -524,19 +600,67 @@ mod tests {
         let key = key_params
             .generate()
             .expect("failed to generate secret key");
-        // println!("{:#?}", key);
 
         let signed_key = key.sign(|| "hello".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string()
             .expect("failed to serialize key");
-        let bytes = signed_key.to_bytes().unwrap();
 
-        // println!("{}", hex::encode(&bytes));
+        ::std::fs::write("sample-rsa.sec.asc", &armor).unwrap();
 
-        ::std::fs::write("sample2.asc", &armor).unwrap();
-        ::std::fs::write("sample2.bin", &bytes).unwrap();
+        let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        // assert_eq!(signed_key, signed_key2);
+    }
+
+    #[test]
+    fn test_key_gen_x25519() {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .key_type(KeyType::EdDSA)
+            .can_create_certificates(true)
+            .can_sign(true)
+            .primary_user_id("Me <me@mail.com>".into())
+            .passphrase("hello".into())
+            .preferred_symmetric_algorithms(vec![
+                SymmetricKeyAlgorithm::AES256,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES128,
+            ])
+            .preferred_hash_algorithms(vec![
+                HashAlgorithm::SHA256,
+                HashAlgorithm::SHA384,
+                HashAlgorithm::SHA512,
+                HashAlgorithm::SHA224,
+                HashAlgorithm::SHA1,
+            ])
+            .preferred_compression_algorithms(vec![
+                CompressionAlgorithm::ZLIB,
+                CompressionAlgorithm::ZIP,
+            ])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .key_type(KeyType::ECDH)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate()
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(|| "hello".into()).expect("failed to sign key");
+
+        let armor = signed_key
+            .to_armored_string()
+            .expect("failed to serialize key");
+
+        ::std::fs::write("sample-x25519.sec.asc", &armor).unwrap();
 
         let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
         // assert_eq!(signed_key, signed_key2);

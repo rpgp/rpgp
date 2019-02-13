@@ -294,7 +294,9 @@ macro_rules! impl_secret_key {
                         }
                         SecretKeyRepr::DSA => unimplemented_err!(" sign DSA"),
                         SecretKeyRepr::ECDSA => unimplemented_err!("sign ECDSA"),
-                        SecretKeyRepr::ECDH(_) => unimplemented_err!("sign ECDH"),
+                        SecretKeyRepr::ECDH(_) => {
+                            bail!("ECDH can not be used to for signing operations")
+                        }
                         SecretKeyRepr::EdDSA(ref priv_key) => match self.public_params() {
                             PublicParams::EdDSA { ref curve, ref q } => match *curve {
                                 ECCCurve::Ed25519 => {
