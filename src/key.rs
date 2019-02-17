@@ -1,10 +1,9 @@
 use std::time::Duration;
 
 use chrono;
+use num_bigint::traits::ModInverse;
 use rand::OsRng;
-use rsa::math::ModInverse;
 use rsa::{self, PublicKey as PublicKeyTrait};
-use sha2::Sha512;
 
 use composed::{
     SignedKeyDetails, SignedPublicKey, SignedPublicSubKey, SignedSecretKey, SignedSecretSubKey,
@@ -189,7 +188,7 @@ impl PublicSubkey {
 
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::SubkeyBinding)
-            .pub_alg(key.algorithm())
+            .pub_alg(sec_key.algorithm())
             .hashed_subpackets(hashed_subpackets)
             .unhashed_subpackets(vec![Subpacket::Issuer(
                 sec_key.key_id().expect("missing key id"),
@@ -246,7 +245,7 @@ impl SecretSubkey {
 
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::SubkeyBinding)
-            .pub_alg(key.algorithm())
+            .pub_alg(sec_key.algorithm())
             .hashed_subpackets(hashed_subpackets)
             .unhashed_subpackets(vec![Subpacket::Issuer(
                 sec_key.key_id().expect("missing key id"),
@@ -290,7 +289,7 @@ pub struct SecretKeyParams {
     #[builder(default)]
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
-    passphrase: String,
+    passphrase: Option<String>,
     #[builder(default = "chrono::Utc::now()")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
@@ -320,7 +319,7 @@ pub struct SubkeyParams {
     #[builder(default)]
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
-    passphrase: String,
+    passphrase: Option<String>,
     #[builder(default = "chrono::Utc::now()")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
@@ -380,7 +379,8 @@ impl SecretKeyParamsBuilder {
 
 impl SecretKeyParams {
     pub fn generate(self) -> errors::Result<SecretKey> {
-        let (public_params, secret_params) = self.key_type.generate(&self.passphrase)?;
+        let passphrase = self.passphrase;
+        let (public_params, secret_params) = self.key_type.generate(passphrase)?;
         let primary_key = packet::SecretKey {
             details: packet::PublicKey {
                 packet_version: self.packet_version,
@@ -419,8 +419,8 @@ impl SecretKeyParams {
                 .subkeys
                 .into_iter()
                 .map(|subkey| {
-                    let (public_params, secret_params) =
-                        subkey.key_type.generate(&subkey.passphrase)?;
+                    let passphrase = subkey.passphrase;
+                    let (public_params, secret_params) = subkey.key_type.generate(passphrase)?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_certify(subkey.can_create_certificates);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
@@ -468,20 +468,28 @@ impl KeyType {
 
     pub fn generate(
         &self,
-        passphrase: &str,
+        passphrase: Option<String>,
     ) -> errors::Result<(PublicParams, types::EncryptedSecretParams)> {
         let mut rng = OsRng::new().expect("no system rng available");
+
+        // TODO: handle encrypt using S2K Iterated and Salted when passphrase is set.
+        ensure!(passphrase.is_none(), "Passphrases are note yet supported");
 
         match self {
             KeyType::Rsa(bit_size) => {
                 let key = rsa::RSAPrivateKey::new(&mut rng, *bit_size)?;
 
-                // TODO: encrypt with iterated and salted
-
                 let p = &key.primes()[0];
                 let q = &key.primes()[1];
-                let u = p.clone().mod_inverse(q).expect("invalid prime");
+                let u = p
+                    .clone()
+                    .mod_inverse(q)
+                    .expect("invalid prime")
+                    .to_biguint()
+                    .expect("invalid prime");
 
+                // Data for RSA Public  : [n: MPI, e: MPI]
+                // Data for RSA Private : [d: MPI, p: MPI, q: MPI, u: MPI]
                 let mut data = Vec::new();
                 write_bignum_mpi(key.d(), &mut data)?;
                 write_bignum_mpi(p, &mut data)?;
@@ -499,8 +507,8 @@ impl KeyType {
                 ))
             }
             KeyType::ECDH => {
-                // ECDH could be a different curve, for not it is always curve 25519
-                let keypair = ed25519_dalek::Keypair::generate::<Sha512, _>(&mut rng);
+                // ECDH could be a different curve, for now it is always ed25519
+                let keypair = ed25519_dalek::Keypair::generate(&mut rng);
                 let bytes = keypair.to_bytes();
 
                 // secret key
@@ -510,6 +518,8 @@ impl KeyType {
                 p.push(0x40);
                 p.extend_from_slice(&bytes[32..]);
 
+                // Data for ECDH Public  : [OID, p: MPI, KDF]
+                // Data for ECDH Private : [q: MPI]
                 let mut data = Vec::new();
                 write_mpi(q, &mut data)?;
 
@@ -527,7 +537,7 @@ impl KeyType {
                 ))
             }
             KeyType::EdDSA => {
-                let keypair = ed25519_dalek::Keypair::generate::<Sha512, _>(&mut rng);
+                let keypair = ed25519_dalek::Keypair::generate(&mut rng);
                 let bytes = keypair.to_bytes();
 
                 // secret key
@@ -537,6 +547,8 @@ impl KeyType {
                 q.push(0x40);
                 q.extend_from_slice(&bytes[32..]);
 
+                // Data for EdDSA Public  : [OID, q: MPI]
+                // Data for EdDSA Private : [p: MPI]
                 let mut data = Vec::new();
                 write_mpi(p, &mut data)?;
 
@@ -570,7 +582,7 @@ mod tests {
             .can_create_certificates(true)
             .can_sign(true)
             .primary_user_id("Me <me@mail.com>".into())
-            .passphrase("hello".into())
+            .passphrase(None)
             .preferred_symmetric_algorithms(vec![
                 SymmetricKeyAlgorithm::AES256,
                 SymmetricKeyAlgorithm::AES192,
@@ -601,7 +613,7 @@ mod tests {
             .generate()
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "hello".into()).expect("failed to sign key");
+        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string()
@@ -623,7 +635,7 @@ mod tests {
             .can_create_certificates(true)
             .can_sign(true)
             .primary_user_id("Me <me@mail.com>".into())
-            .passphrase("hello".into())
+            .passphrase(None)
             .preferred_symmetric_algorithms(vec![
                 SymmetricKeyAlgorithm::AES256,
                 SymmetricKeyAlgorithm::AES192,
@@ -641,9 +653,11 @@ mod tests {
                 CompressionAlgorithm::ZIP,
             ])
             .subkey(
+                // TODO: this is the part that gpg is unhappy about
                 SubkeyParamsBuilder::default()
                     .key_type(KeyType::ECDH)
                     .can_encrypt(true)
+                    .passphrase(None)
                     .build()
                     .unwrap(),
             )
@@ -654,7 +668,7 @@ mod tests {
             .generate()
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "hello".into()).expect("failed to sign key");
+        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string()
