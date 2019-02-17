@@ -89,7 +89,7 @@ pub fn sign_eddsa(
     kp_bytes[32..].copy_from_slice(&q[1..]);
     let kp = ed25519_dalek::Keypair::from_bytes(&kp_bytes)?;
 
-    let signature = kp.sign::<sha2::Sha512>(digest);
+    let signature = kp.sign(digest);
     let bytes = signature.to_bytes();
 
     let r = bytes[..32].to_vec();
