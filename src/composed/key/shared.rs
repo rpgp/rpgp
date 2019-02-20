@@ -8,7 +8,7 @@ use ser::Serialize;
 use types::{KeyId, KeyTrait, PublicKeyTrait, SignedUser, SignedUserAttribute};
 
 /// Shared details between secret and public keys.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedKeyDetails {
     pub revocation_signatures: Vec<packet::Signature>,
     pub direct_signatures: Vec<packet::Signature>,
@@ -118,7 +118,7 @@ impl Serialize for SignedKeyDetails {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PublicOrSecret {
     Public(SignedPublicKey),
     Secret(SignedSecretKey),
@@ -150,6 +150,22 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_armored_string(),
             PublicOrSecret::Secret(k) => k.to_armored_string(),
+        }
+    }
+
+    /// Panics if not a secret key.
+    pub fn into_secret(self) -> SignedSecretKey {
+        match self {
+            PublicOrSecret::Public(_) => panic!("Can not convert a public into a secret key"),
+            PublicOrSecret::Secret(k) => k,
+        }
+    }
+
+    /// Panics if not a public key.
+    pub fn into_public(self) -> SignedPublicKey {
+        match self {
+            PublicOrSecret::Secret(_) => panic!("Can not convert a secret into a public key"),
+            PublicOrSecret::Public(k) => k,
         }
     }
 }

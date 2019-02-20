@@ -77,7 +77,7 @@ where
 
 /// Key Derivation Function for ECDH (as defined in RFC 6637).
 /// https://tools.ietf.org/html/rfc6637#section-7
-pub fn kdf(hash: HashAlgorithm, x: &[u8], length: usize, param: &[u8]) -> Result<Vec<u8>> {
+pub fn kdf(hash: HashAlgorithm, x: &[u8; 32], length: usize, param: &[u8]) -> Result<Vec<u8>> {
     let prefix = vec![0, 0, 0, 1];
 
     let values: Vec<&[u8]> = vec![&prefix, x, param];

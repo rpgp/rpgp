@@ -18,7 +18,7 @@ use packet::{
     self, KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, UserAttribute,
     UserId,
 };
-use types::{self, CompressionAlgorithm, KeyTrait, SecretKeyTrait};
+use types::{self, CompressionAlgorithm, SecretKeyTrait};
 use util::{write_bignum_mpi, write_mpi};
 
 /// User facing interface to work with a public key.
@@ -508,20 +508,22 @@ impl KeyType {
             }
             KeyType::ECDH => {
                 // ECDH could be a different curve, for now it is always ed25519
-                let keypair = ed25519_dalek::Keypair::generate(&mut rng);
-                let bytes = keypair.to_bytes();
 
-                // secret key
-                let q = &bytes[..32];
+                let secret = x25519_dalek::StaticSecret::new(&mut rng);
+                let public = x25519_dalek::PublicKey::from(&secret);
+
                 // public key
                 let mut p = Vec::with_capacity(33);
                 p.push(0x40);
-                p.extend_from_slice(&bytes[32..]);
+                p.extend_from_slice(&public.as_bytes()[..]);
+
+                // secret key
+                let q = secret.to_bytes().iter().cloned().rev().collect::<Vec<u8>>();
 
                 // Data for ECDH Public  : [OID, p: MPI, KDF]
                 // Data for ECDH Private : [q: MPI]
                 let mut data = Vec::new();
-                write_mpi(q, &mut data)?;
+                write_mpi(&q[..], &mut data)?;
 
                 let checksum = crypto::checksum::calculate_simple(&data);
 
@@ -530,8 +532,8 @@ impl KeyType {
                         curve: ECCCurve::Curve25519,
                         p,
                         // TODO: make these configurable and/or check for good defaults
-                        hash: HashAlgorithm::SHA512,
-                        alg_sym: SymmetricKeyAlgorithm::AES256,
+                        hash: HashAlgorithm::SHA256,
+                        alg_sym: SymmetricKeyAlgorithm::AES128,
                     },
                     types::EncryptedSecretParams::new_plaintext(data, Some(checksum)),
                 ))
@@ -540,12 +542,13 @@ impl KeyType {
                 let keypair = ed25519_dalek::Keypair::generate(&mut rng);
                 let bytes = keypair.to_bytes();
 
-                // secret key
-                let p = &bytes[..32];
                 // public key
                 let mut q = Vec::with_capacity(33);
                 q.push(0x40);
                 q.extend_from_slice(&bytes[32..]);
+
+                // secret key
+                let p = &bytes[..32];
 
                 // Data for EdDSA Public  : [OID, q: MPI]
                 // Data for EdDSA Private : [p: MPI]
@@ -622,6 +625,8 @@ mod tests {
         ::std::fs::write("sample-rsa.sec.asc", &armor).unwrap();
 
         let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        signed_key2.verify().expect("invalid key");
+
         // assert_eq!(signed_key, signed_key2);
     }
 
@@ -634,7 +639,7 @@ mod tests {
             .key_type(KeyType::EdDSA)
             .can_create_certificates(true)
             .can_sign(true)
-            .primary_user_id("Me <me@mail.com>".into())
+            .primary_user_id("Me-X <me-x25519@mail.com>".into())
             .passphrase(None)
             .preferred_symmetric_algorithms(vec![
                 SymmetricKeyAlgorithm::AES256,
@@ -674,9 +679,11 @@ mod tests {
             .to_armored_string()
             .expect("failed to serialize key");
 
-        ::std::fs::write("sample-x25519.sec.asc", &armor).unwrap();
+        std::fs::write("sample-x25519.sec.asc", &armor).unwrap();
 
         let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        signed_key2.verify().expect("invalid key");
+
         // assert_eq!(signed_key, signed_key2);
     }
 }

@@ -9,7 +9,7 @@ use ser::Serialize;
 use types::{KeyId, KeyTrait, PublicKeyTrait};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedPublicKey {
     pub primary_key: packet::PublicKey,
     pub details: SignedKeyDetails,
@@ -113,7 +113,7 @@ impl Serialize for SignedPublicKey {
 }
 
 /// Represents a Public PGP SubKey.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedPublicSubKey {
     pub key: packet::PublicSubkey,
     pub signatures: Vec<packet::Signature>,
