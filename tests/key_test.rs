@@ -1,6 +1,6 @@
 extern crate chrono;
 extern crate hex;
-extern crate num_bigint_dig as num_bigint;
+extern crate num_bigint;
 extern crate num_traits;
 extern crate pgp;
 extern crate pretty_env_logger;
@@ -874,3 +874,73 @@ fn pub_x25519_little_verify() {
     assert_eq!(pk.details.users.len(), 1);
     assert_eq!(pk.details.users[0].id.id(), "Hi <hi@hel.lo>");
 }
+
+macro_rules! autocrypt_key {
+    ($name:ident, $path:expr, $unlock:expr,) => {
+        #[test]
+        fn $name() {
+            test_parse_autocrypt_key($path, $unlock);
+        }
+    };
+}
+
+fn test_parse_autocrypt_key(key: &str, unlock: bool) {
+    use pretty_env_logger;
+    let _ = pretty_env_logger::try_init();
+
+    let f = read_file(Path::new("./tests/autocrypt/").join(key));
+    let pk = from_armor_many(f).unwrap();
+    for key in pk {
+        let parsed = key.expect("failed to parse key");
+        parsed.verify().expect("invalid key");
+
+        if unlock {
+            parsed
+                .clone()
+                .into_secret()
+                .unlock(|| "".to_string(), |_| Ok(()))
+                .expect("failed to unlock key");
+        }
+
+        // serialize and check we get the same thing
+        let serialized = parsed.to_armored_bytes().unwrap();
+
+        println!("{}", ::std::str::from_utf8(&serialized).unwrap());
+
+        // and parse them again
+        let parsed2 = from_armor_many(Cursor::new(&serialized))
+            .expect("failed to parse round2")
+            .collect::<Vec<_>>();
+
+        assert_eq!(parsed2.len(), 1);
+        assert_eq!(&parsed, parsed2[0].as_ref().unwrap());
+    }
+}
+
+autocrypt_key!(
+    key_autocrypt_alice_pub,
+    "alice@autocrypt.example.pub.asc",
+    false,
+);
+autocrypt_key!(
+    key_autocrypt_alice_sec,
+    "alice@autocrypt.example.sec.asc",
+    true,
+);
+
+autocrypt_key!(
+    key_autocrypt_bob_pub,
+    "bob@autocrypt.example.pub.asc",
+    false,
+);
+autocrypt_key!(key_autocrypt_bob_sec, "bob@autocrypt.example.sec.asc", true,);
+autocrypt_key!(
+    key_autocrypt_carol_pub,
+    "carol@autocrypt.example.pub.asc",
+    false,
+);
+autocrypt_key!(
+    key_autocrypt_carol_sec,
+    "carol@autocrypt.example.sec.asc",
+    true,
+);

@@ -735,7 +735,7 @@ bitfield! {
 
 impl<'a> From<&'a [u8]> for KeyFlags {
     fn from(other: &'a [u8]) -> Self {
-        if other.len() == 0 {
+        if other.is_empty() {
             Default::default()
         } else {
             KeyFlags(other[0])

@@ -10,7 +10,7 @@ use ser::Serialize;
 use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait};
 
 /// Represents a secret signed PGP key.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedSecretKey {
     pub primary_key: packet::SecretKey,
     pub details: SignedKeyDetails,
@@ -182,7 +182,7 @@ impl PublicKeyTrait for SignedSecretKey {
 }
 
 /// Represents a composed secret PGP SubKey.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedSecretSubKey {
     pub key: packet::SecretSubkey,
     pub signatures: Vec<packet::Signature>,

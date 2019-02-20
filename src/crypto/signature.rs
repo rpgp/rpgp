@@ -5,7 +5,7 @@ use try_from::TryInto;
 use crypto::ecc_curve::ECCCurve;
 use crypto::hash::HashAlgorithm;
 use errors::Result;
-use rsa::{self, padding, RSAPrivateKey, RSAPublicKey};
+use rsa::{self, padding, PublicKey, RSAPrivateKey, RSAPublicKey};
 use types::EdDSASecretKey;
 
 /// Verify a RSA, PKCS1v15 padded signature.
