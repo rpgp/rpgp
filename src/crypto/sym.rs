@@ -1,12 +1,12 @@
 use aes::{Aes128, Aes192, Aes256};
-// use blowfish::Blowfish;
+use blowfish::Blowfish;
 use cast5::Cast5;
 use cfb_mode::stream_cipher::{NewStreamCipher, StreamCipher};
 use cfb_mode::Cfb;
 use des::TdesEde3;
-use sha1::{Digest, Sha1};
-// use twofish::Twofish;
 use rand::{OsRng, RngCore};
+use sha1::{Digest, Sha1};
+use twofish::Twofish;
 
 use crypto::checksum;
 use errors::Result;
@@ -132,7 +132,8 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::IDEA => 16,
             SymmetricKeyAlgorithm::TripleDES => 24,
             SymmetricKeyAlgorithm::CAST5 => 16,
-            SymmetricKeyAlgorithm::Blowfish => 16,
+            // TODO: Validate this is the right key size.
+            SymmetricKeyAlgorithm::Blowfish => 56,
             SymmetricKeyAlgorithm::AES128 => 16,
             SymmetricKeyAlgorithm::AES192 => 24,
             SymmetricKeyAlgorithm::AES256 => 32,
@@ -233,16 +234,15 @@ impl SymmetricKeyAlgorithm {
                     bs,
                     resync
                 ),
-                SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
-                // decrypt!(
-                //     Blowfish,
-                //     key,
-                //     iv_vec,
-                //     encrypted_prefix,
-                //     encrypted_data,
-                //     bs,
-                //     resync
-                // ),
+                SymmetricKeyAlgorithm::Blowfish => decrypt!(
+                    Blowfish,
+                    key,
+                    iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
                 SymmetricKeyAlgorithm::AES128 => decrypt!(
                     Aes128,
                     key,
@@ -270,16 +270,15 @@ impl SymmetricKeyAlgorithm {
                     bs,
                     resync
                 ),
-                SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream update"),
-                //decrypt!(
-                //     Twofish,
-                //     key,
-                //     iv_vec,
-                //     encrypted_prefix,
-                //     encrypted_data,
-                //     bs,
-                //     resync
-                // ),
+                SymmetricKeyAlgorithm::Twofish => decrypt!(
+                    Twofish,
+                    key,
+                    iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
                 SymmetricKeyAlgorithm::Camellia128 => {
                     unimplemented_err!("Camellia 128 not yet available")
                 }
@@ -318,10 +317,9 @@ impl SymmetricKeyAlgorithm {
                 decrypt_regular!(TdesEde3, key, iv_vec, ciphertext, self.block_size());
             }
             SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, iv_vec, ciphertext, bs),
-            SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
-            // {
-            //     decrypt_regular!(Blowfish, key, iv_vec, ciphertext, self.block_size())
-            // }
+            SymmetricKeyAlgorithm::Blowfish => {
+                decrypt_regular!(Blowfish, key, iv_vec, ciphertext, self.block_size())
+            }
             SymmetricKeyAlgorithm::AES128 => {
                 decrypt_regular!(Aes128, key, iv_vec, ciphertext, self.block_size())
             }
@@ -331,10 +329,9 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::AES256 => {
                 decrypt_regular!(Aes256, key, iv_vec, ciphertext, self.block_size())
             }
-            SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream update"),
-            // {
-            //     decrypt_regular!(Twofish, key, iv_vec, ciphertext, self.block_size())
-            // }
+            SymmetricKeyAlgorithm::Twofish => {
+                decrypt_regular!(Twofish, key, iv_vec, ciphertext, self.block_size())
+            }
             SymmetricKeyAlgorithm::Camellia128 => {
                 unimplemented_err!("Camellia 128 not yet available")
             }
@@ -453,16 +450,9 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::CAST5 => {
                     encrypt!(Cast5, key, iv_vec, prefix, data, bs, resync)
                 }
-                SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
-                // encrypt!(
-                //     Blowfish,
-                //     key,
-                //     iv_vec,
-                //     prefix,
-                //     data,
-                //     bs,
-                //     resync
-                // ),
+                SymmetricKeyAlgorithm::Blowfish => {
+                    encrypt!(Blowfish, key, iv_vec, prefix, data, bs, resync)
+                }
                 SymmetricKeyAlgorithm::AES128 => {
                     encrypt!(Aes128, key, iv_vec, prefix, data, bs, resync)
                 }
@@ -472,16 +462,9 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::AES256 => {
                     encrypt!(Aes256, key, iv_vec, prefix, data, bs, resync)
                 }
-                SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream update"),
-                //encrypt!(
-                //     Twofish,
-                //     key,
-                //     iv_vec,
-                //     prefix,
-                //     data,
-                //     bs,
-                //     resync
-                // ),
+                SymmetricKeyAlgorithm::Twofish => {
+                    encrypt!(Twofish, key, iv_vec, prefix, data, bs, resync)
+                }
                 SymmetricKeyAlgorithm::Camellia128 => {
                     unimplemented_err!("Camellia 128 not yet available")
                 }
@@ -515,17 +498,13 @@ impl SymmetricKeyAlgorithm {
                 encrypt_regular!(TdesEde3, key, iv_vec, plaintext, bs);
             }
             SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("awaiting upstream changes"),
-            // {
-            //     encrypt_regular!(Blowfish, key, iv_vec, plaintext, bs)
-            // }
+            SymmetricKeyAlgorithm::Blowfish => {
+                encrypt_regular!(Blowfish, key, iv_vec, plaintext, bs)
+            }
             SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::Twofish => unimplemented_err!("awaiting upstream changes"),
-            // {
-            //     encrypt_regular!(Twofish, key, iv_vec, plaintext, bs)
-            // }
+            SymmetricKeyAlgorithm::Twofish => encrypt_regular!(Twofish, key, iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::Camellia128 => {
                 unimplemented_err!("Camellia 128 not yet available")
             }
@@ -589,7 +568,7 @@ mod tests {
     roundtrip!(roundtrip_aes192, SymmetricKeyAlgorithm::AES192);
     roundtrip!(roundtrip_aes256, SymmetricKeyAlgorithm::AES256);
     roundtrip!(roundtrip_tripledes, SymmetricKeyAlgorithm::TripleDES);
-    // roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
-    // roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
+    roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
+    roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
     roundtrip!(roundtrip_cast5, SymmetricKeyAlgorithm::CAST5);
 }
