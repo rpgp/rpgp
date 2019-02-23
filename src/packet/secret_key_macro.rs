@@ -73,7 +73,7 @@ macro_rules! impl_secret_key {
             }
 
             /// Checks if we should expect a SHA1 checksum in the encrypted part.
-            fn has_sha1_checksum(&self) -> bool {
+            pub fn has_sha1_checksum(&self) -> bool {
                 self.secret_params.string_to_key_id() == 254
             }
 
