@@ -690,6 +690,7 @@ pub enum Subpacket {
     SignatureExpirationTime(DateTime<Utc>),
     /// When the key is going to expire
     KeyExpirationTime(DateTime<Utc>),
+    /// The OpenPGP Key ID of the key issuing the signature.
     Issuer(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
     PreferredSymmetricAlgorithms(Vec<SymmetricKeyAlgorithm>),
