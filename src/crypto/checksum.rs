@@ -23,7 +23,7 @@ pub fn simple(actual: &[u8], data: &[u8]) -> Result<()> {
 /// SHA1 checksum, first 20 octets.
 #[inline]
 pub fn sha1(hash: &[u8], data: &[u8]) -> Result<()> {
-    ensure_eq!(hash, &Sha1::digest(data)[0..20], "invalid SHA1 checksum");
+    ensure_eq!(hash, &calculate_sha1(data)[..], "invalid SHA1 checksum");
 
     Ok(())
 }
@@ -35,4 +35,9 @@ pub fn calculate_simple(data: &[u8]) -> Vec<u8> {
     res.write_u16::<BigEndian>(val).expect("pre allocated");
 
     res
+}
+
+#[inline]
+pub fn calculate_sha1(data: &[u8]) -> Vec<u8> {
+    Sha1::digest(data)[..20].to_vec()
 }
