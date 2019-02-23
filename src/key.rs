@@ -92,9 +92,10 @@ impl KeyDetails {
                 .typ(SignatureType::CertGeneric)
                 .pub_alg(key.algorithm())
                 .hashed_subpackets(hashed_subpackets)
-                .unhashed_subpackets(vec![Subpacket::Issuer(
-                    key.key_id().expect("missing key id"),
-                )])
+                .unhashed_subpackets(vec![
+                    Subpacket::Issuer(key.key_id().expect("missing key id")),
+                    Subpacket::IssuerFingerprint(key.fingerprint()),
+                ])
                 .build()?;
 
             let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
@@ -122,9 +123,10 @@ impl KeyDetails {
                                 preferred_compression_algorithms.clone(),
                             ),
                         ])
-                        .unhashed_subpackets(vec![Subpacket::Issuer(
-                            key.key_id().expect("missing key id"),
-                        )])
+                        .unhashed_subpackets(vec![
+                            Subpacket::Issuer(key.key_id().expect("missing key id")),
+                            Subpacket::IssuerFingerprint(key.fingerprint()),
+                        ])
                         .build()?;
 
                     let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
@@ -193,9 +195,10 @@ impl PublicSubkey {
             .typ(SignatureType::SubkeyBinding)
             .pub_alg(sec_key.algorithm())
             .hashed_subpackets(hashed_subpackets)
-            .unhashed_subpackets(vec![Subpacket::Issuer(
-                sec_key.key_id().expect("missing key id"),
-            )])
+            .unhashed_subpackets(vec![
+                Subpacket::Issuer(sec_key.key_id().expect("missing key id")),
+                Subpacket::IssuerFingerprint(sec_key.fingerprint()),
+            ])
             .build()?;
 
         let signatures = vec![config.sign_key(sec_key, key_pw, &key)?];
@@ -250,9 +253,10 @@ impl SecretSubkey {
             .typ(SignatureType::SubkeyBinding)
             .pub_alg(sec_key.algorithm())
             .hashed_subpackets(hashed_subpackets)
-            .unhashed_subpackets(vec![Subpacket::Issuer(
-                sec_key.key_id().expect("missing key id"),
-            )])
+            .unhashed_subpackets(vec![
+                Subpacket::Issuer(sec_key.key_id().expect("missing key id")),
+                Subpacket::IssuerFingerprint(sec_key.fingerprint()),
+            ])
             .build()?;
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 
