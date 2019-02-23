@@ -7,7 +7,7 @@ use crypto::hash::HashAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 
 /// The version of the secret key that is actually exposed to users to do crypto operations.
-#[allow(clippy::large_enum_variant)]
+#[allow(clippy::large_enum_variant)] // FIXME
 pub enum SecretKeyRepr {
     RSA(RSAPrivateKey),
     DSA(DSASecretKey),

@@ -429,6 +429,7 @@ impl SymmetricKeyAlgorithm {
     /// prefixes the plaintext with BS+2 octets of random data, such that
     /// octets BS+1 and BS+2 match octets BS-1 and BS. It does a CFB
     /// resynchronization after encrypting those BS+2 octets.
+    #[allow(clippy::cyclomatic_complexity)] // FIXME
     pub fn encrypt_with_iv<'a>(
         self,
         key: &[u8],
@@ -443,7 +444,7 @@ impl SymmetricKeyAlgorithm {
         {
             match self {
                 SymmetricKeyAlgorithm::Plaintext => {}
-                SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+                SymmetricKeyAlgorithm::IDEA => unimplemented_err!("IDEA encrypt"),
                 SymmetricKeyAlgorithm::TripleDES => {
                     encrypt!(TdesEde3, key, iv_vec, prefix, data, bs, resync);
                 }
@@ -474,9 +475,9 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::Camellia256 => {
                     unimplemented_err!("Camellia 256 not yet available")
                 }
-                SymmetricKeyAlgorithm::Private10 => unimplemented_err!(
-                    "Private10 should not be used, and only exist for compatability"
-                ),
+                SymmetricKeyAlgorithm::Private10 => {
+                    bail!("Private10 should not be used, and only exist for compatability")
+                }
             }
         }
 

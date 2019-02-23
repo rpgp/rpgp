@@ -119,6 +119,7 @@ impl Serialize for SignedKeyDetails {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[allow(clippy::large_enum_variant)] // FIXME
 pub enum PublicOrSecret {
     Public(SignedPublicKey),
     Secret(SignedSecretKey),

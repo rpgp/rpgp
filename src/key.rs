@@ -495,7 +495,7 @@ impl KeyType {
                         d: key.d().clone(),
                         p: p.clone(),
                         q: q.clone(),
-                        u: u.clone(),
+                        u,
                     }),
                 ))
             }
