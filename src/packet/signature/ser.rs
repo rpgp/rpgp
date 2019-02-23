@@ -84,7 +84,7 @@ impl Subpacket {
                 writer.write_all(&value_bytes)?;
             }
             Subpacket::RevocationKey(rev_key) => {
-                writer.write_all(&[rev_key.class, rev_key.algorithm as u8])?;
+                writer.write_all(&[rev_key.class as u8, rev_key.algorithm as u8])?;
                 writer.write_all(&rev_key.fingerprint[..])?;
             }
             Subpacket::SignersUserID(body) => {

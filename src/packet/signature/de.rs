@@ -11,7 +11,7 @@ use crypto::sym::SymmetricKeyAlgorithm;
 use de::Deserialize;
 use errors::Result;
 use packet::signature::types::*;
-use types::{CompressionAlgorithm, KeyId, RevocationKey, Version};
+use types::{CompressionAlgorithm, KeyId, RevocationKey, RevocationKeyClass, Version};
 use util::{clone_into_array, mpi, packet_length, read_string};
 
 impl Deserialize for Signature {
@@ -125,14 +125,15 @@ named!(regular_expression<Subpacket>, map!(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
 #[rustfmt::skip]
 named!(revocation_key<Subpacket>, do_parse!(
-             class: be_u8
+             class: map_opt!(be_u8, RevocationKeyClass::from_u8)
     >>   algorithm: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+    // TODO: V5 Keys have 32 octets here
     >>          fp: take!(20)
-    >> (Subpacket::RevocationKey(RevocationKey {
+    >> (Subpacket::RevocationKey(RevocationKey::new(
         class,
         algorithm,
-        fingerprint: clone_into_array(fp)
-    }))
+        fp.to_vec()
+    )))
 ));
 
 /// Parse a notation data subpacket

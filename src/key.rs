@@ -17,7 +17,7 @@ use packet::{
     self, KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, UserAttribute,
     UserId,
 };
-use types::{self, CompressionAlgorithm, SecretKeyTrait};
+use types::{self, CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq)]
@@ -45,6 +45,7 @@ pub struct KeyDetails {
     preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
     preferred_hash_algorithms: Vec<HashAlgorithm>,
     preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+    revocation_key: Option<RevocationKey>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -68,25 +69,29 @@ impl KeyDetails {
         let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
         let preferred_hash_algorithms = self.preferred_hash_algorithms;
         let preferred_compression_algorithms = self.preferred_compression_algorithms;
+        let revocation_key = self.revocation_key;
 
         let mut users = vec![];
 
         // primary user id
         {
             let id = self.primary_user_id;
+            let mut hashed_subpackets = vec![
+                Subpacket::IsPrimary(true),
+                Subpacket::SignatureCreationTime(chrono::Utc::now()),
+                Subpacket::KeyFlags(keyflags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
+                Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
+                Subpacket::PreferredCompressionAlgorithms(preferred_compression_algorithms.clone()),
+            ];
+            if let Some(rkey) = revocation_key {
+                hashed_subpackets.push(Subpacket::RevocationKey(rkey));
+            }
+
             let config = SignatureConfigBuilder::default()
                 .typ(SignatureType::CertGeneric)
                 .pub_alg(key.algorithm())
-                .hashed_subpackets(vec![
-                    Subpacket::IsPrimary(true),
-                    Subpacket::SignatureCreationTime(chrono::Utc::now()),
-                    Subpacket::KeyFlags(keyflags.clone()),
-                    Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
-                    Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
-                    Subpacket::PreferredCompressionAlgorithms(
-                        preferred_compression_algorithms.clone(),
-                    ),
-                ])
+                .hashed_subpackets(hashed_subpackets)
                 .unhashed_subpackets(vec![Subpacket::Issuer(
                     key.key_id().expect("missing key id"),
                 )])
@@ -278,6 +283,8 @@ pub struct SecretKeyParams {
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
     preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+    #[builder(default)]
+    revocation_key: Option<RevocationKey>,
 
     #[builder]
     primary_user_id: String,
@@ -411,6 +418,7 @@ impl SecretKeyParams {
                 preferred_symmetric_algorithms: self.preferred_symmetric_algorithms,
                 preferred_hash_algorithms: self.preferred_hash_algorithms,
                 preferred_compression_algorithms: self.preferred_compression_algorithms,
+                revocation_key: self.revocation_key,
             },
             public_subkeys: Default::default(),
             secret_subkeys: self
@@ -449,9 +457,9 @@ impl SecretKeyParams {
 pub enum KeyType {
     /// Encryption & Signing with RSA an the given bitsize.
     Rsa(usize),
-    /// Encrypting with curev 25519
+    /// Encrypting with Curve25519
     ECDH,
-    /// Signing with curve 25519
+    /// Signing with Curve25519
     EdDSA,
 }
 
