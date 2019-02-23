@@ -10,8 +10,8 @@ pub fn s2k<F>(
     sym_alg: SymmetricKeyAlgorithm,
     s2k: StringToKeyType,
     hash_alg: HashAlgorithm,
-    salt: Option<&Vec<u8>>,
-    count: Option<&usize>,
+    salt: Option<&[u8]>,
+    count: Option<usize>,
 ) -> Result<Vec<u8>>
 where
     F: FnOnce() -> String,

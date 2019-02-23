@@ -5,8 +5,7 @@ use nom::{Needed, Offset};
 
 use errors::{Error, Result};
 use packet::packet_sum::Packet;
-use packet::single;
-use types::PacketLength;
+use packet::single::{self, ParseResult};
 
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
@@ -75,24 +74,19 @@ impl<R: Read> Iterator for PacketParser<R> {
                     Err(err) => Err(err.into()),
                 }
             }
-            .and_then(|(rest, (ver, tag, packet_length, body))| {
-                if packet_length == PacketLength::Indeterminated {
-                    // Indeterminated length packet
+            .and_then(|(rest, (ver, tag, _packet_length, body))| match body {
+                ParseResult::Indeterminated => {
                     let mut body = rest.to_vec();
                     inner.read_to_end(&mut body)?;
                     let p = single::body_parser(ver, tag, &body);
-
                     Ok((rest.len() + body.len(), p))
-                } else {
-                    // Regular packet
-                    let p = if body.len() == 1 {
-                        // Most packets will only have a single element,
-                        // so no need to allocate
-                        single::body_parser(ver, tag, &body[0][..])
-                    } else {
-                        single::body_parser(ver, tag, &body.concat())
-                    };
-
+                }
+                ParseResult::Fixed(body) => {
+                    let p = single::body_parser(ver, tag, body);
+                    Ok((b.data().offset(rest), p))
+                }
+                ParseResult::Partial(body) => {
+                    let p = single::body_parser(ver, tag, &body.concat());
                     Ok((b.data().offset(rest), p))
                 }
             }) {

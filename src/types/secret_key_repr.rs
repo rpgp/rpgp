@@ -1,5 +1,6 @@
 use std::fmt;
 
+use num_bigint::BigUint;
 use rsa::RSAPrivateKey;
 
 use crypto::hash::HashAlgorithm;
@@ -9,7 +10,7 @@ use crypto::sym::SymmetricKeyAlgorithm;
 #[allow(clippy::large_enum_variant)]
 pub enum SecretKeyRepr {
     RSA(RSAPrivateKey),
-    DSA,
+    DSA(DSASecretKey),
     ECDSA,
     ECDH(ECDHSecretKey),
     EdDSA(EdDSASecretKey),
@@ -33,11 +34,17 @@ pub struct EdDSASecretKey {
     pub oid: Vec<u8>,
 }
 
+/// Secret key for DSA.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DSASecretKey {
+    x: BigUint,
+}
+
 impl fmt::Debug for SecretKeyRepr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             SecretKeyRepr::RSA(_) => write!(f, "SecretKeyRepr(RSA)"),
-            SecretKeyRepr::DSA => write!(f, "SecretKeyRepr(DSA)"),
+            SecretKeyRepr::DSA(_) => write!(f, "SecretKeyRepr(DSA)"),
             SecretKeyRepr::ECDSA => write!(f, "SecretKeyRepr(ECDSA)"),
             SecretKeyRepr::ECDH(_) => write!(f, "SecretKeyRepr(ECDH)"),
             SecretKeyRepr::EdDSA(_) => write!(f, "SecretKeyRepr(EdDSA)"),

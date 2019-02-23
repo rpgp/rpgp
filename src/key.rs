@@ -8,7 +8,6 @@ use rsa::{self, PublicKey as PublicKeyTrait};
 use composed::{
     SignedKeyDetails, SignedPublicKey, SignedPublicSubKey, SignedSecretKey, SignedSecretSubKey,
 };
-use crypto;
 use crypto::ecc_curve::ECCCurve;
 use crypto::hash::HashAlgorithm;
 use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
@@ -19,7 +18,6 @@ use packet::{
     UserId,
 };
 use types::{self, CompressionAlgorithm, SecretKeyTrait};
-use util::{write_bignum_mpi, write_mpi};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq)]
@@ -469,11 +467,11 @@ impl KeyType {
     pub fn generate(
         &self,
         passphrase: Option<String>,
-    ) -> errors::Result<(PublicParams, types::EncryptedSecretParams)> {
+    ) -> errors::Result<(PublicParams, types::SecretParams)> {
         let mut rng = OsRng::new().expect("no system rng available");
 
         // TODO: handle encrypt using S2K Iterated and Salted when passphrase is set.
-        ensure!(passphrase.is_none(), "Passphrases are note yet supported");
+        ensure!(passphrase.is_none(), "Passphrases are not yet supported");
 
         match self {
             KeyType::Rsa(bit_size) => {
@@ -488,22 +486,17 @@ impl KeyType {
                     .to_biguint()
                     .expect("invalid prime");
 
-                // Data for RSA Public  : [n: MPI, e: MPI]
-                // Data for RSA Private : [d: MPI, p: MPI, q: MPI, u: MPI]
-                let mut data = Vec::new();
-                write_bignum_mpi(key.d(), &mut data)?;
-                write_bignum_mpi(p, &mut data)?;
-                write_bignum_mpi(q, &mut data)?;
-                write_bignum_mpi(&u, &mut data)?;
-
-                let checksum = crypto::checksum::calculate_simple(&data);
-
                 Ok((
                     PublicParams::RSA {
                         n: key.n().clone(),
                         e: key.e().clone(),
                     },
-                    types::EncryptedSecretParams::new_plaintext(data, Some(checksum)),
+                    types::SecretParams::Plain(types::PlainSecretParams::RSA {
+                        d: key.d().clone(),
+                        p: p.clone(),
+                        q: q.clone(),
+                        u: u.clone(),
+                    }),
                 ))
             }
             KeyType::ECDH => {
@@ -520,13 +513,6 @@ impl KeyType {
                 // secret key
                 let q = secret.to_bytes().iter().cloned().rev().collect::<Vec<u8>>();
 
-                // Data for ECDH Public  : [OID, p: MPI, KDF]
-                // Data for ECDH Private : [q: MPI]
-                let mut data = Vec::new();
-                write_mpi(&q[..], &mut data)?;
-
-                let checksum = crypto::checksum::calculate_simple(&data);
-
                 Ok((
                     PublicParams::ECDH {
                         curve: ECCCurve::Curve25519,
@@ -535,7 +521,7 @@ impl KeyType {
                         hash: HashAlgorithm::SHA256,
                         alg_sym: SymmetricKeyAlgorithm::AES128,
                     },
-                    types::EncryptedSecretParams::new_plaintext(data, Some(checksum)),
+                    types::SecretParams::Plain(types::PlainSecretParams::ECDH(q)),
                 ))
             }
             KeyType::EdDSA => {
@@ -550,19 +536,12 @@ impl KeyType {
                 // secret key
                 let p = &bytes[..32];
 
-                // Data for EdDSA Public  : [OID, q: MPI]
-                // Data for EdDSA Private : [p: MPI]
-                let mut data = Vec::new();
-                write_mpi(p, &mut data)?;
-
-                let checksum = crypto::checksum::calculate_simple(&data);
-
                 Ok((
                     PublicParams::EdDSA {
                         curve: ECCCurve::Ed25519,
                         q,
                     },
-                    types::EncryptedSecretParams::new_plaintext(data, Some(checksum)),
+                    types::SecretParams::Plain(types::PlainSecretParams::EdDSA(p.to_vec())),
                 ))
             }
         }

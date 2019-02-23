@@ -12,6 +12,8 @@ extern crate log;
 #[macro_use]
 extern crate pretty_assertions;
 
+extern crate gperftools;
+
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::Path;
@@ -34,8 +36,8 @@ use pgp::packet::{
     KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId,
 };
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, SecretKeyRepr, SecretKeyTrait, SignedUser,
-    StringToKeyType, Version,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, SecretKeyRepr, SecretKeyTrait, SecretParams,
+    SignedUser, StringToKeyType, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -177,8 +179,8 @@ fn test_parse_openpgp_sample_rsa_private() {
     assert_eq!(pkey.algorithm(), PublicKeyAlgorithm::RSA);
 
     assert_eq!(
-        pkey.secret_params().checksum,
-        Some(hex::decode("2c46").expect("failed hex encoding"))
+        pkey.secret_params().checksum().unwrap(),
+        hex::decode("2c46").expect("failed hex encoding")
     );
 
     pkey.unlock(
@@ -503,34 +505,29 @@ fn encrypted_private_key() {
 
     let pp = key.primary_key.secret_params().clone();
 
-    assert_eq!(
-        pp.iv,
-        Some(
-            hex::decode("2271f718af70d3bd9d60c2aed9469b67")
-                .unwrap()
-                .to_vec()
-        )
-    );
+    match pp {
+        SecretParams::Plain(_) => panic!("should be encrypted"),
+        SecretParams::Encrypted(pp) => {
+            assert_eq!(
+                pp.iv(),
+                &hex::decode("2271f718af70d3bd9d60c2aed9469b67").unwrap()[..]
+            );
 
-    assert_eq!(
-        pp.string_to_key.as_ref().unwrap().salt,
-        Some(hex::decode("CB18E77884F2F055").unwrap().to_vec())
-    );
+            assert_eq!(
+                pp.string_to_key().salt().unwrap(),
+                &hex::decode("CB18E77884F2F055").unwrap()[..]
+            );
 
-    assert_eq!(
-        pp.string_to_key.as_ref().unwrap().typ,
-        StringToKeyType::IteratedAndSalted
-    );
+            assert_eq!(pp.string_to_key().typ(), StringToKeyType::IteratedAndSalted);
 
-    assert_eq!(pp.string_to_key.as_ref().unwrap().count, Some(96));
+            assert_eq!(pp.string_to_key().count(), Some(65536));
 
-    assert_eq!(
-        pp.string_to_key.as_ref().unwrap().hash,
-        HashAlgorithm::SHA256
-    );
+            assert_eq!(pp.string_to_key().hash(), HashAlgorithm::SHA256);
 
-    assert_eq!(pp.encryption_algorithm, Some(SymmetricKeyAlgorithm::AES128));
-    assert_eq!(pp.string_to_key_id, 254);
+            assert_eq!(pp.encryption_algorithm(), SymmetricKeyAlgorithm::AES128);
+            assert_eq!(pp.string_to_key_id(), 254);
+        }
+    }
 
     key.unlock(
         || "test".to_string(),

@@ -11,10 +11,10 @@ const EXPBIAS: u32 = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringToKey {
-    pub typ: StringToKeyType,
-    pub hash: HashAlgorithm,
-    pub salt: Option<Vec<u8>>,
-    pub count: Option<u8>,
+    typ: StringToKeyType,
+    hash: HashAlgorithm,
+    salt: Option<Vec<u8>>,
+    count: Option<u8>,
 }
 
 impl StringToKey {
@@ -23,10 +23,23 @@ impl StringToKey {
     pub fn count(&self) -> Option<usize> {
         match self.count {
             Some(c) => {
-                Some(((16u32 + u32::from(c & 15)) << (u32::from(c >> 4) + EXPBIAS)) as usize)
+                let res = ((16u32 + u32::from(c & 15)) << (u32::from(c >> 4) + EXPBIAS)) as usize;
+                Some(res)
             }
             None => None,
         }
+    }
+
+    pub fn salt(&self) -> Option<&[u8]> {
+        self.salt.as_ref().map(|salt| &salt[..])
+    }
+
+    pub fn hash(&self) -> HashAlgorithm {
+        self.hash
+    }
+
+    pub fn typ(&self) -> StringToKeyType {
+        self.typ
     }
 }
 

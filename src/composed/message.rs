@@ -406,7 +406,7 @@ impl<'a> MessageDecrypter<'a> {
                 SecretKeyRepr::RSA(ref priv_key) => {
                     decrypt_rsa(priv_key, mpis, &locked_key.fingerprint())?
                 }
-                SecretKeyRepr::DSA => bail!("DSA is only used for signing"),
+                SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
                 SecretKeyRepr::ECDSA => bail!("ECDSA is only used for signing"),
                 SecretKeyRepr::ECDH(ref priv_key) => {
                     decrypt_ecdh(priv_key, mpis, &locked_key.fingerprint())?
