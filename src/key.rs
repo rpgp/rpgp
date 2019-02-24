@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use chrono;
 use num_bigint::traits::ModInverse;
-use rand::OsRng;
+use rand::{CryptoRng, OsRng, Rng};
 use rsa::{self, PublicKey as PublicKeyTrait};
 
 use composed::{
@@ -476,87 +476,125 @@ impl KeyType {
         }
     }
 
+    fn generate_rsa_key<R: Rng + CryptoRng>(
+        &self,
+        rng: &mut R,
+        bit_size: usize,
+    ) -> errors::Result<(PublicParams, types::PlainSecretParams)> {
+        let key = rsa::RSAPrivateKey::new(rng, bit_size)?;
+
+        let p = &key.primes()[0];
+        let q = &key.primes()[1];
+        let u = p
+            .clone()
+            .mod_inverse(q)
+            .expect("invalid prime")
+            .to_biguint()
+            .expect("invalid prime");
+
+        Ok((
+            PublicParams::RSA {
+                n: key.n().clone(),
+                e: key.e().clone(),
+            },
+            types::PlainSecretParams::RSA {
+                d: key.d().clone(),
+                p: p.clone(),
+                q: q.clone(),
+                u,
+            },
+        ))
+    }
+
+    fn generate_ecdh_key<R: Rng + CryptoRng>(
+        &self,
+        rng: &mut R,
+    ) -> (PublicParams, types::PlainSecretParams) {
+        // ECDH could be a different curve, for now it is always ed25519
+
+        let secret = x25519_dalek::StaticSecret::new(rng);
+        let public = x25519_dalek::PublicKey::from(&secret);
+
+        // public key
+        let mut p = Vec::with_capacity(33);
+        p.push(0x40);
+        p.extend_from_slice(&public.as_bytes()[..]);
+
+        // secret key
+        let q = secret.to_bytes().iter().cloned().rev().collect::<Vec<u8>>();
+
+        (
+            PublicParams::ECDH {
+                curve: ECCCurve::Curve25519,
+                p,
+                // TODO: make these configurable and/or check for good defaults
+                hash: HashAlgorithm::SHA256,
+                alg_sym: SymmetricKeyAlgorithm::AES128,
+            },
+            types::PlainSecretParams::ECDH(q),
+        )
+    }
+
+    fn generate_eddsa_key<R: Rng + CryptoRng>(
+        &self,
+        rng: &mut R,
+    ) -> (PublicParams, types::PlainSecretParams) {
+        let keypair = ed25519_dalek::Keypair::generate(rng);
+        let bytes = keypair.to_bytes();
+
+        // public key
+        let mut q = Vec::with_capacity(33);
+        q.push(0x40);
+        q.extend_from_slice(&bytes[32..]);
+
+        // secret key
+        let p = &bytes[..32];
+
+        (
+            PublicParams::EdDSA {
+                curve: ECCCurve::Ed25519,
+                q,
+            },
+            types::PlainSecretParams::EdDSA(p.to_vec()),
+        )
+    }
+
     pub fn generate(
         &self,
         passphrase: Option<String>,
     ) -> errors::Result<(PublicParams, types::SecretParams)> {
         let mut rng = OsRng::new().expect("no system rng available");
 
-        // TODO: handle encrypt using S2K Iterated and Salted when passphrase is set.
-        ensure!(passphrase.is_none(), "Passphrases are not yet supported");
+        let (pub_params, plain) = match self {
+            KeyType::Rsa(bit_size) => self.generate_rsa_key(&mut rng, *bit_size)?,
+            KeyType::ECDH => self.generate_ecdh_key(&mut rng),
+            KeyType::EdDSA => self.generate_eddsa_key(&mut rng),
+        };
 
-        match self {
-            KeyType::Rsa(bit_size) => {
-                let key = rsa::RSAPrivateKey::new(&mut rng, *bit_size)?;
+        let secret = match passphrase {
+            Some(passphrase) => {
+                // TODO: make configurable
+                let s2k = types::StringToKey::new_default(&mut rng);
+                let alg = SymmetricKeyAlgorithm::AES256;
+                // encrypted, sha1 checksum
+                let id = 254;
 
-                let p = &key.primes()[0];
-                let q = &key.primes()[1];
-                let u = p
-                    .clone()
-                    .mod_inverse(q)
-                    .expect("invalid prime")
-                    .to_biguint()
-                    .expect("invalid prime");
+                // TODO: derive from key itself
+                let version = types::KeyVersion::default();
 
-                Ok((
-                    PublicParams::RSA {
-                        n: key.n().clone(),
-                        e: key.e().clone(),
-                    },
-                    types::SecretParams::Plain(types::PlainSecretParams::RSA {
-                        d: key.d().clone(),
-                        p: p.clone(),
-                        q: q.clone(),
-                        u,
-                    }),
-                ))
+                types::SecretParams::Encrypted(plain.encrypt(
+                    &mut rng,
+                    &passphrase,
+                    alg,
+                    s2k,
+                    version,
+                    id,
+                )?)
             }
-            KeyType::ECDH => {
-                // ECDH could be a different curve, for now it is always ed25519
+            None => types::SecretParams::Plain(plain),
+        };
 
-                let secret = x25519_dalek::StaticSecret::new(&mut rng);
-                let public = x25519_dalek::PublicKey::from(&secret);
-
-                // public key
-                let mut p = Vec::with_capacity(33);
-                p.push(0x40);
-                p.extend_from_slice(&public.as_bytes()[..]);
-
-                // secret key
-                let q = secret.to_bytes().iter().cloned().rev().collect::<Vec<u8>>();
-
-                Ok((
-                    PublicParams::ECDH {
-                        curve: ECCCurve::Curve25519,
-                        p,
-                        // TODO: make these configurable and/or check for good defaults
-                        hash: HashAlgorithm::SHA256,
-                        alg_sym: SymmetricKeyAlgorithm::AES128,
-                    },
-                    types::SecretParams::Plain(types::PlainSecretParams::ECDH(q)),
-                ))
-            }
-            KeyType::EdDSA => {
-                let keypair = ed25519_dalek::Keypair::generate(&mut rng);
-                let bytes = keypair.to_bytes();
-
-                // public key
-                let mut q = Vec::with_capacity(33);
-                q.push(0x40);
-                q.extend_from_slice(&bytes[32..]);
-
-                // secret key
-                let p = &bytes[..32];
-
-                Ok((
-                    PublicParams::EdDSA {
-                        curve: ECCCurve::Ed25519,
-                        q,
-                    },
-                    types::SecretParams::Plain(types::PlainSecretParams::EdDSA(p.to_vec())),
-                ))
-            }
-        }
+        Ok((pub_params, secret))
     }
 }
 
@@ -571,12 +609,12 @@ mod tests {
         use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
-        let key_params = SecretKeyParamsBuilder::default()
+        let mut key_params = SecretKeyParamsBuilder::default();
+        key_params
             .key_type(KeyType::Rsa(2048))
             .can_create_certificates(true)
             .can_sign(true)
             .primary_user_id("Me <me@mail.com>".into())
-            .passphrase(None)
             .preferred_symmetric_algorithms(vec![
                 SymmetricKeyAlgorithm::AES256,
                 SymmetricKeyAlgorithm::AES192,
@@ -599,24 +637,49 @@ mod tests {
                     .can_encrypt(true)
                     .build()
                     .unwrap(),
-            )
+            );
+
+        let key_params_enc = key_params
+            .clone()
+            .passphrase(Some("hello".into()))
             .build()
             .unwrap();
+        let key_enc = key_params_enc
+            .generate()
+            .expect("failed to generate secret key, encrypted");
 
-        let key = key_params
+        let key_params_plain = key_params.clone().passphrase(None).build().unwrap();
+        let key_plain = key_params_plain
             .generate()
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+        let signed_key_enc = key_enc.sign(|| "hello".into()).expect("failed to sign key");
+        let signed_key_plain = key_plain.sign(|| "".into()).expect("failed to sign key");
 
-        let armor = signed_key
+        let armor_enc = signed_key_enc
+            .to_armored_string()
+            .expect("failed to serialize key");
+        let armor_plain = signed_key_plain
             .to_armored_string()
             .expect("failed to serialize key");
 
-        ::std::fs::write("sample-rsa.sec.asc", &armor).unwrap();
+        std::fs::write("sample-rsa-enc.sec.asc", &armor_enc).unwrap();
+        std::fs::write("sample-rsa.sec.asc", &armor_plain).unwrap();
 
-        let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
+        let signed_key2_enc =
+            SignedSecretKey::from_string(&armor_enc).expect("failed to parse key (enc)");
+        signed_key2_enc.verify().expect("invalid key (enc)");
+
+        let signed_key2_plain =
+            SignedSecretKey::from_string(&armor_plain).expect("failed to parse key (plain)");
+        signed_key2_plain.verify().expect("invalid key (plain)");
+
+        signed_key2_enc
+            .unlock(|| "hello".into(), |_| Ok(()))
+            .expect("failed to unlock parsed key (enc)");
+        signed_key2_plain
+            .unlock(|| "".into(), |_| Ok(()))
+            .expect("failed to unlock parsed key (plain)");
 
         // assert_eq!(signed_key, signed_key2);
     }
