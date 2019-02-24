@@ -32,7 +32,7 @@ pub enum HashAlgorithm {
 
 impl Default for HashAlgorithm {
     fn default() -> Self {
-        HashAlgorithm::SHA512
+        HashAlgorithm::SHA256
     }
 }
 

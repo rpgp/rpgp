@@ -205,6 +205,7 @@ macro_rules! impl_secret_key {
                         self.to_writer_old(writer)
                     }
                     $crate::types::KeyVersion::V4 => self.to_writer_new(writer),
+                    $crate::types::KeyVersion::V5 => unimplemented_err!("V5 keys"),
                 }
             }
         }
@@ -231,6 +232,7 @@ macro_rules! impl_secret_key {
                 use $crate::util::bignum_to_mpi;
 
                 match self.version() {
+                    KeyVersion::V5 => unimplemented!("V5 keys"),
                     KeyVersion::V4 => {
                         // A one-octet version number (4).
                         let mut packet = Vec::new();
@@ -383,6 +385,7 @@ macro_rules! impl_secret_key {
                 use $crate::types::{KeyId, KeyVersion};
 
                 match self.version() {
+                    KeyVersion::V5 => unimplemented!("V5 keys"),
                     KeyVersion::V4 => {
                         // Lower 64 bits
                         let f = self.fingerprint();
