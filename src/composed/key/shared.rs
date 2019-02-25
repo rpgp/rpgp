@@ -1,4 +1,4 @@
-use chrono;
+use chrono::{self, SubsecRound};
 
 use composed::SignedKeyDetails;
 use crypto::hash::HashAlgorithm;
@@ -62,7 +62,7 @@ impl KeyDetails {
             let id = self.primary_user_id;
             let mut hashed_subpackets = vec![
                 Subpacket::IsPrimary(true),
-                Subpacket::SignatureCreationTime(chrono::Utc::now()),
+                Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
                 Subpacket::KeyFlags(keyflags.clone()),
                 Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
                 Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
@@ -97,7 +97,7 @@ impl KeyDetails {
                         .typ(SignatureType::CertGeneric)
                         .pub_alg(key.algorithm())
                         .hashed_subpackets(vec![
-                            Subpacket::SignatureCreationTime(chrono::Utc::now()),
+                            Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
                             Subpacket::KeyFlags(keyflags.clone()),
                             Subpacket::PreferredSymmetricAlgorithms(
                                 preferred_symmetric_algorithms.clone(),
