@@ -11,7 +11,7 @@ keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy
 
 [dependencies]
 rsa = "^0.1"
-num-bigint-dig = { version = "0.2", features = ["rand", "i128", "u64_digit"] }
+num-bigint = { version = "0.3", features = ["rand", "i128", "u64_digit", "prime"] , package = "num-bigint-dig" }
 crc24 = "^0.1"
 base64 = { git = "https://github.com/dignifiedquire/rust-base64", branch = "fix/slow-writer" }
 byteorder = "^1.2"
@@ -27,17 +27,17 @@ ripemd160 = "^0.8"
 generic-array = "^0.12"
 digest = "^0.8"
 aes = "^0.3"
-blowfish = "^0.3"
-twofish = "^0.1"
-des = "^0.2"
-block-modes = "^0.2"
+blowfish = "^0.4"
+twofish = "^0.2"
+des = "^0.3"
+block-modes = "^0.3"
 hex = "^0.3"
 cfb-mode = "^0.3"
 flate2 = { version = "^1.0", default-features = false, features = ["rust_backend"] }
 num-derive = "0.2.3"
 num-traits = "0.2.6"
 cast5 = { git = "https://github.com/dignifiedquire/block-ciphers", branch = "cast5" }
-x25519-dalek = { version = "0.4", default-features = false, features = ["std", "u64_backend"] }
+x25519-dalek = { version = "0.5", default-features = false, features = ["std", "u64_backend"] }
 ed25519-dalek = { version = "1.0.0-pre.1", default-features = false, features = ["std", "u64_backend"] }
 lazy_static = "1.2.0"
 block-padding = "0.1.2"
@@ -46,6 +46,8 @@ pretty_env_logger = "0.2.5"
 buf_redux = { version = "0.8.1", default-features = false }
 try_from = "^0.3"
 rand = "0.5.5"
+derive_builder = "0.7.0"
+bitfield = "0.13.1"
 
 [dependencies.nom]
 version = "^4.0"
@@ -56,12 +58,16 @@ serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
 glob = "^0.2"
-gperftools = { git = "https://github.com/dignifiedquire/rust-gperftools" }
 regex = "^1.1"
 pretty_assertions = "0.5.1"
 
+[dependencies.gperftools]
+version = "0.2.0"
+optional = true
+
+
 [features]
 default = []
-nightly = ["x25519-dalek/nightly"]
-profile = []
+nightly = ["x25519-dalek/nightly", "rsa/nightly"]
+profile = ["gperftools"]
 asm = ["sha2/asm"]

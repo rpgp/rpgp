@@ -11,5 +11,15 @@ pub trait PublicKeyTrait: KeyTrait {
 
     // TODO: figure out a better place for this
     /// This is the data used for hashing in a signature. Only uses the public portion of the key.
-    fn to_writer_old(&self, &mut impl io::Write) -> Result<()>;
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()>;
+}
+
+impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+        (*self).verify_signature(hash, data, sig)
+    }
+
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
+        (*self).to_writer_old(writer)
+    }
 }

@@ -2,6 +2,7 @@ use std::io;
 
 use nom::be_u8;
 use num_traits::FromPrimitive;
+use rand::{CryptoRng, Rng};
 
 use crypto::hash::HashAlgorithm;
 use errors::Result;
@@ -11,10 +12,28 @@ const EXPBIAS: u32 = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringToKey {
-    pub typ: StringToKeyType,
-    pub hash: HashAlgorithm,
-    pub salt: Option<Vec<u8>>,
-    pub count: Option<u8>,
+    typ: StringToKeyType,
+    hash: HashAlgorithm,
+    salt: Option<Vec<u8>>,
+    count: Option<u8>,
+}
+
+impl StringToKey {
+    pub fn new_default<R: CryptoRng + Rng>(rng: &mut R) -> Self {
+        StringToKey::new_iterated(rng, HashAlgorithm::default(), 224)
+    }
+
+    pub fn new_iterated<R: CryptoRng + Rng>(rng: &mut R, hash: HashAlgorithm, count: u8) -> Self {
+        let mut salt = vec![0u8; 8];
+        rng.fill(&mut salt[..]);
+
+        StringToKey {
+            typ: StringToKeyType::IteratedAndSalted,
+            hash,
+            salt: Some(salt),
+            count: Some(count),
+        }
+    }
 }
 
 impl StringToKey {
@@ -23,10 +42,86 @@ impl StringToKey {
     pub fn count(&self) -> Option<usize> {
         match self.count {
             Some(c) => {
-                Some(((16u32 + u32::from(c & 15)) << (u32::from(c >> 4) + EXPBIAS)) as usize)
+                let res = ((16u32 + u32::from(c & 15)) << (u32::from(c >> 4) + EXPBIAS)) as usize;
+                Some(res)
             }
             None => None,
         }
+    }
+
+    pub fn salt(&self) -> Option<&[u8]> {
+        self.salt.as_ref().map(|salt| &salt[..])
+    }
+
+    pub fn hash(&self) -> HashAlgorithm {
+        self.hash
+    }
+
+    pub fn typ(&self) -> StringToKeyType {
+        self.typ
+    }
+
+    /// Derives a key from the given password.
+    pub fn derive_key(&self, passphrase: &str, key_size: usize) -> Result<Vec<u8>> {
+        let digest_size = self.hash.digest_size();
+        let rounds = (key_size as f32 / digest_size as f32).ceil() as usize;
+
+        let mut key = Vec::with_capacity(key_size);
+
+        for round in 0..rounds {
+            let mut hasher = self.hash.new_hasher()?;
+
+            // add 0s prefix
+            if round > 0 {
+                hasher.update(&vec![0u8; round][..]);
+            }
+
+            match self.typ {
+                StringToKeyType::Simple => {
+                    hasher.update(passphrase.as_bytes());
+                }
+                StringToKeyType::Salted => {
+                    hasher.update(self.salt.as_ref().expect("missing salt"));
+                    hasher.update(passphrase.as_bytes());
+                }
+                StringToKeyType::IteratedAndSalted => {
+                    let salt = self.salt.as_ref().expect("missing salt");
+                    let pw = passphrase.as_bytes();
+                    let data_size = salt.len() + pw.len();
+                    // how many bytes are supposed to be hashed
+                    let mut count = self.count().expect("missing count");
+
+                    if count < data_size {
+                        // if the count is less, hash one full set
+                        count = data_size;
+                    }
+
+                    while count > data_size {
+                        hasher.update(salt);
+                        hasher.update(pw);
+                        count -= data_size;
+                    }
+
+                    if count < salt.len() {
+                        hasher.update(&salt[..count]);
+                    } else {
+                        hasher.update(salt);
+                        count -= salt.len();
+                        hasher.update(&pw[..count]);
+                    }
+                }
+                _ => unimplemented_err!("S2K {:?} is not available", self.typ),
+            }
+
+            if key_size - key.len() < digest_size {
+                let end = key_size - key.len();
+                key.extend_from_slice(&hasher.finish()[..end]);
+            } else {
+                key.extend_from_slice(&hasher.finish()[..]);
+            }
+        }
+
+        Ok(key)
     }
 }
 
@@ -49,6 +144,12 @@ pub enum StringToKeyType {
     Private108 = 108,
     Private109 = 109,
     Private110 = 110,
+}
+
+impl Default for StringToKeyType {
+    fn default() -> Self {
+        StringToKeyType::IteratedAndSalted
+    }
 }
 
 impl StringToKeyType {

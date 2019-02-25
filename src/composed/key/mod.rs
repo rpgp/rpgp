@@ -1,12 +1,9 @@
-#[macro_use]
-mod key_parser_macros;
+mod builder;
+mod public;
+mod secret;
+mod shared;
 
-pub mod parse;
-pub mod public;
-pub mod secret;
-pub mod shared;
-
-pub use parse::*;
-pub use public::*;
-pub use secret::*;
-pub use shared::*;
+pub use self::builder::*;
+pub use self::public::*;
+pub use self::secret::*;
+pub use self::shared::*;

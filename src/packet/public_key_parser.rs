@@ -93,24 +93,24 @@ named!(rsa<PublicParams>, do_parse!(
 ));
 
 /// Parse the fields of a public key.
-named_args!(pub parse_pub_fields<'a>(typ: &PublicKeyAlgorithm) <PublicParams>, switch!(
+named_args!(pub parse_pub_fields(typ: PublicKeyAlgorithm) <PublicParams>, switch!(
     value!(typ),
-    &PublicKeyAlgorithm::RSA        |
-    &PublicKeyAlgorithm::RSAEncrypt |
-    &PublicKeyAlgorithm::RSASign    => call!(rsa)     |
-    &PublicKeyAlgorithm::DSA        => call!(dsa)     |
-    &PublicKeyAlgorithm::ECDSA      => call!(ecdsa)   |
-    &PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
-    &PublicKeyAlgorithm::Elgamal    |
-    &PublicKeyAlgorithm::ElgamalSign => call!(elgamal) |
-    &PublicKeyAlgorithm::EdDSA       => call!(eddsa)
+    PublicKeyAlgorithm::RSA        |
+    PublicKeyAlgorithm::RSAEncrypt |
+    PublicKeyAlgorithm::RSASign    => call!(rsa)     |
+    PublicKeyAlgorithm::DSA        => call!(dsa)     |
+    PublicKeyAlgorithm::ECDSA      => call!(ecdsa)   |
+    PublicKeyAlgorithm::ECDH       => call!(ecdh)    |
+    PublicKeyAlgorithm::Elgamal    |
+    PublicKeyAlgorithm::ElgamalSign => call!(elgamal) |
+    PublicKeyAlgorithm::EdDSA       => call!(eddsa)
     // &PublicKeyAlgorithm::DiffieHellman =>
 ));
 
 named_args!(new_public_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
        created_at: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
     >>        alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
-    >>     params: call!(parse_pub_fields, &alg)
+    >>     params: call!(parse_pub_fields, alg)
     >> (*key_ver, alg, created_at, None, params)
 ));
 
@@ -118,7 +118,7 @@ named_args!(old_public_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, Pub
         created_at: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
     >>         exp: be_u16
     >>         alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >>      params: call!(parse_pub_fields, &alg)
+    >>      params: call!(parse_pub_fields, alg)
     >> (*key_ver, alg, created_at, Some(exp), params)
 ));
 

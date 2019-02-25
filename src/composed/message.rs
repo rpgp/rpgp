@@ -5,8 +5,8 @@ use generic_array::typenum::U64;
 use num_traits::FromPrimitive;
 use try_from::TryFrom;
 
-use composed::key::SignedSecretKey;
 use composed::shared::Deserializable;
+use composed::signed_key::SignedSecretKey;
 use crypto::checksum;
 use crypto::ecc::decrypt_ecdh;
 use crypto::rsa::decrypt_rsa;
@@ -406,8 +406,8 @@ impl<'a> MessageDecrypter<'a> {
                 SecretKeyRepr::RSA(ref priv_key) => {
                     decrypt_rsa(priv_key, mpis, &locked_key.fingerprint())?
                 }
-                SecretKeyRepr::DSA => unimplemented_err!("DSA"),
-                SecretKeyRepr::ECDSA => unimplemented_err!("ECDSA"),
+                SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
+                SecretKeyRepr::ECDSA => bail!("ECDSA is only used for signing"),
                 SecretKeyRepr::ECDH(ref priv_key) => {
                     decrypt_ecdh(priv_key, mpis, &locked_key.fingerprint())?
                 }
@@ -494,7 +494,7 @@ mod tests {
     use serde_json;
     use std::fs::File;
 
-    use composed::key::{SignedPublicKey, SignedSecretKey};
+    use composed::signed_key::{SignedPublicKey, SignedSecretKey};
     use composed::Deserializable;
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -566,7 +566,7 @@ mod tests {
                     )
                     .expect("failed to decrypt message")
                     .next()
-                    .expect("no mesage")
+                    .expect("no message")
                     .expect("message decryption failed");
 
                 if let Some(verify_key) = verify_key {
@@ -611,6 +611,7 @@ mod tests {
             }
             _ => {
                 // TODO: some other checks?
+                panic!("this test should not have anything else?");
             }
         }
 

@@ -58,7 +58,7 @@ named!(read_packet_len(&[u8]) -> PacketLength, do_parse!(
     >> (len)
 ));
 
-fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], Vec<&'a [u8]>> {
+fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], ParseResult<'a>> {
     if input.len() < len {
         return Err(Err::Incomplete(nom::Needed::Size(len - input.len())));
     }
@@ -100,7 +100,7 @@ fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], Vec
         }
     }
 
-    Ok((rest, out))
+    Ok((rest, ParseResult::Partial(out)))
 }
 
 /// Parses a new format packet header
@@ -120,14 +120,21 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
     })
 )));
 
+#[derive(Debug)]
+pub enum ParseResult<'a> {
+    Fixed(&'a [u8]),
+    Indeterminated,
+    Partial(Vec<&'a [u8]>),
+}
+
 /// Parse a single Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-4.2
 #[rustfmt::skip]
-named!(pub parser<(Version, Tag, PacketLength, Vec<&[u8]>)>, do_parse!(
+named!(pub parser<(Version, Tag, PacketLength, ParseResult)>, do_parse!(
        head: alt!(new_packet_header | old_packet_header)
     >> body: switch!(value!(&head.2),
-        PacketLength::Fixed(length)   => map!(take!(*length), |v| vec![v]) |
-        PacketLength::Indeterminated  => value!(Vec::new()) |
+        PacketLength::Fixed(length)   => map!(take!(*length), |v| ParseResult::Fixed(v)) |
+        PacketLength::Indeterminated  => value!(ParseResult::Indeterminated) |
         PacketLength::Partial(length) => call!(read_partial_bodies, *length)
     )
     >> (head.0, head.1, head.2, body)
