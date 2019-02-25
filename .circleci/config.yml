@@ -16,6 +16,19 @@ restore-cache: &restore-cache
       - cargo-v4-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
       - repo-source-{{ .Branch }}-{{ .Revision }}
 
+commands:
+  test_target:
+    parameters:
+      target:
+        type: string
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Test (<< parameters.target >>)
+          command: TARGET=<< parameters.target >> ci/run.sh
+          no_output_timeout: 15m
+
 jobs:
   cargo_fetch:
     executor: default
@@ -45,16 +58,6 @@ jobs:
           paths:
             - "~/.cargo"
             - "~/.rustup"
-
-  test:
-    executor: default
-    steps:
-      - *restore-workspace
-      - *restore-cache
-      - run:
-          name: Test (x86_64-unknown-linux-gnu)
-          command: TARGET=x86_64-unknown-linux-gnu ci/run.sh
-          no_output_timeout: 15m
 
   rustfmt:
     executor: default
@@ -109,10 +112,69 @@ workflows:
       - clippy:
           requires:
             - cargo_fetch
-      - test:
+
+      - test_x86_64-unknown-linux-gnu:
+          executor: default
+          steps:
+            - test_target:
+                target: "x86_64-unknown-linux-gnu"
+          requires:
+            - cargo_fetch
+
+      - test_aarch64-unknown-linux-gnu:
+          executor: default
+          steps:
+            - test_target:
+                target: "aarch64-unknown-linux-gnu"
           requires:
             - cargo_fetch
 
       - test_macos:
           requires:
             - cargo_fetch
+
+
+# Targets TODO
+# - env: TARGET=aarch64-unknown-linux-gnu
+# - env: TARGET=arm-unknown-linux-gnueabi
+# - env: TARGET=armv7-unknown-linux-gnueabihf
+# - env: TARGET=i586-unknown-linux-gnu
+# - env: TARGET=i686-unknown-linux-gnu
+# - env: TARGET=mips-unknown-linux-gnu
+# - env: TARGET=mips64-unknown-linux-gnuabi64
+# - env: TARGET=mips64el-unknown-linux-gnuabi64
+# - env: TARGET=mipsel-unknown-linux-gnu
+# - env: TARGET=powerpc-unknown-linux-gnu
+# - env: TARGET=powerpc64-unknown-linux-gnu
+# - env: TARGET=powerpc64le-unknown-linux-gnu
+# - env: TARGET=x86_64-unknown-linux-gnu
+# - env: TARGET=x86_64-unknown-linux-gnu
+#   rust: stable
+# - env: TARGET=aarch64-linux-android
+# - env: TARGET=arm-linux-androideabi
+# - env: TARGET=armv7-linux-androideabi
+# - env: TARGET=x86_64-linux-android
+# - env: TARGET=i686-apple-darwin
+#   os: osx
+# - env: TARGET=x86_64-apple-darwin
+#   os: osx
+#   osx_image: xcode9.2
+# - env: TARGET=i386-apple-ios  NORUN=1
+#   os: osx
+#   osx_image: xcode9.2
+# - env: TARGET=x86_64-apple-ios NORUN=1
+#   os: osx
+#   osx_image: xcode9.2
+# - env: TARGET=aarch64-apple-ios NORUN=1
+#   os: osx
+#   osx_image: xcode9.2
+# - env: TARGET=armv7-apple-ios NORUN=1
+#   os: osx
+#   osx_image: xcode9.2
+# - env: TARGET=armv7s-apple-ios NORUN=1
+#   os: osx
+#   osx_image: xcode9.2
+# - env: TARGET=i686-unknown-freebsd NORUN=1
+# - env: TARGET=x86_64-unknown-freebsd NORUN=1
+# - env: TARGET=x86_64-unknown-netbsd NORUN=1
+# - env: TARGET=x86_64-sun-solaris NORUN=1
