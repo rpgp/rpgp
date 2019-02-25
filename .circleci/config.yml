@@ -2,7 +2,7 @@ version: 2
 jobs:
   cargo_fetch:
     docker:
-      - image: rust
+      - image: rustlang/rust:nightly
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -12,6 +12,7 @@ jobs:
       - restore_cache:
           keys:
             - cargo-v0-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - run: rustup install stable
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add rustfmt-preview
@@ -31,7 +32,7 @@ jobs:
             - /root/.rustup
   test:
     docker:
-      - image: rust
+      - image: rustlang/rust:nightly
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -47,7 +48,7 @@ jobs:
 
   rustfmt:
     docker:
-      - image: rust
+      - image: rustlang/rust:nightly
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -62,7 +63,7 @@ jobs:
 
   clippy:
     docker:
-      - image: rust
+      - image: rustlang/rust:nightly
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -74,6 +75,29 @@ jobs:
       - run:
           name: Run cargo clippy
           command: cargo clippy --all
+
+  test_macos:
+    macos:
+      xcode: "10.0.0"
+    working_directory: ~/crate
+    steps:
+      - run:
+          name: Configure environment variables
+          command: |
+            echo 'export PATH="${HOME}/.cargo/bin:${HOME}/.bin:${PATH}"' >> $BASH_ENV
+            echo 'export CIRCLE_ARTIFACTS="/tmp"' >> $BASH_ENV
+      - checkout
+      - run:
+          name: Install Rust
+          command: |
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: rustup install $(cat rust-toolchain)
+      - run: rustup default $(cat rust-toolchain)
+      - run: cargo update
+      - run: cargo fetch
+      - run:
+          name: Test
+          command: TARGET=x86_64-apple-darwin ci/run.sh
 
 workflows:
   version: 2
@@ -89,3 +113,11 @@ workflows:
       - test:
           requires:
             - cargo_fetch
+            - rustfmt
+            - clippy
+
+      - test_macos:
+          requires:
+            - cargo_fetch
+            - rustfmt
+            - clippy
