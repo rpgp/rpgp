@@ -58,12 +58,16 @@ serde = "^1.0"
 serde_derive = "^1.0"
 serde_json = "^1.0"
 glob = "^0.2"
-gperftools = "0.2"
 regex = "^1.1"
 pretty_assertions = "0.5.1"
+
+[dependencies.gperftools]
+version = "0.2.0"
+optional = true
+
 
 [features]
 default = []
 nightly = ["x25519-dalek/nightly", "rsa/nightly"]
-profile = []
+profile = ["gperftools"]
 asm = ["sha2/asm"]
