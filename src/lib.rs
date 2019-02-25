@@ -94,7 +94,6 @@ pub use composed::key::*;
 pub mod composed;
 pub mod crypto;
 pub mod de;
-pub mod key;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod ser;

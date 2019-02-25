@@ -1,8 +1,8 @@
 use std::{io, iter};
 
 use armor::{self, BlockType};
-use composed::key::{PublicOrSecret, SignedPublicKey, SignedSecretKey};
 use composed::shared::Deserializable;
+use composed::signed_key::{PublicOrSecret, SignedPublicKey, SignedSecretKey};
 use errors::Result;
 use packet::{Packet, PacketParser};
 use types::Tag;

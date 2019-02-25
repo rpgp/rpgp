@@ -1,92 +1,59 @@
-use std::io;
+use chrono;
 
-use armor;
-use composed::key::SignedKeyDetails;
-use crypto::public_key::PublicKeyAlgorithm;
+use composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
+use crypto::PublicKeyAlgorithm;
 use errors::Result;
-use packet::{self, write_packet, SignatureType};
-use ser::Serialize;
-use types::{KeyId, KeyTrait, PublicKeyTrait};
+use packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
+use types::{KeyId, KeyTrait, SecretKeyTrait};
 
-/// Represents a Public PGP key, which is signed and either received or ready to be transferred.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SignedPublicKey {
-    pub primary_key: packet::PublicKey,
-    pub details: SignedKeyDetails,
-    pub public_subkeys: Vec<SignedPublicSubKey>,
+/// User facing interface to work with a public key.
+#[derive(Debug, PartialEq, Eq)]
+pub struct PublicKey {
+    primary_key: packet::PublicKey,
+    details: KeyDetails,
+    public_subkeys: Vec<PublicSubkey>,
 }
 
-key_parser!(
-    SignedPublicKey,
-    PublicKeyParser,
-    Tag::PublicKey,
-    packet::PublicKey,
-    (
-        PublicSubkey,
-        packet::PublicSubkey,
-        SignedPublicSubKey,
-        public_subkeys
-    )
-);
+#[derive(Debug, PartialEq, Eq)]
+pub struct PublicSubkey {
+    key: packet::PublicSubkey,
+    keyflags: KeyFlags,
+}
 
-impl SignedPublicKey {
+impl PublicKey {
     pub fn new(
         primary_key: packet::PublicKey,
-        details: SignedKeyDetails,
-        public_subkeys: Vec<SignedPublicSubKey>,
+        details: KeyDetails,
+        public_subkeys: Vec<PublicSubkey>,
     ) -> Self {
-        let public_subkeys = public_subkeys
-            .into_iter()
-            .filter(|key| {
-                if key.signatures.is_empty() {
-                    warn!("ignoring unsigned {:?}", key.key);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
-
-        SignedPublicKey {
+        PublicKey {
             primary_key,
             details,
             public_subkeys,
         }
     }
 
-    fn verify_public_subkeys(&self) -> Result<()> {
-        for subkey in &self.public_subkeys {
-            subkey.verify(&self.primary_key)?;
-        }
+    pub fn sign<F>(self, sec_key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedPublicKey>
+    where
+        F: (FnOnce() -> String) + Clone,
+    {
+        let primary_key = self.primary_key;
+        let details = self.details.sign(sec_key, key_pw.clone())?;
+        let public_subkeys = self
+            .public_subkeys
+            .into_iter()
+            .map(|k| k.sign(sec_key, key_pw.clone()))
+            .collect::<Result<Vec<_>>>()?;
 
-        Ok(())
-    }
-
-    pub fn verify(&self) -> Result<()> {
-        self.verify_public_subkeys()?;
-        self.details.verify(&self.primary_key)?;
-
-        Ok(())
-    }
-
-    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        armor::write(self, "PUBLIC KEY", writer)
-    }
-
-    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
-        let mut buf = Vec::new();
-
-        self.to_armored_writer(&mut buf)?;
-
-        Ok(buf)
-    }
-
-    pub fn to_armored_string(&self) -> Result<String> {
-        Ok(::std::str::from_utf8(&self.to_armored_bytes()?)?.to_string())
+        Ok(SignedPublicKey {
+            primary_key,
+            details,
+            public_subkeys,
+        })
     }
 }
 
-impl KeyTrait for SignedPublicKey {
+impl KeyTrait for PublicKey {
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
@@ -100,80 +67,47 @@ impl KeyTrait for SignedPublicKey {
     }
 }
 
-impl Serialize for SignedPublicKey {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.primary_key)?;
-        self.details.to_writer(writer)?;
-        for ps in &self.public_subkeys {
-            ps.to_writer(writer)?;
-        }
+impl PublicSubkey {
+    pub fn new(key: packet::PublicSubkey, keyflags: KeyFlags) -> Self {
+        PublicSubkey { key, keyflags }
+    }
 
-        Ok(())
+    pub fn sign<F>(self, sec_key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedPublicSubKey>
+    where
+        F: (FnOnce() -> String) + Clone,
+    {
+        let key = self.key;
+        let hashed_subpackets = vec![
+            Subpacket::SignatureCreationTime(chrono::Utc::now()),
+            Subpacket::KeyFlags(self.keyflags.into()),
+        ];
+
+        let config = SignatureConfigBuilder::default()
+            .typ(SignatureType::SubkeyBinding)
+            .pub_alg(sec_key.algorithm())
+            .hashed_subpackets(hashed_subpackets)
+            .unhashed_subpackets(vec![
+                Subpacket::Issuer(sec_key.key_id().expect("missing key id")),
+                Subpacket::IssuerFingerprint(sec_key.fingerprint()),
+            ])
+            .build()?;
+
+        let signatures = vec![config.sign_key(sec_key, key_pw, &key)?];
+
+        Ok(SignedPublicSubKey { key, signatures })
     }
 }
 
-/// Represents a Public PGP SubKey.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct SignedPublicSubKey {
-    pub key: packet::PublicSubkey,
-    pub signatures: Vec<packet::Signature>,
-}
-
-impl SignedPublicSubKey {
-    pub fn new(key: packet::PublicSubkey, signatures: Vec<packet::Signature>) -> Self {
-        let signatures = signatures
-            .into_iter()
-            .filter(|sig| {
-                if sig.typ() != SignatureType::SubkeyBinding
-                    && sig.typ() != SignatureType::SubkeyRevocation
-                {
-                    warn!(
-                        "ignoring unexpected signature {:?} after Subkey packet",
-                        sig.typ()
-                    );
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
-
-        SignedPublicSubKey { key, signatures }
-    }
-
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        ensure!(!self.signatures.is_empty(), "missing subkey bindings");
-        for sig in &self.signatures {
-            sig.verify_key_binding(key, &self.key)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl KeyTrait for SignedPublicSubKey {
-    /// Returns the fingerprint of the key.
+impl KeyTrait for PublicSubkey {
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
     }
 
-    /// Returns the Key ID of the key.
     fn key_id(&self) -> Option<KeyId> {
         self.key.key_id()
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
-    }
-}
-
-impl Serialize for SignedPublicSubKey {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.key)?;
-        for sig in &self.signatures {
-            write_packet(writer, sig)?;
-        }
-
-        Ok(())
     }
 }

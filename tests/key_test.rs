@@ -25,7 +25,7 @@ use rand::OsRng;
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
 
-use pgp::composed::key::*;
+use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::hash::HashAlgorithm;
@@ -215,6 +215,9 @@ fn test_parse_openpgp_sample_rsa_private() {
         },
     )
     .expect("failed to unlock");
+
+    let pub_key = pkey.public_key();
+    assert_eq!(pub_key.key_id(), pkey.key_id());
 }
 
 #[test]
@@ -502,6 +505,9 @@ fn encrypted_private_key() {
     let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
     let key = SignedSecretKey::from_string(input).expect("failed to parse key");
     key.verify().expect("invalid key");
+
+    let pub_key = key.public_key();
+    assert_eq!(pub_key.key_id(), key.key_id());
 
     let pp = key.primary_key.secret_params().clone();
 
@@ -851,6 +857,9 @@ fn private_x25519_verify() {
         },
     )
     .unwrap();
+
+    let pub_key = sk.public_key();
+    assert_eq!(pub_key.key_id(), sk.key_id());
 }
 
 #[test]
@@ -892,11 +901,12 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         parsed.verify().expect("invalid key");
 
         if unlock {
-            parsed
-                .clone()
-                .into_secret()
-                .unlock(|| "".to_string(), |_| Ok(()))
+            let sk = parsed.clone().into_secret();
+            sk.unlock(|| "".to_string(), |_| Ok(()))
                 .expect("failed to unlock key");
+
+            let pub_key = sk.public_key();
+            assert_eq!(pub_key.key_id(), sk.key_id());
         }
 
         // serialize and check we get the same thing

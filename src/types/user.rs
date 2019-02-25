@@ -42,6 +42,10 @@ impl SignedUser {
 
         Ok(())
     }
+
+    pub fn is_primary(&self) -> bool {
+        self.signatures.iter().any(|sig| sig.is_primary())
+    }
 }
 
 impl Serialize for SignedUser {

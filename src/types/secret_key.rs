@@ -3,6 +3,8 @@ use errors::Result;
 use types::{PublicKeyTrait, SecretKeyRepr};
 
 pub trait SecretKeyTrait: PublicKeyTrait {
+    type PublicKey;
+
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
@@ -16,9 +18,13 @@ pub trait SecretKeyTrait: PublicKeyTrait {
     ) -> Result<Vec<Vec<u8>>>
     where
         F: FnOnce() -> String;
+
+    fn public_key(&self) -> Self::PublicKey;
 }
 
 impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
+    type PublicKey = T::PublicKey;
+
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
@@ -37,5 +43,9 @@ impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
         F: FnOnce() -> String,
     {
         (*self).create_signature(key_pw, hash, data)
+    }
+
+    fn public_key(&self) -> Self::PublicKey {
+        (*self).public_key()
     }
 }

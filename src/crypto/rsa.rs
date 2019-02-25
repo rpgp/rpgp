@@ -1,7 +1,11 @@
+use num_bigint::traits::ModInverse;
+use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
-use rsa::RSAPrivateKey;
+use rsa::{PublicKey, RSAPrivateKey};
 
+use crypto::PublicParams;
 use errors::Result;
+use types::PlainSecretParams;
 
 pub fn decrypt_rsa(
     priv_key: &RSAPrivateKey,
@@ -15,4 +19,34 @@ pub fn decrypt_rsa(
     info!("m: {}", hex::encode(&m));
 
     Ok(m)
+}
+
+/// Generate an RSA KeyPair.
+pub fn generate_key<R: Rng + CryptoRng>(
+    rng: &mut R,
+    bit_size: usize,
+) -> Result<(PublicParams, PlainSecretParams)> {
+    let key = RSAPrivateKey::new(rng, bit_size)?;
+
+    let p = &key.primes()[0];
+    let q = &key.primes()[1];
+    let u = p
+        .clone()
+        .mod_inverse(q)
+        .expect("invalid prime")
+        .to_biguint()
+        .expect("invalid prime");
+
+    Ok((
+        PublicParams::RSA {
+            n: key.n().clone(),
+            e: key.e().clone(),
+        },
+        PlainSecretParams::RSA {
+            d: key.d().clone(),
+            p: p.clone(),
+            q: q.clone(),
+            u,
+        },
+    ))
 }
