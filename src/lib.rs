@@ -44,6 +44,7 @@ extern crate num_traits;
 extern crate ripemd160;
 extern crate sha1;
 extern crate sha2;
+extern crate sha3;
 extern crate twofish;
 extern crate x25519_dalek;
 #[macro_use]

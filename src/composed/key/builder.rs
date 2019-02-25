@@ -285,10 +285,10 @@ mod tests {
                 SymmetricKeyAlgorithm::AES128,
             ])
             .preferred_hash_algorithms(vec![
-                HashAlgorithm::SHA256,
-                HashAlgorithm::SHA384,
-                HashAlgorithm::SHA512,
-                HashAlgorithm::SHA224,
+                HashAlgorithm::SHA2_256,
+                HashAlgorithm::SHA2_384,
+                HashAlgorithm::SHA2_512,
+                HashAlgorithm::SHA2_224,
                 HashAlgorithm::SHA1,
             ])
             .preferred_compression_algorithms(vec![
@@ -394,10 +394,10 @@ mod tests {
                 SymmetricKeyAlgorithm::AES128,
             ])
             .preferred_hash_algorithms(vec![
-                HashAlgorithm::SHA256,
-                HashAlgorithm::SHA384,
-                HashAlgorithm::SHA512,
-                HashAlgorithm::SHA224,
+                HashAlgorithm::SHA2_256,
+                HashAlgorithm::SHA2_384,
+                HashAlgorithm::SHA2_512,
+                HashAlgorithm::SHA2_224,
                 HashAlgorithm::SHA1,
             ])
             .preferred_compression_algorithms(vec![
