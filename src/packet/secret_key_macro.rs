@@ -134,6 +134,8 @@ macro_rules! impl_secret_key {
         }
 
         impl $crate::types::SecretKeyTrait for $name {
+            type PublicKey = $details;
+
             /// Unlock the raw data in the secret parameters.
             fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
             where
@@ -193,6 +195,10 @@ macro_rules! impl_secret_key {
                 })?;
 
                 signature.ok_or_else(|| unreachable!())
+            }
+
+            fn public_key(&self) -> $details {
+                self.details.clone()
             }
         }
 

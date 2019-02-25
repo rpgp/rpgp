@@ -5,8 +5,8 @@ use generic_array::typenum::U64;
 use num_traits::FromPrimitive;
 use try_from::TryFrom;
 
-use composed::key::SignedSecretKey;
 use composed::shared::Deserializable;
+use composed::signed_key::SignedSecretKey;
 use crypto::checksum;
 use crypto::ecc::decrypt_ecdh;
 use crypto::rsa::decrypt_rsa;
@@ -494,7 +494,7 @@ mod tests {
     use serde_json;
     use std::fs::File;
 
-    use composed::key::{SignedPublicKey, SignedSecretKey};
+    use composed::signed_key::{SignedPublicKey, SignedSecretKey};
     use composed::Deserializable;
 
     #[derive(Serialize, Deserialize, Debug)]
