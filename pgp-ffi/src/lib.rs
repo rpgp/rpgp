@@ -2,7 +2,7 @@ extern crate hex;
 extern crate libc;
 extern crate pgp;
 
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::Cursor;
 use std::mem::transmute;
 use std::os::raw::c_char;
@@ -25,8 +25,11 @@ pub type public_or_secret_key = PublicOrSecret;
 
 /// Generates a new RSA key.
 #[no_mangle]
-pub extern "C" fn rpgp_create_rsa_skey(bits: u32, user_id: *mut c_char) -> *mut signed_secret_key {
-    let user_id = unsafe { CString::from_raw(user_id) };
+pub extern "C" fn rpgp_create_rsa_skey(
+    bits: u32,
+    user_id: *const c_char,
+) -> *mut signed_secret_key {
+    let user_id = unsafe { CStr::from_ptr(user_id) };
     let user_id_str = user_id.to_str().expect("invalid user id");
     let key = create_key(KeyType::Rsa(bits), KeyType::Rsa(bits), user_id_str)
         .expect("failed to generate key");
@@ -36,8 +39,8 @@ pub extern "C" fn rpgp_create_rsa_skey(bits: u32, user_id: *mut c_char) -> *mut 
 
 /// Generates a new x25519 key.
 #[no_mangle]
-pub extern "C" fn rpgp_create_x25519_skey(user_id: *mut c_char) -> *mut signed_secret_key {
-    let user_id = unsafe { CString::from_raw(user_id) };
+pub extern "C" fn rpgp_create_x25519_skey(user_id: *const c_char) -> *mut signed_secret_key {
+    let user_id = unsafe { CStr::from_ptr(user_id) };
     let user_id_str = user_id.to_str().expect("invalid user id");
     let key =
         create_key(KeyType::EdDSA, KeyType::ECDH, user_id_str).expect("failed to generate key");
@@ -111,17 +114,25 @@ pub extern "C" fn rpgp_pkey_drop(pkey_ptr: *mut signed_public_key) {
 /// Represents a vector.
 #[repr(C)]
 pub struct cvec {
-    data: *const u8,
+    data: *mut u8,
     len: libc::size_t,
 }
 
 impl Into<cvec> for Vec<u8> {
     fn into(mut self) -> cvec {
         self.shrink_to_fit();
-        cvec {
+        let res = cvec {
             data: self.as_mut_ptr(),
             len: self.len() as libc::size_t,
-        }
+        };
+
+        std::mem::forget(self);
+        res
+    }
+}
+impl Into<Vec<u8>> for cvec {
+    fn into(self) -> Vec<u8> {
+        unsafe { Vec::from_raw_parts(self.data, self.len, self.len) }
     }
 }
 
@@ -218,4 +229,44 @@ pub extern "C" fn rpgp_key_drop(ptr: *mut public_or_secret_key) {
 pub extern "C" fn rpgp_string_free(p: *mut c_char) {
     let _ = unsafe { CString::from_raw(p) };
     // Drop
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use pgp::composed::Deserializable;
+
+    #[test]
+    fn test_keygen_rsa() {
+        let user_id = CStr::from_bytes_with_nul(b"<hello@world.com>\0").unwrap();
+
+        /* Create the actual key */
+        let skey = rpgp_create_rsa_skey(2048, user_id.as_ptr());
+
+        /* Serialize secret key into bytes */
+        let skey_bytes = rpgp_skey_to_bytes(skey);
+
+        /* Get the public key */
+        let pkey = rpgp_skey_public_key(skey);
+
+        /* Serialize public key into bytes */
+        let pkey_bytes = rpgp_pkey_to_bytes(pkey);
+
+        let skey_bytes_vec =
+            unsafe { from_raw_parts(rpgp_cvec_data(skey_bytes), rpgp_cvec_len(skey_bytes)) };
+        let skey_back = SignedSecretKey::from_bytes(skey_bytes_vec).expect("invalid secret key");
+        assert_eq!(unsafe { &*skey }, &skey_back);
+
+        let pkey_bytes_vec =
+            unsafe { from_raw_parts(rpgp_cvec_data(pkey_bytes), rpgp_cvec_len(pkey_bytes)) };
+        let pkey_back = SignedPublicKey::from_bytes(pkey_bytes_vec).expect("invalid public key");
+        assert_eq!(unsafe { &*pkey }, &pkey_back);
+
+        /* cleanup */
+        rpgp_skey_drop(skey);
+        rpgp_cvec_drop(skey_bytes);
+        rpgp_pkey_drop(pkey);
+        rpgp_cvec_drop(pkey_bytes);
+    }
 }
