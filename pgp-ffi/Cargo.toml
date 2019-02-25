@@ -11,8 +11,16 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 pgp = { path = "../" }
-hex = "*"
-libc = "*"
+hex = "0.3.2"
+libc = "0.2.49"
 
 [build-dependencies]
-cbindgen = "0.6.7"
+cbindgen = "0.8"
+
+# [profile.release]
+# debuginfo = 0
+# opt-level = "s"
+# codegen-units = 1
+# TODO: Enable these through the CLI when building
+# panic = "abort"
+# lto = "thin"

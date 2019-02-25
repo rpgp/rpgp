@@ -203,10 +203,10 @@ impl SecretKeyParams {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum KeyType {
     /// Encryption & Signing with RSA an the given bitsize.
-    Rsa(usize),
+    Rsa(u32),
     /// Encrypting with Curve25519
     ECDH,
     /// Signing with Curve25519
@@ -229,7 +229,7 @@ impl KeyType {
         let mut rng = OsRng::new().expect("no system rng available");
 
         let (pub_params, plain) = match self {
-            KeyType::Rsa(bit_size) => rsa::generate_key(&mut rng, *bit_size)?,
+            KeyType::Rsa(bit_size) => rsa::generate_key(&mut rng, *bit_size as usize)?,
             KeyType::ECDH => ecdh::generate_key(&mut rng),
             KeyType::EdDSA => eddsa::generate_key(&mut rng),
         };

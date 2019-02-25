@@ -8,8 +8,9 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let target_path = out_path.join("../../..");
 
-    let target_path = PathBuf::from("target");
     let target_triple = env::var("TARGET").unwrap();
 
     // macOS or iOS
@@ -21,8 +22,8 @@ fn main() {
     };
 
     let pkg_config = format!(
-        include_str!("pgp.pc.in"),
-        name = env::var("CARGO_PKG_NAME").unwrap(),
+        include_str!("rpgp.pc.in"),
+        name = "rpgp",
         description = env::var("CARGO_PKG_DESCRIPTION").unwrap(),
         url = env::var("CARGO_PKG_HOMEPAGE").unwrap_or("".to_string()),
         version = env::var("CARGO_PKG_VERSION").unwrap(),
@@ -31,18 +32,17 @@ fn main() {
     );
 
     fs::create_dir_all(target_path.join("pkgconfig")).unwrap();
-    fs::File::create(target_path.join("pkgconfig").join("pgp.pc"))
+    fs::File::create(target_path.join("pkgconfig").join("rpgp.pc"))
         .unwrap()
         .write_all(&pkg_config.as_bytes())
         .unwrap();
 
-    let cfg = cbindgen::Config::from_file(&format!("{}/cbindgen.toml", &crate_dir))
-        .expect("invalid config");
+    let cfg = cbindgen::Config::from_root_or_default(std::path::Path::new(&crate_dir));
 
     let c = cbindgen::Builder::new()
         .with_config(cfg)
         .with_crate(crate_dir)
-        .with_header(format!("/* libpgp Header Version {} */", VERSION))
+        .with_header(format!("/* librpgp Header Version {} */", VERSION))
         .with_language(cbindgen::Language::C)
         .generate();
 
@@ -50,7 +50,7 @@ fn main() {
     // but rather just tell the rest of the system we can't proceed.
     match c {
         Ok(res) => {
-            res.write_to_file("libpgp.h");
+            res.write_to_file("librpgp.h");
         }
         Err(err) => {
             eprintln!("unable to generate bindings: {:#?}", err);

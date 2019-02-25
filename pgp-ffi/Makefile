@@ -33,15 +33,15 @@ soext := $(pgp_lib_extension)
 all: clean build install
 
 build:
-	cargo build --release
+	cd ../ && cargo build --release -p pgp-ffi && cd pgp-ffi
 
 install: build
 	install -d $(DESTDIR)$(PREFIX)/lib/
-	install -m 644 target/release/libpgp_ffi$(soext) $(DESTDIR)$(PREFIX)/lib/libpgp$(soext)
+	install -m 644 ../target/release/libpgp_ffi$(soext) $(DESTDIR)$(PREFIX)/lib/librpgp$(soext)
 	install -d $(DESTDIR)$(PREFIX)/include/
-	install -m 644 libpgp.h $(DESTDIR)$(PREFIX)/include/
-	install -d $(DESTDIR)$(PREFIX)/share/pkconfig
-	install -m 644 target/pkgconfig/pgp.pc $(DESTDIR)$(PREFIX)/include/
+	install -m 644 librpgp.h $(DESTDIR)$(PREFIX)/include/
+	install -d $(DESTDIR)$(PREFIX)/lib/pkconfig
+	install -m 644 ../target/release/pkgconfig/rpgp.pc $(DESTDIR)$(PREFIX)/lib/pkgconfig
 
 clean:
 	rm libpgp.h
