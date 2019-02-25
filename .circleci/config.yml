@@ -24,6 +24,7 @@ commands:
     steps:
       - *restore-workspace
       - *restore-cache
+      - setup_remote_docker
       - run:
           name: Test (<< parameters.target >>)
           command: TARGET=<< parameters.target >> ci/run.sh
