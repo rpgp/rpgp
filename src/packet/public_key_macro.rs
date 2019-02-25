@@ -89,6 +89,8 @@ macro_rules! impl_public_key {
             where
                 F: FnOnce() -> String,
             {
+                use chrono::SubsecRound;
+
                 let mut config = $crate::packet::SignatureConfigBuilder::default();
                 match $tag {
                     $crate::types::Tag::PublicKey => {
@@ -103,7 +105,7 @@ macro_rules! impl_public_key {
                 config
                     .pub_alg(key.algorithm())
                     .hashed_subpackets(vec![$crate::packet::Subpacket::SignatureCreationTime(
-                        chrono::Utc::now(),
+                        chrono::Utc::now().trunc_subsecs(0),
                     )])
                     .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(
                         key.key_id().expect("missing key id"),

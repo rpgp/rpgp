@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono;
+use chrono::{self, SubsecRound};
 use rand::OsRng;
 use rsa::{self, PublicKey as PublicKeyTrait};
 
@@ -41,7 +41,7 @@ pub struct SecretKeyParams {
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
     passphrase: String,
-    #[builder(default = "chrono::Utc::now()")]
+    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
     packet_version: types::Version,

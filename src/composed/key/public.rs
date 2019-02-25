@@ -1,4 +1,4 @@
-use chrono;
+use chrono::{self, SubsecRound};
 
 use composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
 use crypto::PublicKeyAlgorithm;
@@ -78,7 +78,7 @@ impl PublicSubkey {
     {
         let key = self.key;
         let hashed_subpackets = vec![
-            Subpacket::SignatureCreationTime(chrono::Utc::now()),
+            Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
             Subpacket::KeyFlags(self.keyflags.into()),
         ];
 

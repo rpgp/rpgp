@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono;
+use chrono::{self, SubsecRound};
 use rand::OsRng;
 
 use composed::{KeyDetails, SecretKey, SecretSubkey};
@@ -47,7 +47,7 @@ pub struct SecretKeyParams {
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
     passphrase: Option<String>,
-    #[builder(default = "chrono::Utc::now()")]
+    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
     packet_version: types::Version,
@@ -77,7 +77,7 @@ pub struct SubkeyParams {
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
     passphrase: Option<String>,
-    #[builder(default = "chrono::Utc::now()")]
+    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
     packet_version: types::Version,
@@ -357,7 +357,7 @@ mod tests {
             .unlock(|| "".into(), |_| Ok(()))
             .expect("failed to unlock parsed key (plain)");
 
-        // assert_eq!(signed_key, signed_key2);
+        assert_eq!(signed_key_plain, signed_key2_plain);
 
         let public_key = signed_key_plain.public_key();
 
@@ -430,7 +430,7 @@ mod tests {
         let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
         signed_key2.verify().expect("invalid key");
 
-        // assert_eq!(signed_key, signed_key2);
+        assert_eq!(signed_key, signed_key2);
 
         let public_key = signed_key.public_key();
 

@@ -1,7 +1,7 @@
 use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use nom::{be_u32, be_u8, rest};
 use num_traits::FromPrimitive;
 
@@ -46,7 +46,7 @@ impl LiteralData {
             packet_version: Version::New,
             mode: DataMode::Utf8,
             file_name: file_name.to_owned(),
-            created: Utc::now(),
+            created: Utc::now().trunc_subsecs(0),
             data,
         }
     }
