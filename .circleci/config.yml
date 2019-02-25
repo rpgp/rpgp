@@ -100,17 +100,17 @@ jobs:
           name: Test
           command: TARGET=x86_64-apple-darwin ci/run.sh
 
-    test_x86_64-unknown-linux-gnu:
-      executor: default
-      steps:
-        - test_target:
-            target: "x86_64-unknown-linux-gnu"
+  test_x86_64-unknown-linux-gnu:
+    executor: default
+    steps:
+      - test_target:
+          target: "x86_64-unknown-linux-gnu"
 
-    test_aarch64-unknown-linux-gnu:
-      executor: default
-      steps:
-        - test_target:
-            target: "aarch64-unknown-linux-gnu"
+  test_aarch64-unknown-linux-gnu:
+    executor: default
+    steps:
+      - test_target:
+          target: "aarch64-unknown-linux-gnu"
 
 
 workflows:
