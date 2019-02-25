@@ -1,6 +1,6 @@
 use std::{fmt, io};
 
-use chrono::Utc;
+use chrono::{SubsecRound, Utc};
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{be_u8, le_u16, rest};
@@ -62,7 +62,9 @@ impl UserAttribute {
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::CertGeneric)
             .pub_alg(key.algorithm())
-            .hashed_subpackets(vec![Subpacket::SignatureCreationTime(Utc::now())])
+            .hashed_subpackets(vec![Subpacket::SignatureCreationTime(
+                Utc::now().trunc_subsecs(0),
+            )])
             .unhashed_subpackets(vec![Subpacket::Issuer(
                 key.key_id().expect("missing key id"),
             )])

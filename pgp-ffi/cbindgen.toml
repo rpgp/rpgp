@@ -1,0 +1,6 @@
+[parse]
+parse_deps = true
+include = ["pgp"]
+
+[export]
+prefix = "rpgp_"
