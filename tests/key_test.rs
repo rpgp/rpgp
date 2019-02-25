@@ -12,8 +12,6 @@ extern crate log;
 #[macro_use]
 extern crate pretty_assertions;
 
-extern crate gperftools;
-
 use std::fs::File;
 use std::io::{Cursor, Read};
 use std::path::Path;
