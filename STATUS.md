@@ -53,7 +53,7 @@ Symbols:
   - [ ] Camellia 128
   - [ ] Camellia 192
   - [ ] Camellia 256
-- [ ] Hash Algorithms
+- [x] Hash Algorithms
   - [x] MD5
   - [x] SHA-1
   - [x] RIPE-MD/160
@@ -61,8 +61,8 @@ Symbols:
   - [x] SHA2 384
   - [x] SHA2 512
   - [x] SHA2 224
-  - [ ] SHA3 256
-  - [ ] SHA3 512
+  - [x] SHA3 256
+  - [x] SHA3 512
 - [ ] Compression Algorithms
   - [x] ZIP
   - [x] ZLIB

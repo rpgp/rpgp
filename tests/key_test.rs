@@ -274,11 +274,11 @@ fn test_parse_details() {
         CompressionAlgorithm::ZIP,
     ];
     let p_hash_algs = vec![
-        HashAlgorithm::SHA256,
+        HashAlgorithm::SHA2_256,
         HashAlgorithm::SHA1,
-        HashAlgorithm::SHA384,
-        HashAlgorithm::SHA512,
-        HashAlgorithm::SHA224,
+        HashAlgorithm::SHA2_384,
+        HashAlgorithm::SHA2_512,
+        HashAlgorithm::SHA2_224,
     ];
 
     let sig1 = Signature::new(
@@ -526,7 +526,7 @@ fn encrypted_private_key() {
 
             assert_eq!(pp.string_to_key().count(), Some(65536));
 
-            assert_eq!(pp.string_to_key().hash(), HashAlgorithm::SHA256);
+            assert_eq!(pp.string_to_key().hash(), HashAlgorithm::SHA2_256);
 
             assert_eq!(pp.encryption_algorithm(), SymmetricKeyAlgorithm::AES128);
             assert_eq!(pp.string_to_key_id(), 254);

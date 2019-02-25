@@ -10,7 +10,6 @@ repository = "https://github.com/dignifiedquire/rpgp"
 keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption", "privacy"]
 
 [dependencies]
-rsa = "^0.1"
 num-bigint = { version = "0.3", features = ["rand", "i128", "u64_digit", "prime"] , package = "num-bigint-dig" }
 crc24 = "^0.1"
 base64 = { git = "https://github.com/dignifiedquire/rust-base64", branch = "fix/slow-writer" }
@@ -48,9 +47,17 @@ try_from = "^0.3"
 rand = "0.5.5"
 derive_builder = "0.7.0"
 bitfield = "0.13.1"
+sha3 = "0.8.1"
 
 [dependencies.nom]
 version = "^4.0"
+
+[dependencies.gperftools]
+version = "0.2.0"
+optional = true
+
+[dependencies.rsa]
+version = "0.1.2"
 
 [dev-dependencies]
 hex-literal = "^0.1"
@@ -60,11 +67,6 @@ serde_json = "^1.0"
 glob = "^0.2"
 regex = "^1.1"
 pretty_assertions = "0.5.1"
-
-[dependencies.gperftools]
-version = "0.2.0"
-optional = true
-
 
 [features]
 default = []

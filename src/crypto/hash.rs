@@ -8,7 +8,8 @@ use generic_array::typenum::Unsigned;
 use md5::Md5;
 use ripemd160::Ripemd160;
 use sha1::Sha1;
-use sha2::{Sha224, Sha256, Sha384, Sha512};
+use sha2;
+use sha3;
 
 use errors::{Error, Result};
 
@@ -21,10 +22,12 @@ pub enum HashAlgorithm {
     MD5 = 1,
     SHA1 = 2,
     RIPEMD160 = 3,
-    SHA256 = 8,
-    SHA384 = 9,
-    SHA512 = 10,
-    SHA224 = 11,
+    SHA2_256 = 8,
+    SHA2_384 = 9,
+    SHA2_512 = 10,
+    SHA2_224 = 11,
+    SHA3_256 = 12,
+    SHA3_512 = 14,
 
     /// Do not use, just for compatability with GnuPG.
     Private10 = 110,
@@ -32,7 +35,7 @@ pub enum HashAlgorithm {
 
 impl Default for HashAlgorithm {
     fn default() -> Self {
-        HashAlgorithm::SHA256
+        HashAlgorithm::SHA2_256
     }
 }
 
@@ -45,10 +48,12 @@ impl TryInto<Hashes> for HashAlgorithm {
             HashAlgorithm::MD5 => Ok(Hashes::MD5),
             HashAlgorithm::SHA1 => Ok(Hashes::SHA1),
             HashAlgorithm::RIPEMD160 => Ok(Hashes::RIPEMD160),
-            HashAlgorithm::SHA256 => Ok(Hashes::SHA256),
-            HashAlgorithm::SHA384 => Ok(Hashes::SHA384),
-            HashAlgorithm::SHA512 => Ok(Hashes::SHA512),
-            HashAlgorithm::SHA224 => Ok(Hashes::SHA224),
+            HashAlgorithm::SHA2_256 => Ok(Hashes::SHA2_256),
+            HashAlgorithm::SHA2_384 => Ok(Hashes::SHA2_384),
+            HashAlgorithm::SHA2_512 => Ok(Hashes::SHA2_512),
+            HashAlgorithm::SHA2_224 => Ok(Hashes::SHA2_224),
+            HashAlgorithm::SHA3_256 => Ok(Hashes::SHA3_256),
+            HashAlgorithm::SHA3_512 => Ok(Hashes::SHA3_512),
             HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
         }
     }
@@ -64,7 +69,7 @@ pub trait Hasher {
 }
 
 macro_rules! derive_hasher {
-    ($name:ident, $struct:ident) => {
+    ($name:ident, $struct:path) => {
         #[derive(Default)]
         pub struct $name {
             inner: $struct,
@@ -85,10 +90,12 @@ macro_rules! derive_hasher {
 derive_hasher!(Md5Hasher, Md5);
 derive_hasher!(Sha1Hasher, Sha1);
 derive_hasher!(Ripemd160Hasher, Ripemd160);
-derive_hasher!(Sha256Hasher, Sha256);
-derive_hasher!(Sha384Hasher, Sha384);
-derive_hasher!(Sha512Hasher, Sha512);
-derive_hasher!(Sha224Hasher, Sha224);
+derive_hasher!(Sha2_256Hasher, sha2::Sha256);
+derive_hasher!(Sha2_384Hasher, sha2::Sha384);
+derive_hasher!(Sha2_512Hasher, sha2::Sha512);
+derive_hasher!(Sha2_224Hasher, sha2::Sha224);
+derive_hasher!(Sha3_256Hasher, sha3::Sha3_256);
+derive_hasher!(Sha3_512Hasher, sha3::Sha3_512);
 
 impl HashAlgorithm {
     /// Create a new hasher.
@@ -97,10 +104,13 @@ impl HashAlgorithm {
             HashAlgorithm::MD5 => Ok(Box::new(Md5Hasher::default())),
             HashAlgorithm::SHA1 => Ok(Box::new(Sha1Hasher::default())),
             HashAlgorithm::RIPEMD160 => Ok(Box::new(Ripemd160Hasher::default())),
-            HashAlgorithm::SHA256 => Ok(Box::new(Sha256Hasher::default())),
-            HashAlgorithm::SHA384 => Ok(Box::new(Sha384Hasher::default())),
-            HashAlgorithm::SHA512 => Ok(Box::new(Sha512Hasher::default())),
-            HashAlgorithm::SHA224 => Ok(Box::new(Sha224Hasher::default())),
+            HashAlgorithm::SHA2_256 => Ok(Box::new(Sha2_256Hasher::default())),
+            HashAlgorithm::SHA2_384 => Ok(Box::new(Sha2_384Hasher::default())),
+            HashAlgorithm::SHA2_512 => Ok(Box::new(Sha2_512Hasher::default())),
+            HashAlgorithm::SHA2_224 => Ok(Box::new(Sha2_224Hasher::default())),
+            HashAlgorithm::SHA3_256 => Ok(Box::new(Sha3_256Hasher::default())),
+            HashAlgorithm::SHA3_512 => Ok(Box::new(Sha3_512Hasher::default())),
+
             _ => unimplemented_err!("hasher {:?}", self),
         }
     }
@@ -111,10 +121,13 @@ impl HashAlgorithm {
             HashAlgorithm::MD5 => Md5::digest(data).to_vec(),
             HashAlgorithm::SHA1 => Sha1::digest(data).to_vec(),
             HashAlgorithm::RIPEMD160 => Ripemd160::digest(data).to_vec(),
-            HashAlgorithm::SHA256 => Sha256::digest(data).to_vec(),
-            HashAlgorithm::SHA384 => Sha384::digest(data).to_vec(),
-            HashAlgorithm::SHA512 => Sha512::digest(data).to_vec(),
-            HashAlgorithm::SHA224 => Sha224::digest(data).to_vec(),
+            HashAlgorithm::SHA2_256 => sha2::Sha256::digest(data).to_vec(),
+            HashAlgorithm::SHA2_384 => sha2::Sha384::digest(data).to_vec(),
+            HashAlgorithm::SHA2_512 => sha2::Sha512::digest(data).to_vec(),
+            HashAlgorithm::SHA2_224 => sha2::Sha224::digest(data).to_vec(),
+            HashAlgorithm::SHA3_256 => sha3::Sha3_256::digest(data).to_vec(),
+            HashAlgorithm::SHA3_512 => sha3::Sha3_512::digest(data).to_vec(),
+
             HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
             _ => unimplemented_err!("hasher: {:?}", self),
         })
@@ -126,10 +139,12 @@ impl HashAlgorithm {
             HashAlgorithm::MD5 => <Md5 as FixedOutput>::OutputSize::to_usize(),
             HashAlgorithm::SHA1 => <Sha1 as FixedOutput>::OutputSize::to_usize(),
             HashAlgorithm::RIPEMD160 => <Ripemd160 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA256 => <Sha256 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA384 => <Sha384 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA512 => <Sha512 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA224 => <Sha224 as FixedOutput>::OutputSize::to_usize(),
+            HashAlgorithm::SHA2_256 => <sha2::Sha256 as FixedOutput>::OutputSize::to_usize(),
+            HashAlgorithm::SHA2_384 => <sha2::Sha384 as FixedOutput>::OutputSize::to_usize(),
+            HashAlgorithm::SHA2_512 => <sha2::Sha512 as FixedOutput>::OutputSize::to_usize(),
+            HashAlgorithm::SHA2_224 => <sha2::Sha224 as FixedOutput>::OutputSize::to_usize(),
+            HashAlgorithm::SHA3_256 => <sha3::Sha3_256 as FixedOutput>::OutputSize::to_usize(),
+            HashAlgorithm::SHA3_512 => <sha3::Sha3_512 as FixedOutput>::OutputSize::to_usize(),
             _ => 0,
         }
     }
