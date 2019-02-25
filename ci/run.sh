@@ -5,10 +5,10 @@ set -ex
 export RUST_TEST_THREADS=1
 export RUST_BACKTRACE=1
 export RUST_TEST_NOCAPTURE=1
-export OPT="--target=$TARGET"
-export OPT_RELEASE="--release ${OPT}"
+export OPT="--target=$TARGET --all"
+export OPT_RELEASE="--release ${OPT} --all"
 export OPT_RELEASE_IGNORED="--release ${OPT} -- --ignored"
-export OPT_FFI_RELEASE="--manifest-path=ffi/Cargo.toml --release"
+export OPT_FFI_RELEASE="--manifest-path=pgp-ffi/Cargo.toml --release"
 
 # Select cargo command: use cross by default
 export CARGO_CMD=cross
@@ -20,7 +20,7 @@ fi
 
 # Install cross if necessary:
 if [[ $CARGO_CMD == "cross" ]]; then
-   cargo install cross
+   cargo install cross --force
 fi
 
 # Use iOS simulator for those targets that support it:
