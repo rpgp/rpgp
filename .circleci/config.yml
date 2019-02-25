@@ -6,7 +6,7 @@ executors:
       - image: filecoin/rust:latest
     working_directory: /mnt/crate
 
-fast-checkout: &fast-checkout
+restore-workspace: &restore-workspace
   attach_workspace:
     at: /mnt
 
@@ -14,6 +14,7 @@ restore-cache: &restore-cache
   restore_cache:
     keys:
       - cargo-v4-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - repo-source-{{ .Branch }}-{{ .Revision }}
 
 jobs:
   cargo_fetch:
@@ -26,7 +27,6 @@ jobs:
       - restore_cache:
           keys:
             - cargo-v4-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
-      - run: rustup install stable
       - run: rustup install $(cat rust-toolchain)
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add --toolchain $(cat rust-toolchain) rustfmt
@@ -35,6 +35,7 @@ jobs:
       - run: cargo fetch
       - run: rustc +stable --version
       - run: rustc +$(cat rust-toolchain) --version
+      - run: rm -rf .git
       - persist_to_workspace:
           root: /mnt
           paths:
@@ -48,7 +49,7 @@ jobs:
   test:
     executor: default
     steps:
-      - *fast-checkout
+      - *restore-workspace
       - *restore-cache
       - run:
           name: Test (x86_64-unknown-linux-gnu)
@@ -58,7 +59,7 @@ jobs:
   rustfmt:
     executor: default
     steps:
-      - *fast-checkout
+      - *restore-workspace
       - *restore-cache
       - run:
           name: Run cargo fmt
@@ -67,7 +68,7 @@ jobs:
   clippy:
     executor: default
     steps:
-      - *fast-checkout
+      - *restore-workspace
       - *restore-cache
       - run:
           name: Run cargo clippy
