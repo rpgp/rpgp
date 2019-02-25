@@ -6,6 +6,15 @@ executors:
       - image: rustlang/rust:nightly
     working_directory: /mnt/crate
 
+fast-checkout: &fast-checkout
+  attach_workspace:
+    at: /mnt
+
+restore-cache: &restore-cache
+  restore_cache:
+    keys:
+      - cargo-v2-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+
 jobs:
   cargo_fetch:
     executor: default
@@ -27,8 +36,9 @@ jobs:
       - run: rustc +stable --version
       - run: rustc +$(cat rust-toolchain) --version
       - persist_to_workspace:
-          root: "."
-          path: "*"
+          root: /mnt
+          paths:
+            - crate
       - save_cache:
           key: cargo-v2-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
@@ -38,11 +48,8 @@ jobs:
   test:
     executor: default
     steps:
-      - attach_workspace:
-          at: "."
-      - restore_cache:
-          keys:
-            - cargo-v2-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - *fast-checkout
+      - *restore-cache
       - run:
           name: Test (x86_64-unknown-linux-gnu)
           command: TARGET=x86_64-unknown-linux-gnu ci/run.sh
@@ -51,11 +58,8 @@ jobs:
   rustfmt:
     executor: default
     steps:
-      - attach_workspace:
-          at: "."
-      - restore_cache:
-          keys:
-            - cargo-v2-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - *fast-checkout
+      - *restore-cache
       - run:
           name: Run cargo fmt
           command: cargo fmt --all -- --check
@@ -63,12 +67,8 @@ jobs:
   clippy:
     executor: default
     steps:
-      - checkout
-      - attach_workspace:
-          at: "."
-      - restore_cache:
-          keys:
-            - cargo-v2-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
+      - *fast-checkout
+      - *restore-cache
       - run:
           name: Run cargo clippy
           command: cargo clippy --all
