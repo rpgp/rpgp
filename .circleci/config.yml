@@ -27,7 +27,8 @@ jobs:
       - run: rustc +stable --version
       - run: rustc +$(cat rust-toolchain) --version
       - persist_to_workspace:
-          root: /mnt/crate
+          root: "."
+          path: "*"
       - save_cache:
           key: cargo-v2-{{ checksum "rust-toolchain" }}-{{ checksum "Cargo.toml" }}-{{ checksum "Cargo.lock" }}-{{ arch }}
           paths:
