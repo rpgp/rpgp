@@ -174,13 +174,19 @@ impl SecretKeyTrait for SignedSecretKey {
     }
 
     fn public_key(&self) -> Self::PublicKey {
+        let mut subkeys: Vec<PublicSubkey> = self
+            .public_subkeys
+            .iter()
+            .map(|k| k.as_unsigned())
+            .collect();
+        let sec_subkeys = self.secret_subkeys.iter().map(|k| k.public_key());
+
+        subkeys.extend(sec_subkeys);
+
         PublicKey::new(
             self.primary_key.public_key(),
             self.details.as_unsigned(),
-            self.public_subkeys
-                .iter()
-                .map(|k| k.as_unsigned())
-                .collect(),
+            subkeys,
         )
     }
 }
@@ -286,7 +292,13 @@ impl SecretKeyTrait for SignedSecretSubKey {
     }
 
     fn public_key(&self) -> Self::PublicKey {
-        unimplemented!("")
+        let keyflags = self
+            .signatures
+            .first()
+            .expect("invalid signed subkey")
+            .key_flags();
+
+        PublicSubkey::new(self.key.public_key(), keyflags)
     }
 }
 

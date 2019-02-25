@@ -92,7 +92,7 @@ impl PublicSubkey {
             ])
             .build()?;
 
-        let signatures = vec![config.sign_key(sec_key, key_pw, &key)?];
+        let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 
         Ok(SignedPublicSubKey { key, signatures })
     }
