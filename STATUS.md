@@ -22,9 +22,9 @@ Symbols:
   - [ ] 🚧 Generation
 - [ ] 🚧 Encryption
 - [x] Decryption
-- [ ] Keys
-  - [ ] 🚧 Generation
-  - [ ] 🚧 Export
+- [x] Keys
+  - [x] 🚧 Generation
+  - [x] 🚧 Export
   - [x] Import
 - [ ] Public-Key Algorithms
   - [x] RSA
@@ -32,7 +32,7 @@ Symbols:
   - [ ] DSA
   - [x] ECDH
   - [ ] ECDSA
-  - [x] EdDSA 
+  - [x] EdDSA
 - [ ] Supported Elliptic Curves
   - [ ] NIST P256
   - [ ] NIST P384
