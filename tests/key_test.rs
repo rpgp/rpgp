@@ -1,6 +1,6 @@
 extern crate chrono;
 extern crate hex;
-extern crate num_bigint_dig as num_bigint;
+extern crate num_bigint;
 extern crate num_traits;
 extern crate pgp;
 extern crate pretty_env_logger;
@@ -23,17 +23,19 @@ use rand::OsRng;
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
 
-use pgp::composed::key::*;
+use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::{PublicKeyAlgorithm, PublicParams};
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::errors::Error;
-use pgp::packet::{Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId};
+use pgp::packet::{
+    KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId,
+};
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, SecretKeyRepr, SecretKeyTrait, SignedUser,
-    StringToKeyType, Version,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, SecretKeyRepr, SecretKeyTrait, SecretParams,
+    SignedUser, StringToKeyType, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -172,11 +174,11 @@ fn test_parse_openpgp_sample_rsa_private() {
 
     let pkey = key.primary_key;
     assert_eq!(pkey.version(), KeyVersion::V4);
-    assert_eq!(pkey.algorithm(), &PublicKeyAlgorithm::RSA);
+    assert_eq!(pkey.algorithm(), PublicKeyAlgorithm::RSA);
 
     assert_eq!(
-        pkey.secret_params().checksum,
-        Some(hex::decode("2c46").expect("failed hex encoding"))
+        pkey.secret_params().checksum().unwrap(),
+        hex::decode("2c46").expect("failed hex encoding")
     );
 
     pkey.unlock(
@@ -211,6 +213,9 @@ fn test_parse_openpgp_sample_rsa_private() {
         },
     )
     .expect("failed to unlock");
+
+    let pub_key = pkey.public_key();
+    assert_eq!(pub_key.key_id(), pkey.key_id());
 }
 
 #[test]
@@ -236,7 +241,7 @@ fn test_parse_details() {
 
     let pk = key.primary_key;
     assert_eq!(pk.version(), KeyVersion::V4);
-    assert_eq!(pk.algorithm(), &PublicKeyAlgorithm::RSA);
+    assert_eq!(pk.algorithm(), PublicKeyAlgorithm::RSA);
 
     match pk.public_params() {
         PublicParams::RSA { n, e } => {
@@ -255,7 +260,7 @@ fn test_parse_details() {
     let issuer = Subpacket::Issuer(
         KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
     );
-    let key_flags = vec![3];
+    let key_flags: Vec<u8> = KeyFlags(0x03).into();
     let p_sym_algs = vec![
         SymmetricKeyAlgorithm::AES256,
         SymmetricKeyAlgorithm::AES192,
@@ -499,36 +504,34 @@ fn encrypted_private_key() {
     let key = SignedSecretKey::from_string(input).expect("failed to parse key");
     key.verify().expect("invalid key");
 
+    let pub_key = key.public_key();
+    assert_eq!(pub_key.key_id(), key.key_id());
+
     let pp = key.primary_key.secret_params().clone();
 
-    assert_eq!(
-        pp.iv,
-        Some(
-            hex::decode("2271f718af70d3bd9d60c2aed9469b67")
-                .unwrap()
-                .to_vec()
-        )
-    );
+    match pp {
+        SecretParams::Plain(_) => panic!("should be encrypted"),
+        SecretParams::Encrypted(pp) => {
+            assert_eq!(
+                pp.iv(),
+                &hex::decode("2271f718af70d3bd9d60c2aed9469b67").unwrap()[..]
+            );
 
-    assert_eq!(
-        pp.string_to_key.as_ref().unwrap().salt,
-        Some(hex::decode("CB18E77884F2F055").unwrap().to_vec())
-    );
+            assert_eq!(
+                pp.string_to_key().salt().unwrap(),
+                &hex::decode("CB18E77884F2F055").unwrap()[..]
+            );
 
-    assert_eq!(
-        pp.string_to_key.as_ref().unwrap().typ,
-        StringToKeyType::IteratedAndSalted
-    );
+            assert_eq!(pp.string_to_key().typ(), StringToKeyType::IteratedAndSalted);
 
-    assert_eq!(pp.string_to_key.as_ref().unwrap().count, Some(96));
+            assert_eq!(pp.string_to_key().count(), Some(65536));
 
-    assert_eq!(
-        pp.string_to_key.as_ref().unwrap().hash,
-        HashAlgorithm::SHA256
-    );
+            assert_eq!(pp.string_to_key().hash(), HashAlgorithm::SHA256);
 
-    assert_eq!(pp.encryption_algorithm, Some(SymmetricKeyAlgorithm::AES128));
-    assert_eq!(pp.string_to_key_id, 254);
+            assert_eq!(pp.encryption_algorithm(), SymmetricKeyAlgorithm::AES128);
+            assert_eq!(pp.string_to_key_id(), 254);
+        }
+    }
 
     key.unlock(
         || "test".to_string(),
@@ -852,6 +855,9 @@ fn private_x25519_verify() {
         },
     )
     .unwrap();
+
+    let pub_key = sk.public_key();
+    assert_eq!(pub_key.key_id(), sk.key_id());
 }
 
 #[test]
@@ -872,3 +878,74 @@ fn pub_x25519_little_verify() {
     assert_eq!(pk.details.users.len(), 1);
     assert_eq!(pk.details.users[0].id.id(), "Hi <hi@hel.lo>");
 }
+
+macro_rules! autocrypt_key {
+    ($name:ident, $path:expr, $unlock:expr,) => {
+        #[test]
+        fn $name() {
+            test_parse_autocrypt_key($path, $unlock);
+        }
+    };
+}
+
+fn test_parse_autocrypt_key(key: &str, unlock: bool) {
+    use pretty_env_logger;
+    let _ = pretty_env_logger::try_init();
+
+    let f = read_file(Path::new("./tests/autocrypt/").join(key));
+    let pk = from_armor_many(f).unwrap();
+    for key in pk {
+        let parsed = key.expect("failed to parse key");
+        parsed.verify().expect("invalid key");
+
+        if unlock {
+            let sk = parsed.clone().into_secret();
+            sk.unlock(|| "".to_string(), |_| Ok(()))
+                .expect("failed to unlock key");
+
+            let pub_key = sk.public_key();
+            assert_eq!(pub_key.key_id(), sk.key_id());
+        }
+
+        // serialize and check we get the same thing
+        let serialized = parsed.to_armored_bytes().unwrap();
+
+        println!("{}", ::std::str::from_utf8(&serialized).unwrap());
+
+        // and parse them again
+        let parsed2 = from_armor_many(Cursor::new(&serialized))
+            .expect("failed to parse round2")
+            .collect::<Vec<_>>();
+
+        assert_eq!(parsed2.len(), 1);
+        assert_eq!(&parsed, parsed2[0].as_ref().unwrap());
+    }
+}
+
+autocrypt_key!(
+    key_autocrypt_alice_pub,
+    "alice@autocrypt.example.pub.asc",
+    false,
+);
+autocrypt_key!(
+    key_autocrypt_alice_sec,
+    "alice@autocrypt.example.sec.asc",
+    true,
+);
+
+autocrypt_key!(
+    key_autocrypt_bob_pub,
+    "bob@autocrypt.example.pub.asc",
+    false,
+);
+autocrypt_key!(key_autocrypt_bob_sec, "bob@autocrypt.example.sec.asc", true,);
+autocrypt_key!(
+    key_autocrypt_carol_pub,
+    "carol@autocrypt.example.pub.asc",
+    false,
+);
+autocrypt_key!(
+    key_autocrypt_carol_sec,
+    "carol@autocrypt.example.sec.asc",
+    true,
+);

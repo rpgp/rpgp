@@ -1,72 +1,120 @@
 use std::{fmt, io};
 
+use crypto::checksum;
+use crypto::kdf;
+use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
 use ser::Serialize;
-use types::StringToKey;
+use types::*;
 
-/// A list of params that are used to represent the values of possibly encrypted key, from imports and exports.
 #[derive(Clone, PartialEq, Eq)]
 pub struct EncryptedSecretParams {
-    /// The raw data as generated when imported.
-    pub data: Vec<u8>,
-    /// Hash or checksum of the raw data.
-    pub checksum: Option<Vec<u8>>,
-    /// IV, exist encrypted raw data.
-    pub iv: Option<Vec<u8>>,
-    /// If raw is encrypted, the encryption algorithm used.
-    pub encryption_algorithm: Option<SymmetricKeyAlgorithm>,
-    /// If raw is encrypted, the string-to-key method and its parameters.
-    pub string_to_key: Option<StringToKey>,
+    /// The encrypted data.
+    data: Vec<u8>,
+    /// IV.
+    iv: Vec<u8>,
+    /// The encryption algorithm used.
+    encryption_algorithm: SymmetricKeyAlgorithm,
+    /// The string-to-key method and its parameters.
+    string_to_key: StringToKey,
     /// The identifier for how this data is stored.
-    pub string_to_key_id: u8,
+    string_to_key_id: u8,
 }
 
 impl EncryptedSecretParams {
-    pub fn new_plaintext(data: Vec<u8>, checksum: Option<Vec<u8>>) -> EncryptedSecretParams {
+    pub fn new(
+        data: Vec<u8>,
+        iv: Vec<u8>,
+        alg: SymmetricKeyAlgorithm,
+        s2k: StringToKey,
+        id: u8,
+    ) -> Self {
+        assert_ne!(id, 0, "invalid string to key id");
         EncryptedSecretParams {
             data,
-            checksum,
-            iv: None,
-            encryption_algorithm: None,
-            string_to_key: None,
-            string_to_key_id: 0,
+            iv,
+            encryption_algorithm: alg,
+            string_to_key: s2k,
+            string_to_key_id: id,
         }
     }
 
-    pub fn is_encrypted(&self) -> bool {
-        self.string_to_key_id != 0
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    pub fn iv(&self) -> &[u8] {
+        &self.iv
+    }
+
+    pub fn encryption_algorithm(&self) -> SymmetricKeyAlgorithm {
+        self.encryption_algorithm
+    }
+
+    pub fn string_to_key(&self) -> &StringToKey {
+        &self.string_to_key
+    }
+
+    pub fn string_to_key_id(&self) -> u8 {
+        self.string_to_key_id
+    }
+
+    pub fn checksum(&self) -> Option<Vec<u8>> {
+        if self.string_to_key_id < 254 {
+            Some(checksum::calculate_simple(self.data()))
+        } else {
+            None
+        }
+    }
+
+    pub fn unlock<F>(&self, pw: F, alg: PublicKeyAlgorithm) -> Result<PlainSecretParams>
+    where
+        F: FnOnce() -> String,
+    {
+        let s2k_details = &self.string_to_key;
+        let key = kdf::s2k(
+            pw,
+            self.encryption_algorithm,
+            s2k_details.typ(),
+            s2k_details.hash(),
+            s2k_details.salt(),
+            s2k_details.count(),
+        )?;
+
+        let iv = &self.iv;
+
+        // Actual decryption
+        let mut plaintext = self.data.clone();
+        self.encryption_algorithm
+            .decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
+
+        PlainSecretParams::from_slice(&plaintext, alg)
     }
 }
 
 impl Serialize for EncryptedSecretParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[self.string_to_key_id])?;
+
         match self.string_to_key_id {
-            0 => {}
+            0 => panic!("encrypted secret params should not have an unecrypted identifier"),
             1...253 => {
-                writer.write_all(self.iv.as_ref().expect("inconsistent string to key id"))?;
+                writer.write_all(&self.iv)?;
             }
             254...255 => {
-                let s2k = self
-                    .string_to_key
-                    .as_ref()
-                    .expect("inconsistent string to key id");
+                let s2k = &self.string_to_key;
 
-                writer.write_all(&[self
-                    .encryption_algorithm
-                    .expect("inconsistent string to key id")
-                    as u8])?;
+                writer.write_all(&[self.encryption_algorithm as u8])?;
                 s2k.to_writer(writer)?;
-                writer.write_all(self.iv.as_ref().expect("inconsistent string to key id"))?;
+                writer.write_all(&self.iv)?;
             }
             _ => unreachable!("this is a u8"),
         }
 
         writer.write_all(&self.data)?;
-
-        if let Some(ref checksum) = self.checksum {
-            writer.write_all(checksum)?;
+        if let Some(cs) = self.checksum() {
+            writer.write_all(&cs)?;
         }
 
         Ok(())
@@ -77,8 +125,8 @@ impl fmt::Debug for EncryptedSecretParams {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("EncryptedSecretParams")
             .field("data", &hex::encode(&self.data))
-            .field("checksum", &self.checksum.as_ref().map(hex::encode))
-            .field("iv", &self.iv.as_ref().map(hex::encode))
+            .field("checksum", &self.checksum().map(hex::encode))
+            .field("iv", &hex::encode(&self.iv))
             .field("encryption_algorithm", &self.encryption_algorithm)
             .field("string_to_key", &self.string_to_key)
             .field("string_to_key_id", &self.string_to_key_id)

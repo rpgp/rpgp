@@ -157,7 +157,7 @@ macro_rules! key_parser {
 
                 Some(Ok(<$key_type>::new(
                     primary_key,
-                    $crate::composed::key::SignedKeyDetails::new(
+                    $crate::composed::signed_key::SignedKeyDetails::new(
                         revocation_signatures,
                         direct_signatures,
                         users,

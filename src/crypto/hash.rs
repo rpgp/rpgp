@@ -12,9 +12,9 @@ use sha2::{Sha224, Sha256, Sha384, Sha512};
 
 use errors::{Error, Result};
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
 pub enum HashAlgorithm {
     None = 0,
@@ -28,6 +28,12 @@ pub enum HashAlgorithm {
 
     /// Do not use, just for compatability with GnuPG.
     Private10 = 110,
+}
+
+impl Default for HashAlgorithm {
+    fn default() -> Self {
+        HashAlgorithm::SHA256
+    }
 }
 
 impl TryInto<Hashes> for HashAlgorithm {

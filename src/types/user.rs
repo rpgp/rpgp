@@ -19,7 +19,7 @@ impl SignedUser {
                 if !sig.is_certificate() {
                     warn!(
                         "ignoring unexpected signature {:?} after User ID packet",
-                        sig.typ
+                        sig.typ()
                     );
                     false
                 } else {
@@ -41,6 +41,10 @@ impl SignedUser {
         }
 
         Ok(())
+    }
+
+    pub fn is_primary(&self) -> bool {
+        self.signatures.iter().any(|sig| sig.is_primary())
     }
 }
 
@@ -69,7 +73,7 @@ impl SignedUserAttribute {
                 if !sig.is_certificate() {
                     warn!(
                         "ignoring unexpected signature {:?} after User Attribute packet",
-                        sig.typ
+                        sig.typ()
                     );
                     false
                 } else {

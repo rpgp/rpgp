@@ -1,181 +1,136 @@
-use std::io;
+use chrono;
 
-use composed::key::{SignedPublicKey, SignedSecretKey};
+use composed::SignedKeyDetails;
+use crypto::hash::HashAlgorithm;
+use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
-use packet;
-use ser::Serialize;
-use types::{KeyId, KeyTrait, PublicKeyTrait, SignedUser, SignedUserAttribute};
+use packet::{
+    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, UserAttribute, UserId,
+};
+use types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
-/// Shared details between secret and public keys.
 #[derive(Debug, PartialEq, Eq)]
-pub struct SignedKeyDetails {
-    pub revocation_signatures: Vec<packet::Signature>,
-    pub direct_signatures: Vec<packet::Signature>,
-    pub users: Vec<SignedUser>,
-    pub user_attributes: Vec<SignedUserAttribute>,
+pub struct KeyDetails {
+    primary_user_id: UserId,
+    user_ids: Vec<UserId>,
+    user_attributes: Vec<UserAttribute>,
+    keyflags: KeyFlags,
+    preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
+    preferred_hash_algorithms: Vec<HashAlgorithm>,
+    preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+    revocation_key: Option<RevocationKey>,
 }
 
-impl SignedKeyDetails {
+impl KeyDetails {
+    #[allow(clippy::too_many_arguments)] // FIXME
     pub fn new(
-        revocation_signatures: Vec<packet::Signature>,
-        direct_signatures: Vec<packet::Signature>,
-        users: Vec<SignedUser>,
-        user_attributes: Vec<SignedUserAttribute>,
+        primary_user_id: UserId,
+        user_ids: Vec<UserId>,
+        user_attributes: Vec<UserAttribute>,
+        keyflags: KeyFlags,
+        preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
+        preferred_hash_algorithms: Vec<HashAlgorithm>,
+        preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+        revocation_key: Option<RevocationKey>,
     ) -> Self {
-        let users = users
-            .into_iter()
-            .filter(|user| {
-                if user.signatures.is_empty() {
-                    warn!("ignoring unsigned {}", user.id);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
-        let user_attributes = user_attributes
-            .into_iter()
-            .filter(|attr| {
-                if attr.signatures.is_empty() {
-                    warn!("ignoring unsigned {}", attr.attr);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+        KeyDetails {
+            primary_user_id,
+            user_ids,
+            user_attributes,
+            keyflags,
+            preferred_symmetric_algorithms,
+            preferred_hash_algorithms,
+            preferred_compression_algorithms,
+            revocation_key,
+        }
+    }
 
-        SignedKeyDetails {
-            revocation_signatures,
-            direct_signatures,
+    pub fn sign<F>(self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedKeyDetails>
+    where
+        F: (FnOnce() -> String) + Clone,
+    {
+        let keyflags: Vec<u8> = self.keyflags.into();
+        let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
+        let preferred_hash_algorithms = self.preferred_hash_algorithms;
+        let preferred_compression_algorithms = self.preferred_compression_algorithms;
+        let revocation_key = self.revocation_key;
+
+        let mut users = vec![];
+
+        // primary user id
+        {
+            let id = self.primary_user_id;
+            let mut hashed_subpackets = vec![
+                Subpacket::IsPrimary(true),
+                Subpacket::SignatureCreationTime(chrono::Utc::now()),
+                Subpacket::KeyFlags(keyflags.clone()),
+                Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
+                Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
+                Subpacket::PreferredCompressionAlgorithms(preferred_compression_algorithms.clone()),
+            ];
+            if let Some(rkey) = revocation_key {
+                hashed_subpackets.push(Subpacket::RevocationKey(rkey));
+            }
+
+            let config = SignatureConfigBuilder::default()
+                .typ(SignatureType::CertGeneric)
+                .pub_alg(key.algorithm())
+                .hashed_subpackets(hashed_subpackets)
+                .unhashed_subpackets(vec![
+                    Subpacket::Issuer(key.key_id().expect("missing key id")),
+                    Subpacket::IssuerFingerprint(key.fingerprint()),
+                ])
+                .build()?;
+
+            let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
+
+            users.push(id.into_signed(sig));
+        }
+
+        // othe user ids
+
+        users.extend(
+            self.user_ids
+                .into_iter()
+                .map(|id| {
+                    let config = SignatureConfigBuilder::default()
+                        .typ(SignatureType::CertGeneric)
+                        .pub_alg(key.algorithm())
+                        .hashed_subpackets(vec![
+                            Subpacket::SignatureCreationTime(chrono::Utc::now()),
+                            Subpacket::KeyFlags(keyflags.clone()),
+                            Subpacket::PreferredSymmetricAlgorithms(
+                                preferred_symmetric_algorithms.clone(),
+                            ),
+                            Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
+                            Subpacket::PreferredCompressionAlgorithms(
+                                preferred_compression_algorithms.clone(),
+                            ),
+                        ])
+                        .unhashed_subpackets(vec![
+                            Subpacket::Issuer(key.key_id().expect("missing key id")),
+                            Subpacket::IssuerFingerprint(key.fingerprint()),
+                        ])
+                        .build()?;
+
+                    let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
+
+                    Ok(id.into_signed(sig))
+                })
+                .collect::<Result<Vec<_>>>()?,
+        );
+
+        let user_attributes = self
+            .user_attributes
+            .into_iter()
+            .map(|u| u.sign(key, key_pw.clone()))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(SignedKeyDetails {
+            revocation_signatures: Default::default(),
+            direct_signatures: Default::default(),
             users,
             user_attributes,
-        }
-    }
-
-    fn verify_users(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        for user in &self.users {
-            user.verify(key)?;
-        }
-
-        Ok(())
-    }
-
-    fn verify_attributes(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        for attr in &self.user_attributes {
-            attr.verify(key)?;
-        }
-
-        Ok(())
-    }
-
-    fn verify_revocation_signatures(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        for sig in &self.revocation_signatures {
-            sig.verify_key(key)?;
-        }
-
-        Ok(())
-    }
-
-    fn verify_direct_signatures(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        for sig in &self.direct_signatures {
-            sig.verify_key(key)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        self.verify_users(key)?;
-        self.verify_attributes(key)?;
-        self.verify_revocation_signatures(key)?;
-        self.verify_direct_signatures(key)?;
-
-        Ok(())
-    }
-}
-
-impl Serialize for SignedKeyDetails {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        for sig in &self.revocation_signatures {
-            packet::write_packet(writer, sig)?;
-        }
-
-        for sig in &self.direct_signatures {
-            packet::write_packet(writer, sig)?;
-        }
-
-        for user in &self.users {
-            user.to_writer(writer)?;
-        }
-
-        for attr in &self.user_attributes {
-            attr.to_writer(writer)?;
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum PublicOrSecret {
-    Public(SignedPublicKey),
-    Secret(SignedSecretKey),
-}
-
-impl PublicOrSecret {
-    pub fn verify(&self) -> Result<()> {
-        match self {
-            PublicOrSecret::Public(k) => k.verify(),
-            PublicOrSecret::Secret(k) => k.verify(),
-        }
-    }
-
-    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        match self {
-            PublicOrSecret::Public(k) => k.to_armored_writer(writer),
-            PublicOrSecret::Secret(k) => k.to_armored_writer(writer),
-        }
-    }
-
-    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
-        match self {
-            PublicOrSecret::Public(k) => k.to_armored_bytes(),
-            PublicOrSecret::Secret(k) => k.to_armored_bytes(),
-        }
-    }
-
-    pub fn to_armored_string(&self) -> Result<String> {
-        match self {
-            PublicOrSecret::Public(k) => k.to_armored_string(),
-            PublicOrSecret::Secret(k) => k.to_armored_string(),
-        }
-    }
-}
-
-impl Serialize for PublicOrSecret {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            PublicOrSecret::Public(k) => k.to_writer(writer),
-            PublicOrSecret::Secret(k) => k.to_writer(writer),
-        }
-    }
-}
-
-impl KeyTrait for PublicOrSecret {
-    /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
-        match self {
-            PublicOrSecret::Public(k) => k.fingerprint(),
-            PublicOrSecret::Secret(k) => k.fingerprint(),
-        }
-    }
-
-    /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
-        match self {
-            PublicOrSecret::Public(k) => k.key_id(),
-            PublicOrSecret::Secret(k) => k.key_id(),
-        }
+        })
     }
 }

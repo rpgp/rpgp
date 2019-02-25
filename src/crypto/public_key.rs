@@ -48,7 +48,7 @@ pub enum PublicKeyAlgorithm {
 }
 
 /// Represent the public paramaters for the different algorithms.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone)]
 pub enum PublicParams {
     RSA {
         n: BigUint,

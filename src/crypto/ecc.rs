@@ -1,6 +1,5 @@
 use block_padding::{Padding, Pkcs7};
 use hex;
-use x25519_dalek::x25519;
 
 use crypto::aes_kw;
 use crypto::hash::HashAlgorithm;
@@ -62,34 +61,40 @@ pub fn decrypt_ecdh(
 
     // 33 = 0x40 + 32bits
     ensure_eq!(mpis[0].len(), 33, "invalid public point");
-
-    // public part of the ephemeral key (removes 0x40 prefix)
-    let ephemeral_public_key = &mpis[0][1..];
+    ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
 
     // encrypted and wrapped value derived from the session key
     let encrypted_session_key = &mpis[1];
 
-    // private key of the recipient.
-    let private_key = &priv_key.secret[..];
+    let their_public = {
+        // public part of the ephemeral key (removes 0x40 prefix)
+        let ephemeral_public_key = &mpis[0][1..];
 
-    // create montgomery point
-    let mut ephemeral_public_key_arr = [0u8; 32];
-    ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
+        // create montgomery point
+        let mut ephemeral_public_key_arr = [0u8; 32];
+        ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
 
-    // create scalar and reverse to little endian
-    let private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
-    let mut private_key_arr = [0u8; 32];
-    private_key_arr[..].copy_from_slice(&private_key_le);
+        x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
+    };
+
+    let our_secret = {
+        // private key of the recipient.
+        let private_key = &priv_key.secret[..];
+
+        // create scalar and reverse to little endian
+        let private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
+        let mut private_key_arr = [0u8; 32];
+        private_key_arr[..].copy_from_slice(&private_key_le);
+        x25519_dalek::StaticSecret::from(private_key_arr)
+    };
 
     // derive shared secret
-    // let shared_secret =
-    // EphemeralSecret::diffie_hellman(&private_key_arr, &ephemeral_public_key_arr);
-    let shared_secret = x25519(private_key_arr, ephemeral_public_key_arr);
+    let shared_secret = our_secret.diffie_hellman(&their_public);
 
     // Perform key derivation
     let z = kdf(
         priv_key.hash,
-        &shared_secret,
+        shared_secret.as_bytes(),
         priv_key.alg_sym.key_size(),
         &param,
     )?;

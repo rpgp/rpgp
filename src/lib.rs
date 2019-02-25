@@ -39,7 +39,7 @@ extern crate generic_array;
 extern crate ed25519_dalek;
 extern crate itertools;
 extern crate md5;
-extern crate num_bigint_dig as num_bigint;
+extern crate num_bigint;
 extern crate num_traits;
 extern crate ripemd160;
 extern crate sha1;
@@ -56,6 +56,10 @@ extern crate buf_redux;
 extern crate hex;
 extern crate rand;
 extern crate try_from;
+#[macro_use]
+extern crate derive_builder;
+#[macro_use]
+extern crate bitfield;
 
 #[cfg(test)]
 extern crate regex;

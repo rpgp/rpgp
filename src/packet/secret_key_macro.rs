@@ -1,10 +1,10 @@
 #[macro_export]
 macro_rules! impl_secret_key {
     ($name:ident, $tag:expr, $details:ident) => {
-        #[derive(Debug, PartialEq, Eq)]
+        #[derive(Debug, PartialEq, Eq, Clone)]
         pub struct $name {
-            details: $crate::packet::$details,
-            secret_params: $crate::types::EncryptedSecretParams,
+            pub(crate) details: $crate::packet::$details,
+            pub(crate) secret_params: $crate::types::SecretParams,
         }
 
         impl $name {
@@ -33,10 +33,6 @@ macro_rules! impl_secret_key {
                 self.details.version()
             }
 
-            pub fn algorithm(&self) -> &$crate::crypto::public_key::PublicKeyAlgorithm {
-                &self.details.algorithm()
-            }
-
             pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
                 &self.details.created_at()
             }
@@ -56,150 +52,29 @@ macro_rules! impl_secret_key {
             fn repr_from_ciphertext<F>(
                 &self,
                 pw: F,
-                ciphertext: &[u8],
+                ciphertext: &$crate::types::EncryptedSecretParams,
             ) -> $crate::errors::Result<$crate::types::SecretKeyRepr>
             where
                 F: FnOnce() -> String,
             {
-                use $crate::crypto::checksum;
-                use $crate::crypto::kdf::s2k;
-
-                let sym_alg = self
-                    .secret_params
-                    .encryption_algorithm
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing encryption algorithm"))?;
-                let s2k_details = self
-                    .secret_params
-                    .string_to_key
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing s2k"))?;
-                let key = s2k(
-                    pw,
-                    *sym_alg,
-                    s2k_details.typ,
-                    s2k_details.hash,
-                    s2k_details.salt.as_ref(),
-                    s2k_details.count().as_ref(),
-                )?;
-
-                let iv = self
-                    .secret_params
-                    .iv
-                    .as_ref()
-                    .ok_or_else(|| format_err!("missing IV"))?;
-
-                // Actual decryption
-                let mut plaintext = ciphertext.to_vec();
-                sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
-
-                // Validate checksum
-                if self.has_checksum() {
-                    let split = plaintext.len() - 20;
-                    checksum::sha1(&plaintext[split..], &plaintext[..split])?;
-                } else if let Some(ref actual_checksum) = self.secret_params.checksum {
-                    // we already parsed the checksum when reading the s2k.
-                    checksum::simple(actual_checksum, &plaintext)?;
-                } else {
-                    bail!("missing checksum");
-                }
-
-                // Construct details from the now decrypted plaintext information
-                self.repr_from_plaintext(&plaintext)
+                let plain = ciphertext.unlock(pw, self.details.algorithm)?;
+                self.repr_from_plaintext(&plain)
             }
 
             fn repr_from_plaintext(
                 &self,
-                plaintext: &[u8],
+                plaintext: &$crate::types::PlainSecretParams,
             ) -> $crate::errors::Result<$crate::types::SecretKeyRepr> {
-                use rsa::RSAPrivateKey;
-                use $crate::crypto::ecc_curve::ECCCurve;
-                use $crate::crypto::public_key::{PublicKeyAlgorithm, PublicParams};
-                use $crate::packet::secret_key_parser::{ecc_secret_params, rsa_secret_params};
-                use $crate::types::{ECDHSecretKey, EdDSASecretKey, SecretKeyRepr};
-
-                match self.algorithm() {
-                    PublicKeyAlgorithm::RSA
-                    | PublicKeyAlgorithm::RSAEncrypt
-                    | PublicKeyAlgorithm::RSASign => {
-                        let (_, (d, p, q, _)) = rsa_secret_params(plaintext)?;
-                        match self.public_params() {
-                            PublicParams::RSA { ref n, ref e } => {
-                                let secret_key = RSAPrivateKey::from_components(
-                                    n.clone(),
-                                    e.clone(),
-                                    d,
-                                    vec![p, q],
-                                );
-                                secret_key.validate()?;
-                                Ok(SecretKeyRepr::RSA(secret_key))
-                            }
-                            _ => unreachable!("inconsistent key state"),
-                        }
-                    }
-                    PublicKeyAlgorithm::DSA => {
-                        unimplemented_err!("DSA");
-                    }
-                    PublicKeyAlgorithm::ECDH => match self.public_params() {
-                        PublicParams::ECDH {
-                            ref curve,
-                            ref hash,
-                            ref alg_sym,
-                            ..
-                        } => match *curve {
-                            ECCCurve::Curve25519 => {
-                                let (_, d) = ecc_secret_params(plaintext)?;
-                                ensure_eq!(d.len(), 32, "invalid secret");
-
-                                let mut secret = [0u8; 32];
-                                secret.copy_from_slice(d);
-
-                                Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
-                                    oid: curve.oid(),
-                                    hash: *hash,
-                                    alg_sym: *alg_sym,
-                                    secret,
-                                }))
-                            }
-                            _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
-                        },
-                        _ => unreachable!("inconsistent key state"),
-                    },
-                    PublicKeyAlgorithm::ECDSA => {
-                        unimplemented_err!("ECDSA");
-                    }
-                    PublicKeyAlgorithm::EdDSA => match self.public_params() {
-                        PublicParams::EdDSA { ref curve, .. } => match *curve {
-                            ECCCurve::Ed25519 => {
-                                let (_, d) = ecc_secret_params(plaintext)?;
-                                ensure_eq!(d.len(), 32, "invalid secret");
-
-                                let mut secret = [0u8; 32];
-                                secret.copy_from_slice(d);
-
-                                Ok(SecretKeyRepr::EdDSA(EdDSASecretKey {
-                                    oid: curve.oid(),
-                                    secret,
-                                }))
-                            }
-                            _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-                        },
-                        _ => unreachable!("inconsistent key state"),
-                    },
-                    PublicKeyAlgorithm::Elgamal => {
-                        unimplemented_err!("Elgamal");
-                    }
-                    _ => unsupported_err!("algorithm: {:?}", self.algorithm()),
-                }
+                plaintext.as_repr(self.public_params())
             }
 
-            pub fn secret_params(&self) -> &$crate::types::EncryptedSecretParams {
+            pub fn secret_params(&self) -> &$crate::types::SecretParams {
                 &self.secret_params
             }
 
             /// Checks if we should expect a SHA1 checksum in the encrypted part.
-            fn has_checksum(&self) -> bool {
-                self.secret_params.string_to_key_id == 254
+            pub fn has_sha1_checksum(&self) -> bool {
+                self.secret_params.string_to_key_id() == 254
             }
 
             fn to_writer_old<W: std::io::Write>(
@@ -225,22 +100,105 @@ macro_rules! impl_secret_key {
 
                 Ok(())
             }
+
+            pub fn sign<F>(
+                &self,
+                key: &impl $crate::types::SecretKeyTrait,
+                key_pw: F,
+            ) -> $crate::errors::Result<$crate::packet::Signature>
+            where
+                F: FnOnce() -> String,
+            {
+                let mut config = $crate::packet::SignatureConfigBuilder::default();
+                match $tag {
+                    $crate::types::Tag::SecretKey => {
+                        config.typ($crate::packet::SignatureType::KeyBinding);
+                    }
+                    $crate::types::Tag::SecretSubkey => {
+                        config.typ($crate::packet::SignatureType::SubkeyBinding);
+                    }
+                    _ => panic!("invalid tag"),
+                };
+
+                config
+                    .pub_alg(key.algorithm())
+                    .hashed_subpackets(vec![$crate::packet::Subpacket::SignatureCreationTime(
+                        chrono::Utc::now(),
+                    )])
+                    .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(
+                        key.key_id().expect("missing key id"),
+                    )])
+                    .build()?
+                    .sign_key(key, key_pw, &self)
+            }
         }
 
         impl $crate::types::SecretKeyTrait for $name {
+            type PublicKey = $details;
+
             /// Unlock the raw data in the secret parameters.
             fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
             where
                 F: FnOnce() -> String,
                 G: FnOnce(&$crate::types::SecretKeyRepr) -> $crate::errors::Result<()>,
             {
-                let decrypted = if self.secret_params.is_encrypted() {
-                    self.repr_from_ciphertext(pw, self.secret_params.data.as_slice())
-                } else {
-                    self.repr_from_plaintext(self.secret_params.data.as_slice())
+                use $crate::types::SecretParams;
+
+                let decrypted = match self.secret_params {
+                    SecretParams::Plain(ref k) => self.repr_from_plaintext(k),
+                    SecretParams::Encrypted(ref k) => self.repr_from_ciphertext(pw, k),
                 }?;
 
                 work(&decrypted)
+            }
+
+            fn create_signature<F>(
+                &self,
+                key_pw: F,
+                hash: $crate::crypto::hash::HashAlgorithm,
+                data: &[u8],
+            ) -> $crate::errors::Result<Vec<Vec<u8>>>
+            where
+                F: FnOnce() -> String,
+            {
+                use $crate::crypto::ecc_curve::ECCCurve;
+                use $crate::crypto::public_key::PublicParams;
+                use $crate::types::SecretKeyRepr;
+
+                info!("signing data: {}", hex::encode(&data));
+
+                let mut signature: Option<Vec<Vec<u8>>> = None;
+                self.unlock(key_pw, |priv_key| {
+                    info!("unlocked key");
+                    let sig = match *priv_key {
+                        SecretKeyRepr::RSA(ref priv_key) => {
+                            $crate::crypto::signature::sign_rsa(priv_key, hash, data)
+                        }
+                        SecretKeyRepr::DSA(_) => unimplemented_err!("sign DSA"),
+                        SecretKeyRepr::ECDSA => unimplemented_err!("sign ECDSA"),
+                        SecretKeyRepr::ECDH(_) => {
+                            bail!("ECDH can not be used to for signing operations")
+                        }
+                        SecretKeyRepr::EdDSA(ref priv_key) => match self.public_params() {
+                            PublicParams::EdDSA { ref curve, ref q } => match *curve {
+                                ECCCurve::Ed25519 => {
+                                    $crate::crypto::signature::sign_eddsa(q, priv_key, hash, data)
+                                }
+                                _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
+                            },
+                            _ => unreachable!("inconsistent key state"),
+                        },
+                    }?;
+
+                    signature = Some(sig);
+                    Ok(())
+                })?;
+
+                signature.ok_or_else(|| unreachable!())
+            }
+
+            fn public_key(&self) -> $details {
+                self.details.clone()
             }
         }
 
@@ -253,6 +211,7 @@ macro_rules! impl_secret_key {
                         self.to_writer_old(writer)
                     }
                     $crate::types::KeyVersion::V4 => self.to_writer_new(writer),
+                    $crate::types::KeyVersion::V5 => unimplemented_err!("V5 keys"),
                 }
             }
         }
@@ -279,6 +238,7 @@ macro_rules! impl_secret_key {
                 use $crate::util::bignum_to_mpi;
 
                 match self.version() {
+                    KeyVersion::V5 => unimplemented!("V5 keys"),
                     KeyVersion::V4 => {
                         // A one-octet version number (4).
                         let mut packet = Vec::new();
@@ -290,7 +250,7 @@ macro_rules! impl_secret_key {
                         packet.extend_from_slice(&time_buf);
 
                         // A one-octet number denoting the public-key algorithm of this key.
-                        packet.push(*self.algorithm() as u8);
+                        packet.push(self.algorithm() as u8);
 
                         // A series of multiprecision integers comprising the key material.
                         match &self.public_params() {
@@ -431,6 +391,7 @@ macro_rules! impl_secret_key {
                 use $crate::types::{KeyId, KeyVersion};
 
                 match self.version() {
+                    KeyVersion::V5 => unimplemented!("V5 keys"),
                     KeyVersion::V4 => {
                         // Lower 64 bits
                         let f = self.fingerprint();
@@ -448,6 +409,10 @@ macro_rules! impl_secret_key {
                         _ => None,
                     },
                 }
+            }
+
+            fn algorithm(&self) -> $crate::crypto::public_key::PublicKeyAlgorithm {
+                self.details.algorithm()
             }
         }
 
