@@ -3,7 +3,7 @@ version: 2.1
 executors:
   default:
     docker:
-      - image: rustlang/rust:nightly
+      - image: filecoin/rust:latest
     working_directory: /mnt/crate
 
 fast-checkout: &fast-checkout
