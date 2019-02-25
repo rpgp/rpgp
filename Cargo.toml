@@ -1,3 +1,5 @@
+cargo-features = ["profile-overrides"]
+
 [package]
 name = "pgp"
 version = "0.1.0"
@@ -49,7 +51,6 @@ derive_builder = "0.7.0"
 bitfield = "0.13.1"
 sha3 = "0.8.1"
 rand = "0.5.5"
-libc = "0.2.44"
 
 [dependencies.nom]
 version = "^4.0"
@@ -69,10 +70,23 @@ serde_json = "^1.0"
 glob = "^0.2"
 regex = "^1.1"
 pretty_assertions = "0.5.1"
-rand = "0.5.5"
+
 
 [features]
 default = []
 nightly = ["x25519-dalek/nightly", "rsa/nightly"]
 profile = ["gperftools"]
 asm = ["sha2/asm"]
+
+[workspace]
+members = [
+  "pgp-ffi",
+]
+
+[profile.release.overrides.pgp-ffi]
+debuginfo = 0
+opt-level = "s"
+codegen-units = 1
+# TODO: Enable these through the CLI when building
+# panic = "abort"
+# lto = "thin"

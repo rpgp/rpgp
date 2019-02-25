@@ -8,7 +8,7 @@ use std::mem::transmute;
 use std::os::raw::c_char;
 use std::slice::from_raw_parts;
 
-use pgp::composed::key::{from_armor_many, PublicOrSecret};
+use pgp::composed::{from_armor_many, PublicOrSecret};
 use pgp::types::KeyTrait;
 
 /// Creates an in-memory representation of a PGP key, based on the armor file given.
@@ -20,7 +20,6 @@ pub extern "C" fn key_from_armor(raw: *const u8, len: libc::size_t) -> *mut Publ
     let mut keys = from_armor_many(Cursor::new(bytes)).expect("failed to parse");
 
     let key = keys.nth(0).unwrap().expect("failed to parse key");
-    println!("got key with id {}", hex::encode(key.key_id().unwrap()));
 
     let _key = unsafe { transmute(Box::new(key)) };
     _key

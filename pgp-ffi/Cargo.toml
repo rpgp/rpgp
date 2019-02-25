@@ -7,7 +7,7 @@ authors = ["dignifiedquire <dignifiedquire@users.noreply.github.com>"]
 edition = "2018"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 pgp = { path = "../" }
@@ -16,10 +16,3 @@ libc = "*"
 
 [build-dependencies]
 cbindgen = "0.6.7"
-
-[profile.release]
-debuginfo = 0
-opt-level = "s"
-panic = "abort"
-codegen-units = 1
-lto = "thin"
