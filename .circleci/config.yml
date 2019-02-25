@@ -149,16 +149,6 @@ workflows:
           requires:
             - cargo_fetch
 
-      - test_i686-unknown-linux-gnu:
-          requires:
-            - cargo_fetch
-
-      # Mobile
-
-      - test_aarch64-linux-android:
-          requires:
-            - cargo_fetch
-
       # Desktop Apple
 
       - test_macos:
