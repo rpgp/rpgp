@@ -6,7 +6,7 @@ export RUST_TEST_THREADS=1
 export RUST_BACKTRACE=1
 export RUST_TEST_NOCAPTURE=1
 export OPT="--target=$TARGET --all"
-export OPT_RELEASE="--release ${OPT} --all"
+export OPT_RELEASE="--release ${OPT}"
 export OPT_RELEASE_IGNORED="--release ${OPT} -- --ignored"
 export OPT_FFI_RELEASE="--manifest-path=pgp-ffi/Cargo.toml --release"
 

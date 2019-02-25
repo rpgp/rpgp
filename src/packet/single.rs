@@ -144,28 +144,28 @@ pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
     info!("packet body: {}", hex::encode(body));
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
-            PublicKeyEncryptedSessionKey::from_slice(ver, body).map(|r| r.into())
+            PublicKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
         }
-        Tag::Signature => Signature::from_slice(ver, body).map(|r| r.into()),
+        Tag::Signature => Signature::from_slice(ver, body).map(Into::into),
         Tag::SymKeyEncryptedSessionKey => {
-            SymKeyEncryptedSessionKey::from_slice(ver, body).map(|r| r.into())
+            SymKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
         }
-        Tag::OnePassSignature => OnePassSignature::from_slice(ver, body).map(|r| r.into()),
-        Tag::SecretKey => SecretKey::from_slice(ver, body).map(|r| r.into()),
-        Tag::PublicKey => PublicKey::from_slice(ver, body).map(|r| r.into()),
-        Tag::SecretSubkey => SecretSubkey::from_slice(ver, body).map(|r| r.into()),
-        Tag::CompressedData => CompressedData::from_slice(ver, body).map(|r| r.into()),
-        Tag::SymEncryptedData => SymEncryptedData::from_slice(ver, body).map(|r| r.into()),
-        Tag::Marker => Marker::from_slice(ver, body).map(|r| r.into()),
-        Tag::LiteralData => LiteralData::from_slice(ver, body).map(|r| r.into()),
-        Tag::Trust => Trust::from_slice(ver, body).map(|r| r.into()),
-        Tag::UserId => UserId::from_slice(ver, body).map(|r| r.into()),
-        Tag::PublicSubkey => PublicSubkey::from_slice(ver, body).map(|r| r.into()),
-        Tag::UserAttribute => UserAttribute::from_slice(ver, body).map(|r| r.into()),
+        Tag::OnePassSignature => OnePassSignature::from_slice(ver, body).map(Into::into),
+        Tag::SecretKey => SecretKey::from_slice(ver, body).map(Into::into),
+        Tag::PublicKey => PublicKey::from_slice(ver, body).map(Into::into),
+        Tag::SecretSubkey => SecretSubkey::from_slice(ver, body).map(Into::into),
+        Tag::CompressedData => CompressedData::from_slice(ver, body).map(Into::into),
+        Tag::SymEncryptedData => SymEncryptedData::from_slice(ver, body).map(Into::into),
+        Tag::Marker => Marker::from_slice(ver, body).map(Into::into),
+        Tag::LiteralData => LiteralData::from_slice(ver, body).map(Into::into),
+        Tag::Trust => Trust::from_slice(ver, body).map(Into::into),
+        Tag::UserId => UserId::from_slice(ver, body).map(Into::into),
+        Tag::PublicSubkey => PublicSubkey::from_slice(ver, body).map(Into::into),
+        Tag::UserAttribute => UserAttribute::from_slice(ver, body).map(Into::into),
         Tag::SymEncryptedProtectedData => {
-            SymEncryptedProtectedData::from_slice(ver, body).map(|r| r.into())
+            SymEncryptedProtectedData::from_slice(ver, body).map(Into::into)
         }
-        Tag::ModDetectionCode => ModDetectionCode::from_slice(ver, body).map(|r| r.into()),
+        Tag::ModDetectionCode => ModDetectionCode::from_slice(ver, body).map(Into::into),
     };
 
     match res {

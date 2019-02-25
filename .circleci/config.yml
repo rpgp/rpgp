@@ -106,11 +106,17 @@ jobs:
       - test_target:
           target: "x86_64-unknown-linux-gnu"
 
-  test_aarch64-unknown-linux-gnu:
+  test_i686-unknown-linux-gnu:
     executor: default
     steps:
       - test_target:
-          target: "aarch64-unknown-linux-gnu"
+          target: "i686-unknown-linux-gnu"
+
+  test_aarch64-linux-android:
+    executor: default
+    steps:
+      - test_target:
+          target: "aarch64-linux-android"
 
 
 workflows:
@@ -126,13 +132,23 @@ workflows:
           requires:
             - cargo_fetch
 
+      # Linux Desktop
+
       - test_x86_64-unknown-linux-gnu:
           requires:
             - cargo_fetch
 
-      - test_aarch64-unknown-linux-gnu:
+      - test_i686-unknown-linux-gnu:
           requires:
             - cargo_fetch
+
+      # Mobile
+
+      - test_aarch64-linux-android:
+          requires:
+            - cargo_fetch
+
+      # Desktop Apple
 
       - test_macos:
           requires:

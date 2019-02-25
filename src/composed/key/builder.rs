@@ -214,7 +214,7 @@ pub enum KeyType {
 }
 
 impl KeyType {
-    pub fn to_alg(&self) -> PublicKeyAlgorithm {
+    pub fn to_alg(self) -> PublicKeyAlgorithm {
         match self {
             KeyType::Rsa(_) => PublicKeyAlgorithm::RSA,
             KeyType::ECDH => PublicKeyAlgorithm::ECDH,
@@ -223,13 +223,13 @@ impl KeyType {
     }
 
     pub fn generate(
-        &self,
+        self,
         passphrase: Option<String>,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let mut rng = OsRng::new().expect("no system rng available");
 
         let (pub_params, plain) = match self {
-            KeyType::Rsa(bit_size) => rsa::generate_key(&mut rng, *bit_size as usize)?,
+            KeyType::Rsa(bit_size) => rsa::generate_key(&mut rng, bit_size as usize)?,
             KeyType::ECDH => ecdh::generate_key(&mut rng),
             KeyType::EdDSA => eddsa::generate_key(&mut rng),
         };
