@@ -2,7 +2,7 @@ version: 2
 jobs:
   cargo_fetch:
     docker:
-      - image: rustlang/rust:nightly
+      - image: rustlang/rust
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -31,7 +31,7 @@ jobs:
             - /root/.rustup
   test:
     docker:
-      - image: rustlang/rust:nightly
+      - image: rustlang/rust
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -47,7 +47,7 @@ jobs:
 
   rustfmt:
     docker:
-      - image: rustlang/rust:nightly
+      - image: rustlang/rust
     working_directory: /mnt/crate
     steps:
       - checkout
@@ -62,7 +62,7 @@ jobs:
 
   clippy:
     docker:
-      - image: rustlang/rust:nightly
+      - image: rustlang/rust
     working_directory: /mnt/crate
     steps:
       - checkout
