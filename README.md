@@ -24,6 +24,10 @@ untested). The following targets are known to work and pass all tests:
 
 ### Linux
 
+* x86_64-unknown-linux-gnu
+
+> Note: currently not tested on CI, but likely working.
+
 * aarch64-unknown-linux-gnu
 * arm-unknown-linux-gnueabi
 * armv7-unknown-linux-gnueabihf
@@ -36,12 +40,11 @@ untested). The following targets are known to work and pass all tests:
 * powerpc-unknown-linux-gnu
 * powerpc64-unknown-linux-gnu
 * powerpc64le-unknown-linux-gnu
-* x86_64-unknown-linux-gnu
 * x86_64-unknown-linux-musl
 
 ### Android
 
-> Note: currently not always passing on CI, but likely working.
+> Note: currently not test on CI, but likely working.
 
 * aarch64-linux-android
 * arm-linux-androideabi
@@ -50,7 +53,7 @@ untested). The following targets are known to work and pass all tests:
 
 ### iOS
 
-> Note: currently only building on CI, but likely working.
+> Note: currently not tested on CI, but likely working.
 
 * i386-apple-ios
 * x86_64-apple-ios
@@ -59,8 +62,12 @@ untested). The following targets are known to work and pass all tests:
 
 ### MacOS X
 
-* i686-apple-darwin
 * x86_64-apple-darwin
+
+> Note: currently not tested on CI, but likely working.
+
+* i686-apple-darwin
+
 
 ### Windows
 
