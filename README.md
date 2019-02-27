@@ -4,77 +4,16 @@
 
 > Pure rust implementation of OpenPGP. Following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440).
 
-
-
 > ⚠️ **WARNING:** This library has **not** been audited, so be careful.
-
-
 
 ## Status
 
 You can find the details of the currently supported features in [this status document](STATUS.md)
 
-
-
-
 ## Platform Support
 
 Windows, Linux, MacOS and every other unix-like OS is supported (although maybe
-untested). The following targets are known to work and pass all tests:
-
-### Linux
-
-* x86_64-unknown-linux-gnu
-
-> Note: currently not tested on CI, but likely working.
-
-* aarch64-unknown-linux-gnu
-* arm-unknown-linux-gnueabi
-* armv7-unknown-linux-gnueabihf
-* i586-unknown-linux-gnu
-* i686-unknown-linux-gnu
-* mips-unknown-linux-gnu
-* mips64-unknown-linux-gnuabi64
-* mips64el-unknown-linux-gnuabi64
-* mipsel-unknown-linux-gnu
-* powerpc-unknown-linux-gnu
-* powerpc64-unknown-linux-gnu
-* powerpc64le-unknown-linux-gnu
-* x86_64-unknown-linux-musl
-
-### Android
-
-> Note: currently not test on CI, but likely working.
-
-* aarch64-linux-android
-* arm-linux-androideabi
-* armv7-linux-androideabi
-* x86_64-linux-android
-
-### iOS
-
-> Note: currently not tested on CI, but likely working.
-
-* i386-apple-ios
-* x86_64-apple-ios
-* armv7-apple-ios
-* armv7s-apple-ios
-
-### MacOS X
-
-* x86_64-apple-darwin
-
-> Note: currently not tested on CI, but likely working.
-
-* i686-apple-darwin
-
-
-### Windows
-
-* i686-pc-windows-gnu
-* x86_64-pc-windows-gnu
-* i686-pc-windows-msvc
-* x86_64-pc-windows-msvc
+untested). For details see [this platform document](PLATFORMS.md).
 
 ## Developement
 
