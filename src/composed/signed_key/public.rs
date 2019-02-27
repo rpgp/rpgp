@@ -92,7 +92,7 @@ impl SignedPublicKey {
             self.details.as_unsigned(),
             self.public_subkeys
                 .iter()
-                .map(|k| k.as_unsigned())
+                .map(SignedPublicSubKey::as_unsigned)
                 .collect(),
         )
     }

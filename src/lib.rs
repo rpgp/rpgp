@@ -13,6 +13,7 @@
     all(feature = "cargo-clippy", not(test)),
     deny(clippy::option_unwrap_used)
 )]
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::missing_const_for_fn))]
 
 #[macro_use]
 extern crate nom;
