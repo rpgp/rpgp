@@ -1,6 +1,6 @@
 # rPGP
 
-[![crates.io version][crate-shield]][crate] [![Travis build status][travis-shield]][travis] [![Appveyor build status][appveyor-shield]][appveyor] [![Docs][docs-shield]][docs] [![License][license-shield]][license]
+[![crates.io version][crate-shield]][crate] [![CircleCI build status][circle-shield]][circle] [![Appveyor build status][appveyor-shield]][appveyor] [![Docs][docs-shield]][docs] [![License][license-shield]][license]
 
 > Pure rust implementation of OpenPGP. Following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440).
 
@@ -90,8 +90,8 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in pgp by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
-[travis-shield]: https://img.shields.io/travis/dignifiedquire/rpgp.svg?style=flat-square
-[travis]: https://travis-ci.org/dignifiedquire/rpgp
+[circle-shield]: https://img.shields.io/circleci/project/github/dignifiedquire/rpgp/master.svg?style=flat-square
+[circle]: https://circleci.com/gh/dignifiedquire/rpgp/
 [appveyor-shield]: https://ci.appveyor.com/api/projects/status/99y4f73itv7yvt93/branch/master?style=flat-square
 [appveyor]: https://ci.appveyor.com/project/dignifiedquire/pgp/branch/master
 [docs-shield]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
