@@ -177,9 +177,9 @@ impl SecretKeyTrait for SignedSecretKey {
         let mut subkeys: Vec<PublicSubkey> = self
             .public_subkeys
             .iter()
-            .map(|k| k.as_unsigned())
+            .map(SignedPublicSubKey::as_unsigned)
             .collect();
-        let sec_subkeys = self.secret_subkeys.iter().map(|k| k.public_key());
+        let sec_subkeys = self.secret_subkeys.iter().map(SecretKeyTrait::public_key);
 
         subkeys.extend(sec_subkeys);
 

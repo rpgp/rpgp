@@ -44,7 +44,7 @@ impl SignedUser {
     }
 
     pub fn is_primary(&self) -> bool {
-        self.signatures.iter().any(|sig| sig.is_primary())
+        self.signatures.iter().any(Signature::is_primary)
     }
 }
 

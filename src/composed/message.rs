@@ -263,7 +263,7 @@ impl Message {
                         "{:?}",
                         key.secret_subkeys
                             .iter()
-                            .map(|k| k.key_id())
+                            .map(KeyTrait::key_id)
                             .collect::<Vec<_>>()
                     );
 

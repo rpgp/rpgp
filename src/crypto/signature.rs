@@ -27,7 +27,7 @@ pub fn verify_rsa(
         &hashed[..],
         sig,
     )
-    .map_err(|err| err.into())
+    .map_err(Into::into)
 }
 
 /// Sign using RSA, with PKCS1v15 padding.
