@@ -7,5 +7,5 @@ Description: {description}
 URL: {url}
 Version: {version}
 Cflags: -I${{includedir}}
-Libs: -L${{libdir}} -lpgp
+Libs: -L${{libdir}} -lrpgp
 Libs.private: {libs_priv}
