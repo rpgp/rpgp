@@ -30,20 +30,26 @@ endif
 
 soext := $(pgp_lib_extension)
 
-all: clean build install
+CARGO_SRC := $(CURDIR)/../Cargo.toml $(CURDIR)/../Cargo.lock
+RUST_SRC := $(shell find $(CURDIR)/.. -name '*.rs')
+LOCAL_SRC := build.rs librpgp.h
 
-build:
-	cd ../ && cargo test --release -p pgp-ffi && cargo build --release -p pgp-ffi && cd pgp-ffi
+all: build
+
+build: build-stamp
+build-stamp: $(LOCAL_SRC) $(CARGO_SRC) $(RUST_SRC)
+	cd $(CURDIR)/../ && cargo test --release -p pgp-ffi && cargo build --release -p pgp-ffi && cd pgp-ffi
+	touch $@
 
 install: build
 	install -d $(DESTDIR)$(PREFIX)/lib/
-	install -m 644 ../target/release/libpgp_ffi$(soext) $(DESTDIR)$(PREFIX)/lib/librpgp$(soext)
+	install -m 644 $(CURDIR)/../target/release/libpgp_ffi$(soext) $(DESTDIR)$(PREFIX)/lib/librpgp$(soext)
 	install -d $(DESTDIR)$(PREFIX)/include/
 	install -m 644 librpgp.h $(DESTDIR)$(PREFIX)/include/
 	install -d $(DESTDIR)$(PREFIX)/lib/pkconfig
-	install -m 644 ../target/release/pkgconfig/rpgp.pc $(DESTDIR)$(PREFIX)/lib/pkgconfig
+	install -m 644 $(CURDIR)/../target/release/pkgconfig/rpgp.pc $(DESTDIR)$(PREFIX)/lib/pkgconfig
 
 clean:
-	rm -f libpgp.h
+	rm -f librpgp.h
 
 .PHONY: clean build install
