@@ -9,7 +9,7 @@ use packet::{
 };
 use types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
     primary_user_id: UserId,
     user_ids: Vec<UserId>,

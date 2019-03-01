@@ -7,14 +7,14 @@ use packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
 use types::{KeyId, KeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PublicKey {
     primary_key: packet::PublicKey,
     details: KeyDetails,
     public_subkeys: Vec<PublicSubkey>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PublicSubkey {
     key: packet::PublicSubkey,
     keyflags: KeyFlags,
