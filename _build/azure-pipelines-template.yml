@@ -8,9 +8,6 @@ jobs:
         rustup_toolchain: stable
       nightly:
         rustup_toolchain: nightly
-      minimum_supported_version:
-        rustup_toolchain: 1.31.0
-  steps:
   - ${{ if ne(parameters.name, 'Windows') }}:
     # Linux and macOS.
     - script: |
@@ -31,6 +28,11 @@ jobs:
         cargo -V
     displayName: Query rust and cargo versions
   - ${{ if eq(parameters.name, 'Linux') }}:
+    - script: ci/run.sh
+      env:
+        TARGET: ${{ parameters.target }}
+      displayName: Build and run tests
+  - ${{ if eq(parameters.name, 'Android') }}:
     - script: ci/run.sh
       env:
         TARGET: ${{ parameters.target }}
