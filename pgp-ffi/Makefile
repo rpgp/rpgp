@@ -30,15 +30,15 @@ endif
 
 soext := $(pgp_lib_extension)
 
-CARGO_SRC := $(CURDIR)/../Cargo.toml $(CURDIR)/../Cargo.lock
+CARGO_SRC := $(CURDIR)/../Cargo.toml
 RUST_SRC := $(shell find $(CURDIR)/.. -name '*.rs')
-LOCAL_SRC := build.rs librpgp.h
+LOCAL_SRC := build.rs
 
 all: build
 
 build: build-stamp
 build-stamp: $(LOCAL_SRC) $(CARGO_SRC) $(RUST_SRC)
-	cd $(CURDIR)/../ && cargo test --release -p pgp-ffi && cargo build --release --features nightly -p pgp-ffi && cd pgp-ffi
+	cd $(CURDIR)/../ && cargo test --release -p pgp-ffi && cargo build --release --features nightly -p pgp-ffi
 	touch $@
 
 install: build
@@ -51,5 +51,6 @@ install: build
 
 clean:
 	rm -f librpgp.h
+	rm -f build-stamp
 
 .PHONY: clean build install
