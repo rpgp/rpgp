@@ -8,7 +8,7 @@ jobs:
         rustup_toolchain: stable
       nightly:
         rustup_toolchain: nightly
-
+  steps:
   - ${{ if ne(parameters.name, 'Windows') }}:
     # Linux and macOS.
     - script: |
