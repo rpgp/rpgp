@@ -64,6 +64,8 @@ extern crate derive_builder;
 extern crate bitfield;
 
 #[cfg(test)]
+extern crate rand_xorshift;
+#[cfg(test)]
 extern crate regex;
 #[cfg(test)]
 extern crate serde_json;

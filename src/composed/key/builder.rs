@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use chrono::{self, SubsecRound};
-use rand::OsRng;
+use rand::thread_rng;
 
 use composed::{KeyDetails, SecretKey, SecretSubkey};
 use crypto::hash::HashAlgorithm;
@@ -226,7 +226,7 @@ impl KeyType {
         self,
         passphrase: Option<String>,
     ) -> Result<(PublicParams, types::SecretParams)> {
-        let mut rng = OsRng::new().expect("no system rng available");
+        let mut rng = thread_rng();
 
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => rsa::generate_key(&mut rng, bit_size as usize)?,
