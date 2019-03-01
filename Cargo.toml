@@ -71,9 +71,10 @@ rand_xorshift = "0.1.1"
 
 [features]
 default = []
-nightly = ["x25519-dalek/nightly", "rsa/nightly", "asm"]
+nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "asm", "rand/nightly", "buf_redux/default"]
+avx2 = ["ed25519-dalek/avx2_backend"]
 profile = ["gperftools"]
-asm = ["sha2/asm"]
+asm = ["sha-1/asm", "sha2/asm", "md-5/asm"]
 
 [workspace]
 members = [

@@ -24,3 +24,7 @@ cbindgen = "0.8"
 # TODO: Enable these through the CLI when building
 # panic = "abort"
 # lto = "thin"
+
+[features]
+default = ["nightly"]
+nightly = ["pgp/nightly"]
