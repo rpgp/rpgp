@@ -18,14 +18,17 @@ jobs:
 - template: _build/azure-pipelines-template.yml
   parameters:
     name: Linux
+    target: x86_64-unknown-linux-gnu
     vmImage: ubuntu-16.04
 
 - template: _build/azure-pipelines-template.yml
   parameters:
     name: macOS
+    target: x86_64-apple-darwin
     vmImage: macOS-10.13
 
 - template: _build/azure-pipelines-template.yml
   parameters:
     name: Windows
+    target: x86_64-pc-windows-msvc
     vmImage: vs2017-win2016

@@ -38,4 +38,5 @@ jobs:
       displayName: Build and run tests
   - ${{ if eq(parameters.name, 'Windows') }}:
     - script: ci\run.sh
+      env: { TARGET: parameters.target }
       displayName: Build and run tests
