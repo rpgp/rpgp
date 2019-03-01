@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use chrono::{self, SubsecRound};
-use rand::OsRng;
+use rand::thread_rng;
 use rsa::{self, PublicKey as PublicKeyTrait};
 
 use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
@@ -126,7 +126,7 @@ impl KeyType {
     ) -> errors::Result<(PublicParams, types::EncryptedSecretParams)> {
         match self {
             KeyType::Rsa(bit_size) => {
-                let mut rng = OsRng::new().expect("no system rng available");
+                let mut rng = thread_rng();
                 let key = rsa::RSAPrivateKey::new(&mut rng, *bit_size)?;
 
                 // TODO: encrypt with iterated and salted

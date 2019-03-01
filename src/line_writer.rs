@@ -233,7 +233,8 @@ mod tests {
         ( $name:ident, $len:ty ) => {
             #[test]
             fn $name() {
-                use rand::{Rng, SeedableRng, XorShiftRng};
+                use rand::{Rng, SeedableRng};
+                use rand_xorshift::XorShiftRng;
                 use std::io::Cursor;
 
                 let rng = &mut XorShiftRng::from_seed([

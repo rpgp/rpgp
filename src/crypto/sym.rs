@@ -4,7 +4,7 @@ use cast5::Cast5;
 use cfb_mode::stream_cipher::{NewStreamCipher, StreamCipher};
 use cfb_mode::Cfb;
 use des::TdesEde3;
-use rand::{OsRng, RngCore};
+use rand::{thread_rng, RngCore};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
@@ -357,7 +357,7 @@ impl SymmetricKeyAlgorithm {
         let iv_vec = vec![0u8; self.block_size()];
 
         let bs = self.block_size();
-        let mut rng = OsRng::new().expect("no randomness available from the system");
+        let mut rng = thread_rng();
 
         let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
@@ -386,7 +386,7 @@ impl SymmetricKeyAlgorithm {
         let mdc_len = 22;
 
         let bs = self.block_size();
-        let mut rng = OsRng::new().expect("no randomness available from the system");
+        let mut rng = thread_rng();
 
         let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
@@ -527,7 +527,8 @@ impl SymmetricKeyAlgorithm {
 mod tests {
     use super::*;
 
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     macro_rules! roundtrip {
         ($name:ident, $alg:path) => {

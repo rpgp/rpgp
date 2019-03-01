@@ -19,7 +19,7 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use rand::OsRng;
+use rand::thread_rng;
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
 
@@ -192,7 +192,7 @@ fn test_parse_openpgp_sample_rsa_private() {
 
                     // test basic encrypt decrypt
                     let plaintext = vec![2u8; 128];
-                    let mut rng = OsRng::new().expect("failed to create randomness");
+                    let mut rng = thread_rng();
 
                     let ciphertext = {
                         // TODO: fix this in rust-rsa

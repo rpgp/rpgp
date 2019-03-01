@@ -139,7 +139,8 @@ mod tests {
     use std::io::Cursor;
 
     use base64::{encode_config, CharacterSet, Config};
-    use rand::{Rng, SeedableRng, XorShiftRng};
+    use rand::{Rng, SeedableRng};
+    use rand_xorshift::XorShiftRng;
 
     use base64_reader::Base64Reader;
     use line_reader::LineReader;
