@@ -38,7 +38,7 @@ all: build
 
 build: build-stamp
 build-stamp: $(LOCAL_SRC) $(CARGO_SRC) $(RUST_SRC)
-	cd $(CURDIR)/../ && cargo test --release -p pgp-ffi && cargo build --release -p pgp-ffi && cd pgp-ffi
+	cd $(CURDIR)/../ && cargo test --release -p pgp-ffi && cargo build --release --features nightly -p pgp-ffi && cd pgp-ffi
 	touch $@
 
 install: build
