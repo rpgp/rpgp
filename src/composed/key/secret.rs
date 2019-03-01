@@ -7,7 +7,7 @@ use packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
 use types::{KeyId, KeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a secret key.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretKey {
     primary_key: packet::SecretKey,
     details: KeyDetails,
@@ -15,7 +15,7 @@ pub struct SecretKey {
     secret_subkeys: Vec<SecretSubkey>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretSubkey {
     key: packet::SecretSubkey,
     keyflags: KeyFlags,
