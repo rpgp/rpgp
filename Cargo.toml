@@ -79,4 +79,5 @@ asm = ["sha-1/asm", "sha2/asm", "md-5/asm"]
 [workspace]
 members = [
   "pgp-ffi",
+  "ios-simulator",
 ]
