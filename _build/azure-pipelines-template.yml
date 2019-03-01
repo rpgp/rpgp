@@ -33,15 +33,15 @@ jobs:
   - ${{ if eq(parameters.name, 'Linux') }}:
     - script: ci/run.sh
       env:
-        - TARGET: ${{ parameters.target }}
+        TARGET: ${{ parameters.target }}
       displayName: Build and run tests
   - ${{ if eq(parameters.name, 'macOS') }}:
     - script: ci/run.sh
       env:
-        - TARGET: ${{ parameters.target }}
+        TARGET: ${{ parameters.target }}
       displayName: Build and run tests
   - ${{ if eq(parameters.name, 'Windows') }}:
     - script: ci\run.sh
       env:
-        - TARGET: ${{ parameters.target }}
+        TARGET: ${{ parameters.target }}
       displayName: Build and run tests
