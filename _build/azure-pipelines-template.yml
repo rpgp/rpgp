@@ -40,6 +40,12 @@ jobs:
       env:
         TARGET: ${{ parameters.target }}
       displayName: Build and run tests
+  - ${{ if eq(parameters.name, 'iOS') }}:
+    - script: ci/run.sh
+      env:
+        TARGET: ${{ parameters.target }}
+        NORUN: 1
+      displayName: Build and run tests
   - ${{ if eq(parameters.name, 'Windows') }}:
     - script: ci\run.sh
       env:

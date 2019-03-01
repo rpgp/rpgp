@@ -23,8 +23,21 @@ jobs:
 
 - template: _build/azure-pipelines-template.yml
   parameters:
+    name: Android
+    target: aarch64-linux-android
+    vmImage: ubuntu-16.04
+
+- template: _build/azure-pipelines-template.yml
+  parameters:
     name: macOS
     target: x86_64-apple-darwin
+    vmImage: macOS-10.13
+
+
+- template: _build/azure-pipelines-template.yml
+  parameters:
+    name: iOS
+    target: x86_64-apple-ios
     vmImage: macOS-10.13
 
 - template: _build/azure-pipelines-template.yml
