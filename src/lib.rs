@@ -38,7 +38,6 @@ extern crate flate2;
 #[macro_use]
 extern crate generic_array;
 extern crate ed25519_dalek;
-extern crate itertools;
 extern crate md5;
 extern crate num_bigint;
 extern crate num_traits;
