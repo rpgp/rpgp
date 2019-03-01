@@ -10,7 +10,7 @@ jobs:
         $HOME/.cargo/bin/rustup component add rustfmt clippy
       displayName: Install stable Rust
     - script: |
-        $HOME/.cargo/bin/cargo fmt -- --check
+        $HOME/.cargo/bin/cargo fmt --all -- --check
       displayName: Run rustfmt
     - script: |
         $HOME/.cargo/bin/cargo clippy --all
