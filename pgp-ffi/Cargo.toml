@@ -26,5 +26,6 @@ cbindgen = "0.8"
 # lto = "thin"
 
 [features]
-default = ["nightly"]
+default = []
 nightly = ["pgp/nightly"]
+asm = ["pgp/asm", "nightly"]
