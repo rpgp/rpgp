@@ -5,7 +5,7 @@ set -ex
 export RUST_TEST_THREADS=1
 export RUST_BACKTRACE=1
 export RUST_TEST_NOCAPTURE=1
-export OPT="--target=$TARGET --all"
+export OPT="--target=$TARGET"
 export OPT_RELEASE="--release ${OPT}"
 export OPT_RELEASE_IGNORED="--release ${OPT} -- --ignored"
 export OPT_FFI_RELEASE="--manifest-path=pgp-ffi/Cargo.toml --release"
@@ -53,7 +53,7 @@ $CARGO_CMD $CARGO_SUBCMD $OPT_RELEASE
 $CARGO_CMD $CARGO_SUBCMD $OPT_RELEASE_IGNORED
 
 # Build the ffi lib
-$CARGO_CMD build $OPT_FFI_RELEASE
+$CARGO_CMD $CARGO_SUBCMD $OPT_FFI_RELEASE
 
 # Run documentation and clippy:
 if [[ $CARGO_CMD == "cargo" ]] && [[ $TARGET != *"ios"* ]]; then
