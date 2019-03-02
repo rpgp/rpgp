@@ -12,8 +12,8 @@ use std::os::raw::c_char;
 use std::slice::from_raw_parts;
 
 use pgp::composed::{
-    from_armor_many, KeyType, PublicOrSecret, SecretKeyParamsBuilder, SignedPublicKey,
-    SignedSecretKey, SubkeyParamsBuilder,
+    from_armor_many, from_bytes_many, KeyType, PublicOrSecret, SecretKeyParamsBuilder,
+    SignedPublicKey, SignedSecretKey, SubkeyParamsBuilder,
 };
 use pgp::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
 use pgp::errors::Result;
@@ -117,24 +117,42 @@ pub unsafe extern "C" fn rpgp_pkey_drop(pkey_ptr: *mut signed_public_key) {
 }
 
 /// Represents a vector.
+/// Has to deallocated using [rpgp_cvec_drop], otherwise leaks memory.
 #[repr(C)]
+#[derive(Debug)]
 pub struct cvec {
     data: *mut u8,
     len: libc::size_t,
 }
 
+impl PartialEq for cvec {
+    fn eq(&self, other: &cvec) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+
+        unsafe { from_raw_parts(self.data, self.len) == from_raw_parts(other.data, other.len) }
+    }
+}
+
+impl Eq for cvec {}
+
 impl Into<cvec> for Vec<u8> {
     fn into(mut self) -> cvec {
         self.shrink_to_fit();
+        assert!(self.len() == self.capacity());
+
         let res = cvec {
             data: self.as_mut_ptr(),
             len: self.len() as libc::size_t,
         };
 
+        // prevent deallocation in Rust
         std::mem::forget(self);
         res
     }
 }
+
 impl Into<Vec<u8>> for cvec {
     fn into(self) -> Vec<u8> {
         unsafe { Vec::from_raw_parts(self.data, self.len, self.len) }
@@ -155,7 +173,8 @@ pub unsafe extern "C" fn rpgp_cvec_data(cvec_ptr: *mut cvec) -> *const u8 {
 
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_cvec_drop(cvec_ptr: *mut cvec) {
-    let _cvec: Box<cvec> = transmute(cvec_ptr);
+    let v = &*cvec_ptr;
+    let _ = Vec::from_raw_parts(v.data, v.len, v.len);
     // Drop
 }
 
@@ -213,13 +232,35 @@ pub unsafe extern "C" fn rpgp_key_from_armor(
     Box::into_raw(Box::new(key))
 }
 
-/// Returns the KeyID for the passed in key. The caller is responsible to call [rpgp_string_free] with the returned memory, to free it.
+/// Creates an in-memory representation of a PGP key, based on the serialized bytes given.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_key_from_bytes(
+    raw: *const u8,
+    len: libc::size_t,
+) -> *mut public_or_secret_key {
+    let bytes = from_raw_parts(raw, len);
+    let mut keys = from_bytes_many(Cursor::new(bytes));
+    let key = keys.nth(0).unwrap().expect("failed to parse key");
+
+    Box::into_raw(Box::new(key))
+}
+
+/// Returns the KeyID for the passed in key. The caller is responsible to call [rpgp_string_drop] with the returned memory, to free it.
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_key_id(ptr: *mut public_or_secret_key) -> *mut c_char {
     let key = &*ptr;
     let id = CString::new(hex::encode(key.key_id().unwrap())).unwrap();
 
     id.into_raw()
+}
+
+/// Returns the Fingerprint for the passed in key. The caller is responsible to call [rpgp_cvec_drop] with the returned memory, to free it.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_key_fingerprint(ptr: *mut public_or_secret_key) -> *mut cvec {
+    let key = &*ptr;
+    let fingerprint = key.fingerprint();
+
+    Box::into_raw(Box::new(fingerprint.into()))
 }
 
 /// Frees the memory of the passed in key, making the pointer invalid after this method was called.
@@ -231,7 +272,7 @@ pub unsafe extern "C" fn rpgp_key_drop(ptr: *mut public_or_secret_key) {
 
 /// Free string, that was created by rpgp.
 #[no_mangle]
-pub unsafe extern "C" fn rpgp_string_free(p: *mut c_char) {
+pub unsafe extern "C" fn rpgp_string_drop(p: *mut c_char) {
     let _ = CString::from_raw(p);
     // Drop
 }
@@ -241,6 +282,43 @@ mod tests {
     use super::*;
 
     use pgp::composed::Deserializable;
+
+    #[test]
+    fn test_cvec() {
+        for i in 0..100 {
+            let a = vec![i as u8; i * 10];
+            let b: cvec = a.clone().into();
+            let c: Vec<u8> = b.into();
+            assert_eq!(a, c);
+        }
+    }
+
+    #[test]
+    fn test_fingerprint() {
+        let user_id = CStr::from_bytes_with_nul(b"<hello@world.com>\0").unwrap();
+
+        unsafe {
+            // Create the actual key
+            let skey = rpgp_create_x25519_skey(user_id.as_ptr());
+
+            // Serialize secret key into bytes
+            let skey_bytes = rpgp_skey_to_bytes(skey);
+
+            let key = rpgp_key_from_bytes(rpgp_cvec_data(skey_bytes), rpgp_cvec_len(skey_bytes));
+
+            let fingerprint1 = rpgp_key_fingerprint(key);
+
+            // get fingerprint directly
+            let mut fingerprint2: cvec = (&*skey).fingerprint().into();
+
+            assert_eq!(*fingerprint1, fingerprint2);
+
+            // cleanup
+            rpgp_cvec_drop(skey_bytes);
+            rpgp_cvec_drop(fingerprint1);
+            rpgp_cvec_drop(&mut fingerprint2);
+        }
+    }
 
     #[test]
     fn test_keygen_rsa() {
