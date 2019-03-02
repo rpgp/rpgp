@@ -12,8 +12,8 @@ use std::os::raw::c_char;
 use std::slice::from_raw_parts;
 
 use pgp::composed::{
-    from_armor_many, from_bytes_many, KeyType, PublicOrSecret, SecretKeyParamsBuilder,
-    SignedPublicKey, SignedSecretKey, SubkeyParamsBuilder,
+    from_armor_many, from_bytes_many, Deserializable, KeyType, PublicOrSecret,
+    SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey, SubkeyParamsBuilder,
 };
 use pgp::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
 use pgp::errors::Result;
@@ -89,6 +89,18 @@ pub unsafe extern "C" fn rpgp_skey_key_id(ptr: *mut signed_secret_key) -> *mut c
 pub unsafe extern "C" fn rpgp_skey_drop(skey_ptr: *mut signed_secret_key) {
     let _skey: Box<signed_secret_key> = transmute(skey_ptr);
     // Drop
+}
+
+/// Creates an in-memory representation of a Secret PGP key, based on the serialized bytes given.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_skey_from_bytes(
+    raw: *const u8,
+    len: libc::size_t,
+) -> *mut signed_secret_key {
+    let bytes = from_raw_parts(raw, len);
+    let key = SignedSecretKey::from_bytes(Cursor::new(bytes)).expect("invalid secret key");
+
+    Box::into_raw(Box::new(key))
 }
 
 #[no_mangle]
