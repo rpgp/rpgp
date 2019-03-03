@@ -230,81 +230,128 @@ impl Message {
         }
     }
 
+    /// Returns a list of [KeyId]s that the message is encrypted to. For non encrypted messages this list is empty.
+    pub fn get_recipients(&self) -> Vec<&KeyId> {
+        match self {
+            Message::Encrypted { esk, .. } => esk.iter().map(Esk::id).collect(),
+            _ => Vec::new(),
+        }
+    }
+
     /// Decrypt the message using the given password and key.
-    // TODO: allow for multiple keys to be passed in
+    /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt<'a, F, G>(
         &'a self,
         msg_pw: F,
         key_pw: G,
-        key: &SignedSecretKey,
-    ) -> Result<MessageDecrypter<'a>>
+        keys: &[&SignedSecretKey],
+    ) -> Result<(MessageDecrypter<'a>, Vec<KeyId>)>
     where
-        F: FnOnce() -> String,
-        G: FnOnce() -> String,
+        F: FnOnce() -> String + Clone,
+        G: FnOnce() -> String + Clone,
     {
         match self {
             Message::Compressed(_) | Message::Literal(_) => {
                 bail!("not encrypted");
             }
             Message::Signed { message, .. } => match message {
-                Some(message) => message.as_ref().decrypt(msg_pw, key_pw, key),
+                Some(message) => message.as_ref().decrypt(msg_pw, key_pw, keys),
                 None => bail!("not encrypted"),
             },
             Message::Encrypted { esk, edata } => {
-                // search for a packet with a key id that we have and that key
-                let mut packet = None;
-                let mut encoding_key = None;
-                let mut encoding_subkey = None;
+                let valid_keys = keys
+                    .iter()
+                    .filter_map(|key| {
+                        // search for a packet with a key id that we have and that key.
+                        let mut packet = None;
+                        let mut encoding_key = None;
+                        let mut encoding_subkey = None;
 
-                for esk_packet in esk {
-                    info!("esk packet: {:?}", esk_packet);
-                    info!("{:?}", key.key_id());
-                    info!(
-                        "{:?}",
-                        key.secret_subkeys
-                            .iter()
-                            .map(KeyTrait::key_id)
-                            .collect::<Vec<_>>()
-                    );
+                        for esk_packet in esk {
+                            info!("esk packet: {:?}", esk_packet);
+                            info!("{:?}", key.key_id());
+                            info!(
+                                "{:?}",
+                                key.secret_subkeys
+                                    .iter()
+                                    .map(KeyTrait::key_id)
+                                    .collect::<Vec<_>>()
+                            );
 
-                    // find the key with the matching key id
+                            // find the key with the matching key id
 
-                    if &key
-                        .primary_key
-                        .key_id()
-                        .ok_or_else(|| format_err!("missing key_id"))?
-                        == esk_packet.id()
-                    {
-                        encoding_key = Some(&key.primary_key);
-                    } else {
-                        encoding_subkey = key.secret_subkeys.iter().find_map(|subkey| {
-                            if let Some(id) = subkey.key_id() {
-                                if &id == esk_packet.id() {
-                                    Some(subkey)
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
+                            if &key.primary_key.key_id() == esk_packet.id() {
+                                encoding_key = Some(&key.primary_key);
                             }
-                        });
-                    }
 
-                    if encoding_key.is_some() || encoding_subkey.is_some() {
-                        packet = Some(esk_packet);
-                        break;
-                    }
+                            if encoding_key.is_none() {
+                                encoding_subkey = key.secret_subkeys.iter().find_map(|subkey| {
+                                    if &subkey.key_id() == esk_packet.id() {
+                                        Some(subkey)
+                                    } else {
+                                        None
+                                    }
+                                });
+                            }
+
+                            if encoding_key.is_some() || encoding_subkey.is_some() {
+                                packet = Some(esk_packet);
+                                break;
+                            }
+                        }
+
+                        if let Some(packet) = packet {
+                            Some((packet, encoding_key, encoding_subkey))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                if valid_keys.is_empty() {
+                    return Err(Error::MissingKey);
                 }
 
-                let packet = packet.ok_or_else(|| Error::MissingKey)?;
+                let session_keys = valid_keys
+                    .iter()
+                    .map(|(packet, encoding_key, encoding_subkey)| {
+                        if let Some(ek) = encoding_key {
+                            Ok((
+                                ek.key_id(),
+                                decrypt_session_key(ek, key_pw.clone(), packet.mpis())?,
+                            ))
+                        } else if let Some(ek) = encoding_subkey {
+                            Ok((
+                                ek.key_id(),
+                                decrypt_session_key(ek, key_pw.clone(), packet.mpis())?,
+                            ))
+                        } else {
+                            unreachable!("either a key or a subkey were found");
+                        }
+                    })
+                    .filter(|res| match res {
+                        Ok(_) => true,
+                        Err(err) => {
+                            warn!("failed to decrpty session_key for key: {:?}", err);
+                            false
+                        }
+                    })
+                    .collect::<Result<Vec<_>>>()?;
 
-                if let Some(encoding_key) = encoding_key {
-                    MessageDecrypter::new(encoding_key, key_pw, packet.mpis(), edata)
-                } else if let Some(encoding_key) = encoding_subkey {
-                    MessageDecrypter::new(encoding_key, key_pw, packet.mpis(), edata)
-                } else {
-                    Err(Error::MissingKey)
-                }
+                // make sure all the keys are the same, otherwise we are in a bad place
+                let (session_key, alg) = {
+                    let k0 = &session_keys[0].1;
+                    if !session_keys.iter().skip(1).all(|(_, k)| k0 == k) {
+                        bail!("found inconsistent session keys, possible message corruption");
+                    }
+
+                    // TODO: avoid cloning
+                    (k0.0.clone(), k0.1)
+                };
+
+                let ids = session_keys.into_iter().map(|(k, _)| k).collect();
+
+                Ok((MessageDecrypter::new(session_key, alg, edata), ids))
             }
         }
     }
@@ -347,6 +394,22 @@ impl Message {
         }
     }
 
+    /// Returns the underlying content and `None` if the message is encrypted.
+    pub fn get_content(&self) -> Result<Option<Vec<u8>>> {
+        match self {
+            Message::Literal(ref msg) => Ok(Some(msg.data().to_vec())),
+            Message::Signed { message, .. } => Ok(message
+                .as_ref()
+                .and_then(|m| m.get_literal())
+                .map(|l| l.data().to_vec())),
+            Message::Compressed(m) => {
+                let msg = Message::from_bytes(m.decompress()?)?;
+                msg.get_content()
+            }
+            Message::Encrypted { .. } => Ok(None),
+        }
+    }
+
     pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
         writer.write_all(&b"-----BEGIN PGP MESSAGE-----\n"[..])?;
 
@@ -378,6 +441,60 @@ impl Message {
     }
 }
 
+fn decrypt_session_key<F>(
+    locked_key: &(impl SecretKeyTrait + KeyTrait),
+    key_pw: F,
+    mpis: &[Vec<u8>],
+) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
+where
+    F: FnOnce() -> String,
+{
+    let mut key: Vec<u8> = Vec::new();
+    let mut alg: Option<SymmetricKeyAlgorithm> = None;
+
+    locked_key.unlock(key_pw, |priv_key| {
+        let decrypted_key = match *priv_key {
+            SecretKeyRepr::RSA(ref priv_key) => {
+                decrypt_rsa(priv_key, mpis, &locked_key.fingerprint())?
+            }
+            SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
+            SecretKeyRepr::ECDSA => bail!("ECDSA is only used for signing"),
+            SecretKeyRepr::ECDH(ref priv_key) => {
+                decrypt_ecdh(priv_key, mpis, &locked_key.fingerprint())?
+            }
+            SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
+        };
+        let algorithm = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
+            .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
+        alg = Some(algorithm);
+        info!("alg: {:?}", alg);
+
+        let (k, checksum) = match *priv_key {
+            SecretKeyRepr::ECDH(_) => {
+                let dec_len = decrypted_key.len();
+                (
+                    &decrypted_key[1..dec_len - 2],
+                    &decrypted_key[dec_len - 2..],
+                )
+            }
+            _ => {
+                let key_size = algorithm.key_size();
+                (
+                    &decrypted_key[1..=key_size],
+                    &decrypted_key[key_size + 1..key_size + 3],
+                )
+            }
+        };
+
+        key = k.to_vec();
+        checksum::simple(checksum, k)?;
+
+        Ok(())
+    })?;
+
+    Ok((key, alg.expect("failed to unlock")))
+}
+
 pub struct MessageDecrypter<'a> {
     key: Vec<u8>,
     alg: SymmetricKeyAlgorithm,
@@ -389,65 +506,14 @@ pub struct MessageDecrypter<'a> {
 }
 
 impl<'a> MessageDecrypter<'a> {
-    pub fn new<F>(
-        locked_key: &(impl SecretKeyTrait + KeyTrait),
-        key_pw: F,
-        mpis: &'a [Vec<u8>],
-        edata: &'a [Edata],
-    ) -> Result<Self>
-    where
-        F: FnOnce() -> String,
-    {
-        let mut key: Vec<u8> = Vec::new();
-        let mut alg: Option<SymmetricKeyAlgorithm> = None;
-
-        locked_key.unlock(key_pw, |priv_key| {
-            let decrypted_key = match *priv_key {
-                SecretKeyRepr::RSA(ref priv_key) => {
-                    decrypt_rsa(priv_key, mpis, &locked_key.fingerprint())?
-                }
-                SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
-                SecretKeyRepr::ECDSA => bail!("ECDSA is only used for signing"),
-                SecretKeyRepr::ECDH(ref priv_key) => {
-                    decrypt_ecdh(priv_key, mpis, &locked_key.fingerprint())?
-                }
-                SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
-            };
-            let algorithm = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
-                .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
-            alg = Some(algorithm);
-            info!("alg: {:?}", alg);
-
-            let (k, checksum) = match *priv_key {
-                SecretKeyRepr::ECDH(_) => {
-                    let dec_len = decrypted_key.len();
-                    (
-                        &decrypted_key[1..dec_len - 2],
-                        &decrypted_key[dec_len - 2..],
-                    )
-                }
-                _ => {
-                    let key_size = algorithm.key_size();
-                    (
-                        &decrypted_key[1..=key_size],
-                        &decrypted_key[key_size + 1..key_size + 3],
-                    )
-                }
-            };
-
-            key = k.to_vec();
-            checksum::simple(checksum, k)?;
-
-            Ok(())
-        })?;
-
-        Ok(MessageDecrypter {
-            key,
-            alg: alg.expect("failed to unlock"),
+    pub fn new(session_key: Vec<u8>, alg: SymmetricKeyAlgorithm, edata: &'a [Edata]) -> Self {
+        MessageDecrypter {
+            key: session_key,
+            alg,
             edata,
             pos: 0,
             current_msgs: None,
-        })
+        }
     }
 }
 
@@ -527,7 +593,7 @@ mod tests {
             .expect("failed to read decryption key");
         decrypt_key.verify().expect("invalid decryption key");
 
-        let decrypt_id = hex::encode(decrypt_key.key_id().unwrap().to_vec());
+        let decrypt_id = hex::encode(&decrypt_key.key_id());
 
         info!("decrypt key (ID={})", &decrypt_id);
         if let Some(id) = &details.keyid {
@@ -541,7 +607,7 @@ mod tests {
                 .expect("failed to read verification key");
             verify_key.verify().expect("invalid verification key");
 
-            let verify_id = hex::encode(verify_key.key_id().unwrap().to_vec());
+            let verify_id = hex::encode(&verify_key.key_id());
             info!("verify key (ID={})", &verify_id);
             Some(verify_key)
         } else {
@@ -558,13 +624,16 @@ mod tests {
 
         match &message {
             Message::Encrypted { .. } => {
-                let decrypted = message
+                let (mut decrypter, ids) = message
                     .decrypt(
                         || "".to_string(),
                         || details.passphrase.clone(),
-                        &decrypt_key,
+                        &[&decrypt_key],
                     )
-                    .expect("failed to decrypt message")
+                    .expect("failed to init decryption");
+                assert_eq!(ids.len(), 1);
+
+                let decrypted = decrypter
                     .next()
                     .expect("no message")
                     .expect("message decryption failed");
@@ -739,8 +808,9 @@ mod tests {
             SignedSecretKey::from_armor_single(&mut key_file).expect("failed to parse key");
 
         let decrypted = message
-            .decrypt(|| "".to_string(), || "moon".to_string(), &decrypt_key)
+            .decrypt(|| "".to_string(), || "moon".to_string(), &[&decrypt_key])
             .expect("failed to decrypt message")
+            .0
             .next()
             .expect("no mesage")
             .expect("message decryption failed");

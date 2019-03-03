@@ -125,7 +125,7 @@ impl KeyTrait for SignedSecretKey {
     }
 
     /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> KeyId {
         self.primary_key.key_id()
     }
 
@@ -248,7 +248,7 @@ impl KeyTrait for SignedSecretSubKey {
     }
 
     /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> KeyId {
         self.key.key_id()
     }
 

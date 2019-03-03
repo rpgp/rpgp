@@ -126,9 +126,7 @@ macro_rules! impl_secret_key {
                     .hashed_subpackets(vec![$crate::packet::Subpacket::SignatureCreationTime(
                         chrono::Utc::now().trunc_subsecs(0),
                     )])
-                    .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(
-                        key.key_id().expect("missing key id"),
-                    )])
+                    .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(key.key_id())])
                     .build()?
                     .sign_key(key, key_pw, &self)
             }
@@ -387,7 +385,7 @@ macro_rules! impl_secret_key {
                 }
             }
 
-            fn key_id(&self) -> Option<$crate::types::KeyId> {
+            fn key_id(&self) -> $crate::types::KeyId {
                 use $crate::crypto::public_key::PublicParams;
                 use $crate::types::{KeyId, KeyVersion};
 
@@ -398,16 +396,16 @@ macro_rules! impl_secret_key {
                         let f = self.fingerprint();
                         let offset = f.len() - 8;
 
-                        KeyId::from_slice(&f[offset..]).ok()
+                        KeyId::from_slice(&f[offset..]).expect("fixed size slice")
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params() {
                         PublicParams::RSA { n, .. } => {
                             let n = n.to_bytes_be();
                             let offset = n.len() - 8;
 
-                            KeyId::from_slice(&n[offset..]).ok()
+                            KeyId::from_slice(&n[offset..]).expect("fixed size slice")
                         }
-                        _ => None,
+                        _ => panic!("invalid key constructed: {:?}", &self.public_params()),
                     },
                 }
             }

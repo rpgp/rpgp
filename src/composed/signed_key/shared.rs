@@ -243,7 +243,7 @@ impl KeyTrait for PublicOrSecret {
     }
 
     /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> KeyId {
         match self {
             PublicOrSecret::Public(k) => k.key_id(),
             PublicOrSecret::Secret(k) => k.key_id(),

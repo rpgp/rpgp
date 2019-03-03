@@ -77,7 +77,7 @@ impl KeyDetails {
                 .pub_alg(key.algorithm())
                 .hashed_subpackets(hashed_subpackets)
                 .unhashed_subpackets(vec![
-                    Subpacket::Issuer(key.key_id().expect("missing key id")),
+                    Subpacket::Issuer(key.key_id()),
                     Subpacket::IssuerFingerprint(key.fingerprint()),
                 ])
                 .build()?;
@@ -108,7 +108,7 @@ impl KeyDetails {
                             ),
                         ])
                         .unhashed_subpackets(vec![
-                            Subpacket::Issuer(key.key_id().expect("missing key id")),
+                            Subpacket::Issuer(key.key_id()),
                             Subpacket::IssuerFingerprint(key.fingerprint()),
                         ])
                         .build()?;

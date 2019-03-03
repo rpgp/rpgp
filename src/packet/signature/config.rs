@@ -75,11 +75,7 @@ impl SignatureConfig {
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
 
-        info!(
-            "key:    ({:?}), {}",
-            key.key_id().expect("key_id should be there"),
-            hex::encode(&key_buf)
-        );
+        info!("key:    ({:?}), {}", key.key_id(), hex::encode(&key_buf));
         info!("packet: {}", hex::encode(&packet_buf));
 
         hasher.update(&key_buf);
