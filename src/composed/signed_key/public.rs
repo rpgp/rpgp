@@ -64,8 +64,8 @@ impl SignedPublicKey {
     }
 
     pub fn verify(&self) -> Result<()> {
-        self.verify_public_subkeys()?;
         self.details.verify(&self.primary_key)?;
+        self.verify_public_subkeys()?;
 
         Ok(())
     }
@@ -103,7 +103,7 @@ impl KeyTrait for SignedPublicKey {
         self.primary_key.fingerprint()
     }
 
-    fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> KeyId {
         self.primary_key.key_id()
     }
 
@@ -179,7 +179,7 @@ impl KeyTrait for SignedPublicSubKey {
     }
 
     /// Returns the Key ID of the key.
-    fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> KeyId {
         self.key.key_id()
     }
 

@@ -67,7 +67,7 @@ impl KeyTrait for SecretKey {
         self.primary_key.fingerprint()
     }
 
-    fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> KeyId {
         self.primary_key.key_id()
     }
 
@@ -96,7 +96,7 @@ impl SecretSubkey {
             .pub_alg(sec_key.algorithm())
             .hashed_subpackets(hashed_subpackets)
             .unhashed_subpackets(vec![
-                Subpacket::Issuer(sec_key.key_id().expect("missing key id")),
+                Subpacket::Issuer(sec_key.key_id()),
                 Subpacket::IssuerFingerprint(sec_key.fingerprint()),
             ])
             .build()?;
@@ -111,7 +111,7 @@ impl KeyTrait for SecretSubkey {
         self.key.fingerprint()
     }
 
-    fn key_id(&self) -> Option<KeyId> {
+    fn key_id(&self) -> KeyId {
         self.key.key_id()
     }
 

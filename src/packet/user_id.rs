@@ -45,9 +45,7 @@ impl UserId {
             .hashed_subpackets(vec![Subpacket::SignatureCreationTime(
                 Utc::now().trunc_subsecs(0),
             )])
-            .unhashed_subpackets(vec![Subpacket::Issuer(
-                key.key_id().expect("missing key id"),
-            )])
+            .unhashed_subpackets(vec![Subpacket::Issuer(key.key_id())])
             .build()?;
 
         let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;

@@ -74,15 +74,14 @@ impl Signature {
 
     /// Verify this signature.
     pub fn verify(&self, key: &impl PublicKeyTrait, data: &[u8]) -> Result<()> {
-        if let Some(key_id) = key.key_id() {
-            if let Some(issuer) = self.issuer() {
-                if &key_id != issuer {
-                    // TODO: should this be an actual error?
-                    warn!(
-                        "validating signature with a non matching Key ID {:?} != {:?}",
-                        &key_id, issuer
-                    );
-                }
+        if let Some(issuer) = self.issuer() {
+            if &key.key_id() != issuer {
+                // TODO: should this be an actual error?
+                warn!(
+                    "validating signature with a non matching Key ID {:?} != {:?}",
+                    &key.key_id(),
+                    issuer
+                );
             }
         }
 
@@ -111,15 +110,14 @@ impl Signature {
     ) -> Result<()> {
         info!("verifying certificate {:#?}", self);
 
-        if let Some(key_id) = key.key_id() {
-            if let Some(issuer) = self.issuer() {
-                if &key_id != issuer {
-                    // TODO: should this be an actual error?
-                    warn!(
-                        "validating certificate with a non matching Key ID {:?} != {:?}",
-                        &key_id, issuer
-                    );
-                }
+        if let Some(issuer) = self.issuer() {
+            if &key.key_id() != issuer {
+                // TODO: should this be an actual error?
+                warn!(
+                    "validating certificate with a non matching Key ID {:?} != {:?}",
+                    &key.key_id(),
+                    issuer
+                );
             }
         }
 
@@ -130,11 +128,7 @@ impl Signature {
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
 
-        info!(
-            "key:    ({:?}), {}",
-            key.key_id().expect("key_id should be there"),
-            hex::encode(&key_buf)
-        );
+        info!("key:    ({:?}), {}", key.key_id(), hex::encode(&key_buf));
         info!("packet: {}", hex::encode(&packet_buf));
 
         hasher.update(&key_buf);
@@ -186,15 +180,14 @@ impl Signature {
             self, signing_key, key
         );
 
-        if let Some(key_id) = signing_key.key_id() {
-            if let Some(issuer) = self.issuer() {
-                if &key_id != issuer {
-                    // TODO: should this be an actual error?
-                    warn!(
-                        "validating key binding with a non matching Key ID {:?} != {:?}",
-                        &key_id, issuer
-                    );
-                }
+        let key_id = signing_key.key_id();
+        if let Some(issuer) = self.issuer() {
+            if &key_id != issuer {
+                // TODO: should this be an actual error?
+                warn!(
+                    "validating key binding with a non matching Key ID {:?} != {:?}",
+                    &key_id, issuer
+                );
             }
         }
 
@@ -232,15 +225,14 @@ impl Signature {
     pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
         info!("verifying key (revocation): {:#?} - {:#?}", self, key);
 
-        if let Some(key_id) = key.key_id() {
-            if let Some(issuer) = self.issuer() {
-                if &key_id != issuer {
-                    // TODO: should this be an actual error?
-                    warn!(
-                        "validating key (revocation) with a non matching Key ID {:?} != {:?}",
-                        &key_id, issuer
-                    );
-                }
+        let key_id = key.key_id();
+        if let Some(issuer) = self.issuer() {
+            if &key_id != issuer {
+                // TODO: should this be an actual error?
+                warn!(
+                    "validating key (revocation) with a non matching Key ID {:?} != {:?}",
+                    &key_id, issuer
+                );
             }
         }
 
