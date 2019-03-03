@@ -208,6 +208,20 @@ impl PublicOrSecret {
             PublicOrSecret::Public(k) => k,
         }
     }
+
+    pub fn is_public(&self) -> bool {
+        match self {
+            PublicOrSecret::Secret(_) => false,
+            PublicOrSecret::Public(_) => true,
+        }
+    }
+
+    pub fn is_secret(&self) -> bool {
+        match self {
+            PublicOrSecret::Secret(_) => true,
+            PublicOrSecret::Public(_) => false,
+        }
+    }
 }
 
 impl Serialize for PublicOrSecret {

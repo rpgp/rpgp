@@ -13,6 +13,7 @@ crate-type = ["cdylib", "staticlib"]
 pgp = { path = "../" }
 hex = "0.3.2"
 libc = "0.2.49"
+failure = "0.1.5"
 
 [build-dependencies]
 cbindgen = "0.8"

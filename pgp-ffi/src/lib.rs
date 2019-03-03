@@ -3,7 +3,9 @@
 
 extern crate hex;
 extern crate libc;
+#[macro_use]
 extern crate pgp;
+extern crate failure;
 
 use std::ffi::{CStr, CString};
 use std::io::Cursor;
@@ -20,11 +22,24 @@ use pgp::errors::Result;
 use pgp::ser::Serialize;
 use pgp::types::{CompressionAlgorithm, KeyTrait, SecretKeyTrait};
 
-// TODO: Add error handling.
-
 pub type signed_secret_key = SignedSecretKey;
 pub type signed_public_key = SignedPublicKey;
 pub type public_or_secret_key = PublicOrSecret;
+
+mod errors;
+pub use errors::*;
+
+macro_rules! try_ffi {
+    ($e:expr, $fmt:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err(err) => {
+                update_last_error(err.into());
+                return std::ptr::null_mut();
+            }
+        }
+    };
+}
 
 /// Generates a new RSA key.
 #[no_mangle]
@@ -33,9 +48,12 @@ pub unsafe extern "C" fn rpgp_create_rsa_skey(
     user_id: *const c_char,
 ) -> *mut signed_secret_key {
     let user_id = CStr::from_ptr(user_id);
-    let user_id_str = user_id.to_str().expect("invalid user id");
-    let key = create_key(KeyType::Rsa(bits), KeyType::Rsa(bits), user_id_str)
-        .expect("failed to generate key");
+    let user_id_str = try_ffi!(user_id.to_str(), "invalid user id");
+
+    let key = try_ffi!(
+        create_key(KeyType::Rsa(bits), KeyType::Rsa(bits), user_id_str),
+        "failed to generate key"
+    );
 
     Box::into_raw(Box::new(key))
 }
@@ -44,9 +62,11 @@ pub unsafe extern "C" fn rpgp_create_rsa_skey(
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_create_x25519_skey(user_id: *const c_char) -> *mut signed_secret_key {
     let user_id = CStr::from_ptr(user_id);
-    let user_id_str = user_id.to_str().expect("invalid user id");
-    let key =
-        create_key(KeyType::EdDSA, KeyType::ECDH, user_id_str).expect("failed to generate key");
+    let user_id_str = try_ffi!(user_id.to_str(), "invalid user id");
+    let key = try_ffi!(
+        create_key(KeyType::EdDSA, KeyType::ECDH, user_id_str),
+        "failed to generate key"
+    );
 
     Box::into_raw(Box::new(key))
 }
@@ -57,7 +77,7 @@ pub unsafe extern "C" fn rpgp_skey_to_bytes(skey_ptr: *mut signed_secret_key) ->
     let skey = &*skey_ptr;
 
     let mut res = Vec::new();
-    skey.to_writer(&mut res).expect("failed to serialize key");
+    try_ffi!(skey.to_writer(&mut res), "failed to serialize key");
 
     Box::into_raw(Box::new(res.into()))
 }
@@ -70,7 +90,7 @@ pub unsafe extern "C" fn rpgp_skey_public_key(
     let skey = &*skey_ptr;
 
     let pkey = skey.public_key();
-    let signed_pkey = pkey.sign(&skey, || "".into()).expect("failed to sign key");
+    let signed_pkey = try_ffi!(pkey.sign(&skey, || "".into()), "failed to sign key");
 
     Box::into_raw(Box::new(signed_pkey))
 }
@@ -79,7 +99,10 @@ pub unsafe extern "C" fn rpgp_skey_public_key(
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_skey_key_id(ptr: *mut signed_secret_key) -> *mut c_char {
     let key = &*ptr;
-    let id = CString::new(hex::encode(key.key_id().unwrap())).unwrap();
+    let id = try_ffi!(
+        CString::new(hex::encode(key.key_id().expect("invalid key version"))),
+        "failed to allocate string"
+    );
 
     id.into_raw()
 }
@@ -108,7 +131,7 @@ pub unsafe extern "C" fn rpgp_pkey_to_bytes(pkey_ptr: *mut signed_public_key) ->
     let pkey = &*pkey_ptr;
 
     let mut res = Vec::new();
-    pkey.to_writer(&mut res).expect("failed to serialize key");
+    try_ffi!(pkey.to_writer(&mut res), "failed to serialize key");
 
     Box::into_raw(Box::new(res.into()))
 }
@@ -117,7 +140,10 @@ pub unsafe extern "C" fn rpgp_pkey_to_bytes(pkey_ptr: *mut signed_public_key) ->
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_pkey_key_id(ptr: *mut signed_public_key) -> *mut c_char {
     let key = &*ptr;
-    let id = CString::new(hex::encode(key.key_id().unwrap())).unwrap();
+    let id = try_ffi!(
+        CString::new(hex::encode(key.key_id().expect("invalid key version"))),
+        "failed to allocate string"
+    );
 
     id.into_raw()
 }
@@ -237,9 +263,15 @@ pub unsafe extern "C" fn rpgp_key_from_armor(
     len: libc::size_t,
 ) -> *mut public_or_secret_key {
     let bytes = from_raw_parts(raw, len);
-    let mut keys = from_armor_many(Cursor::new(bytes)).expect("failed to parse");
+    let mut keys = try_ffi!(from_armor_many(Cursor::new(bytes)), "failed to parse");
 
-    let key = keys.nth(0).unwrap().expect("failed to parse key");
+    let key = try_ffi!(
+        try_ffi!(
+            keys.nth(0).ok_or_else(|| format_err!("no valid key found")),
+            "failed to parse key"
+        ),
+        "failed to parse key"
+    );
 
     Box::into_raw(Box::new(key))
 }
@@ -252,7 +284,14 @@ pub unsafe extern "C" fn rpgp_key_from_bytes(
 ) -> *mut public_or_secret_key {
     let bytes = from_raw_parts(raw, len);
     let mut keys = from_bytes_many(Cursor::new(bytes));
-    let key = keys.nth(0).unwrap().expect("failed to parse key");
+
+    let key = try_ffi!(
+        try_ffi!(
+            keys.nth(0).ok_or_else(|| format_err!("no valid key found")),
+            "failed to parse key"
+        ),
+        "failed to parse key"
+    );
 
     Box::into_raw(Box::new(key))
 }
@@ -261,7 +300,10 @@ pub unsafe extern "C" fn rpgp_key_from_bytes(
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_key_id(ptr: *mut public_or_secret_key) -> *mut c_char {
     let key = &*ptr;
-    let id = CString::new(hex::encode(key.key_id().unwrap())).unwrap();
+    let id = try_ffi!(
+        CString::new(hex::encode(key.key_id().expect("invalid key version"))),
+        "failed to allocate string"
+    );
 
     id.into_raw()
 }
@@ -273,6 +315,22 @@ pub unsafe extern "C" fn rpgp_key_fingerprint(ptr: *mut public_or_secret_key) ->
     let fingerprint = key.fingerprint();
 
     Box::into_raw(Box::new(fingerprint.into()))
+}
+
+/// Returns `true` if this key is a public key, false otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_key_is_public(ptr: *mut public_or_secret_key) -> bool {
+    let key = &*ptr;
+
+    key.is_public()
+}
+
+/// Returns `true` if this key is a secret key, false otherwise.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_key_is_secret(ptr: *mut public_or_secret_key) -> bool {
+    let key = &*ptr;
+
+    key.is_secret()
 }
 
 /// Frees the memory of the passed in key, making the pointer invalid after this method was called.
@@ -317,6 +375,7 @@ mod tests {
             let skey_bytes = rpgp_skey_to_bytes(skey);
 
             let key = rpgp_key_from_bytes(rpgp_cvec_data(skey_bytes), rpgp_cvec_len(skey_bytes));
+            assert!(rpgp_key_is_secret(key));
 
             let fingerprint1 = rpgp_key_fingerprint(key);
 
