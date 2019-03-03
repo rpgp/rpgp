@@ -14,7 +14,7 @@ use std::os::raw::c_char;
 use std::slice::from_raw_parts;
 
 use pgp::composed::{
-    from_armor_many, from_bytes_many, Deserializable, KeyType, PublicOrSecret,
+    from_armor_many, from_bytes_many, Deserializable, KeyType, Message, PublicOrSecret,
     SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey, SubkeyParamsBuilder,
 };
 use pgp::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
@@ -25,6 +25,7 @@ use pgp::types::{CompressionAlgorithm, KeyTrait, SecretKeyTrait};
 pub type signed_secret_key = SignedSecretKey;
 pub type signed_public_key = SignedPublicKey;
 pub type public_or_secret_key = PublicOrSecret;
+pub type message = Message;
 
 mod errors;
 pub use errors::*;
@@ -100,7 +101,7 @@ pub unsafe extern "C" fn rpgp_skey_public_key(
 pub unsafe extern "C" fn rpgp_skey_key_id(ptr: *mut signed_secret_key) -> *mut c_char {
     let key = &*ptr;
     let id = try_ffi!(
-        CString::new(hex::encode(key.key_id().expect("invalid key version"))),
+        CString::new(hex::encode(&key.key_id())),
         "failed to allocate string"
     );
 
@@ -121,7 +122,28 @@ pub unsafe extern "C" fn rpgp_skey_from_bytes(
     len: libc::size_t,
 ) -> *mut signed_secret_key {
     let bytes = from_raw_parts(raw, len);
-    let key = SignedSecretKey::from_bytes(Cursor::new(bytes)).expect("invalid secret key");
+    let key = try_ffi!(
+        SignedSecretKey::from_bytes(Cursor::new(bytes)),
+        "invalid secret key"
+    );
+    try_ffi!(key.verify(), "failed to verify key");
+
+    Box::into_raw(Box::new(key))
+}
+
+/// Creates an in-memory representation of a Public PGP key, based on the serialized bytes given.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_pkey_from_bytes(
+    raw: *const u8,
+    len: libc::size_t,
+) -> *mut signed_public_key {
+    let bytes = from_raw_parts(raw, len);
+    let key = try_ffi!(
+        SignedPublicKey::from_bytes(Cursor::new(bytes)),
+        "invalid public key"
+    );
+
+    try_ffi!(key.verify(), "failed to verify key");
 
     Box::into_raw(Box::new(key))
 }
@@ -141,7 +163,7 @@ pub unsafe extern "C" fn rpgp_pkey_to_bytes(pkey_ptr: *mut signed_public_key) ->
 pub unsafe extern "C" fn rpgp_pkey_key_id(ptr: *mut signed_public_key) -> *mut c_char {
     let key = &*ptr;
     let id = try_ffi!(
-        CString::new(hex::encode(key.key_id().expect("invalid key version"))),
+        CString::new(hex::encode(&key.key_id())),
         "failed to allocate string"
     );
 
@@ -273,6 +295,8 @@ pub unsafe extern "C" fn rpgp_key_from_armor(
         "failed to parse key"
     );
 
+    try_ffi!(key.verify(), "failed to verify key");
+
     Box::into_raw(Box::new(key))
 }
 
@@ -293,6 +317,8 @@ pub unsafe extern "C" fn rpgp_key_from_bytes(
         "failed to parse key"
     );
 
+    try_ffi!(key.verify(), "failed to verify key");
+
     Box::into_raw(Box::new(key))
 }
 
@@ -301,7 +327,7 @@ pub unsafe extern "C" fn rpgp_key_from_bytes(
 pub unsafe extern "C" fn rpgp_key_id(ptr: *mut public_or_secret_key) -> *mut c_char {
     let key = &*ptr;
     let id = try_ffi!(
-        CString::new(hex::encode(key.key_id().expect("invalid key version"))),
+        CString::new(hex::encode(&key.key_id())),
         "failed to allocate string"
     );
 
@@ -345,6 +371,150 @@ pub unsafe extern "C" fn rpgp_key_drop(ptr: *mut public_or_secret_key) {
 pub unsafe extern "C" fn rpgp_string_drop(p: *mut c_char) {
     let _ = CString::from_raw(p);
     // Drop
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_from_armor(
+    msg_ptr: *const u8,
+    msg_len: libc::size_t,
+) -> *mut message {
+    let enc_msg = from_raw_parts(msg_ptr, msg_len);
+
+    let msg = try_ffi!(
+        Message::from_armor_single(Cursor::new(enc_msg)),
+        "invalid message"
+    );
+
+    Box::into_raw(Box::new(msg))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_decrypt_no_pw(
+    msg_ptr: *const message,
+    skeys_ptr: *const *const signed_secret_key,
+    skeys_len: libc::size_t,
+    pkeys_ptr: *const *const signed_public_key,
+    pkeys_len: libc::size_t,
+) -> *mut message_decrypt_result {
+    let msg = &*msg_ptr;
+    let skeys_raw = from_raw_parts(skeys_ptr, skeys_len);
+    let skeys = skeys_raw
+        .iter()
+        .map(|k| {
+            let v: &SignedSecretKey = &**k;
+            v
+        })
+        .collect::<Vec<_>>();
+
+    let pkeys = if pkeys_ptr.is_null() {
+        None
+    } else {
+        Some(from_raw_parts(pkeys_ptr, pkeys_len))
+    };
+
+    let (mut decryptor, _) = try_ffi!(
+        msg.decrypt(|| "".into(), || "".into(), &skeys[..]),
+        "failed to decrypt message"
+    );
+
+    // TODO: multiple messages
+    let dec_msg = try_ffi!(
+        try_ffi!(
+            decryptor.next().ok_or_else(|| format_err!("no message")),
+            "no message found"
+        ),
+        "failed to decrypt message"
+    );
+
+    let (valid_ids_ptr, valid_ids_len) = if let Some(pkeys) = pkeys {
+        let mut valid_ids = pkeys
+            .iter()
+            .filter_map(|pkey| match dec_msg.verify(&(**pkey).primary_key) {
+                Ok(_) => Some(
+                    CString::new(hex::encode(&(&**pkey).key_id()))
+                        .expect("failed to allocate")
+                        .into_raw(),
+                ),
+                Err(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        valid_ids.shrink_to_fit();
+        let res = (valid_ids.as_mut_ptr(), valid_ids.len());
+        std::mem::forget(valid_ids);
+        res
+    } else {
+        (std::ptr::null_mut(), 0)
+    };
+
+    Box::into_raw(Box::new(message_decrypt_result {
+        message_ptr: Box::into_raw(Box::new(dec_msg)),
+        valid_ids_ptr,
+        valid_ids_len,
+    }))
+}
+
+#[repr(C)]
+pub struct message_decrypt_result {
+    pub message_ptr: *mut message,
+    pub valid_ids_ptr: *mut *mut c_char,
+    pub valid_ids_len: libc::size_t,
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_message_decrypt_result_drop(res_ptr: *mut message_decrypt_result) {
+    let res = &*res_ptr;
+    let _msg = &*res.message_ptr;
+    let _ids = Vec::from_raw_parts(res.valid_ids_ptr, res.valid_ids_len, res.valid_ids_len);
+    // Drop
+}
+
+/// Returns the underlying data of the given message.
+/// Fails when the message is encrypted. Decompresses compressed messages.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_to_bytes(msg_ptr: *const message) -> *mut cvec {
+    let msg = &*msg_ptr;
+
+    let result = try_ffi!(msg.get_content(), "failed to extract content");
+    match result {
+        Some(data) => Box::into_raw(Box::new(data.into())),
+        None => {
+            update_last_error(format_err!("called on encrypted message").into());
+            std::ptr::null_mut()
+        }
+    }
+}
+
+/// Free a message, that was created by rpgp.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_drop(msg: *mut message) {
+    let _ = &*msg;
+    // Drop
+}
+
+/// Get the number of fingerprints of a given encrypted message.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_recipients_len(msg_ptr: *mut message) -> u32 {
+    let msg = &*msg_ptr;
+
+    let list = msg.get_recipients();
+
+    list.len() as u32
+}
+
+/// Get the fingerprint of a given encrypted message, by index, in hexformat.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_recipients_get(msg_ptr: *mut message, i: u32) -> *mut c_char {
+    let msg = &*msg_ptr;
+
+    let list = msg.get_recipients();
+    if (i as usize) < list.len() {
+        CString::new(hex::encode(&list[i as usize]))
+            .expect("allocation failure")
+            .into_raw()
+    } else {
+        std::ptr::null_mut()
+    }
 }
 
 #[cfg(test)]
