@@ -143,7 +143,7 @@ pub fn write_bignum_mpi(n: &BigUint, w: &mut impl io::Write) -> errors::Result<(
 }
 
 #[inline]
-fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
+pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
     let offset = bytes.iter().position(|b| *b != 0).unwrap_or(0);
     &bytes[offset..]
 }
