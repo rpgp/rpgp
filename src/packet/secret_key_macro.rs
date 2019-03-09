@@ -189,7 +189,12 @@ macro_rules! impl_secret_key {
                         },
                     }?;
 
-                    signature = Some(sig);
+                    // strip leading zeros, to match parse results from MPIs
+                    signature = Some(
+                        sig.iter()
+                            .map(|a| $crate::util::strip_leading_zeros(&a[..]).to_vec())
+                            .collect(),
+                    );
                     Ok(())
                 })?;
 
