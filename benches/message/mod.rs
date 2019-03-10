@@ -52,17 +52,22 @@ fn bench_message_parse(b: &mut Bencher) {
 fn bench_message_decryption_rsa(b: &mut Bencher) {
     let mut decrypt_key_file =
         File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc").unwrap();
-    let decrypt_key = SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap();
+    let (decrypt_key, _headers) =
+        SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap();
     let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
     let mut message_file = File::open(message_file_path).unwrap();
-    let message = Message::from_armor_single(&mut message_file).unwrap();
+    let (message, _headers) = Message::from_armor_single(&mut message_file).unwrap();
 
     start_profile("message_decryption");
     b.bytes = fs::metadata(message_file_path).unwrap().len();
     b.iter(|| {
         black_box(
             message
-                .decrypt(|| "".to_string(), || "test".to_string(), &decrypt_key)
+                .decrypt(
+                    || "".to_string(),
+                    || "test".to_string(),
+                    &[&decrypt_key][..],
+                )
                 .unwrap(),
         )
     });
