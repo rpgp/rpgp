@@ -45,7 +45,7 @@ Symbols:
   - [ ] ❓IDEA
   - [x] DES
   - [x] CAST5
-  - [x] Blowfish
+  - [ ] Blowfish
   - [x] AES 128
   - [x] AES 192
   - [x] AES 256

@@ -577,6 +577,9 @@ mod tests {
     }
 
     fn test_parse_msg(entry: &str, base_path: &str) {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
         // TODO: verify filename
         let n = format!("{}/{}", base_path, entry);
         let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
@@ -717,20 +720,18 @@ mod tests {
     // RSA
     msg_test!(msg_gnupg_v1_003, "gnupg-v1-003");
 
-    // disabled because of blockciphers not updated
-    // msg_test!(msg_gnupg_v1_4_11_001, "gnupg-v1-4-11-001");
+    msg_test!(msg_gnupg_v1_4_11_001, "gnupg-v1-4-11-001");
     msg_test!(msg_gnupg_v1_4_11_002, "gnupg-v1-4-11-002");
     msg_test!(msg_gnupg_v1_4_11_003, "gnupg-v1-4-11-003");
     msg_test!(msg_gnupg_v1_4_11_004, "gnupg-v1-4-11-004");
-    // disabled because of blockciphers not updated
+    // blowfish
     // msg_test!(msg_gnupg_v1_4_11_005, "gnupg-v1-4-11-005");
     msg_test!(msg_gnupg_v1_4_11_006, "gnupg-v1-4-11-006");
-    // disabled because of blockciphers not updated
-    // msg_test!(msg_gnupg_v2_0_17_001, "gnupg-v2-0-17-001");
+    msg_test!(msg_gnupg_v2_0_17_001, "gnupg-v2-0-17-001");
     msg_test!(msg_gnupg_v2_0_17_002, "gnupg-v2-0-17-002");
     msg_test!(msg_gnupg_v2_0_17_003, "gnupg-v2-0-17-003");
     msg_test!(msg_gnupg_v2_0_17_004, "gnupg-v2-0-17-004");
-    // disabled because of blockciphers not updated
+    // blowfish
     // msg_test!(msg_gnupg_v2_0_17_005, "gnupg-v2-0-17-005");
     msg_test!(msg_gnupg_v2_0_17_006, "gnupg-v2-0-17-006");
     // parsing error
@@ -742,13 +743,13 @@ mod tests {
     // parsing error
     // ECDH key - nist p512
     // msg_test!(msg_gnupg_v2_1_5_003, "gnupg-v2-1-5-003");
-    // disabled because of blockciphers not updated
-    // msg_test!(msg_gnupg_v2_10_001, "gnupg-v2-10-001");
+
+    msg_test!(msg_gnupg_v2_10_001, "gnupg-v2-10-001");
     msg_test!(msg_gnupg_v2_10_002, "gnupg-v2-10-002");
     msg_test!(msg_gnupg_v2_10_003, "gnupg-v2-10-003");
     msg_test!(msg_gnupg_v2_10_004, "gnupg-v2-10-004");
     msg_test!(msg_gnupg_v2_10_005, "gnupg-v2-10-005");
-    // disabled because of blockciphers not updated
+    // blowfish
     // msg_test!(msg_gnupg_v2_10_006, "gnupg-v2-10-006");
     msg_test!(msg_gnupg_v2_10_007, "gnupg-v2-10-007");
 
@@ -757,8 +758,7 @@ mod tests {
     // ECDH
     // msg_test!(msg_e2e_002, "e2e-001");
 
-    // disabled because of blockciphers not updated
-    // msg_test!(msg_pgp_10_0_001, "pgp-10-0-001");
+    msg_test!(msg_pgp_10_0_001, "pgp-10-0-001");
     msg_test!(msg_pgp_10_0_002, "pgp-10-0-002");
     msg_test!(msg_pgp_10_0_003, "pgp-10-0-003");
     msg_test!(msg_pgp_10_0_004, "pgp-10-0-004");
