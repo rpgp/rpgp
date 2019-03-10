@@ -67,10 +67,10 @@ fn test_parse_dump(i: usize, expected_count: usize) {
             // roundtrip
             {
                 // serialize and check we get the same thing
-                let serialized = key.to_armored_bytes().unwrap();
+                let serialized = key.to_armored_bytes(None).unwrap();
 
                 // and parse them again
-                let key2 = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
+                let (key2, _headers) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
                     .expect("failed to parse round2");
                 assert_eq!(key, &key2);
             }
@@ -139,7 +139,7 @@ fn test_parse_gnupg_v1() {
         file.read_to_end(&mut buf).unwrap();
 
         let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-        let pk = SignedPublicKey::from_string(input).expect("failed to parse key");
+        let (pk, headers) = SignedPublicKey::from_string(input).expect("failed to parse key");
         match pk.verify() {
             // Skip these for now
             Err(Error::Unimplemented(err)) => {
@@ -151,11 +151,12 @@ fn test_parse_gnupg_v1() {
         }
 
         // serialize and check we get the same thing
-        let serialized = pk.to_armored_bytes().unwrap();
+        let serialized = pk.to_armored_bytes(Some(&headers)).unwrap();
 
         // and parse them again
-        let pk2 = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
+        let (pk2, headers2) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
             .expect("failed to parse round2");
+        assert_eq!(headers, headers2);
         assert_eq!(pk, pk2);
     }
 }
@@ -169,7 +170,7 @@ fn test_parse_openpgp_sample_rsa_private() {
     file.read_to_end(&mut buf).expect("failed to read file");
 
     let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-    let key = SignedSecretKey::from_string(input).expect("failed to parse key");
+    let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
     key.verify().expect("invalid key");
 
     let pkey = key.primary_key;
@@ -224,7 +225,7 @@ fn test_parse_details() {
     let _ = pretty_env_logger::try_init();
 
     let file = File::open("./tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
-    let key = SignedPublicKey::from_armor_single(file).expect("failed to parse key");
+    let (key, _headers) = SignedPublicKey::from_armor_single(file).expect("failed to parse key");
     key.verify().expect("invalid key");
 
     assert_eq!(
@@ -501,7 +502,7 @@ fn encrypted_private_key() {
     file.read_to_end(&mut buf).unwrap();
 
     let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-    let key = SignedSecretKey::from_string(input).expect("failed to parse key");
+    let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
     key.verify().expect("invalid key");
 
     let pub_key = key.public_key();
@@ -570,7 +571,7 @@ fn get_test_fingerprint(filename: &str) -> (serde_json::Value, SignedPublicKey) 
 
     let mut asc_string = String::new();
     asc.read_to_string(&mut asc_string).unwrap();
-    let key = SignedPublicKey::from_string(&asc_string).unwrap();
+    let (key, _headers) = SignedPublicKey::from_string(&asc_string).unwrap();
 
     let json: serde_json::Value = serde_json::from_reader(json_file).unwrap();
 
@@ -638,7 +639,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool) {
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let pk = from_armor_many(f).unwrap();
+    let (pk, headers) = from_armor_many(f).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         if verify {
@@ -646,15 +647,16 @@ fn test_parse_openpgp_key(key: &str, verify: bool) {
         }
 
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes().unwrap();
+        let serialized = parsed.to_armored_bytes(Some(&headers)).unwrap();
 
         println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
         // and parse them again
-        let parsed2 = from_armor_many(Cursor::new(&serialized))
-            .expect("failed to parse round2")
-            .collect::<Vec<_>>();
+        let (iter2, headers2) =
+            from_armor_many(Cursor::new(&serialized)).expect("failed to parse round2");
+        let parsed2 = iter2.collect::<Vec<_>>();
 
+        assert_eq!(headers, headers2);
         assert_eq!(parsed2.len(), 1);
         assert_eq!(&parsed, parsed2[0].as_ref().unwrap());
     }
@@ -670,11 +672,12 @@ fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
         }
 
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes().unwrap();
+        let serialized = parsed.to_armored_bytes(None).unwrap();
 
         // and parse them again
         let parsed2 = from_armor_many(Cursor::new(&serialized))
             .expect("failed to parse round2")
+            .0
             .collect::<Vec<_>>();
         assert_eq!(parsed2.len(), 1);
         assert_eq!(&parsed, parsed2[0].as_ref().unwrap());
@@ -835,7 +838,7 @@ openpgp_key!(
 #[test]
 fn private_x25519_verify() {
     let f = read_file("./tests/openpgpjs/x25519.sec.asc");
-    let sk = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(&sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
@@ -860,7 +863,7 @@ fn private_x25519_verify() {
 #[test]
 fn pub_x25519_little_verify() {
     let f = read_file("./tests/openpgpjs/x25519-little.pub.asc");
-    let pk = SignedPublicKey::from_armor_single(f).expect("failed to parse key");
+    let (pk, _headers) = SignedPublicKey::from_armor_single(f).expect("failed to parse key");
     pk.verify().expect("invalid key");
     assert_eq!(pk.public_subkeys.len(), 1);
     assert_eq!(hex::encode(&pk.key_id()).to_uppercase(), "C062C165CA61C215",);
@@ -887,7 +890,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/autocrypt/").join(key));
-    let pk = from_armor_many(f).unwrap();
+    let (pk, _headers) = from_armor_many(f).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         parsed.verify().expect("invalid key");
@@ -902,13 +905,14 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         }
 
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes().unwrap();
+        let serialized = parsed.to_armored_bytes(None).unwrap();
 
         println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
         // and parse them again
         let parsed2 = from_armor_many(Cursor::new(&serialized))
             .expect("failed to parse round2")
+            .0
             .collect::<Vec<_>>();
 
         assert_eq!(parsed2.len(), 1);

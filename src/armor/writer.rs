@@ -1,20 +1,32 @@
+use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::io::Write;
 
 use crc24::Crc24Hasher;
 
+use armor::BlockType;
 use errors::Result;
 use generic_array::typenum::U64;
 use line_writer::{LineBreak, LineWriter};
 use ser::Serialize;
 
-pub fn write(source: &impl Serialize, typ: &str, writer: &mut impl Write) -> Result<()> {
-    let heading = format!("-----BEGIN PGP {} BLOCK-----\n", typ);
-    let footer = format!("\n-----END PGP {} BLOCK-----\n", typ);
+pub fn write(
+    source: &impl Serialize,
+    typ: BlockType,
+    writer: &mut impl Write,
+    headers: Option<&BTreeMap<String, String>>,
+) -> Result<()> {
+    let heading = format!("-----BEGIN {}-----\n", typ);
+    let footer = format!("\n-----END {}-----\n", typ);
 
     writer.write_all(heading.as_bytes())?;
 
-    // TODO: headers
+    if let Some(headers) = headers {
+        for (key, value) in headers.iter() {
+            writer.write_all(format!("{}: {}\n", key, value).as_ref())?;
+        }
+    }
+
     writer.write_all(&b"\n"[..])?;
 
     // TODO: avoid buffering

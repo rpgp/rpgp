@@ -21,13 +21,13 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
         match tag {
             Tag::LiteralData => {
                 return match packet.try_into() {
-                    Ok(p) => Some(Ok(Message::Literal(p))),
+                    Ok(data) => Some(Ok(Message::Literal(data))),
                     Err(err) => Some(Err(err)),
                 };
             }
             Tag::CompressedData => {
                 return match packet.try_into() {
-                    Ok(p) => Some(Ok(Message::Compressed(p))),
+                    Ok(data) => Some(Ok(Message::Compressed(data))),
                     Err(err) => Some(Err(err)),
                 };
             }

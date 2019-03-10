@@ -22,7 +22,7 @@ pub unsafe extern "C" fn rpgp_msg_from_armor(
 
     let enc_msg = slice::from_raw_parts(msg_ptr, msg_len);
 
-    let msg = try_ffi!(
+    let (msg, _headers) = try_ffi!(
         Message::from_armor_single(Cursor::new(enc_msg)),
         "invalid message"
     );

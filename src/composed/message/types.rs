@@ -1,25 +1,21 @@
 use std::boxed::Box;
-use std::io::{self, Cursor};
+use std::collections::BTreeMap;
+use std::io;
 
-use generic_array::typenum::U64;
-use num_traits::FromPrimitive;
 use try_from::TryFrom;
 
+use armor;
+use composed::message::decrypt::*;
 use composed::shared::Deserializable;
 use composed::signed_key::SignedSecretKey;
-use crypto::checksum;
-use crypto::ecc::decrypt_ecdh;
-use crypto::rsa::decrypt_rsa;
-use crypto::sym::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
-use line_writer::{LineBreak, LineWriter};
 use packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
     PublicKeyEncryptedSessionKey, Signature, SymEncryptedData, SymEncryptedProtectedData,
     SymKeyEncryptedSessionKey,
 };
 use ser::Serialize;
-use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
+use types::{KeyId, KeyTrait, PublicKeyTrait, Tag};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
@@ -173,12 +169,13 @@ impl Edata {
 impl Serialize for Message {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
-            Message::Literal(l) => write_packet(writer, l),
-            Message::Compressed(c) => write_packet(writer, c),
+            Message::Literal(data) => write_packet(writer, data),
+            Message::Compressed(data) => write_packet(writer, data),
             Message::Signed {
                 message,
                 one_pass_signature,
                 signature,
+                ..
             } => {
                 if let Some(ops) = one_pass_signature {
                     write_packet(writer, ops)?;
@@ -191,7 +188,7 @@ impl Serialize for Message {
 
                 Ok(())
             }
-            Message::Encrypted { esk, edata } => {
+            Message::Encrypted { esk, edata, .. } => {
                 for e in esk {
                     e.to_writer(writer)?;
                 }
@@ -213,15 +210,15 @@ impl Message {
             } => {
                 if let Some(message) = message {
                     match **message {
-                        Message::Literal(ref m) => signature.verify(key, m.data()),
+                        Message::Literal(ref data) => signature.verify(key, data.data()),
                         _ => unimplemented_err!("verify for {:?}", *message),
                     }
                 } else {
                     unimplemented_err!("no message, what to do?");
                 }
             }
-            Message::Compressed(m) => {
-                let msg = Message::from_bytes(m.decompress()?)?;
+            Message::Compressed(data) => {
+                let msg = Message::from_bytes(data.decompress()?)?;
                 msg.verify(key)
             }
             // Nothing to do for others.
@@ -251,14 +248,14 @@ impl Message {
         G: FnOnce() -> String + Clone,
     {
         match self {
-            Message::Compressed(_) | Message::Literal(_) => {
+            Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
             }
             Message::Signed { message, .. } => match message {
                 Some(message) => message.as_ref().decrypt(msg_pw, key_pw, keys),
                 None => bail!("not encrypted"),
             },
-            Message::Encrypted { esk, edata } => {
+            Message::Encrypted { esk, edata, .. } => {
                 let valid_keys = keys
                     .iter()
                     .filter_map(|key| {
@@ -368,7 +365,7 @@ impl Message {
 
     pub fn is_literal(&self) -> bool {
         match self {
-            Message::Literal(_) => true,
+            Message::Literal { .. } => true,
             Message::Signed { message, .. } => {
                 if let Some(msg) = message {
                     msg.is_literal()
@@ -382,7 +379,7 @@ impl Message {
 
     pub fn get_literal(&self) -> Option<&LiteralData> {
         match self {
-            Message::Literal(ref msg) => Some(msg),
+            Message::Literal(ref data) => Some(data),
             Message::Signed { message, .. } => {
                 if let Some(msg) = message {
                     msg.get_literal()
@@ -397,160 +394,37 @@ impl Message {
     /// Returns the underlying content and `None` if the message is encrypted.
     pub fn get_content(&self) -> Result<Option<Vec<u8>>> {
         match self {
-            Message::Literal(ref msg) => Ok(Some(msg.data().to_vec())),
+            Message::Literal(ref data) => Ok(Some(data.data().to_vec())),
             Message::Signed { message, .. } => Ok(message
                 .as_ref()
                 .and_then(|m| m.get_literal())
                 .map(|l| l.data().to_vec())),
-            Message::Compressed(m) => {
-                let msg = Message::from_bytes(m.decompress()?)?;
+            Message::Compressed(data) => {
+                let msg = Message::from_bytes(data.decompress()?)?;
                 msg.get_content()
             }
             Message::Encrypted { .. } => Ok(None),
         }
     }
 
-    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        writer.write_all(&b"-----BEGIN PGP MESSAGE-----\n"[..])?;
-
-        // TODO: headers
-
-        // write the base64 encoded content
-        {
-            let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
-            let mut enc = base64::write::EncoderWriter::new(&mut line_wrapper, base64::STANDARD);
-            self.to_writer(&mut enc)?;
-        }
-        // TODO: CRC24
-
-        writer.write_all(&b"\n-----END PGP MESSAGE-----\n"[..])?;
-
-        Ok(())
+    pub fn to_armored_writer(
+        &self,
+        writer: &mut impl io::Write,
+        headers: Option<&BTreeMap<String, String>>,
+    ) -> Result<()> {
+        armor::write(self, armor::BlockType::Message, writer, headers)
     }
 
-    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
+    pub fn to_armored_bytes(&self, headers: Option<&BTreeMap<String, String>>) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
-        self.to_armored_writer(&mut buf)?;
+        self.to_armored_writer(&mut buf, headers)?;
 
         Ok(buf)
     }
 
-    pub fn to_armored_string(&self) -> Result<String> {
-        Ok(::std::str::from_utf8(&self.to_armored_bytes()?)?.to_string())
-    }
-}
-
-fn decrypt_session_key<F>(
-    locked_key: &(impl SecretKeyTrait + KeyTrait),
-    key_pw: F,
-    mpis: &[Vec<u8>],
-) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
-where
-    F: FnOnce() -> String,
-{
-    let mut key: Vec<u8> = Vec::new();
-    let mut alg: Option<SymmetricKeyAlgorithm> = None;
-
-    locked_key.unlock(key_pw, |priv_key| {
-        let decrypted_key = match *priv_key {
-            SecretKeyRepr::RSA(ref priv_key) => {
-                decrypt_rsa(priv_key, mpis, &locked_key.fingerprint())?
-            }
-            SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
-            SecretKeyRepr::ECDSA => bail!("ECDSA is only used for signing"),
-            SecretKeyRepr::ECDH(ref priv_key) => {
-                decrypt_ecdh(priv_key, mpis, &locked_key.fingerprint())?
-            }
-            SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
-        };
-        let algorithm = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
-            .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
-        alg = Some(algorithm);
-        info!("alg: {:?}", alg);
-
-        let (k, checksum) = match *priv_key {
-            SecretKeyRepr::ECDH(_) => {
-                let dec_len = decrypted_key.len();
-                (
-                    &decrypted_key[1..dec_len - 2],
-                    &decrypted_key[dec_len - 2..],
-                )
-            }
-            _ => {
-                let key_size = algorithm.key_size();
-                (
-                    &decrypted_key[1..=key_size],
-                    &decrypted_key[key_size + 1..key_size + 3],
-                )
-            }
-        };
-
-        key = k.to_vec();
-        checksum::simple(checksum, k)?;
-
-        Ok(())
-    })?;
-
-    Ok((key, alg.expect("failed to unlock")))
-}
-
-pub struct MessageDecrypter<'a> {
-    key: Vec<u8>,
-    alg: SymmetricKeyAlgorithm,
-    edata: &'a [Edata],
-    // position in the edata slice
-    pos: usize,
-    // the current msgs that are already decrypted
-    current_msgs: Option<Box<dyn Iterator<Item = Result<Message>>>>,
-}
-
-impl<'a> MessageDecrypter<'a> {
-    pub fn new(session_key: Vec<u8>, alg: SymmetricKeyAlgorithm, edata: &'a [Edata]) -> Self {
-        MessageDecrypter {
-            key: session_key,
-            alg,
-            edata,
-            pos: 0,
-            current_msgs: None,
-        }
-    }
-}
-
-impl<'a> Iterator for MessageDecrypter<'a> {
-    type Item = Result<Message>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.pos >= self.edata.len() && self.current_msgs.is_none() {
-            return None;
-        }
-
-        if self.current_msgs.is_none() {
-            // need to decrypt another packet
-            let packet = &self.edata[self.pos];
-            self.pos += 1;
-
-            let mut res = packet.data()[..].to_vec();
-            let protected = packet.tag() == Tag::SymEncryptedProtectedData;
-
-            info!("decrypting protected = {:?}", protected);
-
-            let decrypted_packet: &[u8] = if protected {
-                err_opt!(self.alg.decrypt_protected(&self.key, &mut res))
-            } else {
-                err_opt!(self.alg.decrypt(&self.key, &mut res))
-            };
-
-            self.current_msgs = Some(Message::from_bytes_many(Cursor::new(
-                decrypted_packet.to_vec(),
-            )));
-        };
-
-        let mut msgs = self.current_msgs.take().expect("just checked");
-        let next = msgs.next();
-        self.current_msgs = Some(msgs);
-
-        next
+    pub fn to_armored_string(&self, headers: Option<&BTreeMap<String, String>>) -> Result<String> {
+        Ok(::std::str::from_utf8(&self.to_armored_bytes(headers)?)?.to_string())
     }
 }
 
@@ -559,6 +433,7 @@ mod tests {
     use super::*;
     use serde_json;
     use std::fs::File;
+    use std::io::{Cursor, Read};
 
     use composed::signed_key::{SignedPublicKey, SignedSecretKey};
     use composed::Deserializable;
@@ -576,7 +451,7 @@ mod tests {
         keyid: Option<String>,
     }
 
-    fn test_parse_msg(entry: &str, base_path: &str) {
+    fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
         use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
@@ -592,7 +467,7 @@ mod tests {
 
         let mut decrypt_key_file =
             File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
-        let decrypt_key = SignedSecretKey::from_armor_single(&mut decrypt_key_file)
+        let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(&mut decrypt_key_file)
             .expect("failed to read decryption key");
         decrypt_key.verify().expect("invalid decryption key");
 
@@ -606,7 +481,7 @@ mod tests {
         let verify_key = if let Some(verify_key_str) = details.verify_key.clone() {
             let mut verify_key_file =
                 File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
-            let verify_key = SignedPublicKey::from_armor_single(&mut verify_key_file)
+            let (verify_key, _headers) = SignedPublicKey::from_armor_single(&mut verify_key_file)
                 .expect("failed to read verification key");
             verify_key.verify().expect("invalid verification key");
 
@@ -621,7 +496,7 @@ mod tests {
         let cipher_file_path = format!("{}/{}", base_path, file_name);
         let mut cipher_file = File::open(&cipher_file_path).unwrap();
 
-        let message =
+        let (message, headers) =
             Message::from_armor_single(&mut cipher_file).expect("failed to parse message");
         info!("message: {:?}", &message);
 
@@ -648,23 +523,23 @@ mod tests {
                 }
 
                 // serialize and check we get the same thing
-                let serialized = decrypted.to_armored_bytes().unwrap();
+                let serialized = decrypted.to_armored_bytes(None).unwrap();
 
                 // and parse them again
-                let decrypted2 = Message::from_armor_single(Cursor::new(&serialized))
+                let (decrypted2, _headers) = Message::from_armor_single(Cursor::new(&serialized))
                     .expect("failed to parse round2");
                 assert_eq!(decrypted, decrypted2);
 
                 let raw = match decrypted {
-                    Message::Literal(msg) => msg,
-                    Message::Compressed(msg) => {
-                        let m = Message::from_bytes(msg.decompress().unwrap()).unwrap();
+                    Message::Literal(data) => data,
+                    Message::Compressed(data) => {
+                        let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
 
                         // serialize and check we get the same thing
-                        let serialized = m.to_armored_bytes().unwrap();
+                        let serialized = m.to_armored_bytes(None).unwrap();
 
                         // and parse them again
-                        let m2 = Message::from_armor_single(Cursor::new(&serialized))
+                        let (m2, _headers) = Message::from_armor_single(Cursor::new(&serialized))
                             .expect("failed to parse round3");
                         assert_eq!(m, m2);
 
@@ -688,100 +563,105 @@ mod tests {
         }
 
         // serialize and check we get the same thing
-        let serialized = message.to_armored_bytes().unwrap();
+        let serialized = message.to_armored_string(Some(&headers)).unwrap();
 
-        // let mut cipher_file = File::open(&cipher_file_path).unwrap();
-        // let mut expected_bytes = String::new();
-        // cipher_file.read_to_string(&mut expected_bytes).unwrap();
-        // assert_eq!(serialized, expected_bytes);
+        if is_normalized {
+            let mut cipher_file = File::open(&cipher_file_path).unwrap();
+            let mut expected_bytes = String::new();
+            cipher_file.read_to_string(&mut expected_bytes).unwrap();
+            assert_eq!(serialized, expected_bytes);
+        }
 
         // and parse them again
-        let message2 =
+        let (message2, headers2) =
             Message::from_armor_single(Cursor::new(&serialized)).expect("failed to parse round2");
+        assert_eq!(headers, headers2);
         assert_eq!(message, message2);
     }
 
     macro_rules! msg_test {
-        ($name:ident, $pos:expr) => {
+        ($name:ident, $pos:expr, $normalized:expr) => {
             #[test]
             fn $name() {
                 test_parse_msg(
                     &format!("{}.json", $pos),
                     "./tests/opengpg-interop/testcases/messages",
+                    $normalized,
                 );
             }
         };
     }
 
     // RSA
-    msg_test!(msg_gnupg_v1_001, "gnupg-v1-001");
+    msg_test!(msg_gnupg_v1_001, "gnupg-v1-001", false);
     // Elgamal
-    // msg_test!(msg_gnupg_v1_002, "gnupg-v1-002");
+    // msg_test!(msg_gnupg_v1_002, "gnupg-v1-002", true);
     // RSA
-    msg_test!(msg_gnupg_v1_003, "gnupg-v1-003");
+    msg_test!(msg_gnupg_v1_003, "gnupg-v1-003", false);
 
-    msg_test!(msg_gnupg_v1_4_11_001, "gnupg-v1-4-11-001");
-    msg_test!(msg_gnupg_v1_4_11_002, "gnupg-v1-4-11-002");
-    msg_test!(msg_gnupg_v1_4_11_003, "gnupg-v1-4-11-003");
-    msg_test!(msg_gnupg_v1_4_11_004, "gnupg-v1-4-11-004");
+    msg_test!(msg_gnupg_v1_4_11_001, "gnupg-v1-4-11-001", true);
+    msg_test!(msg_gnupg_v1_4_11_002, "gnupg-v1-4-11-002", false);
+    msg_test!(msg_gnupg_v1_4_11_003, "gnupg-v1-4-11-003", true);
+    msg_test!(msg_gnupg_v1_4_11_004, "gnupg-v1-4-11-004", true);
     // blowfish
-    // msg_test!(msg_gnupg_v1_4_11_005, "gnupg-v1-4-11-005");
-    msg_test!(msg_gnupg_v1_4_11_006, "gnupg-v1-4-11-006");
-    msg_test!(msg_gnupg_v2_0_17_001, "gnupg-v2-0-17-001");
-    msg_test!(msg_gnupg_v2_0_17_002, "gnupg-v2-0-17-002");
-    msg_test!(msg_gnupg_v2_0_17_003, "gnupg-v2-0-17-003");
-    msg_test!(msg_gnupg_v2_0_17_004, "gnupg-v2-0-17-004");
+    // msg_test!(msg_gnupg_v1_4_11_005, "gnupg-v1-4-11-005", true);
+    msg_test!(msg_gnupg_v1_4_11_006, "gnupg-v1-4-11-006", false);
+    msg_test!(msg_gnupg_v2_0_17_001, "gnupg-v2-0-17-001", true);
+    msg_test!(msg_gnupg_v2_0_17_002, "gnupg-v2-0-17-002", false);
+    msg_test!(msg_gnupg_v2_0_17_003, "gnupg-v2-0-17-003", true);
+    msg_test!(msg_gnupg_v2_0_17_004, "gnupg-v2-0-17-004", true);
     // blowfish
-    // msg_test!(msg_gnupg_v2_0_17_005, "gnupg-v2-0-17-005");
-    msg_test!(msg_gnupg_v2_0_17_006, "gnupg-v2-0-17-006");
+    // msg_test!(msg_gnupg_v2_0_17_005, "gnupg-v2-0-17-005", true);
+    msg_test!(msg_gnupg_v2_0_17_006, "gnupg-v2-0-17-006", true);
     // parsing error
     // ECDH key - nist p256
-    // msg_test!(msg_gnupg_v2_1_5_001, "gnupg-v2-1-5-001");
+    // msg_test!(msg_gnupg_v2_1_5_001, "gnupg-v2-1-5-001", true);
+
     // parsing error
     // ECDH key - nist p384
-    // msg_test!(msg_gnupg_v2_1_5_002, "gnupg-v2-1-5-002");
+    // msg_test!(msg_gnupg_v2_1_5_002, "gnupg-v2-1-5-002", true);
     // parsing error
     // ECDH key - nist p512
-    // msg_test!(msg_gnupg_v2_1_5_003, "gnupg-v2-1-5-003");
+    // msg_test!(msg_gnupg_v2_1_5_003, "gnupg-v2-1-5-003", true);
 
-    msg_test!(msg_gnupg_v2_10_001, "gnupg-v2-10-001");
-    msg_test!(msg_gnupg_v2_10_002, "gnupg-v2-10-002");
-    msg_test!(msg_gnupg_v2_10_003, "gnupg-v2-10-003");
-    msg_test!(msg_gnupg_v2_10_004, "gnupg-v2-10-004");
-    msg_test!(msg_gnupg_v2_10_005, "gnupg-v2-10-005");
+    msg_test!(msg_gnupg_v2_10_001, "gnupg-v2-10-001", true);
+    msg_test!(msg_gnupg_v2_10_002, "gnupg-v2-10-002", true);
+    msg_test!(msg_gnupg_v2_10_003, "gnupg-v2-10-003", true);
+    msg_test!(msg_gnupg_v2_10_004, "gnupg-v2-10-004", false);
+    msg_test!(msg_gnupg_v2_10_005, "gnupg-v2-10-005", true);
     // blowfish
-    // msg_test!(msg_gnupg_v2_10_006, "gnupg-v2-10-006");
-    msg_test!(msg_gnupg_v2_10_007, "gnupg-v2-10-007");
+    // msg_test!(msg_gnupg_v2_10_006, "gnupg-v2-10-006", true);
+    msg_test!(msg_gnupg_v2_10_007, "gnupg-v2-10-007", true);
 
     // ECDH
-    // msg_test!(msg_e2e_001, "e2e-001");
+    // msg_test!(msg_e2e_001, "e2e-001", true);
     // ECDH
-    // msg_test!(msg_e2e_002, "e2e-001");
+    // msg_test!(msg_e2e_002, "e2e-001", true);
 
-    msg_test!(msg_pgp_10_0_001, "pgp-10-0-001");
-    msg_test!(msg_pgp_10_0_002, "pgp-10-0-002");
-    msg_test!(msg_pgp_10_0_003, "pgp-10-0-003");
-    msg_test!(msg_pgp_10_0_004, "pgp-10-0-004");
-    msg_test!(msg_pgp_10_0_005, "pgp-10-0-005");
-    msg_test!(msg_pgp_10_0_006, "pgp-10-0-006");
+    msg_test!(msg_pgp_10_0_001, "pgp-10-0-001", false);
+    msg_test!(msg_pgp_10_0_002, "pgp-10-0-002", false);
+    msg_test!(msg_pgp_10_0_003, "pgp-10-0-003", false);
+    msg_test!(msg_pgp_10_0_004, "pgp-10-0-004", false);
+    msg_test!(msg_pgp_10_0_005, "pgp-10-0-005", false);
+    msg_test!(msg_pgp_10_0_006, "pgp-10-0-006", false);
     // IDEA
-    // msg_test!(msg_pgp_10_0_007, "pgp-10-0-007");
+    // msg_test!(msg_pgp_10_0_007, "pgp-10-0-007", true);
 
     // ECDH
-    // msg_test!(msg_openkeychain_001, "openkeychain-001");
+    // msg_test!(msg_openkeychain_001, "openkeychain-001", true);
 
-    msg_test!(msg_openpgp_001, "openpgp-001");
+    msg_test!(msg_openpgp_001, "openpgp-001", false);
 
     macro_rules! msg_test_js {
-        ($name:ident, $pos:expr) => {
+        ($name:ident, $pos:expr, $normalized:expr) => {
             #[test]
             fn $name() {
-                test_parse_msg(&format!("{}.json", $pos), "./tests/openpgpjs");
+                test_parse_msg(&format!("{}.json", $pos), "./tests/openpgpjs", $normalized);
             }
         };
     }
 
-    msg_test_js!(msg_openpgpjs_x25519, "x25519");
+    msg_test_js!(msg_openpgpjs_x25519, "x25519", true);
 
     #[test]
     fn msg_partial_body_len() {
@@ -801,10 +681,11 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         let mut msg_file = File::open("./tests/indeterminated.asc").unwrap();
-        let message = Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+        let (message, _headers) =
+            Message::from_armor_single(&mut msg_file).expect("failed to parse message");
 
         let mut key_file = File::open("./tests/openpgpjs/x25519.sec.asc").unwrap();
-        let decrypt_key =
+        let (decrypt_key, _headers) =
             SignedSecretKey::from_armor_single(&mut key_file).expect("failed to parse key");
 
         let decrypted = message
@@ -816,9 +697,9 @@ mod tests {
             .expect("message decryption failed");
 
         let raw = match decrypted {
-            Message::Literal(msg) => msg,
-            Message::Compressed(msg) => {
-                let m = Message::from_bytes(msg.decompress().unwrap()).unwrap();
+            Message::Literal(data) => data,
+            Message::Compressed(data) => {
+                let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
 
                 m.get_literal().unwrap().clone()
             }

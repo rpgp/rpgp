@@ -333,20 +333,20 @@ mod tests {
         let signed_key_plain = key_plain.sign(|| "".into()).expect("failed to sign key");
 
         let armor_enc = signed_key_enc
-            .to_armored_string()
+            .to_armored_string(None)
             .expect("failed to serialize key");
         let armor_plain = signed_key_plain
-            .to_armored_string()
+            .to_armored_string(None)
             .expect("failed to serialize key");
 
         std::fs::write("sample-rsa-enc.sec.asc", &armor_enc).unwrap();
         std::fs::write("sample-rsa.sec.asc", &armor_plain).unwrap();
 
-        let signed_key2_enc =
+        let (signed_key2_enc, _headers) =
             SignedSecretKey::from_string(&armor_enc).expect("failed to parse key (enc)");
         signed_key2_enc.verify().expect("invalid key (enc)");
 
-        let signed_key2_plain =
+        let (signed_key2_plain, _headers) =
             SignedSecretKey::from_string(&armor_plain).expect("failed to parse key (plain)");
         signed_key2_plain.verify().expect("invalid key (plain)");
 
@@ -368,12 +368,13 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string()
+            .to_armored_string(None)
             .expect("failed to serialize public key");
 
         std::fs::write("sample-rsa.pub.asc", &armor).unwrap();
 
-        let signed_key2 = SignedPublicKey::from_string(&armor).expect("failed to parse public key");
+        let (signed_key2, _headers) =
+            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
         signed_key2.verify().expect("invalid public key");
     }
 
@@ -422,12 +423,13 @@ mod tests {
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
-            .to_armored_string()
+            .to_armored_string(None)
             .expect("failed to serialize key");
 
         std::fs::write("sample-x25519.sec.asc", &armor).unwrap();
 
-        let signed_key2 = SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        let (signed_key2, _headers) =
+            SignedSecretKey::from_string(&armor).expect("failed to parse key");
         signed_key2.verify().expect("invalid key");
 
         assert_eq!(signed_key, signed_key2);
@@ -441,12 +443,13 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string()
+            .to_armored_string(None)
             .expect("failed to serialize public key");
 
         std::fs::write("sample-x25519.pub.asc", &armor).unwrap();
 
-        let signed_key2 = SignedPublicKey::from_string(&armor).expect("failed to parse public key");
+        let (signed_key2, _headers) =
+            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
         signed_key2.verify().expect("invalid public key");
     }
 }

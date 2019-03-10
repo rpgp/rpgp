@@ -22,7 +22,7 @@ pub unsafe extern "C" fn rpgp_key_from_armor(
     assert!(len > 0);
 
     let bytes = slice::from_raw_parts(raw, len);
-    let mut keys = try_ffi!(from_armor_many(Cursor::new(bytes)), "failed to parse");
+    let (mut keys, _headers) = try_ffi!(from_armor_many(Cursor::new(bytes)), "failed to parse");
 
     let key = try_ffi!(
         try_ffi!(

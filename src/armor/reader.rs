@@ -1,8 +1,7 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::hash::Hasher;
-use std::io;
 use std::io::prelude::*;
-use std::str;
+use std::{fmt, io, str};
 
 use base64;
 use buf_redux::BufReader;
@@ -21,7 +20,7 @@ pub enum BlockType {
     /// PGP Public key
     PublicKey,
     /// Public key DER encoded PKCS#1
-    PublicKeyPKCS1,
+    PublicKeyPKCS1(PKCS1Type),
     /// Public key DER encoded PKCS#8
     PublicKeyPKCS8,
     /// Public key OpenSSH
@@ -29,7 +28,7 @@ pub enum BlockType {
     /// PGP Private key
     PrivateKey,
     /// Private key DER encoded PKCS#1
-    PrivateKeyPKCS1,
+    PrivateKeyPKCS1(PKCS1Type),
     /// Private key DER encoded PKCS#8
     PrivateKeyPKCS8,
     /// Private key OpenSSh
@@ -41,6 +40,41 @@ pub enum BlockType {
     File,
 }
 
+impl fmt::Display for BlockType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BlockType::PublicKey => write!(f, "PGP PUBLIC KEY BLOCK"),
+            BlockType::PrivateKey => write!(f, "PGP PRIVATE KEY BLOCK"),
+            BlockType::MultiPartMessage(x, y) => write!(f, "PGP MESSAGE, PART {}/{}", x, y),
+            BlockType::Message => write!(f, "PGP MESSAGE"),
+            BlockType::Signature => write!(f, "PGP SIGNATURE"),
+            BlockType::File => write!(f, "PGP ARMORED FILE"),
+            BlockType::PublicKeyPKCS1(typ) => write!(f, "{} PUBLIC KEY", typ),
+            BlockType::PublicKeyPKCS8 => write!(f, "PUBLIC KEY"),
+            BlockType::PublicKeyOpenssh => write!(f, "OPENSSH PUBLIC KEY"),
+            BlockType::PrivateKeyPKCS1(typ) => write!(f, "{} PRIVATE KEY", typ),
+            BlockType::PrivateKeyPKCS8 => write!(f, "PRIVATE KEY"),
+            BlockType::PrivateKeyOpenssh => write!(f, "OPENSSH PRIVATE KEY"),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum PKCS1Type {
+    RSA,
+    DSA,
+    EC,
+}
+
+impl fmt::Display for PKCS1Type {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PKCS1Type::RSA => write!(f, "RSA"),
+            PKCS1Type::DSA => write!(f, "DSA"),
+            PKCS1Type::EC => write!(f, "EC"),
+        }
+    }
+}
 /// Parses a single ascii armor header separator.
 named!(armor_header_sep, tag!("-----"));
 
@@ -73,11 +107,11 @@ named!(
       // Lets also parse openssl formats :tada:
 
       // Public Key File PKCS#1
-      | map!(tag!("RSA PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1)
+      | map!(tag!("RSA PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1(PKCS1Type::RSA))
       // Public Key File PKCS#1
-      | map!(tag!("DSA PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1)
+      | map!(tag!("DSA PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1(PKCS1Type::DSA))
       // Public Key File PKCS#1
-      | map!(tag!("EC PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1)
+      | map!(tag!("EC PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1(PKCS1Type::EC))
       // Public Key File PKCS#8
       | map!(tag!("PUBLIC KEY"), |_| BlockType::PublicKeyPKCS8)
 
@@ -85,11 +119,11 @@ named!(
       | map!(tag!("OPENSSH PUBLIC KEY"), |_| BlockType::PublicKeyOpenssh)
 
       // Private Key File PKCS#1
-      | map!(tag!("RSA PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1)
+      | map!(tag!("RSA PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1(PKCS1Type::RSA))
       // Private Key File PKCS#1
-      | map!(tag!("DSA PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1)
+      | map!(tag!("DSA PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1(PKCS1Type::DSA))
       // Private Key File PKCS#1
-      | map!(tag!("EC PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1)
+      | map!(tag!("EC PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1(PKCS1Type::EC))
       // Private Key File PKCS#8
       | map!(tag!("PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS8)
 
@@ -143,7 +177,7 @@ named!(
 
 /// Parses the full armor header.
 named!(
-    armor_headers<HashMap<String, String>>,
+    armor_headers<BTreeMap<String, String>>,
     do_parse!(
         pairs: key_value_pairs
             >> (pairs
@@ -154,7 +188,7 @@ named!(
 );
 
 /// Armor Header
-named!(armor_header(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
+named!(armor_header(&[u8]) -> (BlockType, BTreeMap<String, String>), do_parse!(
     typ:     armor_header_line >>
     headers: armor_headers     >>
     (typ, headers)
@@ -176,7 +210,7 @@ fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
 }
 
 #[rustfmt::skip]
-named!(header_parser(&[u8]) -> (BlockType, HashMap<String, String>), do_parse!(
+named!(header_parser(&[u8]) -> (BlockType, BTreeMap<String, String>), do_parse!(
                take_until!("-----")
     >>   head: armor_header
     >>         many0!(line_ending)
@@ -219,7 +253,7 @@ pub struct Dearmor<R> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
-    pub headers: HashMap<String, String>,
+    pub headers: BTreeMap<String, String>,
     /// Optional crc checksum
     pub checksum: Option<u64>,
     /// track what we are currently parsing
@@ -247,7 +281,7 @@ impl<R: Read + Seek> Dearmor<R> {
     pub fn new(input: R) -> Self {
         Dearmor {
             typ: None,
-            headers: HashMap::new(),
+            headers: BTreeMap::new(),
             checksum: None,
             current_part: Part::Header,
             base_decoder: None,
@@ -434,7 +468,7 @@ mod tests {
     // helper function to parse all data at once
     pub fn parse<R: Read + Seek>(
         mut input: R,
-    ) -> Result<(BlockType, HashMap<String, String>, Vec<u8>)> {
+    ) -> Result<(BlockType, BTreeMap<String, String>, Vec<u8>)> {
         let mut dearmor = Dearmor::new(input.by_ref());
 
         // estimate size
@@ -464,7 +498,7 @@ mod tests {
 
     #[test]
     fn test_armor_headers() {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "12".to_string());
         map.insert("special-stuff".to_string(), "cool12.0".to_string());
         map.insert("some:colon".to_string(), "with:me".to_string());
@@ -480,7 +514,7 @@ mod tests {
 
     #[test]
     fn test_armor_header() {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "1.0".to_string());
         map.insert("Mode".to_string(), "Test".to_string());
 
@@ -489,7 +523,7 @@ mod tests {
             (&b""[..], (BlockType::Message, map))
         );
 
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
         assert_eq!(
@@ -501,7 +535,7 @@ mod tests {
 
     #[test]
     fn test_parse_armor_small() {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
         let c = Cursor::new(
@@ -520,7 +554,7 @@ mod tests {
 
     #[test]
     fn test_parse_armor_full() {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
         let c = Cursor::new(
@@ -606,12 +640,12 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
         let (typ, _, _) = parse(c).unwrap();
 
-        assert_eq!(typ, (BlockType::PrivateKeyPKCS1));
+        assert_eq!(typ, (BlockType::PrivateKeyPKCS1(PKCS1Type::RSA)));
     }
 
     #[test]
     fn test_dearmor_small_stream() {
-        let mut map = HashMap::new();
+        let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
         let c = Cursor::new(
