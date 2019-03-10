@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::{io, iter};
 
 use armor::{self, BlockType};
@@ -10,9 +11,13 @@ use types::Tag;
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 
 /// Parses a list of secret and public keys from ascii armored text.
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
 pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
     input: R,
-) -> Result<Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>> {
+) -> Result<(
+    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+    BTreeMap<String, String>,
+)> {
     let mut dearmor = armor::Dearmor::new(input);
     dearmor.read_header()?;
     // Safe to unwrap, as read_header succeeded.
@@ -20,7 +25,7 @@ pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
         .typ
         .ok_or_else(|| format_err!("dearmor failed to retrieve armor type"))?;
 
-    // TODO: add typ and headers information to the key possibly?
+    // TODO: add typ information to the key possibly?
     match typ {
         // Standard PGP types
         BlockType::PublicKey
@@ -29,13 +34,14 @@ pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
         | BlockType::MultiPartMessage(_, _)
         | BlockType::Signature
         | BlockType::File => {
-            // TODO: check that the result is what it actually said.
-            Ok(from_bytes_many(dearmor))
+            let headers = dearmor.headers.clone(); // FIXME: avoid clone
+                                                   // TODO: check that the result is what it actually said.
+            Ok((from_bytes_many(dearmor), headers))
         }
-        BlockType::PublicKeyPKCS1
+        BlockType::PublicKeyPKCS1(_)
         | BlockType::PublicKeyPKCS8
         | BlockType::PublicKeyOpenssh
-        | BlockType::PrivateKeyPKCS1
+        | BlockType::PrivateKeyPKCS1(_)
         | BlockType::PrivateKeyPKCS8
         | BlockType::PrivateKeyOpenssh => {
             unimplemented_err!("key format {:?}", typ);

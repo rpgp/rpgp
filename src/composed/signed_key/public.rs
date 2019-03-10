@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io;
 
 use armor;
@@ -70,20 +71,24 @@ impl SignedPublicKey {
         Ok(())
     }
 
-    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        armor::write(self, "PUBLIC KEY", writer)
+    pub fn to_armored_writer(
+        &self,
+        writer: &mut impl io::Write,
+        headers: Option<&BTreeMap<String, String>>,
+    ) -> Result<()> {
+        armor::write(self, armor::BlockType::PublicKey, writer, headers)
     }
 
-    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
+    pub fn to_armored_bytes(&self, headers: Option<&BTreeMap<String, String>>) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
-        self.to_armored_writer(&mut buf)?;
+        self.to_armored_writer(&mut buf, headers)?;
 
         Ok(buf)
     }
 
-    pub fn to_armored_string(&self) -> Result<String> {
-        Ok(::std::str::from_utf8(&self.to_armored_bytes()?)?.to_string())
+    pub fn to_armored_string(&self, headers: Option<&BTreeMap<String, String>>) -> Result<String> {
+        Ok(::std::str::from_utf8(&self.to_armored_bytes(headers)?)?.to_string())
     }
 
     pub fn as_unsigned(&self) -> PublicKey {

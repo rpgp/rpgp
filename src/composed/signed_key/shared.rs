@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io;
 
 use composed::key::KeyDetails;
@@ -172,24 +173,28 @@ impl PublicOrSecret {
         }
     }
 
-    pub fn to_armored_writer(&self, writer: &mut impl io::Write) -> Result<()> {
+    pub fn to_armored_writer(
+        &self,
+        writer: &mut impl io::Write,
+        headers: Option<&BTreeMap<String, String>>,
+    ) -> Result<()> {
         match self {
-            PublicOrSecret::Public(k) => k.to_armored_writer(writer),
-            PublicOrSecret::Secret(k) => k.to_armored_writer(writer),
+            PublicOrSecret::Public(k) => k.to_armored_writer(writer, headers),
+            PublicOrSecret::Secret(k) => k.to_armored_writer(writer, headers),
         }
     }
 
-    pub fn to_armored_bytes(&self) -> Result<Vec<u8>> {
+    pub fn to_armored_bytes(&self, headers: Option<&BTreeMap<String, String>>) -> Result<Vec<u8>> {
         match self {
-            PublicOrSecret::Public(k) => k.to_armored_bytes(),
-            PublicOrSecret::Secret(k) => k.to_armored_bytes(),
+            PublicOrSecret::Public(k) => k.to_armored_bytes(headers),
+            PublicOrSecret::Secret(k) => k.to_armored_bytes(headers),
         }
     }
 
-    pub fn to_armored_string(&self) -> Result<String> {
+    pub fn to_armored_string(&self, headers: Option<&BTreeMap<String, String>>) -> Result<String> {
         match self {
-            PublicOrSecret::Public(k) => k.to_armored_string(),
-            PublicOrSecret::Secret(k) => k.to_armored_string(),
+            PublicOrSecret::Public(k) => k.to_armored_string(headers),
+            PublicOrSecret::Secret(k) => k.to_armored_string(headers),
         }
     }
 
