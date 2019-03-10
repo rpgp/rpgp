@@ -22,6 +22,8 @@ where
             let hash_size = hash_alg.digest_size();
             let num_contexts = (key_size + hash_size - 1) / hash_size;
             let pw = password();
+            ensure!(!pw.is_empty(), "missing password");
+
             info!("{} {} {} {}", key_size, hash_size, num_contexts, pw);
             info!("{:?} {:?} {:?}", sym_alg, hash_alg, s2k);
 

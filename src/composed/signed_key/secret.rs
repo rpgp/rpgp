@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::io;
 
+use rand::{CryptoRng, Rng};
+
 use armor;
 use composed::key::{PublicKey, PublicSubkey};
 use composed::signed_key::{SignedKeyDetails, SignedPublicSubKey};
@@ -201,6 +203,10 @@ impl PublicKeyTrait for SignedSecretKey {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.primary_key.encrypt(rng, plain)
+    }
+
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.primary_key.to_writer_old(writer)
     }
@@ -310,6 +316,10 @@ impl SecretKeyTrait for SignedSecretSubKey {
 impl PublicKeyTrait for SignedSecretSubKey {
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
+    }
+
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.key.encrypt(rng, plain)
     }
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {

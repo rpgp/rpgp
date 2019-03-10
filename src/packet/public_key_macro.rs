@@ -381,6 +381,39 @@ macro_rules! impl_public_key {
                 }
             }
 
+            fn encrypt<R: rand::CryptoRng + rand::Rng>(
+                &self,
+                rng: &mut R,
+                plain: &[u8],
+            ) -> $crate::errors::Result<Vec<Vec<u8>>> {
+                use $crate::crypto::public_key::PublicParams;
+                use $crate::types::KeyTrait;
+
+                match self.public_params {
+                    PublicParams::RSA { ref n, ref e } => {
+                        $crate::crypto::rsa::encrypt_rsa(rng, n, e, plain)
+                    }
+                    PublicParams::EdDSA { .. } => unimplemented_err!("encryption with EdDSA"),
+                    PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
+                    PublicParams::ECDH {
+                        ref curve,
+                        hash,
+                        alg_sym,
+                        ref p,
+                    } => $crate::crypto::ecc::encrypt_ecdh(
+                        rng,
+                        curve,
+                        alg_sym,
+                        hash,
+                        &self.fingerprint(),
+                        p,
+                        plain,
+                    ),
+                    PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
+                    PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
+                }
+            }
+
             fn to_writer_old(
                 &self,
                 writer: &mut impl std::io::Write,

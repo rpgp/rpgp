@@ -48,6 +48,14 @@ impl CompressedData {
         })
     }
 
+    pub fn from_compressed(alg: CompressionAlgorithm, data: Vec<u8>) -> Self {
+        CompressedData {
+            packet_version: Default::default(),
+            compression_algorithm: alg,
+            compressed_data: data,
+        }
+    }
+
     pub fn decompress(&self) -> Result<Decompressor<&[u8]>> {
         match self.compression_algorithm {
             CompressionAlgorithm::Uncompressed => Ok(Decompressor::Uncompressed(Cursor::new(

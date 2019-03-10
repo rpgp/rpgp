@@ -1,7 +1,8 @@
 use num_bigint::traits::ModInverse;
+use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
-use rsa::{PublicKey, RSAPrivateKey};
+use rsa::{PublicKey, RSAPrivateKey, RSAPublicKey};
 
 use crypto::PublicParams;
 use errors::Result;
@@ -19,6 +20,21 @@ pub fn decrypt_rsa(
     info!("m: {}", hex::encode(&m));
 
     Ok(m)
+}
+
+pub fn encrypt_rsa<R: CryptoRng + Rng>(
+    rng: &mut R,
+    n: &BigUint,
+    e: &BigUint,
+    plaintext: &[u8],
+) -> Result<Vec<Vec<u8>>> {
+    info!("RSA encrypt");
+
+    // TODO: fix rsa to allow for references
+    let key = RSAPublicKey::new(n.clone(), e.clone())?;
+    let data = key.encrypt(rng, PaddingScheme::PKCS1v15, plaintext)?;
+
+    Ok(vec![data])
 }
 
 /// Generate an RSA KeyPair.
