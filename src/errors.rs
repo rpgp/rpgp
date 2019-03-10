@@ -59,6 +59,8 @@ pub enum Error {
     PacketIncomplete,
     #[fail(display = "Unpadding failed")]
     UnpadError,
+    #[fail(display = "Padding failed")]
+    PadError,
     #[fail(display = "Utf8 {:?}", _0)]
     Utf8Error(::std::str::Utf8Error),
     #[fail(display = "ParseInt {:?}", _0)]
@@ -94,10 +96,11 @@ impl Error {
             Error::PacketError(_) => 19,
             Error::PacketIncomplete => 20,
             Error::UnpadError => 21,
-            Error::Utf8Error(_) => 22,
-            Error::ParseIntError(_) => 23,
-            Error::InvalidPacketContent(_) => 24,
-            Error::Ed25519SignatureError(_) => 25,
+            Error::PadError => 22,
+            Error::Utf8Error(_) => 23,
+            Error::ParseIntError(_) => 24,
+            Error::InvalidPacketContent(_) => 25,
+            Error::Ed25519SignatureError(_) => 26,
         }
     }
 }
@@ -174,6 +177,11 @@ impl From<cfb_mode::stream_cipher::InvalidKeyNonceLength> for Error {
 impl From<block_padding::UnpadError> for Error {
     fn from(_: block_padding::UnpadError) -> Error {
         Error::UnpadError
+    }
+}
+impl From<block_padding::PadError> for Error {
+    fn from(_: block_padding::PadError) -> Error {
+        Error::PadError
     }
 }
 

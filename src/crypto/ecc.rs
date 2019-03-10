@@ -1,11 +1,9 @@
 use block_padding::{Padding, Pkcs7};
-use hex;
+use rand::{CryptoRng, Rng};
 
 use crypto::aes_kw;
-use crypto::hash::HashAlgorithm;
 use crypto::kdf::kdf;
-use crypto::public_key::PublicKeyAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
+use crypto::{ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
 use types::ECDHSecretKey;
 
@@ -30,7 +28,6 @@ pub fn build_ecdh_param(
         alg_sym as u8,
     ];
 
-    info!("kdf params: {}", hex::encode(&kdf_params));
     let oid_len = [oid.len() as u8];
 
     let values: Vec<&[u8]> = vec![
@@ -51,15 +48,11 @@ pub fn decrypt_ecdh(
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {
     info!("ECDH decrypt");
-    info!("oid {}", hex::encode(&priv_key.oid));
-    info!("cipher {}", priv_key.alg_sym as u8);
-    info!("hash: {}", priv_key.hash as u8);
-    info!("fingerprint: {}", hex::encode(fingerprint));
 
     let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
-    info!("ecdh kdf param: {}", hex::encode(&param));
 
     // 33 = 0x40 + 32bits
+    ensure_eq!(mpis.len(), 2);
     ensure_eq!(mpis[0].len(), 33, "invalid public point");
     ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
 
@@ -106,4 +99,94 @@ pub fn decrypt_ecdh(
     let decrypted_key = Pkcs7::unpad(&decrypted_key_padded)?;
 
     Ok(decrypted_key.to_vec())
+}
+
+pub fn encrypt_ecdh<R: CryptoRng + Rng>(
+    rng: &mut R,
+    curve: &ECCCurve,
+    alg_sym: SymmetricKeyAlgorithm,
+    hash: HashAlgorithm,
+    fingerprint: &[u8],
+    q: &[u8],
+    plain: &[u8],
+) -> Result<Vec<Vec<u8>>> {
+    info!("ECDH encrypt");
+
+    let param = build_ecdh_param(&curve.oid(), alg_sym, hash, fingerprint);
+
+    ensure_eq!(q.len(), 33, "invalid public key");
+
+    let their_public = {
+        // public part of the ephemeral key (removes 0x40 prefix)
+        let public_key = &q[1..];
+
+        // create montgomery point
+        let mut public_key_arr = [0u8; 32];
+        public_key_arr[..].copy_from_slice(public_key);
+
+        x25519_dalek::PublicKey::from(public_key_arr)
+    };
+
+    let our_secret = x25519_dalek::StaticSecret::new(rng);
+
+    // derive shared secret
+    let shared_secret = our_secret.diffie_hellman(&their_public);
+
+    // Perform key derivation
+    let z = kdf(hash, shared_secret.as_bytes(), alg_sym.key_size(), &param)?;
+
+    // PKCS5 padding (PKCS5 is PKCS7 with a blocksize of 8)
+    let len = plain.len();
+    let mut plain_padded = plain.to_vec();
+    plain_padded.resize(len + 8, 0);
+    let plain_padded_ref = Pkcs7::pad(&mut plain_padded, len, 8)?;
+
+    // Peform AES Key Wrap
+    let encrypted_key = aes_kw::wrap(&z, plain_padded_ref)?;
+
+    // Encode public point: prefix with 0x40
+    let mut encoded_public = Vec::with_capacity(33);
+    encoded_public.push(0x40);
+    encoded_public.extend(x25519_dalek::PublicKey::from(&our_secret).as_bytes().iter());
+
+    Ok(vec![encoded_public, encrypted_key])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rand::{RngCore, SeedableRng};
+    use rand_chacha::ChaChaRng;
+
+    use crypto::{ecdh, PublicParams};
+    use types::SecretKeyRepr;
+
+    #[test]
+    fn test_encrypt_decrypt() {
+        let mut rng = ChaChaRng::from_seed([0u8; 32]);
+
+        let (pkey, skey) = ecdh::generate_key(&mut rng);
+        let mut fingerprint = vec![0u8; 20];
+        rng.fill_bytes(&mut fingerprint);
+
+        let plain = b"hello world";
+
+        let mpis = match pkey {
+            PublicParams::ECDH {
+                ref curve,
+                ref p,
+                hash,
+                alg_sym,
+            } => encrypt_ecdh(&mut rng, curve, alg_sym, hash, &fingerprint, p, &plain[..]).unwrap(),
+            _ => panic!("invalid key generated"),
+        };
+
+        let decrypted = match skey.as_repr(&pkey).unwrap() {
+            SecretKeyRepr::ECDH(ref skey) => decrypt_ecdh(skey, &mpis, &fingerprint).unwrap(),
+            _ => panic!("invalid key generated"),
+        };
+
+        assert_eq!(&plain[..], &decrypted[..]);
+    }
 }

@@ -2,12 +2,16 @@ use std::boxed::Box;
 use std::collections::BTreeMap;
 use std::io;
 
+use flate2::write::{DeflateEncoder, ZlibEncoder};
+use flate2::Compression;
+use rand::{CryptoRng, Rng};
 use try_from::TryFrom;
 
 use armor;
 use composed::message::decrypt::*;
 use composed::shared::Deserializable;
 use composed::signed_key::SignedSecretKey;
+use crypto::SymmetricKeyAlgorithm;
 use errors::{Error, Result};
 use packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
@@ -15,7 +19,7 @@ use packet::{
     SymKeyEncryptedSessionKey,
 };
 use ser::Serialize;
-use types::{KeyId, KeyTrait, PublicKeyTrait, Tag};
+use types::{CompressionAlgorithm, KeyId, KeyTrait, PublicKeyTrait, Tag};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
@@ -203,6 +207,82 @@ impl Serialize for Message {
 }
 
 impl Message {
+    pub fn new_literal(file_name: &str, data: &str) -> Self {
+        Message::Literal(LiteralData::from_str(file_name, data))
+    }
+
+    pub fn compress(self, alg: CompressionAlgorithm) -> Result<Self> {
+        let data = match alg {
+            CompressionAlgorithm::Uncompressed => {
+                let mut data = Vec::new();
+                self.to_writer(&mut data)?;
+                data
+            }
+            CompressionAlgorithm::ZIP => {
+                let mut enc = DeflateEncoder::new(Vec::new(), Compression::default());
+                self.to_writer(&mut enc)?;
+                enc.finish()?
+            }
+            CompressionAlgorithm::ZLIB => {
+                let mut enc = ZlibEncoder::new(Vec::new(), Compression::default());
+                self.to_writer(&mut enc)?;
+                enc.finish()?
+            }
+            CompressionAlgorithm::BZip2 => unimplemented_err!("BZip2"),
+            CompressionAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+        };
+
+        Ok(Message::Compressed(CompressedData::from_compressed(
+            alg, data,
+        )))
+    }
+
+    pub fn decompress(self) -> Result<Self> {
+        match self {
+            Message::Compressed(data) => Message::from_bytes(data.decompress()?),
+            _ => Ok(self),
+        }
+    }
+
+    /// Encrypt the message to the list of passed in public keys.
+    pub fn encrypt_to_keys<R: CryptoRng + Rng>(
+        &self,
+        rng: &mut R,
+        alg: SymmetricKeyAlgorithm,
+        pkeys: &[&impl PublicKeyTrait],
+    ) -> Result<Self> {
+        // 1. Generate a session key.
+        let mut session_key = vec![0u8; alg.key_size()];
+        rng.fill_bytes(&mut session_key);
+
+        // 2. Encrypt (pub) the session key, to each PublicKey.
+        let esk = pkeys
+            .iter()
+            .map(|pkey| {
+                let pkes =
+                    PublicKeyEncryptedSessionKey::from_session_key(rng, &session_key, alg, pkey)?;
+                Ok(Esk::PublicKeyEncryptedSessionKey(pkes))
+            })
+            .collect::<Result<_>>()?;
+
+        // 3. Encrypt (sym) the data using the session key.
+        let data = self.to_bytes()?;
+
+        let edata = vec![Edata::SymEncryptedProtectedData(
+            SymEncryptedProtectedData::from_plain(alg, &session_key, &data)?,
+        )];
+
+        Ok(Message::Encrypted { esk, edata })
+    }
+
+    /// Encrytp the message using the given password.
+    pub fn encrypt_with_password<F>(&self, msg_pw: F) -> Result<Self>
+    where
+        F: FnOnce() -> String + Clone,
+    {
+        unimplemented!()
+    }
+
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
         match self {
             Message::Signed {
@@ -256,6 +336,8 @@ impl Message {
                 None => bail!("not encrypted"),
             },
             Message::Encrypted { esk, edata, .. } => {
+                // TODO: handle password protected messages.
+
                 let valid_keys = keys
                     .iter()
                     .filter_map(|key| {
@@ -329,11 +411,13 @@ impl Message {
                     .filter(|res| match res {
                         Ok(_) => true,
                         Err(err) => {
-                            warn!("failed to decrpty session_key for key: {:?}", err);
+                            warn!("failed to decrypt session_key for key: {:?}", err);
                             false
                         }
                     })
                     .collect::<Result<Vec<_>>>()?;
+
+                ensure!(!session_keys.is_empty(), "failed to decrypt session key");
 
                 // make sure all the keys are the same, otherwise we are in a bad place
                 let (session_key, alg) = {
@@ -431,12 +515,15 @@ impl Message {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::thread_rng;
     use serde_json;
+    use std::fs;
     use std::fs::File;
     use std::io::{Cursor, Read};
 
-    use composed::signed_key::{SignedPublicKey, SignedSecretKey};
-    use composed::Deserializable;
+    use composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
+    use crypto::SymmetricKeyAlgorithm;
+    use types::{CompressionAlgorithm, SecretKeyTrait};
 
     #[derive(Serialize, Deserialize, Debug)]
     #[serde(rename_all = "camelCase")]
@@ -772,5 +859,108 @@ Autocrypt-Gossip: addr=holger@merlinux.eu; keydata=
 test1
 "
         );
+    }
+
+    #[test]
+    fn test_compression_zlib() {
+        let lit_msg = Message::new_literal("hello-zlib.txt", "hello world");
+
+        let compressed_msg = lit_msg
+            .clone()
+            .compress(CompressionAlgorithm::ZLIB)
+            .unwrap();
+        let uncompressed_msg = compressed_msg.decompress().unwrap();
+
+        assert_eq!(&lit_msg, &uncompressed_msg);
+    }
+
+    #[test]
+    fn test_compression_zip() {
+        let lit_msg = Message::new_literal("hello-zip.txt", "hello world");
+
+        let compressed_msg = lit_msg.clone().compress(CompressionAlgorithm::ZIP).unwrap();
+        let uncompressed_msg = compressed_msg.decompress().unwrap();
+
+        assert_eq!(&lit_msg, &uncompressed_msg);
+    }
+
+    #[test]
+    fn test_compression_uncompressed() {
+        let lit_msg = Message::new_literal("hello.txt", "hello world");
+
+        let compressed_msg = lit_msg
+            .clone()
+            .compress(CompressionAlgorithm::Uncompressed)
+            .unwrap();
+        let uncompressed_msg = compressed_msg.decompress().unwrap();
+
+        assert_eq!(&lit_msg, &uncompressed_msg);
+    }
+
+    #[test]
+    fn test_rsa_encryption() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+        let mut rng = thread_rng();
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        let encrypted = compressed_msg
+            .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+            .unwrap();
+
+        let armored = encrypted.to_armored_bytes(None).unwrap();
+        fs::write("./message-rsa.asc", &armored).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+
+        let decrypted = parsed
+            .decrypt(|| "".into(), || "test".into(), &[&skey])
+            .unwrap()
+            .0
+            .next()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(compressed_msg, decrypted);
+    }
+
+    #[test]
+    fn test_x25519_encryption() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+        let mut rng = thread_rng();
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        let encrypted = compressed_msg
+            .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+            .unwrap();
+
+        let armored = encrypted.to_armored_bytes(None).unwrap();
+        fs::write("./message-x25519.asc", &armored).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+
+        let decrypted = parsed
+            .decrypt(|| "".into(), || "".into(), &[&skey])
+            .unwrap()
+            .0
+            .next()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(compressed_msg, decrypted);
     }
 }

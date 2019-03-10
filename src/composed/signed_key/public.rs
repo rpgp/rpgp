@@ -1,10 +1,13 @@
 use std::collections::BTreeMap;
 use std::io;
 
+use rand::{CryptoRng, Rng};
+
 use armor;
 use composed::key::{PublicKey, PublicSubkey};
 use composed::signed_key::SignedKeyDetails;
 use crypto::public_key::PublicKeyAlgorithm;
+use crypto::HashAlgorithm;
 use errors::Result;
 use packet::{self, write_packet, SignatureType};
 use ser::Serialize;
@@ -117,6 +120,20 @@ impl KeyTrait for SignedPublicKey {
     }
 }
 
+impl PublicKeyTrait for SignedPublicKey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+        self.primary_key.verify_signature(hash, data, sig)
+    }
+
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.primary_key.encrypt(rng, plain)
+    }
+
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.primary_key.to_writer_old(writer)
+    }
+}
+
 impl Serialize for SignedPublicKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         write_packet(writer, &self.primary_key)?;
@@ -190,6 +207,20 @@ impl KeyTrait for SignedPublicSubKey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
+    }
+}
+
+impl PublicKeyTrait for SignedPublicSubKey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+        self.key.verify_signature(hash, data, sig)
+    }
+
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.key.encrypt(rng, plain)
+    }
+
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.key.to_writer_old(writer)
     }
 }
 

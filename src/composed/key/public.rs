@@ -1,10 +1,13 @@
+use std::io;
+
 use chrono::{self, SubsecRound};
+use rand::{CryptoRng, Rng};
 
 use composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
-use crypto::PublicKeyAlgorithm;
+use crypto::{HashAlgorithm, PublicKeyAlgorithm};
 use errors::Result;
 use packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
-use types::{KeyId, KeyTrait, SecretKeyTrait};
+use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -67,6 +70,20 @@ impl KeyTrait for PublicKey {
     }
 }
 
+impl PublicKeyTrait for PublicKey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+        self.primary_key.verify_signature(hash, data, sig)
+    }
+
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.primary_key.encrypt(rng, plain)
+    }
+
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.primary_key.to_writer_old(writer)
+    }
+}
+
 impl PublicSubkey {
     pub fn new(key: packet::PublicSubkey, keyflags: KeyFlags) -> Self {
         PublicSubkey { key, keyflags }
@@ -109,5 +126,19 @@ impl KeyTrait for PublicSubkey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
+    }
+}
+
+impl PublicKeyTrait for PublicSubkey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+        self.key.verify_signature(hash, data, sig)
+    }
+
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+        self.key.encrypt(rng, plain)
+    }
+
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.key.to_writer_old(writer)
     }
 }

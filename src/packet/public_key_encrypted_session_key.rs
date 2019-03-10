@@ -2,12 +2,13 @@ use std::{fmt, io};
 
 use nom::be_u8;
 use num_traits::FromPrimitive;
+use rand::{CryptoRng, Rng};
 
-use crypto::public_key::PublicKeyAlgorithm;
+use crypto::{checksum, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
 use packet::PacketTrait;
 use ser::Serialize;
-use types::{KeyId, Tag, Version};
+use types::{KeyId, PublicKeyTrait, Tag, Version};
 use util::{mpi, write_mpi};
 
 /// Public Key Encrypted Session Key Packet
@@ -29,6 +30,32 @@ impl PublicKeyEncryptedSessionKey {
         ensure_eq!(pk.version, 3, "invalid version");
 
         Ok(pk)
+    }
+
+    /// Encryptes the given session key to the passed in public key.
+    pub fn from_session_key<R: CryptoRng + Rng>(
+        rng: &mut R,
+        session_key: &[u8],
+        alg: SymmetricKeyAlgorithm,
+        pkey: &impl PublicKeyTrait,
+    ) -> Result<Self> {
+        // the session key is prefixed with symmetric key algorithm
+        let mut data = Vec::with_capacity(session_key.len() + 3);
+        data.push(alg as u8);
+        data.extend(session_key);
+
+        // and appended a checksum
+        data.extend(&checksum::calculate_simple(session_key));
+
+        let mpis = pkey.encrypt(rng, &data)?;
+
+        Ok(PublicKeyEncryptedSessionKey {
+            packet_version: Default::default(),
+            version: 3,
+            id: pkey.key_id(),
+            algorithm: pkey.algorithm(),
+            mpis,
+        })
     }
 
     pub fn id(&self) -> &KeyId {

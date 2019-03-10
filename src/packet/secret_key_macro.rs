@@ -430,6 +430,14 @@ macro_rules! impl_secret_key {
                 self.details.verify_signature(hash, hashed, sig)
             }
 
+            fn encrypt<R: rand::Rng + rand::CryptoRng>(
+                &self,
+                rng: &mut R,
+                plain: &[u8],
+            ) -> $crate::errors::Result<Vec<Vec<u8>>> {
+                self.details.encrypt(rng, plain)
+            }
+
             fn to_writer_old(
                 &self,
                 writer: &mut impl std::io::Write,

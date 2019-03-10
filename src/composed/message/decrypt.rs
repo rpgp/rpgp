@@ -20,9 +20,10 @@ pub fn decrypt_session_key<F>(
 where
     F: FnOnce() -> String,
 {
+    info!("decrypting session key");
+
     let mut key: Vec<u8> = Vec::new();
     let mut alg: Option<SymmetricKeyAlgorithm> = None;
-
     locked_key.unlock(key_pw, |priv_key| {
         let decrypted_key = match *priv_key {
             SecretKeyRepr::RSA(ref priv_key) => {

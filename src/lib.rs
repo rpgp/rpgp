@@ -63,6 +63,8 @@ extern crate derive_builder;
 extern crate bitfield;
 
 #[cfg(test)]
+extern crate rand_chacha;
+#[cfg(test)]
 extern crate rand_xorshift;
 #[cfg(test)]
 extern crate regex;

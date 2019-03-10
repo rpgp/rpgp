@@ -1,5 +1,6 @@
 use std::{fmt, io};
 
+use crypto::SymmetricKeyAlgorithm;
 use errors::Result;
 use packet::PacketTrait;
 use ser::Serialize;
@@ -22,6 +23,16 @@ impl SymEncryptedProtectedData {
         Ok(SymEncryptedProtectedData {
             data: input[1..].to_vec(),
             packet_version,
+        })
+    }
+
+    /// Encrypts the data using the given symmetric key.
+    pub fn from_plain(alg: SymmetricKeyAlgorithm, key: &[u8], plaintext: &[u8]) -> Result<Self> {
+        let data = alg.encrypt_protected(key, plaintext)?;
+
+        Ok(SymEncryptedProtectedData {
+            packet_version: Default::default(),
+            data,
         })
     }
 
