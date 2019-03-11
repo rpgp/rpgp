@@ -19,7 +19,7 @@ use packet::{
     SymKeyEncryptedSessionKey,
 };
 use ser::Serialize;
-use types::{CompressionAlgorithm, KeyId, KeyTrait, PublicKeyTrait, Tag};
+use types::{CompressionAlgorithm, KeyId, KeyTrait, PublicKeyTrait, StringToKey, Tag};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
@@ -66,20 +66,6 @@ impl_try_from_into!(
 );
 
 impl Esk {
-    pub fn id(&self) -> &KeyId {
-        match self {
-            Esk::PublicKeyEncryptedSessionKey(k) => k.id(),
-            Esk::SymKeyEncryptedSessionKey(k) => k.id(),
-        }
-    }
-
-    pub fn mpis(&self) -> &[Vec<u8>] {
-        match self {
-            Esk::PublicKeyEncryptedSessionKey(k) => k.mpis(),
-            Esk::SymKeyEncryptedSessionKey(k) => k.mpis(),
-        }
-    }
-
     pub fn tag(&self) -> Tag {
         match self {
             Esk::PublicKeyEncryptedSessionKey(_) => Tag::PublicKeyEncryptedSessionKey,
@@ -251,6 +237,8 @@ impl Message {
         alg: SymmetricKeyAlgorithm,
         pkeys: &[&impl PublicKeyTrait],
     ) -> Result<Self> {
+        // TODO: Investigate exact usage of various integrity packets and add them.
+
         // 1. Generate a session key.
         let mut session_key = vec![0u8; alg.key_size()];
         rng.fill_bytes(&mut session_key);
@@ -276,11 +264,44 @@ impl Message {
     }
 
     /// Encrytp the message using the given password.
-    pub fn encrypt_with_password<F>(&self, msg_pw: F) -> Result<Self>
+    pub fn encrypt_with_password<R, F>(
+        &self,
+        rng: &mut R,
+        s2k: StringToKey,
+        alg: SymmetricKeyAlgorithm,
+        msg_pw: F,
+    ) -> Result<Self>
     where
+        R: Rng + CryptoRng,
         F: FnOnce() -> String + Clone,
     {
-        unimplemented!()
+        // TODO: Investigate exact usage of various integrity packets and add them.
+
+        // 1. Generate a session key.
+        let mut session_key = vec![0u8; alg.key_size()];
+        rng.fill_bytes(&mut session_key);
+
+        // 2. Encrypt (sym) the session key using the provided password.
+        // TODO: handle version 5
+        let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::from_session_key(
+            rng,
+            msg_pw,
+            &session_key,
+            s2k,
+            alg,
+        )?);
+
+        // 3. Encrypt (sym) the data using the session key.
+        let data = self.to_bytes()?;
+
+        let edata = vec![Edata::SymEncryptedProtectedData(
+            SymEncryptedProtectedData::from_plain(alg, &session_key, &data)?,
+        )];
+
+        Ok(Message::Encrypted {
+            esk: vec![skesk],
+            edata,
+        })
     }
 
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
@@ -310,16 +331,22 @@ impl Message {
     /// Returns a list of [KeyId]s that the message is encrypted to. For non encrypted messages this list is empty.
     pub fn get_recipients(&self) -> Vec<&KeyId> {
         match self {
-            Message::Encrypted { esk, .. } => esk.iter().map(Esk::id).collect(),
+            Message::Encrypted { esk, .. } => esk
+                .iter()
+                .filter_map(|e| match e {
+                    Esk::PublicKeyEncryptedSessionKey(k) => Some(k.id()),
+                    _ => None,
+                })
+                .collect(),
             _ => Vec::new(),
         }
     }
 
-    /// Decrypt the message using the given password and key.
+    /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt<'a, F, G>(
         &'a self,
-        msg_pw: F,
+        msg_pw: F, // TODO: remove
         key_pw: G,
         keys: &[&SignedSecretKey],
     ) -> Result<(MessageDecrypter<'a>, Vec<KeyId>)>
@@ -336,8 +363,6 @@ impl Message {
                 None => bail!("not encrypted"),
             },
             Message::Encrypted { esk, edata, .. } => {
-                // TODO: handle password protected messages.
-
                 let valid_keys = keys
                     .iter()
                     .filter_map(|key| {
@@ -346,7 +371,10 @@ impl Message {
                         let mut encoding_key = None;
                         let mut encoding_subkey = None;
 
-                        for esk_packet in esk {
+                        for esk_packet in esk.iter().filter_map(|k| match k {
+                            Esk::PublicKeyEncryptedSessionKey(k) => Some(k),
+                            _ => None,
+                        }) {
                             info!("esk packet: {:?}", esk_packet);
                             info!("{:?}", key.key_id());
                             info!(
@@ -437,6 +465,37 @@ impl Message {
         }
     }
 
+    /// Decrypt the message using the given key.
+    /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
+    pub fn decrypt_with_password<'a, F>(&'a self, msg_pw: F) -> Result<MessageDecrypter<'a>>
+    where
+        F: FnOnce() -> String + Clone,
+    {
+        match self {
+            Message::Compressed { .. } | Message::Literal { .. } => {
+                bail!("not encrypted");
+            }
+            Message::Signed { message, .. } => match message {
+                Some(ref message) => message.decrypt_with_password(msg_pw),
+                None => bail!("not encrypted"),
+            },
+            Message::Encrypted { esk, edata, .. } => {
+                // TODO: handle multiple passwords
+                let skesk = esk.iter().find_map(|esk| match esk {
+                    Esk::SymKeyEncryptedSessionKey(k) => Some(k),
+                    _ => None,
+                });
+
+                ensure!(skesk.is_some(), "message is not password protected");
+
+                let (session_key, alg) =
+                    decrypt_session_key_with_password(&skesk.expect("checked above"), msg_pw)?;
+
+                Ok(MessageDecrypter::new(session_key, alg, edata))
+            }
+        }
+    }
+
     /// Check if this message is a signature, that was signed with a one pass signature.
     pub fn is_one_pass_signed(&self) -> bool {
         match self {
@@ -522,7 +581,7 @@ mod tests {
     use std::io::{Cursor, Read};
 
     use composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
-    use crypto::SymmetricKeyAlgorithm;
+    use crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
     use types::{CompressionAlgorithm, SecretKeyTrait};
 
     #[derive(Serialize, Deserialize, Debug)]
@@ -957,6 +1016,39 @@ test1
             .decrypt(|| "".into(), || "".into(), &[&skey])
             .unwrap()
             .0
+            .next()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(compressed_msg, decrypted);
+    }
+
+    #[test]
+    fn test_password_encryption() {
+        use pretty_env_logger;
+        let _ = pretty_env_logger::try_init();
+
+        let mut rng = thread_rng();
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+
+        let s2k = StringToKey::new_default(&mut rng);
+
+        let encrypted = compressed_msg
+            .encrypt_with_password(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
+                "secret".into()
+            })
+            .unwrap();
+
+        let armored = encrypted.to_armored_bytes(None).unwrap();
+        fs::write("./message-password.asc", &armored).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+
+        let decrypted = parsed
+            .decrypt_with_password(|| "secret".into())
+            .unwrap()
             .next()
             .unwrap()
             .unwrap();

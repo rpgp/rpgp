@@ -10,6 +10,7 @@ use crypto::ecc::decrypt_ecdh;
 use crypto::rsa::decrypt_rsa;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
+use packet::SymKeyEncryptedSessionKey;
 use types::{KeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
 
 pub fn decrypt_session_key<F>(
@@ -65,6 +66,37 @@ where
     })?;
 
     Ok((key, alg.expect("failed to unlock")))
+}
+
+pub fn decrypt_session_key_with_password<F>(
+    packet: &SymKeyEncryptedSessionKey,
+    msg_pw: F,
+) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
+where
+    F: FnOnce() -> String,
+{
+    info!("decrypting session key");
+
+    let key = packet
+        .s2k()
+        .derive_key(&msg_pw(), packet.sym_algorithm().key_size())?;
+
+    match packet.encrypted_key() {
+        Some(ref encrypted_key) => {
+            let mut decrypted_key = encrypted_key.to_vec();
+            // packet.sym_algorithm().decrypt(&key, &mut decrypted_key)?;
+            let iv = vec![0u8; packet.sym_algorithm().block_size()];
+            packet
+                .sym_algorithm()
+                .decrypt_with_iv_regular(&key, &iv, &mut decrypted_key)?;
+
+            let alg = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
+                .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
+
+            Ok((decrypted_key[1..].to_vec(), alg))
+        }
+        None => Ok((key, packet.sym_algorithm())),
+    }
 }
 
 pub struct MessageDecrypter<'a> {
