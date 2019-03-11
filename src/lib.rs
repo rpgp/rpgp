@@ -68,11 +68,6 @@ extern crate rand_chacha;
 extern crate rand_xorshift;
 #[cfg(test)]
 extern crate regex;
-#[cfg(test)]
-extern crate serde_json;
-#[cfg(test)]
-#[macro_use]
-extern crate serde_derive;
 
 #[cfg(test)]
 extern crate glob;
