@@ -4,7 +4,7 @@ use cast5::Cast5;
 use cfb_mode::stream_cipher::{NewStreamCipher, StreamCipher};
 use cfb_mode::Cfb;
 use des::TdesEde3;
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, CryptoRng, Rng, RngCore};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
@@ -520,6 +520,13 @@ impl SymmetricKeyAlgorithm {
             }
         }
         Ok(())
+    }
+
+    /// Generate a new session key.
+    pub fn new_session_key<R: Rng + CryptoRng>(self, rng: &mut R) -> Vec<u8> {
+        let mut session_key = vec![0u8; self.key_size()];
+        rng.fill_bytes(&mut session_key);
+        session_key
     }
 }
 

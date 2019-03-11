@@ -2,7 +2,6 @@ use std::io;
 
 use nom::{be_u8, rest};
 use num_traits::FromPrimitive;
-use rand::{CryptoRng, Rng};
 
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
@@ -46,15 +45,13 @@ impl SymKeyEncryptedSessionKey {
         &self.encrypted_key
     }
 
-    pub fn from_session_key<R, F>(
-        rng: &mut R,
+    pub fn encrypt<F>(
         msg_pw: F,
         session_key: &[u8],
         s2k: StringToKey,
         alg: SymmetricKeyAlgorithm,
     ) -> Result<Self>
     where
-        R: CryptoRng + Rng,
         F: FnOnce() -> String + Clone,
     {
         ensure!(
