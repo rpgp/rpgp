@@ -1,5 +1,5 @@
 use aes::{Aes128, Aes192, Aes256};
-// use blowfish::Blowfish;
+use blowfish::Blowfish;
 use cast5::Cast5;
 use cfb_mode::stream_cipher::{NewStreamCipher, StreamCipher};
 use cfb_mode::Cfb;
@@ -234,15 +234,15 @@ impl SymmetricKeyAlgorithm {
                     bs,
                     resync
                 ),
-                SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("needs fixing"), // decrypt!(
-                //     Blowfish,
-                //     key,
-                //     iv_vec,
-                //     encrypted_prefix,
-                //     encrypted_data,
-                //     bs,
-                //     resync
-                // ),
+                SymmetricKeyAlgorithm::Blowfish => decrypt!(
+                    Blowfish,
+                    key,
+                    iv_vec,
+                    encrypted_prefix,
+                    encrypted_data,
+                    bs,
+                    resync
+                ),
                 SymmetricKeyAlgorithm::AES128 => decrypt!(
                     Aes128,
                     key,
@@ -317,9 +317,9 @@ impl SymmetricKeyAlgorithm {
                 decrypt_regular!(TdesEde3, key, iv_vec, ciphertext, self.block_size());
             }
             SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, iv_vec, ciphertext, bs),
-            SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("needs fixing"), // {
-            //     decrypt_regular!(Blowfish, key, iv_vec, ciphertext, self.block_size())
-            // }
+            SymmetricKeyAlgorithm::Blowfish => {
+                decrypt_regular!(Blowfish, key, iv_vec, ciphertext, self.block_size())
+            }
             SymmetricKeyAlgorithm::AES128 => {
                 decrypt_regular!(Aes128, key, iv_vec, ciphertext, self.block_size())
             }
@@ -451,9 +451,9 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::CAST5 => {
                     encrypt!(Cast5, key, iv_vec, prefix, data, bs, resync)
                 }
-                SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("needs fixing"), // {
-                //     encrypt!(Blowfish, key, iv_vec, prefix, data, bs, resync)
-                // }
+                SymmetricKeyAlgorithm::Blowfish => {
+                    encrypt!(Blowfish, key, iv_vec, prefix, data, bs, resync)
+                }
                 SymmetricKeyAlgorithm::AES128 => {
                     encrypt!(Aes128, key, iv_vec, prefix, data, bs, resync)
                 }
@@ -499,9 +499,9 @@ impl SymmetricKeyAlgorithm {
                 encrypt_regular!(TdesEde3, key, iv_vec, plaintext, bs);
             }
             SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::Blowfish => unimplemented_err!("needs fixing"), // {
-            //     encrypt_regular!(Blowfish, key, iv_vec, plaintext, bs)
-            // }
+            SymmetricKeyAlgorithm::Blowfish => {
+                encrypt_regular!(Blowfish, key, iv_vec, plaintext, bs)
+            }
             SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, iv_vec, plaintext, bs),
             SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, iv_vec, plaintext, bs),
@@ -577,7 +577,7 @@ mod tests {
     roundtrip!(roundtrip_aes192, SymmetricKeyAlgorithm::AES192);
     roundtrip!(roundtrip_aes256, SymmetricKeyAlgorithm::AES256);
     roundtrip!(roundtrip_tripledes, SymmetricKeyAlgorithm::TripleDES);
-    // roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
+    roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
     roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
     roundtrip!(roundtrip_cast5, SymmetricKeyAlgorithm::CAST5);
 }

@@ -179,15 +179,13 @@ msg_test!(msg_gnupg_v1_4_11_001, "gnupg-v1-4-11-001", true);
 msg_test!(msg_gnupg_v1_4_11_002, "gnupg-v1-4-11-002", false);
 msg_test!(msg_gnupg_v1_4_11_003, "gnupg-v1-4-11-003", true);
 msg_test!(msg_gnupg_v1_4_11_004, "gnupg-v1-4-11-004", true);
-// blowfish
-// msg_test!(msg_gnupg_v1_4_11_005, "gnupg-v1-4-11-005", true);
+msg_test!(msg_gnupg_v1_4_11_005, "gnupg-v1-4-11-005", true);
 msg_test!(msg_gnupg_v1_4_11_006, "gnupg-v1-4-11-006", false);
 msg_test!(msg_gnupg_v2_0_17_001, "gnupg-v2-0-17-001", true);
 msg_test!(msg_gnupg_v2_0_17_002, "gnupg-v2-0-17-002", false);
 msg_test!(msg_gnupg_v2_0_17_003, "gnupg-v2-0-17-003", true);
 msg_test!(msg_gnupg_v2_0_17_004, "gnupg-v2-0-17-004", true);
-// blowfish
-// msg_test!(msg_gnupg_v2_0_17_005, "gnupg-v2-0-17-005", true);
+msg_test!(msg_gnupg_v2_0_17_005, "gnupg-v2-0-17-005", true);
 msg_test!(msg_gnupg_v2_0_17_006, "gnupg-v2-0-17-006", true);
 // parsing error
 // ECDH key - nist p256
@@ -205,8 +203,7 @@ msg_test!(msg_gnupg_v2_10_002, "gnupg-v2-10-002", true);
 msg_test!(msg_gnupg_v2_10_003, "gnupg-v2-10-003", true);
 msg_test!(msg_gnupg_v2_10_004, "gnupg-v2-10-004", false);
 msg_test!(msg_gnupg_v2_10_005, "gnupg-v2-10-005", true);
-// blowfish
-// msg_test!(msg_gnupg_v2_10_006, "gnupg-v2-10-006", true);
+msg_test!(msg_gnupg_v2_10_006, "gnupg-v2-10-006", true);
 msg_test!(msg_gnupg_v2_10_007, "gnupg-v2-10-007", true);
 
 // ECDH
