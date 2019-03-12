@@ -31,7 +31,7 @@ twofish = "^0.2"
 des = "^0.3"
 block-modes = "^0.3"
 hex = "^0.3"
-cfb-mode = "^0.3"
+cfb-mode = "^0.3.2"
 flate2 = { version = "^1.0", default-features = false, features = ["rust_backend"] }
 num-derive = "0.2.3"
 num-traits = "0.2.6"
