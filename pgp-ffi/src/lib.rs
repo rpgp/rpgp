@@ -12,6 +12,7 @@ mod macros;
 
 mod cvec;
 mod errors;
+mod hash;
 mod key;
 mod message;
 mod public_key;
@@ -19,6 +20,7 @@ mod secret_key;
 
 pub use cvec::*;
 pub use errors::*;
+pub use hash::*;
 pub use key::*;
 pub use message::*;
 pub use public_key::*;
