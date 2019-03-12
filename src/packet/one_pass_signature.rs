@@ -21,7 +21,7 @@ pub struct OnePassSignature {
     hash_algorithm: HashAlgorithm,
     pub_algorithm: PublicKeyAlgorithm,
     key_id: KeyId,
-    is_nested: bool,
+    is_nested: u8,
 }
 
 impl OnePassSignature {
@@ -30,6 +30,23 @@ impl OnePassSignature {
         let (_, pk) = parse(input, packet_version)?;
 
         Ok(pk)
+    }
+
+    pub fn from_details(
+        typ: SignatureType,
+        hash_algorithm: HashAlgorithm,
+        pub_algorithm: PublicKeyAlgorithm,
+        key_id: KeyId,
+    ) -> Self {
+        OnePassSignature {
+            packet_version: Default::default(),
+            version: 0x03,
+            typ,
+            hash_algorithm,
+            pub_algorithm,
+            key_id,
+            is_nested: 0,
+        }
     }
 
     pub fn packet_version(&self) -> Version {
@@ -44,7 +61,7 @@ named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
     >>      hash: map_opt!(be_u8, HashAlgorithm::from_u8)
     >>   pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>    key_id: map_res!(take!(8), KeyId::from_slice)
-    >> is_nested: map!(be_u8, |v| v > 0)
+    >> is_nested: be_u8
     >> (OnePassSignature {
         packet_version,
         version,
@@ -65,7 +82,7 @@ impl Serialize for OnePassSignature {
             self.pub_algorithm as u8,
         ])?;
         writer.write_all(self.key_id.as_ref())?;
-        writer.write_all(&[self.is_nested as u8])?;
+        writer.write_all(&[self.is_nested])?;
 
         Ok(())
     }

@@ -103,7 +103,8 @@ impl Subpacket {
                 let val = if *is_exportable { 1 } else { 0 };
                 writer.write_all(&[val])?;
             }
-            Subpacket::IssuerFingerprint(fp) => {
+            Subpacket::IssuerFingerprint(version, fp) => {
+                writer.write_all(&[*version as u8])?;
                 writer.write_all(fp)?;
             }
             Subpacket::PreferredAeadAlgorithms(algs) => {
@@ -156,7 +157,7 @@ impl Subpacket {
             Subpacket::TrustSignature(_, _) => 2,
             Subpacket::RegularExpression(regexp) => regexp.as_bytes().len(),
             Subpacket::ExportableCertification(_) => 1,
-            Subpacket::IssuerFingerprint(fp) => fp.len(),
+            Subpacket::IssuerFingerprint(_, fp) => 1 + fp.len(),
             Subpacket::PreferredAeadAlgorithms(algs) => algs.len(),
             Subpacket::Experimental(_, body) => body.len(),
             Subpacket::Other(_, body) => body.len(),
@@ -194,7 +195,7 @@ impl Subpacket {
             Subpacket::TrustSignature(_, _) => SubpacketType::TrustSignature,
             Subpacket::RegularExpression(_) => SubpacketType::RegularExpression,
             Subpacket::ExportableCertification(_) => SubpacketType::ExportableCertification,
-            Subpacket::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
+            Subpacket::IssuerFingerprint(_, _) => SubpacketType::IssuerFingerprint,
             Subpacket::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
             Subpacket::Experimental(n, _) => SubpacketType::Experimental(*n),
             Subpacket::Other(n, _) => SubpacketType::Other(*n),

@@ -2,6 +2,7 @@ use std::boxed::Box;
 use std::collections::BTreeMap;
 use std::io;
 
+use chrono::{self, SubsecRound};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use rand::{CryptoRng, Rng};
@@ -11,15 +12,18 @@ use armor;
 use composed::message::decrypt::*;
 use composed::shared::Deserializable;
 use composed::signed_key::SignedSecretKey;
-use crypto::SymmetricKeyAlgorithm;
+use crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
 use errors::{Error, Result};
 use packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
-    PublicKeyEncryptedSessionKey, Signature, SymEncryptedData, SymEncryptedProtectedData,
-    SymKeyEncryptedSessionKey,
+    PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType, Subpacket,
+    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use ser::Serialize;
-use types::{CompressionAlgorithm, KeyId, KeyTrait, PublicKeyTrait, StringToKey, Tag};
+use types::{
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, PublicKeyTrait, SecretKeyTrait, StringToKey,
+    Tag,
+};
 
 /// A PGP message
 /// https://tools.ietf.org/html/rfc4880.html#section-11.3
@@ -197,7 +201,12 @@ impl Message {
         Message::Literal(LiteralData::from_str(file_name, data))
     }
 
-    pub fn compress(self, alg: CompressionAlgorithm) -> Result<Self> {
+    pub fn new_literal_bytes(file_name: &str, data: &[u8]) -> Self {
+        Message::Literal(LiteralData::from_bytes(file_name, data))
+    }
+
+    /// Compresses the message.
+    pub fn compress(&self, alg: CompressionAlgorithm) -> Result<Self> {
         let data = match alg {
             CompressionAlgorithm::Uncompressed => {
                 let mut data = Vec::new();
@@ -223,6 +232,7 @@ impl Message {
         )))
     }
 
+    /// Decompresses the data if compressed.
     pub fn decompress(self) -> Result<Self> {
         match self {
             Message::Compressed(data) => Message::from_bytes(data.decompress()?),
@@ -297,6 +307,64 @@ impl Message {
         Ok(Message::Encrypted { esk, edata })
     }
 
+    /// Sign this message using the provided key.
+    pub fn sign<F>(
+        self,
+        key: &impl SecretKeyTrait,
+        key_pw: F,
+        hash_algorithm: HashAlgorithm,
+    ) -> Result<Self>
+    where
+        F: FnOnce() -> String,
+    {
+        let key_id = key.key_id();
+        let algorithm = key.algorithm();
+        let hashed_subpackets = vec![
+            Subpacket::IssuerFingerprint(KeyVersion::V4, key.fingerprint()),
+            Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
+        ];
+        let unhashed_subpackets = vec![Subpacket::Issuer(key_id.clone())];
+
+        let (typ, signature) = match self {
+            Message::Literal(ref l) => {
+                let typ = if l.is_binary() {
+                    SignatureType::Binary
+                } else {
+                    SignatureType::Text
+                };
+
+                let signature_config = SignatureConfig::new_v4(
+                    Default::default(),
+                    typ,
+                    algorithm,
+                    hash_algorithm,
+                    hashed_subpackets,
+                    unhashed_subpackets,
+                );
+                (typ, signature_config.sign(key, key_pw, l.data())?)
+            }
+            _ => {
+                let typ = SignatureType::Binary;
+                let signature_config = SignatureConfig::new_v4(
+                    Default::default(),
+                    typ,
+                    algorithm,
+                    hash_algorithm,
+                    hashed_subpackets,
+                    unhashed_subpackets,
+                );
+                (typ, signature_config.sign(key, key_pw, &self.to_bytes()?)?)
+            }
+        };
+        let ops = OnePassSignature::from_details(typ, hash_algorithm, algorithm, key_id);
+
+        Ok(Message::Signed {
+            message: Some(Box::new(self)),
+            one_pass_signature: Some(ops),
+            signature,
+        })
+    }
+
     /// Verify this message.
     /// For signed messages this verifies the signature and for compressed messages
     /// they are decompressed and checked for signatures to verify.
@@ -308,7 +376,7 @@ impl Message {
                 if let Some(message) = message {
                     match **message {
                         Message::Literal(ref data) => signature.verify(key, data.data()),
-                        _ => unimplemented_err!("verify for {:?}", *message),
+                        _ => signature.verify(key, &message.to_bytes()?),
                     }
                 } else {
                     unimplemented_err!("no message, what to do?");
@@ -712,5 +780,148 @@ mod tests {
             .unwrap();
 
         assert_eq!(compressed_msg, decrypted);
+    }
+
+    #[test]
+    fn test_x25519_signing_string() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        let pkey = skey.public_key();
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let signed_msg = lit_msg
+            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .unwrap();
+
+        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
+
+        signed_msg.verify(&pkey).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        parsed.verify(&pkey).unwrap();
+    }
+
+    #[test]
+    fn test_x25519_signing_bytes() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        let pkey = skey.public_key();
+
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let signed_msg = lit_msg
+            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .unwrap();
+
+        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
+
+        signed_msg.verify(&pkey).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        parsed.verify(&pkey).unwrap();
+    }
+
+    #[test]
+    fn test_x25519_signing_bytes_compressed() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        let pkey = skey.public_key();
+
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let signed_msg = lit_msg
+            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .unwrap();
+        let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+
+        let armored = compressed_msg.to_armored_bytes(None).unwrap();
+        fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
+
+        signed_msg.verify(&pkey).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        parsed.verify(&pkey).unwrap();
+    }
+
+    #[test]
+    fn test_rsa_signing_string() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let pkey = skey.public_key();
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let signed_msg = lit_msg
+            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .unwrap();
+
+        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
+
+        signed_msg.verify(&pkey).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        parsed.verify(&pkey).unwrap();
+    }
+
+    #[test]
+    fn test_rsa_signing_bytes() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let pkey = skey.public_key();
+
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let signed_msg = lit_msg
+            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .unwrap();
+
+        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        fs::write("./message-bytes-signed-rsa.asc", &armored).unwrap();
+
+        signed_msg.verify(&pkey).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        parsed.verify(&pkey).unwrap();
+    }
+
+    #[test]
+    fn test_rsa_signing_bytes_compressed() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let pkey = skey.public_key();
+
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let signed_msg = lit_msg
+            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .unwrap();
+
+        let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        let armored = compressed_msg.to_armored_bytes(None).unwrap();
+        fs::write("./message-bytes-compressed-signed-rsa.asc", &armored).unwrap();
+
+        signed_msg.verify(&pkey).unwrap();
+
+        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        parsed.verify(&pkey).unwrap();
     }
 }

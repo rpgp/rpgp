@@ -11,7 +11,7 @@ use crypto::sym::SymmetricKeyAlgorithm;
 use de::Deserialize;
 use errors::Result;
 use packet::signature::types::*;
-use types::{CompressionAlgorithm, KeyId, RevocationKey, RevocationKeyClass, Version};
+use types::{CompressionAlgorithm, KeyId, KeyVersion, RevocationKey, RevocationKeyClass, Version};
 use util::{clone_into_array, mpi, packet_length, read_string};
 
 impl Deserialize for Signature {
@@ -224,9 +224,11 @@ named!(embedded_sig<Subpacket>, map!(call!(parse, Version::New), |sig| {
 /// Parse an issuer subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
 #[rustfmt::skip]
-named!(issuer_fingerprint<Subpacket>,
-    map!(rest, |v| Subpacket::IssuerFingerprint(v.to_vec()))
-);
+named!(issuer_fingerprint<Subpacket>, do_parse!(
+           version: map_opt!(be_u8, KeyVersion::from_u8)
+    >> fingerprint: rest
+    >> (Subpacket::IssuerFingerprint(version, fingerprint.to_vec()))
+));
 
 /// Parse a preferred aead subpacket
 #[rustfmt::skip]

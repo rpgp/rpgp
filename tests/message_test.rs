@@ -349,3 +349,15 @@ test1
 "
     );
 }
+
+#[test]
+fn msg_literal_signature() {
+    let (pkey, _) = SignedPublicKey::from_armor_single(
+        File::open("./tests/autocrypt/alice@autocrypt.example.pub.asc").unwrap(),
+    )
+    .unwrap();
+    let mut msg_file = File::open("./tests/literal-text-signed.asc").unwrap();
+    let (msg, _) = Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+
+    msg.verify(&pkey).unwrap();
+}

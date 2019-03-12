@@ -5,3 +5,4 @@ Cargo.lock
 ios_simulator_app
 *.h
 pgp-ffi/build-stamp
+/*.asc

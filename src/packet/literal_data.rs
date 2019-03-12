@@ -51,11 +51,29 @@ impl LiteralData {
         }
     }
 
+    /// Creates a literal data packet from the given bytes.
+    pub fn from_bytes(file_name: &str, data: &[u8]) -> Self {
+        LiteralData {
+            packet_version: Version::New,
+            mode: DataMode::Binary,
+            file_name: file_name.to_owned(),
+            created: Utc::now().trunc_subsecs(0),
+            data: data.to_owned(),
+        }
+    }
+
     /// Parses a `LiteralData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(input, packet_version)?;
 
         Ok(pk)
+    }
+
+    pub fn is_binary(&self) -> bool {
+        match self.mode {
+            DataMode::Binary => true,
+            _ => false,
+        }
     }
 
     pub fn data(&self) -> &[u8] {

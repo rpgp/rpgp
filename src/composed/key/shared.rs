@@ -67,6 +67,7 @@ impl KeyDetails {
                 Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
                 Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
                 Subpacket::PreferredCompressionAlgorithms(preferred_compression_algorithms.clone()),
+                Subpacket::IssuerFingerprint(Default::default(), key.fingerprint()),
             ];
             if let Some(rkey) = revocation_key {
                 hashed_subpackets.push(Subpacket::RevocationKey(rkey));
@@ -76,10 +77,7 @@ impl KeyDetails {
                 .typ(SignatureType::CertGeneric)
                 .pub_alg(key.algorithm())
                 .hashed_subpackets(hashed_subpackets)
-                .unhashed_subpackets(vec![
-                    Subpacket::Issuer(key.key_id()),
-                    Subpacket::IssuerFingerprint(key.fingerprint()),
-                ])
+                .unhashed_subpackets(vec![Subpacket::Issuer(key.key_id())])
                 .build()?;
 
             let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
@@ -106,11 +104,9 @@ impl KeyDetails {
                             Subpacket::PreferredCompressionAlgorithms(
                                 preferred_compression_algorithms.clone(),
                             ),
+                            Subpacket::IssuerFingerprint(Default::default(), key.fingerprint()),
                         ])
-                        .unhashed_subpackets(vec![
-                            Subpacket::Issuer(key.key_id()),
-                            Subpacket::IssuerFingerprint(key.fingerprint()),
-                        ])
+                        .unhashed_subpackets(vec![Subpacket::Issuer(key.key_id())])
                         .build()?;
 
                     let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
