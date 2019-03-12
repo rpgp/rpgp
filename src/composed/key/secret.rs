@@ -89,16 +89,14 @@ impl SecretSubkey {
         let hashed_subpackets = vec![
             Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
             Subpacket::KeyFlags(self.keyflags.into()),
+            Subpacket::IssuerFingerprint(Default::default(), sec_key.fingerprint()),
         ];
 
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::SubkeyBinding)
             .pub_alg(sec_key.algorithm())
             .hashed_subpackets(hashed_subpackets)
-            .unhashed_subpackets(vec![
-                Subpacket::Issuer(sec_key.key_id()),
-                Subpacket::IssuerFingerprint(sec_key.fingerprint()),
-            ])
+            .unhashed_subpackets(vec![Subpacket::Issuer(sec_key.key_id())])
             .build()?;
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 

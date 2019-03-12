@@ -12,7 +12,7 @@ use errors::Result;
 use packet::signature::SignatureConfig;
 use packet::PacketTrait;
 use ser::Serialize;
-use types::{self, CompressionAlgorithm, KeyId, PublicKeyTrait, Tag, Version};
+use types::{self, CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, Tag, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
@@ -705,7 +705,7 @@ pub enum Subpacket {
     TrustSignature(u8, u8),
     RegularExpression(String),
     ExportableCertification(bool),
-    IssuerFingerprint(Vec<u8>),
+    IssuerFingerprint(KeyVersion, Vec<u8>),
     PreferredAeadAlgorithms(Vec<AeadAlgorithm>),
     Experimental(u8, Vec<u8>),
     Other(u8, Vec<u8>),

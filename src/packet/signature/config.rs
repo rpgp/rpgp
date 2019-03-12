@@ -51,6 +51,25 @@ impl SignatureConfig {
         }
     }
 
+    /// Sign the given data.
+    pub fn sign<F>(self, key: &impl SecretKeyTrait, key_pw: F, data: &[u8]) -> Result<Signature>
+    where
+        F: FnOnce() -> String,
+    {
+        let mut hasher = self.hash_alg.new_hasher()?;
+
+        self.hash_data_to_sign(&mut *hasher, data)?;
+        let len = self.hash_signature_data(&mut *hasher)?;
+        hasher.update(&self.trailer(len));
+
+        let hash = &hasher.finish()[..];
+
+        let signed_hash_value = [hash[0], hash[1]];
+        let signature = key.create_signature(key_pw, self.hash_alg, hash)?;
+
+        Ok(Signature::from_config(self, signed_hash_value, signature))
+    }
+
     /// Create a certificate siganture.
     pub fn sign_certificate<F>(
         self,
@@ -250,20 +269,34 @@ impl SignatureConfig {
                 hasher.update(data);
                 Ok(data.len())
             }
-            SignatureType::Text => unimplemented_err!("Text"),
-            SignatureType::Standalone => unimplemented_err!("Standalone"),
-            SignatureType::CertGeneric => unimplemented_err!("CertGeneric"),
-            SignatureType::CertPersona => unimplemented_err!("CertPersona"),
-            SignatureType::CertCasual => unimplemented_err!("CertCasual"),
-            SignatureType::CertPositive => unimplemented_err!("CertPositive"),
-            SignatureType::SubkeyBinding => unimplemented_err!("SubkeyBinding"),
-            SignatureType::KeyBinding => unimplemented_err!("KeyBinding"),
-            SignatureType::Key => unimplemented_err!("Key"),
+            SignatureType::Text => {
+                // assumes that the passed in text was already valid utf8 and normalized
+                hasher.update(data);
+                Ok(data.len())
+            }
+            SignatureType::Standalone => {
+                hasher.update(&[0][..]);
+                Ok(1)
+            }
+            SignatureType::CertGeneric
+            | SignatureType::CertPersona
+            | SignatureType::CertCasual
+            | SignatureType::CertPositive
+            | SignatureType::CertRevocation => {
+                unimplemented_err!("{:?}", self.typ);
+            }
+            SignatureType::SubkeyBinding
+            | SignatureType::SubkeyRevocation
+            | SignatureType::KeyBinding
+            | SignatureType::Key => {
+                unimplemented_err!("{:?}", self.typ);
+            }
             SignatureType::KeyRevocation => unimplemented_err!("KeyRevocation"),
-            SignatureType::CertRevocation => unimplemented_err!("CertRevocation"),
-            SignatureType::Timestamp => unimplemented_err!("Timestamp"),
-            SignatureType::ThirdParty => unimplemented_err!("ThirdParty"),
-            SignatureType::SubkeyRevocation => unimplemented_err!("SubkeyRevocation"),
+            SignatureType::Timestamp => {
+                hasher.update(&[0][..]);
+                Ok(1)
+            }
+            SignatureType::ThirdParty => unimplemented_err!("signing ThirdParty"),
         }
     }
 
