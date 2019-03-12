@@ -17,10 +17,10 @@ Symbols:
   - [x] Writing
 - [ ] Cleartext Signature Framework
 - [ ] 🚧 Paket Generation
-- [ ] 🚧 Signatures
-  - [ ] 🚧 Validation
-  - [ ] 🚧 Generation
-- [ ] 🚧 Encryption
+- [x] Signatures
+  - [x] Validation
+  - [x] Generation
+- [x] Encryption
 - [x] Decryption
 - [x] Keys
   - [x] 🚧 Generation
