@@ -1,10 +1,10 @@
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::io::Cursor;
 use std::slice;
 
 use libc::c_char;
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
-use pgp::types::KeyTrait;
+use pgp::types::{KeyTrait, StringToKey};
 use rand::thread_rng;
 
 use crate::cvec::cvec;
@@ -29,6 +29,49 @@ pub unsafe extern "C" fn rpgp_msg_from_armor(
     );
 
     Box::into_raw(Box::new(msg))
+}
+
+/// Parse a message in bytes format.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_from_bytes(
+    msg_ptr: *const u8,
+    msg_len: libc::size_t,
+) -> *mut message {
+    assert!(!msg_ptr.is_null());
+    assert!(msg_len > 0);
+
+    let enc_msg = slice::from_raw_parts(msg_ptr, msg_len);
+
+    let msg = try_ffi!(Message::from_bytes(Cursor::new(enc_msg)), "invalid message");
+
+    Box::into_raw(Box::new(msg))
+}
+
+/// Decrypt the passed in message, using a password.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_decrypt_with_password(
+    msg_ptr: *const message,
+    password_ptr: *const c_char,
+) -> *mut message {
+    assert!(!msg_ptr.is_null());
+    assert!(!password_ptr.is_null());
+
+    let msg = &*msg_ptr;
+    let password = CStr::from_ptr(password_ptr);
+    let password_str = try_ffi!(password.to_str(), "invalid password");
+    let mut decryptor = try_ffi!(
+        msg.decrypt_with_password(|| password_str.into()),
+        "failed to decrypt message"
+    );
+    let decrypted_msg = try_ffi!(
+        try_ffi!(
+            decryptor.next().ok_or_else(|| format_err!("")),
+            "no message found"
+        ),
+        "failed to decrypt message"
+    );
+
+    Box::into_raw(Box::new(decrypted_msg))
 }
 
 /// Decrypt the passed in message, without attempting to use a password.
@@ -156,6 +199,21 @@ pub unsafe extern "C" fn rpgp_msg_to_armored(msg_ptr: *const message) -> *mut cv
     Box::into_raw(Box::new(result.into()))
 }
 
+/// Encodes the message into its ascii armored representation, returning a string.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_to_armored_str(msg_ptr: *const message) -> *mut c_char {
+    assert!(!msg_ptr.is_null());
+
+    let msg = &*msg_ptr;
+
+    let result = try_ffi!(
+        msg.to_armored_string(None),
+        "failed to encode message to ASCII Armor"
+    );
+
+    CString::new(result).expect("allocation failed").into_raw()
+}
+
 /// Free a [message], that was created by rpgp.
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_msg_drop(msg_ptr: *mut message) {
@@ -202,6 +260,7 @@ pub unsafe extern "C" fn rpgp_encrypt_bytes_to_keys(
     pkeys_len: libc::size_t,
 ) -> *mut message {
     assert!(!bytes_ptr.is_null());
+    assert!(bytes_len > 0);
     assert!(!pkeys_ptr.is_null());
     assert!(pkeys_len > 0);
 
@@ -236,6 +295,7 @@ pub unsafe extern "C" fn rpgp_sign_encrypt_bytes_to_keys(
     skey_ptr: *const signed_secret_key,
 ) -> *mut message {
     assert!(!bytes_ptr.is_null());
+    assert!(bytes_len > 0);
     assert!(!pkeys_ptr.is_null());
     assert!(pkeys_len > 0);
     assert!(!skey_ptr.is_null());
@@ -267,4 +327,34 @@ pub unsafe extern "C" fn rpgp_sign_encrypt_bytes_to_keys(
     );
 
     Box::into_raw(Box::new(encrypted_msg))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_encrypt_bytes_with_password(
+    bytes_ptr: *const u8,
+    bytes_len: libc::size_t,
+    password_ptr: *const c_char,
+) -> *mut message {
+    assert!(!bytes_ptr.is_null());
+    assert!(!password_ptr.is_null());
+    assert!(bytes_len > 0);
+
+    let bytes = slice::from_raw_parts(bytes_ptr, bytes_len);
+
+    let mut rng = thread_rng();
+    let lit_msg = Message::new_literal_bytes("", bytes);
+
+    let password = CStr::from_ptr(password_ptr);
+    let password_str = try_ffi!(password.to_str(), "invalid password");
+
+    let s2k = StringToKey::new_default(&mut rng);
+
+    let msg = try_ffi!(
+        lit_msg.encrypt_with_password(&mut rng, s2k, Default::default(), || {
+            password_str.into()
+        }),
+        "failed to encrypt"
+    );
+
+    Box::into_raw(Box::new(msg))
 }
