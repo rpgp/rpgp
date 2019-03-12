@@ -3,8 +3,9 @@ use std::io::Cursor;
 use std::slice;
 
 use libc::c_char;
-use pgp::composed::{Deserializable, Message, SignedSecretKey};
+use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
 use pgp::types::KeyTrait;
+use rand::thread_rng;
 
 use crate::cvec::cvec;
 use crate::{signed_public_key, signed_secret_key, update_last_error};
@@ -140,6 +141,21 @@ pub unsafe extern "C" fn rpgp_msg_to_bytes(msg_ptr: *const message) -> *mut cvec
     }
 }
 
+/// Encodes the message into its ascii armored representation.
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_msg_to_armored(msg_ptr: *const message) -> *mut cvec {
+    assert!(!msg_ptr.is_null());
+
+    let msg = &*msg_ptr;
+
+    let result = try_ffi!(
+        msg.to_armored_bytes(None),
+        "failed to encode message to ASCII Armor"
+    );
+
+    Box::into_raw(Box::new(result.into()))
+}
+
 /// Free a [message], that was created by rpgp.
 #[no_mangle]
 pub unsafe extern "C" fn rpgp_msg_drop(msg_ptr: *mut message) {
@@ -176,4 +192,79 @@ pub unsafe extern "C" fn rpgp_msg_recipients_get(msg_ptr: *mut message, i: u32) 
     } else {
         std::ptr::null_mut()
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_encrypt_bytes_to_keys(
+    bytes_ptr: *const u8,
+    bytes_len: libc::size_t,
+    pkeys_ptr: *const *const signed_public_key,
+    pkeys_len: libc::size_t,
+) -> *mut message {
+    assert!(!bytes_ptr.is_null());
+    assert!(!pkeys_ptr.is_null());
+    assert!(pkeys_len > 0);
+
+    let pkeys_raw = slice::from_raw_parts(pkeys_ptr, pkeys_len);
+    let pkeys = pkeys_raw
+        .iter()
+        .map(|k| {
+            let v: &SignedPublicKey = &**k;
+            v
+        })
+        .collect::<Vec<_>>();
+
+    let bytes = slice::from_raw_parts(bytes_ptr, bytes_len);
+
+    let mut rng = thread_rng();
+    let lit_msg = Message::new_literal_bytes("", bytes);
+
+    let msg = try_ffi!(
+        lit_msg.encrypt_to_keys(&mut rng, Default::default(), &pkeys),
+        "failed to encrypt"
+    );
+
+    Box::into_raw(Box::new(msg))
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn rpgp_sign_encrypt_bytes_to_keys(
+    bytes_ptr: *const u8,
+    bytes_len: libc::size_t,
+    pkeys_ptr: *const *const signed_public_key,
+    pkeys_len: libc::size_t,
+    skey_ptr: *const signed_secret_key,
+) -> *mut message {
+    assert!(!bytes_ptr.is_null());
+    assert!(!pkeys_ptr.is_null());
+    assert!(pkeys_len > 0);
+    assert!(!skey_ptr.is_null());
+
+    let pkeys_raw = slice::from_raw_parts(pkeys_ptr, pkeys_len);
+    let pkeys = pkeys_raw
+        .iter()
+        .map(|k| {
+            let v: &SignedPublicKey = &**k;
+            v
+        })
+        .collect::<Vec<_>>();
+
+    let skey = &*skey_ptr;
+
+    let bytes = slice::from_raw_parts(bytes_ptr, bytes_len);
+
+    let mut rng = thread_rng();
+
+    let lit_msg = Message::new_literal_bytes("", bytes);
+    let signed_msg = try_ffi!(
+        lit_msg.sign(&skey, || "".into(), Default::default()),
+        "failed to sign"
+    );
+
+    let encrypted_msg = try_ffi!(
+        signed_msg.encrypt_to_keys(&mut rng, Default::default(), &pkeys),
+        "failed to encrypt"
+    );
+
+    Box::into_raw(Box::new(encrypted_msg))
 }

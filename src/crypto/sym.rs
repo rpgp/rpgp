@@ -103,6 +103,12 @@ pub enum SymmetricKeyAlgorithm {
     Private10 = 110,
 }
 
+impl Default for SymmetricKeyAlgorithm {
+    fn default() -> Self {
+        SymmetricKeyAlgorithm::AES128
+    }
+}
+
 impl SymmetricKeyAlgorithm {
     /// The size of a single block in bytes.
     /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher
