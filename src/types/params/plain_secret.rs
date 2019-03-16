@@ -4,10 +4,7 @@ use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use rsa::RSAPrivateKey;
 
-use crypto::checksum;
-use crypto::ecc_curve::ECCCurve;
-use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
-use crypto::sym::SymmetricKeyAlgorithm;
+use crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
 use ser::Serialize;
 use types::*;

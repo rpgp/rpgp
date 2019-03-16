@@ -41,7 +41,7 @@ macro_rules! impl_secret_key {
                 self.details.expiration()
             }
 
-            pub fn public_params(&self) -> &$crate::crypto::public_key::PublicParams {
+            pub fn public_params(&self) -> &$crate::types::PublicParams {
                 &self.details.public_params()
             }
 
@@ -160,9 +160,8 @@ macro_rules! impl_secret_key {
             where
                 F: FnOnce() -> String,
             {
-                use $crate::crypto::ecc_curve::ECCCurve;
-                use $crate::crypto::public_key::PublicParams;
-                use $crate::types::SecretKeyRepr;
+                use $crate::crypto::ECCCurve;
+                use $crate::types::{PublicParams, SecretKeyRepr};
 
                 info!("signing data: {}", hex::encode(&data));
 
@@ -237,8 +236,7 @@ macro_rules! impl_secret_key {
                 use md5::Md5;
                 use num_bigint::BigUint;
                 use sha1::{Digest, Sha1};
-                use $crate::crypto::public_key::PublicParams;
-                use $crate::types::KeyVersion;
+                use $crate::types::{KeyVersion, PublicParams};
                 use $crate::util::bignum_to_mpi;
 
                 match self.version() {
@@ -391,8 +389,7 @@ macro_rules! impl_secret_key {
             }
 
             fn key_id(&self) -> $crate::types::KeyId {
-                use $crate::crypto::public_key::PublicParams;
-                use $crate::types::{KeyId, KeyVersion};
+                use $crate::types::{KeyId, KeyVersion, PublicParams};
 
                 match self.version() {
                     KeyVersion::V5 => unimplemented!("V5 keys"),

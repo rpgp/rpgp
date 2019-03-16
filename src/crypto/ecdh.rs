@@ -1,8 +1,8 @@
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crypto::{ECCCurve, HashAlgorithm, PublicParams, SymmetricKeyAlgorithm};
-use types::PlainSecretParams;
+use crypto::{ECCCurve, HashAlgorithm, SymmetricKeyAlgorithm};
+use types::{PlainSecretParams, PublicParams};
 
 /// Generate an ECDH KeyPair.
 /// Currently only support ED25519.

@@ -3,10 +3,8 @@ use nom::{be_u16, be_u32, be_u8};
 use num_traits::FromPrimitive;
 
 use crypto::ecc_curve::ecc_curve_from_oid;
-use crypto::hash::HashAlgorithm;
-use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
-use crypto::sym::SymmetricKeyAlgorithm;
-use types::KeyVersion;
+use crypto::{HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use types::{KeyVersion, PublicParams};
 use util::{mpi, mpi_big};
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9

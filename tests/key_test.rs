@@ -25,17 +25,14 @@ use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
 
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
-use pgp::crypto::ecc_curve::ECCCurve;
-use pgp::crypto::hash::HashAlgorithm;
-use pgp::crypto::public_key::{PublicKeyAlgorithm, PublicParams};
-use pgp::crypto::sym::SymmetricKeyAlgorithm;
+use pgp::crypto::{ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use pgp::errors::Error;
 use pgp::packet::{
     KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId,
 };
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, SecretKeyRepr, SecretKeyTrait, SecretParams,
-    SignedUser, StringToKeyType, Version,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, PublicParams, SecretKeyRepr, SecretKeyTrait,
+    SecretParams, SignedUser, StringToKeyType, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {

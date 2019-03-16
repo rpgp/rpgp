@@ -2,9 +2,9 @@ use chrono::{DateTime, TimeZone, Utc};
 use nom::{be_u16, be_u32, be_u8, rest};
 use num_traits::FromPrimitive;
 
-use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
+use crypto::PublicKeyAlgorithm;
 use packet::public_key_parser::parse_pub_fields;
-use types::{KeyVersion, SecretParams};
+use types::{KeyVersion, PublicParams, SecretParams};
 
 /// Parse the whole private key, both public and private fields.
 #[rustfmt::skip]
