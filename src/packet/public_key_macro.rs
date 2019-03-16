@@ -354,10 +354,10 @@ macro_rules! impl_public_key {
 
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
-                        $crate::crypto::signature::verify_rsa(n, e, hash, hashed, &sig.concat())
+                        $crate::crypto::rsa::verify(n, e, hash, hashed, &sig.concat())
                     }
                     PublicParams::EdDSA { ref curve, ref q } => {
-                        $crate::crypto::signature::verify_eddsa(curve, q, hash, hashed, sig)
+                        $crate::crypto::eddsa::verify(curve, q, hash, hashed, sig)
                     }
                     PublicParams::ECDSA { ref curve, .. } => {
                         unimplemented_err!("verify ECDSA: {:?}", curve);
@@ -388,7 +388,7 @@ macro_rules! impl_public_key {
 
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
-                        $crate::crypto::rsa::encrypt_rsa(rng, n, e, plain)
+                        $crate::crypto::rsa::encrypt(rng, n, e, plain)
                     }
                     PublicParams::EdDSA { .. } => unimplemented_err!("encryption with EdDSA"),
                     PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
@@ -397,7 +397,7 @@ macro_rules! impl_public_key {
                         hash,
                         alg_sym,
                         ref p,
-                    } => $crate::crypto::ecc::encrypt_ecdh(
+                    } => $crate::crypto::ecdh::encrypt(
                         rng,
                         curve,
                         alg_sym,

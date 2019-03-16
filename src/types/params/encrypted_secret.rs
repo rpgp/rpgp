@@ -1,7 +1,6 @@
 use std::{fmt, io};
 
 use crypto::checksum;
-use crypto::kdf;
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
 use errors::Result;
@@ -72,22 +71,14 @@ impl EncryptedSecretParams {
     where
         F: FnOnce() -> String,
     {
-        let s2k_details = &self.string_to_key;
-        let key = kdf::s2k(
-            pw,
-            self.encryption_algorithm,
-            s2k_details.typ(),
-            s2k_details.hash(),
-            s2k_details.salt(),
-            s2k_details.count(),
-        )?;
-
-        let iv = &self.iv;
+        let key = self
+            .string_to_key
+            .derive_key(&pw(), self.encryption_algorithm.key_size())?;
 
         // Actual decryption
         let mut plaintext = self.data.clone();
         self.encryption_algorithm
-            .decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
+            .decrypt_with_iv_regular(&key, &self.iv, &mut plaintext)?;
 
         PlainSecretParams::from_slice(&plaintext, alg)
     }

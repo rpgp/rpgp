@@ -61,7 +61,8 @@ impl StringToKey {
         self.typ
     }
 
-    /// Derives a key from the given password.
+    /// String-To-Key methods are used to convert a given password string into a key.
+    /// Ref: https://tools.ietf.org/html/rfc4880#section-3.7
     pub fn derive_key(&self, passphrase: &str, key_size: usize) -> Result<Vec<u8>> {
         let digest_size = self.hash.digest_size();
         let rounds = (key_size as f32 / digest_size as f32).ceil() as usize;

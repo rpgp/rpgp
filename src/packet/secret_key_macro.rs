@@ -170,7 +170,7 @@ macro_rules! impl_secret_key {
                     info!("unlocked key");
                     let sig = match *priv_key {
                         SecretKeyRepr::RSA(ref priv_key) => {
-                            $crate::crypto::signature::sign_rsa(priv_key, hash, data)
+                            $crate::crypto::rsa::sign(priv_key, hash, data)
                         }
                         SecretKeyRepr::DSA(_) => unimplemented_err!("sign DSA"),
                         SecretKeyRepr::ECDSA => unimplemented_err!("sign ECDSA"),
@@ -180,7 +180,7 @@ macro_rules! impl_secret_key {
                         SecretKeyRepr::EdDSA(ref priv_key) => match self.public_params() {
                             PublicParams::EdDSA { ref curve, ref q } => match *curve {
                                 ECCCurve::Ed25519 => {
-                                    $crate::crypto::signature::sign_eddsa(q, priv_key, hash, data)
+                                    $crate::crypto::eddsa::sign(q, priv_key, hash, data)
                                 }
                                 _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
                             },
