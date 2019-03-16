@@ -3,15 +3,14 @@ use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey, RSAPrivateKey, RSAPublicKey};
+use try_from::TryInto;
 
+use crypto::HashAlgorithm;
 use errors::Result;
 use types::{PlainSecretParams, PublicParams};
 
-pub fn decrypt_rsa(
-    priv_key: &RSAPrivateKey,
-    mpis: &[Vec<u8>],
-    _fingerprint: &[u8],
-) -> Result<Vec<u8>> {
+/// RSA decryption using PKCS1v15 padding.
+pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Vec<u8>], _fingerprint: &[u8]) -> Result<Vec<u8>> {
     // rsa consist of exactly one mpi
     let mpi = &mpis[0];
     info!("RSA m^e mod n: {}", hex::encode(mpi));
@@ -21,7 +20,8 @@ pub fn decrypt_rsa(
     Ok(m)
 }
 
-pub fn encrypt_rsa<R: CryptoRng + Rng>(
+/// RSA encryption using PKCS1v15 padding.
+pub fn encrypt<R: CryptoRng + Rng>(
     rng: &mut R,
     n: &BigUint,
     e: &BigUint,
@@ -64,4 +64,29 @@ pub fn generate_key<R: Rng + CryptoRng>(
             u,
         },
     ))
+}
+
+/// Verify a RSA, PKCS1v15 padded signature.
+pub fn verify(
+    n: &BigUint,
+    e: &BigUint,
+    hash: HashAlgorithm,
+    hashed: &[u8],
+    sig: &[u8],
+) -> Result<()> {
+    let key = RSAPublicKey::new(n.clone(), e.clone())?;
+    let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
+
+    info!("n: {}", hex::encode(n.to_bytes_be()));
+    info!("e: {}", hex::encode(e.to_bytes_be()));
+    key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], sig)
+        .map_err(Into::into)
+}
+
+/// Sign using RSA, with PKCS1v15 padding.
+pub fn sign(key: &RSAPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
+    let sig = key.sign(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), digest)?;
+
+    Ok(vec![sig])
 }

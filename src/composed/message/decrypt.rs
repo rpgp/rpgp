@@ -5,10 +5,7 @@ use num_traits::FromPrimitive;
 
 use composed::message::types::{Edata, Message};
 use composed::shared::Deserializable;
-use crypto::checksum;
-use crypto::ecc::decrypt_ecdh;
-use crypto::rsa::decrypt_rsa;
-use crypto::sym::SymmetricKeyAlgorithm;
+use crypto::{checksum, ecdh, rsa, SymmetricKeyAlgorithm};
 use errors::Result;
 use packet::SymKeyEncryptedSessionKey;
 use types::{KeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
@@ -28,12 +25,12 @@ where
     locked_key.unlock(key_pw, |priv_key| {
         let decrypted_key = match *priv_key {
             SecretKeyRepr::RSA(ref priv_key) => {
-                decrypt_rsa(priv_key, mpis, &locked_key.fingerprint())?
+                rsa::decrypt(priv_key, mpis, &locked_key.fingerprint())?
             }
             SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
             SecretKeyRepr::ECDSA => bail!("ECDSA is only used for signing"),
             SecretKeyRepr::ECDH(ref priv_key) => {
-                decrypt_ecdh(priv_key, mpis, &locked_key.fingerprint())?
+                ecdh::decrypt(priv_key, mpis, &locked_key.fingerprint())?
             }
             SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
         };
