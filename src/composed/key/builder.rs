@@ -4,13 +4,10 @@ use chrono::{self, SubsecRound};
 use rand::thread_rng;
 
 use composed::{KeyDetails, SecretKey, SecretSubkey};
-use crypto::hash::HashAlgorithm;
-use crypto::public_key::{PublicKeyAlgorithm, PublicParams};
-use crypto::sym::SymmetricKeyAlgorithm;
-use crypto::{ecdh, eddsa, rsa};
+use crypto::{ecdh, eddsa, rsa, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
 use packet::{self, KeyFlags, UserAttribute, UserId};
-use types::{self, CompressionAlgorithm, RevocationKey};
+use types::{self, CompressionAlgorithm, PublicParams, RevocationKey};
 
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]

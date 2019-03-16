@@ -4,9 +4,8 @@ use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey, RSAPrivateKey, RSAPublicKey};
 
-use crypto::PublicParams;
 use errors::Result;
-use types::PlainSecretParams;
+use types::{PlainSecretParams, PublicParams};
 
 pub fn decrypt_rsa(
     priv_key: &RSAPrivateKey,

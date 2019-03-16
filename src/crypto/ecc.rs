@@ -159,8 +159,8 @@ mod tests {
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
-    use crypto::{ecdh, PublicParams};
-    use types::SecretKeyRepr;
+    use crypto::ecdh;
+    use types::{PublicParams, SecretKeyRepr};
 
     #[test]
     fn test_encrypt_decrypt() {

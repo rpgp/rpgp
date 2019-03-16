@@ -8,7 +8,7 @@ macro_rules! impl_public_key {
             pub(crate) algorithm: $crate::crypto::public_key::PublicKeyAlgorithm,
             pub(crate) created_at: chrono::DateTime<chrono::Utc>,
             pub(crate) expiration: Option<u16>,
-            pub(crate) public_params: $crate::crypto::public_key::PublicParams,
+            pub(crate) public_params: $crate::types::PublicParams,
         }
 
         impl $name {
@@ -56,7 +56,7 @@ macro_rules! impl_public_key {
                 self.expiration
             }
 
-            pub fn public_params(&self) -> &$crate::crypto::public_key::PublicParams {
+            pub fn public_params(&self) -> &$crate::types::PublicParams {
                 &self.public_params
             }
 
@@ -159,8 +159,7 @@ macro_rules! impl_public_key {
                 use md5::Md5;
                 use num_bigint::BigUint;
                 use sha1::{Digest, Sha1};
-                use $crate::crypto::public_key::PublicParams;
-                use $crate::types::KeyVersion;
+                use $crate::types::{KeyVersion, PublicParams};
                 use $crate::util::bignum_to_mpi;
 
                 match self.version() {
@@ -313,8 +312,7 @@ macro_rules! impl_public_key {
             }
 
             fn key_id(&self) -> $crate::types::KeyId {
-                use $crate::crypto::public_key::PublicParams;
-                use $crate::types::{KeyId, KeyVersion};
+                use $crate::types::{KeyId, KeyVersion, PublicParams};
 
                 match self.version() {
                     KeyVersion::V5 => unimplemented!("V5 keys"),
@@ -349,7 +347,7 @@ macro_rules! impl_public_key {
                 hashed: &[u8],
                 sig: &[Vec<u8>],
             ) -> $crate::errors::Result<()> {
-                use $crate::crypto::public_key::PublicParams;
+                use $crate::types::PublicParams;
 
                 info!("verify data: {}", hex::encode(&hashed));
                 info!("verify sig: {}", hex::encode(&sig.concat()));
@@ -386,8 +384,7 @@ macro_rules! impl_public_key {
                 rng: &mut R,
                 plain: &[u8],
             ) -> $crate::errors::Result<Vec<Vec<u8>>> {
-                use $crate::crypto::public_key::PublicParams;
-                use $crate::types::KeyTrait;
+                use $crate::types::{KeyTrait, PublicParams};
 
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
