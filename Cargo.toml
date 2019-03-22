@@ -81,3 +81,9 @@ asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
 members = [
   "pgp-ffi",
 ]
+
+[profile.release]
+debug = 0
+debug-assertions = false
+opt-level = "s"
+panic = "abort"
