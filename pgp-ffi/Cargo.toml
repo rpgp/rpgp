@@ -24,7 +24,6 @@ cbindgen = "0.8"
 # debuginfo = 0
 # opt-level = "s"
 # codegen-units = 1
-# TODO: Enable these through the CLI when building
 # panic = "abort"
 # lto = "thin"
 
