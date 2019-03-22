@@ -33,13 +33,16 @@ soext := $(pgp_lib_extension)
 CARGO_SRC := $(CURDIR)/../Cargo.toml
 RUST_SRC := $(shell find $(CURDIR)/.. -name '*.rs')
 LOCAL_SRC := build.rs
-RUSTFLAGS := "-C debuginfo=0 -C opt-level=s -C codegen-units=1"
+RUSTFLAGS := "-C codegen-units=1"
 
-all: build
+all: test build
+
+test:
+	cd $(CURDIR)/../ && cargo test --release -p pgp_ffi
 
 build: build-stamp
 build-stamp: $(LOCAL_SRC) $(CARGO_SRC) $(RUST_SRC)
-	cd $(CURDIR)/../ && cargo test --release -p pgp_ffi && RUSTFLAGS=$(RUSTFLAGS) cargo build --release --features nightly -p pgp_ffi
+	cd $(CURDIR)/../ && RUSTFLAGS=$(RUSTFLAGS) cargo build --release --features nightly -p pgp_ffi
 	touch $@
 
 install: build
@@ -54,4 +57,4 @@ clean:
 	rm -f librpgp.h
 	rm -f build-stamp
 
-.PHONY: clean build install
+.PHONY: clean build install test

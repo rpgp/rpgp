@@ -20,13 +20,6 @@ sha2 = "0.8.0"
 [build-dependencies]
 cbindgen = "0.8"
 
-# [profile.release]
-# debuginfo = 0
-# opt-level = "s"
-# codegen-units = 1
-# panic = "abort"
-# lto = "thin"
-
 [features]
 default = []
 nightly = ["pgp/nightly"]
