@@ -1,5 +1,5 @@
 [package]
-name = "pgp-ffi"
+name = "pgp_ffi"
 version = "0.1.0"
 homepage = "https://github.com/dignifiedquire/rpgp"
 description = "PGP implementation in Rust"
