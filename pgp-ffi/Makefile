@@ -33,12 +33,13 @@ soext := $(pgp_lib_extension)
 CARGO_SRC := $(CURDIR)/../Cargo.toml
 RUST_SRC := $(shell find $(CURDIR)/.. -name '*.rs')
 LOCAL_SRC := build.rs
+RUSTFLAGS := "-C debuginfo=0 -C opt-level=s -C codegen-units=1"
 
 all: build
 
 build: build-stamp
 build-stamp: $(LOCAL_SRC) $(CARGO_SRC) $(RUST_SRC)
-	cd $(CURDIR)/../ && cargo test --release -p pgp_ffi && cargo build --release --features nightly -p pgp_ffi
+	cd $(CURDIR)/../ && cargo test --release -p pgp_ffi && RUSTFLAGS=$(RUSTFLAGS) cargo build --release --features nightly -p pgp_ffi
 	touch $@
 
 install: build
