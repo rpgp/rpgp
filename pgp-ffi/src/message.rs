@@ -122,7 +122,7 @@ pub unsafe extern "C" fn rpgp_msg_decrypt_no_pw(
             .iter()
             .filter_map(|pkey| match dec_msg.verify(&(**pkey).primary_key) {
                 Ok(_) => Some(
-                    CString::new(hex::encode(&(&**pkey).key_id()))
+                    CString::new(hex::encode_upper(&(&**pkey).fingerprint()))
                         .expect("failed to allocate")
                         .into_raw(),
                 ),
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn rpgp_msg_decrypt_no_pw(
 pub struct message_decrypt_result {
     /// A pointer to the decrypted message.
     pub message_ptr: *mut message,
-    /// Pointer to a list of ids which verified the signature.
+    /// Pointer to a list of fingerprints which verified the signature.
     pub valid_ids_ptr: *mut *mut c_char,
     pub valid_ids_len: libc::size_t,
 }
