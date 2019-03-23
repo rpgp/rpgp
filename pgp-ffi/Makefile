@@ -50,7 +50,7 @@ install: build
 	install -m 644 $(CURDIR)/../target/release/libpgp_ffi$(soext) $(DESTDIR)$(PREFIX)/lib/librpgp$(soext)
 	install -d $(DESTDIR)$(PREFIX)/include/
 	install -m 644 librpgp.h $(DESTDIR)$(PREFIX)/include/
-	install -d $(DESTDIR)$(PREFIX)/lib/pkconfig
+	install -d $(DESTDIR)$(PREFIX)/lib/pkgconfig
 	install -m 644 $(CURDIR)/../target/release/pkgconfig/rpgp.pc $(DESTDIR)$(PREFIX)/lib/pkgconfig
 
 clean:
