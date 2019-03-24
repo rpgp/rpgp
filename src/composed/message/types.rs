@@ -6,6 +6,7 @@ use chrono::{self, SubsecRound};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use rand::{CryptoRng, Rng};
+use smallvec::SmallVec;
 use try_from::TryFrom;
 
 use armor;
@@ -320,7 +321,7 @@ impl Message {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
         let hashed_subpackets = vec![
-            Subpacket::IssuerFingerprint(KeyVersion::V4, key.fingerprint()),
+            Subpacket::IssuerFingerprint(KeyVersion::V4, SmallVec::from_slice(&key.fingerprint())),
             Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
         ];
         let unhashed_subpackets = vec![Subpacket::Issuer(key_id.clone())];

@@ -11,6 +11,8 @@ extern crate serde_json;
 extern crate log;
 #[macro_use]
 extern crate pretty_assertions;
+#[macro_use]
+extern crate smallvec;
 
 use std::fs::File;
 use std::io::{Cursor, Read};
@@ -22,6 +24,7 @@ use num_traits::ToPrimitive;
 use rand::thread_rng;
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
+use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
@@ -261,20 +264,20 @@ fn test_parse_details() {
     let issuer = Subpacket::Issuer(
         KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
     );
-    let key_flags: Vec<u8> = KeyFlags(0x03).into();
-    let p_sym_algs = vec![
+    let key_flags: SmallVec<[u8; 1]> = KeyFlags(0x03).into();
+    let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
         SymmetricKeyAlgorithm::AES192,
         SymmetricKeyAlgorithm::AES128,
         SymmetricKeyAlgorithm::CAST5,
         SymmetricKeyAlgorithm::TripleDES,
     ];
-    let p_com_algs = vec![
+    let p_com_algs = smallvec![
         CompressionAlgorithm::ZLIB,
         CompressionAlgorithm::BZip2,
         CompressionAlgorithm::ZIP,
     ];
-    let p_hash_algs = vec![
+    let p_hash_algs = smallvec![
         HashAlgorithm::SHA2_256,
         HashAlgorithm::SHA1,
         HashAlgorithm::SHA2_384,
@@ -339,8 +342,8 @@ fn test_parse_details() {
             Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
             Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
             Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(vec![1]),
-            Subpacket::KeyServerPreferences(vec![128]),
+            Subpacket::Features(smallvec![1]),
+            Subpacket::KeyServerPreferences(smallvec![128]),
         ],
         vec![issuer.clone()],
     );
@@ -407,8 +410,8 @@ fn test_parse_details() {
             Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
             Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
             Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(vec![1]),
-            Subpacket::KeyServerPreferences(vec![128]),
+            Subpacket::Features(smallvec![1]),
+            Subpacket::KeyServerPreferences(smallvec![128]),
         ],
         vec![issuer.clone()],
     );
@@ -487,8 +490,8 @@ fn test_parse_details() {
             Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
             Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
             Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(vec![1]),
-            Subpacket::KeyServerPreferences(vec![128]),
+            Subpacket::Features(smallvec![1]),
+            Subpacket::KeyServerPreferences(smallvec![128]),
         ],
         vec![issuer.clone()],
     );
