@@ -4,7 +4,7 @@ use x25519_dalek::{PublicKey, StaticSecret};
 
 use crypto::{aes_kw, ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
-use types::{ECDHSecretKey, PlainSecretParams, PublicParams};
+use types::{ECDHSecretKey, Mpi, PlainSecretParams, PublicParams};
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -32,11 +32,11 @@ pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecr
     (
         PublicParams::ECDH {
             curve: ECCCurve::Curve25519,
-            p,
+            p: p.into(),
             hash,
             alg_sym,
         },
-        PlainSecretParams::ECDH(q),
+        PlainSecretParams::ECDH(Mpi::from_raw_slice(&q)),
     )
 }
 
@@ -70,7 +70,7 @@ pub fn build_ecdh_param(
 }
 
 /// ECDH decryption.
-pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Vec<u8>], fingerprint: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
     info!("ECDH decrypt");
 
     let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
@@ -81,11 +81,11 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Vec<u8>], fingerprint: &[u8]) -
     ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
 
     // encrypted and wrapped value derived from the session key
-    let encrypted_session_key = &mpis[1];
+    let encrypted_session_key = mpis[1].as_bytes();
 
     let their_public = {
         // public part of the ephemeral key (removes 0x40 prefix)
-        let ephemeral_public_key = &mpis[0][1..];
+        let ephemeral_public_key = &mpis[0].as_bytes()[1..];
 
         // create montgomery point
         let mut ephemeral_public_key_arr = [0u8; 32];
@@ -216,9 +216,20 @@ mod tests {
                 ref p,
                 hash,
                 alg_sym,
-            } => encrypt(&mut rng, curve, alg_sym, hash, &fingerprint, p, &plain[..]).unwrap(),
+            } => encrypt(
+                &mut rng,
+                curve,
+                alg_sym,
+                hash,
+                &fingerprint,
+                p.as_bytes(),
+                &plain[..],
+            )
+            .unwrap(),
             _ => panic!("invalid key generated"),
         };
+
+        let mpis = mpis.into_iter().map(Into::into).collect::<Vec<Mpi>>();
 
         let decrypted = match skey.as_ref().as_repr(&pkey).unwrap() {
             SecretKeyRepr::ECDH(ref skey) => decrypt(skey, &mpis, &fingerprint).unwrap(),

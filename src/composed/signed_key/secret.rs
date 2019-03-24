@@ -11,7 +11,7 @@ use crypto::public_key::PublicKeyAlgorithm;
 use errors::Result;
 use packet::{self, write_packet, SignatureType};
 use ser::Serialize;
-use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait};
+use types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait};
 
 /// Represents a secret signed PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -46,32 +46,26 @@ impl SignedSecretKey {
     pub fn new(
         primary_key: packet::SecretKey,
         details: SignedKeyDetails,
-        public_subkeys: Vec<SignedPublicSubKey>,
-        secret_subkeys: Vec<SignedSecretSubKey>,
+        mut public_subkeys: Vec<SignedPublicSubKey>,
+        mut secret_subkeys: Vec<SignedSecretSubKey>,
     ) -> Self {
-        let public_subkeys = public_subkeys
-            .into_iter()
-            .filter(|key| {
-                if key.signatures.is_empty() {
-                    warn!("ignoring unsigned {:?}", key.key);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+        public_subkeys.retain(|key| {
+            if key.signatures.is_empty() {
+                warn!("ignoring unsigned {:?}", key.key);
+                false
+            } else {
+                true
+            }
+        });
 
-        let secret_subkeys = secret_subkeys
-            .into_iter()
-            .filter(|key| {
-                if key.signatures.is_empty() {
-                    warn!("ignoring unsigned {:?}", key.key);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+        secret_subkeys.retain(|key| {
+            if key.signatures.is_empty() {
+                warn!("ignoring unsigned {:?}", key.key);
+                false
+            } else {
+                true
+            }
+        });
 
         SignedSecretKey {
             primary_key,
@@ -168,12 +162,7 @@ impl SecretKeyTrait for SignedSecretKey {
         self.primary_key.unlock(pw, work)
     }
 
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<Vec<Vec<u8>>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
     where
         F: FnOnce() -> String,
     {
@@ -199,11 +188,11 @@ impl SecretKeyTrait for SignedSecretKey {
 }
 
 impl PublicKeyTrait for SignedSecretKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.primary_key.encrypt(rng, plain)
     }
 
@@ -220,23 +209,20 @@ pub struct SignedSecretSubKey {
 }
 
 impl SignedSecretSubKey {
-    pub fn new(key: packet::SecretSubkey, signatures: Vec<packet::Signature>) -> Self {
-        let signatures = signatures
-            .into_iter()
-            .filter(|sig| {
-                if sig.typ() != SignatureType::SubkeyBinding
-                    && sig.typ() != SignatureType::SubkeyRevocation
-                {
-                    warn!(
-                        "ignoring unexpected signature {:?} after Subkey packet",
-                        sig.typ()
-                    );
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+    pub fn new(key: packet::SecretSubkey, mut signatures: Vec<packet::Signature>) -> Self {
+        signatures.retain(|sig| {
+            if sig.typ() != SignatureType::SubkeyBinding
+                && sig.typ() != SignatureType::SubkeyRevocation
+            {
+                warn!(
+                    "ignoring unexpected signature {:?} after Subkey packet",
+                    sig.typ()
+                );
+                false
+            } else {
+                true
+            }
+        });
 
         SignedSecretSubKey { key, signatures }
     }
@@ -290,12 +276,7 @@ impl SecretKeyTrait for SignedSecretSubKey {
         self.key.unlock(pw, work)
     }
 
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<Vec<Vec<u8>>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
     where
         F: FnOnce() -> String,
     {
@@ -314,11 +295,11 @@ impl SecretKeyTrait for SignedSecretSubKey {
 }
 
 impl PublicKeyTrait for SignedSecretSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.key.encrypt(rng, plain)
     }
 

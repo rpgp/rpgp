@@ -16,7 +16,7 @@ pub fn simple(actual: &[u8], data: &[u8]) -> Result<()> {
 
     ensure_eq!(
         &actual[..2],
-        &expected_checksum[..],
+        &expected_checksum.to_be_bytes()[..],
         "invalid simple checksum"
     );
 
@@ -32,10 +32,17 @@ pub fn sha1(hash: &[u8], data: &[u8]) -> Result<()> {
 }
 
 #[inline]
-pub fn calculate_simple(data: &[u8]) -> [u8; 2] {
+pub fn simple_to_writer<W: io::Write>(data: &[u8], writer: &mut W) -> io::Result<()> {
     let mut hasher = SimpleChecksum::default();
     hasher.write(data);
-    hasher.finalize()
+    hasher.to_writer(writer)
+}
+
+#[inline]
+pub fn calculate_simple(data: &[u8]) -> u16 {
+    let mut hasher = SimpleChecksum::default();
+    hasher.write(data);
+    hasher.finish() as u16
 }
 
 #[derive(Debug, Default)]

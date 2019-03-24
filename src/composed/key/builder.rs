@@ -266,6 +266,7 @@ mod tests {
     use types::SecretKeyTrait;
 
     #[test]
+    #[ignore] // slow in debug mode
     fn test_key_gen_rsa_2048() {
         use pretty_env_logger;
         let _ = pretty_env_logger::try_init();

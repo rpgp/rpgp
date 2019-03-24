@@ -1,6 +1,7 @@
+use std::hash::Hasher;
 use std::{fmt, io};
 
-use num_bigint::BigUint;
+use byteorder::{BigEndian, ByteOrder};
 use rand::{CryptoRng, Rng};
 use rsa::RSAPrivateKey;
 
@@ -8,36 +9,31 @@ use crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
 use ser::Serialize;
 use types::*;
-use util::{mpi, write_mpi, TeeWriter};
+use util::TeeWriter;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum PlainSecretParams {
-    RSA {
-        d: Vec<u8>,
-        p: Vec<u8>,
-        q: Vec<u8>,
-        u: Vec<u8>,
-    },
-    DSA(Vec<u8>),
-    ECDSA(Vec<u8>),
-    ECDH(Vec<u8>),
-    Elgamal(Vec<u8>),
-    EdDSA(Vec<u8>),
+    RSA { d: Mpi, p: Mpi, q: Mpi, u: Mpi },
+    DSA(Mpi),
+    ECDSA(Mpi),
+    ECDH(Mpi),
+    Elgamal(Mpi),
+    EdDSA(Mpi),
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum PlainSecretParamsRef<'a> {
     RSA {
-        d: &'a [u8],
-        p: &'a [u8],
-        q: &'a [u8],
-        u: &'a [u8],
+        d: MpiRef<'a>,
+        p: MpiRef<'a>,
+        q: MpiRef<'a>,
+        u: MpiRef<'a>,
     },
-    DSA(&'a [u8]),
-    ECDSA(&'a [u8]),
-    ECDH(&'a [u8]),
-    Elgamal(&'a [u8]),
-    EdDSA(&'a [u8]),
+    DSA(MpiRef<'a>),
+    ECDSA(MpiRef<'a>),
+    ECDH(MpiRef<'a>),
+    Elgamal(MpiRef<'a>),
+    EdDSA(MpiRef<'a>),
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
@@ -50,16 +46,16 @@ impl<'a> PlainSecretParamsRef<'a> {
     pub fn to_owned(&self) -> PlainSecretParams {
         match self {
             PlainSecretParamsRef::RSA { d, p, q, u } => PlainSecretParams::RSA {
-                d: d.to_vec(),
-                p: p.to_vec(),
-                q: q.to_vec(),
-                u: u.to_vec(),
+                d: (*d).to_owned(),
+                p: (*p).to_owned(),
+                q: (*q).to_owned(),
+                u: (*u).to_owned(),
             },
-            PlainSecretParamsRef::DSA(v) => PlainSecretParams::DSA(v.to_vec()),
-            PlainSecretParamsRef::ECDSA(v) => PlainSecretParams::ECDSA(v.to_vec()),
-            PlainSecretParamsRef::ECDH(v) => PlainSecretParams::ECDH(v.to_vec()),
-            PlainSecretParamsRef::Elgamal(v) => PlainSecretParams::Elgamal(v.to_vec()),
-            PlainSecretParamsRef::EdDSA(v) => PlainSecretParams::EdDSA(v.to_vec()),
+            PlainSecretParamsRef::DSA(v) => PlainSecretParams::DSA((*v).to_owned()),
+            PlainSecretParamsRef::ECDSA(v) => PlainSecretParams::ECDSA((*v).to_owned()),
+            PlainSecretParamsRef::ECDH(v) => PlainSecretParams::ECDH((*v).to_owned()),
+            PlainSecretParamsRef::Elgamal(v) => PlainSecretParams::Elgamal((*v).to_owned()),
+            PlainSecretParamsRef::EdDSA(v) => PlainSecretParams::EdDSA((*v).to_owned()),
         }
     }
 
@@ -70,29 +66,44 @@ impl<'a> PlainSecretParamsRef<'a> {
     fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
             PlainSecretParamsRef::RSA { d, p, q, u } => {
-                write_mpi(d, writer)?;
-                write_mpi(p, writer)?;
-                write_mpi(q, writer)?;
-                write_mpi(u, writer)?;
+                (*d).to_writer(writer)?;
+                (*p).to_writer(writer)?;
+                (*q).to_writer(writer)?;
+                (*u).to_writer(writer)?;
             }
             PlainSecretParamsRef::DSA(x) => {
-                write_mpi(x, writer)?;
+                (*x).to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDSA(x) => {
-                write_mpi(x, writer)?;
+                (*x).to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDH(x) => {
-                write_mpi(x, writer)?;
+                (*x).to_writer(writer)?;
             }
             PlainSecretParamsRef::Elgamal(d) => {
-                write_mpi(d, writer)?;
+                (*d).to_writer(writer)?;
             }
             PlainSecretParamsRef::EdDSA(x) => {
-                write_mpi(x, writer)?;
+                (*x).to_writer(writer)?;
             }
         }
 
         Ok(())
+    }
+
+    pub fn compare_checksum_simple(&self, other: Option<&[u8]>) -> Result<()> {
+        if let Some(other) = other {
+            let mut hasher = checksum::SimpleChecksum::default();
+            self.to_writer_raw(&mut hasher).expect("known write target");
+            ensure_eq!(
+                BigEndian::read_u16(other),
+                hasher.finish() as u16,
+                "Invalid checksum"
+            );
+            Ok(())
+        } else {
+            bail!("Missing checksum");
+        }
     }
 
     pub fn checksum_simple(&self) -> Vec<u8> {
@@ -112,10 +123,10 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::RSA { d, p, q, .. } => match public_params {
                 PublicParams::RSA { ref n, ref e } => {
                     let secret_key = RSAPrivateKey::from_components(
-                        BigUint::from_bytes_be(n),
-                        BigUint::from_bytes_be(e),
-                        BigUint::from_bytes_be(d),
-                        vec![BigUint::from_bytes_be(p), BigUint::from_bytes_be(q)],
+                        n.into(),
+                        e.into(),
+                        d.into(),
+                        vec![p.into(), q.into()],
                     );
                     secret_key.validate()?;
                     Ok(SecretKeyRepr::RSA(secret_key))
@@ -133,7 +144,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                         ensure_eq!(d.len(), 32, "invalid secret");
 
                         let mut secret = [0u8; 32];
-                        secret.copy_from_slice(d);
+                        secret.copy_from_slice(d.as_bytes());
 
                         Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
                             oid: curve.oid(),
@@ -152,7 +163,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                         ensure_eq!(d.len(), 32, "invalid secret");
 
                         let mut secret = [0u8; 32];
-                        secret.copy_from_slice(d);
+                        secret.copy_from_slice(d.as_bytes());
 
                         Ok(SecretKeyRepr::EdDSA(EdDSASecretKey {
                             oid: curve.oid(),

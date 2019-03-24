@@ -156,7 +156,7 @@ macro_rules! impl_secret_key {
                 key_pw: F,
                 hash: $crate::crypto::hash::HashAlgorithm,
                 data: &[u8],
-            ) -> $crate::errors::Result<Vec<Vec<u8>>>
+            ) -> $crate::errors::Result<Vec<$crate::types::Mpi>>
             where
                 F: FnOnce() -> String,
             {
@@ -165,7 +165,7 @@ macro_rules! impl_secret_key {
 
                 info!("signing data: {}", hex::encode(&data));
 
-                let mut signature: Option<Vec<Vec<u8>>> = None;
+                let mut signature: Option<Vec<$crate::types::Mpi>> = None;
                 self.unlock(key_pw, |priv_key| {
                     info!("unlocked key");
                     let sig = match *priv_key {
@@ -180,7 +180,7 @@ macro_rules! impl_secret_key {
                         SecretKeyRepr::EdDSA(ref priv_key) => match self.public_params() {
                             PublicParams::EdDSA { ref curve, ref q } => match *curve {
                                 ECCCurve::Ed25519 => {
-                                    $crate::crypto::eddsa::sign(q, priv_key, hash, data)
+                                    $crate::crypto::eddsa::sign(q.as_bytes(), priv_key, hash, data)
                                 }
                                 _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
                             },
@@ -191,8 +191,8 @@ macro_rules! impl_secret_key {
                     // strip leading zeros, to match parse results from MPIs
                     signature = Some(
                         sig.iter()
-                            .map(|a| $crate::util::strip_leading_zeros(&a[..]).to_vec())
-                            .collect(),
+                            .map(|v| $crate::types::Mpi::from_raw_slice(&v[..]))
+                            .collect::<Vec<_>>(),
                     );
                     Ok(())
                 })?;
@@ -249,7 +249,7 @@ macro_rules! impl_secret_key {
                 &self,
                 hash: $crate::crypto::hash::HashAlgorithm,
                 hashed: &[u8],
-                sig: &[Vec<u8>],
+                sig: &[$crate::types::Mpi],
             ) -> $crate::errors::Result<()> {
                 self.details.verify_signature(hash, hashed, sig)
             }
@@ -258,7 +258,7 @@ macro_rules! impl_secret_key {
                 &self,
                 rng: &mut R,
                 plain: &[u8],
-            ) -> $crate::errors::Result<Vec<Vec<u8>>> {
+            ) -> $crate::errors::Result<Vec<$crate::types::Mpi>> {
                 self.details.encrypt(rng, plain)
             }
 

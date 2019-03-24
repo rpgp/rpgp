@@ -11,8 +11,11 @@ use crypto::sym::SymmetricKeyAlgorithm;
 use de::Deserialize;
 use errors::Result;
 use packet::signature::types::*;
-use types::{CompressionAlgorithm, KeyId, KeyVersion, RevocationKey, RevocationKeyClass, Version};
-use util::{clone_into_array, mpi, packet_length, read_string};
+use types::{
+    mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
+    Version,
+};
+use util::{clone_into_array, packet_length, read_string};
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -288,16 +291,16 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>, many0!(complete!(do_parse!(
     >> (p)
 ))));
 
-named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Vec<u8>>>, switch!(
+named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Mpi>>, switch!(
     value!(typ),
     &PublicKeyAlgorithm::RSA |
-    &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| vec![v.to_vec()]) |
+    &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| vec![v.to_owned()]) |
     &PublicKeyAlgorithm::DSA   |
     &PublicKeyAlgorithm::ECDSA |
     // TODO: Handle EdDSA signature parameters being encoded in little-endian format
     // Rref https://tools.ietf.org/html/rfc8032#section-5.1.2
-    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<_>, item: &[u8] | {
-        acc.push(item.to_vec());
+    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<Mpi>, item: MpiRef | {
+        acc.push(item.to_owned());
         acc
     }) |
     &PublicKeyAlgorithm::Private100 |
@@ -310,8 +313,8 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Vec<u8
     &PublicKeyAlgorithm::Private107 |
     &PublicKeyAlgorithm::Private108 |
     &PublicKeyAlgorithm::Private109 |
-    &PublicKeyAlgorithm::Private110  => map!(call!(mpi), |v| vec![v.to_vec()]) |
-    _ => map!(call!(mpi), |v| vec![v.to_vec()])
+    &PublicKeyAlgorithm::Private110  => map!(call!(mpi), |v| vec![v.to_owned()]) |
+    _ => map!(call!(mpi), |v| vec![v.to_owned()])
 ));
 
 /// Parse a v2 or v3 signature packet

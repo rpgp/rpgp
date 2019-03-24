@@ -11,7 +11,7 @@ use crypto::HashAlgorithm;
 use errors::Result;
 use packet::{self, write_packet, SignatureType};
 use ser::Serialize;
-use types::{KeyId, KeyTrait, PublicKeyTrait};
+use types::{KeyId, KeyTrait, Mpi, PublicKeyTrait};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,19 +38,16 @@ impl SignedPublicKey {
     pub fn new(
         primary_key: packet::PublicKey,
         details: SignedKeyDetails,
-        public_subkeys: Vec<SignedPublicSubKey>,
+        mut public_subkeys: Vec<SignedPublicSubKey>,
     ) -> Self {
-        let public_subkeys = public_subkeys
-            .into_iter()
-            .filter(|key| {
-                if key.signatures.is_empty() {
-                    warn!("ignoring unsigned {:?}", key.key);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+        public_subkeys.retain(|key| {
+            if key.signatures.is_empty() {
+                warn!("ignoring unsigned {:?}", key.key);
+                false
+            } else {
+                true
+            }
+        });
 
         SignedPublicKey {
             primary_key,
@@ -121,11 +118,11 @@ impl KeyTrait for SignedPublicKey {
 }
 
 impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.primary_key.encrypt(rng, plain)
     }
 
@@ -154,23 +151,20 @@ pub struct SignedPublicSubKey {
 }
 
 impl SignedPublicSubKey {
-    pub fn new(key: packet::PublicSubkey, signatures: Vec<packet::Signature>) -> Self {
-        let signatures = signatures
-            .into_iter()
-            .filter(|sig| {
-                if sig.typ() != SignatureType::SubkeyBinding
-                    && sig.typ() != SignatureType::SubkeyRevocation
-                {
-                    warn!(
-                        "ignoring unexpected signature {:?} after Subkey packet",
-                        sig.typ()
-                    );
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+    pub fn new(key: packet::PublicSubkey, mut signatures: Vec<packet::Signature>) -> Self {
+        signatures.retain(|sig| {
+            if sig.typ() != SignatureType::SubkeyBinding
+                && sig.typ() != SignatureType::SubkeyRevocation
+            {
+                warn!(
+                    "ignoring unexpected signature {:?} after Subkey packet",
+                    sig.typ()
+                );
+                false
+            } else {
+                true
+            }
+        });
 
         SignedPublicSubKey { key, signatures }
     }
@@ -211,11 +205,11 @@ impl KeyTrait for SignedPublicSubKey {
 }
 
 impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.key.encrypt(rng, plain)
     }
 

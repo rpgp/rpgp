@@ -7,6 +7,7 @@ use pgp::composed::{
     SubkeyParamsBuilder,
 };
 use pgp::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
+use pgp::ser::Serialize;
 use pgp::types::CompressionAlgorithm;
 
 #[cfg(feature = "profile")]
@@ -108,25 +109,37 @@ fn bench_secret_key_x25519_self_sign(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_secret_key_parse_x25519(b: &mut Bencher) {
+fn bench_secret_key_parse_armored_x25519(b: &mut Bencher) {
     let key = build_key(KeyType::EdDSA, KeyType::ECDH)
         .sign(|| "".into())
         .unwrap();
     let bytes = key.to_armored_bytes(None).unwrap();
 
-    start_profile("parse_key_secret_x25519");
+    start_profile("parse_key_secret_armored_x25519");
     b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
     stop_profile();
 }
 
 #[bench]
-fn bench_secret_key_parse_rsa(b: &mut Bencher) {
+fn bench_secret_key_parse_armored_rsa(b: &mut Bencher) {
     let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
         .sign(|| "".into())
         .unwrap();
     let bytes = key.to_armored_bytes(None).unwrap();
 
-    start_profile("parse_key_secret_rsa");
+    start_profile("parse_key_secret_armored_rsa");
     b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
+    stop_profile();
+}
+
+#[bench]
+fn bench_secret_key_parse_raw_rsa(b: &mut Bencher) {
+    let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
+        .sign(|| "".into())
+        .unwrap();
+    let bytes = key.to_bytes().unwrap();
+
+    start_profile("parse_key_secret_raw_rsa");
+    b.iter(|| black_box(SignedSecretKey::from_bytes(Cursor::new(&bytes)).unwrap()));
     stop_profile();
 }

@@ -1,6 +1,6 @@
 use crypto::hash::HashAlgorithm;
 use errors::Result;
-use types::{PublicKeyTrait, SecretKeyRepr};
+use types::{Mpi, PublicKeyTrait, SecretKeyRepr};
 
 pub trait SecretKeyTrait: PublicKeyTrait {
     type PublicKey;
@@ -10,12 +10,7 @@ pub trait SecretKeyTrait: PublicKeyTrait {
         F: FnOnce() -> String,
         G: FnOnce(&SecretKeyRepr) -> Result<()>;
 
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<Vec<Vec<u8>>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
     where
         F: FnOnce() -> String;
 
@@ -33,12 +28,7 @@ impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
         (*self).unlock(pw, work)
     }
 
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<Vec<Vec<u8>>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
     where
         F: FnOnce() -> String,
     {
