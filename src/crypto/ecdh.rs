@@ -220,7 +220,7 @@ mod tests {
             _ => panic!("invalid key generated"),
         };
 
-        let decrypted = match skey.as_repr(&pkey).unwrap() {
+        let decrypted = match skey.as_ref().as_repr(&pkey).unwrap() {
             SecretKeyRepr::ECDH(ref skey) => decrypt(skey, &mpis, &fingerprint).unwrap(),
             _ => panic!("invalid key generated"),
         };

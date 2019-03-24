@@ -61,7 +61,7 @@ impl EncryptedSecretParams {
 
     pub fn checksum(&self) -> Option<Vec<u8>> {
         if self.string_to_key_id < 254 {
-            Some(checksum::calculate_simple(self.data()))
+            Some(checksum::calculate_simple(self.data()).to_vec())
         } else {
             None
         }

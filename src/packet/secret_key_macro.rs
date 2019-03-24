@@ -65,7 +65,7 @@ macro_rules! impl_secret_key {
                 &self,
                 plaintext: &$crate::types::PlainSecretParams,
             ) -> $crate::errors::Result<$crate::types::SecretKeyRepr> {
-                plaintext.as_repr(self.public_params())
+                plaintext.as_ref().as_repr(self.public_params())
             }
 
             pub fn secret_params(&self) -> &$crate::types::SecretParams {

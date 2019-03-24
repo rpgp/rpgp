@@ -5,7 +5,12 @@ use num_traits::FromPrimitive;
 use crypto::ecc_curve::ecc_curve_from_oid;
 use crypto::{HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use types::{KeyVersion, PublicParams};
-use util::{mpi, mpi_big};
+use util::mpi;
+
+#[inline]
+fn to_vec(slice: &[u8]) -> Vec<u8> {
+    slice.to_vec()
+}
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 #[rustfmt::skip]
@@ -66,27 +71,27 @@ named!(ecdh<PublicParams>, do_parse!(
 #[rustfmt::skip]
 named!(elgamal<PublicParams>, do_parse!(
     // MPI of Elgamal prime p
-        p: mpi_big
+        p: map!(mpi, to_vec)
     // MPI of Elgamal group generator g
-    >> g: mpi_big
+    >> g: map!(mpi, to_vec)
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
-    >> y: mpi_big
+    >> y: map!(mpi, to_vec)
     >> (PublicParams::Elgamal{ p, g, y })
 ));
 
 #[rustfmt::skip]
 named!(dsa<PublicParams>, do_parse!(
-       p: mpi_big
-    >> q: mpi_big
-    >> g: mpi_big
-    >> y: mpi_big
+       p: map!(mpi, to_vec)
+    >> q: map!(mpi, to_vec)
+    >> g: map!(mpi, to_vec)
+    >> y: map!(mpi, to_vec)
     >> (PublicParams::DSA { p, q, g, y })
 ));
 
 #[rustfmt::skip]
 named!(rsa<PublicParams>, do_parse!(
-       n: mpi_big
-    >> e: mpi_big
+       n: map!(mpi, to_vec)
+    >> e: map!(mpi, to_vec)
     >> (PublicParams::RSA { n, e })
 ));
 

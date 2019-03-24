@@ -3,10 +3,10 @@ use std::io::Cursor;
 use std::io::Read;
 use test::{black_box, Bencher};
 
+use pgp::composed::{Deserializable, Message, SignedSecretKey};
+
 #[cfg(feature = "profile")]
 use gperftools::profiler::PROFILER;
-
-use pgp::composed::{Deserializable, Message, SignedSecretKey};
 
 #[cfg(feature = "profile")]
 #[inline(always)]
@@ -49,18 +49,20 @@ fn bench_message_parse(b: &mut Bencher) {
 }
 
 #[bench]
-fn bench_message_decryption_rsa(b: &mut Bencher) {
+fn bench_message_parse_decrypt_rsa(b: &mut Bencher) {
     let mut decrypt_key_file =
         File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc").unwrap();
     let (decrypt_key, _headers) =
         SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap();
     let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
-    let mut message_file = File::open(message_file_path).unwrap();
-    let (message, _headers) = Message::from_armor_single(&mut message_file).unwrap();
+    let message_file = fs::read(message_file_path).unwrap();
 
-    start_profile("message_decryption");
+    start_profile("message_decryption_rsa");
     b.bytes = fs::metadata(message_file_path).unwrap().len();
     b.iter(|| {
+        let (message, _headers) =
+            Message::from_armor_single(Cursor::new(message_file.clone())).unwrap();
+
         black_box(
             message
                 .decrypt(
@@ -69,7 +71,34 @@ fn bench_message_decryption_rsa(b: &mut Bencher) {
                     &[&decrypt_key][..],
                 )
                 .unwrap(),
-        )
+        );
+    });
+    stop_profile();
+}
+
+#[bench]
+fn bench_message_parse_decrypt_x25519(b: &mut Bencher) {
+    let mut decrypt_key_file = File::open("./tests/openpgpjs/x25519.sec.asc").unwrap();
+    let (decrypt_key, _headers) =
+        SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap();
+    let message_file_path = "./tests/openpgpjs/x25519.asc";
+    let message_file = fs::read(message_file_path).unwrap();
+
+    start_profile("message_decryption_x25519");
+    b.bytes = fs::metadata(message_file_path).unwrap().len();
+    b.iter(|| {
+        let (message, _headers) =
+            Message::from_armor_single(Cursor::new(message_file.clone())).unwrap();
+
+        black_box(
+            message
+                .decrypt(
+                    || "".to_string(),
+                    || "moon".to_string(),
+                    &[&decrypt_key][..],
+                )
+                .unwrap(),
+        );
     });
     stop_profile();
 }

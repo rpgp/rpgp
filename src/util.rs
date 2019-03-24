@@ -1,6 +1,6 @@
 use std::convert::AsMut;
-use std::io;
 use std::ops::{Range, RangeFrom, RangeTo};
+use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::types::{CompleteByteSlice, CompleteStr};
@@ -135,7 +135,7 @@ pub fn write_bignum_mpi(n: &BigUint, w: &mut impl io::Write) -> errors::Result<(
     w.write_u16::<BigEndian>(size as u16)?;
     let bytes = n.to_bytes_be();
 
-    // to stripping of leading zeroes, BigUint takes care of this for us
+    // no stripping of leading zeroes, BigUint takes care of this for us
 
     w.write_all(&bytes)?;
 
@@ -261,6 +261,32 @@ pub fn write_string(val: &str) -> Vec<u8> {
 
 pub fn read_string(raw: &[u8]) -> String {
     raw.iter().map(|c| *c as char).collect::<String>()
+}
+
+pub struct TeeWriter<'a, A, B> {
+    a: &'a mut A,
+    b: &'a mut B,
+}
+
+impl<'a, A, B> TeeWriter<'a, A, B> {
+    pub fn new(a: &'a mut A, b: &'a mut B) -> Self {
+        TeeWriter { a, b }
+    }
+}
+
+impl<'a, A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'a, A, B> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.a.write(buf);
+        self.b.write_all(buf)?;
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.b.flush()?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
