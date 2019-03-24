@@ -1,6 +1,7 @@
+use std::hash::Hasher;
 use std::{fmt, io};
 
-use num_bigint::BigUint;
+use byteorder::{BigEndian, ByteOrder};
 use rand::{CryptoRng, Rng};
 use rsa::RSAPrivateKey;
 
@@ -8,28 +9,54 @@ use crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
 use ser::Serialize;
 use types::*;
-use util::{mpi, mpi_big, write_bignum_mpi, write_mpi};
+use util::TeeWriter;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum PlainSecretParams {
-    RSA {
-        d: BigUint,
-        p: BigUint,
-        q: BigUint,
-        u: BigUint,
-    },
-    DSA(BigUint),
-    ECDSA(Vec<u8>),
-    ECDH(Vec<u8>),
-    Elgamal(BigUint),
-    EdDSA(Vec<u8>),
+    RSA { d: Mpi, p: Mpi, q: Mpi, u: Mpi },
+    DSA(Mpi),
+    ECDSA(Mpi),
+    ECDH(Mpi),
+    Elgamal(Mpi),
+    EdDSA(Mpi),
 }
 
-impl PlainSecretParams {
-    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm) -> Result<Self> {
+#[derive(Clone, PartialEq, Eq)]
+pub enum PlainSecretParamsRef<'a> {
+    RSA {
+        d: MpiRef<'a>,
+        p: MpiRef<'a>,
+        q: MpiRef<'a>,
+        u: MpiRef<'a>,
+    },
+    DSA(MpiRef<'a>),
+    ECDSA(MpiRef<'a>),
+    ECDH(MpiRef<'a>),
+    Elgamal(MpiRef<'a>),
+    EdDSA(MpiRef<'a>),
+}
+
+impl<'a> PlainSecretParamsRef<'a> {
+    pub fn from_slice(data: &'a [u8], alg: PublicKeyAlgorithm) -> Result<Self> {
         let (_, repr) = parse_secret_params(data, alg)?;
 
         Ok(repr)
+    }
+
+    pub fn to_owned(&self) -> PlainSecretParams {
+        match self {
+            PlainSecretParamsRef::RSA { d, p, q, u } => PlainSecretParams::RSA {
+                d: (*d).to_owned(),
+                p: (*p).to_owned(),
+                q: (*q).to_owned(),
+                u: (*u).to_owned(),
+            },
+            PlainSecretParamsRef::DSA(v) => PlainSecretParams::DSA((*v).to_owned()),
+            PlainSecretParamsRef::ECDSA(v) => PlainSecretParams::ECDSA((*v).to_owned()),
+            PlainSecretParamsRef::ECDH(v) => PlainSecretParams::ECDH((*v).to_owned()),
+            PlainSecretParamsRef::Elgamal(v) => PlainSecretParams::Elgamal((*v).to_owned()),
+            PlainSecretParamsRef::EdDSA(v) => PlainSecretParams::EdDSA((*v).to_owned()),
+        }
     }
 
     pub fn string_to_key_id(&self) -> u8 {
@@ -38,36 +65,51 @@ impl PlainSecretParams {
 
     fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
-            PlainSecretParams::RSA { d, p, q, u } => {
-                write_bignum_mpi(d, writer)?;
-                write_bignum_mpi(p, writer)?;
-                write_bignum_mpi(q, writer)?;
-                write_bignum_mpi(u, writer)?;
+            PlainSecretParamsRef::RSA { d, p, q, u } => {
+                (*d).to_writer(writer)?;
+                (*p).to_writer(writer)?;
+                (*q).to_writer(writer)?;
+                (*u).to_writer(writer)?;
             }
-            PlainSecretParams::DSA(x) => {
-                write_bignum_mpi(x, writer)?;
+            PlainSecretParamsRef::DSA(x) => {
+                (*x).to_writer(writer)?;
             }
-            PlainSecretParams::ECDSA(x) => {
-                write_mpi(x, writer)?;
+            PlainSecretParamsRef::ECDSA(x) => {
+                (*x).to_writer(writer)?;
             }
-            PlainSecretParams::ECDH(x) => {
-                write_mpi(x, writer)?;
+            PlainSecretParamsRef::ECDH(x) => {
+                (*x).to_writer(writer)?;
             }
-            PlainSecretParams::Elgamal(d) => {
-                write_bignum_mpi(d, writer)?;
+            PlainSecretParamsRef::Elgamal(d) => {
+                (*d).to_writer(writer)?;
             }
-            PlainSecretParams::EdDSA(x) => {
-                write_mpi(x, writer)?;
+            PlainSecretParamsRef::EdDSA(x) => {
+                (*x).to_writer(writer)?;
             }
         }
 
         Ok(())
     }
 
+    pub fn compare_checksum_simple(&self, other: Option<&[u8]>) -> Result<()> {
+        if let Some(other) = other {
+            let mut hasher = checksum::SimpleChecksum::default();
+            self.to_writer_raw(&mut hasher)?;
+            ensure_eq!(
+                BigEndian::read_u16(other),
+                hasher.finish() as u16,
+                "Invalid checksum"
+            );
+            Ok(())
+        } else {
+            bail!("Missing checksum");
+        }
+    }
+
     pub fn checksum_simple(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
-        self.to_writer_raw(&mut buf).expect("known write target");
-        checksum::calculate_simple(&buf)
+        let mut hasher = checksum::SimpleChecksum::default();
+        self.to_writer_raw(&mut hasher).expect("known write target");
+        hasher.finalize().to_vec()
     }
 
     pub fn checksum_sha1(&self) -> Vec<u8> {
@@ -78,20 +120,20 @@ impl PlainSecretParams {
 
     pub fn as_repr(&self, public_params: &PublicParams) -> Result<SecretKeyRepr> {
         match self {
-            PlainSecretParams::RSA { d, p, q, .. } => match public_params {
+            PlainSecretParamsRef::RSA { d, p, q, .. } => match public_params {
                 PublicParams::RSA { ref n, ref e } => {
                     let secret_key = RSAPrivateKey::from_components(
-                        n.clone(),
-                        e.clone(),
-                        d.clone(),
-                        vec![p.clone(), q.clone()],
+                        n.into(),
+                        e.into(),
+                        d.into(),
+                        vec![p.into(), q.into()],
                     );
                     secret_key.validate()?;
                     Ok(SecretKeyRepr::RSA(secret_key))
                 }
                 _ => unreachable!("inconsistent key state"),
             },
-            PlainSecretParams::ECDH(d) => match public_params {
+            PlainSecretParamsRef::ECDH(d) => match public_params {
                 PublicParams::ECDH {
                     ref curve,
                     ref hash,
@@ -102,7 +144,7 @@ impl PlainSecretParams {
                         ensure_eq!(d.len(), 32, "invalid secret");
 
                         let mut secret = [0u8; 32];
-                        secret.copy_from_slice(d);
+                        secret.copy_from_slice(d.as_bytes());
 
                         Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
                             oid: curve.oid(),
@@ -115,13 +157,13 @@ impl PlainSecretParams {
                 },
                 _ => unreachable!("inconsistent key state"),
             },
-            PlainSecretParams::EdDSA(d) => match public_params {
+            PlainSecretParamsRef::EdDSA(d) => match public_params {
                 PublicParams::EdDSA { ref curve, .. } => match *curve {
                     ECCCurve::Ed25519 => {
                         ensure_eq!(d.len(), 32, "invalid secret");
 
                         let mut secret = [0u8; 32];
-                        secret.copy_from_slice(d);
+                        secret.copy_from_slice(d.as_bytes());
 
                         Ok(SecretKeyRepr::EdDSA(EdDSASecretKey {
                             oid: curve.oid(),
@@ -132,15 +174,50 @@ impl PlainSecretParams {
                 },
                 _ => unreachable!("inconsistent key state"),
             },
-            PlainSecretParams::DSA(_) => {
+            PlainSecretParamsRef::DSA(_) => {
                 unimplemented_err!("DSA");
             }
-            PlainSecretParams::Elgamal(_) => {
+            PlainSecretParamsRef::Elgamal(_) => {
                 unimplemented_err!("Elgamal");
             }
-            PlainSecretParams::ECDSA(_) => {
+            PlainSecretParamsRef::ECDSA(_) => {
                 unimplemented_err!("ECDSA");
             }
+        }
+    }
+}
+
+impl PlainSecretParams {
+    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm) -> Result<Self> {
+        let ref_params = PlainSecretParamsRef::from_slice(data, alg)?;
+        Ok(ref_params.to_owned())
+    }
+
+    pub fn string_to_key_id(&self) -> u8 {
+        self.as_ref().string_to_key_id()
+    }
+
+    pub fn checksum_simple(&self) -> Vec<u8> {
+        self.as_ref().checksum_simple()
+    }
+
+    pub fn checksum_sha1(&self) -> Vec<u8> {
+        self.as_ref().checksum_sha1()
+    }
+
+    pub fn as_ref(&self) -> PlainSecretParamsRef {
+        match self {
+            PlainSecretParams::RSA { d, p, q, u } => PlainSecretParamsRef::RSA {
+                d: d.as_ref(),
+                p: p.as_ref(),
+                q: q.as_ref(),
+                u: u.as_ref(),
+            },
+            PlainSecretParams::DSA(v) => PlainSecretParamsRef::DSA(v.as_ref()),
+            PlainSecretParams::ECDSA(v) => PlainSecretParamsRef::ECDSA(v.as_ref()),
+            PlainSecretParams::ECDH(v) => PlainSecretParamsRef::ECDH(v.as_ref()),
+            PlainSecretParams::Elgamal(v) => PlainSecretParamsRef::Elgamal(v.as_ref()),
+            PlainSecretParams::EdDSA(v) => PlainSecretParamsRef::EdDSA(v.as_ref()),
         }
     }
 
@@ -162,7 +239,9 @@ impl PlainSecretParams {
             KeyVersion::V3 => unimplemented_err!("v3 encryption"),
             KeyVersion::V4 => {
                 let mut data = Vec::new();
-                self.to_writer_raw(&mut data).expect("preallocated vector");
+                self.as_ref()
+                    .to_writer_raw(&mut data)
+                    .expect("preallocated vector");
                 match id {
                     254 => {
                         data.extend_from_slice(&self.checksum_sha1()[..]);
@@ -183,11 +262,19 @@ impl PlainSecretParams {
 
 impl Serialize for PlainSecretParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.as_ref().to_writer(writer)
+    }
+}
+
+impl<'a> Serialize for PlainSecretParamsRef<'a> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[self.string_to_key_id()])?;
-        let mut buf = Vec::new();
-        self.to_writer_raw(&mut buf)?;
-        writer.write_all(&buf)?;
-        writer.write_all(&checksum::calculate_simple(&buf))?;
+        let mut hasher = checksum::SimpleChecksum::default();
+        {
+            let mut tee = TeeWriter::new(&mut hasher, writer);
+            self.to_writer_raw(&mut tee)?;
+        }
+        hasher.to_writer(writer)?;
 
         Ok(())
     }
@@ -195,35 +282,41 @@ impl Serialize for PlainSecretParams {
 
 impl fmt::Debug for PlainSecretParams {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.as_ref().fmt(f)
+    }
+}
+
+impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            PlainSecretParams::RSA { .. } => write!(f, "PlainSecretParams(RSA)"),
-            PlainSecretParams::DSA(_) => write!(f, "PlainSecretParams(DSA)"),
-            PlainSecretParams::Elgamal(_) => write!(f, "PlainSecretParams(Elgamal)"),
-            PlainSecretParams::ECDSA(_) => write!(f, "PlainSecretParams(ECDSA)"),
-            PlainSecretParams::ECDH(_) => write!(f, "PlainSecretParams(ECDH)"),
-            PlainSecretParams::EdDSA(_) => write!(f, "PlainSecretParams(EdDSA)"),
+            PlainSecretParamsRef::RSA { .. } => write!(f, "PlainSecretParams(RSA)"),
+            PlainSecretParamsRef::DSA(_) => write!(f, "PlainSecretParams(DSA)"),
+            PlainSecretParamsRef::Elgamal(_) => write!(f, "PlainSecretParams(Elgamal)"),
+            PlainSecretParamsRef::ECDSA(_) => write!(f, "PlainSecretParams(ECDSA)"),
+            PlainSecretParamsRef::ECDH(_) => write!(f, "PlainSecretParams(ECDH)"),
+            PlainSecretParamsRef::EdDSA(_) => write!(f, "PlainSecretParams(EdDSA)"),
         }
     }
 }
 
 #[rustfmt::skip]
-named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParams>, switch!(value!(alg),
+named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef>, switch!(value!(alg),
     PublicKeyAlgorithm::RSA        |
     PublicKeyAlgorithm::RSAEncrypt |
     PublicKeyAlgorithm::RSASign => call!(rsa_secret_params)                                |
-    PublicKeyAlgorithm::DSA     => do_parse!(x: mpi_big >> (PlainSecretParams::DSA(x)))      |
-    PublicKeyAlgorithm::Elgamal => do_parse!(x: mpi_big >> (PlainSecretParams::Elgamal(x)))  |
-    PublicKeyAlgorithm::ECDH    => do_parse!(x: mpi >> (PlainSecretParams::ECDH(x.into())))  |
-    PublicKeyAlgorithm::ECDSA   => do_parse!(x: mpi >> (PlainSecretParams::ECDSA(x.into()))) |
-    PublicKeyAlgorithm::EdDSA   => do_parse!(x: mpi >> (PlainSecretParams::EdDSA(x.into())))
+    PublicKeyAlgorithm::DSA     => do_parse!(x: mpi >> (PlainSecretParamsRef::DSA(x)))      |
+    PublicKeyAlgorithm::Elgamal => do_parse!(x: mpi >> (PlainSecretParamsRef::Elgamal(x)))  |
+    PublicKeyAlgorithm::ECDH    => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDH(x)))  |
+    PublicKeyAlgorithm::ECDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDSA(x))) |
+    PublicKeyAlgorithm::EdDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::EdDSA(x)))
 ));
 
 /// Parse the decrpyted private params of an RSA private key.
 #[rustfmt::skip]
-named!(rsa_secret_params<PlainSecretParams>, do_parse!(
-       d: mpi_big
-    >> p: mpi_big
-    >> q: mpi_big
-    >> u: mpi_big
-    >> (PlainSecretParams::RSA { d, p, q, u })
+named!(rsa_secret_params<PlainSecretParamsRef>, do_parse!(
+       d: mpi
+    >> p: mpi
+    >> q: mpi
+    >> u: mpi
+    >> (PlainSecretParamsRef::RSA { d, p, q, u })
 ));

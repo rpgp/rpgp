@@ -13,6 +13,7 @@ use base64_decoder::Base64Decoder;
 use base64_reader::Base64Reader;
 use errors::Result;
 use line_reader::LineReader;
+use ser::Serialize;
 
 /// Armor block types.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -42,19 +43,33 @@ pub enum BlockType {
 
 impl fmt::Display for BlockType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.as_string())
+    }
+}
+
+impl Serialize for BlockType {
+    fn to_writer<W: io::Write>(&self, w: &mut W) -> Result<()> {
+        w.write_all(self.as_string().as_bytes())?;
+
+        Ok(())
+    }
+}
+
+impl BlockType {
+    fn as_string(&self) -> String {
         match self {
-            BlockType::PublicKey => write!(f, "PGP PUBLIC KEY BLOCK"),
-            BlockType::PrivateKey => write!(f, "PGP PRIVATE KEY BLOCK"),
-            BlockType::MultiPartMessage(x, y) => write!(f, "PGP MESSAGE, PART {}/{}", x, y),
-            BlockType::Message => write!(f, "PGP MESSAGE"),
-            BlockType::Signature => write!(f, "PGP SIGNATURE"),
-            BlockType::File => write!(f, "PGP ARMORED FILE"),
-            BlockType::PublicKeyPKCS1(typ) => write!(f, "{} PUBLIC KEY", typ),
-            BlockType::PublicKeyPKCS8 => write!(f, "PUBLIC KEY"),
-            BlockType::PublicKeyOpenssh => write!(f, "OPENSSH PUBLIC KEY"),
-            BlockType::PrivateKeyPKCS1(typ) => write!(f, "{} PRIVATE KEY", typ),
-            BlockType::PrivateKeyPKCS8 => write!(f, "PRIVATE KEY"),
-            BlockType::PrivateKeyOpenssh => write!(f, "OPENSSH PRIVATE KEY"),
+            BlockType::PublicKey => "PGP PUBLIC KEY BLOCK".into(),
+            BlockType::PrivateKey => "PGP PRIVATE KEY BLOCK".into(),
+            BlockType::MultiPartMessage(x, y) => format!("PGP MESSAGE, PART {}/{}", x, y),
+            BlockType::Message => "PGP MESSAGE".into(),
+            BlockType::Signature => "PGP SIGNATURE".into(),
+            BlockType::File => "PGP ARMORED FILE".into(),
+            BlockType::PublicKeyPKCS1(typ) => format!("{} PUBLIC KEY", typ),
+            BlockType::PublicKeyPKCS8 => "PUBLIC KEY".into(),
+            BlockType::PublicKeyOpenssh => "OPENSSH PUBLIC KEY".into(),
+            BlockType::PrivateKeyPKCS1(typ) => format!("{} PRIVATE KEY", typ),
+            BlockType::PrivateKeyPKCS8 => "PRIVATE KEY".into(),
+            BlockType::PrivateKeyOpenssh => "OPENSSH PRIVATE KEY".into(),
         }
     }
 }

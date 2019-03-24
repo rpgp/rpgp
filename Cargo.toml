@@ -48,6 +48,7 @@ derive_builder = "0.7.0"
 bitfield = "0.13.1"
 sha3 = "0.8.1"
 rand = "0.6"
+smallvec = "0.6.9"
 
 [dependencies.nom]
 version = "^4.2"

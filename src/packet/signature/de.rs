@@ -3,6 +3,7 @@ use std::str;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use num_traits::FromPrimitive;
+use smallvec::SmallVec;
 
 use crypto::aead::AeadAlgorithm;
 use crypto::hash::HashAlgorithm;
@@ -11,8 +12,11 @@ use crypto::sym::SymmetricKeyAlgorithm;
 use de::Deserialize;
 use errors::Result;
 use packet::signature::types::*;
-use types::{CompressionAlgorithm, KeyId, KeyVersion, RevocationKey, RevocationKeyClass, Version};
-use util::{clone_into_array, mpi, packet_length, read_string};
+use types::{
+    mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
+    Version,
+};
+use util::{clone_into_array, packet_length, read_string};
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -58,27 +62,42 @@ named!(key_expiration<Subpacket>, map!(
 
 /// Parse a preferred symmetric algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
-#[rustfmt::skip]
-named!(pref_sym_alg<Subpacket>, do_parse!(
-       algs: many0!(complete!(map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)))
-    >> (Subpacket::PreferredSymmetricAlgorithms(algs))
-));
+fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+    let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
+        .iter()
+        .map(|v| {
+            SymmetricKeyAlgorithm::from_u8(*v)
+                .ok_or_else(|| format_err!("Invalid SymmetricKeyAlgorithm"))
+        })
+        .collect::<Result<_>>()?;
+
+    Ok((&b""[..], Subpacket::PreferredSymmetricAlgorithms(list)))
+}
 
 /// Parse a preferred hash algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.8
-#[rustfmt::skip]
-named!(pref_hash_alg<Subpacket>, do_parse!(
-        algs: many0!(complete!(map_opt!(be_u8, HashAlgorithm::from_u8)))
-    >> (Subpacket::PreferredHashAlgorithms(algs))
-));
+fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+    let list: SmallVec<[HashAlgorithm; 8]> = body
+        .iter()
+        .map(|v| HashAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid HashAlgorithm")))
+        .collect::<Result<_>>()?;
+
+    Ok((&b""[..], Subpacket::PreferredHashAlgorithms(list)))
+}
 
 /// Parse a preferred compression algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.9
-#[rustfmt::skip]
-named!(pref_com_alg<Subpacket>,do_parse!(
-        algs: many0!(complete!(map_opt!(be_u8, CompressionAlgorithm::from_u8)))
-    >> (Subpacket::PreferredCompressionAlgorithms(algs))
-));
+fn pref_com_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+    let list: SmallVec<[CompressionAlgorithm; 8]> = body
+        .iter()
+        .map(|v| {
+            CompressionAlgorithm::from_u8(*v)
+                .ok_or_else(|| format_err!("Invalid CompressionAlgorithm"))
+        })
+        .collect::<Result<_>>()?;
+
+    Ok((&b""[..], Subpacket::PreferredCompressionAlgorithms(list)))
+}
 
 /// Parse a signature expiration time subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
@@ -132,7 +151,7 @@ named!(revocation_key<Subpacket>, do_parse!(
     >> (Subpacket::RevocationKey(RevocationKey::new(
         class,
         algorithm,
-        fp.to_vec()
+        fp,
     )))
 ));
 
@@ -153,7 +172,10 @@ named!(notation_data<Subpacket>, do_parse!(
 /// Parse a key server preferences subpacket
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2.3.17
 fn key_server_prefs(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    Ok((&b""[..], Subpacket::KeyServerPreferences(body.to_vec())))
+    Ok((
+        &b""[..],
+        Subpacket::KeyServerPreferences(SmallVec::from_slice(body)),
+    ))
 }
 
 /// Parse a preferred key server subpacket
@@ -181,7 +203,7 @@ named!(policy_uri<Subpacket>, map!(
 /// Parse a key flags subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.21
 fn key_flags(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    Ok((&b""[..], Subpacket::KeyFlags(body.to_vec())))
+    Ok((&b""[..], Subpacket::KeyFlags(SmallVec::from_slice(body))))
 }
 
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
@@ -194,7 +216,7 @@ named!(signers_userid<Subpacket>, do_parse!(
 /// Parse a features subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.24
 fn features(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    Ok((&b""[..], Subpacket::Features(body.to_vec())))
+    Ok((&b""[..], Subpacket::Features(SmallVec::from_slice(body))))
 }
 
 /// Parse a revocation reason subpacket
@@ -222,20 +244,23 @@ named!(embedded_sig<Subpacket>, map!(call!(parse, Version::New), |sig| {
 }));
 
 /// Parse an issuer subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
+/// Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
 #[rustfmt::skip]
 named!(issuer_fingerprint<Subpacket>, do_parse!(
            version: map_opt!(be_u8, KeyVersion::from_u8)
     >> fingerprint: rest
-    >> (Subpacket::IssuerFingerprint(version, fingerprint.to_vec()))
+    >> (Subpacket::IssuerFingerprint(version, SmallVec::from_slice(fingerprint)))
 ));
 
 /// Parse a preferred aead subpacket
-#[rustfmt::skip]
-named!(preferred_aead<Subpacket>, do_parse!(
-       algs: many0!(complete!(map_opt!(be_u8, AeadAlgorithm::from_u8)))
-    >> (Subpacket::PreferredAeadAlgorithms(algs))
-));
+fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+    let list: SmallVec<[AeadAlgorithm; 2]> = body
+        .iter()
+        .map(|v| AeadAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid AeadAlgorithm")))
+        .collect::<Result<_>>()?;
+
+    Ok((&b""[..], Subpacket::PreferredAeadAlgorithms(list)))
+}
 
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
@@ -266,8 +291,11 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
         SignatureTarget => sig_target(body),
         EmbeddedSignature => embedded_sig(body),
         IssuerFingerprint => issuer_fingerprint(body),
-        PreferredAead => preferred_aead(body),
-        Experimental(n) => Ok((&body[..], Subpacket::Experimental(n, body.to_vec()))),
+        PreferredAead => pref_aead_alg(body),
+        Experimental(n) => Ok((
+            &body[..],
+            Subpacket::Experimental(n, SmallVec::from_slice(body)),
+        )),
         Other(n) => Ok((&body[..], Subpacket::Other(n, body.to_vec()))),
     };
 
@@ -288,16 +316,14 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>, many0!(complete!(do_parse!(
     >> (p)
 ))));
 
-named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Vec<u8>>>, switch!(
+named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Mpi>>, switch!(
     value!(typ),
     &PublicKeyAlgorithm::RSA |
-    &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| vec![v.to_vec()]) |
+    &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| vec![v.to_owned()]) |
     &PublicKeyAlgorithm::DSA   |
     &PublicKeyAlgorithm::ECDSA |
-    // TODO: Handle EdDSA signature parameters being encoded in little-endian format
-    // Rref https://tools.ietf.org/html/rfc8032#section-5.1.2
-    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<_>, item: &[u8] | {
-        acc.push(item.to_vec());
+    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<Mpi>, item: MpiRef | {
+        acc.push(item.to_owned());
         acc
     }) |
     &PublicKeyAlgorithm::Private100 |
@@ -310,8 +336,8 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Vec<u8
     &PublicKeyAlgorithm::Private107 |
     &PublicKeyAlgorithm::Private108 |
     &PublicKeyAlgorithm::Private109 |
-    &PublicKeyAlgorithm::Private110  => map!(call!(mpi), |v| vec![v.to_vec()]) |
-    _ => map!(call!(mpi), |v| vec![v.to_vec()])
+    &PublicKeyAlgorithm::Private110  => map!(call!(mpi), |v| vec![v.to_owned()]) |
+    _ => map!(call!(mpi), |v| vec![v.to_owned()])
 ));
 
 /// Parse a v2 or v3 signature packet

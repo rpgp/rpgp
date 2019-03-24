@@ -8,12 +8,12 @@ use composed::shared::Deserializable;
 use crypto::{checksum, ecdh, rsa, SymmetricKeyAlgorithm};
 use errors::Result;
 use packet::SymKeyEncryptedSessionKey;
-use types::{KeyTrait, SecretKeyRepr, SecretKeyTrait, Tag};
+use types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait, Tag};
 
 pub fn decrypt_session_key<F>(
     locked_key: &(impl SecretKeyTrait + KeyTrait),
     key_pw: F,
-    mpis: &[Vec<u8>],
+    mpis: &[Mpi],
 ) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
 where
     F: FnOnce() -> String,

@@ -28,8 +28,7 @@ impl SecretParams {
     pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm) -> Result<Self> {
         let (_, (params, cs)) = parse_secret_fields(data, alg)?;
 
-        let other = params.checksum();
-        ensure_eq!(cs, other.as_ref().map(|v| &v[..]), "invalid checksum");
+        params.compare_checksum(cs)?;
 
         Ok(params)
     }
@@ -38,6 +37,13 @@ impl SecretParams {
         match self {
             SecretParams::Plain(k) => k.string_to_key_id(),
             SecretParams::Encrypted(k) => k.string_to_key_id(),
+        }
+    }
+
+    pub fn compare_checksum(&self, other: Option<&[u8]>) -> Result<()> {
+        match self {
+            SecretParams::Plain(k) => k.as_ref().compare_checksum_simple(other),
+            SecretParams::Encrypted(k) => k.compare_checksum(other),
         }
     }
 

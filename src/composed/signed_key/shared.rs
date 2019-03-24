@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::io;
 
+use smallvec::SmallVec;
+
 use composed::key::KeyDetails;
 use composed::signed_key::{SignedPublicKey, SignedSecretKey};
 use crypto::public_key::PublicKeyAlgorithm;
@@ -22,31 +24,26 @@ impl SignedKeyDetails {
     pub fn new(
         revocation_signatures: Vec<packet::Signature>,
         direct_signatures: Vec<packet::Signature>,
-        users: Vec<SignedUser>,
-        user_attributes: Vec<SignedUserAttribute>,
+        mut users: Vec<SignedUser>,
+        mut user_attributes: Vec<SignedUserAttribute>,
     ) -> Self {
-        let users = users
-            .into_iter()
-            .filter(|user| {
-                if user.signatures.is_empty() {
-                    warn!("ignoring unsigned {}", user.id);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
-        let user_attributes = user_attributes
-            .into_iter()
-            .filter(|attr| {
-                if attr.signatures.is_empty() {
-                    warn!("ignoring unsigned {}", attr.attr);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+        users.retain(|user| {
+            if user.signatures.is_empty() {
+                warn!("ignoring unsigned {}", user.id);
+                false
+            } else {
+                true
+            }
+        });
+
+        user_attributes.retain(|attr| {
+            if attr.signatures.is_empty() {
+                warn!("ignoring unsigned {}", attr.attr);
+                false
+            } else {
+                true
+            }
+        });
 
         SignedKeyDetails {
             revocation_signatures,
@@ -111,9 +108,11 @@ impl SignedKeyDetails {
             .expect("invalid primary user");
         let keyflags = primary_sig.key_flags();
 
-        let preferred_symmetric_algorithms = primary_sig.preferred_symmetric_algs().to_vec();
-        let preferred_hash_algorithms = primary_sig.preferred_hash_algs().to_vec();
-        let preferred_compression_algorithms = primary_sig.preferred_compression_algs().to_vec();
+        let preferred_symmetric_algorithms =
+            SmallVec::from_slice(primary_sig.preferred_symmetric_algs());
+        let preferred_hash_algorithms = SmallVec::from_slice(primary_sig.preferred_hash_algs());
+        let preferred_compression_algorithms =
+            SmallVec::from_slice(primary_sig.preferred_compression_algs());
         let revocation_key = primary_sig.revocation_key().cloned();
 
         KeyDetails::new(

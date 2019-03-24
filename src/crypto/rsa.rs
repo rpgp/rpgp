@@ -7,14 +7,16 @@ use try_from::TryInto;
 
 use crypto::HashAlgorithm;
 use errors::Result;
-use types::{PlainSecretParams, PublicParams};
+use types::{Mpi, PlainSecretParams, PublicParams};
 
 /// RSA decryption using PKCS1v15 padding.
-pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Vec<u8>], _fingerprint: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
     // rsa consist of exactly one mpi
+    ensure_eq!(mpis.len(), 1, "invalid input");
+
     let mpi = &mpis[0];
-    info!("RSA m^e mod n: {}", hex::encode(mpi));
-    let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi)?;
+    info!("RSA m^e mod n: {:?}", mpi);
+    let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi.as_bytes())?;
     info!("m: {}", hex::encode(&m));
 
     Ok(m)
@@ -23,14 +25,13 @@ pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Vec<u8>], _fingerprint: &[u8]) 
 /// RSA encryption using PKCS1v15 padding.
 pub fn encrypt<R: CryptoRng + Rng>(
     rng: &mut R,
-    n: &BigUint,
-    e: &BigUint,
+    n: &[u8],
+    e: &[u8],
     plaintext: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
     info!("RSA encrypt");
 
-    // TODO: fix rsa to allow for references
-    let key = RSAPublicKey::new(n.clone(), e.clone())?;
+    let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
     let data = key.encrypt(rng, PaddingScheme::PKCS1v15, plaintext)?;
 
     Ok(vec![data])
@@ -54,31 +55,25 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
     Ok((
         PublicParams::RSA {
-            n: key.n().clone(),
-            e: key.e().clone(),
+            n: key.n().into(),
+            e: key.e().into(),
         },
         PlainSecretParams::RSA {
-            d: key.d().clone(),
-            p: p.clone(),
-            q: q.clone(),
-            u,
+            d: key.d().into(),
+            p: p.into(),
+            q: q.into(),
+            u: u.into(),
         },
     ))
 }
 
 /// Verify a RSA, PKCS1v15 padded signature.
-pub fn verify(
-    n: &BigUint,
-    e: &BigUint,
-    hash: HashAlgorithm,
-    hashed: &[u8],
-    sig: &[u8],
-) -> Result<()> {
-    let key = RSAPublicKey::new(n.clone(), e.clone())?;
+pub fn verify(n: &[u8], e: &[u8], hash: HashAlgorithm, hashed: &[u8], sig: &[u8]) -> Result<()> {
+    let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
     let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
 
-    info!("n: {}", hex::encode(n.to_bytes_be()));
-    info!("e: {}", hex::encode(e.to_bytes_be()));
+    info!("n: {}", hex::encode(n));
+    info!("e: {}", hex::encode(e));
     key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], sig)
         .map_err(Into::into)
 }

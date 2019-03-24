@@ -4,8 +4,12 @@ use num_traits::FromPrimitive;
 
 use crypto::ecc_curve::ecc_curve_from_oid;
 use crypto::{HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
-use types::{KeyVersion, PublicParams};
-use util::{mpi, mpi_big};
+use types::{mpi, KeyVersion, Mpi, MpiRef, PublicParams};
+
+#[inline]
+fn to_owned(mref: MpiRef) -> Mpi {
+    mref.to_owned()
+}
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 #[rustfmt::skip]
@@ -18,7 +22,7 @@ named!(ecdsa<PublicParams>, do_parse!(
     >>   p: mpi
     >> (PublicParams::ECDSA {
         curve,
-        p: p.to_vec(),
+        p: p.to_owned(),
     })
 ));
 
@@ -33,7 +37,7 @@ named!(eddsa<PublicParams>, do_parse!(
     >>   q: mpi
     >> (PublicParams::EdDSA {
         curve,
-        q: q.to_vec(),
+        q: q.to_owned(),
     })
 ));
 
@@ -57,7 +61,7 @@ named!(ecdh<PublicParams>, do_parse!(
     >>  alg_sym: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
     >> (PublicParams::ECDH {
         curve,
-        p: p.to_vec(),
+        p: p.to_owned(),
         hash: hash,
         alg_sym: alg_sym,
     })
@@ -66,27 +70,27 @@ named!(ecdh<PublicParams>, do_parse!(
 #[rustfmt::skip]
 named!(elgamal<PublicParams>, do_parse!(
     // MPI of Elgamal prime p
-        p: mpi_big
+        p: map!(mpi, to_owned)
     // MPI of Elgamal group generator g
-    >> g: mpi_big
+    >> g: map!(mpi, to_owned)
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
-    >> y: mpi_big
+    >> y: map!(mpi, to_owned)
     >> (PublicParams::Elgamal{ p, g, y })
 ));
 
 #[rustfmt::skip]
 named!(dsa<PublicParams>, do_parse!(
-       p: mpi_big
-    >> q: mpi_big
-    >> g: mpi_big
-    >> y: mpi_big
+       p: map!(mpi, to_owned)
+    >> q: map!(mpi, to_owned)
+    >> g: map!(mpi, to_owned)
+    >> y: map!(mpi, to_owned)
     >> (PublicParams::DSA { p, q, g, y })
 ));
 
 #[rustfmt::skip]
 named!(rsa<PublicParams>, do_parse!(
-       n: mpi_big
-    >> e: mpi_big
+       n: map!(mpi, to_owned)
+    >> e: map!(mpi, to_owned)
     >> (PublicParams::RSA { n, e })
 ));
 

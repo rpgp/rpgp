@@ -61,6 +61,8 @@ extern crate try_from;
 extern crate derive_builder;
 #[macro_use]
 extern crate bitfield;
+#[macro_use]
+extern crate smallvec;
 
 #[cfg(test)]
 extern crate rand_chacha;

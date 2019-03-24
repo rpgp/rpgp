@@ -12,7 +12,8 @@ use errors::Result;
 use packet::signature::SignatureConfig;
 use packet::PacketTrait;
 use ser::Serialize;
-use types::{self, CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, Tag, Version};
+use smallvec::SmallVec;
+use types::{self, CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicKeyTrait, Tag, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
@@ -23,7 +24,7 @@ pub struct Signature {
     pub config: SignatureConfig,
 
     pub signed_hash_value: [u8; 2],
-    pub signature: Vec<Vec<u8>>,
+    pub signature: Vec<Mpi>,
 }
 
 impl Signature {
@@ -35,7 +36,7 @@ impl Signature {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         signed_hash_value: [u8; 2],
-        signature: Vec<Vec<u8>>,
+        signature: Vec<Mpi>,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
     ) -> Self {
@@ -57,7 +58,7 @@ impl Signature {
     pub fn from_config(
         config: SignatureConfig,
         signed_hash_value: [u8; 2],
-        signature: Vec<Vec<u8>>,
+        signature: Vec<Mpi>,
     ) -> Self {
         Signature {
             packet_version: Default::default(),
@@ -685,14 +686,14 @@ pub enum Subpacket {
     /// The OpenPGP Key ID of the key issuing the signature.
     Issuer(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
-    PreferredSymmetricAlgorithms(Vec<SymmetricKeyAlgorithm>),
+    PreferredSymmetricAlgorithms(SmallVec<[SymmetricKeyAlgorithm; 8]>),
     /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
-    PreferredHashAlgorithms(Vec<HashAlgorithm>),
+    PreferredHashAlgorithms(SmallVec<[HashAlgorithm; 8]>),
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
-    PreferredCompressionAlgorithms(Vec<CompressionAlgorithm>),
-    KeyServerPreferences(Vec<u8>),
-    KeyFlags(Vec<u8>),
-    Features(Vec<u8>),
+    PreferredCompressionAlgorithms(SmallVec<[CompressionAlgorithm; 8]>),
+    KeyServerPreferences(SmallVec<[u8; 4]>),
+    KeyFlags(SmallVec<[u8; 1]>),
+    Features(SmallVec<[u8; 1]>),
     RevocationReason(RevocationCode, String),
     IsPrimary(bool),
     Revocable(bool),
@@ -705,9 +706,9 @@ pub enum Subpacket {
     TrustSignature(u8, u8),
     RegularExpression(String),
     ExportableCertification(bool),
-    IssuerFingerprint(KeyVersion, Vec<u8>),
-    PreferredAeadAlgorithms(Vec<AeadAlgorithm>),
-    Experimental(u8, Vec<u8>),
+    IssuerFingerprint(KeyVersion, SmallVec<[u8; 20]>),
+    PreferredAeadAlgorithms(SmallVec<[AeadAlgorithm; 2]>),
+    Experimental(u8, SmallVec<[u8; 2]>),
     Other(u8, Vec<u8>),
     SignatureTarget(PublicKeyAlgorithm, HashAlgorithm, Vec<u8>),
 }
@@ -736,9 +737,9 @@ impl<'a> From<&'a [u8]> for KeyFlags {
     }
 }
 
-impl From<KeyFlags> for Vec<u8> {
+impl From<KeyFlags> for SmallVec<[u8; 1]> {
     fn from(flags: KeyFlags) -> Self {
-        vec![flags.0]
+        smallvec![flags.0]
     }
 }
 
@@ -771,7 +772,13 @@ impl fmt::Debug for Signature {
             .field("packet_version", &self.packet_version)
             .field("config", &self.config)
             .field("signed_hash_value", &hex::encode(&self.signed_hash_value))
-            .field("signature", &hex::encode(&self.signature.concat()))
+            .field(
+                "signature",
+                &format_args!(
+                    "{:?}",
+                    self.signature.iter().map(hex::encode).collect::<Vec<_>>()
+                ),
+            )
             .finish()
     }
 }

@@ -11,6 +11,8 @@ extern crate serde_json;
 extern crate log;
 #[macro_use]
 extern crate pretty_assertions;
+#[macro_use]
+extern crate smallvec;
 
 use std::fs::File;
 use std::io::{Cursor, Read};
@@ -22,6 +24,7 @@ use num_traits::ToPrimitive;
 use rand::thread_rng;
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
+use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
@@ -31,8 +34,8 @@ use pgp::packet::{
     KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId,
 };
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, PublicParams, SecretKeyRepr, SecretKeyTrait,
-    SecretParams, SignedUser, StringToKeyType, Version,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, SecretKeyRepr,
+    SecretKeyTrait, SecretParams, SignedUser, StringToKeyType, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -235,7 +238,7 @@ fn test_parse_details() {
         &hex::decode("4c073ae0c8445c0c").unwrap()[..]
     );
 
-    let primary_n = BigUint::from_bytes_be(hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap().to_vec().as_slice());
+    let primary_n: Mpi = hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap().into();
 
     let pk = key.primary_key;
     assert_eq!(pk.version(), KeyVersion::V4);
@@ -244,7 +247,10 @@ fn test_parse_details() {
     match pk.public_params() {
         PublicParams::RSA { n, e } => {
             assert_eq!(n, &primary_n);
-            assert_eq!(e.to_u64().unwrap(), 0x0001_0001);
+            assert_eq!(
+                BigUint::from_bytes_be(e.as_bytes()).to_u64().unwrap(),
+                0x0001_0001
+            );
         }
         _ => panic!("wrong public params: {:?}", pk.public_params()),
     }
@@ -258,20 +264,20 @@ fn test_parse_details() {
     let issuer = Subpacket::Issuer(
         KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
     );
-    let key_flags: Vec<u8> = KeyFlags(0x03).into();
-    let p_sym_algs = vec![
+    let key_flags: SmallVec<[u8; 1]> = KeyFlags(0x03).into();
+    let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
         SymmetricKeyAlgorithm::AES192,
         SymmetricKeyAlgorithm::AES128,
         SymmetricKeyAlgorithm::CAST5,
         SymmetricKeyAlgorithm::TripleDES,
     ];
-    let p_com_algs = vec![
+    let p_com_algs = smallvec![
         CompressionAlgorithm::ZLIB,
         CompressionAlgorithm::BZip2,
         CompressionAlgorithm::ZIP,
     ];
-    let p_hash_algs = vec![
+    let p_hash_algs = smallvec![
         HashAlgorithm::SHA2_256,
         HashAlgorithm::SHA1,
         HashAlgorithm::SHA2_384,
@@ -324,7 +330,8 @@ fn test_parse_details() {
             0xbd, 0x1f, 0x26, 0x92, 0xda, 0x85, 0x52, 0x71, 0x15, 0x9d, 0x7e, 0xa4, 0x7e, 0xc2,
             0xd1, 0xcd, 0xb4, 0x56, 0xb3, 0x9a, 0x92, 0x0c, 0x4c, 0x0e, 0x40, 0x8d, 0xf3, 0x4d,
             0xb9, 0x49, 0x6f, 0x55, 0xc6, 0xb9, 0xf5, 0x1a,
-        ]],
+        ]
+        .into()],
         vec![
             Subpacket::SignatureCreationTime(
                 DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
@@ -335,8 +342,8 @@ fn test_parse_details() {
             Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
             Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
             Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(vec![1]),
-            Subpacket::KeyServerPreferences(vec![128]),
+            Subpacket::Features(smallvec![1]),
+            Subpacket::KeyServerPreferences(smallvec![128]),
         ],
         vec![issuer.clone()],
     );
@@ -391,7 +398,8 @@ fn test_parse_details() {
             0x5a, 0xe8, 0x4a, 0x93, 0x98, 0xf3, 0xe2, 0xdb, 0xbc, 0x9f, 0xb1, 0x83, 0x92, 0x8b,
             0xba, 0x8b, 0xe0, 0xe4, 0x6b, 0x77, 0x0f, 0x35, 0xcb, 0x3f, 0x3e, 0xf5, 0x98, 0x37,
             0x99, 0xed, 0x79, 0xd8, 0x76, 0xdf, 0x13, 0x9e,
-        ]],
+        ]
+        .into()],
         vec![
             Subpacket::SignatureCreationTime(
                 DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
@@ -402,8 +410,8 @@ fn test_parse_details() {
             Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
             Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
             Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(vec![1]),
-            Subpacket::KeyServerPreferences(vec![128]),
+            Subpacket::Features(smallvec![1]),
+            Subpacket::KeyServerPreferences(smallvec![128]),
         ],
         vec![issuer.clone()],
     );
@@ -470,7 +478,8 @@ fn test_parse_details() {
             0xbb, 0xa0, 0x5e, 0x76, 0xd6, 0x01, 0xe1, 0xa4, 0x9a, 0x14, 0x43, 0xcd, 0x99, 0xa0,
             0x2e, 0xa2, 0xda, 0x81, 0xe2, 0x9c, 0xab, 0x22, 0x41, 0x02, 0xcc, 0x2f, 0xca, 0xc5,
             0xf7, 0x26, 0x65, 0x7d, 0x0b, 0xcc, 0xab, 0x26,
-        ]],
+        ]
+        .into()],
         vec![
             Subpacket::SignatureCreationTime(
                 DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
@@ -481,8 +490,8 @@ fn test_parse_details() {
             Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
             Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
             Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(vec![1]),
-            Subpacket::KeyServerPreferences(vec![128]),
+            Subpacket::Features(smallvec![1]),
+            Subpacket::KeyServerPreferences(smallvec![128]),
         ],
         vec![issuer.clone()],
     );
