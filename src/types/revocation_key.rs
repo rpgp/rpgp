@@ -1,10 +1,12 @@
+use smallvec::SmallVec;
+
 use crypto::public_key::PublicKeyAlgorithm;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct RevocationKey {
     pub class: RevocationKeyClass,
     pub algorithm: PublicKeyAlgorithm,
-    pub fingerprint: Vec<u8>,
+    pub fingerprint: SmallVec<[u8; 20]>,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
@@ -18,12 +20,12 @@ impl RevocationKey {
     pub fn new(
         class: RevocationKeyClass,
         algorithm: PublicKeyAlgorithm,
-        fingerprint: Vec<u8>,
+        fingerprint: &[u8],
     ) -> Self {
         RevocationKey {
             class,
             algorithm,
-            fingerprint,
+            fingerprint: SmallVec::from_slice(fingerprint),
         }
     }
 }

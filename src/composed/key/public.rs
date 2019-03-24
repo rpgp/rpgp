@@ -2,6 +2,7 @@ use std::io;
 
 use chrono::{self, SubsecRound};
 use rand::{CryptoRng, Rng};
+use smallvec::SmallVec;
 
 use composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
 use crypto::{HashAlgorithm, PublicKeyAlgorithm};
@@ -97,7 +98,10 @@ impl PublicSubkey {
         let hashed_subpackets = vec![
             Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
             Subpacket::KeyFlags(self.keyflags.into()),
-            Subpacket::IssuerFingerprint(Default::default(), sec_key.fingerprint()),
+            Subpacket::IssuerFingerprint(
+                Default::default(),
+                SmallVec::from_slice(&sec_key.fingerprint()),
+            ),
         ];
 
         let config = SignatureConfigBuilder::default()

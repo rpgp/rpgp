@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use chrono::{self, SubsecRound};
 use rand::thread_rng;
+use smallvec::SmallVec;
 
 use composed::{KeyDetails, SecretKey, SecretSubkey};
 use crypto::{ecdh, eddsa, rsa, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
@@ -25,13 +26,13 @@ pub struct SecretKeyParams {
     // -- Preferences
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
-    preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
+    preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
     /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
-    preferred_hash_algorithms: Vec<HashAlgorithm>,
+    preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
-    preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+    preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
     #[builder(default)]
     revocation_key: Option<RevocationKey>,
 
@@ -277,19 +278,19 @@ mod tests {
             .can_create_certificates(true)
             .can_sign(true)
             .primary_user_id("Me <me@mail.com>".into())
-            .preferred_symmetric_algorithms(vec![
+            .preferred_symmetric_algorithms(smallvec![
                 SymmetricKeyAlgorithm::AES256,
                 SymmetricKeyAlgorithm::AES192,
                 SymmetricKeyAlgorithm::AES128,
             ])
-            .preferred_hash_algorithms(vec![
+            .preferred_hash_algorithms(smallvec![
                 HashAlgorithm::SHA2_256,
                 HashAlgorithm::SHA2_384,
                 HashAlgorithm::SHA2_512,
                 HashAlgorithm::SHA2_224,
                 HashAlgorithm::SHA1,
             ])
-            .preferred_compression_algorithms(vec![
+            .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
                 CompressionAlgorithm::ZIP,
             ]);
@@ -387,19 +388,19 @@ mod tests {
             .can_sign(true)
             .primary_user_id("Me-X <me-x25519@mail.com>".into())
             .passphrase(None)
-            .preferred_symmetric_algorithms(vec![
+            .preferred_symmetric_algorithms(smallvec![
                 SymmetricKeyAlgorithm::AES256,
                 SymmetricKeyAlgorithm::AES192,
                 SymmetricKeyAlgorithm::AES128,
             ])
-            .preferred_hash_algorithms(vec![
+            .preferred_hash_algorithms(smallvec![
                 HashAlgorithm::SHA2_256,
                 HashAlgorithm::SHA2_384,
                 HashAlgorithm::SHA2_512,
                 HashAlgorithm::SHA2_224,
                 HashAlgorithm::SHA1,
             ])
-            .preferred_compression_algorithms(vec![
+            .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
                 CompressionAlgorithm::ZIP,
             ])

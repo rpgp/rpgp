@@ -94,7 +94,7 @@ impl<'a> PlainSecretParamsRef<'a> {
     pub fn compare_checksum_simple(&self, other: Option<&[u8]>) -> Result<()> {
         if let Some(other) = other {
             let mut hasher = checksum::SimpleChecksum::default();
-            self.to_writer_raw(&mut hasher).expect("known write target");
+            self.to_writer_raw(&mut hasher)?;
             ensure_eq!(
                 BigEndian::read_u16(other),
                 hasher.finish() as u16,

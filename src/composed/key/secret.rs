@@ -1,4 +1,5 @@
 use chrono::{self, SubsecRound};
+use smallvec::SmallVec;
 
 use composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
 use crypto::PublicKeyAlgorithm;
@@ -89,7 +90,10 @@ impl SecretSubkey {
         let hashed_subpackets = vec![
             Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
             Subpacket::KeyFlags(self.keyflags.into()),
-            Subpacket::IssuerFingerprint(Default::default(), sec_key.fingerprint()),
+            Subpacket::IssuerFingerprint(
+                Default::default(),
+                SmallVec::from_slice(&sec_key.fingerprint()),
+            ),
         ];
 
         let config = SignatureConfigBuilder::default()

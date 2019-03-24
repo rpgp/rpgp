@@ -10,6 +10,7 @@ use pgp::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
 use pgp::errors::Result;
 use pgp::ser::Serialize;
 use pgp::types::{CompressionAlgorithm, KeyTrait, SecretKeyTrait};
+use smallvec::smallvec;
 
 use crate::cvec::cvec;
 use crate::signed_public_key;
@@ -127,19 +128,19 @@ fn create_key(typ: KeyType, sub_typ: KeyType, user_id: &str) -> Result<SignedSec
         .can_sign(true)
         .primary_user_id(user_id.into())
         .passphrase(None)
-        .preferred_symmetric_algorithms(vec![
+        .preferred_symmetric_algorithms(smallvec![
             SymmetricKeyAlgorithm::AES256,
             SymmetricKeyAlgorithm::AES192,
             SymmetricKeyAlgorithm::AES128,
         ])
-        .preferred_hash_algorithms(vec![
+        .preferred_hash_algorithms(smallvec![
             HashAlgorithm::SHA2_256,
             HashAlgorithm::SHA2_384,
             HashAlgorithm::SHA2_512,
             HashAlgorithm::SHA2_224,
             HashAlgorithm::SHA1,
         ])
-        .preferred_compression_algorithms(vec![
+        .preferred_compression_algorithms(smallvec![
             CompressionAlgorithm::ZLIB,
             CompressionAlgorithm::ZIP,
         ])
