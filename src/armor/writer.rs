@@ -18,7 +18,7 @@ pub fn write(
     headers: Option<&BTreeMap<String, String>>,
 ) -> Result<()> {
     // write armor header
-    writer.write_all(&b"\n-----BEGIN "[..])?;
+    writer.write_all(&b"-----BEGIN "[..])?;
     typ.to_writer(writer)?;
     writer.write_all(&b"-----\n"[..])?;
 
