@@ -1,4 +1,5 @@
 use chrono::{self, SubsecRound};
+use smallvec::SmallVec;
 
 use composed::SignedKeyDetails;
 use crypto::hash::HashAlgorithm;
@@ -15,9 +16,9 @@ pub struct KeyDetails {
     user_ids: Vec<UserId>,
     user_attributes: Vec<UserAttribute>,
     keyflags: KeyFlags,
-    preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
-    preferred_hash_algorithms: Vec<HashAlgorithm>,
-    preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+    preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
+    preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
+    preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
     revocation_key: Option<RevocationKey>,
 }
 
@@ -28,9 +29,9 @@ impl KeyDetails {
         user_ids: Vec<UserId>,
         user_attributes: Vec<UserAttribute>,
         keyflags: KeyFlags,
-        preferred_symmetric_algorithms: Vec<SymmetricKeyAlgorithm>,
-        preferred_hash_algorithms: Vec<HashAlgorithm>,
-        preferred_compression_algorithms: Vec<CompressionAlgorithm>,
+        preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
+        preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
+        preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
         revocation_key: Option<RevocationKey>,
     ) -> Self {
         KeyDetails {
@@ -49,7 +50,7 @@ impl KeyDetails {
     where
         F: (FnOnce() -> String) + Clone,
     {
-        let keyflags: Vec<u8> = self.keyflags.into();
+        let keyflags: SmallVec<[u8; 1]> = self.keyflags.into();
         let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
         let preferred_hash_algorithms = self.preferred_hash_algorithms;
         let preferred_compression_algorithms = self.preferred_compression_algorithms;
@@ -67,7 +68,10 @@ impl KeyDetails {
                 Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
                 Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
                 Subpacket::PreferredCompressionAlgorithms(preferred_compression_algorithms.clone()),
-                Subpacket::IssuerFingerprint(Default::default(), key.fingerprint()),
+                Subpacket::IssuerFingerprint(
+                    Default::default(),
+                    SmallVec::from_slice(&key.fingerprint()),
+                ),
             ];
             if let Some(rkey) = revocation_key {
                 hashed_subpackets.push(Subpacket::RevocationKey(rkey));
@@ -104,7 +108,10 @@ impl KeyDetails {
                             Subpacket::PreferredCompressionAlgorithms(
                                 preferred_compression_algorithms.clone(),
                             ),
-                            Subpacket::IssuerFingerprint(Default::default(), key.fingerprint()),
+                            Subpacket::IssuerFingerprint(
+                                Default::default(),
+                                SmallVec::from_slice(&key.fingerprint()),
+                            ),
                         ])
                         .unhashed_subpackets(vec![Subpacket::Issuer(key.key_id())])
                         .build()?;

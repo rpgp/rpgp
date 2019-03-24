@@ -3,7 +3,7 @@ use rand::{CryptoRng, Rng};
 
 use crypto::{ECCCurve, HashAlgorithm};
 use errors::Result;
-use types::{EdDSASecretKey, PlainSecretParams, PublicParams};
+use types::{EdDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 
 /// Generate an EdDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {
@@ -21,9 +21,9 @@ pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecr
     (
         PublicParams::EdDSA {
             curve: ECCCurve::Ed25519,
-            q,
+            q: q.into(),
         },
-        PlainSecretParams::EdDSA(p.to_vec()),
+        PlainSecretParams::EdDSA(Mpi::from_raw_slice(p)),
     )
 }
 
@@ -33,14 +33,14 @@ pub fn verify(
     q: &[u8],
     _hash: HashAlgorithm,
     hashed: &[u8],
-    sig: &[Vec<u8>],
+    sig: &[Mpi],
 ) -> Result<()> {
     match *curve {
         ECCCurve::Ed25519 => {
             ensure_eq!(sig.len(), 2);
 
-            let r = &sig[0];
-            let s = &sig[1];
+            let r = sig[0].as_bytes();
+            let s = sig[1].as_bytes();
 
             ensure!(r.len() < 33, "invalid R (len)");
             ensure!(s.len() < 33, "invalid S (len)");

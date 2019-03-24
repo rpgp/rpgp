@@ -1,4 +1,7 @@
-use byteorder::{BigEndian, WriteBytesExt};
+use std::hash::Hasher;
+use std::io;
+
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use sha1::{Digest, Sha1};
 
 use errors::Result;
@@ -13,7 +16,7 @@ pub fn simple(actual: &[u8], data: &[u8]) -> Result<()> {
 
     ensure_eq!(
         &actual[..2],
-        &expected_checksum[..],
+        &expected_checksum.to_be_bytes()[..],
         "invalid simple checksum"
     );
 
@@ -29,12 +32,60 @@ pub fn sha1(hash: &[u8], data: &[u8]) -> Result<()> {
 }
 
 #[inline]
-pub fn calculate_simple(data: &[u8]) -> Vec<u8> {
-    let val = (data.iter().map(|v| u32::from(*v)).sum::<u32>() & 0xffff) as u16;
-    let mut res = Vec::with_capacity(2);
-    res.write_u16::<BigEndian>(val).expect("pre allocated");
+pub fn simple_to_writer<W: io::Write>(data: &[u8], writer: &mut W) -> io::Result<()> {
+    let mut hasher = SimpleChecksum::default();
+    hasher.write(data);
+    hasher.to_writer(writer)
+}
 
-    res
+#[inline]
+pub fn calculate_simple(data: &[u8]) -> u16 {
+    let mut hasher = SimpleChecksum::default();
+    hasher.write(data);
+    hasher.finish() as u16
+}
+
+#[derive(Debug, Default)]
+pub struct SimpleChecksum(u16);
+
+impl SimpleChecksum {
+    #[inline]
+    pub fn to_writer<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write_u16::<BigEndian>(self.0)
+    }
+
+    #[inline]
+    pub fn finalize(&self) -> [u8; 2] {
+        let mut res = [0u8; 2];
+        BigEndian::write_u16(&mut res[..], self.0);
+
+        res
+    }
+}
+
+impl io::Write for SimpleChecksum {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        Hasher::write(self, buf);
+
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Hasher for SimpleChecksum {
+    #[inline]
+    fn write(&mut self, buf: &[u8]) {
+        let new_sum = buf.iter().map(|v| u32::from(*v)).sum::<u32>();
+        self.0 = ((u32::from(self.0) + new_sum) & 0xffff) as u16;
+    }
+
+    #[inline]
+    fn finish(&self) -> u64 {
+        u64::from(self.0)
+    }
 }
 
 #[inline]

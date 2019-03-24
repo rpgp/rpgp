@@ -1,5 +1,6 @@
-use std::{fmt, io};
+use std::io;
 
+use byteorder::{BigEndian, ByteOrder};
 use nom::be_u8;
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
@@ -8,18 +9,17 @@ use crypto::{checksum, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use errors::Result;
 use packet::PacketTrait;
 use ser::Serialize;
-use types::{KeyId, PublicKeyTrait, Tag, Version};
-use util::{mpi, write_mpi};
+use types::{mpi, KeyId, Mpi, PublicKeyTrait, Tag, Version};
 
 /// Public Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.1
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKeyEncryptedSessionKey {
     packet_version: Version,
     version: u8,
     id: KeyId,
     algorithm: PublicKeyAlgorithm,
-    mpis: Vec<Vec<u8>>,
+    mpis: Vec<Mpi>,
 }
 
 impl PublicKeyEncryptedSessionKey {
@@ -40,12 +40,16 @@ impl PublicKeyEncryptedSessionKey {
         pkey: &impl PublicKeyTrait,
     ) -> Result<Self> {
         // the session key is prefixed with symmetric key algorithm
-        let mut data = Vec::with_capacity(session_key.len() + 3);
-        data.push(alg as u8);
-        data.extend(session_key);
+        let len = session_key.len();
+        let mut data = vec![0u8; len + 3];
+        data[0] = alg as u8;
+        data[1..=len].copy_from_slice(session_key);
 
         // and appended a checksum
-        data.extend(&checksum::calculate_simple(session_key));
+        BigEndian::write_u16(
+            &mut data[len + 1..],
+            checksum::calculate_simple(session_key),
+        );
 
         let mpis = pkey.encrypt(rng, &data)?;
 
@@ -62,7 +66,7 @@ impl PublicKeyEncryptedSessionKey {
         &self.id
     }
 
-    pub fn mpis(&self) -> &[Vec<u8>] {
+    pub fn mpis(&self) -> &[Mpi] {
         &self.mpis
     }
 
@@ -72,16 +76,16 @@ impl PublicKeyEncryptedSessionKey {
 }
 
 #[rustfmt::skip]
-named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Vec<u8>>>, switch!(
+named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Mpi>>, switch!(
     value!(alg),
     &PublicKeyAlgorithm::RSA |
     &PublicKeyAlgorithm::RSASign |
-    &PublicKeyAlgorithm::RSAEncrypt => map!(mpi, |v| vec![v.to_vec()]) |
+    &PublicKeyAlgorithm::RSAEncrypt => map!(mpi, |v| vec![v.to_owned()]) |
     &PublicKeyAlgorithm::Elgamal |
     &PublicKeyAlgorithm::ElgamalSign => do_parse!(
           first: mpi
       >> second: mpi
-      >> (vec![first.to_vec(), second.to_vec()])
+      >> (vec![first.to_owned(), second.to_owned()])
     ) |
     &PublicKeyAlgorithm::ECDSA |
     &PublicKeyAlgorithm::DSA |
@@ -91,7 +95,7 @@ named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Vec<u8>>>, switch!(
         >> blen: be_u8
         >> b: take!(blen)
         >> ({
-            vec![a.to_vec(), b.to_vec()]
+            vec![a.to_owned(), b.into()]
         })
     )
 ));
@@ -129,13 +133,15 @@ impl Serialize for PublicKeyEncryptedSessionKey {
             | PublicKeyAlgorithm::Elgamal
             | PublicKeyAlgorithm::ElgamalSign => {
                 for mpi in &self.mpis {
-                    write_mpi(mpi, writer)?;
+                    mpi.to_writer(writer)?;
                 }
             }
             PublicKeyAlgorithm::ECDH => {
-                write_mpi(&self.mpis[0], writer)?;
+                self.mpis[0].to_writer(writer)?;
+                // The second value is not encoded as an actual MPI, but rather as a length prefixed
+                // number.
                 writer.write_all(&[self.mpis[1].len() as u8])?;
-                writer.write_all(&self.mpis[1])?;
+                writer.write_all(self.mpis[1].as_bytes())?;
             }
             _ => {
                 unimplemented_err!("writing {:?}", self.algorithm);
@@ -153,27 +159,5 @@ impl PacketTrait for PublicKeyEncryptedSessionKey {
 
     fn tag(&self) -> Tag {
         Tag::PublicKeyEncryptedSessionKey
-    }
-}
-
-impl fmt::Debug for PublicKeyEncryptedSessionKey {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("PublicKeyEncryptedSessionKey")
-            .field("packet_version", &self.packet_version)
-            .field("version", &self.version)
-            .field("id", &self.id)
-            .field("algorithm", &self.algorithm)
-            .field(
-                "mpis",
-                &format!(
-                    "[{}]",
-                    self.mpis
-                        .iter()
-                        .map(hex::encode)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            )
-            .finish()
     }
 }

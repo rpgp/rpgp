@@ -212,10 +212,9 @@ macro_rules! impl_public_key {
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                         PublicParams::RSA { n, .. } => {
-                            let n = n.to_bytes_be();
                             let offset = n.len() - 8;
 
-                            KeyId::from_slice(&n[offset..]).expect("fixed size slice")
+                            KeyId::from_slice(&n.as_bytes()[offset..]).expect("fixed size slice")
                         }
                         _ => panic!("invalid key constructed: {:?}", &self.public_params),
                     },
@@ -232,19 +231,25 @@ macro_rules! impl_public_key {
                 &self,
                 hash: $crate::crypto::hash::HashAlgorithm,
                 hashed: &[u8],
-                sig: &[Vec<u8>],
+                sig: &[$crate::types::Mpi],
             ) -> $crate::errors::Result<()> {
                 use $crate::types::PublicParams;
 
                 info!("verify data: {}", hex::encode(&hashed));
-                info!("verify sig: {}", hex::encode(&sig.concat()));
 
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
-                        $crate::crypto::rsa::verify(n, e, hash, hashed, &sig.concat())
+                        ensure_eq!(sig.len(), 1, "invalid signature");
+                        $crate::crypto::rsa::verify(
+                            n.as_bytes(),
+                            e.as_bytes(),
+                            hash,
+                            hashed,
+                            sig[0].as_bytes(),
+                        )
                     }
                     PublicParams::EdDSA { ref curve, ref q } => {
-                        $crate::crypto::eddsa::verify(curve, q, hash, hashed, sig)
+                        $crate::crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
                     }
                     PublicParams::ECDSA { ref curve, .. } => {
                         unimplemented_err!("verify ECDSA: {:?}", curve);
@@ -270,12 +275,12 @@ macro_rules! impl_public_key {
                 &self,
                 rng: &mut R,
                 plain: &[u8],
-            ) -> $crate::errors::Result<Vec<Vec<u8>>> {
+            ) -> $crate::errors::Result<Vec<$crate::types::Mpi>> {
                 use $crate::types::{KeyTrait, PublicParams};
 
-                match self.public_params {
+                let res = match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
-                        $crate::crypto::rsa::encrypt(rng, n, e, plain)
+                        $crate::crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
                     }
                     PublicParams::EdDSA { .. } => unimplemented_err!("encryption with EdDSA"),
                     PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
@@ -290,12 +295,17 @@ macro_rules! impl_public_key {
                         alg_sym,
                         hash,
                         &self.fingerprint(),
-                        p,
+                        p.as_bytes(),
                         plain,
                     ),
                     PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
                     PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
-                }
+                }?;
+
+                Ok(res
+                    .iter()
+                    .map(|v| $crate::types::Mpi::from_raw_slice(&v[..]))
+                    .collect::<Vec<_>>())
             }
 
             fn to_writer_old(
