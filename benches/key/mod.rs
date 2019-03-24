@@ -1,4 +1,5 @@
 use std::fs::{self, File};
+use std::io::Cursor;
 use test::{black_box, Bencher};
 
 use pgp::composed::{
@@ -7,6 +8,33 @@ use pgp::composed::{
 };
 use pgp::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
 use pgp::types::CompressionAlgorithm;
+
+#[cfg(feature = "profile")]
+use gperftools::profiler::PROFILER;
+
+#[cfg(feature = "profile")]
+#[inline(always)]
+fn start_profile(stage: &str) {
+    PROFILER
+        .lock()
+        .unwrap()
+        .start(format!("./{}.profile", stage))
+        .unwrap();
+}
+
+#[cfg(not(feature = "profile"))]
+#[inline(always)]
+fn start_profile(_stage: &str) {}
+
+#[cfg(feature = "profile")]
+#[inline(always)]
+fn stop_profile() {
+    PROFILER.lock().unwrap().stop().unwrap();
+}
+
+#[cfg(not(feature = "profile"))]
+#[inline(always)]
+fn stop_profile() {}
 
 #[bench]
 fn bench_secret_key_rsa_parse(b: &mut Bencher) {
@@ -77,4 +105,28 @@ fn bench_secret_key_x25519_generate(b: &mut Bencher) {
 fn bench_secret_key_x25519_self_sign(b: &mut Bencher) {
     let key = build_key(KeyType::EdDSA, KeyType::ECDH);
     b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()));
+}
+
+#[bench]
+fn bench_secret_key_parse_x25519(b: &mut Bencher) {
+    let key = build_key(KeyType::EdDSA, KeyType::ECDH)
+        .sign(|| "".into())
+        .unwrap();
+    let bytes = key.to_armored_bytes(None).unwrap();
+
+    start_profile("parse_key_secret_x25519");
+    b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
+    stop_profile();
+}
+
+#[bench]
+fn bench_secret_key_parse_rsa(b: &mut Bencher) {
+    let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
+        .sign(|| "".into())
+        .unwrap();
+    let bytes = key.to_armored_bytes(None).unwrap();
+
+    start_profile("parse_key_secret_rsa");
+    b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
+    stop_profile();
 }

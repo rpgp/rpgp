@@ -9,6 +9,7 @@ use errors::Result;
 use generic_array::typenum::U64;
 use line_writer::{LineBreak, LineWriter};
 use ser::Serialize;
+use util::TeeWriter;
 
 pub fn write(
     source: &impl Serialize,
@@ -16,33 +17,34 @@ pub fn write(
     writer: &mut impl Write,
     headers: Option<&BTreeMap<String, String>>,
 ) -> Result<()> {
-    let heading = format!("-----BEGIN {}-----\n", typ);
-    let footer = format!("\n-----END {}-----\n", typ);
+    // write armor header
+    writer.write_all(&b"\n-----BEGIN "[..])?;
+    typ.to_writer(writer)?;
+    writer.write_all(&b"-----\n"[..])?;
 
-    writer.write_all(heading.as_bytes())?;
-
+    // write armor headers
     if let Some(headers) = headers {
         for (key, value) in headers.iter() {
-            writer.write_all(format!("{}: {}\n", key, value).as_ref())?;
+            writer.write_all(key.as_bytes())?;
+            writer.write_all(&b": "[..])?;
+            writer.write_all(value.as_bytes())?;
+            writer.write_all(&b"\n"[..])?;
         }
     }
 
     writer.write_all(&b"\n"[..])?;
 
-    // TODO: avoid buffering
-    let mut bytes = Vec::new();
-    source.to_writer(&mut bytes)?;
+    // write body
     let mut crc_hasher = Crc24Hasher::init(0x00B7_04CE);
-    crc_hasher.write(&bytes);
-    let crc = crc_hasher.finish() as u32;
-
-    // write the base64 encoded content
     {
         let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
         let mut enc = base64::write::EncoderWriter::new(&mut line_wrapper, base64::STANDARD);
 
-        enc.write_all(&bytes)?;
+        let mut tee = TeeWriter::new(&mut crc_hasher, &mut enc);
+        source.to_writer(&mut tee)?;
     }
+
+    let crc = crc_hasher.finish() as u32;
 
     // write crc
     writer.write_all(b"\n=")?;
@@ -57,7 +59,10 @@ pub fn write(
 
     writer.write_all(crc_enc.as_bytes())?;
 
-    writer.write_all(footer.as_bytes())?;
+    // write footer
+    writer.write_all(&b"\n-----END "[..])?;
+    typ.to_writer(writer)?;
+    writer.write_all(&b"-----\n"[..])?;
 
     Ok(())
 }

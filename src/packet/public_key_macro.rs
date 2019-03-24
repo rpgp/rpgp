@@ -212,7 +212,6 @@ macro_rules! impl_public_key {
                     }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                         PublicParams::RSA { n, .. } => {
-                            let n = n.to_bytes_be();
                             let offset = n.len() - 8;
 
                             KeyId::from_slice(&n[offset..]).expect("fixed size slice")
