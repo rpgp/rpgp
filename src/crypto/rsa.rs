@@ -7,14 +7,16 @@ use try_from::TryInto;
 
 use crypto::HashAlgorithm;
 use errors::Result;
-use types::{PlainSecretParams, PublicParams};
+use types::{Mpi, PlainSecretParams, PublicParams};
 
 /// RSA decryption using PKCS1v15 padding.
-pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Vec<u8>], _fingerprint: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
     // rsa consist of exactly one mpi
+    ensure_eq!(mpis.len(), 1, "invalid input");
+
     let mpi = &mpis[0];
-    info!("RSA m^e mod n: {}", hex::encode(mpi));
-    let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi)?;
+    info!("RSA m^e mod n: {:?}", mpi);
+    let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi.as_bytes())?;
     info!("m: {}", hex::encode(&m));
 
     Ok(m)
@@ -53,14 +55,14 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
     Ok((
         PublicParams::RSA {
-            n: key.n().to_bytes_be(),
-            e: key.e().to_bytes_be(),
+            n: key.n().into(),
+            e: key.e().into(),
         },
         PlainSecretParams::RSA {
-            d: key.d().to_bytes_be(),
-            p: p.to_bytes_be(),
-            q: q.to_bytes_be(),
-            u: u.to_bytes_be(),
+            d: key.d().into(),
+            p: p.into(),
+            q: q.into(),
+            u: u.into(),
         },
     ))
 }

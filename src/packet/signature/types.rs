@@ -12,7 +12,7 @@ use errors::Result;
 use packet::signature::SignatureConfig;
 use packet::PacketTrait;
 use ser::Serialize;
-use types::{self, CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, Tag, Version};
+use types::{self, CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicKeyTrait, Tag, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
@@ -23,7 +23,7 @@ pub struct Signature {
     pub config: SignatureConfig,
 
     pub signed_hash_value: [u8; 2],
-    pub signature: Vec<Vec<u8>>,
+    pub signature: Vec<Mpi>,
 }
 
 impl Signature {
@@ -35,7 +35,7 @@ impl Signature {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         signed_hash_value: [u8; 2],
-        signature: Vec<Vec<u8>>,
+        signature: Vec<Mpi>,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
     ) -> Self {
@@ -57,7 +57,7 @@ impl Signature {
     pub fn from_config(
         config: SignatureConfig,
         signed_hash_value: [u8; 2],
-        signature: Vec<Vec<u8>>,
+        signature: Vec<Mpi>,
     ) -> Self {
         Signature {
             packet_version: Default::default(),
@@ -771,7 +771,13 @@ impl fmt::Debug for Signature {
             .field("packet_version", &self.packet_version)
             .field("config", &self.config)
             .field("signed_hash_value", &hex::encode(&self.signed_hash_value))
-            .field("signature", &hex::encode(&self.signature.concat()))
+            .field(
+                "signature",
+                &format_args!(
+                    "{:?}",
+                    self.signature.iter().map(hex::encode).collect::<Vec<_>>()
+                ),
+            )
             .finish()
     }
 }

@@ -1,5 +1,7 @@
 use std::{fmt, io};
 
+use byteorder::{BigEndian, ByteOrder};
+
 use crypto::checksum;
 use crypto::public_key::PublicKeyAlgorithm;
 use crypto::sym::SymmetricKeyAlgorithm;
@@ -59,9 +61,31 @@ impl EncryptedSecretParams {
         self.string_to_key_id
     }
 
+    pub fn compare_checksum(&self, other: Option<&[u8]>) -> Result<()> {
+        if self.string_to_key_id < 254 {
+            if let Some(other) = other {
+                ensure_eq!(
+                    BigEndian::read_u16(other),
+                    checksum::calculate_simple(self.data()),
+                    "Invalid checksum"
+                );
+            } else {
+                bail!("Missing checksum");
+            }
+        } else {
+            ensure!(other.is_none(), "Expected no checksum, but found one");
+        }
+
+        Ok(())
+    }
+
     pub fn checksum(&self) -> Option<Vec<u8>> {
         if self.string_to_key_id < 254 {
-            Some(checksum::calculate_simple(self.data()).to_vec())
+            Some(
+                checksum::calculate_simple(self.data())
+                    .to_be_bytes()
+                    .to_vec(),
+            )
         } else {
             None
         }
@@ -100,7 +124,6 @@ impl Serialize for EncryptedSecretParams {
                 s2k.to_writer(writer)?;
                 writer.write_all(&self.iv)?;
             }
-            _ => unreachable!("this is a u8"),
         }
 
         writer.write_all(&self.data)?;

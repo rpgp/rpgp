@@ -22,31 +22,26 @@ impl SignedKeyDetails {
     pub fn new(
         revocation_signatures: Vec<packet::Signature>,
         direct_signatures: Vec<packet::Signature>,
-        users: Vec<SignedUser>,
-        user_attributes: Vec<SignedUserAttribute>,
+        mut users: Vec<SignedUser>,
+        mut user_attributes: Vec<SignedUserAttribute>,
     ) -> Self {
-        let users = users
-            .into_iter()
-            .filter(|user| {
-                if user.signatures.is_empty() {
-                    warn!("ignoring unsigned {}", user.id);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
-        let user_attributes = user_attributes
-            .into_iter()
-            .filter(|attr| {
-                if attr.signatures.is_empty() {
-                    warn!("ignoring unsigned {}", attr.attr);
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect();
+        users.retain(|user| {
+            if user.signatures.is_empty() {
+                warn!("ignoring unsigned {}", user.id);
+                false
+            } else {
+                true
+            }
+        });
+
+        user_attributes.retain(|attr| {
+            if attr.signatures.is_empty() {
+                warn!("ignoring unsigned {}", attr.attr);
+                false
+            } else {
+                true
+            }
+        });
 
         SignedKeyDetails {
             revocation_signatures,

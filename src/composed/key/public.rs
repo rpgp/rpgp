@@ -7,7 +7,7 @@ use composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
 use crypto::{HashAlgorithm, PublicKeyAlgorithm};
 use errors::Result;
 use packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
-use types::{KeyId, KeyTrait, PublicKeyTrait, SecretKeyTrait};
+use types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -71,11 +71,11 @@ impl KeyTrait for PublicKey {
 }
 
 impl PublicKeyTrait for PublicKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.primary_key.encrypt(rng, plain)
     }
 
@@ -128,11 +128,11 @@ impl KeyTrait for PublicSubkey {
 }
 
 impl PublicKeyTrait for PublicSubkey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Vec<u8>]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.key.encrypt(rng, plain)
     }
 

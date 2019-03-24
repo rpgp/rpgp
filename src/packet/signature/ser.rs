@@ -6,7 +6,7 @@ use errors::Result;
 use packet::signature::types::*;
 use packet::signature::SignatureConfig;
 use ser::Serialize;
-use util::{write_mpi, write_packet_length, write_string};
+use util::{write_packet_length, write_string};
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -290,7 +290,7 @@ impl Signature {
         // the actual signature
         for val in &self.signature {
             info!("writing: {}", hex::encode(val));
-            write_mpi(val, writer)?;
+            val.to_writer(writer)?;
         }
 
         Ok(())
@@ -306,7 +306,7 @@ impl Signature {
         // the actual signature
         for val in &self.signature {
             info!("writing: {}", hex::encode(val));
-            write_mpi(val, writer)?;
+            val.to_writer(writer)?;
         }
 
         Ok(())
