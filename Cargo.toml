@@ -85,7 +85,7 @@ members = [
 ]
 
 [profile.release]
-debug = true
-#debug-assertions = false
-#opt-level = "s"
-#panic = "abort"
+debug = 0
+debug-assertions = false
+opt-level = "s"
+panic = "abort"
