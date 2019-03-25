@@ -36,13 +36,13 @@ Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in pgp by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
-[circle-shield]: https://img.shields.io/circleci/project/github/dignifiedquire/rpgp/master.svg?style=flat-square
-[circle]: https://circleci.com/gh/dignifiedquire/rpgp/
+[circle-shield]: https://img.shields.io/circleci/project/github/rpgp/rpgp/master.svg?style=flat-square
+[circle]: https://circleci.com/gh/rpgp/rpgp/
 [appveyor-shield]: https://ci.appveyor.com/api/projects/status/99y4f73itv7yvt93/branch/master?style=flat-square
 [appveyor]: https://ci.appveyor.com/project/dignifiedquire/pgp/branch/master
 [docs-shield]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
 [docs]: https://docs.rs/crate/pgp/
 [license-shield]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
-[license]: https://github.com/dignifiedquire/rpgp/blob/master/LICENSE.md
+[license]: https://github.com/rpgp/rpgp/blob/master/LICENSE.md
 [crate-shield]: https://img.shields.io/crates/v/pgp.svg?style=flat-square
 [crate]: https://crates.io/crates/pgp
