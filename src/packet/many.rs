@@ -190,7 +190,7 @@ mod tests {
         use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
-        let path = format!("./tests/sks-dump/{}.pgp", dump);
+        let path = format!("./tests/tests/sks-dump/{}.pgp", dump);
         let p = Path::new(&path);
         let file = File::open(&p).unwrap();
 
@@ -226,13 +226,13 @@ mod tests {
         // use pretty_env_logger;
         // let _ = pretty_env_logger::try_init();
 
-        let p = Path::new("./tests/sks-dump/0000.pgp");
+        let p = Path::new("./tests/tests/sks-dump/0000.pgp");
         let file = File::open(p).unwrap();
 
         // list of expected tags
         // this file is built by
-        // `gpg --list-packets tests/sks-dump/0000.pgp`
-        let fixture = File::open("./tests/sks-dump/0000_parsed.txt").unwrap();
+        // `gpg --list-packets tests/tests/sks-dump/0000.pgp`
+        let fixture = File::open("./tests/tests/sks-dump/0000_parsed.txt").unwrap();
         let re = Regex::new(r"^#\soff=(\d+)\sctb=[[:alpha:]\d]+\stag=(\d+)\s.*").unwrap();
         let expected_tags = BufReader::new(fixture)
             .lines()
