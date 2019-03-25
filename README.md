@@ -17,6 +17,13 @@ untested). For details see [this platform document](PLATFORMS.md).
 
 ## Developement
 
+To run the stress tests,
+
+```sh
+> git submodule update --init --recursive
+> cargo test --release -- --ignored
+```
+
 To enable debugging, add
 
 ```rust
