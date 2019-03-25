@@ -84,6 +84,9 @@ members = [
   "pgp-ffi",
 ]
 
+[profile.bench]
+debug = true
+
 [profile.release]
 debug = 0
 debug-assertions = false

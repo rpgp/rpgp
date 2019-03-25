@@ -33,9 +33,9 @@ fn stop_profile() {
 fn stop_profile() {}
 
 #[bench]
-fn bench_message_parse(b: &mut Bencher) {
-    let mut message_file =
-        File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc").unwrap();
+fn bench_message_parse_armored(b: &mut Bencher) {
+    let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
+    let mut message_file = File::open(message_file_path).unwrap();
     let mut bytes = Vec::new();
     message_file.read_to_end(&mut bytes).unwrap();
 

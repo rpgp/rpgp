@@ -32,8 +32,8 @@ impl<R: Read + Seek> Base64Decoder<R> {
     pub fn new_with_character_set(input: R, cs: CharacterSet) -> Self {
         Base64Decoder {
             config: Config::new(cs, true),
-            inner: BufReader::with_capacity(BUF_SIZE, input),
-            out: util::new_buffer(BUF_CAPACITY),
+            inner: util::new_buf_reader(BUF_SIZE, input),
+            out: Buffer::with_capacity(BUF_CAPACITY),
             out_buffer: [0u8; BUF_CAPACITY],
             err: None,
         }

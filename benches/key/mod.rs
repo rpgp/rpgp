@@ -86,10 +86,10 @@ fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
         .expect("failed to generate secret key, encrypted")
 }
 
-#[bench]
-fn bench_secret_key_rsa_2048_generate(b: &mut Bencher) {
-    b.iter(|| black_box(build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))));
-}
+// #[bench]
+// fn bench_secret_key_rsa_2048_generate(b: &mut Bencher) {
+//     b.iter(|| black_box(build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))));
+// }
 
 #[bench]
 fn bench_secret_key_rsa_2048_self_sign(b: &mut Bencher) {
@@ -115,6 +115,8 @@ fn bench_secret_key_parse_armored_x25519(b: &mut Bencher) {
         .unwrap();
     let bytes = key.to_armored_bytes(None).unwrap();
 
+    b.bytes = bytes.len() as u64;
+
     start_profile("parse_key_secret_armored_x25519");
     b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
     stop_profile();
@@ -126,6 +128,7 @@ fn bench_secret_key_parse_armored_rsa(b: &mut Bencher) {
         .sign(|| "".into())
         .unwrap();
     let bytes = key.to_armored_bytes(None).unwrap();
+    b.bytes = bytes.len() as u64;
 
     start_profile("parse_key_secret_armored_rsa");
     b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
@@ -138,6 +141,7 @@ fn bench_secret_key_parse_raw_rsa(b: &mut Bencher) {
         .sign(|| "".into())
         .unwrap();
     let bytes = key.to_bytes().unwrap();
+    b.bytes = bytes.len() as u64;
 
     start_profile("parse_key_secret_raw_rsa");
     b.iter(|| black_box(SignedSecretKey::from_bytes(Cursor::new(&bytes)).unwrap()));

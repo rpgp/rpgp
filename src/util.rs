@@ -2,7 +2,7 @@ use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
-use buf_redux::Buffer;
+use buf_redux::{BufReader, Buffer};
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
@@ -217,6 +217,18 @@ pub fn new_buffer(capacity: usize) -> Buffer {
 #[inline(always)]
 pub fn new_buffer(capacity: usize) -> Buffer {
     Buffer::with_capacity(capacity)
+}
+
+#[cfg(feature = "rinbuf")]
+#[inline(always)]
+pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
+    BufReader::with_capacity_ringbuf(capacity, inner)
+}
+
+#[cfg(not(feature = "rinbuf"))]
+#[inline(always)]
+pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
+    BufReader::with_capacity(capacity, inner)
 }
 
 #[cfg(test)]
