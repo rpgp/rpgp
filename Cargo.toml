@@ -71,8 +71,9 @@ rand_xorshift = "0.1.1"
 rand_chacha = "0.1.1"
 
 [features]
-default = []
-nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "buf_redux/default"]
+default = ["ringbuf"]
+ringbuf = ["buf_redux/default"]
+nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand/nightly"]
 avx2 = ["ed25519-dalek/avx2_backend"]
 profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
@@ -82,6 +83,9 @@ asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
 members = [
   "pgp-ffi",
 ]
+
+[profile.bench]
+debug = true
 
 [profile.release]
 debug = 0

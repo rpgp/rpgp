@@ -1,11 +1,12 @@
 use std::io::Read;
 
-use circular::Buffer;
+use buf_redux::Buffer;
 use nom::{Needed, Offset};
 
 use errors::{Error, Result};
 use packet::packet_sum::Packet;
 use packet::single::{self, ParseResult};
+use util;
 
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
@@ -23,7 +24,8 @@ impl<R: Read> PacketParser<R> {
             // the inital capacity of our buffer
             // TODO: use a better value than a random guess
             capacity: 1024,
-            buffer: Buffer::with_capacity(1024),
+            // TODO: only use when available
+            buffer: util::new_buffer(1024),
             failed: false,
         }
     }
@@ -44,32 +46,31 @@ impl<R: Read> Iterator for PacketParser<R> {
 
         loop {
             // read some data
-            let sz = match inner.read(b.space()) {
+            let sz = match b.read_from(inner) {
                 Ok(sz) => sz,
                 Err(err) => {
                     warn!("failed to read {:?}", err);
                     return None;
                 }
             };
-            b.fill(sz);
 
             // If there's no more available data in the buffer after a write, that means we reached
             // the end of the input.
-            if b.available_data() == 0 {
+            if b.is_empty() {
                 return None;
             }
 
             if needed.is_some() && sz == 0 {
                 if second_round {
                     // Cancel if we didn't receive enough bytes from our source, the second time around.
-                    b.reset();
+                    // TODO: b.reset();
                     return Some(Err(Error::PacketIncomplete));
                 }
                 second_round = true;
             }
 
             let res = match {
-                match single::parser(b.data()) {
+                match single::parser(b.buf()) {
                     Ok(v) => Ok(v),
                     Err(err) => Err(err.into()),
                 }
@@ -83,11 +84,11 @@ impl<R: Read> Iterator for PacketParser<R> {
                 }
                 ParseResult::Fixed(body) => {
                     let p = single::body_parser(ver, tag, body);
-                    Ok((b.data().offset(rest), p))
+                    Ok((b.buf().offset(rest), p))
                 }
                 ParseResult::Partial(body) => {
                     let p = single::body_parser(ver, tag, &body.concat());
-                    Ok((b.data().offset(rest), p))
+                    Ok((b.buf().offset(rest), p))
                 }
             }) {
                 Ok(val) => Some(val),
@@ -113,10 +114,11 @@ impl<R: Read> Iterator for PacketParser<R> {
 
             // if the parser returned `Incomplete`, and it needs more data than the buffer can hold, we grow the buffer.
             if let Some(Needed::Size(sz)) = needed {
-                if b.available_space() < sz && self.capacity * 2 < MAX_CAPACITY {
+                if b.usable_space() < sz && self.capacity * 2 < MAX_CAPACITY {
                     self.capacity *= 2;
                     let capacity = self.capacity;
-                    b.grow(capacity);
+                    b.make_room();
+                    b.reserve(capacity);
                 }
             }
         }
