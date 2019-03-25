@@ -1,10 +1,10 @@
 use std::error::Error;
-use std::io::{self, BufRead, Read, Seek, Write};
-
-use buf_redux::{BufReader, Buffer as ReBuffer};
-use circular::Buffer;
+use std::io::{self, BufRead, Read, Seek};
 
 use base64::{decode_config_slice, CharacterSet, Config};
+use buf_redux::{BufReader, Buffer};
+
+use util;
 
 const BUF_SIZE: usize = 1024;
 const BUF_CAPACITY: usize = BUF_SIZE / 4 * 3;
@@ -33,13 +33,13 @@ impl<R: Read + Seek> Base64Decoder<R> {
         Base64Decoder {
             config: Config::new(cs, true),
             inner: BufReader::with_capacity(BUF_SIZE, input),
-            out: Buffer::with_capacity(BUF_CAPACITY),
+            out: util::new_buffer(BUF_CAPACITY),
             out_buffer: [0u8; BUF_CAPACITY],
             err: None,
         }
     }
 
-    pub fn into_inner_with_buffer(self) -> (R, ReBuffer) {
+    pub fn into_inner_with_buffer(self) -> (R, Buffer) {
         self.inner.into_inner_with_buffer()
     }
 }
@@ -47,10 +47,8 @@ impl<R: Read + Seek> Base64Decoder<R> {
 impl<R: Read + Seek> Read for Base64Decoder<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         // take care of leftovers
-        if !self.out.empty() {
-            let len = ::std::cmp::min(into.len(), self.out.available_data());
-            into[0..len].copy_from_slice(&self.out.data()[0..len]);
-            self.out.consume(len);
+        if !self.out.is_empty() {
+            let len = self.out.copy_to_slice(into);
 
             return Ok(len);
         }
@@ -87,7 +85,7 @@ impl<R: Read + Seek> Read for Base64Decoder<R> {
             // copy what we have into `into`
             into[0..n].copy_from_slice(t1);
             // store the rest
-            self.out.write_all(t2)?;
+            self.out.copy_from_slice(t2);
 
             (consumed, n)
         } else {

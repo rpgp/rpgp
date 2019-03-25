@@ -2,6 +2,7 @@ use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
+use buf_redux::Buffer;
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
@@ -204,6 +205,18 @@ impl<'a, A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'a, A, B> {
 
         Ok(())
     }
+}
+
+#[cfg(feature = "rinbuf")]
+#[inline(always)]
+pub fn new_buffer(capacity: usize) -> Buffer {
+    Buffer::with_capacity_ringbuf(capacity)
+}
+
+#[cfg(not(feature = "rinbuf"))]
+#[inline(always)]
+pub fn new_buffer(capacity: usize) -> Buffer {
+    Buffer::with_capacity(capacity)
 }
 
 #[cfg(test)]
