@@ -1,16 +1,22 @@
 [package]
 name = "pgp_ffi"
 version = "0.1.0"
-homepage = "https://github.com/rpgp/rpgp"
 description = "PGP implementation in Rust"
 authors = ["dignifiedquire <dignifiedquire@users.noreply.github.com>"]
 edition = "2018"
+homepage = "https://github.com/rpgp/rpgp"
+repository = "https://github.com/rpgp/rpgp"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+
+keywords = ["pgp", "gpg", "openpgp", "email", "encryption"]
+categories = ["cryptography", "std", "email"]
 
 [lib]
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-pgp = { path = "../" }
+pgp = { path = "../", version = "0.2" }
 hex = "0.3.2"
 libc = "0.2.49"
 failure = "0.1.5"
