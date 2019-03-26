@@ -59,3 +59,12 @@ jobs:
     inputs:
       pathtoPublish: $(Build.ArtifactStagingDirectory)
       artifactName: "librpgp-$(Build.SourceVersion)-${{ parameters.target }}"
+  - task: GithubRelease@0
+    displayName: 'Create GitHub Release'
+    inputs:
+      githubConnection: 'rpgp-release'
+      repositoryName: rpgp/rpgp
+      tagSource: manual
+      tag: $(Build.SourceVersion)
+      assets: |
+        $(Build.ArtifactStagingDirectory)/**
