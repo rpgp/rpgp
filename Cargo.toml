@@ -11,6 +11,8 @@ readme = "README.md"
 keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption"]
 categories = ["cryptography", "std", "email"]
 
+exclude = ["tests/tests/*"]
+
 [dependencies]
 crc24 = "^0.1"
 base64 = "^0.10.1"
