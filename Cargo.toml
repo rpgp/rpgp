@@ -8,7 +8,7 @@ homepage = "https://github.com/rpgp/rpgp"
 repository = "https://github.com/rpgp/rpgp"
 readme = "README.md"
 
-keywords = ["pgp", "gpg", "pretty good privacy", "email", "encryption"]
+keywords = ["pgp", "gpg", "openpgp", "email", "encryption"]
 categories = ["cryptography", "std", "email"]
 
 exclude = ["tests/tests/*"]
