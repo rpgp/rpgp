@@ -50,7 +50,7 @@ fn main() {
     // but rather just tell the rest of the system we can't proceed.
     match c {
         Ok(res) => {
-            res.write_to_file("librpgp.h");
+            res.write_to_file(target_path.join("librpgp.h"));
         }
         Err(err) => {
             eprintln!("unable to generate bindings: {:#?}", err);
