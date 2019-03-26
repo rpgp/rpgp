@@ -56,7 +56,7 @@ fn test_parse_dump(i: usize, expected_count: usize) {
     // use pretty_env_logger;
     // let _ = pretty_env_logger::try_init();
 
-    let f = read_file(Path::new("./tests/sks-dump/").join(format!("000{}.pgp", i)));
+    let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{}.pgp", i)));
 
     let count = SignedPublicKey::from_bytes_many(f)
         .enumerate()
