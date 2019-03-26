@@ -16,8 +16,8 @@ use packet::{
 use types::{PacketLength, Tag, Version};
 use util::{u16_as_usize, u32_as_usize, u8_as_usize};
 
-/// Parses an old format packet header
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
+// Parses an old format packet header
+// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
 #[rustfmt::skip]
 named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!(
     // First bit is always 1
@@ -103,8 +103,8 @@ fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], Par
     Ok((rest, ParseResult::Partial(out)))
 }
 
-/// Parses a new format packet header
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
+// Parses a new format packet header
+// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
 #[rustfmt::skip]
 named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!(
     // First bit is always 1
@@ -127,8 +127,8 @@ pub enum ParseResult<'a> {
     Partial(Vec<&'a [u8]>),
 }
 
-/// Parse a single Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-4.2
+// Parse a single Packet
+// https://tools.ietf.org/html/rfc4880.html#section-4.2
 #[rustfmt::skip]
 named!(pub parser<(Version, Tag, PacketLength, ParseResult)>, do_parse!(
        head: alt!(new_packet_header | old_packet_header)

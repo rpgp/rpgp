@@ -435,7 +435,7 @@ impl SymmetricKeyAlgorithm {
     /// prefixes the plaintext with BS+2 octets of random data, such that
     /// octets BS+1 and BS+2 match octets BS-1 and BS. It does a CFB
     /// resynchronization after encrypting those BS+2 octets.
-    #[allow(clippy::cyclomatic_complexity)] // FIXME
+    #[allow(clippy::cognitive_complexity)] // FIXME
     pub fn encrypt_with_iv<'a>(
         self,
         key: &[u8],

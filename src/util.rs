@@ -90,7 +90,7 @@ where
     a
 }
 
-/// Parse a packet length.
+// Parse a packet length.
 #[rustfmt::skip]
 named!(pub packet_length<usize>, do_parse!(
        olen: be_u8

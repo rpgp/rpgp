@@ -311,7 +311,7 @@ named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef>,
     PublicKeyAlgorithm::EdDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::EdDSA(x)))
 ));
 
-/// Parse the decrpyted private params of an RSA private key.
+// Parse the decrpyted private params of an RSA private key.
 #[rustfmt::skip]
 named!(rsa_secret_params<PlainSecretParamsRef>, do_parse!(
        d: mpi

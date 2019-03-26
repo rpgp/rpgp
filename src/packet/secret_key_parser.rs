@@ -6,7 +6,7 @@ use crypto::PublicKeyAlgorithm;
 use packet::public_key_parser::parse_pub_fields;
 use types::{KeyVersion, PublicParams, SecretParams};
 
-/// Parse the whole private key, both public and private fields.
+// Parse the whole private key, both public and private fields.
 #[rustfmt::skip]
 named_args!(parse_pub_priv_fields(typ: PublicKeyAlgorithm) <(PublicParams, SecretParams)>, do_parse!(
       pub_params: call!(parse_pub_fields, typ)
@@ -31,8 +31,8 @@ named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, Pu
     >> (*key_ver, alg, created_at, Some(exp), params.0, params.1)
 ));
 
-/// Parse a private key packet (Tag 5)
-/// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
+// Parse a private key packet (Tag 5)
+// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 #[rustfmt::skip]
 named!(pub(crate) parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
        key_ver: map_opt!(be_u8, KeyVersion::from_u8)

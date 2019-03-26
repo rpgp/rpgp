@@ -90,7 +90,8 @@ impl fmt::Display for PKCS1Type {
         }
     }
 }
-/// Parses a single ascii armor header separator.
+
+// Parses a single ascii armor header separator.
 named!(armor_header_sep, tag!("-----"));
 
 #[inline]
@@ -100,7 +101,7 @@ fn parse_digit(x: &[u8]) -> Result<usize> {
     Ok(digit)
 }
 
-/// Parses the type inside of an ascii armor header.
+// Parses the type inside of an ascii armor header.
 #[rustfmt::skip]
 named!(
     armor_header_type<BlockType>,
@@ -147,7 +148,7 @@ named!(
     )
 );
 
-/// Parses a single armor header line.
+// Parses a single armor header line.
 named!(
     armor_header_line<BlockType>,
     do_parse!(
@@ -174,7 +175,7 @@ fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     Ok((input.slice(input_length..), input))
 }
 
-/// Parses a single key value pair, for the header.
+// Parses a single key value pair, for the header.
 named!(
     key_value_pair<(&str, &str)>,
     do_parse!(
@@ -184,13 +185,13 @@ named!(
     )
 );
 
-/// Parses a list of key value pairs.
+// Parses a list of key value pairs.
 named!(
     key_value_pairs<Vec<(&str, &str)>>,
     many0!(complete!(key_value_pair))
 );
 
-/// Parses the full armor header.
+// Parses the full armor header.
 named!(
     armor_headers<BTreeMap<String, String>>,
     do_parse!(
@@ -202,7 +203,7 @@ named!(
     )
 );
 
-/// Armor Header
+// Armor Header
 named!(armor_header(&[u8]) -> (BlockType, BTreeMap<String, String>), do_parse!(
     typ:     armor_header_line >>
     headers: armor_headers     >>
@@ -252,7 +253,7 @@ named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
      >> (crc, footer)
 ));
 
-/// Parses a single armor footer line
+// Parses a single armor footer line
 #[rustfmt::skip]
 named!(armor_footer_line<BlockType>, do_parse!(
             // only 3, because we parse two already

@@ -64,7 +64,7 @@ impl Serialize for SecretParams {
     }
 }
 
-/// Parse possibly encrypted private fields of a key.
+// Parse possibly encrypted private fields of a key.
 #[rustfmt::skip]
 named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<&[u8]>)>, do_parse!(
           s2k_typ: be_u8

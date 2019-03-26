@@ -100,7 +100,7 @@ named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Mpi>>, switch!(
     )
 ));
 
-/// Parses a Public-Key Encrypted Session Key Packets
+// Parses a Public-Key Encrypted Session Key Packets
 #[rustfmt::skip]
 named_args!(parse(packet_version: Version) <PublicKeyEncryptedSessionKey>, do_parse!(
     // version, only 3 is allowed
