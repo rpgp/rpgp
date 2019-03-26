@@ -29,3 +29,13 @@ jobs:
     name: Windows
     target: x86_64-pc-windows-msvc
     vmImage: vs2017-win2016
+
+- task: GithubRelease@0
+  displayName: 'Create GitHub Release'
+  inputs:
+    githubConnection: rpgp-release
+    repositoryName: rpgp/rpgp
+    tagSource: manual
+    tag: $(Build.SourceVersion)
+    assets: |
+      $(Build.ArtifactStagingDirectory)/**
