@@ -3,6 +3,7 @@
 set -ex
 
 export RUST_BACKTRACE=1
+TAG=`git describe --tags`
 
 if [[ $TARGET = *"ios"* ]]; then
     rustup target add $TARGET || true
@@ -11,6 +12,7 @@ if [[ $TARGET = *"ios"* ]]; then
     RUSTFLAGS="-C codegen-units=1 -C lto=thin" cargo lipo --release --features nightly -p pgp_ffi
     cp -r target/universal/release/ .
 
+    tar cvzf "librpgp-${TAG}-ios-universal.tar.gz" release
 elif [[ $TARGET = *"windows"* ]]; then
     rustup target add $TARGET || true
 
@@ -20,6 +22,7 @@ elif [[ $TARGET = *"windows"* ]]; then
     cp "target/${TARGET}/release/librpgp.h" release/include/
     cp "target/${TARGET}/release/pkgconfig/rpgp.pc" release/lib/pkgconfig
 
+    tar cvzf "librpgp-${TAG}-${TARGET}.tar.gz" release
 elif [[ $TARGET = *"darwin"* ]]; then
     rustup target add $TARGET || true
 
@@ -28,6 +31,8 @@ elif [[ $TARGET = *"darwin"* ]]; then
     cp "target/${TARGET}/release/libpgp_ffi.dylib" release/lib/librpgp.dylib
     cp "target/${TARGET}/release/librpgp.h" release/include/
     cp "target/${TARGET}/release/pkgconfig/rpgp.pc" release/lib/pkgconfig
+
+    tar cvzf "librpgp-${TAG}-${TARGET}.tar.gz" release
 else
     # nix systems
 
@@ -38,11 +43,9 @@ else
     cp "target/${TARGET}/release/libpgp_ffi.so" release/lib/librpgp.so
     cp "target/${TARGET}/release/librpgp.h" release/include/
     cp "target/${TARGET}/release/pkgconfig/rpgp.pc" release/lib/pkgconfig
+
+    tar cvzf "librpgp-${TAG}-${TARGET}.tar.gz" release
 fi
 
-
-TAG=`git describe --tags`
-
-tar cvzf "librpgp-${TAG}-${TARGET}.tar.gz" release
 
 # TODO: upload everything in release
