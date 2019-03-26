@@ -26,10 +26,16 @@ jobs:
         rustc -Vv
         cargo -V
     displayName: Query rust and cargo versions
-  - script: ci/build.sh
-    env:
-      TARGET: ${{ parameters.target }}
-    displayName: Build
+  - ${{ if ne(parameters.name, 'Windows') }}:
+    - script: ci/build.sh
+      env:
+        TARGET: ${{ parameters.target }}
+      displayName: Build
+  - ${{ if eq(parameters.name, 'Windows') }}:
+    - script: ci\build.sh
+      env:
+        TARGET: ${{ parameters.target }}
+      displayName: Build
   - task: CopyFiles@2
     inputs:
       contents: 'release\**'
