@@ -1,3 +1,6 @@
+variables:
+- group: secrets
+
 jobs:
 - job: ${{ parameters.name }}
   pool:
@@ -44,9 +47,8 @@ jobs:
       displayName: Build
   - task: CopyFiles@2
     inputs:
-      contents: |
-        'librpgp*'
-        'release/**'
+      sourceFolder: release
+      contents: '**\*'
       targetFolder: $(Build.ArtifactStagingDirectory)
   - task: PublishBuildArtifacts@1
     inputs:
@@ -55,7 +57,7 @@ jobs:
   - task: GithubRelease@0
     displayName: 'Create GitHub Release'
     inputs:
-      githubConnection: rpgp-bot
+      githubConnection: rpgp
       repositoryName: rpgp/rpgp
       tagSource: manual
       tag: $(Build.SourceVersion)
