@@ -14,15 +14,7 @@ if [[ $TARGET = *"ios"* ]]; then
 
     tar cvzf "librpgp-${TAG}-ios-universal.tar.gz" release
 elif [[ $TARGET = *"windows"* ]]; then
-    rustup target add $TARGET || true
-
-    cargo build --release --features nightly -p pgp_ffi --target $TARGET
-    mkdir -p release/lib/pkgconfig release/include
-    cp "target/${TARGET}/release/libpgp_ffi.dll" release/lib/librpgp.dll
-    cp "target/${TARGET}/release/librpgp.h" release/include/
-    cp "target/${TARGET}/release/pkgconfig/rpgp.pc" release/lib/pkgconfig
-
-    tar cvzf "librpgp-${TAG}-${TARGET}.tar.gz" release
+    echo "nothing to do"
 elif [[ $TARGET = *"darwin"* ]]; then
     rustup target add $TARGET || true
 
