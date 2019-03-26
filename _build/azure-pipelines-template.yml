@@ -34,7 +34,7 @@ jobs:
   - ${{ if eq(parameters.name, 'Windows') }}:
     - script: |
         rustup target add $TARGET || true
-        cargo build --release --features nightly -p pgp_ffi --target $TARGET
+        cargo build --release --features nightly -p pgp_ffi --target %TARGET%
         mkdir release release\lib release\lib\pkgconfig release\include
         copy "target\%TARGET%\release/libpgp_ffi.dll" release\lib\librpgp.dll
         copy "target\%TARGET%\release/librpgp.h" release\include\librpgp.h

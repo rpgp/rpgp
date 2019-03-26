@@ -18,7 +18,7 @@ elif [[ $TARGET = *"windows"* ]]; then
 elif [[ $TARGET = *"darwin"* ]]; then
     rustup target add $TARGET || true
 
-    cargo build --release --features nightly -p pgp_ffi --target %TARGET%
+    cargo build --release --features nightly -p pgp_ffi --target $TARGET
     mkdir -p release/lib/pkgconfig release/include
     cp "target/${TARGET}/release/libpgp_ffi.dylib" release/lib/librpgp.dylib
     cp "target/${TARGET}/release/librpgp.h" release/include/
