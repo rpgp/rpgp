@@ -8,19 +8,19 @@ jobs:
 
 - template: _build/azure-pipelines-template.yml
   parameters:
-    name: Android-aarch64
+    name: Android_aarch64
     target: aarch64-linux-android
     vmImage: ubuntu-16.04
 
 - template: _build/azure-pipelines-template.yml
   parameters:
-    name: Android-armv7
+    name: Android_armv7
     target: armv7-linux-androideabi
     vmImage: ubuntu-16.04
 
 - template: _build/azure-pipelines-template.yml
   parameters:
-    name: Android-i686
+    name: Android_i686
     target:  i686-linux-android
     vmImage: ubuntu-16.04
 
