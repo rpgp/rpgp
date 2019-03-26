@@ -16,15 +16,15 @@ Symbols:
   - [x] Reading
   - [x] Writing
 - [ ] Cleartext Signature Framework
-- [ ] 🚧 Paket Generation
+- [x] Paket Generation
 - [x] Signatures
   - [x] Validation
   - [x] Generation
 - [x] Encryption
 - [x] Decryption
 - [x] Keys
-  - [x] 🚧 Generation
-  - [x] 🚧 Export
+  - [x] Generation
+  - [x] Export
   - [x] Import
 - [ ] Public-Key Algorithms
   - [x] RSA
@@ -37,12 +37,12 @@ Symbols:
   - [ ] NIST P256
   - [ ] NIST P384
   - [ ] NIST P521
-  - [ ] ❓brainpool256rl
-  - [ ] ❓brainpool521rl
+  - [ ] brainpool256rl
+  - [ ] brainpool521rl
   - [x] Curve 25519
 - [ ] Symmetric Algorithms
   - [x] Plaintext
-  - [ ] ❓IDEA
+  - [ ] IDEA
   - [x] DES
   - [x] CAST5
   - [x] Blowfish
