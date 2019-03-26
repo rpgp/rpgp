@@ -206,6 +206,7 @@ mod tests {
 
     use generic_array::typenum::{self, U10};
     use std::io::Write;
+    use util::write_all;
 
     #[test]
     fn simple_writes() {
@@ -324,7 +325,7 @@ mod tests {
         {
             let mut line_wrapper = LineWriter::<_, typenum::U64>::new(&mut buf, LineBreak::Lf);
             let mut enc = base64::write::EncoderWriter::new(&mut line_wrapper, base64::STANDARD);
-            enc.write_all(&content).unwrap();
+            write_all(&mut enc, &content).unwrap();
         }
 
         assert_eq!(

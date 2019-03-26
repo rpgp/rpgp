@@ -195,7 +195,7 @@ impl<'a, A, B> TeeWriter<'a, A, B> {
 impl<'a, A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'a, A, B> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.a.write(buf);
-        self.b.write_all(buf)?;
+        write_all(&mut self.b, buf)?;
 
         Ok(buf.len())
     }
@@ -229,6 +229,20 @@ pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
 #[inline(always)]
 pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
     BufReader::with_capacity(capacity, inner)
+}
+
+/// The same as the std lib, but doesn't choke on write 0. This is a hack, to be compatible with
+/// rust-base64.
+pub fn write_all(writer: &mut impl io::Write, mut buf: &[u8]) -> io::Result<()> {
+    while !buf.is_empty() {
+        match writer.write(buf) {
+            Ok(0) => {}
+            Ok(n) => buf = &buf[n..],
+            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -50,7 +50,6 @@ extern crate x25519_dalek;
 #[macro_use]
 extern crate lazy_static;
 extern crate block_padding;
-extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 extern crate buf_redux;
@@ -78,6 +77,8 @@ extern crate serde;
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
+#[cfg(test)]
+extern crate pretty_env_logger;
 
 // public so it can be used in doc test
 #[macro_use]
