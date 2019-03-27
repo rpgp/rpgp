@@ -1,3 +1,6 @@
+variables:
+  System.Debug: true
+
 jobs:
 
 - template: _build/azure-pipelines-template.yml
