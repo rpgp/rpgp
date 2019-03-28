@@ -47,7 +47,7 @@ jobs:
     target: x86_64-pc-windows-msvc
     vmImage: vs2017-win2016
 
-- job: GitHub Release
+- job: GitHubRelease
   pool:
     vmImage: ubuntu-16.04
   dependsOn:
