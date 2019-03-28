@@ -44,3 +44,25 @@ jobs:
     name: Windows
     target: x86_64-pc-windows-msvc
     vmImage: vs2017-win2016
+
+- job: Release
+  pool:
+    vmImage: vs2017-win2016
+  dependsOn:
+    - Linux
+    - Android_aarch64
+    - Android_armv7
+    - Android_i686
+    - macOS
+    - iOS
+    - Windows
+  steps:
+  - task: GithubRelease@0
+    displayName: 'Create GitHub Release'
+    inputs:
+      githubConnection: 'rpgp-bot'
+      repositoryName: rpgp/rpgp
+      tagSource: manual
+      tag: $(Build.SourceVersion)
+      assets: |
+        $(Build.ArtifactStagingDirectory)/**

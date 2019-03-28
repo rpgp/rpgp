@@ -2,10 +2,7 @@ jobs:
 - job: ${{ parameters.name }}
   pool:
     vmImage: ${{ parameters.vmImage }}
-  strategy:
-    matrix:
-      nightly:
-        rustup_toolchain: nightly
+    rustup_toolchain: nightly
   steps:
   - ${{ if ne(parameters.name, 'Windows') }}:
     # Linux and macOS.
@@ -51,12 +48,3 @@ jobs:
     inputs:
       pathtoPublish: $(Build.ArtifactStagingDirectory)
       artifactName: "librpgp-$(Build.SourceVersion)-${{ parameters.target }}"
-  - task: GithubRelease@0
-    displayName: 'Create GitHub Release'
-    inputs:
-      githubConnection: 'rpgp-bot'
-      repositoryName: rpgp/rpgp
-      tagSource: manual
-      tag: $(Build.SourceVersion)
-      assets: |
-        $(Build.ArtifactStagingDirectory)/**
