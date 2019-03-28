@@ -1,7 +1,7 @@
 variables:
   - name: System.Debug
     value: true
-  - group: security
+  - group: secrets
 
 jobs:
 
