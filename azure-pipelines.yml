@@ -1,5 +1,7 @@
 variables:
-  System.Debug: true
+  - name: System.Debug
+    value: true
+  - group: security
 
 jobs:
 
@@ -45,9 +47,9 @@ jobs:
     target: x86_64-pc-windows-msvc
     vmImage: vs2017-win2016
 
-- job: Release
+- job: GitHub Release
   pool:
-    vmImage: vs2017-win2016
+    vmImage: ubuntu-16.04
   dependsOn:
     - Linux
     - Android_aarch64
@@ -56,13 +58,12 @@ jobs:
     - macOS
     - iOS
     - Windows
-  steps:
-  - task: GithubRelease@0
-    displayName: 'Create GitHub Release'
+  - task: GoTool@0
     inputs:
-      githubConnection: 'rpgp-bot'
-      repositoryName: rpgp/rpgp
-      tagSource: manual
-      tag: $(Build.SourceVersion)
-      assets: |
-        $(Build.ArtifactStagingDirectory)/**
+      version: '1.12'
+  steps:
+    - script: |
+        go get github.com/tcnksm/ghr
+        echo $GOPATH
+        echo $GOBIN
+        GITHUB_TOKEN="$(GH_TOKEN)" ghr -prerelease $(Build.SourceVersion) $(Build.ArtifactStagingDirectory)
