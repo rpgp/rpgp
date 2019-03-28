@@ -44,7 +44,7 @@ jobs:
   - task: CopyFiles@2
     inputs:
       sourceFolder: release
-      contents: '**\*'
+      contents: '**'
       targetFolder: $(Build.ArtifactStagingDirectory)
   - task: PublishBuildArtifacts@1
     inputs:
