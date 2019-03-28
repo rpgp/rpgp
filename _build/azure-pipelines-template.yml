@@ -35,9 +35,8 @@ jobs:
         dir *.*
         dir target\%TARGET%
         dir release
-        copy target\%TARGET%\release/libpgp_ffi.dll release\lib\librpgp.dll
-        copy target\%TARGET%\release/librpgp.h release\include\librpgp.h
-        copy target\%TARGET%\release/pkgconfig/rpgp.pc release\lib\pkgconfig
+        copy target\%TARGET%\release\pgp_ffi.dll release\lib\librpgp.dll
+        copy target\%TARGET%\release\librpgp.h release\include\librpgp.h
       env:
         TARGET: ${{ parameters.target }}
       displayName: Build
