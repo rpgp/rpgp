@@ -58,10 +58,10 @@ jobs:
     - macOS
     - iOS
     - Windows
-  - task: GoTool@0
-    inputs:
-      version: '1.12'
   steps:
+    - task: GoTool@0
+      inputs:
+        version: '1.12'
     - script: |
         go get github.com/tcnksm/ghr
         echo $GOPATH
