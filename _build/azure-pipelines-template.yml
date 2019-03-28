@@ -33,11 +33,11 @@ jobs:
         cargo build --release --features nightly -p pgp_ffi --target %TARGET%
         mkdir release release\lib release\lib\pkgconfig release\include
         dir *.*
-        dir target
+        dir target\%TARGET%
         dir release
-        copy "target\%TARGET%\release/libpgp_ffi.dll" release\lib\librpgp.dll
-        copy "target\%TARGET%\release/librpgp.h" release\include\librpgp.h
-        copy "target\%TARGET%\release/pkgconfig/rpgp.pc" release\lib\pkgconfig
+        copy target\%TARGET%\release/libpgp_ffi.dll release\lib\librpgp.dll
+        copy target\%TARGET%\release/librpgp.h release\include\librpgp.h
+        copy target\%TARGET%\release/pkgconfig/rpgp.pc release\lib\pkgconfig
       env:
         TARGET: ${{ parameters.target }}
       displayName: Build
