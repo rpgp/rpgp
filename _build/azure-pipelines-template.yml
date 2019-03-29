@@ -42,7 +42,7 @@ jobs:
       displayName: Build
   - task: CopyFiles@2
     inputs:
-      contents: 'librpgp-$(TARGET).tar.gz'
+      contents: "librpgp-${{ parameters.target }}.tar.gz"
       targetFolder: $(Build.ArtifactStagingDirectory)
   - task: PublishBuildArtifacts@1
     inputs:
