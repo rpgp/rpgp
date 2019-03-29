@@ -40,10 +40,18 @@ jobs:
       env:
         TARGET: ${{ parameters.target }}
       displayName: Build
-  - task: CopyFiles@2
-    inputs:
-      contents: "librpgp-${{ parameters.target }}.tar.gz"
-      targetFolder: $(Build.ArtifactStagingDirectory)
+  - ${{ if eq(parameters.name, 'Windows') }}:
+      - task: ArchiveFiles@2
+        inputs:
+          rootFolderOrFile: 'release'
+          archiveType: 'zip'
+          archiveFile: "$(Build.ArtifactStagingDirectory)/librpgp-${{ parameters.target }}.zip"
+          replaceExistingArchive: true
+  - ${{ if ne(parameters.name, 'Windows') }}:
+      - task: CopyFiles@2
+        inputs:
+          contents: "librpgp-${{ parameters.target }}.tar.gz"
+          targetFolder: $(Build.ArtifactStagingDirectory)
   - task: PublishBuildArtifacts@1
     inputs:
       pathtoPublish: $(Build.ArtifactStagingDirectory)
