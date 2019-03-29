@@ -19,54 +19,60 @@ jobs:
     target: x86_64-unknown-linux-gnu
     vmImage: ubuntu-16.04
 
-- template: _build/azure-pipelines-template.yml
-  parameters:
-    name: Android_aarch64
-    target: aarch64-linux-android
-    vmImage: ubuntu-16.04
+# - template: _build/azure-pipelines-template.yml
+#   parameters:
+#     name: Android_aarch64
+#     target: aarch64-linux-android
+#     vmImage: ubuntu-16.04
 
-- template: _build/azure-pipelines-template.yml
-  parameters:
-    name: Android_armv7
-    target: armv7-linux-androideabi
-    vmImage: ubuntu-16.04
+# - template: _build/azure-pipelines-template.yml
+#   parameters:
+#     name: Android_armv7
+#     target: armv7-linux-androideabi
+#     vmImage: ubuntu-16.04
 
-- template: _build/azure-pipelines-template.yml
-  parameters:
-    name: Android_i686
-    target:  i686-linux-android
-    vmImage: ubuntu-16.04
+# - template: _build/azure-pipelines-template.yml
+#   parameters:
+#     name: Android_i686
+#     target:  i686-linux-android
+#     vmImage: ubuntu-16.04
 
-- template: _build/azure-pipelines-template.yml
-  parameters:
-    name: macOS
-    target: x86_64-apple-darwin
-    vmImage: macOS-10.13
+# - template: _build/azure-pipelines-template.yml
+#   parameters:
+#     name: macOS
+#     target: x86_64-apple-darwin
+#     vmImage: macOS-10.13
 
-- template: _build/azure-pipelines-template.yml
-  parameters:
-    name: iOS
-    target: "aarch64-apple-ios x86_64-apple-ios armv7-apple-ios armv7s-apple-ios"
-    vmImage: macOS-10.13
+# - template: _build/azure-pipelines-template.yml
+#   parameters:
+#     name: iOS
+#     target: "aarch64-apple-ios x86_64-apple-ios armv7-apple-ios armv7s-apple-ios"
+#     vmImage: macOS-10.13
 
-- template: _build/azure-pipelines-template.yml
-  parameters:
-    name: Windows
-    target: x86_64-pc-windows-msvc
-    vmImage: vs2017-win2016
+# - template: _build/azure-pipelines-template.yml
+#   parameters:
+#     name: Windows
+#     target: x86_64-pc-windows-msvc
+#     vmImage: vs2017-win2016
 
 - job: GitHubRelease
   pool:
     vmImage: ubuntu-16.04
   dependsOn:
     - Linux
-    - Android_aarch64
-    - Android_armv7
-    - Android_i686
-    - macOS
-    - iOS
-    - Windows
+    # - Android_aarch64
+    # - Android_armv7
+    # - Android_i686
+    # - macOS
+    # - iOS
+    # - Windows
   steps:
+    - task: DownloadBuildArtifacts@0
+      inputs:
+        buildType: 'current'
+        downloadType: 'single'
+        artifactName: "librpgp-$(Build.SourceVersion)-x86_64-unknown-linux-gnu"
+        downloadPath: '$(System.ArtifactsDirectory)'
     - script: |
         mkdir -p '$(GOBIN)'
         mkdir -p '$(GOPATH)/pkg'
@@ -83,5 +89,5 @@ jobs:
         goBin: '$(GOBIN)'
     - script: |
         go get github.com/tcnksm/ghr
-        ls $(Build.ArtifactStagingDirectory)/**
-        GITHUB_TOKEN="$(GH_TOKEN)" ghr -prerelease $(Build.SourceVersion) $(Build.ArtifactStagingDirectory)/**
+        ls $(Build.ArtifactsDirectory)/**
+        GITHUB_TOKEN="$(GH_TOKEN)" ghr -prerelease $(Build.SourceVersion) $(Build.ArtifactsDirectory)/**
