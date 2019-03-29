@@ -89,5 +89,5 @@ jobs:
         goBin: '$(GOBIN)'
     - script: |
         go get github.com/tcnksm/ghr
-        ls '$(Build.ArtifactsDirectory)/**'
-        GITHUB_TOKEN='$(GH_TOKEN)' ghr -prerelease '$(Build.SourceVersion)' '$(Build.ArtifactsDirectory)/**'
+        ls '$(System.ArtifactsDirectory)'
+        GITHUB_TOKEN='$(GH_TOKEN)' ghr -prerelease '$(Build.SourceVersion)' '$(System.ArtifactsDirectory)'
