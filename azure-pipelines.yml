@@ -89,5 +89,5 @@ jobs:
         goBin: '$(GOBIN)'
     - script: |
         go get github.com/tcnksm/ghr
-        ls '$(Build.ArtifactStagingDirectory)/**'
-        GITHUB_TOKEN='$(GH_TOKEN)' ghr -prerelease `git describe --tags` '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-x86_64-unknown-linux-gnu'
+        ls '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-x86_64-unknown-linux-gnu'
+        GITHUB_TOKEN='$(GH_TOKEN)' ghr -prerelease `git describe --tags` '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-x86_64-unknown-linux-gnu/'
