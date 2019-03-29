@@ -72,7 +72,7 @@ jobs:
         buildType: 'current'
         downloadType: 'single'
         artifactName: "librpgp-$(Build.SourceVersion)-x86_64-unknown-linux-gnu"
-        downloadPath: '$(System.ArtifactsDirectory)'
+        downloadPath: '$(Build.ArtifactStagingDirectory)'
     - script: |
         mkdir -p '$(GOBIN)'
         mkdir -p '$(GOPATH)/pkg'
@@ -89,5 +89,6 @@ jobs:
         goBin: '$(GOBIN)'
     - script: |
         go get github.com/tcnksm/ghr
-        ls '$(System.ArtifactsDirectory)'
-        GITHUB_TOKEN='$(GH_TOKEN)' ghr -prerelease '$(Build.SourceVersion)' '$(System.ArtifactsDirectory)'
+        echo '$(Build.ArtifactStagingDirectory)'
+        ls '$(Build.ArtifactStagingDirectory)'
+        GITHUB_TOKEN='$(GH_TOKEN)' ghr -prerelease '$(Build.SourceVersion)' '$(Build.ArtifactStagingDirectory)'
