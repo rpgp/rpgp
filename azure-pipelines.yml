@@ -11,6 +11,15 @@ variables:
     value: true
   - group: secrets
 
+trigger:
+  batch: true
+  branches:
+    include:
+      - master
+pr:
+  - master
+
+
 jobs:
 
 - template: _build/azure-pipelines-template.yml
@@ -125,5 +134,13 @@ jobs:
         goBin: '$(GOBIN)'
     - script: |
         go get github.com/tcnksm/ghr
-        ls '$(Build.ArtifactStagingDirectory)'
-        GITHUB_TOKEN='$(GH_TOKEN)' ghr -prerelease `git describe --tags` '$(Build.ArtifactStagingDirectory)'
+        export GITHUB_TOKEN='$(GH_TOKEN)'
+        export REL_TAG=`git describe --tags`
+
+        ghr -prerelease $REL_TAG '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-x86_64-unknown-linux-gnu/'
+        ghr -prerelease $REL_TAG '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-aarch64-linux-android/'
+        ghr -prerelease $REL_TAG '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-armv7-linux-androideabi/'
+        ghr -prerelease $REL_TAG '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-i686-linux-android/'
+        ghr -prerelease $REL_TAG '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-x86_64-apple-darwin/'
+        ghr -prerelease $REL_TAG '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-ios-universal/'
+        ghr -prerelease $REL_TAG '$(Build.ArtifactStagingDirectory)/librpgp-$(Build.SourceVersion)-x86_64-pc-windows-msvc/'
