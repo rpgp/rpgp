@@ -4,7 +4,7 @@ use std::slice;
 
 use libc::c_char;
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
-use pgp::types::{KeyTrait, StringToKey};
+use pgp::types::{CompressionAlgorithm, KeyTrait, StringToKey};
 use rand::thread_rng;
 
 use crate::cvec::cvec;
@@ -321,8 +321,13 @@ pub unsafe extern "C" fn rpgp_sign_encrypt_bytes_to_keys(
         "failed to sign"
     );
 
+    let compressed_msg = try_ffi!(
+        signed_msg.compress(CompressionAlgorithm::ZLIB),
+        "failed to compress"
+    );
+
     let encrypted_msg = try_ffi!(
-        signed_msg.encrypt_to_keys(&mut rng, Default::default(), &pkeys),
+        compressed_msg.encrypt_to_keys(&mut rng, Default::default(), &pkeys),
         "failed to encrypt"
     );
 
