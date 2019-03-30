@@ -16,7 +16,7 @@ categories = ["cryptography", "std", "email"]
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-pgp = "0.2"#{ path = "../", version = "0.2" }
+pgp = { path = "../", version = "0.2" }
 hex = "0.3.2"
 libc = "0.2.49"
 failure = "0.1.5"
