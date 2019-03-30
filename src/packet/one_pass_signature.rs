@@ -21,7 +21,7 @@ pub struct OnePassSignature {
     hash_algorithm: HashAlgorithm,
     pub_algorithm: PublicKeyAlgorithm,
     key_id: KeyId,
-    is_nested: u8,
+    last: u8,
 }
 
 impl OnePassSignature {
@@ -45,7 +45,7 @@ impl OnePassSignature {
             hash_algorithm,
             pub_algorithm,
             key_id,
-            is_nested: 0,
+            last: 1,
         }
     }
 
@@ -61,7 +61,7 @@ named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
     >>      hash: map_opt!(be_u8, HashAlgorithm::from_u8)
     >>   pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>    key_id: map_res!(take!(8), KeyId::from_slice)
-    >> is_nested: be_u8
+    >> last: be_u8
     >> (OnePassSignature {
         packet_version,
         version,
@@ -69,7 +69,7 @@ named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
         hash_algorithm: hash,
         pub_algorithm: pub_alg,
         key_id,
-        is_nested,
+        last,
     })
 ));
 
@@ -82,7 +82,7 @@ impl Serialize for OnePassSignature {
             self.pub_algorithm as u8,
         ])?;
         writer.write_all(self.key_id.as_ref())?;
-        writer.write_all(&[self.is_nested])?;
+        writer.write_all(&[self.last])?;
 
         Ok(())
     }
