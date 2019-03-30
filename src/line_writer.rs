@@ -38,7 +38,7 @@ where
     N: std::ops::Add<U2>,
     Sum<N, U2>: ArrayLength<u8>,
 {
-    /// Which kind of line break to inser.
+    /// Which kind of line break to insert.
     line_break: LineBreak,
     /// Where encoded data is written to.
     w: &'a mut W,
@@ -90,6 +90,7 @@ where
         if self.extra_len > 0 {
             self.panicked = true;
             self.w.write_all(&self.extra[..self.extra_len])?;
+            self.w.write_all(self.line_break.as_ref())?;
             self.panicked = false;
             // write succeeded, do not write the encoding of extra again if finish() is retried
             self.extra_len = 0;
@@ -226,7 +227,7 @@ mod tests {
 
         assert_eq!(
             &buf[..],
-            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, b'\r', b'\n', 10, 11][..]
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, b'\r', b'\n', 10, 11, b'\r', b'\n'][..]
         );
     }
 
@@ -255,7 +256,7 @@ mod tests {
                 }
 
                 let len = <$len as typenum::Unsigned>::to_usize();
-                let expected: Vec<u8> = list.chunks(len).fold(Vec::new(), |mut acc, line| {
+                let mut expected: Vec<u8> = list.chunks(len).fold(Vec::new(), |mut acc, line| {
                     acc.extend(line);
 
                     if line.len() == len {
@@ -264,6 +265,11 @@ mod tests {
                     }
                     acc
                 });
+
+                if expected.len() % len != 0 {
+                    expected.push(b'\r');
+                    expected.push(b'\n');
+                }
 
                 assert_eq!(&buf[..], &expected[..]);
             }
@@ -356,7 +362,7 @@ mod tests {
              HLFaPGy9KJMM0Z/hlCIIeyK/a90zWlT5UMfRoqNQRbY/iiYdmpvf69I9PobGVbo/\n\
              7ahZTumPWwjiGOztNXeuo5UUaAVVxMQBYKp2w3wil2sHzYfTfYUSMyh+oUFx4Xlz\n\
              WF3bLzsafRaeuK1h5+JuvIcimvU5zWZtn0hOpiIXpZOoJvvM9r5D4ZRT5UX2blQ8\n\
-             Pw=="
+             Pw==\n"
         );
     }
 }
