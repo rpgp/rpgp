@@ -23,11 +23,19 @@ jobs:
         cargo -V
     displayName: Query rust and cargo versions
   - ${{ if ne(parameters.name, 'Windows') }}:
+    - script: ci/run.sh
+      env:
+        TARGET: ${{ parameters.target }}
+      displayName: Test
     - script: ci/build.sh
       env:
         TARGET: ${{ parameters.target }}
       displayName: Build
   - ${{ if eq(parameters.name, 'Windows') }}:
+    - script: ci\run.sh
+      env:
+        TARGET: ${{ parameters.target }}
+      displayName: Test
     - script: |
         rustup target add $TARGET || true
         cargo build --release --features nightly -p pgp_ffi --target %TARGET%
