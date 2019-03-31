@@ -28,7 +28,6 @@ fn main() {
         url = env::var("CARGO_PKG_HOMEPAGE").unwrap_or("".to_string()),
         version = env::var("CARGO_PKG_VERSION").unwrap(),
         libs_priv = libs_priv,
-        prefix = env::var("PREFIX").unwrap_or("/usr/local".to_string()),
     );
 
     fs::create_dir_all(target_path.join("pkgconfig")).unwrap();
