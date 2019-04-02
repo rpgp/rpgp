@@ -19,6 +19,9 @@ jobs:
       displayName: Install rust (windows)
   # All platforms.
   - script: |
+      git submodule update --init --recursive
+    displayName: "Fetch git submodule"
+  - script: |
         rustc -Vv
         cargo -V
     displayName: Query rust and cargo versions
