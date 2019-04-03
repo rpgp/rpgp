@@ -101,6 +101,7 @@ asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
 [workspace]
 members = [
   "pgp-ffi",
+  "ios-simulator",
 ]
 
 [profile.bench]
