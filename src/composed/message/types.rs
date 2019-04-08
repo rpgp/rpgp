@@ -702,7 +702,7 @@ mod tests {
             .unwrap();
 
         let armored = encrypted.to_armored_bytes(None).unwrap();
-        fs::write("./message-rsa.asc", &armored).unwrap();
+        // fs::write("./message-rsa.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
@@ -735,7 +735,7 @@ mod tests {
             .unwrap();
 
         let armored = encrypted.to_armored_bytes(None).unwrap();
-        fs::write("./message-x25519.asc", &armored).unwrap();
+        // fs::write("./message-x25519.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
@@ -769,7 +769,7 @@ mod tests {
             .unwrap();
 
         let armored = encrypted.to_armored_bytes(None).unwrap();
-        fs::write("./message-password.asc", &armored).unwrap();
+        // fs::write("./message-password.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
@@ -798,7 +798,7 @@ mod tests {
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None).unwrap();
-        fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
+        // fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
 
@@ -821,7 +821,7 @@ mod tests {
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None).unwrap();
-        fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
+        // fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
 
@@ -845,7 +845,7 @@ mod tests {
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
         let armored = compressed_msg.to_armored_bytes(None).unwrap();
-        fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
+        // fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
 
@@ -918,7 +918,7 @@ mod tests {
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
         let armored = compressed_msg.to_armored_bytes(None).unwrap();
-        fs::write("./message-bytes-compressed-signed-rsa.asc", &armored).unwrap();
+        // fs::write("./message-bytes-compressed-signed-rsa.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
 
