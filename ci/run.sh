@@ -36,7 +36,7 @@ if [[ $CARGO_CMD == "cargo" ]]; then
 fi
 
 # If the build should not run tests, just check that the code builds:
-if [[ $NORUN == "1" ]]; then
+if [[ $NORUN == "1" || $TARGET = *"ios"* ]]; then
     export CARGO_SUBCMD="build"
 else
     export CARGO_SUBCMD="test"
