@@ -64,6 +64,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                 if second_round {
                     // Cancel if we didn't receive enough bytes from our source, the second time around.
                     // TODO: b.reset();
+                    self.failed = true;
                     return Some(Err(Error::PacketIncomplete));
                 }
                 second_round = true;

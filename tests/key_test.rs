@@ -33,6 +33,7 @@ use pgp::errors::Error;
 use pgp::packet::{
     KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId,
 };
+use pgp::ser::Serialize;
 use pgp::types::{
     CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, SecretKeyRepr,
     SecretKeyTrait, SecretParams, SignedUser, StringToKeyType, Version,
@@ -953,3 +954,32 @@ autocrypt_key!(
     "carol@autocrypt.example.sec.asc",
     true,
 );
+
+#[test]
+fn test_invalid() {
+    let v = (0..64).collect::<Vec<u8>>();
+    let c = std::io::Cursor::new(&v);
+    let k = SignedSecretKey::from_bytes(c);
+
+    assert!(k.is_err());
+}
+
+#[test]
+fn test_handle_incomplete_packets_end() {
+    use pretty_env_logger;
+    let _ = pretty_env_logger::try_init();
+    let p = Path::new("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
+    let mut file = read_file(p.to_path_buf());
+
+    let mut buf = vec![];
+    file.read_to_end(&mut buf).unwrap();
+
+    let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
+    let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
+    key.verify().expect("invalid key");
+
+    // add overflow of "b60ed7"
+    let raw = hex::decode(hex::encode(&key.to_bytes().unwrap()) + "b60ed7").unwrap();
+    let key = SignedSecretKey::from_bytes(Cursor::new(raw)).expect("failed");
+    key.verify().expect("invalid key");
+}
