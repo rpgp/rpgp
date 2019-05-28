@@ -1,6 +1,6 @@
 [package]
 name = "pgp"
-version = "0.2.1"
+version = "0.2.2-alpha.0"
 authors = ["dignifiedquire <dignifiedquire@gmail.com>"]
 description = "OpenPGP implementation in Rust"
 license = "MIT OR Apache-2.0"
