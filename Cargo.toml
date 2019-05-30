@@ -98,11 +98,6 @@ profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
 
 
-[workspace]
-members = [
-  "pgp-ffi",
-]
-
 [profile.bench]
 debug = true
 
@@ -111,3 +106,9 @@ debug = 0
 debug-assertions = false
 opt-level = "s"
 panic = "abort"
+
+
+[workspace]
+members = [
+  "pgp-ffi"
+]
