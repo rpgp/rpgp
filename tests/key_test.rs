@@ -954,6 +954,7 @@ autocrypt_key!(
     "carol@autocrypt.example.sec.asc",
     true,
 );
+autocrypt_key!(key_autocrypt_rsa4096_sec, "test@example.com.sec.asc", true,);
 
 #[test]
 fn test_invalid() {
