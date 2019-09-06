@@ -883,20 +883,11 @@ fn pub_x25519_little_verify() {
     assert_eq!(pk.details.users[0].id.id(), "Hi <hi@hel.lo>");
 }
 
-macro_rules! autocrypt_key {
-    ($name:ident, $path:expr, $unlock:expr,) => {
-        #[test]
-        fn $name() {
-            test_parse_autocrypt_key($path, $unlock);
-        }
-    };
-}
-
-fn test_parse_autocrypt_key(key: &str, unlock: bool) {
+fn test_parse_key(p: &Path, unlock: bool) {
     use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
 
-    let f = read_file(Path::new("./tests/autocrypt/").join(key));
+    let f = read_file(p);
     let (pk, _headers) = from_armor_many(f).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
@@ -927,6 +918,23 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
     }
 }
 
+#[test]
+fn test_parse_rsa4096() {
+    test_parse_key(Path::new("./tests/test@example.com.sec.asc"), true);
+}
+
+macro_rules! autocrypt_key {
+    ($name:ident, $path:expr, $unlock:expr,) => {
+        #[test]
+        fn $name() {
+            test_parse_autocrypt_key($path, $unlock);
+        }
+    };
+}
+fn test_parse_autocrypt_key(key: &str, unlock: bool) {
+    test_parse_key(&Path::new("./tests/autocrypt").join(key), unlock);
+}
+
 autocrypt_key!(
     key_autocrypt_alice_pub,
     "alice@autocrypt.example.pub.asc",
@@ -954,7 +962,6 @@ autocrypt_key!(
     "carol@autocrypt.example.sec.asc",
     true,
 );
-autocrypt_key!(key_autocrypt_rsa4096_sec, "test@example.com.sec.asc", true,);
 
 #[test]
 fn test_invalid() {
