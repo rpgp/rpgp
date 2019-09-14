@@ -78,8 +78,10 @@ impl<R: Read> Iterator for PacketParser<R> {
                 ParseResult::Indeterminated => {
                     let mut body = rest.to_vec();
                     inner.read_to_end(&mut body)?;
-                    let p = single::body_parser(ver, tag, &body);
-                    Ok((rest.len() + body.len(), p))
+                    match single::body_parser(ver, tag, &body) {
+                        Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
+                        p => Ok((rest.len() + body.len(), p)),
+                    }
                 }
                 ParseResult::Fixed(body) => {
                     let p = single::body_parser(ver, tag, body);
