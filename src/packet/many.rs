@@ -277,4 +277,24 @@ mod tests {
             assert_eq!(tag, packet.tag(), "missmatch in packet {:?} ({})", p, e);
         }
     }
+
+    #[test]
+    fn incomplete_packet_parser() {
+        let _ = pretty_env_logger::try_init();
+        use std::io::Cursor;
+
+        let bytes: [u8; 1] = [0x97];
+        let parser = PacketParser::new(Cursor::new(bytes));
+        let mut packets = parser.filter_map(|p| {
+            // for now we are skipping any packets that we failed to parse
+            match p {
+                Ok(pp) => Some(pp),
+                Err(err) => {
+                    warn!("skipping packet: {:?}", err);
+                    None
+                }
+            }
+        });
+        assert!(packets.next().is_none());
+    }
 }
