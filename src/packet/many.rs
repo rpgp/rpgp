@@ -109,6 +109,7 @@ impl<R: Read> Iterator for PacketParser<R> {
 
             if let Some((length, p)) = res_body {
                 info!("got packet: {:#?} {}", p, length);
+                assert!(length > 0);
                 b.consume(length);
                 return Some(p);
             }
