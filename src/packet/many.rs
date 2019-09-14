@@ -70,11 +70,9 @@ impl<R: Read> Iterator for PacketParser<R> {
                 second_round = true;
             }
 
-            let res = match {
-                match single::parser(b.buf()) {
-                    Ok(v) => Ok(v),
-                    Err(err) => Err(err.into()),
-                }
+            let res_header = match single::parser(b.buf()) {
+                Ok(v) => Ok(v),
+                Err(err) => Err(err.into()),
             }
             .and_then(|(rest, (ver, tag, _packet_length, body))| match body {
                 ParseResult::Indeterminated => {
@@ -91,7 +89,9 @@ impl<R: Read> Iterator for PacketParser<R> {
                     let p = single::body_parser(ver, tag, &body.concat());
                     Ok((b.buf().offset(rest), p))
                 }
-            }) {
+            });
+
+            let res_body = match res_header {
                 Ok(val) => Some(val),
                 Err(err) => match err {
                     Error::Incomplete(n) => {
@@ -107,7 +107,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                 },
             };
 
-            if let Some((length, p)) = res {
+            if let Some((length, p)) = res_body {
                 info!("got packet: {:#?} {}", p, length);
                 b.consume(length);
                 return Some(p);
