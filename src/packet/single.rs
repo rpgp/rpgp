@@ -170,6 +170,7 @@ pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
 
     match res {
         Ok(res) => Ok(res),
+        Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
         Err(err) => {
             warn!("invalid packet: {:?} {:?}\n{}", err, tag, hex::encode(body));
             Err(Error::InvalidPacketContent(Box::new(err)))
