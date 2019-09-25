@@ -52,6 +52,7 @@ impl<R: Read + Seek> Seek for LineReader<R> {
 impl<R: Read> Read for LineReader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let mut n = self.inner.read(into)?;
+        info!("read {}bytes", n);
 
         while n > 0 {
             let mut offset = 0;
@@ -66,6 +67,10 @@ impl<R: Read> Read for LineReader<R> {
                 }
             }
             if offset > 0 {
+                info!(
+                    "read(linereader-offset): {:?}",
+                    std::str::from_utf8(&into[..offset])
+                );
                 return Ok(offset);
             }
 
@@ -73,6 +78,7 @@ impl<R: Read> Read for LineReader<R> {
             n = self.inner.read(into)?;
         }
 
+        info!("read(linereader): {:?}", std::str::from_utf8(&into[..n]));
         Ok(n)
     }
 }
@@ -195,5 +201,23 @@ mod tests {
             ]
             .concat()
         );
+    }
+
+    #[test]
+    fn test_line_reader_seek() {
+        let input = b"hellonworld-";
+        let c = Cursor::new(&input[..]);
+        let mut r = LineReader::new(c);
+
+        let mut buf = vec![0; input.len() + 2];
+        assert_eq!(r.read(&mut buf).unwrap(), input.len());
+        assert_eq!(&buf[..input.len()], &input[..]);
+
+        // seek
+        assert_eq!(r.seek(io::SeekFrom::Current(-8)).unwrap(), 4);
+
+        let mut buf = vec![0; input.len()];
+        assert_eq!(r.read(&mut buf).unwrap(), 8);
+        assert_eq!(&buf[..input.len() - 4], &input[4..]);
     }
 }
