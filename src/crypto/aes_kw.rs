@@ -5,7 +5,7 @@ use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 use byteorder::{BigEndian, WriteBytesExt};
 
-use errors::Result;
+use crate::errors::Result;
 
 lazy_static! {
     static ref IV: GenericArray<u8, U8> = arr![u8; 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6];

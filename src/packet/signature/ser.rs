@@ -2,11 +2,11 @@ use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use errors::Result;
-use packet::signature::types::*;
-use packet::signature::SignatureConfig;
-use ser::Serialize;
-use util::{write_packet_length, write_string};
+use crate::errors::Result;
+use crate::packet::signature::types::*;
+use crate::packet::signature::SignatureConfig;
+use crate::ser::Serialize;
+use crate::util::{write_packet_length, write_string};
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -320,8 +320,8 @@ mod tests {
     use std::io::Read;
     use std::path::Path;
 
-    use packet::{Packet, PacketParser};
-    use ser::Serialize;
+    use crate::packet::{Packet, PacketParser};
+    use crate::ser::Serialize;
 
     fn test_roundtrip(name: &str) {
         let f = File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap();

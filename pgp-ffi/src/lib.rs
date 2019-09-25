@@ -1,11 +1,8 @@
 #![allow(non_snake_case)]
 #![allow(non_camel_case_types)]
 
-extern crate hex;
-extern crate libc;
 #[macro_use]
 extern crate pgp;
-extern crate failure;
 
 #[macro_use]
 mod macros;

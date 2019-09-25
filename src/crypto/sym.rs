@@ -8,8 +8,8 @@ use rand::{thread_rng, CryptoRng, Rng, RngCore};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
-use crypto::checksum;
-use errors::Result;
+use crate::crypto::checksum;
+use crate::errors::Result;
 
 macro_rules! decrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{

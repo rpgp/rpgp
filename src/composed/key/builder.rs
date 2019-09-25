@@ -4,11 +4,11 @@ use chrono::{self, SubsecRound};
 use rand::thread_rng;
 use smallvec::SmallVec;
 
-use composed::{KeyDetails, SecretKey, SecretSubkey};
-use crypto::{ecdh, eddsa, rsa, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
-use errors::Result;
-use packet::{self, KeyFlags, UserAttribute, UserId};
-use types::{self, CompressionAlgorithm, PublicParams, RevocationKey};
+use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
+use crate::crypto::{ecdh, eddsa, rsa, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use crate::errors::Result;
+use crate::packet::{self, KeyFlags, UserAttribute, UserId};
+use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey};
 
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
@@ -263,8 +263,8 @@ impl KeyType {
 mod tests {
     use super::*;
 
-    use composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-    use types::SecretKeyTrait;
+    use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
+    use crate::types::SecretKeyTrait;
 
     #[test]
     #[ignore] // slow in debug mode

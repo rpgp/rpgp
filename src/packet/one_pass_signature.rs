@@ -3,13 +3,13 @@ use std::io;
 use nom::be_u8;
 use num_traits::FromPrimitive;
 
-use crypto::hash::HashAlgorithm;
-use crypto::public_key::PublicKeyAlgorithm;
-use errors::Result;
-use packet::signature::SignatureType;
-use packet::PacketTrait;
-use ser::Serialize;
-use types::{KeyId, Tag, Version};
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::errors::Result;
+use crate::packet::signature::SignatureType;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{KeyId, Tag, Version};
 
 /// One-Pass Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.4

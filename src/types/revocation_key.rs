@@ -1,6 +1,6 @@
 use smallvec::SmallVec;
 
-use crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct RevocationKey {

@@ -3,11 +3,11 @@ use std::io;
 use nom::{be_u8, rest_len};
 use num_traits::FromPrimitive;
 
-use crypto::public_key::PublicKeyAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use ser::Serialize;
-use types::*;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::errors::Result;
+use crate::ser::Serialize;
+use crate::types::*;
 
 /// A list of params that are used to represent the values of possibly encrypted key,
 /// from imports and exports.

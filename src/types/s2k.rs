@@ -4,9 +4,9 @@ use nom::be_u8;
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
 
-use crypto::hash::HashAlgorithm;
-use errors::Result;
-use ser::Serialize;
+use crate::crypto::hash::HashAlgorithm;
+use crate::errors::Result;
+use crate::ser::Serialize;
 
 const EXPBIAS: u32 = 6;
 

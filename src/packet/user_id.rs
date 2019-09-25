@@ -2,11 +2,11 @@ use std::{fmt, io, str};
 
 use chrono::{SubsecRound, Utc};
 
-use errors::Result;
-use packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
-use ser::Serialize;
-use types::{SecretKeyTrait, SignedUser, Tag, Version};
-use util::{read_string, write_string};
+use crate::errors::Result;
+use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
+use crate::ser::Serialize;
+use crate::types::{SecretKeyTrait, SignedUser, Tag, Version};
+use crate::util::{read_string, write_string};
 
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
@@ -67,7 +67,7 @@ impl Serialize for UserId {
 }
 
 impl fmt::Display for UserId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "User ID: \"{}\"", self.id)
     }
 }

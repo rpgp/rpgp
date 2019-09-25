@@ -13,6 +13,8 @@ categories = ["cryptography", "std", "email"]
 
 exclude = ["tests/tests/*"]
 
+edition = "2018"
+
 [dependencies]
 crc24 = "^0.1"
 base64 = "^0.10.1"

@@ -1,5 +1,5 @@
-use crypto::public_key::PublicKeyAlgorithm;
-use types::KeyId;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::types::KeyId;
 
 pub trait KeyTrait: ::std::fmt::Debug {
     fn fingerprint(&self) -> Vec<u8>;

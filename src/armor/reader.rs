@@ -9,11 +9,11 @@ use byteorder::{BigEndian, ByteOrder};
 use crc24;
 use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Slice};
 
-use base64_decoder::Base64Decoder;
-use base64_reader::Base64Reader;
-use errors::Result;
-use line_reader::LineReader;
-use ser::Serialize;
+use crate::base64_decoder::Base64Decoder;
+use crate::base64_reader::Base64Reader;
+use crate::errors::Result;
+use crate::line_reader::LineReader;
+use crate::ser::Serialize;
 
 /// Armor block types.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -42,7 +42,7 @@ pub enum BlockType {
 }
 
 impl fmt::Display for BlockType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_string())
     }
 }
@@ -82,7 +82,7 @@ pub enum PKCS1Type {
 }
 
 impl fmt::Display for PKCS1Type {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PKCS1Type::RSA => write!(f, "RSA"),
             PKCS1Type::DSA => write!(f, "DSA"),
@@ -479,7 +479,7 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    use errors::Result;
+    use crate::errors::Result;
 
     // helper function to parse all data at once
     pub fn parse<R: Read + Seek>(

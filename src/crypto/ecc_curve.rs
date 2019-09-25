@@ -1,4 +1,4 @@
-use crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ECCCurve {

@@ -3,11 +3,11 @@ use std::iter::Peekable;
 
 use try_from::TryInto;
 
-use composed::message::Message;
-use composed::Deserializable;
-use errors::Result;
-use packet::Packet;
-use types::Tag;
+use crate::composed::message::Message;
+use crate::composed::Deserializable;
+use crate::errors::Result;
+use crate::packet::Packet;
+use crate::types::Tag;
 
 pub struct MessageParser<I: Sized + Iterator<Item = Packet>> {
     source: Peekable<I>,

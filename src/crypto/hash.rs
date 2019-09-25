@@ -11,7 +11,7 @@ use sha1::Sha1;
 use sha2;
 use sha3;
 
-use errors::{Error, Result};
+use crate::errors::{Error, Result};
 
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
@@ -63,7 +63,7 @@ impl TryInto<Hashes> for HashAlgorithm {
 /// be used as `Box<Digest>`.
 pub trait Hasher {
     /// Update the hash with the given value.
-    fn update(&mut self, &[u8]);
+    fn update(&mut self, _: &[u8]);
     /// Finalize the hash and return the result.
     fn finish(self: Box<Self>) -> Vec<u8>;
 }

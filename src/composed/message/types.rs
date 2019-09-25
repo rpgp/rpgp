@@ -9,19 +9,19 @@ use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 use try_from::TryFrom;
 
-use armor;
-use composed::message::decrypt::*;
-use composed::shared::Deserializable;
-use composed::signed_key::SignedSecretKey;
-use crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
-use errors::{Error, Result};
-use packet::{
+use crate::armor;
+use crate::composed::message::decrypt::*;
+use crate::composed::shared::Deserializable;
+use crate::composed::signed_key::SignedSecretKey;
+use crate::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
+use crate::errors::{Error, Result};
+use crate::packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType, Subpacket,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
-use ser::Serialize;
-use types::{
+use crate::ser::Serialize;
+use crate::types::{
     CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, PublicKeyTrait, SecretKeyTrait, StringToKey,
     Tag,
 };
@@ -643,9 +643,9 @@ mod tests {
     use std::fs;
     use std::io::Cursor;
 
-    use composed::{Deserializable, Message, SignedSecretKey};
-    use crypto::SymmetricKeyAlgorithm;
-    use types::{CompressionAlgorithm, SecretKeyTrait};
+    use crate::composed::{Deserializable, Message, SignedSecretKey};
+    use crate::crypto::SymmetricKeyAlgorithm;
+    use crate::types::{CompressionAlgorithm, SecretKeyTrait};
 
     #[test]
     fn test_compression_zlib() {

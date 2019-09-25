@@ -2,12 +2,12 @@ use std::{fmt, io};
 
 use byteorder::{BigEndian, ByteOrder};
 
-use crypto::checksum;
-use crypto::public_key::PublicKeyAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use ser::Serialize;
-use types::*;
+use crate::crypto::checksum;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::errors::Result;
+use crate::ser::Serialize;
+use crate::types::*;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct EncryptedSecretParams {
@@ -136,7 +136,7 @@ impl Serialize for EncryptedSecretParams {
 }
 
 impl fmt::Debug for EncryptedSecretParams {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EncryptedSecretParams")
             .field("data", &hex::encode(&self.data))
             .field("checksum", &self.checksum().map(hex::encode))

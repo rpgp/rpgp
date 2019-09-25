@@ -3,15 +3,15 @@ use std::io;
 
 use rand::{CryptoRng, Rng};
 
-use armor;
-use composed::key::{PublicKey, PublicSubkey};
-use composed::signed_key::SignedKeyDetails;
-use crypto::public_key::PublicKeyAlgorithm;
-use crypto::HashAlgorithm;
-use errors::Result;
-use packet::{self, write_packet, SignatureType};
-use ser::Serialize;
-use types::{KeyId, KeyTrait, Mpi, PublicKeyTrait};
+use crate::armor;
+use crate::composed::key::{PublicKey, PublicSubkey};
+use crate::composed::signed_key::SignedKeyDetails;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::HashAlgorithm;
+use crate::errors::Result;
+use crate::packet::{self, write_packet, SignatureType};
+use crate::ser::Serialize;
+use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -3,8 +3,8 @@ use std::fmt;
 use num_bigint::BigUint;
 use rsa::RSAPrivateKey;
 
-use crypto::hash::HashAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 
 /// The version of the secret key that is actually exposed to users to do crypto operations.
 #[allow(clippy::large_enum_variant)] // FIXME
@@ -41,7 +41,7 @@ pub struct DSASecretKey {
 }
 
 impl fmt::Debug for SecretKeyRepr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SecretKeyRepr::RSA(_) => write!(f, "SecretKeyRepr(RSA)"),
             SecretKeyRepr::DSA(_) => write!(f, "SecretKeyRepr(DSA)"),

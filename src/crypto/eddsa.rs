@@ -1,9 +1,9 @@
 use ed25519_dalek::Keypair;
 use rand::{CryptoRng, Rng};
 
-use crypto::{ECCCurve, HashAlgorithm};
-use errors::Result;
-use types::{EdDSASecretKey, Mpi, PlainSecretParams, PublicParams};
+use crate::crypto::{ECCCurve, HashAlgorithm};
+use crate::errors::Result;
+use crate::types::{EdDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 
 /// Generate an EdDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {

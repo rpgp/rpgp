@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Seek};
 
-use armor::{self, BlockType};
-use errors::{Error, Result};
-use packet::{Packet, PacketParser};
+use crate::armor::{self, BlockType};
+use crate::errors::{Error, Result};
+use crate::packet::{Packet, PacketParser};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.

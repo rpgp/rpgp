@@ -1,7 +1,7 @@
 use std::io;
 use std::io::prelude::*;
 
-use util::is_base64_token;
+use crate::util::is_base64_token;
 
 /// Reads base64 values from a given byte input, stops once it detects the first non base64 char.
 #[derive(Debug)]
@@ -56,7 +56,7 @@ mod tests {
     use std::io::Cursor;
     use std::io::Read;
 
-    use line_reader::LineReader;
+    use crate::line_reader::LineReader;
 
     fn read_exact(data: &[u8], size: usize) -> Vec<u8> {
         let c = Cursor::new(data);

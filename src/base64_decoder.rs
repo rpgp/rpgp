@@ -4,7 +4,7 @@ use std::io::{self, BufRead, Read, Seek};
 use base64::{decode_config_slice, CharacterSet, Config};
 use buf_redux::{BufReader, Buffer};
 
-use util;
+use crate::util;
 
 const BUF_SIZE: usize = 1024;
 const BUF_CAPACITY: usize = BUF_SIZE / 4 * 3;
@@ -140,8 +140,8 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    use base64_reader::Base64Reader;
-    use line_reader::LineReader;
+    use crate::base64_reader::Base64Reader;
+    use crate::line_reader::LineReader;
 
     fn test_roundtrip(cs: CharacterSet, n: usize) {
         let rng = &mut XorShiftRng::from_seed([

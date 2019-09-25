@@ -1,12 +1,12 @@
 use std::collections::BTreeMap;
 use std::{io, iter};
 
-use armor::{self, BlockType};
-use composed::shared::Deserializable;
-use composed::signed_key::{PublicOrSecret, SignedPublicKey, SignedSecretKey};
-use errors::Result;
-use packet::{Packet, PacketParser};
-use types::Tag;
+use crate::armor::{self, BlockType};
+use crate::composed::shared::Deserializable;
+use crate::composed::signed_key::{PublicOrSecret, SignedPublicKey, SignedSecretKey};
+use crate::errors::Result;
+use crate::packet::{Packet, PacketParser};
+use crate::types::Tag;
 
 // TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
 

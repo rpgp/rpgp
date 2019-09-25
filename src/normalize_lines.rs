@@ -5,7 +5,7 @@
 //!
 //! Based on https://github.com/derekdreery/normalize-line-endings.
 
-use line_writer::LineBreak;
+use crate::line_writer::LineBreak;
 use std::iter::Peekable;
 
 /// This struct wraps a `std::io::Chars` to normalize line endings.
@@ -127,7 +127,7 @@ mod tests {
 
     use std::iter::FromIterator;
 
-    use line_writer::LineBreak;
+    use crate::line_writer::LineBreak;
 
     #[test]
     fn normalized_lf() {

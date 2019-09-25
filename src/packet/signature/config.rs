@@ -3,12 +3,12 @@ use std::fmt;
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
 
-use crypto::hash::{HashAlgorithm, Hasher};
-use crypto::public_key::PublicKeyAlgorithm;
-use errors::Result;
-use packet::{Signature, SignatureType, SignatureVersion, Subpacket};
-use ser::Serialize;
-use types::{KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
+use crate::crypto::hash::{HashAlgorithm, Hasher};
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::errors::Result;
+use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket};
+use crate::ser::Serialize;
+use crate::types::{KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
 
 #[derive(Clone, PartialEq, Eq, Builder)]
 pub struct SignatureConfig {
@@ -357,7 +357,7 @@ impl SignatureConfig {
 }
 
 impl fmt::Debug for SignatureConfig {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SignatureConfig")
             .field("version", &self.version)
             .field("typ", &self.typ)
