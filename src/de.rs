@@ -1,6 +1,6 @@
-use errors::Result;
-use types::Version;
+use crate::errors::Result;
+use crate::types::Version;
 
 pub trait Deserialize: Sized {
-    fn from_slice(Version, &[u8]) -> Result<Self>;
+    fn from_slice(_: Version, _: &[u8]) -> Result<Self>;
 }

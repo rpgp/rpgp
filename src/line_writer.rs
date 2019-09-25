@@ -33,7 +33,7 @@ impl AsRef<[u8]> for LineBreak {
 /// Calling `write()` after `finish()` is invalid and will panic.
 pub struct LineWriter<'a, W, N>
 where
-    W: 'a + io::Write,
+    W: io::Write,
     N: Unsigned + ArrayLength<u8>,
     N: std::ops::Add<U2>,
     Sum<N, U2>: ArrayLength<u8>,
@@ -205,9 +205,9 @@ where
 mod tests {
     use super::*;
 
+    use crate::util::write_all;
     use generic_array::typenum::{self, U10};
     use std::io::Write;
-    use util::write_all;
 
     #[test]
     fn simple_writes() {

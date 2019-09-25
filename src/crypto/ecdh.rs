@@ -2,9 +2,9 @@ use block_padding::{Padding, Pkcs7};
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
 
-use crypto::{aes_kw, ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
-use errors::Result;
-use types::{ECDHSecretKey, Mpi, PlainSecretParams, PublicParams};
+use crate::crypto::{aes_kw, ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use crate::errors::Result;
+use crate::types::{ECDHSecretKey, Mpi, PlainSecretParams, PublicParams};
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -198,7 +198,7 @@ mod tests {
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
-    use types::{PublicParams, SecretKeyRepr};
+    use crate::types::{PublicParams, SecretKeyRepr};
 
     #[test]
     fn test_encrypt_decrypt() {

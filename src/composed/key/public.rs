@@ -4,11 +4,11 @@ use chrono::{self, SubsecRound};
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 
-use composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
-use crypto::{HashAlgorithm, PublicKeyAlgorithm};
-use errors::Result;
-use packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
-use types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyTrait};
+use crate::composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
+use crate::crypto::{HashAlgorithm, PublicKeyAlgorithm};
+use crate::errors::Result;
+use crate::packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
+use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]

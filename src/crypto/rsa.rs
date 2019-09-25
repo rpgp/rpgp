@@ -5,9 +5,9 @@ use rsa::padding::PaddingScheme;
 use rsa::{PublicKey, RSAPrivateKey, RSAPublicKey};
 use try_from::TryInto;
 
-use crypto::HashAlgorithm;
-use errors::Result;
-use types::{Mpi, PlainSecretParams, PublicParams};
+use crate::crypto::HashAlgorithm;
+use crate::errors::Result;
+use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
 /// RSA decryption using PKCS1v15 padding.
 pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {

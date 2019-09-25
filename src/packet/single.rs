@@ -4,17 +4,17 @@
 use nom::{self, be_u32, be_u8, Err, IResult};
 use num_traits::FromPrimitive;
 
-use de::Deserialize;
-use errors::{Error, Result};
-use packet::packet_sum::Packet;
-use packet::{
+use crate::de::Deserialize;
+use crate::errors::{Error, Result};
+use crate::packet::packet_sum::Packet;
+use crate::packet::{
     CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PublicKey,
     PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
     UserId,
 };
-use types::{PacketLength, Tag, Version};
-use util::{u16_as_usize, u32_as_usize, u8_as_usize};
+use crate::types::{PacketLength, Tag, Version};
+use crate::util::{u16_as_usize, u32_as_usize, u8_as_usize};
 
 // Parses an old format packet header
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
@@ -45,13 +45,13 @@ named!(read_packet_len(&[u8]) -> PacketLength, do_parse!(
        olen: be_u8
     >>  len: switch!(value!(olen),
                // One-Octet Lengths
-               0...191   => value!((olen as usize).into()) |
+               0..=191   => value!((olen as usize).into()) |
                // Two-Octet Lengths
-               192...223 => map!(be_u8, |a| {
+               192..=223 => map!(be_u8, |a| {
                    (((olen as usize - 192) << 8) + 192 + a as usize).into()
                }) |
                // Partial Body Lengths
-               224...254 => value!(PacketLength::Partial(1 << (olen as usize & 0x1F))) |
+               224..=254 => value!(PacketLength::Partial(1 << (olen as usize & 0x1F))) |
                // Five-Octet Lengths
                255       => map!(be_u32, |v| u32_as_usize(v).into())
     )
@@ -130,7 +130,7 @@ pub enum ParseResult<'a> {
 // Parse a single Packet
 // https://tools.ietf.org/html/rfc4880.html#section-4.2
 #[rustfmt::skip]
-named!(pub parser<(Version, Tag, PacketLength, ParseResult)>, do_parse!(
+named!(pub parser<(Version, Tag, PacketLength, ParseResult<'_>)>, do_parse!(
        head: alt!(new_packet_header | old_packet_header)
     >> body: switch!(value!(&head.2),
         PacketLength::Fixed(length)   => map!(take!(*length), |v| ParseResult::Fixed(v)) |

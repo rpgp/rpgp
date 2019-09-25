@@ -5,7 +5,7 @@ use aes::block_cipher_trait::generic_array::GenericArray;
 use aes::block_cipher_trait::BlockCipher;
 use byteorder::{BigEndian, WriteBytesExt};
 
-use errors::Result;
+use crate::errors::Result;
 
 lazy_static! {
     static ref IV: GenericArray<u8, U8> = arr![u8; 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6];
@@ -69,7 +69,7 @@ macro_rules! impl_aes_kw {
                 for i in 0..n {
                     let t = (n * j + (i + 1)) as u64;
 
-                    let mut cipher = <$hasher as BlockCipher>::new(&key);
+                    let cipher = <$hasher as BlockCipher>::new(&key);
                     // Safe to unwrap, as we know the size of t_arr.
                     (&mut t_arr[..]).write_u64::<BigEndian>(t).unwrap();
 
@@ -124,7 +124,7 @@ macro_rules! impl_aes_kw {
                 for i in (0..n).rev() {
                     let t = (n * j + (i + 1)) as u64;
 
-                    let mut cipher = <$hasher as BlockCipher>::new(&key);
+                    let cipher = <$hasher as BlockCipher>::new(&key);
                     // Safe to unwrap, as we know the size of t_arr.
                     (&mut t_arr[..]).write_u64::<BigEndian>(t).unwrap();
 

@@ -1,9 +1,9 @@
 use std::io;
 
-use errors::Result;
-use packet::PacketTrait;
-use ser::Serialize;
-use types::{Tag, Version};
+use crate::errors::Result;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{Tag, Version};
 
 /// Modification Detection Code Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.14

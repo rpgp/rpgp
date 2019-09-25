@@ -2,12 +2,12 @@ use chrono::{DateTime, TimeZone, Utc};
 use nom::{be_u16, be_u32, be_u8};
 use num_traits::FromPrimitive;
 
-use crypto::ecc_curve::ecc_curve_from_oid;
-use crypto::{HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
-use types::{mpi, KeyVersion, Mpi, MpiRef, PublicParams};
+use crate::crypto::ecc_curve::ecc_curve_from_oid;
+use crate::crypto::{HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use crate::types::{mpi, KeyVersion, Mpi, MpiRef, PublicParams};
 
 #[inline]
-fn to_owned(mref: MpiRef) -> Mpi {
+fn to_owned(mref: MpiRef<'_>) -> Mpi {
     mref.to_owned()
 }
 

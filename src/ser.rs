@@ -1,9 +1,9 @@
 use std::io;
 
-use errors::Result;
+use crate::errors::Result;
 
 pub trait Serialize {
-    fn to_writer<W: io::Write>(&self, &mut W) -> Result<()>;
+    fn to_writer<W: io::Write>(&self, _: &mut W) -> Result<()>;
 
     fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut buf = Vec::new();

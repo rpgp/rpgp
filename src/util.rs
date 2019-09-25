@@ -10,7 +10,7 @@ use nom::{
     Slice,
 };
 
-use errors;
+use crate::errors;
 
 #[inline]
 pub fn u8_as_usize(a: u8) -> usize {
@@ -32,7 +32,7 @@ pub fn is_base64_token(c: u8) -> bool {
     is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
 }
 
-named!(pub prefixed<CompleteByteSlice, CompleteByteSlice>, do_parse!(
+named!(pub prefixed<CompleteByteSlice<'_>, CompleteByteSlice<'_>>, do_parse!(
              many0!(line_ending)
     >> rest: take_while1!(is_base64_token)
     >> (rest)
@@ -96,9 +96,9 @@ named!(pub packet_length<usize>, do_parse!(
        olen: be_u8
     >>  len: switch!(value!(olen),
                      // One-Octet Lengths
-                     0...191   => value!(olen as usize) |
+                     0..=191   => value!(olen as usize) |
                      // Two-Octet Lengths
-                     192...254 => map!(be_u8, |a| {
+                     192..=254 => map!(be_u8, |a| {
                          ((olen as usize - 192) << 8) + 192 + a as usize
                      }) |
                      // Five-Octet Lengths
@@ -131,7 +131,7 @@ pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Resu
     Ok(())
 }
 
-pub fn end_of_line(input: CompleteStr) -> IResult<CompleteStr, CompleteStr> {
+pub fn end_of_line(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, CompleteStr<'_>> {
     alt!(input, eof!() | eol)
 }
 
@@ -151,7 +151,7 @@ where
 macro_rules! impl_try_from_into {
     ($enum_name:ident, $( $name:ident => $variant_type:ty ),*) => {
        $(
-           impl $crate::try_from::TryFrom<$enum_name> for $variant_type {
+           impl try_from::TryFrom<$enum_name> for $variant_type {
                // TODO: Proper error
                type Err = $crate::errors::Error;
 

@@ -1,14 +1,14 @@
 use chrono::{self, SubsecRound};
 use smallvec::SmallVec;
 
-use composed::SignedKeyDetails;
-use crypto::hash::HashAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use packet::{
+use crate::composed::SignedKeyDetails;
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::errors::Result;
+use crate::packet::{
     KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, UserAttribute, UserId,
 };
-use types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
+use crate::types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {

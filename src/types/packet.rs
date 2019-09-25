@@ -2,7 +2,7 @@ use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-use errors::Result;
+use crate::errors::Result;
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4

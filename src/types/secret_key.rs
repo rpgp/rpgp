@@ -1,6 +1,6 @@
-use crypto::hash::HashAlgorithm;
-use errors::Result;
-use types::{Mpi, PublicKeyTrait, SecretKeyRepr};
+use crate::crypto::hash::HashAlgorithm;
+use crate::errors::Result;
+use crate::types::{Mpi, PublicKeyTrait, SecretKeyRepr};
 
 pub trait SecretKeyTrait: PublicKeyTrait {
     type PublicKey;

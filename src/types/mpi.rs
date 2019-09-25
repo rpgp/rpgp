@@ -4,9 +4,9 @@ use byteorder::{BigEndian, WriteBytesExt};
 use nom::{self, be_u16, Err, InputIter, InputTake};
 use num_bigint::BigUint;
 
-use errors;
-use ser::Serialize;
-use util::{bit_size, strip_leading_zeros};
+use crate::errors;
+use crate::ser::Serialize;
+use crate::util::{bit_size, strip_leading_zeros};
 
 /// Number of bits we accept when reading or writing MPIs.
 /// The value is the same as gnupgs.
@@ -79,7 +79,7 @@ impl Mpi {
         Mpi(strip_leading_zeros(raw).to_vec())
     }
 
-    pub fn as_ref(&self) -> MpiRef {
+    pub fn as_ref(&self) -> MpiRef<'_> {
         MpiRef(&self.0)
     }
 
@@ -193,13 +193,13 @@ impl<'a> From<&'a BigUint> for Mpi {
 }
 
 impl<'a> fmt::Debug for MpiRef<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Mpi({})", hex::encode(self.0))
     }
 }
 
 impl fmt::Debug for Mpi {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }

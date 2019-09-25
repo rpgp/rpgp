@@ -4,8 +4,8 @@ use std::str;
 use nom::types::CompleteStr;
 use nom::{self, crlf, space, AsChar, Err, IResult};
 
-use errors::Result;
-use util::end_of_line;
+use crate::errors::Result;
+use crate::util::end_of_line;
 
 #[inline]
 fn is_name_token(chr: char) -> bool {
@@ -55,32 +55,34 @@ where
 //     |n| str::from_utf8(n).unwrap().to_string()
 // ));
 
-named!(sep(CompleteStr) -> (), do_parse!(
-    char!(':') >>
-    many0!(space) >>
-    ()
-));
+named!(
+    sep(CompleteStr<'_>) -> (),
+    do_parse!(char!(':') >> many0!(space) >> ())
+);
 
-named!(field_body(CompleteStr) -> Vec<&str>, map!(many0!(alt_complete!(
-    body_token |
-    do_parse!(crlf >> many1!(space) >> (CompleteStr(" ")) ) |
-    space
-)), |v| v.iter().map(|s| s.0).filter(|v| !v.is_empty()).collect()));
+named!(
+    field_body(CompleteStr<'_>) -> Vec<&str>,
+    map!(
+        many0!(alt_complete!(
+            body_token | do_parse!(crlf >> many1!(space) >> (CompleteStr(" "))) | space
+        )),
+        |v| v.iter().map(|s| s.0).filter(|v| !v.is_empty()).collect()
+    )
+);
 
-named!(kv_pair(CompleteStr) -> (&str, Vec<&str>), do_parse!(
-    k: take_while!(is_name_token) >>
-       sep                        >>
-    v: field_body                 >>
-    (k.0, v)
-));
+named!(
+    kv_pair(CompleteStr<'_>) -> (&str, Vec<&str>),
+    do_parse!(k: take_while!(is_name_token) >> sep >> v: field_body >> (k.0, v))
+);
 
-named!(header(CompleteStr) -> Vec<(&str, Vec<&str>)>, many0!(
-    terminated!(kv_pair, end_of_line)
-));
+named!(
+    header(CompleteStr<'_>) -> Vec<(&str, Vec<&str>)>,
+    many0!(terminated!(kv_pair, end_of_line))
+);
 
 pub type EmailParseResult<'a> = Result<(&'a [u8], Vec<(String, String)>)>;
 
-pub fn parse(input: &[u8]) -> EmailParseResult {
+pub fn parse(input: &[u8]) -> EmailParseResult<'_> {
     let s = str::from_utf8(input)?;
 
     let (rem, res) = header(CompleteStr(s))?;

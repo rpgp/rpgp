@@ -3,12 +3,12 @@ use std::io::Cursor;
 
 use num_traits::FromPrimitive;
 
-use composed::message::types::{Edata, Message};
-use composed::shared::Deserializable;
-use crypto::{checksum, ecdh, rsa, SymmetricKeyAlgorithm};
-use errors::Result;
-use packet::SymKeyEncryptedSessionKey;
-use types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait, Tag};
+use crate::composed::message::types::{Edata, Message};
+use crate::composed::shared::Deserializable;
+use crate::crypto::{checksum, ecdh, rsa, SymmetricKeyAlgorithm};
+use crate::errors::Result;
+use crate::packet::SymKeyEncryptedSessionKey;
+use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait, Tag};
 
 pub fn decrypt_session_key<F>(
     locked_key: &(impl SecretKeyTrait + KeyTrait),

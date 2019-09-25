@@ -4,12 +4,12 @@ use std::io::Write;
 
 use crc24::Crc24Hasher;
 
-use armor::BlockType;
-use errors::Result;
+use crate::armor::BlockType;
+use crate::errors::Result;
+use crate::line_writer::{LineBreak, LineWriter};
+use crate::ser::Serialize;
+use crate::util::TeeWriter;
 use generic_array::typenum::U64;
-use line_writer::{LineBreak, LineWriter};
-use ser::Serialize;
-use util::TeeWriter;
 
 pub fn write(
     source: &impl Serialize,
@@ -98,7 +98,7 @@ mod tests {
         ]);
 
         for i in 2..1024 {
-            let mut buf: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
+            let buf: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
             let source = TestSource::new(buf);
 
             let mut dest = Vec::with_capacity(2 * i);

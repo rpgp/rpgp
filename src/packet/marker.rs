@@ -1,9 +1,9 @@
 use std::io;
 
-use errors::Result;
-use packet::PacketTrait;
-use ser::Serialize;
-use types::{Tag, Version};
+use crate::errors::Result;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{Tag, Version};
 
 /// PGP as UTF-8 octets.
 const PGP: [u8; 3] = [0x50, 0x47, 0x50];

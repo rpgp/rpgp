@@ -3,10 +3,10 @@ use std::io::Read;
 use buf_redux::Buffer;
 use nom::{Needed, Offset};
 
-use errors::{Error, Result};
-use packet::packet_sum::Packet;
-use packet::single::{self, ParseResult};
-use util;
+use crate::errors::{Error, Result};
+use crate::packet::packet_sum::Packet;
+use crate::packet::single::{self, ParseResult};
+use crate::util;
 
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
@@ -135,8 +135,8 @@ mod tests {
     use std::io::{BufRead, BufReader, Seek, SeekFrom};
     use std::path::Path;
 
-    use ser::Serialize;
-    use types::Tag;
+    use crate::ser::Serialize;
+    use crate::types::Tag;
 
     #[test]
     #[ignore]
@@ -190,7 +190,6 @@ mod tests {
     }
 
     fn packet_roundtrip(dump: &str, skips: Vec<(usize, i64)>) {
-        use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
         let path = format!("./tests/tests/sks-dump/{}.pgp", dump);

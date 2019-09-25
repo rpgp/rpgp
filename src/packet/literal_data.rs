@@ -5,13 +5,13 @@ use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use nom::{be_u32, be_u8, rest};
 use num_traits::FromPrimitive;
 
-use errors::Result;
-use line_writer::LineBreak;
-use normalize_lines::Normalized;
-use packet::PacketTrait;
-use ser::Serialize;
-use types::{Tag, Version};
-use util::{read_string, write_string};
+use crate::errors::Result;
+use crate::line_writer::LineBreak;
+use crate::normalize_lines::Normalized;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{Tag, Version};
+use crate::util::{read_string, write_string};
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
@@ -131,7 +131,7 @@ impl PacketTrait for LiteralData {
 }
 
 impl fmt::Debug for LiteralData {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LiteralData")
             .field("packet_version", &self.packet_version)
             .field("mode", &self.mode)

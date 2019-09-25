@@ -4,10 +4,10 @@ use std::io::{self, Cursor, Read};
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 use num_traits::FromPrimitive;
 
-use errors::Result;
-use packet::PacketTrait;
-use ser::Serialize;
-use types::{CompressionAlgorithm, Tag, Version};
+use crate::errors::Result;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{CompressionAlgorithm, Tag, Version};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct CompressedData {
@@ -97,7 +97,7 @@ impl PacketTrait for CompressedData {
 }
 
 impl fmt::Debug for CompressedData {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CompressedData")
             .field("packet_version", &self.packet_version)
             .field("compression_algorithm", &self.compression_algorithm)

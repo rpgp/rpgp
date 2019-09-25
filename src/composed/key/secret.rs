@@ -1,11 +1,11 @@
 use chrono::{self, SubsecRound};
 use smallvec::SmallVec;
 
-use composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
-use crypto::PublicKeyAlgorithm;
-use errors::Result;
-use packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
-use types::{KeyId, KeyTrait, SecretKeyTrait};
+use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
+use crate::crypto::PublicKeyAlgorithm;
+use crate::errors::Result;
+use crate::packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
+use crate::types::{KeyId, KeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]

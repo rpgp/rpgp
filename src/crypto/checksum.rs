@@ -4,7 +4,7 @@ use std::io;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use sha1::{Digest, Sha1};
 
-use errors::Result;
+use crate::errors::Result;
 
 /// Two octet checksum: sum of all octets mod 65535.
 #[inline]

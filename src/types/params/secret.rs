@@ -3,11 +3,11 @@ use std::io;
 use nom::{be_u8, rest_len};
 use num_traits::FromPrimitive;
 
-use crypto::public_key::PublicKeyAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use ser::Serialize;
-use types::*;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::errors::Result;
+use crate::ser::Serialize;
+use crate::types::*;
 
 /// A list of params that are used to represent the values of possibly encrypted key,
 /// from imports and exports.
@@ -72,7 +72,7 @@ named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<
                    // 0 is no encryption
                    0       => value!((None, None, None)) |
                    // symmetric key algorithm
-                   1...253 => do_parse!(
+                   1..=253 => do_parse!(
                           sym_alg: map_opt!(
                                     value!(s2k_typ),
                                     SymmetricKeyAlgorithm::from_u8
@@ -81,7 +81,7 @@ named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<
                        >> (Some(sym_alg), Some(iv), None)
                    ) |
                    // symmetric key + string-to-key
-                   254...255 => do_parse!(
+                   254..=255 => do_parse!(
                              sym_alg: map_opt!(
                                         be_u8,
                                         SymmetricKeyAlgorithm::from_u8

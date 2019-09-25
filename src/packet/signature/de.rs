@@ -5,18 +5,18 @@ use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
-use crypto::aead::AeadAlgorithm;
-use crypto::hash::HashAlgorithm;
-use crypto::public_key::PublicKeyAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use de::Deserialize;
-use errors::Result;
-use packet::signature::types::*;
-use types::{
+use crate::crypto::aead::AeadAlgorithm;
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::de::Deserialize;
+use crate::errors::Result;
+use crate::packet::signature::types::*;
+use crate::types::{
     mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
     Version,
 };
-use util::{clone_into_array, packet_length, read_string};
+use crate::util::{clone_into_array, packet_length, read_string};
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -322,7 +322,7 @@ named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Mpi>>,
     &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| vec![v.to_owned()]) |
     &PublicKeyAlgorithm::DSA   |
     &PublicKeyAlgorithm::ECDSA |
-    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<Mpi>, item: MpiRef | {
+    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<Mpi>, item: MpiRef<'_> | {
         acc.push(item.to_owned());
         acc
     }) |

@@ -1,9 +1,9 @@
 use std::{fmt, io};
 
-use errors::Result;
-use packet::PacketTrait;
-use ser::Serialize;
-use types::{Tag, Version};
+use crate::errors::Result;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.7
@@ -45,7 +45,7 @@ impl PacketTrait for SymEncryptedData {
 }
 
 impl fmt::Debug for SymEncryptedData {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SymEncryptedData")
             .field("packet_version", &self.packet_version)
             .field("data", &hex::encode(&self.data))

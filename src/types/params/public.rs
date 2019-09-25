@@ -1,11 +1,11 @@
 use std::{fmt, io};
 
-use crypto::ecc_curve::ECCCurve;
-use crypto::hash::HashAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use ser::Serialize;
-use types::Mpi;
+use crate::crypto::ecc_curve::ECCCurve;
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::errors::Result;
+use crate::ser::Serialize;
+use crate::types::Mpi;
 
 /// Represent the public paramaters for the different algorithms.
 #[derive(PartialEq, Eq, Clone)]
@@ -110,7 +110,7 @@ impl Serialize for PublicParams {
 }
 
 impl fmt::Debug for PublicParams {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PublicParams::RSA { ref n, ref e } => f
                 .debug_struct("PublicParams::RSA")

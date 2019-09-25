@@ -1,6 +1,6 @@
 use std::fmt;
 
-use errors::Result;
+use crate::errors::Result;
 use hex;
 
 /// Represents a Key ID.
@@ -28,7 +28,7 @@ impl KeyId {
 }
 
 impl fmt::Debug for KeyId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "KeyId({})", hex::encode(self.as_ref()))
     }
 }

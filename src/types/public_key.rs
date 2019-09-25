@@ -2,9 +2,9 @@ use std::io;
 
 use rand::{CryptoRng, Rng};
 
-use crypto::hash::HashAlgorithm;
-use errors::Result;
-use types::{KeyTrait, Mpi};
+use crate::crypto::hash::HashAlgorithm;
+use crate::errors::Result;
+use crate::types::{KeyTrait, Mpi};
 
 pub trait PublicKeyTrait: KeyTrait {
     /// Verify a signed message.

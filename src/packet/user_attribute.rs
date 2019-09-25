@@ -5,11 +5,11 @@ use chrono::{SubsecRound, Utc};
 use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{be_u8, le_u16, rest};
 
-use errors::Result;
-use packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
-use ser::Serialize;
-use types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
-use util::{packet_length, write_packet_length};
+use crate::errors::Result;
+use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
+use crate::ser::Serialize;
+use crate::types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
+use crate::util::{packet_length, write_packet_length};
 
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
@@ -79,7 +79,7 @@ impl UserAttribute {
 }
 
 impl fmt::Display for UserAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UserAttribute::Image { data, .. } => {
                 write!(f, "User Attribute: Image (len: {})", data.len())
@@ -154,7 +154,7 @@ impl Serialize for UserAttribute {
 }
 
 impl fmt::Debug for UserAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UserAttribute::Image {
                 ref header,

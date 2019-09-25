@@ -5,11 +5,11 @@ use byteorder::{BigEndian, ByteOrder};
 use rand::{CryptoRng, Rng};
 use rsa::RSAPrivateKey;
 
-use crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
-use errors::Result;
-use ser::Serialize;
-use types::*;
-use util::TeeWriter;
+use crate::crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use crate::errors::Result;
+use crate::ser::Serialize;
+use crate::types::*;
+use crate::util::TeeWriter;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum PlainSecretParams {
@@ -205,7 +205,7 @@ impl PlainSecretParams {
         self.as_ref().checksum_sha1()
     }
 
-    pub fn as_ref(&self) -> PlainSecretParamsRef {
+    pub fn as_ref(&self) -> PlainSecretParamsRef<'_> {
         match self {
             PlainSecretParams::RSA { d, p, q, u } => PlainSecretParamsRef::RSA {
                 d: d.as_ref(),
@@ -281,13 +281,13 @@ impl<'a> Serialize for PlainSecretParamsRef<'a> {
 }
 
 impl fmt::Debug for PlainSecretParams {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
 impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PlainSecretParamsRef::RSA { .. } => write!(f, "PlainSecretParams(RSA)"),
             PlainSecretParamsRef::DSA(_) => write!(f, "PlainSecretParams(DSA)"),
@@ -300,7 +300,7 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
 }
 
 #[rustfmt::skip]
-named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef>, switch!(value!(alg),
+named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef<'_>>, switch!(value!(alg),
     PublicKeyAlgorithm::RSA        |
     PublicKeyAlgorithm::RSAEncrypt |
     PublicKeyAlgorithm::RSASign => call!(rsa_secret_params)                                |
@@ -313,7 +313,7 @@ named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef>,
 
 // Parse the decrpyted private params of an RSA private key.
 #[rustfmt::skip]
-named!(rsa_secret_params<PlainSecretParamsRef>, do_parse!(
+named!(rsa_secret_params<PlainSecretParamsRef<'_>>, do_parse!(
        d: mpi
     >> p: mpi
     >> q: mpi

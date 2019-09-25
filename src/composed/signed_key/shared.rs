@@ -3,13 +3,13 @@ use std::io;
 
 use smallvec::SmallVec;
 
-use composed::key::KeyDetails;
-use composed::signed_key::{SignedPublicKey, SignedSecretKey};
-use crypto::public_key::PublicKeyAlgorithm;
-use errors::Result;
-use packet;
-use ser::Serialize;
-use types::{KeyId, KeyTrait, PublicKeyTrait, SignedUser, SignedUserAttribute};
+use crate::composed::key::KeyDetails;
+use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::errors::Result;
+use crate::packet;
+use crate::ser::Serialize;
+use crate::types::{KeyId, KeyTrait, PublicKeyTrait, SignedUser, SignedUserAttribute};
 
 /// Shared details between secret and public keys.
 #[derive(Debug, PartialEq, Eq, Clone)]

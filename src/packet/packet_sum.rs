@@ -1,14 +1,14 @@
 use std::io;
 
-use errors::Result;
-use packet::{
+use crate::errors::Result;
+use crate::packet::{
     CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PublicKey,
     PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
     UserId,
 };
-use ser::Serialize;
-use types::{Tag, Version};
+use crate::ser::Serialize;
+use crate::types::{Tag, Version};
 
 #[derive(Debug)]
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))] // TODO: fix me

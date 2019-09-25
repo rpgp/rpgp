@@ -1,10 +1,10 @@
 use std::str;
 
-use email::mime;
-use email::types::Email;
-use errors::Result;
+use crate::email::mime;
+use crate::email::types::Email;
+use crate::errors::Result;
 
-pub fn parse(msg: &[u8]) -> Result<Email> {
+pub fn parse(msg: &[u8]) -> Result<Email<'_>> {
     let (rest, headers) = mime::parse(msg)?;
 
     Ok(Email {

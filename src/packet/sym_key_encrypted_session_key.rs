@@ -3,11 +3,11 @@ use std::io;
 use nom::{be_u8, rest};
 use num_traits::FromPrimitive;
 
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use packet::PacketTrait;
-use ser::Serialize;
-use types::{s2k_parser, StringToKey, Tag, Version};
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::errors::Result;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{s2k_parser, StringToKey, Tag, Version};
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3

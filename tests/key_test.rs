@@ -642,7 +642,6 @@ fn test_fingerprint_elgamel() {
 }
 
 fn test_parse_openpgp_key(key: &str, verify: bool) {
-    use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/openpgp/").join(key));
@@ -893,7 +892,6 @@ macro_rules! autocrypt_key {
 }
 
 fn test_parse_autocrypt_key(key: &str, unlock: bool) {
-    use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/autocrypt/").join(key));

@@ -4,16 +4,18 @@ use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
 use num_traits::FromPrimitive;
 
-use crypto::aead::AeadAlgorithm;
-use crypto::hash::HashAlgorithm;
-use crypto::public_key::PublicKeyAlgorithm;
-use crypto::sym::SymmetricKeyAlgorithm;
-use errors::Result;
-use packet::signature::SignatureConfig;
-use packet::PacketTrait;
-use ser::Serialize;
+use crate::crypto::aead::AeadAlgorithm;
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::errors::Result;
+use crate::packet::signature::SignatureConfig;
+use crate::packet::PacketTrait;
+use crate::ser::Serialize;
+use crate::types::{
+    self, CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicKeyTrait, Tag, Version,
+};
 use smallvec::SmallVec;
-use types::{self, CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicKeyTrait, Tag, Version};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
@@ -666,7 +668,7 @@ impl FromPrimitive for SubpacketType {
                 32 => SubpacketType::EmbeddedSignature,
                 33 => SubpacketType::IssuerFingerprint,
                 34 => SubpacketType::PreferredAead,
-                100...110 => SubpacketType::Experimental(n as u8),
+                100..=110 => SubpacketType::Experimental(n as u8),
                 _ => SubpacketType::Other(n as u8),
             };
 
@@ -767,7 +769,7 @@ pub enum RevocationCode {
 }
 
 impl fmt::Debug for Signature {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Signature")
             .field("packet_version", &self.packet_version)
             .field("config", &self.config)

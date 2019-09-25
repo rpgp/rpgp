@@ -1,61 +1,28 @@
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
-#![cfg_attr(feature = "cargo-clippy", warn(clippy::nursery))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::style))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::complexity))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::perf))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::correctness))]
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_attribute))]
-#![cfg_attr(
-    all(feature = "cargo-clippy", not(test)),
-    deny(clippy::result_unwrap_used)
+#![deny(
+    clippy::all,
+    clippy::style,
+    clippy::perf,
+    clippy::complexity,
+    clippy::correctness,
+    clippy::result_unwrap_used,
+    clippy::option_unwrap_used,
+    rust_2018_idioms
 )]
-#![cfg_attr(
-    all(feature = "cargo-clippy", not(test)),
-    deny(clippy::option_unwrap_used)
-)]
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::missing_const_for_fn))]
+#![warn(clippy::nursery)]
+#![allow(clippy::missing_const_for_fn)]
 
 #[macro_use]
 extern crate nom;
-extern crate base64;
-extern crate byteorder;
-extern crate crc24;
-extern crate rsa;
 #[macro_use]
 extern crate num_derive;
-extern crate chrono;
 #[macro_use]
 extern crate failure;
-extern crate aes;
-extern crate block_modes;
-extern crate blowfish;
-extern crate cast5;
-extern crate cfb_mode;
-extern crate circular;
-extern crate des;
-extern crate digest;
-extern crate flate2;
 #[macro_use]
 extern crate generic_array;
-extern crate ed25519_dalek;
-extern crate md5;
-extern crate num_bigint;
-extern crate num_traits;
-extern crate ripemd160;
-extern crate sha1;
-extern crate sha2;
-extern crate sha3;
-extern crate twofish;
-extern crate x25519_dalek;
 #[macro_use]
 extern crate lazy_static;
-extern crate block_padding;
 #[macro_use]
 extern crate log;
-extern crate buf_redux;
-extern crate hex;
-extern crate rand;
-extern crate try_from;
 #[macro_use]
 extern crate derive_builder;
 #[macro_use]
@@ -64,21 +31,8 @@ extern crate bitfield;
 extern crate smallvec;
 
 #[cfg(test)]
-extern crate rand_chacha;
-#[cfg(test)]
-extern crate rand_xorshift;
-#[cfg(test)]
-extern crate regex;
-
-#[cfg(test)]
-extern crate glob;
-#[cfg(test)]
-extern crate serde;
-#[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
-#[cfg(test)]
-extern crate pretty_env_logger;
 
 // public so it can be used in doc test
 #[macro_use]
@@ -93,7 +47,7 @@ pub mod email;
 pub mod line_reader;
 pub mod packet;
 pub mod types;
-pub use composed::key::*;
+pub use crate::composed::key::*;
 pub mod composed;
 pub mod crypto;
 pub mod de;
