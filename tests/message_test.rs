@@ -29,7 +29,6 @@ struct Testcase {
 }
 
 fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
-    use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
 
     // TODO: verify filename

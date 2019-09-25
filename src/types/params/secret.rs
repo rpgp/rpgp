@@ -72,7 +72,7 @@ named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<
                    // 0 is no encryption
                    0       => value!((None, None, None)) |
                    // symmetric key algorithm
-                   1...253 => do_parse!(
+                   1..=253 => do_parse!(
                           sym_alg: map_opt!(
                                     value!(s2k_typ),
                                     SymmetricKeyAlgorithm::from_u8
@@ -81,7 +81,7 @@ named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<
                        >> (Some(sym_alg), Some(iv), None)
                    ) |
                    // symmetric key + string-to-key
-                   254...255 => do_parse!(
+                   254..=255 => do_parse!(
                              sym_alg: map_opt!(
                                         be_u8,
                                         SymmetricKeyAlgorithm::from_u8

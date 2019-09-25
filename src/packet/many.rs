@@ -190,7 +190,6 @@ mod tests {
     }
 
     fn packet_roundtrip(dump: &str, skips: Vec<(usize, i64)>) {
-        use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
         let path = format!("./tests/tests/sks-dump/{}.pgp", dump);

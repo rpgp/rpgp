@@ -96,9 +96,9 @@ named!(pub packet_length<usize>, do_parse!(
        olen: be_u8
     >>  len: switch!(value!(olen),
                      // One-Octet Lengths
-                     0...191   => value!(olen as usize) |
+                     0..=191   => value!(olen as usize) |
                      // Two-Octet Lengths
-                     192...254 => map!(be_u8, |a| {
+                     192..=254 => map!(be_u8, |a| {
                          ((olen as usize - 192) << 8) + 192 + a as usize
                      }) |
                      // Five-Octet Lengths

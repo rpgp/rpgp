@@ -99,7 +99,7 @@ derive_hasher!(Sha3_512Hasher, sha3::Sha3_512);
 
 impl HashAlgorithm {
     /// Create a new hasher.
-    pub fn new_hasher(self) -> Result<Box<Hasher>> {
+    pub fn new_hasher(self) -> Result<Box<dyn Hasher>> {
         match self {
             HashAlgorithm::MD5 => Ok(Box::new(Md5Hasher::default())),
             HashAlgorithm::SHA1 => Ok(Box::new(Sha1Hasher::default())),

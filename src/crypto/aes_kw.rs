@@ -69,7 +69,7 @@ macro_rules! impl_aes_kw {
                 for i in 0..n {
                     let t = (n * j + (i + 1)) as u64;
 
-                    let mut cipher = <$hasher as BlockCipher>::new(&key);
+                    let cipher = <$hasher as BlockCipher>::new(&key);
                     // Safe to unwrap, as we know the size of t_arr.
                     (&mut t_arr[..]).write_u64::<BigEndian>(t).unwrap();
 
@@ -124,7 +124,7 @@ macro_rules! impl_aes_kw {
                 for i in (0..n).rev() {
                     let t = (n * j + (i + 1)) as u64;
 
-                    let mut cipher = <$hasher as BlockCipher>::new(&key);
+                    let cipher = <$hasher as BlockCipher>::new(&key);
                     // Safe to unwrap, as we know the size of t_arr.
                     (&mut t_arr[..]).write_u64::<BigEndian>(t).unwrap();
 

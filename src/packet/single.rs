@@ -45,13 +45,13 @@ named!(read_packet_len(&[u8]) -> PacketLength, do_parse!(
        olen: be_u8
     >>  len: switch!(value!(olen),
                // One-Octet Lengths
-               0...191   => value!((olen as usize).into()) |
+               0..=191   => value!((olen as usize).into()) |
                // Two-Octet Lengths
-               192...223 => map!(be_u8, |a| {
+               192..=223 => map!(be_u8, |a| {
                    (((olen as usize - 192) << 8) + 192 + a as usize).into()
                }) |
                // Partial Body Lengths
-               224...254 => value!(PacketLength::Partial(1 << (olen as usize & 0x1F))) |
+               224..=254 => value!(PacketLength::Partial(1 << (olen as usize & 0x1F))) |
                // Five-Octet Lengths
                255       => map!(be_u32, |v| u32_as_usize(v).into())
     )

@@ -666,7 +666,7 @@ impl FromPrimitive for SubpacketType {
                 32 => SubpacketType::EmbeddedSignature,
                 33 => SubpacketType::IssuerFingerprint,
                 34 => SubpacketType::PreferredAead,
-                100...110 => SubpacketType::Experimental(n as u8),
+                100..=110 => SubpacketType::Experimental(n as u8),
                 _ => SubpacketType::Other(n as u8),
             };
 

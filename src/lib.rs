@@ -1,19 +1,14 @@
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::all))]
-#![cfg_attr(feature = "cargo-clippy", warn(clippy::nursery))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::style))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::complexity))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::perf))]
-#![cfg_attr(feature = "cargo-clippy", deny(clippy::correctness))]
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_attribute))]
-#![cfg_attr(
-    all(feature = "cargo-clippy", not(test)),
-    deny(clippy::result_unwrap_used)
+#![deny(
+    clippy::all,
+    clippy::style,
+    clippy::perf,
+    clippy::complexity,
+    clippy::correctness,
+    clippy::result_unwrap_used,
+    clippy::option_unwrap_used
 )]
-#![cfg_attr(
-    all(feature = "cargo-clippy", not(test)),
-    deny(clippy::option_unwrap_used)
-)]
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::missing_const_for_fn))]
+#![warn(clippy::nursery)]
+#![allow(clippy::missing_const_for_fn)]
 
 #[macro_use]
 extern crate nom;

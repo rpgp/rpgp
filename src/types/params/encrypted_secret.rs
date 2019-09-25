@@ -114,10 +114,10 @@ impl Serialize for EncryptedSecretParams {
 
         match self.string_to_key_id {
             0 => panic!("encrypted secret params should not have an unecrypted identifier"),
-            1...253 => {
+            1..=253 => {
                 writer.write_all(&self.iv)?;
             }
-            254...255 => {
+            254..=255 => {
                 let s2k = &self.string_to_key;
 
                 writer.write_all(&[self.encryption_algorithm as u8])?;
