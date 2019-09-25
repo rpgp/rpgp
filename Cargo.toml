@@ -22,7 +22,7 @@ byteorder = "^1.2"
 enum_primitive = "^0.1"
 chrono = "^0.4"
 failure = "^0.1"
-circular = "^0.2"
+circular = "^0.3"
 sha-1 = "^0.8"
 sha2 = "^0.8"
 md-5 = "^0.8"
@@ -34,7 +34,7 @@ blowfish = "^0.4"
 twofish = "^0.2"
 des = "^0.3"
 block-modes = "^0.3"
-hex = "^0.3"
+hex = "^0.4"
 cfb-mode = "^0.3.2"
 num-derive = "0.2.3"
 num-traits = "0.2.6"
@@ -81,14 +81,14 @@ optional = true
 
 
 [dev-dependencies]
-hex-literal = "^0.1"
+hex-literal = "^0.2"
 serde = { version = "^1.0", features = ["derive"] }
 serde_json = "^1.0"
 glob = "^0.3"
 regex = "^1.1"
 pretty_assertions = "0.6"
-rand_xorshift = "0.1.1"
-rand_chacha = "0.1.1"
+rand_xorshift = "0.1"
+rand_chacha = "0.1"
 pretty_env_logger = "0.3"
 
 [features]
