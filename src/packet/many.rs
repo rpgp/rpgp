@@ -70,18 +70,18 @@ impl<R: Read> Iterator for PacketParser<R> {
                 second_round = true;
             }
 
-            let res = match {
-                match single::parser(b.buf()) {
-                    Ok(v) => Ok(v),
-                    Err(err) => Err(err.into()),
-                }
+            let res_header = match single::parser(b.buf()) {
+                Ok(v) => Ok(v),
+                Err(err) => Err(err.into()),
             }
             .and_then(|(rest, (ver, tag, _packet_length, body))| match body {
                 ParseResult::Indeterminated => {
                     let mut body = rest.to_vec();
                     inner.read_to_end(&mut body)?;
-                    let p = single::body_parser(ver, tag, &body);
-                    Ok((rest.len() + body.len(), p))
+                    match single::body_parser(ver, tag, &body) {
+                        Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
+                        p => Ok((rest.len() + body.len(), p)),
+                    }
                 }
                 ParseResult::Fixed(body) => {
                     let p = single::body_parser(ver, tag, body);
@@ -91,7 +91,9 @@ impl<R: Read> Iterator for PacketParser<R> {
                     let p = single::body_parser(ver, tag, &body.concat());
                     Ok((b.buf().offset(rest), p))
                 }
-            }) {
+            });
+
+            let res_body = match res_header {
                 Ok(val) => Some(val),
                 Err(err) => match err {
                     Error::Incomplete(n) => {
@@ -107,8 +109,9 @@ impl<R: Read> Iterator for PacketParser<R> {
                 },
             };
 
-            if let Some((length, p)) = res {
+            if let Some((length, p)) = res_body {
                 info!("got packet: {:#?} {}", p, length);
+                assert!(length > 0);
                 b.consume(length);
                 return Some(p);
             }
@@ -275,5 +278,25 @@ mod tests {
             let tag = Tag::from_u8(tag.parse().unwrap()).unwrap();
             assert_eq!(tag, packet.tag(), "missmatch in packet {:?} ({})", p, e);
         }
+    }
+
+    #[test]
+    fn incomplete_packet_parser() {
+        let _ = pretty_env_logger::try_init();
+        use std::io::Cursor;
+
+        let bytes: [u8; 1] = [0x97];
+        let parser = PacketParser::new(Cursor::new(bytes));
+        let mut packets = parser.filter_map(|p| {
+            // for now we are skipping any packets that we failed to parse
+            match p {
+                Ok(pp) => Some(pp),
+                Err(err) => {
+                    warn!("skipping packet: {:?}", err);
+                    None
+                }
+            }
+        });
+        assert!(packets.next().is_none());
     }
 }
