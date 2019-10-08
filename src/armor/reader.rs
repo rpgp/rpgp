@@ -388,6 +388,11 @@ impl<R: Read + Seek> Dearmor<R> {
             // we are done with the body
             self.current_part = Part::Footer;
             self.read_footer()
+        } else if size == 0 {
+            Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "missing footer",
+            ))
         } else {
             // update the hash
             self.crc.write(&into[0..size]);
@@ -403,15 +408,17 @@ impl<R: Read + Seek> Dearmor<R> {
                 .base_decoder
                 .take()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
-            let (r, buffer_outer) = decoder.into_inner_with_buffer();
+            let (base_reader, buffer_outer) = decoder.into_inner_with_buffer();
+
             info!("{:?}", buffer_outer.buf());
-            let (r, buffer_inner) = r.into_inner().into_inner().into_inner_with_buffer();
-            info!("{:?}", buffer_inner.buf());
-            let mut b = BufReader::with_buffer(buffer_inner, r);
+
+            let line_reader: LineReader<_> = base_reader.into_inner();
+            let mut b = line_reader.into_inner();
             b.make_room();
 
             b.read_into_buf()?;
             if b.buf_len() == 0 {
+                info!("nothing to read anymore");
                 // we are done here
                 return Ok(0);
             }
@@ -574,6 +581,7 @@ mod tests {
 
     #[test]
     fn test_parse_armor_small() {
+        pretty_env_logger::try_init().ok();
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
@@ -615,7 +623,7 @@ mod tests {
 
     #[test]
     fn test_parse_armor_two_entries() {
-        pretty_env_logger::try_init();
+        pretty_env_logger::try_init().ok();
         let map = BTreeMap::new();
 
         let c = Cursor::new(

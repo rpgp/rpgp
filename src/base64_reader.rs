@@ -35,8 +35,8 @@ impl<R: Read + Seek> Read for Base64Reader<R> {
         for i in 0..n {
             if !is_base64_token(into[i]) {
                 // the party is over
-                let back = -(n as i64) + (i as i64); // - 1
-                info!("seeking back {}", back);
+                let back = (n as i64) - (i as i64);
+                info!("seeking back {} {}", back, n);
                 info!(
                     "read {:?} {:?}",
                     std::str::from_utf8(&into[..n]),
@@ -45,9 +45,9 @@ impl<R: Read + Seek> Read for Base64Reader<R> {
                 self.inner.seek(io::SeekFrom::Current(back))?;
 
                 // zero out the rest of what we read
-                for el in into.iter_mut().skip(i) {
-                    *el = 0;
-                }
+                // TODO: do we actually need to do this?
+                let l = into.len() - i;
+                into[i..].copy_from_slice(&vec![0u8; l]);
 
                 return Ok(i);
             }
@@ -153,6 +153,16 @@ mod tests {
         {
             // Leave things alone that are not us
             let c = Cursor::new(&b"Kwjk\n-----BEGIN"[..]);
+            let mut r = Base64Reader::new(c);
+            let mut buf = vec![0; 100];
+            assert_eq!(r.read(&mut buf).unwrap(), 5);
+            assert_eq!(&buf[..5], b"Kwjk\n");
+            assert_eq!(&buf[5..], &vec![0u8; 95][..]);
+        }
+
+        {
+            // Leave things alone that are not us
+            let c = Cursor::new(&b"Kwjk\n-----BEGIN-----\nKwjk\n"[..]);
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 100];
             assert_eq!(r.read(&mut buf).unwrap(), 5);

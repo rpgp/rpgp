@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::fmt;
 use std::io::{self, BufRead, Read, Seek};
 
 use base64::{decode_config_slice, CharacterSet, Config};
@@ -21,6 +22,19 @@ pub struct Base64Decoder<R> {
     out_buffer: [u8; BUF_CAPACITY],
     /// Memorize if we had an error, so we can return it on calls to read again.
     err: Option<io::Error>,
+}
+
+impl<R> fmt::Debug for Base64Decoder<R> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let out_buf = format!("{:?}", &self.out_buffer[..]);
+        f.debug_struct("Base64Decoder")
+            .field("config", &self.config)
+            .field("inner", &"BufReader".to_string())
+            .field("out", &self.out)
+            .field("out_buffer", &out_buf)
+            .field("err", &self.err)
+            .finish()
+    }
 }
 
 impl<R: Read + Seek> Base64Decoder<R> {
@@ -66,6 +80,11 @@ impl<R: Read + Seek> Read for Base64Decoder<R> {
                 self.err = Some(copy_err(&err));
                 return Err(err);
             }
+        }
+
+        // short circuit empty read
+        if self.inner.buf_len() == 0 {
+            return Ok(0);
         }
 
         let nr = self.inner.buf_len() / 4 * 4;

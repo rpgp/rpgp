@@ -5,11 +5,17 @@ use std::io::prelude::*;
 #[derive(Debug)]
 pub struct LineReader<R> {
     inner: R,
+    /// Positions into the `inner` reader at which line breaks where detected.
+    // FIXME: limit the size of this.
+    lines: Vec<u64>,
 }
 
 impl<R: Read + Seek> LineReader<R> {
     pub fn new(input: R) -> Self {
-        LineReader { inner: input }
+        LineReader {
+            inner: input,
+            lines: Vec::with_capacity(32),
+        }
     }
 
     /// Consume `self` and return the inner reader.
@@ -22,34 +28,27 @@ impl<R: Read + Seek> Seek for LineReader<R> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         match pos {
             io::SeekFrom::Current(n) => {
-                if n < 0 {
-                    let mut buf = vec![0u8; (-n) as usize];
-                    self.inner.seek(pos)?;
-                    let _ = self.read(&mut buf)?;
-                    let linebreaks = buf
-                        .into_iter()
-                        .filter(|c| *c == b'\r' || *c == b'\n')
-                        .count();
-                    self.inner
-                        .seek(io::SeekFrom::Current(n - linebreaks as i64))
-                } else {
-                    let mut buf = vec![0u8; n as usize];
-                    self.inner.seek(io::SeekFrom::Current(-n))?;
-                    let _ = self.read(&mut buf)?;
-                    let linebreaks = buf
-                        .into_iter()
-                        .filter(|c| *c == b'\r' || *c == b'\n')
-                        .count();
-                    self.inner
-                        .seek(io::SeekFrom::Current(n - linebreaks as i64))
+                let mut seek_pos = if n < 0 { (-n) } else { n } as u64;
+
+                let current_pos = self.inner.seek(io::SeekFrom::Current(0))?;
+
+                // count lines we need to add to our seek
+                for line_break_pos in self.lines.iter().rev() {
+                    info!("{} - {} - {}", current_pos, seek_pos, line_break_pos);
+                    if seek_pos < current_pos - *line_break_pos {
+                        break;
+                    }
+                    seek_pos += 1;
                 }
+
+                self.inner.seek(io::SeekFrom::Current(-(seek_pos as i64)))
             }
             _ => unimplemented!(),
         }
     }
 }
 
-impl<R: Read> Read for LineReader<R> {
+impl<R: Read + Seek> Read for LineReader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let mut n = self.inner.read(into)?;
         info!("read {}bytes", n);
@@ -64,6 +63,10 @@ impl<R: Read> Read for LineReader<R> {
                         into[offset] = b;
                     }
                     offset += 1;
+                } else {
+                    // store the line break position
+                    let r_pos = self.inner.seek(io::SeekFrom::Current(0))?;
+                    self.lines.push((r_pos - n as u64) + i as u64)
                 }
             }
             if offset > 0 {
@@ -219,5 +222,59 @@ mod tests {
         let mut buf = vec![0; input.len()];
         assert_eq!(r.read(&mut buf).unwrap(), 8);
         assert_eq!(&buf[..input.len() - 4], &input[4..]);
+    }
+
+    #[test]
+    fn test_line_reader_seek_mix_1() {
+        let input = b"ab\ncd\nef\ngh";
+        //           "ab cd ef gh"
+        let c = Cursor::new(&input[..]);
+        let mut r = LineReader::new(c);
+
+        let mut buf = vec![0; input.len()];
+        assert_eq!(r.read(&mut buf).unwrap(), input.len() - 3);
+        assert_eq!(
+            std::str::from_utf8(&buf[..input.len() - 3]).unwrap(),
+            "abcdefgh"
+        );
+        assert_eq!(r.read(&mut buf).unwrap(), 0);
+        assert_eq!(&r.lines, &vec![2, 5, 8]);
+
+        // seek
+        assert_eq!(r.seek(io::SeekFrom::Current(-5)).unwrap(), 4);
+
+        let mut buf = vec![0; input.len()];
+        let mut r_inner = r.into_inner();
+        let read = r_inner.read(&mut buf).unwrap();
+        assert_eq!(std::str::from_utf8(&buf[..read]).unwrap(), "d\nef\ngh");
+    }
+
+    #[test]
+    fn test_line_reader_seek_mix_2() {
+        let input = b"ab\ncd\nef\ngh";
+        //           "ab cd ef gh"
+        let c = Cursor::new(&input[..]);
+        let mut r = LineReader::new(c);
+
+        let mut buf = vec![0; input.len()];
+        assert_eq!(r.read(&mut buf).unwrap(), input.len() - 3);
+        assert_eq!(
+            std::str::from_utf8(&buf[..input.len() - 3]).unwrap(),
+            "abcdefgh"
+        );
+        assert_eq!(r.read(&mut buf).unwrap(), 0);
+        assert_eq!(&r.lines, &vec![2, 5, 8]);
+
+        // seek
+        assert_eq!(
+            r.seek(io::SeekFrom::Current(input.len() as i64 - 3))
+                .unwrap(),
+            0
+        );
+
+        let mut buf = vec![0; input.len()];
+        let mut r_inner = r.into_inner();
+        let read = r_inner.read(&mut buf).unwrap();
+        assert_eq!(std::str::from_utf8(&buf[..read]).unwrap(), "ab\ncd\nef\ngh");
     }
 }
