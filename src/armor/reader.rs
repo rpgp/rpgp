@@ -167,8 +167,19 @@ fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
 
     for (idx, item) in input.iter_indices() {
         // are we done? ": " is reached
-        if item == b':' && idx + 1 < input_length && input.slice(idx + 1..idx + 2)[0] == b' ' {
+        let is_colon_space =
+            item == b':' && idx + 1 < input_length && input.slice(idx + 1..idx + 2)[0] == b' ';
+        if is_colon_space {
             return Ok((input.slice(idx + 2..), input.slice(0..idx)));
+        }
+
+        // ":\n" reached
+        let is_colon_line_ending = item == b':'
+            && idx + 1 < input_length
+            && (input.slice(idx + 1..idx + 2)[0] == b'\n'
+                || input.slice(idx + 1..idx + 2)[0] == b'\r');
+        if is_colon_line_ending {
+            return Ok((input.slice(idx + 1..), input.slice(0..idx)));
         }
     }
 
@@ -180,7 +191,14 @@ named!(
     key_value_pair<(&str, &str)>,
     do_parse!(
         key: map_res!(key_token, str::from_utf8)
-            >> value: map_res!(terminated!(not_line_ending, line_ending), str::from_utf8)
+            >> value:
+                map_res!(
+                    terminated!(
+                        map!(opt!(not_line_ending), |r| r.unwrap_or_else(|| b"")),
+                        line_ending
+                    ),
+                    str::from_utf8
+                )
             >> (key, value)
     )
 );
@@ -256,11 +274,11 @@ named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
 // Parses a single armor footer line
 #[rustfmt::skip]
 named!(armor_footer_line<BlockType>, do_parse!(
-            // only 3, because we parse two already
+            // Only 3, because we parsed two already in the `footer_parser`.
             tag!("---END ")
     >> typ: armor_header_type
     >>      armor_header_sep
-    >>      alt_complete!(line_ending | eof!())
+    >>      opt!(complete!(line_ending))
     >> (typ)
 ));
 
@@ -308,7 +326,6 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     pub fn read_header(&mut self) -> io::Result<()> {
-        info!("read_header");
         if let Some(ref mut b) = self.inner {
             b.read_into_buf()?;
 
@@ -349,7 +366,6 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        info!("read_body");
         if self.base_decoder.is_none() {
             let b = self.inner.take().ok_or_else(|| {
                 self.done = true;
@@ -368,6 +384,11 @@ impl<R: Read + Seek> Dearmor<R> {
             // we are done with the body
             self.current_part = Part::Footer;
             self.read_footer()
+        } else if size == 0 {
+            Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "missing footer",
+            ))
         } else {
             // update the hash
             self.crc.write(&into[0..size]);
@@ -377,14 +398,15 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     fn read_footer(&mut self) -> io::Result<usize> {
-        info!("read_footer");
         if self.base_decoder.is_some() {
             let decoder = self
                 .base_decoder
                 .take()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
-            let (r, buffer) = decoder.into_inner_with_buffer();
-            let mut b = BufReader::with_buffer(buffer, r.into_inner().into_inner());
+            let (base_reader, buffer_outer) = decoder.into_inner_with_buffer();
+
+            let line_reader: LineReader<_> = base_reader.into_inner();
+            let mut b = BufReader::with_buffer(buffer_outer, line_reader.into_inner());
             b.make_room();
 
             b.read_into_buf()?;
@@ -569,6 +591,54 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_armor_missing_header_value() {
+        let mut map = BTreeMap::new();
+        map.insert("NoVal".to_string(), "".to_string());
+
+        let c = Cursor::new(
+            "\
+             -----BEGIN PGP MESSAGE-----\n\
+             NoVal:\n\
+             \n\
+             aGVsbG8gd29ybGQ=\n\
+             -----END PGP MESSAGE----\
+             ",
+        );
+
+        let (typ, headers, res) = parse(c).unwrap();
+
+        assert_eq!(typ, (BlockType::Message));
+        assert_eq!(headers, map);
+        assert_eq!(res.as_slice(), &b"hello world"[..]);
+    }
+
+    #[test]
+    fn test_parse_armor_two_entries() {
+        let mut map = BTreeMap::new();
+        map.insert("hello".to_string(), "world".to_string());
+
+        let c = Cursor::new(
+            "\
+             -----BEGIN PGP MESSAGE-----\n\
+             hello: world\n\
+             \n\
+             aGVsbG8gd29ybGQ=\n\
+             -----END PGP MESSAGE-----\n\
+             -----BEGIN PGP MESSAGE-----\n\
+             \n\
+             aGVsbG8gd29ybGQ=\n\
+             -----END PGP MESSAGE-----\
+             ",
+        );
+
+        let (typ, headers, res) = parse(c).unwrap();
+
+        assert_eq!(typ, (BlockType::Message));
+        assert_eq!(headers, map);
+        assert_eq!(res.as_slice(), &b"hello world"[..]);
+    }
+
+    #[test]
     fn test_parse_armor_full() {
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
@@ -706,6 +776,12 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
+            key_value_pair(&b"hello:\n"[..]).unwrap(),
+            (&b""[..], ("hello", "")),
+            "empty"
+        );
+
+        assert_eq!(
             key_value_pair(&b"hello: world\nother content"[..]).unwrap(),
             (&b"other content"[..], ("hello", "world")),
             "with rest"
@@ -721,6 +797,12 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
+            key_value_pairs(&b"hello:\ncool: stuff\n"[..]).unwrap(),
+            (&b""[..], vec![("hello", ""), ("cool", "stuff")]),
+            "empty"
+        );
+
+        assert_eq!(
             key_value_pairs(&b"hello: world\ncool: stuff\nother content"[..]).unwrap(),
             (
                 &b"other content"[..],
@@ -732,6 +814,11 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
     #[test]
     fn test_footer_parser() {
+        assert_eq!(
+            footer_parser(b"-----END PGP PUBLIC KEY BLOCK-----"),
+            Ok((&b""[..], (None, BlockType::PublicKey)))
+        );
+
         assert_eq!(
             footer_parser(b"-----END PGP PUBLIC KEY BLOCK-----\n"),
             Ok((&b""[..], (None, BlockType::PublicKey)))
@@ -760,6 +847,14 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         assert_eq!(
             footer_parser(&b"=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n"[..]),
             Ok((&b""[..], (Some(&b"XyBX"[..]), BlockType::PublicKey)))
+        );
+
+        assert_eq!(
+            footer_parser(&b"-----END PGP MESSAGE-----\n-----BEGIN PGP MESSAGE-----\n\naGVsbG8gd29ybGQ=\n-----END PGP MESSAGE-----\n"[..]),
+            Ok((
+                &b"-----BEGIN PGP MESSAGE-----\n\naGVsbG8gd29ybGQ=\n-----END PGP MESSAGE-----\n"[..],
+                (None, BlockType::Message)
+            )),
         );
     }
 }
