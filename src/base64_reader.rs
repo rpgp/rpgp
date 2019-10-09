@@ -36,12 +36,6 @@ impl<R: Read + Seek> Read for Base64Reader<R> {
             if !is_base64_token(into[i]) {
                 // the party is over
                 let back = (n as i64) - (i as i64);
-                info!("seeking back {} {}", back, n);
-                info!(
-                    "read {:?} {:?}",
-                    std::str::from_utf8(&into[..n]),
-                    std::str::from_utf8(&into[..i])
-                );
                 self.inner.seek(io::SeekFrom::Current(back))?;
 
                 // zero out the rest of what we read

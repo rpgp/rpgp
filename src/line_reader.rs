@@ -8,6 +8,7 @@ pub struct LineReader<R> {
     /// Positions into the `inner` reader at which line breaks where detected.
     // FIXME: limit the size of this.
     lines: Vec<u64>,
+    last_stored_pos: u64,
 }
 
 impl<R: Read + Seek> LineReader<R> {
@@ -15,6 +16,7 @@ impl<R: Read + Seek> LineReader<R> {
         LineReader {
             inner: input,
             lines: Vec::with_capacity(32),
+            last_stored_pos: 0,
         }
     }
 
@@ -34,7 +36,6 @@ impl<R: Read + Seek> Seek for LineReader<R> {
 
                 // count lines we need to add to our seek
                 for line_break_pos in self.lines.iter().rev() {
-                    info!("{} - {} - {}", current_pos, seek_pos, line_break_pos);
                     if seek_pos < current_pos - *line_break_pos {
                         break;
                     }
@@ -51,7 +52,6 @@ impl<R: Read + Seek> Seek for LineReader<R> {
 impl<R: Read + Seek> Read for LineReader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let mut n = self.inner.read(into)?;
-        info!("read {}bytes", n);
 
         while n > 0 {
             let mut offset = 0;
@@ -66,14 +66,17 @@ impl<R: Read + Seek> Read for LineReader<R> {
                 } else {
                     // store the line break position
                     let r_pos = self.inner.seek(io::SeekFrom::Current(0))?;
-                    self.lines.push((r_pos - n as u64) + i as u64)
+                    let offset = (r_pos - n as u64) + i as u64;
+
+                    // As we might be going back and forth in the source, we need to make sure
+                    // to only store newly discovered line breaks.
+                    if offset > self.last_stored_pos {
+                        self.lines.push(offset);
+                        self.last_stored_pos = offset;
+                    }
                 }
             }
             if offset > 0 {
-                info!(
-                    "read(linereader-offset): {:?}",
-                    std::str::from_utf8(&into[..offset])
-                );
                 return Ok(offset);
             }
 
@@ -81,7 +84,6 @@ impl<R: Read + Seek> Read for LineReader<R> {
             n = self.inner.read(into)?;
         }
 
-        info!("read(linereader): {:?}", std::str::from_utf8(&into[..n]));
         Ok(n)
     }
 }

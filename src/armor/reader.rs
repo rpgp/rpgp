@@ -274,7 +274,7 @@ named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
 // Parses a single armor footer line
 #[rustfmt::skip]
 named!(armor_footer_line<BlockType>, do_parse!(
-            // only 3, because we parse two already
+            // Only 3, because we parsed two already in the `footer_parser`.
             tag!("---END ")
     >> typ: armor_header_type
     >>      armor_header_sep
@@ -326,7 +326,6 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     pub fn read_header(&mut self) -> io::Result<()> {
-        info!("read_header");
         if let Some(ref mut b) = self.inner {
             b.read_into_buf()?;
 
@@ -367,7 +366,6 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        info!("read_body");
         if self.base_decoder.is_none() {
             let b = self.inner.take().ok_or_else(|| {
                 self.done = true;
@@ -381,8 +379,6 @@ impl<R: Read + Seek> Dearmor<R> {
         } else {
             unreachable!();
         };
-
-        info!("read {:?}", std::str::from_utf8(&into[..size]));
 
         if size == 0 && !into.is_empty() {
             // we are done with the body
@@ -402,7 +398,6 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 
     fn read_footer(&mut self) -> io::Result<usize> {
-        info!("read_footer");
         if self.base_decoder.is_some() {
             let decoder = self
                 .base_decoder
@@ -410,19 +405,16 @@ impl<R: Read + Seek> Dearmor<R> {
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
             let (base_reader, buffer_outer) = decoder.into_inner_with_buffer();
 
-            info!("{:?}", buffer_outer.buf());
-
             let line_reader: LineReader<_> = base_reader.into_inner();
-            let mut b = line_reader.into_inner();
+            let mut b = BufReader::with_buffer(buffer_outer, line_reader.into_inner());
             b.make_room();
 
             b.read_into_buf()?;
             if b.buf_len() == 0 {
-                info!("nothing to read anymore");
                 // we are done here
                 return Ok(0);
             }
-            info!("parsing: `{:?}`", ::std::str::from_utf8(b.buffer()));
+
             let consumed = match footer_parser(b.buffer()) {
                 Ok((remaining, (checksum, footer_typ))) => {
                     if let Some(ref header_typ) = self.typ {
@@ -581,7 +573,6 @@ mod tests {
 
     #[test]
     fn test_parse_armor_small() {
-        pretty_env_logger::try_init().ok();
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), "GnuPG v1".to_string());
 
@@ -623,8 +614,8 @@ mod tests {
 
     #[test]
     fn test_parse_armor_two_entries() {
-        pretty_env_logger::try_init().ok();
-        let map = BTreeMap::new();
+        let mut map = BTreeMap::new();
+        map.insert("hello".to_string(), "world".to_string());
 
         let c = Cursor::new(
             "\
@@ -632,11 +623,11 @@ mod tests {
              hello: world\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP MESSAGE----\n\
+             -----END PGP MESSAGE-----\n\
              -----BEGIN PGP MESSAGE-----\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP MESSAGE----\
+             -----END PGP MESSAGE-----\
              ",
         );
 
@@ -859,12 +850,11 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            footer_parser(&b"-----END PGP PUBLIC KEY BLOCK-----\n-----BEGIN PGP MESSAGE-----"[..]),
+            footer_parser(&b"-----END PGP MESSAGE-----\n-----BEGIN PGP MESSAGE-----\n\naGVsbG8gd29ybGQ=\n-----END PGP MESSAGE-----\n"[..]),
             Ok((
-                &b"-----BEGIN PGP MESSAGE-----"[..],
-                (None, BlockType::PublicKey)
+                &b"-----BEGIN PGP MESSAGE-----\n\naGVsbG8gd29ybGQ=\n-----END PGP MESSAGE-----\n"[..],
+                (None, BlockType::Message)
             )),
-            "extra"
         );
     }
 }
