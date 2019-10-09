@@ -80,11 +80,12 @@ impl LiteralData {
         &self.data
     }
 
-    /// Convert the data to a string, if appropriate for the type.
+    /// Convert the data to a UTF-8 string, if appropriate for the type.
+    /// Returns `None` if `mode` is `Binary`, or the data is not valid UTF-8.
     pub fn to_string(&self) -> Option<String> {
         match self.mode {
             DataMode::Binary => None,
-            _ => Some(self.data.iter().map(|c| *c as char).collect()),
+            _ => std::str::from_utf8(&self.data).map(str::to_owned).ok(),
         }
     }
 }
