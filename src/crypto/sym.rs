@@ -214,6 +214,7 @@ impl SymmetricKeyAlgorithm {
     ) -> Result<(&'a [u8], &'a [u8])> {
         let bs = self.block_size();
 
+        ensure!(bs + 2 < ciphertext.len(), "invalid ciphertext");
         let (encrypted_prefix, encrypted_data) = ciphertext.split_at_mut(bs + 2);
 
         {
@@ -586,4 +587,13 @@ mod tests {
     roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
     roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
     roundtrip!(roundtrip_cast5, SymmetricKeyAlgorithm::CAST5);
+
+    #[test]
+    pub fn decrypt_without_enough_ciphertext() {
+        let key: [u8; 0] = [];
+        let mut cipher_text: [u8; 0] = [];
+        assert!(SymmetricKeyAlgorithm::AES128
+            .decrypt(&key, &mut cipher_text)
+            .is_err());
+    }
 }
