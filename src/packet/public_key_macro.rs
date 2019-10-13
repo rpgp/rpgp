@@ -235,8 +235,6 @@ macro_rules! impl_public_key {
             ) -> $crate::errors::Result<()> {
                 use $crate::types::PublicParams;
 
-                info!("verify data: {}", hex::encode(&hashed));
-
                 match self.public_params {
                     PublicParams::RSA { ref n, ref e } => {
                         ensure_eq!(sig.len(), 1, "invalid signature");
