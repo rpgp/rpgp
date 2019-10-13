@@ -30,6 +30,10 @@ No critical flaws were found. We have fixed and are fixing some high, medium and
 low risk ones. We will soon publish the full review report. 
 Further independent security reviews are upcoming. 
 
+### Experimental WASM Support
+
+When enabeling the `wasm` feature, rpgp can be compiled to run using WASM in Node.js and the supported Browsers. Experimental bindings for this can be found in [rpgp/rpgp-js](https://github.com/rpgp/rpgp-js).
+
 ## Developement
 
 To run the stress tests,

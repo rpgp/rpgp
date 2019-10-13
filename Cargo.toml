@@ -98,6 +98,7 @@ nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand
 avx2 = ["ed25519-dalek/avx2_backend"]
 profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
+wasm = ["chrono/wasmbind", "nightly", "rand/wasm-bindgen"]
 
 
 [profile.bench]
