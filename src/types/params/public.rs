@@ -140,7 +140,7 @@ impl fmt::Debug for PublicParams {
                 hash,
                 alg_sym,
             } => f
-                .debug_struct("PublicParams::ECDSA")
+                .debug_struct("PublicParams::ECDH")
                 .field("curve", curve)
                 .field("hash", hash)
                 .field("alg_sym", alg_sym)

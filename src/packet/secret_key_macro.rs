@@ -7,6 +7,21 @@ macro_rules! impl_secret_key {
             pub(crate) secret_params: $crate::types::SecretParams,
         }
 
+        impl zeroize::Zeroize for $name {
+            fn zeroize(&mut self) {
+                // details are not zeroed as they are public knowledge.
+
+                self.secret_params.zeroize();
+            }
+        }
+
+        impl Drop for $name {
+            fn drop(&mut self) {
+                use zeroize::Zeroize;
+                self.zeroize();
+            }
+        }
+
         impl $name {
             /// Parses a `SecretKey` packet from the given slice.
             pub fn from_slice(

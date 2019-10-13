@@ -79,6 +79,15 @@ pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
     }
 }
 
+#[inline]
+pub fn strip_leading_zeros_vec(bytes: &mut Vec<u8>) {
+    if let Some(offset) = bytes.iter_mut().position(|b| b != &0) {
+        for i in 0..offset {
+            bytes.remove(i);
+        }
+    }
+}
+
 /// Convert a slice into an array.
 pub fn clone_into_array<A, T>(slice: &[T]) -> A
 where

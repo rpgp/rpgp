@@ -7,3 +7,9 @@ pub enum AeadAlgorithm {
     Eax = 1,
     Ocb = 2,
 }
+
+impl Default for AeadAlgorithm {
+    fn default() -> Self {
+        AeadAlgorithm::None
+    }
+}

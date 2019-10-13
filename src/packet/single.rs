@@ -37,7 +37,7 @@ named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
         2 => map!(take_bits!(u32, 32), |val| u32_as_usize(val).into()) |
         3 => value!(PacketLength::Indeterminated)
     )
-    >> ({ info!("old {:?} {:?} {:?}", ver, tag, len); (ver, tag, len)})
+    >> ((ver, tag, len))
 )));
 
 #[rustfmt::skip]
@@ -114,10 +114,7 @@ named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
     // Packet Tag
     >>  tag: map_opt!(take_bits!(u8, 6), Tag::from_u8)
     >> len: bytes!(read_packet_len)
-    >> ({
-        info!("new {:?} {:?} {:?}", ver, tag, len);
-        (ver, tag, len)
-    })
+    >> ((ver, tag, len))
 )));
 
 #[derive(Debug)]
@@ -141,7 +138,6 @@ named!(pub parser<(Version, Tag, PacketLength, ParseResult<'_>)>, do_parse!(
 ));
 
 pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
-    info!("packet body: {}", hex::encode(body));
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
             PublicKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)

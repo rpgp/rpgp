@@ -15,9 +15,7 @@ pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> R
     ensure_eq!(mpis.len(), 1, "invalid input");
 
     let mpi = &mpis[0];
-    info!("RSA m^e mod n: {:?}", mpi);
     let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi.as_bytes())?;
-    info!("m: {}", hex::encode(&m));
 
     Ok(m)
 }
@@ -29,8 +27,6 @@ pub fn encrypt<R: CryptoRng + Rng>(
     e: &[u8],
     plaintext: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
-    info!("RSA encrypt");
-
     let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
     let data = key.encrypt(rng, PaddingScheme::PKCS1v15, plaintext)?;
 
@@ -72,8 +68,6 @@ pub fn verify(n: &[u8], e: &[u8], hash: HashAlgorithm, hashed: &[u8], sig: &[u8]
     let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
     let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
 
-    info!("n: {}", hex::encode(n));
-    info!("e: {}", hex::encode(e));
     key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], sig)
         .map_err(Into::into)
 }

@@ -33,6 +33,8 @@ pub enum HashAlgorithm {
     Private10 = 110,
 }
 
+impl zeroize::DefaultIsZeroes for HashAlgorithm {}
+
 impl Default for HashAlgorithm {
     fn default() -> Self {
         HashAlgorithm::SHA2_256

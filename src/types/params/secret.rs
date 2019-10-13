@@ -2,6 +2,7 @@ use std::io;
 
 use nom::{be_u8, rest_len};
 use num_traits::FromPrimitive;
+use zeroize::Zeroize;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -15,6 +16,15 @@ use crate::types::*;
 pub enum SecretParams {
     Plain(PlainSecretParams),
     Encrypted(EncryptedSecretParams),
+}
+
+impl Zeroize for SecretParams {
+    fn zeroize(&mut self) {
+        match self {
+            SecretParams::Plain(p) => p.zeroize(),
+            SecretParams::Encrypted(_) => { /* encrypted params do not need zeroing */ }
+        }
+    }
 }
 
 impl SecretParams {

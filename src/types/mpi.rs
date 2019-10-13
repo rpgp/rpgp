@@ -3,10 +3,11 @@ use std::{fmt, io};
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::{self, be_u16, Err, InputIter, InputTake};
 use num_bigint::BigUint;
+use zeroize::Zeroize;
 
 use crate::errors;
 use crate::ser::Serialize;
-use crate::util::{bit_size, strip_leading_zeros};
+use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
 /// Number of bits we accept when reading or writing MPIs.
 /// The value is the same as gnupgs.
@@ -55,7 +56,7 @@ pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>> {
 
 /// Represents an owned MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Default, Clone, PartialEq, Eq, Zeroize)]
 pub struct Mpi(Vec<u8>);
 
 /// Represents a borrowed MPI value.
@@ -70,6 +71,11 @@ impl AsRef<[u8]> for Mpi {
 }
 
 impl Mpi {
+    pub fn from_raw(mut v: Vec<u8>) -> Self {
+        strip_leading_zeros_vec(&mut v);
+        Mpi(v)
+    }
+
     pub fn from_slice(slice: &[u8]) -> Self {
         Mpi(slice.to_vec())
     }
