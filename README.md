@@ -1,38 +1,39 @@
 # rPGP
 
-> OpenPGP implemented in pure Rust, permissively licensed 
+> OpenPGP implemented in pure Rust, permissively licensed
 
 [![crates.io version][crate-shield]][crate] [![CircleCI build status][circle-shield]][circle] [![Appveyor build status][appveyor-shield]][appveyor] [![Docs][docs-shield]][docs] [![License][license-shield]][license]
 
-rPGP is the only full Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html). 
+rPGP is the only full Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html).
 
-rPGP is regularly published as [the `pgp` Crate](https://crates.io/crates/pgp/) and its [RSA](https://crates.io/crates/rsa) implementation 
+rPGP is regularly published as [the `pgp` Crate](https://crates.io/crates/pgp/) and its [RSA](https://crates.io/crates/rsa) implementation
 lives under the collective [RustCrypto umbrella](https://github.com/RustCrypto/RSA).
 For ECC crypto support we are using [Curve25519-dalek](https://crates.io/crates/curve25519-dalek).
 
 > Please note that the API is not well documented yet. You may check out
 > the tests which exercise the API. Please open issues here if if you are
-> attempting to use rPGP and need help. 
+> attempting to use rPGP and need help.
 
 ## Status (Last updated: October 2019)
 
-rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit and 64 bit builds. 
+rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit and 64 bit builds.
 
-You can find more details here: 
+You can find more details here:
 
-- [OpenPGP Status document](STATUS.md) which describes what of OpenPGP is supported 
-- [Platform status document](PLATFORMS.md) which describes current platform support. 
-
-## Independent Security Review
-
-rPGP and its RSA dependency got a first independent security review mid 2019. 
-No critical flaws were found. We have fixed and are fixing some high, medium and 
-low risk ones. We will soon publish the full review report. 
-Further independent security reviews are upcoming. 
+- [OpenPGP Status document](STATUS.md) which describes what of OpenPGP is supported
+- [Platform status document](PLATFORMS.md) which describes current platform support.
 
 ### Experimental WASM Support
 
 When enabeling the `wasm` feature, rpgp can be compiled to run using WASM in Node.js and the supported Browsers. Experimental bindings for this can be found in [rpgp/rpgp-js](https://github.com/rpgp/rpgp-js).
+
+## Independent Security Review
+
+rPGP and its RSA dependency got a first independent security review mid 2019.
+No critical flaws were found. We have fixed and are fixing some high, medium and
+low risk ones. We will soon publish the full review report.
+Further independent security reviews are upcoming.
+
 
 ## Developement
 
