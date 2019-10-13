@@ -1,6 +1,7 @@
 use block_padding::{Padding, Pkcs7};
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroize;
 
 use crate::crypto::{aes_kw, ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use crate::errors::Result;
@@ -36,7 +37,7 @@ pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecr
             hash,
             alg_sym,
         },
-        PlainSecretParams::ECDH(Mpi::from_raw_slice(&q)),
+        PlainSecretParams::ECDH(Mpi::from_raw(q)),
     )
 }
 
@@ -99,9 +100,11 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
         let private_key = &priv_key.secret[..];
 
         // create scalar and reverse to little endian
-        let private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
+        let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
         let mut private_key_arr = [0u8; 32];
         private_key_arr[..].copy_from_slice(&private_key_le);
+        private_key_le.zeroize();
+
         x25519_dalek::StaticSecret::from(private_key_arr)
     };
 

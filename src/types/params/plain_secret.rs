@@ -4,6 +4,7 @@ use std::{fmt, io};
 use byteorder::{BigEndian, ByteOrder};
 use rand::{CryptoRng, Rng};
 use rsa::RSAPrivateKey;
+use zeroize::Zeroize;
 
 use crate::crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use crate::errors::Result;
@@ -11,7 +12,8 @@ use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Zeroize)]
+#[zeroize(drop)]
 pub enum PlainSecretParams {
     RSA { d: Mpi, p: Mpi, q: Mpi, u: Mpi },
     DSA(Mpi),

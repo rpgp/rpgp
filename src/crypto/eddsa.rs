@@ -1,5 +1,6 @@
 use ed25519_dalek::Keypair;
 use rand::{CryptoRng, Rng};
+use zeroize::Zeroize;
 
 use crate::crypto::{ECCCurve, HashAlgorithm};
 use crate::errors::Result;
@@ -8,7 +9,7 @@ use crate::types::{EdDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 /// Generate an EdDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {
     let keypair = Keypair::generate(rng);
-    let bytes = keypair.to_bytes();
+    let mut bytes = keypair.to_bytes();
 
     // public key
     let mut q = Vec::with_capacity(33);
@@ -16,14 +17,15 @@ pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecr
     q.extend_from_slice(&bytes[32..]);
 
     // secret key
-    let p = &bytes[..32];
+    let p = Mpi::from_raw_slice(&bytes[..32]);
+    bytes.zeroize();
 
     (
         PublicParams::EdDSA {
             curve: ECCCurve::Ed25519,
             q: q.into(),
         },
-        PlainSecretParams::EdDSA(Mpi::from_raw_slice(p)),
+        PlainSecretParams::EdDSA(p),
     )
 }
 

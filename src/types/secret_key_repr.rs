@@ -2,6 +2,7 @@ use std::fmt;
 
 use num_bigint::BigUint;
 use rsa::RSAPrivateKey;
+use zeroize::Zeroize;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -17,7 +18,8 @@ pub enum SecretKeyRepr {
 }
 
 /// Secret key for ECDH with Curve25519, the only combination we currently support.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Zeroize)]
+#[zeroize(drop)]
 pub struct ECDHSecretKey {
     /// The secret point.
     pub secret: [u8; 32],
@@ -27,7 +29,8 @@ pub struct ECDHSecretKey {
 }
 
 /// Secret key for EdDSA with Curve25519, the only combination we currently support.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Zeroize)]
+#[zeroize(drop)]
 pub struct EdDSASecretKey {
     /// The secret point.
     pub secret: [u8; 32],
@@ -35,7 +38,8 @@ pub struct EdDSASecretKey {
 }
 
 /// Secret key for DSA.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Zeroize)]
+#[zeroize(drop)]
 pub struct DSASecretKey {
     x: BigUint,
 }

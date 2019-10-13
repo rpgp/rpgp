@@ -13,10 +13,6 @@ use crate::errors::Result;
 
 macro_rules! decrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        info!("key {}", hex::encode($key));
-        info!("iv {}", hex::encode($iv));
-        info!("prefix {}", hex::encode(&$prefix));
-
         let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
         mode.decrypt($prefix);
 
@@ -32,7 +28,6 @@ macro_rules! decrypt {
             "cfb decrypt, quick check part 2"
         );
 
-        info!("decypting: {}", hex::encode(&$data));
         if $resync {
             unimplemented!("CFB resync is not here");
         // info!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
@@ -46,14 +41,9 @@ macro_rules! decrypt {
 
 macro_rules! encrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        info!("key {}", hex::encode($key));
-        info!("iv {}", hex::encode($iv));
-        info!("prefix {}", hex::encode(&$prefix));
-
         let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
         mode.encrypt($prefix);
 
-        info!("encrypting: {}", hex::encode(&$data));
         if $resync {
             unimplemented!("CFB resync is not here");
         // info!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
@@ -102,6 +92,8 @@ pub enum SymmetricKeyAlgorithm {
     Camellia256 = 13,
     Private10 = 110,
 }
+
+impl zeroize::DefaultIsZeroes for SymmetricKeyAlgorithm {}
 
 impl Default for SymmetricKeyAlgorithm {
     fn default() -> Self {
@@ -164,24 +156,13 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     /// Does not do resynchronization.
     pub fn decrypt_protected<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
-        info!("{}", hex::encode(&ciphertext));
         info!("protected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
-        let cv_len = ciphertext.len();
         let (prefix, res) = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
-        info!("{}", hex::encode(&res));
+
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
         let mdc_len = 22;
         let (data, mdc) = res.split_at(res.len() - mdc_len);
-        info!(
-            "decrypted {}b from {}b ({}|{})",
-            res.len(),
-            cv_len,
-            data.len(),
-            mdc.len()
-        );
-
-        info!("mdc: {}", hex::encode(mdc));
 
         ensure_eq!(mdc[0], 0xD3, "invalid MDC tag");
         ensure_eq!(mdc[1], 0x14, "invalid MDC length");
@@ -301,11 +282,6 @@ impl SymmetricKeyAlgorithm {
             }
         }
 
-        info!(
-            "{}\n{}",
-            hex::encode(&encrypted_prefix),
-            hex::encode(&encrypted_data)
-        );
         Ok((encrypted_prefix, encrypted_data))
     }
 
@@ -386,7 +362,6 @@ impl SymmetricKeyAlgorithm {
     }
 
     pub fn encrypt_protected<'a>(self, key: &[u8], plaintext: &'a [u8]) -> Result<Vec<u8>> {
-        info!("{}", hex::encode(&plaintext));
         info!("protected encrypt");
 
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
@@ -416,14 +391,8 @@ impl SymmetricKeyAlgorithm {
         let checksum = &Sha1::digest(&ciphertext[..(prefix_len + plaintext_len + 2)])[..20];
         ciphertext[(prefix_len + plaintext_len + 2)..].copy_from_slice(checksum);
 
-        info!(
-            "mdc: {}",
-            hex::encode(&ciphertext[(prefix_len + plaintext_len)..])
-        );
         // IV is all zeroes
         let iv_vec = vec![0u8; self.block_size()];
-
-        info!("encrypting: {}", hex::encode(&ciphertext));
 
         self.encrypt_with_iv(key, &iv_vec, &mut ciphertext, false)?;
 
