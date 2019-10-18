@@ -1,10 +1,14 @@
+use std::boxed::Box;
+use std::iter::Peekable;
 use std::str;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use nom::{be_u16, be_u32, be_u8, rest, IResult};
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
+use try_from::TryInto;
 
+use crate::composed::Deserializable;
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
@@ -12,9 +16,10 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::de::Deserialize;
 use crate::errors::Result;
 use crate::packet::signature::types::*;
+use crate::packet::Packet;
 use crate::types::{
     mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
-    Version,
+    Tag, Version,
 };
 use crate::util::{clone_into_array, packet_length, read_string};
 
@@ -25,6 +30,39 @@ impl Deserialize for Signature {
 
         Ok(pk)
     }
+}
+
+impl Deserializable for Signature {
+    /// Parse a signature.
+    fn from_packets<'a>(
+        packets: impl Iterator<Item = Packet> + 'a,
+    ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
+        Box::new(SignatureParser {
+            source: packets.peekable(),
+        })
+    }
+}
+
+pub struct SignatureParser<I: Sized + Iterator<Item = Packet>> {
+    source: Peekable<I>,
+}
+
+impl<I: Sized + Iterator<Item = Packet>> Iterator for SignatureParser<I> {
+    type Item = Result<Signature>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        next(self.source.by_ref())
+    }
+}
+
+fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<Signature>> {
+    if let Some(packet) = packets.by_ref().next() {
+        match packet.tag() {
+            Tag::Signature => return Some(packet.try_into()),
+            _ => return Some(Err(format_err!("unexpected packet {:?}", packet.tag()))),
+        }
+    }
+    None
 }
 
 /// Convert an epoch timestamp to a `DateTime`

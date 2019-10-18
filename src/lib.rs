@@ -43,14 +43,18 @@ pub mod errors;
 pub mod armor;
 pub mod base64_decoder;
 pub mod base64_reader;
-pub mod email;
-pub mod line_reader;
-pub mod packet;
-pub mod types;
-pub use crate::composed::key::*;
 pub mod composed;
 pub mod crypto;
 pub mod de;
+pub mod email;
+pub mod line_reader;
 pub mod line_writer;
 pub mod normalize_lines;
+pub mod packet;
 pub mod ser;
+pub mod types;
+
+// reexports for easier use
+pub use self::composed::key::*;
+pub use self::composed::*;
+pub use self::packet::Signature;
