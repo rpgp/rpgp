@@ -8,6 +8,15 @@ pub trait KeyTrait: ::std::fmt::Debug {
     fn key_id(&self) -> KeyId;
 
     fn algorithm(&self) -> PublicKeyAlgorithm;
+
+    fn is_signing_key(&self) -> bool {
+        use crate::crypto::PublicKeyAlgorithm::*;
+
+        match self.algorithm() {
+            RSA | RSASign | ElgamalSign | DSA | EdDSA => true,
+            _ => false,
+        }
+    }
 }
 
 impl<'a, T: KeyTrait> KeyTrait for &'a T {

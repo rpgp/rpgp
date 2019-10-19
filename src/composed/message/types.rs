@@ -13,6 +13,7 @@ use crate::armor;
 use crate::composed::message::decrypt::*;
 use crate::composed::shared::Deserializable;
 use crate::composed::signed_key::SignedSecretKey;
+use crate::composed::StandaloneSignature;
 use crate::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
 use crate::errors::{Error, Result};
 use crate::packet::{
@@ -364,6 +365,14 @@ impl Message {
             one_pass_signature: Some(ops),
             signature,
         })
+    }
+
+    /// Convert the message to a standalone signature according to the cleartext framework.
+    pub fn into_signature(self) -> StandaloneSignature {
+        match self {
+            Message::Signed { signature, .. } => StandaloneSignature::new(signature),
+            _ => panic!("only signed messages can be converted to standalone signature messages"),
+        }
     }
 
     /// Verify this message.
