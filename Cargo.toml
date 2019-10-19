@@ -51,6 +51,7 @@ cast5 = "0.6.0"
 rsa = "^0.1.4"
 nom = "^4.2"
 zeroize = { version = "0.10.1", features = ["zeroize_derive"] }
+clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 
 [dependencies.x25519-dalek]
 version = "0.5"
@@ -61,10 +62,6 @@ features = ["std", "u64_backend"]
 version = "1.0.0-pre.1"
 default-features = false
 features = ["std", "u64_backend"]
-
-[dependencies.buf_redux]
-version = "0.8.1"
-default-features = false
 
 [dependencies.num-bigint]
 version = "0.5"
@@ -92,13 +89,21 @@ rand_chacha = "0.1"
 pretty_env_logger = "0.3"
 
 [features]
-default = ["ringbuf"]
+default = []
 ringbuf = ["buf_redux/default"]
-nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly"]
+nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly", "clear_on_drop/nightly"]
 avx2 = ["ed25519-dalek/avx2_backend"]
 profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
 wasm = ["chrono/wasmbind", "nightly", "rand/wasm-bindgen"]
+
+[target.'cfg(not(any(target_os = "netbsd", target_os = "ios")))'.dependencies.buf_redux]
+version = "0.8.1"
+default-features = true
+
+[target.'cfg(any(target_os = "netbsd", target_os = "ios"))'.dependencies.buf_redux]
+version = "0.8.1"
+default-features = false
 
 
 [profile.bench]
