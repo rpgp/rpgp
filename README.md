@@ -16,9 +16,14 @@ For ECC crypto support we are using [Curve25519-dalek](https://crates.io/crates/
 
 ## Status (Last updated: October 2019)
 
+rPGP and its RSA dependency got a first independent security review mid 2019.
+No critical flaws were found. We have fixed and are fixing some high, medium and
+low risk ones. We will soon publish the full review report.
+Further independent security reviews are upcoming.
+
 rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit and 64 bit builds.
 
-You can find more details here:
+More details on platform and OpenPGP implementation status: 
 
 - [OpenPGP Status document](STATUS.md) which describes what of OpenPGP is supported
 - [Platform status document](PLATFORMS.md) which describes current platform support.
@@ -26,14 +31,6 @@ You can find more details here:
 ### Experimental WASM Support
 
 When enabeling the `wasm` feature, rpgp can be compiled to run using WASM in Node.js and the supported Browsers. Experimental bindings for this can be found in [rpgp/rpgp-js](https://github.com/rpgp/rpgp-js).
-
-## Independent Security Review
-
-rPGP and its RSA dependency got a first independent security review mid 2019.
-No critical flaws were found. We have fixed and are fixing some high, medium and
-low risk ones. We will soon publish the full review report.
-Further independent security reviews are upcoming.
-
 
 ## Developement
 
