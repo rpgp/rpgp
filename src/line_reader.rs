@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::io;
 use std::io::prelude::*;
 
@@ -30,19 +31,36 @@ impl<R: Read + Seek> Seek for LineReader<R> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         match pos {
             io::SeekFrom::Current(n) => {
-                let mut seek_pos = if n < 0 { (-n) } else { n } as u64;
-
                 let current_pos = self.inner.seek(io::SeekFrom::Current(0))?;
+                let mut target_pos = u64::try_from(
+                    i64::try_from(current_pos)
+                        .expect("Current position is too large to be converted to signed")
+                        + n,
+                )
+                .expect("New position is negative");
 
-                // count lines we need to add to our seek
-                for line_break_pos in self.lines.iter().rev() {
-                    if seek_pos < current_pos - *line_break_pos {
-                        break;
+                if n < 0 {
+                    for &line_break_pos in self.lines.iter().rev() {
+                        if line_break_pos < target_pos {
+                            break;
+                        }
+
+                        if line_break_pos < current_pos {
+                            target_pos -= 1;
+                        }
                     }
-                    seek_pos += 1;
-                }
+                } else {
+                    for &line_break_pos in self.lines.iter() {
+                        if line_break_pos > target_pos {
+                            break;
+                        }
 
-                self.inner.seek(io::SeekFrom::Current(-(seek_pos as i64)))
+                        if line_break_pos > current_pos {
+                            target_pos += 1;
+                        }
+                    }
+                }
+                self.inner.seek(io::SeekFrom::Start(target_pos))
             }
             _ => unimplemented!(),
         }
