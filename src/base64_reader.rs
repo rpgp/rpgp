@@ -35,7 +35,7 @@ impl<R: Read + Seek> Read for Base64Reader<R> {
         for i in 0..n {
             if !is_base64_token(into[i]) {
                 // the party is over
-                let back = (n as i64) - (i as i64);
+                let back = (i as i64) - (n as i64);
                 self.inner.seek(io::SeekFrom::Current(back))?;
 
                 // zero out the rest of what we read
@@ -133,6 +133,7 @@ mod tests {
             let mut buf = vec![0; 5];
             assert_eq!(r.read(&mut buf).unwrap(), 2);
             assert_eq!(buf, vec![b'K', b'w', 0, 0, 0]);
+            assert_eq!(r.into_inner().position(), 2);
         }
 
         {
@@ -142,6 +143,7 @@ mod tests {
             let mut buf = vec![0; 10];
             assert_eq!(r.read(&mut buf).unwrap(), 10);
             assert_eq!(&buf[..], b"Kwjk\n=Kwjk");
+            assert_eq!(r.into_inner().position(), 10);
         }
 
         {
@@ -150,6 +152,7 @@ mod tests {
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 100];
             assert_eq!(r.read(&mut buf).unwrap(), 5);
+            assert_eq!(r.into_inner().position(), 5);
             assert_eq!(&buf[..5], b"Kwjk\n");
             assert_eq!(&buf[5..], &vec![0u8; 95][..]);
         }
