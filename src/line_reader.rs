@@ -289,7 +289,7 @@ mod tests {
 
         // seek
         assert_eq!(
-            r.seek(io::SeekFrom::Current(input.len() as i64 - 3))
+            r.seek(io::SeekFrom::Current(-(input.len() as i64 - 3)))
                 .unwrap(),
             0
         );
