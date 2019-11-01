@@ -227,6 +227,26 @@ mod tests {
     }
 
     #[test]
+    fn test_line_reader_seek_forward() {
+        let input = b"hellonworld-";
+        let c = Cursor::new(&input[..]);
+        let mut r = LineReader::new(c);
+
+        let mut buf = vec![0; input.len() + 2];
+        assert_eq!(r.read(&mut buf).unwrap(), input.len());
+        assert_eq!(&buf[..input.len()], &input[..]);
+
+        // seek
+        assert_eq!(r.seek(io::SeekFrom::Current(-10)).unwrap(), 2);
+        assert_eq!(r.seek(io::SeekFrom::Current(4)).unwrap(), 6);
+        assert_eq!(r.seek(io::SeekFrom::Current(-2)).unwrap(), 4);
+
+        let mut buf = vec![0; input.len()];
+        assert_eq!(r.read(&mut buf).unwrap(), 8);
+        assert_eq!(&buf[..input.len() - 4], &input[4..]);
+    }
+
+    #[test]
     fn test_line_reader_seek_mix_1() {
         let input = b"ab\ncd\nef\ngh";
         //           "ab cd ef gh"
