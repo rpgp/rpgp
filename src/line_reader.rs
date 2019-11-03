@@ -317,4 +317,15 @@ mod tests {
         let read = r_inner.read(&mut buf).unwrap();
         assert_eq!(std::str::from_utf8(&buf[..read]).unwrap(), "ab\ncd\nef\ngh");
     }
+
+    #[test]
+    fn test_line_reader_starting_with_newline() {
+        let input = b"\n\nhelloworld";
+        let c = Cursor::new(&input[..]);
+        let mut r = LineReader::new(c);
+
+        let mut buf = vec![0; input.len() + 10];
+        assert_eq!(r.read(&mut buf).unwrap(), input.len() - 2);
+        assert_eq!(&buf[..input.len() - 2], &input[2..]);
+    }
 }
