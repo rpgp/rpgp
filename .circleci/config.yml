@@ -80,6 +80,21 @@ jobs:
           name: Run cargo clippy
           command: cargo clippy --all
 
+  audit:
+    executor: default
+    steps:
+      - *restore-workspace
+      - *restore-cache
+      - run:
+          name: Install Cargo Audit
+          command: cargo install --force cargo-audit
+      - run:
+          name: Generate lockfile
+          command: cargo generate-lockfile
+      - run:
+          name: Run cargo audit
+          command: cargo audit
+
   test_macos:
     macos:
       xcode: "10.0.0"
@@ -132,6 +147,9 @@ workflows:
           requires:
             - cargo_fetch
       - clippy:
+          requires:
+            - cargo_fetch
+      - audit:
           requires:
             - cargo_fetch
 
