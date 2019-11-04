@@ -9,7 +9,7 @@ use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
 use crate::crypto::checksum;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 
 macro_rules! decrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
@@ -164,12 +164,15 @@ impl SymmetricKeyAlgorithm {
         let mdc_len = 22;
         let (data, mdc) = res.split_at(res.len() - mdc_len);
 
-        ensure_eq!(mdc[0], 0xD3, "invalid MDC tag");
-        ensure_eq!(mdc[1], 0x14, "invalid MDC length");
-
-        checksum::sha1(&mdc[2..], &[prefix, data, &mdc[0..2]].concat())?;
-
-        Ok(data)
+        let sha1 = checksum::calculate_sha1(&[prefix, data, &mdc[0..2]].concat());
+        if mdc[0] != 0xD3 || // Invalid MDC tag
+           mdc[1] != 0x14 || // Invalid MDC length
+           mdc[2..] != sha1[..]
+        {
+            Err(Error::MdcError)
+        } else {
+            Ok(data)
+        }
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.

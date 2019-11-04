@@ -69,6 +69,8 @@ pub enum Error {
     InvalidPacketContent(Box<Error>),
     #[fail(display = "Ed25519 {:?}", _0)]
     Ed25519SignatureError(SignatureError),
+    #[fail(display = "Modification Detection Code error")]
+    MdcError,
 }
 
 impl Error {
@@ -101,6 +103,7 @@ impl Error {
             Error::ParseIntError(_) => 24,
             Error::InvalidPacketContent(_) => 25,
             Error::Ed25519SignatureError(_) => 26,
+            Error::MdcError => 27,
         }
     }
 }
