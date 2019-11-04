@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::io;
 use std::io::prelude::*;
 
@@ -30,19 +31,36 @@ impl<R: Read + Seek> Seek for LineReader<R> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         match pos {
             io::SeekFrom::Current(n) => {
-                let mut seek_pos = if n < 0 { (-n) } else { n } as u64;
-
                 let current_pos = self.inner.seek(io::SeekFrom::Current(0))?;
+                let mut target_pos = u64::try_from(
+                    i64::try_from(current_pos)
+                        .expect("Current position is too large to be converted to signed")
+                        + n,
+                )
+                .expect("New position is negative");
 
-                // count lines we need to add to our seek
-                for line_break_pos in self.lines.iter().rev() {
-                    if seek_pos < current_pos - *line_break_pos {
-                        break;
+                if n < 0 {
+                    for &line_break_pos in self.lines.iter().rev() {
+                        if line_break_pos < target_pos {
+                            break;
+                        }
+
+                        if line_break_pos < current_pos {
+                            target_pos -= 1;
+                        }
                     }
-                    seek_pos += 1;
-                }
+                } else {
+                    for &line_break_pos in self.lines.iter() {
+                        if line_break_pos > target_pos {
+                            break;
+                        }
 
-                self.inner.seek(io::SeekFrom::Current(-(seek_pos as i64)))
+                        if line_break_pos > current_pos {
+                            target_pos += 1;
+                        }
+                    }
+                }
+                self.inner.seek(io::SeekFrom::Start(target_pos))
             }
             _ => unimplemented!(),
         }
@@ -227,6 +245,26 @@ mod tests {
     }
 
     #[test]
+    fn test_line_reader_seek_forward() {
+        let input = b"hellonworld-";
+        let c = Cursor::new(&input[..]);
+        let mut r = LineReader::new(c);
+
+        let mut buf = vec![0; input.len() + 2];
+        assert_eq!(r.read(&mut buf).unwrap(), input.len());
+        assert_eq!(&buf[..input.len()], &input[..]);
+
+        // seek
+        assert_eq!(r.seek(io::SeekFrom::Current(-10)).unwrap(), 2);
+        assert_eq!(r.seek(io::SeekFrom::Current(4)).unwrap(), 6);
+        assert_eq!(r.seek(io::SeekFrom::Current(-2)).unwrap(), 4);
+
+        let mut buf = vec![0; input.len()];
+        assert_eq!(r.read(&mut buf).unwrap(), 8);
+        assert_eq!(&buf[..input.len() - 4], &input[4..]);
+    }
+
+    #[test]
     fn test_line_reader_seek_mix_1() {
         let input = b"ab\ncd\nef\ngh";
         //           "ab cd ef gh"
@@ -269,7 +307,7 @@ mod tests {
 
         // seek
         assert_eq!(
-            r.seek(io::SeekFrom::Current(input.len() as i64 - 3))
+            r.seek(io::SeekFrom::Current(-(input.len() as i64 - 3)))
                 .unwrap(),
             0
         );
@@ -278,5 +316,16 @@ mod tests {
         let mut r_inner = r.into_inner();
         let read = r_inner.read(&mut buf).unwrap();
         assert_eq!(std::str::from_utf8(&buf[..read]).unwrap(), "ab\ncd\nef\ngh");
+    }
+
+    #[test]
+    fn test_line_reader_starting_with_newline() {
+        let input = b"\n\nhelloworld";
+        let c = Cursor::new(&input[..]);
+        let mut r = LineReader::new(c);
+
+        let mut buf = vec![0; input.len() + 10];
+        assert_eq!(r.read(&mut buf).unwrap(), input.len() - 2);
+        assert_eq!(&buf[..input.len() - 2], &input[2..]);
     }
 }
