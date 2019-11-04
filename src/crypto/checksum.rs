@@ -23,14 +23,6 @@ pub fn simple(actual: &[u8], data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-/// SHA1 checksum, first 20 octets.
-#[inline]
-pub fn sha1(hash: &[u8], data: &[u8]) -> Result<()> {
-    ensure_eq!(hash, &calculate_sha1(data)[..], "invalid SHA1 checksum");
-
-    Ok(())
-}
-
 #[inline]
 pub fn simple_to_writer<W: io::Write>(data: &[u8], writer: &mut W) -> io::Result<()> {
     let mut hasher = SimpleChecksum::default();
@@ -88,6 +80,7 @@ impl Hasher for SimpleChecksum {
     }
 }
 
+/// SHA1 checksum, first 20 octets.
 #[inline]
 pub fn calculate_sha1(data: &[u8]) -> Vec<u8> {
     Sha1::digest(data)[..20].to_vec()
