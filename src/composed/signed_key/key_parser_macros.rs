@@ -31,9 +31,8 @@ macro_rules! key_parser {
                     Some(n) => n,
                     None => return None
                 };
-                info!("  primary key: {:#?}", next);
                 let primary_key: $inner_key_type = err_opt!(next.try_into());
-                info!("  {:?}", primary_key.key_id());
+                info!("primary key: {:?}", primary_key.key_id());
 
                 // -- Zero or more revocation signatures
                 // -- followed by zero or more direct signatures in V4 keys

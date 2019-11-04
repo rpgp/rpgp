@@ -178,8 +178,6 @@ macro_rules! impl_secret_key {
                 use $crate::crypto::ECCCurve;
                 use $crate::types::{PublicParams, SecretKeyRepr};
 
-                info!("signing data: {}", hex::encode(&data));
-
                 let mut signature: Option<Vec<$crate::types::Mpi>> = None;
                 self.unlock(key_pw, |priv_key| {
                     info!("unlocked key");
