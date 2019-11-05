@@ -52,6 +52,8 @@ rsa = "^0.1.4"
 nom = "^4.2"
 zeroize = { version = "0.10.1", features = ["zeroize_derive"] }
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
+strum = "0.16.0"
+strum_macros = "0.16.0"
 
 [dependencies.x25519-dalek]
 version = "0.5"

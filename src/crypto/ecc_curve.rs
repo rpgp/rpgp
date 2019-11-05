@@ -1,6 +1,9 @@
 use crate::crypto::public_key::PublicKeyAlgorithm;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
+
+#[derive(Clone, Debug, Eq, PartialEq, EnumIter)]
 pub enum ECCCurve {
     Curve25519,
     Ed25519,
@@ -110,34 +113,7 @@ impl ECCCurve {
 }
 /// Get the right curve given an oid.
 pub fn ecc_curve_from_oid(oid: &[u8]) -> Option<ECCCurve> {
-    if ECCCurve::Curve25519.oid().as_slice() == oid {
-        return Some(ECCCurve::Curve25519);
-    }
-    if ECCCurve::Ed25519.oid().as_slice() == oid {
-        return Some(ECCCurve::Ed25519);
-    }
-    if ECCCurve::P256.oid().as_slice() == oid {
-        return Some(ECCCurve::P256);
-    }
-    if ECCCurve::P384.oid().as_slice() == oid {
-        return Some(ECCCurve::P384);
-    }
-    if ECCCurve::P521.oid().as_slice() == oid {
-        return Some(ECCCurve::P521);
-    }
-    if ECCCurve::BrainpoolP256r1.oid().as_slice() == oid {
-        return Some(ECCCurve::BrainpoolP256r1);
-    }
-    if ECCCurve::BrainpoolP384r1.oid().as_slice() == oid {
-        return Some(ECCCurve::BrainpoolP384r1);
-    }
-    if ECCCurve::BrainpoolP512r1.oid().as_slice() == oid {
-        return Some(ECCCurve::BrainpoolP512r1);
-    }
-    if ECCCurve::Secp256k1.oid().as_slice() == oid {
-        return Some(ECCCurve::Secp256k1);
-    }
-    None
+    ECCCurve::iter().find(|x| x.oid().as_slice() == oid)
 }
 
 fn asn1_der_object_id_val_enc(val: u32) -> Vec<u8> {
