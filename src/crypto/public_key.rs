@@ -7,7 +7,7 @@ pub enum PublicKeyAlgorithm {
     RSAEncrypt = 2,
     /// DEPRECATED: RSA (Sign-Only) [HAC]
     RSASign = 3,
-    /// Elgamal (Encrypt-Only) [ELGAMAL] [HAC]
+    /// Elgamal (Sign-Only) [ELGAMAL] [HAC]
     ElgamalSign = 16,
     /// DSA (Digital Signature Algorithm) [FIPS186] [HAC]
     DSA = 17,
