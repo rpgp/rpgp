@@ -17,6 +17,15 @@ pub trait KeyTrait: ::std::fmt::Debug {
             _ => false,
         }
     }
+
+    fn is_encryption_key(&self) -> bool {
+        use crate::crypto::PublicKeyAlgorithm::*;
+
+        match self.algorithm() {
+            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal => true,
+            _ => false,
+        }
+    }
 }
 
 impl<'a, T: KeyTrait> KeyTrait for &'a T {
