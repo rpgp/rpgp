@@ -30,6 +30,7 @@ impl From<usize> for PacketLength {
     }
 }
 
+/// Packet tag as defined in RFC 4880, Section 4.3 "Packet Tags"
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 #[repr(u8)]
 pub enum Tag {

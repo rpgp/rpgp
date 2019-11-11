@@ -1,3 +1,5 @@
+//! # Cryptography module
+
 pub mod aead;
 pub mod aes_kw;
 pub mod checksum;

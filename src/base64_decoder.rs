@@ -1,3 +1,5 @@
+//! # base64 decoder module
+
 use std::error::Error;
 use std::fmt;
 use std::io::{self, BufRead, Read, Seek};

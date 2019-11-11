@@ -1,3 +1,5 @@
+//! # base64 reader module
+
 use std::io;
 use std::io::prelude::*;
 
@@ -10,6 +12,7 @@ pub struct Base64Reader<R> {
 }
 
 impl<R: Read + Seek> Base64Reader<R> {
+    /// Creates a new `Base64Reader`.
     pub fn new(input: R) -> Self {
         Base64Reader { inner: input }
     }

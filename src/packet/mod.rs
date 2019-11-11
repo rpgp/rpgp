@@ -1,4 +1,7 @@
-///! This module handles everything in relationship to packets.
+//! # Packet module
+//!
+//! This module handles everything in relationship to packets.
+
 mod many;
 mod packet_sum;
 mod single;

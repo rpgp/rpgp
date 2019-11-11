@@ -1,3 +1,7 @@
+//! # rPGP
+//!
+//! rPGP is an OpenPGP implementation.
+
 #![deny(
     clippy::all,
     clippy::style,

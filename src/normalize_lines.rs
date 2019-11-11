@@ -1,4 +1,4 @@
-//! Normalize line endings
+//! # Line ending normalization module
 //!
 //! This crate provides a `normalize` method that takes a char iterator and returns
 //! a new one with `\n` for all line endings

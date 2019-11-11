@@ -1,3 +1,5 @@
+//! Deserialize trait
+
 use crate::errors::Result;
 use crate::types::Version;
 

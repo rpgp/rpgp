@@ -1,3 +1,5 @@
+//! # Line reader module
+
 use std::convert::TryFrom;
 use std::io;
 use std::io::prelude::*;
@@ -13,6 +15,7 @@ pub struct LineReader<R> {
 }
 
 impl<R: Read + Seek> LineReader<R> {
+    /// Creates a new `LineReader<R>`.
     pub fn new(input: R) -> Self {
         LineReader {
             inner: input,
@@ -21,7 +24,7 @@ impl<R: Read + Seek> LineReader<R> {
         }
     }
 
-    /// Consume `self` and return the inner reader.
+    /// Consumes `self` and returns the inner reader.
     pub fn into_inner(self) -> R {
         self.inner
     }
