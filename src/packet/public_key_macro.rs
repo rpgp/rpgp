@@ -280,7 +280,7 @@ macro_rules! impl_public_key {
                     PublicParams::RSA { ref n, ref e } => {
                         $crate::crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
                     }
-                    PublicParams::EdDSA { .. } => unimplemented_err!("encryption with EdDSA"),
+                    PublicParams::EdDSA { .. } => bail!("EdDSA is only used for signing"),
                     PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
                     PublicParams::ECDH {
                         ref curve,
