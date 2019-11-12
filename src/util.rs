@@ -1,3 +1,5 @@
+//! # Utilities
+
 use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};

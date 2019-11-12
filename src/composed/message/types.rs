@@ -27,8 +27,7 @@ use crate::types::{
     Tag,
 };
 
-/// A PGP message
-/// https://tools.ietf.org/html/rfc4880.html#section-11.3
+/// An [OpenPGP message](https://tools.ietf.org/html/rfc4880.html#section-11.3)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Message {
     Literal(LiteralData),
@@ -47,7 +46,8 @@ pub enum Message {
     },
 }
 
-/// Encrypte Session Key
+/// Encrypted Session Key
+///
 /// Public-Key Encrypted Session Key Packet |
 /// Symmetric-Key Encrypted Session Key Packet.
 #[derive(Debug, Clone, PartialEq, Eq)]

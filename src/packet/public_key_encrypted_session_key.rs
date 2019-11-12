@@ -32,7 +32,7 @@ impl PublicKeyEncryptedSessionKey {
         Ok(pk)
     }
 
-    /// Encryptes the given session key to the passed in public key.
+    /// Encrypts the given session key to the passed in public key.
     pub fn from_session_key<R: CryptoRng + Rng>(
         rng: &mut R,
         session_key: &[u8],

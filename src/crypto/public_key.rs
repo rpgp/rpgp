@@ -1,15 +1,15 @@
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 #[repr(u8)]
 pub enum PublicKeyAlgorithm {
-    /// RSA (Encrypt and Sign) [HAC]
+    /// RSA (Encrypt and Sign)
     RSA = 1,
-    /// DEPRECATED: RSA (Encrypt-Only) [HAC]
+    /// DEPRECATED: RSA (Encrypt-Only)
     RSAEncrypt = 2,
-    /// DEPRECATED: RSA (Sign-Only) [HAC]
+    /// DEPRECATED: RSA (Sign-Only)
     RSASign = 3,
-    /// Elgamal (Encrypt-Only) [ELGAMAL] [HAC]
+    /// Elgamal (Sign-Only)
     ElgamalSign = 16,
-    /// DSA (Digital Signature Algorithm) [FIPS186] [HAC]
+    /// DSA (Digital Signature Algorithm)
     DSA = 17,
     /// Elliptic Curve: RFC-6637
     ECDH = 18,

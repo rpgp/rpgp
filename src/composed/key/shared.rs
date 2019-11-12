@@ -89,7 +89,7 @@ impl KeyDetails {
             users.push(id.into_signed(sig));
         }
 
-        // othe user ids
+        // other user ids
 
         users.extend(
             self.user_ids

@@ -1,3 +1,5 @@
+//! # Serialize trait module
+
 use std::io;
 
 use crate::errors::Result;

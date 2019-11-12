@@ -68,27 +68,34 @@ macro_rules! encrypt_regular {
     }};
 }
 
-/// Available symmetric key algorithms.
+/// Available [symmetric key algorithms](https://tools.ietf.org/html/rfc4880#section-9.2).
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
     Plaintext = 0,
+    /// IDEA
     IDEA = 1,
-    /// TripleDES (DES-EDE, 168 bit key derived from 192)
+    /// Triple-DES
     TripleDES = 2,
-    /// CAST5 (128 bit key, as per [RFC2144])
+    /// CAST5
     CAST5 = 3,
-    /// Blowfish (128 bit key, 16 rounds)
+    /// Blowfish
     Blowfish = 4,
-    // 5 & 6 are reserved
+    // 5 & 6 are reserved for DES/SK
+    /// AES with 128-bit key
     AES128 = 7,
+    /// AES with 192-bit key
     AES192 = 8,
+    /// AES with 256-bit key
     AES256 = 9,
-    /// Twofish with 256-bit key [TWOFISH]
+    /// Twofish with 256-bit key
     Twofish = 10,
+    /// [Camellia](https://tools.ietf.org/html/rfc5581#section-3) with 128-bit key
     Camellia128 = 11,
+    /// [Camellia](https://tools.ietf.org/html/rfc5581#section-3) with 192-bit key
     Camellia192 = 12,
+    /// [Camellia](https://tools.ietf.org/html/rfc5581#section-3) with 256-bit key
     Camellia256 = 13,
     Private10 = 110,
 }

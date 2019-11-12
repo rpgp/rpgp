@@ -1,3 +1,5 @@
+//! # Line writer module
+
 use std::io;
 
 use generic_array::typenum::{Sum, Unsigned, U2};
@@ -61,7 +63,7 @@ where
     N: std::ops::Add<U2>,
     Sum<N, U2>: ArrayLength<u8>,
 {
-    /// Create a new encoder around an existing writer.
+    /// Creates a new encoder around an existing writer.
     pub fn new(w: &'a mut W, line_break: LineBreak) -> Self {
         LineWriter {
             line_break,

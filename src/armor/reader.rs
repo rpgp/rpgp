@@ -16,23 +16,25 @@ use crate::line_reader::LineReader;
 use crate::ser::Serialize;
 
 /// Armor block types.
+///
+/// Both OpenPGP (RFC4880) and OpenSSL PEM armor types are included.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum BlockType {
-    /// PGP Public key
+    /// PGP public key
     PublicKey,
-    /// Public key DER encoded PKCS#1
+    /// PEM encoded PKCS#1 public key
     PublicKeyPKCS1(PKCS1Type),
-    /// Public key DER encoded PKCS#8
+    /// PEM encoded PKCS#8 public key
     PublicKeyPKCS8,
     /// Public key OpenSSH
     PublicKeyOpenssh,
-    /// PGP Private key
+    /// PGP private key
     PrivateKey,
-    /// Private key DER encoded PKCS#1
+    /// PEM encoded PKCS#1 private key
     PrivateKeyPKCS1(PKCS1Type),
-    /// Private key DER encoded PKCS#8
+    /// PEM encoded PKCS#8 private key
     PrivateKeyPKCS8,
-    /// Private key OpenSSh
+    /// OpenSSH private key
     PrivateKeyOpenssh,
     Message,
     MultiPartMessage(usize, usize),
@@ -74,6 +76,7 @@ impl BlockType {
     }
 }
 
+/// OpenSSL PKCS#1 PEM armor types
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PKCS1Type {
     RSA,
@@ -120,7 +123,7 @@ named!(
       | map!(tag!("PGP SIGNATURE"), |_| BlockType::Signature)
       | map!(tag!("PGP ARMORED FILE"), |_| BlockType::File)
 
-      // Lets also parse openssl formats :tada:
+      // OpenSSL formats
 
       // Public Key File PKCS#1
       | map!(tag!("RSA PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1(PKCS1Type::RSA))
@@ -131,7 +134,7 @@ named!(
       // Public Key File PKCS#8
       | map!(tag!("PUBLIC KEY"), |_| BlockType::PublicKeyPKCS8)
 
-      // Public Key File Openssh
+      // OpenSSH Public Key File
       | map!(tag!("OPENSSH PUBLIC KEY"), |_| BlockType::PublicKeyOpenssh)
 
       // Private Key File PKCS#1
@@ -143,7 +146,7 @@ named!(
       // Private Key File PKCS#8
       | map!(tag!("PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS8)
 
-      // Private Key File Openssh
+      // OpenSSH Private Key File
       | map!(tag!("OPENSSH PRIVATE KEY"), |_| BlockType::PrivateKeyOpenssh)
     )
 );
