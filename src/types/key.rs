@@ -13,7 +13,7 @@ pub trait KeyTrait: ::std::fmt::Debug {
         use crate::crypto::PublicKeyAlgorithm::*;
 
         match self.algorithm() {
-            RSA | RSASign | ElgamalSign | DSA | EdDSA => true,
+            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSA => true,
             _ => false,
         }
     }
