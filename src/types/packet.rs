@@ -87,7 +87,7 @@ impl Default for Version {
 
 impl Version {
     pub fn write_header(self, writer: &mut impl io::Write, tag: u8, len: usize) -> Result<()> {
-        info!("write_header {:?} {} {}", self, tag, len);
+        debug!("write_header {:?} {} {}", self, tag, len);
 
         match self {
             Version::Old => {

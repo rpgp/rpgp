@@ -180,7 +180,7 @@ macro_rules! impl_secret_key {
 
                 let mut signature: Option<Vec<$crate::types::Mpi>> = None;
                 self.unlock(key_pw, |priv_key| {
-                    info!("unlocked key");
+                    debug!("unlocked key");
                     let sig = match *priv_key {
                         SecretKeyRepr::RSA(ref priv_key) => {
                             $crate::crypto::rsa::sign(priv_key, hash, data)

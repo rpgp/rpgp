@@ -111,7 +111,7 @@ impl Signature {
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()> {
-        info!("verifying certificate {:#?}", self);
+        debug!("verifying certificate {:#?}", self);
 
         if let Some(issuer) = self.issuer() {
             if &key.key_id() != issuer {
@@ -131,7 +131,7 @@ impl Signature {
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
 
-        info!("packet: {}", hex::encode(&packet_buf));
+        debug!("packet: {}", hex::encode(&packet_buf));
 
         hasher.update(&key_buf);
 
@@ -148,7 +148,7 @@ impl Signature {
 
                 let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
                 BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
-                info!("prefix: {}", hex::encode(&prefix_buf));
+                debug!("prefix: {}", hex::encode(&prefix_buf));
 
                 // prefixes
                 hasher.update(&prefix_buf);
@@ -177,7 +177,7 @@ impl Signature {
         signing_key: &impl PublicKeyTrait,
         key: &impl PublicKeyTrait,
     ) -> Result<()> {
-        info!(
+        debug!(
             "verifying key binding: {:#?} - {:#?} - {:#?}",
             self, signing_key, key
         );
@@ -225,7 +225,7 @@ impl Signature {
 
     /// Verifies a direct key signature or a revocation.
     pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        info!("verifying key (revocation): {:#?} - {:#?}", self, key);
+        debug!("verifying key (revocation): {:#?} - {:#?}", self, key);
 
         let key_id = key.key_id();
         if let Some(issuer) = self.issuer() {

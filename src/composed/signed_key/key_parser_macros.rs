@@ -32,17 +32,17 @@ macro_rules! key_parser {
                     None => return None
                 };
                 let primary_key: $inner_key_type = err_opt!(next.try_into());
-                info!("primary key: {:?}", primary_key.key_id());
+                debug!("primary key: {:?}", primary_key.key_id());
 
                 // -- Zero or more revocation signatures
                 // -- followed by zero or more direct signatures in V4 keys
-                info!("  signatures");
+                debug!("  signatures");
                 let mut revocation_signatures = Vec::new();
                 let mut direct_signatures = Vec::new();
 
                 while let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::Signature) {
                     let packet = packets.next().expect("peeked");
-                    info!("parsing signature {:?}", packet.tag());
+                    debug!("parsing signature {:?}", packet.tag());
                     let sig: Signature = err_opt!(packet.try_into());
                     let typ = sig.typ();
 
@@ -59,20 +59,20 @@ macro_rules! key_parser {
 
                 // -- Zero or more User ID packets
                 // -- Zero or more User Attribute packets
-                info!("  user");
+                debug!("  user");
                 let mut users = Vec::new();
                 let mut user_attributes = Vec::new();
 
                 while let Some(true) = packets
                     .peek()
                     .map(|packet| {
-                        info!("peek {:?}", packet.tag());
+                        debug!("peek {:?}", packet.tag());
                         packet.tag() == Tag::UserId || packet.tag() == Tag::UserAttribute
                     })
                 {
                     let packet = packets.next().expect("peeked");
                     let tag = packet.tag();
-                    info!("  user data: {:?}", tag);
+                    debug!("  user data: {:?}", tag);
                     match tag {
                         Tag::UserId => {
                             let id: UserId = err_opt!(packet.try_into());
@@ -122,7 +122,7 @@ macro_rules! key_parser {
                     let mut $subkey_container = vec![];
                 )*
 
-                info!("  subkeys");
+                debug!("  subkeys");
 
                 while let Some(true) = packets.peek().map(|packet| {
                     $( packet.tag() == Tag::$subkey_tag || )* false

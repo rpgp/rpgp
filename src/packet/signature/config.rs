@@ -85,7 +85,7 @@ impl SignatureConfig {
             self.is_certificate(),
             "can not sign non certificate as certificate"
         );
-        info!("signing certificate {:#?}", self.typ);
+        debug!("signing certificate {:#?}", self.typ);
 
         let mut hasher = self.hash_alg.new_hasher()?;
         let mut key_buf = Vec::new();
@@ -139,7 +139,7 @@ impl SignatureConfig {
     where
         F: FnOnce() -> String,
     {
-        info!(
+        debug!(
             "signing key binding: {:#?} - {:#?} - {:#?}",
             self, signing_key, key
         );
@@ -181,7 +181,7 @@ impl SignatureConfig {
     where
         F: FnOnce() -> String,
     {
-        info!("signing key (revocation): {:#?} - {:#?}", self, key);
+        debug!("signing key (revocation): {:#?} - {:#?}", self, key);
 
         let mut hasher = self.hash_alg.new_hasher()?;
 

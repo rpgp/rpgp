@@ -30,7 +30,7 @@ macro_rules! decrypt {
 
         if $resync {
             unimplemented!("CFB resync is not here");
-        // info!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
+        // debug!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
         // let mut mode = Cfb::<$mode>::new_var($key, &$prefix[2..$bs + 2])?;
         // mode.decrypt($data);
         } else {
@@ -46,7 +46,7 @@ macro_rules! encrypt {
 
         if $resync {
             unimplemented!("CFB resync is not here");
-        // info!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
+        // debug!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
         // let mut mode = Cfb::<$mode>::new_var($key, &$prefix[2..$bs + 2])?;
         // mode.encrypt($data);
         } else {
@@ -154,7 +154,7 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode. Does
     /// resynchronization.
     pub fn decrypt<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
-        info!("unprotected decrypt");
+        debug!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
         Ok(self.decrypt_with_iv(key, &iv_vec, ciphertext, true)?.1)
     }
@@ -163,7 +163,7 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     /// Does not do resynchronization.
     pub fn decrypt_protected<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
-        info!("protected decrypt");
+        debug!("protected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
         let (prefix, res) = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
 
@@ -345,7 +345,7 @@ impl SymmetricKeyAlgorithm {
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     pub fn encrypt(self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
-        info!("encrypt unprotected");
+        debug!("encrypt unprotected");
 
         let iv_vec = vec![0u8; self.block_size()];
 
@@ -372,7 +372,7 @@ impl SymmetricKeyAlgorithm {
     }
 
     pub fn encrypt_protected<'a>(self, key: &[u8], plaintext: &'a [u8]) -> Result<Vec<u8>> {
-        info!("protected encrypt");
+        debug!("protected encrypt");
 
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
         let mdc_len = 22;

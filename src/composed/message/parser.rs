@@ -16,7 +16,7 @@ pub struct MessageParser<I: Sized + Iterator<Item = Packet>> {
 fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<Message>> {
     while let Some(packet) = packets.by_ref().next() {
         // for packet in packets.by_ref() {
-        info!("{:?}: ", packet);
+        debug!("{:?}: ", packet);
         let tag = packet.tag();
         match tag {
             Tag::LiteralData => {

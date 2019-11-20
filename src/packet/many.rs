@@ -97,7 +97,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                 Ok(val) => Some(val),
                 Err(err) => match err {
                     Error::Incomplete(n) => {
-                        info!("incomplete {:?}", n);
+                        debug!("incomplete {:?}", n);
                         needed = Some(n);
                         None
                     }
@@ -110,7 +110,7 @@ impl<R: Read> Iterator for PacketParser<R> {
             };
 
             if let Some((length, p)) = res_body {
-                info!("got packet: {:#?} {}", p, length);
+                debug!("got packet: {:#?} {}", p, length);
                 assert!(length > 0);
                 b.consume(length);
                 return Some(p);

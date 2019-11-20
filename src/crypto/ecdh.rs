@@ -72,7 +72,7 @@ pub fn build_ecdh_param(
 
 /// ECDH decryption.
 pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
-    info!("ECDH decrypt");
+    debug!("ECDH decrypt");
 
     let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
 
@@ -152,7 +152,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     q: &[u8],
     plain: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
-    info!("ECDH encrypt");
+    debug!("ECDH encrypt");
 
     let param = build_ecdh_param(&curve.oid(), alg_sym, hash, fingerprint);
 

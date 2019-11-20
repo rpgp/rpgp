@@ -449,9 +449,9 @@ impl Message {
                             Esk::PublicKeyEncryptedSessionKey(k) => Some(k),
                             _ => None,
                         }) {
-                            info!("esk packet: {:?}", esk_packet);
-                            info!("{:?}", key.key_id());
-                            info!(
+                            debug!("esk packet: {:?}", esk_packet);
+                            debug!("{:?}", key.key_id());
+                            debug!(
                                 "{:?}",
                                 key.secret_subkeys
                                     .iter()

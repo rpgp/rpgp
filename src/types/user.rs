@@ -33,7 +33,7 @@ impl SignedUser {
 
     /// Verify all signatures. If signatures is empty, this fails.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        info!("verify signed user {:#?}", self);
+        debug!("verify signed user {:#?}", self);
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
@@ -87,7 +87,7 @@ impl SignedUserAttribute {
 
     /// Verify all signatures. If signatures is empty, this fails.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        info!("verify signed attribute {:?}", self);
+        debug!("verify signed attribute {:?}", self);
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
