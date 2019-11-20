@@ -265,7 +265,7 @@ fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
 
 fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
     use self::SubpacketType::*;
-    info!("parsing subpacket: {:?} {}", typ, hex::encode(body));
+    debug!("parsing subpacket: {:?} {}", typ, hex::encode(body));
 
     let res = match typ {
         SignatureCreationTime => signature_creation_time(body),

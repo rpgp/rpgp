@@ -120,14 +120,14 @@ named_args!(parse(packet_version: Version) <UserAttribute>, do_parse!(
                 })
         ))
     >> ({
-        info!("attr with len {}", len);
+        debug!("attr with len {}", len);
         attr
     })
 ));
 
 impl Serialize for UserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        info!("write_packet_len {}", self.packet_len());
+        debug!("write_packet_len {}", self.packet_len());
         write_packet_length(self.packet_len(), writer)?;
 
         match self {

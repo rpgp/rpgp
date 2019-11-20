@@ -18,7 +18,7 @@ pub fn decrypt_session_key<F>(
 where
     F: FnOnce() -> String,
 {
-    info!("decrypting session key");
+    debug!("decrypting session key");
 
     let mut key: Vec<u8> = Vec::new();
     let mut alg: Option<SymmetricKeyAlgorithm> = None;
@@ -37,7 +37,7 @@ where
         let algorithm = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
             .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
         alg = Some(algorithm);
-        info!("alg: {:?}", alg);
+        debug!("alg: {:?}", alg);
 
         let (k, checksum) = match *priv_key {
             SecretKeyRepr::ECDH(_) => {
@@ -72,7 +72,7 @@ pub fn decrypt_session_key_with_password<F>(
 where
     F: FnOnce() -> String,
 {
-    info!("decrypting session key");
+    debug!("decrypting session key");
 
     let key = packet
         .s2k()
@@ -134,7 +134,7 @@ impl<'a> Iterator for MessageDecrypter<'a> {
             let mut res = packet.data()[..].to_vec();
             let protected = packet.tag() == Tag::SymEncryptedProtectedData;
 
-            info!("decrypting protected = {:?}", protected);
+            debug!("decrypting protected = {:?}", protected);
 
             let decrypted_packet: &[u8] = if protected {
                 err_opt!(self.alg.decrypt_protected(&self.key, &mut res))
