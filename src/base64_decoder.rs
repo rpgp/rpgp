@@ -88,17 +88,17 @@ impl<R: Read + Seek> Read for Base64Decoder<R> {
             return Ok(0);
         }
 
-        let nr = self.inner.buf_len() / 4 * 4;
-        let nw = self.inner.buf_len() / 4 * 3;
+        // Buffer might have allocated slightly more
+        let buf_len = std::cmp::min(self.inner.buf_len(), BUF_SIZE);
+        let nr = buf_len;
+        let nw = buf_len / 4 * 3;
 
         let (consumed, written) = if nw > into.len() {
-            let (consumed, nw) = try_decode_config_slice(
-                &self.inner.buffer()[..nr],
-                self.config,
-                &mut self.out_buffer[..],
-            );
+            let a = &self.inner.buffer()[..nr];
+            let b = &mut self.out_buffer[..];
+            let (consumed, nw) = try_decode_config_slice(a, self.config, b);
 
-            let n = ::std::cmp::min(nw, into.len());
+            let n = std::cmp::min(nw, into.len());
             let t = &self.out_buffer[0..nw];
             let (t1, t2) = t.split_at(n);
 
@@ -128,7 +128,7 @@ fn try_decode_config_slice<T: ?Sized + AsRef<[u8]>>(
     let input_bytes = input.as_ref();
     let mut n = input_bytes.len();
     while n > 0 {
-        match decode_config_slice(&input_bytes[0..n], config, output) {
+        match decode_config_slice(&input_bytes[..n], config, output) {
             Ok(size) => {
                 return (n, size);
             }
