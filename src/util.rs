@@ -216,25 +216,25 @@ impl<'a, A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'a, A, B> {
     }
 }
 
-#[cfg(feature = "rinbuf")]
+#[cfg(feature = "ringbuf")]
 #[inline(always)]
 pub fn new_buffer(capacity: usize) -> Buffer {
     Buffer::with_capacity_ringbuf(capacity)
 }
 
-#[cfg(not(feature = "rinbuf"))]
+#[cfg(not(feature = "ringbuf"))]
 #[inline(always)]
 pub fn new_buffer(capacity: usize) -> Buffer {
     Buffer::with_capacity(capacity)
 }
 
-#[cfg(feature = "rinbuf")]
+#[cfg(feature = "ringbuf")]
 #[inline(always)]
 pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
     BufReader::with_capacity_ringbuf(capacity, inner)
 }
 
-#[cfg(not(feature = "rinbuf"))]
+#[cfg(not(feature = "ringbuf"))]
 #[inline(always)]
 pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
     BufReader::with_capacity(capacity, inner)
