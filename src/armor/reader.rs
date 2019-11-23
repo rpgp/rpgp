@@ -7,7 +7,11 @@ use base64;
 use buf_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 use crc24;
-use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Slice};
+use nom::{
+    self,
+    character::streaming::{digit1, line_ending, not_line_ending},
+    InputIter, InputLength, Slice,
+};
 
 use crate::base64_decoder::Base64Decoder;
 use crate::base64_reader::Base64Reader;
@@ -108,13 +112,13 @@ fn parse_digit(x: &[u8]) -> Result<usize> {
 #[rustfmt::skip]
 named!(
     armor_header_type<BlockType>,
-    alt_complete!(
+    alt!(
         map!(tag!("PGP PUBLIC KEY BLOCK"), |_| BlockType::PublicKey)
       | map!(tag!("PGP PRIVATE KEY BLOCK"), |_| BlockType::PrivateKey)
       | do_parse!(
           tag!("PGP MESSAGE, PART ")
-        >> x: map_res!(digit, parse_digit)
-        >> y: opt!(preceded!(tag!("/"), map_res!(digit, parse_digit)))
+        >> x: map_res!(digit1, parse_digit)
+        >> y: opt!(preceded!(tag!("/"), map_res!(digit1, parse_digit)))
         >> ({
             BlockType::MultiPartMessage(x, y.unwrap_or(0))
         })

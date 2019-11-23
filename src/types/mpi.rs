@@ -1,7 +1,7 @@
 use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::{self, be_u16, Err, InputIter, InputTake};
+use nom::{self, number::streaming::be_u16, InputIter, InputTake};
 use num_bigint::BigUint;
 use zeroize::Zeroize;
 
@@ -35,15 +35,16 @@ pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>> {
     let len_actual = ((bits + 7) >> 3) as u32;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
-        Err(Err::Error(error_position!(
+        Err(nom::Err::Failure(error_position!(
             input,
-            nom::ErrorKind::Custom(errors::MPI_TOO_LONG)
+            //nom::error::ErrorKind::Custom(errors::MPI_TOO_LONG)
+            nom::error::ErrorKind::Tag
         )))
     } else {
         // same as take!
         let cnt = len_actual as usize;
         match number.slice_index(cnt) {
-            None => nom::need_more(number, nom::Needed::Size(cnt)),
+            None => Err(nom::Err::Incomplete(nom::Needed::Size(cnt))),
             Some(index) => {
                 let (rest, n) = number.take_split(index);
                 let n_stripped = strip_leading_zeros(n).into();

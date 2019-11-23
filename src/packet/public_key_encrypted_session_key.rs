@@ -1,7 +1,7 @@
 use std::io;
 
 use byteorder::{BigEndian, ByteOrder};
-use nom::be_u8;
+use nom::number::streaming::be_u8;
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
 

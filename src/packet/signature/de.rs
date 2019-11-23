@@ -2,7 +2,11 @@ use std::boxed::Box;
 use std::str;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use nom::{be_u16, be_u32, be_u8, rest, IResult};
+use nom::{
+    combinator::rest,
+    number::streaming::{be_u16, be_u32, be_u8},
+    IResult,
+};
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
@@ -425,11 +429,11 @@ fn invalid_version<'a>(_body: &'a [u8], version: SignatureVersion) -> IResult<&'
 #[rustfmt::skip]
 named_args!(parse(packet_version: Version) <Signature>, do_parse!(
          version: map_opt!(be_u8, SignatureVersion::from_u8)
-    >> signature: switch!(value!(&version),
-                      &SignatureVersion::V2 => call!(v3_parser, packet_version, version) |
-                      &SignatureVersion::V3 => call!(v3_parser, packet_version, version) |
-                      &SignatureVersion::V4 => call!(v4_parser, packet_version, version) |
-                      &SignatureVersion::V5 => call!(v4_parser, packet_version, version) |
+    >> signature: switch!(value!(version),
+                      SignatureVersion::V2 => call!(v3_parser, packet_version, version) |
+                      SignatureVersion::V3 => call!(v3_parser, packet_version, version) |
+                      SignatureVersion::V4 => call!(v4_parser, packet_version, version) |
+                      SignatureVersion::V5 => call!(v4_parser, packet_version, version) |
                       _ => call!(invalid_version, version)
     )
     >> (signature)

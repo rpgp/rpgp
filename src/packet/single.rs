@@ -1,7 +1,11 @@
 // comes from inside somewhere of nom
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_let_if_seq))]
 
-use nom::{self, be_u32, be_u8, Err, IResult};
+use nom::{
+    self,
+    number::streaming::{be_u32, be_u8},
+    Err, IResult,
+};
 use num_traits::FromPrimitive;
 
 use crate::de::Deserialize;
@@ -21,20 +25,20 @@ use crate::util::{u16_as_usize, u32_as_usize, u8_as_usize};
 #[rustfmt::skip]
 named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!(
     // First bit is always 1
-            tag_bits!(u8, 1, 1)
+            tag_bits!(1u8, 1)
     // Version: 0
-    >> ver: map_opt!(tag_bits!(u8, 1, 0), Version::from_u8)
+    >> ver: map_opt!(tag_bits!(1u8, 0), Version::from_u8)
     // Packet Tag
-    >> tag: map_opt!(take_bits!(u8, 4), Tag::from_u8)
+    >> tag: map_opt!(take_bits!(4u8), Tag::from_u8)
     // Packet Length Type
-    >> len_type: take_bits!(u8, 2)
+    >> len_type: take_bits!(2u8)
     >> len: switch!(value!(len_type),
         // One-Octet Lengths
-        0 => map!(take_bits!(u8, 8), |val| u8_as_usize(val).into())    |
+        0 => map!(take_bits!(8u8), |val| u8_as_usize(val).into())    |
         // Two-Octet Lengths
-        1 => map!(take_bits!(u16, 16), |val| u16_as_usize(val).into()) |
+        1 => map!(take_bits!(16u8), |val| u16_as_usize(val).into()) |
         // Four-Octet Lengths
-        2 => map!(take_bits!(u32, 32), |val| u32_as_usize(val).into()) |
+        2 => map!(take_bits!(32u8), |val| u32_as_usize(val).into()) |
         3 => value!(PacketLength::Indeterminated)
     )
     >> ((ver, tag, len))
@@ -108,11 +112,11 @@ fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], Par
 #[rustfmt::skip]
 named!(new_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!(
     // First bit is always 1
-             tag_bits!(u8, 1, 1)
+             tag_bits!(1u8, 1)
     // Version: 1
-    >>  ver: map_opt!(tag_bits!(u8, 1, 1), Version::from_u8)
+    >>  ver: map_opt!(tag_bits!(1u8, 1), Version::from_u8)
     // Packet Tag
-    >>  tag: map_opt!(take_bits!(u8, 6), Tag::from_u8)
+    >>  tag: map_opt!(take_bits!(6u8), Tag::from_u8)
     >> len: bytes!(read_packet_len)
     >> ((ver, tag, len))
 )));
@@ -129,10 +133,10 @@ pub enum ParseResult<'a> {
 #[rustfmt::skip]
 named!(pub parser<(Version, Tag, PacketLength, ParseResult<'_>)>, do_parse!(
        head: alt!(new_packet_header | old_packet_header)
-    >> body: switch!(value!(&head.2),
-        PacketLength::Fixed(length)   => map!(take!(*length), |v| ParseResult::Fixed(v)) |
+    >> body: switch!(value!(head.2),
+        PacketLength::Fixed(length)   => map!(take!(length), |v| ParseResult::Fixed(v)) |
         PacketLength::Indeterminated  => value!(ParseResult::Indeterminated) |
-        PacketLength::Partial(length) => call!(read_partial_bodies, *length)
+        PacketLength::Partial(length) => call!(read_partial_bodies, length)
     )
     >> (head.0, head.1, head.2, body)
 ));

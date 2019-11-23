@@ -17,7 +17,7 @@ pub struct Packet {
 }
 
 /// Represents the packet length.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum PacketLength {
     Fixed(usize),
     Indeterminated,

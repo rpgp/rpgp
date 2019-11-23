@@ -2,7 +2,10 @@ use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use nom::{be_u32, be_u8, rest};
+use nom::{
+    combinator::rest,
+    number::streaming::{be_u32, be_u8},
+};
 use num_traits::FromPrimitive;
 
 use crate::errors::Result;

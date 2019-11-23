@@ -48,7 +48,7 @@ rand = "0.6"
 smallvec = "0.6.9"
 cast5 = "0.6.0"
 rsa = "^0.1.4"
-nom = "^4.2"
+nom = "5"
 zeroize = { version = "0.10.1", features = ["zeroize_derive"] }
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 

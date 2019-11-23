@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
-use nom::{be_u16, be_u32, be_u8};
+use nom::number::streaming::{be_u16, be_u32, be_u8};
 use num_traits::FromPrimitive;
 
 use crate::crypto::ecc_curve::ecc_curve_from_oid;
@@ -129,14 +129,14 @@ named_args!(old_public_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, Pub
 #[rustfmt::skip]
 named!(pub(crate) parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
        key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-    >>     key: switch!(value!(&key_ver),
-                        &KeyVersion::V2 => call!(
+    >>     key: switch!(value!(key_ver),
+                        KeyVersion::V2 => call!(
                             old_public_key_parser, &key_ver
                         ) |
-                        &KeyVersion::V3 => call!(
+                        KeyVersion::V3 => call!(
                             old_public_key_parser, &key_ver
                         ) |
-                        &KeyVersion::V4 => call!(
+                        KeyVersion::V4 => call!(
                             new_public_key_parser, &key_ver
                         )
         )

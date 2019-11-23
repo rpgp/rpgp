@@ -6,10 +6,11 @@ use std::{hash, io};
 
 use buf_redux::{BufReader, Buffer};
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
-    self, be_u32, be_u8, eol, is_alphanumeric, line_ending, Err, IResult, InputIter, InputLength,
-    Slice,
+    self,
+    character::is_alphanumeric,
+    number::streaming::{be_u32, be_u8},
+    Err, IResult, InputIter, InputLength, Slice,
 };
 
 use crate::errors;
@@ -34,12 +35,6 @@ pub fn is_base64_token(c: u8) -> bool {
     is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
 }
 
-named!(pub prefixed<CompleteByteSlice<'_>, CompleteByteSlice<'_>>, do_parse!(
-             many0!(line_ending)
-    >> rest: take_while1!(is_base64_token)
-    >> (rest)
-));
-
 /// Recognizes one or more body tokens
 pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     let input_length = input.input_len();
@@ -52,7 +47,7 @@ pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
             if idx == 0 {
                 return Err(Err::Error(error_position!(
                     input,
-                    nom::ErrorKind::AlphaNumeric
+                    nom::error::ErrorKind::AlphaNumeric
                 )));
             } else {
                 return Ok((input.slice(idx..), input.slice(0..idx)));
@@ -140,10 +135,6 @@ pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Resu
     }
 
     Ok(())
-}
-
-pub fn end_of_line(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, CompleteStr<'_>> {
-    alt!(input, eof!() | eol)
 }
 
 /// Return the length of the remaining input.

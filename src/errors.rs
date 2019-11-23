@@ -15,8 +15,8 @@ pub const MPI_TOO_LONG: u32 = 1000;
 /// Error types
 #[derive(Debug, Fail)]
 pub enum Error {
-    #[fail(display = "failed to parse {:?}", _0)]
-    ParsingError(nom::ErrorKind),
+    #[fail(display = "failed to parse")]
+    ParsingError(nom::error::ErrorKind),
     #[fail(display = "invalid input")]
     InvalidInput,
     #[fail(display = "incomplete input: {:?}", _0)]
@@ -54,7 +54,7 @@ pub enum Error {
     #[fail(display = "{:?}", _0)]
     Message(String),
     #[fail(display = "Invalid Packet {:?}", _0)]
-    PacketError(nom::ErrorKind),
+    PacketError(nom::error::ErrorKind),
     #[fail(display = "Incomplete Packet")]
     PacketIncomplete,
     #[fail(display = "Unpadding failed")]
@@ -73,71 +73,30 @@ pub enum Error {
     MdcError,
 }
 
-impl Error {
-    pub fn as_code(&self) -> u32 {
-        match self {
-            Error::ParsingError(_) => 0,
-            Error::InvalidInput => 1,
-            Error::Incomplete(_) => 2,
-            Error::InvalidArmorWrappers => 3,
-            Error::InvalidChecksum => 4,
-            Error::Base64DecodeError(_) => 5,
-            Error::RequestedSizeTooLarge => 6,
-            Error::NoMatchingPacket => 7,
-            Error::TooManyPackets => 8,
-            Error::RSAError(_) => 9,
-            Error::IOError(_) => 10,
-            Error::MissingPackets => 11,
-            Error::InvalidKeyLength => 12,
-            Error::BlockMode => 13,
-            Error::MissingKey => 14,
-            Error::CfbInvalidKeyIvLength => 15,
-            Error::Unimplemented(_) => 16,
-            Error::Unsupported(_) => 17,
-            Error::Message(_) => 18,
-            Error::PacketError(_) => 19,
-            Error::PacketIncomplete => 20,
-            Error::UnpadError => 21,
-            Error::PadError => 22,
-            Error::Utf8Error(_) => 23,
-            Error::ParseIntError(_) => 24,
-            Error::InvalidPacketContent(_) => 25,
-            Error::Ed25519SignatureError(_) => 26,
-            Error::MdcError => 27,
-        }
+impl<I> nom::error::ParseError<I> for Error {
+    fn from_error_kind(_input: I, kind: nom::error::ErrorKind) -> Self {
+        Self::ParsingError(kind)
+    }
+
+    fn append(input: I, kind: nom::error::ErrorKind, _other: Self) -> Self {
+        Self::from_error_kind(input, kind)
     }
 }
 
-impl<'a> From<nom::Err<&'a [u8]>> for Error {
-    fn from(err: nom::Err<&'a [u8]>) -> Error {
+impl<'a> From<nom::Err<(&'a [u8], nom::error::ErrorKind)>> for Error {
+    fn from(err: nom::Err<(&'a [u8], nom::error::ErrorKind)>) -> Error {
         match err {
             nom::Err::Incomplete(n) => Error::Incomplete(n),
-            _ => Error::ParsingError(err.into_error_kind()),
+            nom::Err::Error((_, e)) => Error::ParsingError(e),
+            nom::Err::Failure((_, e)) => Error::ParsingError(e),
         }
     }
 }
 
-impl<'a> From<nom::Err<nom::types::CompleteStr<'a>>> for Error {
-    fn from(err: nom::Err<nom::types::CompleteStr<'a>>) -> Error {
-        match err {
-            nom::Err::Incomplete(n) => Error::Incomplete(n),
-            _ => Error::ParsingError(err.into_error_kind()),
-        }
-    }
-}
-
-impl<'a> From<Error> for nom::Err<&'a [u8]> {
-    fn from(err: Error) -> nom::Err<&'a [u8]> {
-        nom::Err::Error(nom::Context::Code(
-            &b""[..],
-            nom::ErrorKind::Custom(err.as_code()),
-        ))
-    }
-}
-
-impl<'a> From<nom::Err<&'a str>> for Error {
-    fn from(err: nom::Err<&'a str>) -> Error {
-        Error::ParsingError(err.into_error_kind())
+impl<'a> From<Error> for nom::Err<(&'a [u8], nom::error::ErrorKind)> {
+    fn from(err: Error) -> nom::Err<(&'a [u8], nom::error::ErrorKind)> {
+        //FIXME was: nom::Err::Error((&b""[..], nom::error::ErrorKind::Custom(err.as_code())))
+        nom::Err::Error((&b""[..], nom::error::ErrorKind::Tag))
     }
 }
 

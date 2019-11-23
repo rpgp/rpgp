@@ -3,7 +3,10 @@ use std::{fmt, io};
 use chrono::{SubsecRound, Utc};
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use nom::{be_u8, le_u16, rest};
+use nom::{
+    combinator::rest,
+    number::streaming::{be_u8, le_u16},
+};
 
 use crate::errors::Result;
 use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
