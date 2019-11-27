@@ -42,7 +42,10 @@ fn dt_from_timestamp(ts: u32) -> DateTime<Utc> {
 fn signature_creation_time(i: &[u8]) -> IResult<&[u8], Subpacket, Error> {
     // 4-octet time field
     let (rest, date) = be_u32(i)?;
-    Ok((rest, Subpacket::SignatureCreationTime(dt_from_timestamp(date))))
+    Ok((
+        rest,
+        Subpacket::SignatureCreationTime(dt_from_timestamp(date)),
+    ))
 }
 
 // Parse an issuer subpacket
@@ -116,9 +119,9 @@ fn signature_expiration_time(input: &[u8]) -> IResult<&[u8], Subpacket, Error> {
 // Parse a exportable certification subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
 fn exportable_certification(input: &[u8]) -> IResult<&[u8], Subpacket, Error> {
-    map!(input, complete!(be_u8), |v| Subpacket::ExportableCertification(
-        v == 1
-    ))
+    map!(input, complete!(be_u8), |v| {
+        Subpacket::ExportableCertification(v == 1)
+    })
 }
 
 // Parse a revocable subpacket
@@ -329,7 +332,10 @@ fn subpackets(input: &[u8]) -> IResult<&[u8], Vec<Subpacket>, crate::errors::Err
     >> (p))))
 }
 
-fn actual_signature<'a>(input: &'a [u8], typ: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<Mpi>, crate::errors::Error> {
+fn actual_signature<'a>(
+    input: &'a [u8],
+    typ: &PublicKeyAlgorithm,
+) -> IResult<&'a [u8], Vec<Mpi>, crate::errors::Error> {
     switch!(input,
     value!(typ),
     &PublicKeyAlgorithm::RSA |
@@ -431,7 +437,10 @@ fn v4_parser(input: &[u8], packet_version: Version, version: SignatureVersion) -
     )))
 }
 
-fn invalid_version<'a>(_body: &'a [u8], version: SignatureVersion) -> IResult<&'a [u8], Signature, Error> {
+fn invalid_version<'a>(
+    _body: &'a [u8],
+    version: SignatureVersion,
+) -> IResult<&'a [u8], Signature, Error> {
     unimplemented!("unknown signature version {:?}", version);
 }
 

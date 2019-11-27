@@ -63,7 +63,10 @@ fn read_packet_len(input: &[u8]) -> IResult<&[u8], PacketLength, crate::errors::
     >> (len))
 }
 
-fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], ParseResult<'a>, crate::errors::Error> {
+fn read_partial_bodies<'a>(
+    input: &'a [u8],
+    len: usize,
+) -> IResult<&'a [u8], ParseResult<'a>, crate::errors::Error> {
     if input.len() < len {
         return Err(nom::Err::Incomplete(nom::Needed::Size(len - input.len())));
     }

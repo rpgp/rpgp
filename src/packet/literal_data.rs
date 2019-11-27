@@ -5,10 +5,11 @@ use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use nom::{
     combinator::rest,
     number::streaming::{be_u32, be_u8},
+    IResult,
 };
 use num_traits::FromPrimitive;
 
-use crate::errors::Result;
+use crate::errors::*;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
 use crate::packet::PacketTrait;
@@ -109,7 +110,8 @@ impl Serialize for LiteralData {
 }
 
 #[rustfmt::skip]
-named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
+fn parse(input: &[u8], packet_version: Version) -> IResult<&[u8], LiteralData, Error> {
+    do_parse!(input,
            mode: map_opt!(be_u8, DataMode::from_u8)
     >> name_len: be_u8
     >>     name: map!(take!(name_len), read_string)
@@ -121,8 +123,8 @@ named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
             created,
             file_name: name,
             data: data.to_vec(),
-    })
-));
+    }))
+}
 
 impl PacketTrait for LiteralData {
     fn packet_version(&self) -> Version {

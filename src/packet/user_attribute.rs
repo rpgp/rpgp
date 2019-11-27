@@ -6,7 +6,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{
     combinator::rest,
     number::streaming::{be_u8, le_u16},
-    IResult
+    IResult,
 };
 
 use crate::errors::Result;

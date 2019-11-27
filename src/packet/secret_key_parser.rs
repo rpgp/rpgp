@@ -2,7 +2,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use nom::{
     combinator::rest,
     number::streaming::{be_u16, be_u32, be_u8},
-    IResult
+    IResult,
 };
 use num_traits::FromPrimitive;
 
@@ -37,7 +37,6 @@ fn old_private_key_parser<'a>(input: &'a [u8], key_ver: &'a KeyVersion) -> IResu
     >>     params: call!(parse_pub_priv_fields, alg)
     >> (*key_ver, alg, created_at, Some(exp), params.0, params.1))
 }
-
 
 // Parse a private key packet (Tag 5)
 // Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3

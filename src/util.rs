@@ -45,7 +45,9 @@ pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8], errors::Error> {
     for (idx, item) in input.iter_indices() {
         if !is_base64_token(item) {
             if idx == 0 {
-                return Err(Err::Failure(errors::Error::ParsingError(nom::error::ErrorKind::AlphaNumeric)));
+                return Err(Err::Failure(errors::Error::ParsingError(
+                    nom::error::ErrorKind::AlphaNumeric,
+                )));
             } else {
                 return Ok((input.slice(idx..), input.slice(0..idx)));
             }

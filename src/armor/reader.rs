@@ -10,13 +10,12 @@ use crc24;
 use nom::{
     self,
     character::streaming::{digit1, line_ending, not_line_ending},
-    InputIter, InputLength, Slice,
-    IResult
+    IResult, InputIter, InputLength, Slice,
 };
 
 use crate::base64_decoder::Base64Decoder;
 use crate::base64_reader::Base64Reader;
-use crate::errors::Result;
+use crate::errors::*;
 use crate::line_reader::LineReader;
 use crate::ser::Serialize;
 
@@ -100,7 +99,7 @@ impl fmt::Display for PKCS1Type {
 }
 
 // Parses a single ascii armor header separator.
-fn armor_header_sep(input: &[u8]) -> IResult<&[u8], &[u8], crate::errors::Error> {
+fn armor_header_sep(input: &[u8]) -> IResult<&[u8], &[u8], Error> {
     tag!(input, "-----")
 }
 
@@ -113,9 +112,8 @@ fn parse_digit(x: &[u8]) -> Result<usize> {
 
 // Parses the type inside of an ascii armor header.
 #[rustfmt::skip]
-named!(
-    armor_header_type<BlockType>,
-    alt!(
+fn armor_header_type(input: &[u8]) -> IResult<&[u8], BlockType, Error> {
+    alt!(input,
         map!(tag!("PGP PUBLIC KEY BLOCK"), |_| BlockType::PublicKey)
       | map!(tag!("PGP PRIVATE KEY BLOCK"), |_| BlockType::PrivateKey)
       | do_parse!(
@@ -156,12 +154,12 @@ named!(
       // OpenSSH Private Key File
       | map!(tag!("OPENSSH PRIVATE KEY"), |_| BlockType::PrivateKeyOpenssh)
     )
-);
+}
 
 // Parses a single armor header line.
-named!(
-    armor_header_line<BlockType>,
+fn armor_header_line(input: &[u8]) -> IResult<&[u8], BlockType, Error> {
     do_parse!(
+        input,
         armor_header_sep
             >> tag!("BEGIN ")
             >> typ: armor_header_type
@@ -169,7 +167,7 @@ named!(
             >> line_ending
             >> (typ)
     )
-);
+}
 
 /// Recognizes one or more key tokens.
 fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
@@ -197,9 +195,9 @@ fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
 }
 
 // Parses a single key value pair, for the header.
-named!(
-    key_value_pair<(&str, &str)>,
+fn key_value_pair(input: &[u8]) -> IResult<&[u8], (&str, &str), Error> {
     do_parse!(
+        input,
         key: map_res!(key_token, str::from_utf8)
             >> value:
                 map_res!(
@@ -211,32 +209,32 @@ named!(
                 )
             >> (key, value)
     )
-);
+}
 
 // Parses a list of key value pairs.
-named!(
-    key_value_pairs<Vec<(&str, &str)>>,
-    many0!(complete!(key_value_pair))
-);
+fn key_value_pairs(input: &[u8]) -> IResult<&[u8], Vec<(&str, &str)>, Error> {
+    many0!(input, complete!(key_value_pair))
+}
 
 // Parses the full armor header.
-named!(
-    armor_headers<BTreeMap<String, String>>,
+fn armor_headers(input: &[u8]) -> IResult<&[u8], BTreeMap<String, String>, Error> {
     do_parse!(
+        input,
         pairs: key_value_pairs
             >> (pairs
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect())
     )
-);
+}
 
 // Armor Header
-named!(armor_header(&[u8]) -> (BlockType, BTreeMap<String, String>), do_parse!(
-    typ:     armor_header_line >>
-    headers: armor_headers     >>
-    (typ, headers)
-));
+fn armor_header(input: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, String>), Error> {
+    do_parse!(
+        input,
+        typ: armor_header_line >> headers: armor_headers >> (typ, headers)
+    )
+}
 
 /// Read the checksum from an base64 encoded buffer.
 fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
@@ -254,15 +252,17 @@ fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
 }
 
 #[rustfmt::skip]
-named!(header_parser(&[u8]) -> (BlockType, BTreeMap<String, String>), do_parse!(
+fn header_parser(input: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, String>), crate::errors::Error> {
+    do_parse!(input,
                take_until!("-----")
     >>   head: armor_header
     >>         many0!(line_ending)
-    >> (head.0, head.1)
-));
+    >> (head.0, head.1))
+}
 
 #[rustfmt::skip]
-named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
+fn footer_parser(input: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType), crate::errors::Error> {
+    do_parse!(input,
            crc: alt!(do_parse!(
                             tag!("=")
                     >> crc: take!(4)
@@ -278,19 +278,20 @@ named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
                    )
                 )
      >> footer: armor_footer_line
-     >> (crc, footer)
-));
+     >> (crc, footer))
+}
 
 // Parses a single armor footer line
 #[rustfmt::skip]
-named!(armor_footer_line<BlockType>, do_parse!(
+fn armor_footer_line(input: &[u8]) -> IResult<&[u8], BlockType, Error> {
+    do_parse!(input,
             // Only 3, because we parsed two already in the `footer_parser`.
             tag!("---END ")
     >> typ: armor_header_type
     >>      armor_header_sep
     >>      opt!(complete!(line_ending))
-    >> (typ)
-));
+    >> (typ))
+}
 
 /// Streaming based ascii armor parsing.
 pub struct Dearmor<R> {

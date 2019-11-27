@@ -1,6 +1,9 @@
 use std::io;
 
-use nom::{IResult, {combinator::rest, number::streaming::be_u8}};
+use nom::{
+    IResult,
+    {combinator::rest, number::streaming::be_u8},
+};
 use num_traits::FromPrimitive;
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;

@@ -1,12 +1,15 @@
 use std::io;
 
-use nom::{combinator::rest_len, number::streaming::be_u8};
+use nom::{
+    IResult,
+    {combinator::rest_len, number::streaming::be_u8},
+};
 use num_traits::FromPrimitive;
 use zeroize::Zeroize;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::*;
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -76,7 +79,8 @@ impl Serialize for SecretParams {
 
 // Parse possibly encrypted private fields of a key.
 #[rustfmt::skip]
-named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<&[u8]>)>, do_parse!(
+fn parse_secret_fields(input: &[u8], alg: PublicKeyAlgorithm) -> IResult<&[u8], (SecretParams, Option<&[u8]>), Error> {
+    do_parse!(input,
           s2k_typ: be_u8
     >> enc_params: switch!(value!(s2k_typ),
                    // 0 is no encryption
@@ -131,5 +135,5 @@ named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<
             }
         };
         (res, checksum)
-    })
-));
+               }))
+}

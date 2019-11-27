@@ -1,11 +1,11 @@
 use std::io;
 
-use nom::number::streaming::be_u8;
+use nom::{number::streaming::be_u8, IResult};
 use num_traits::FromPrimitive;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::*;
 use crate::packet::signature::SignatureType;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
@@ -55,7 +55,8 @@ impl OnePassSignature {
 }
 
 #[rustfmt::skip]
-named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
+fn parse(input: &[u8], packet_version: Version) -> IResult<&[u8], OnePassSignature, Error> {
+    do_parse!(input,
          version: be_u8
     >>       typ: map_opt!(be_u8, SignatureType::from_u8)
     >>      hash: map_opt!(be_u8, HashAlgorithm::from_u8)
@@ -70,8 +71,8 @@ named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
         pub_algorithm: pub_alg,
         key_id,
         last,
-    })
-));
+    }))
+}
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

@@ -1,6 +1,6 @@
 use std::io;
 
-use nom::{IResult, number::streaming::be_u8};
+use nom::{number::streaming::be_u8, IResult};
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
 
@@ -184,7 +184,7 @@ fn has_count(typ: StringToKeyType) -> bool {
 }
 
 #[rustfmt::skip]
-pub fn s2k_parser(input: &[u8], typ: StringToKey) -> IResult<&[u8], StringToKey, crate::errors::Error> {
+pub fn s2k_parser(input: &[u8]) -> IResult<&[u8], StringToKey, crate::errors::Error> {
     do_parse!(input,
          typ: map_opt!(be_u8, StringToKeyType::from_u8)
     >>  hash: map_opt!(be_u8, HashAlgorithm::from_u8)
