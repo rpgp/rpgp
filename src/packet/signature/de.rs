@@ -15,7 +15,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::de::Deserialize;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::packet::signature::types::*;
 use crate::types::{
     mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
