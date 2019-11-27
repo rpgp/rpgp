@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
-use nom::number::streaming::{be_u16, be_u32, be_u8};
+use nom::{IResult, number::streaming::{be_u16, be_u32, be_u8}};
 use num_traits::FromPrimitive;
 
 use crate::crypto::ecc_curve::ecc_curve_from_oid;
@@ -13,7 +13,8 @@ fn to_owned(mref: MpiRef<'_>) -> Mpi {
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 #[rustfmt::skip]
-named!(ecdsa<PublicParams>, do_parse!(
+fn ecdsa(input: &[u8]) -> IResult<&[u8], PublicParams, crate::errors::Error> {
+    do_parse!(input,
     // a one-octet size of the following field
          len: be_u8
     // octets representing a curve OID
@@ -23,12 +24,13 @@ named!(ecdsa<PublicParams>, do_parse!(
     >> (PublicParams::ECDSA {
         curve,
         p: p.to_owned(),
-    })
-));
+    }))
+}
 
 // https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
 #[rustfmt::skip]
-named!(eddsa<PublicParams>, do_parse!(
+fn eddsa(input: &[u8]) -> IResult<&[u8], PublicParams, crate::errors::Error> {
+    do_parse!(input,
     // a one-octet size of the following field
          len: be_u8
     // octets representing a curve OID
@@ -38,12 +40,13 @@ named!(eddsa<PublicParams>, do_parse!(
     >> (PublicParams::EdDSA {
         curve,
         q: q.to_owned(),
-    })
-));
+    }))
+}
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 #[rustfmt::skip]
-named!(ecdh<PublicParams>, do_parse!(
+fn ecdh(input: &[u8]) -> IResult<&[u8], PublicParams, crate::errors::Error> {
+    do_parse!(input,
     // a one-octet size of the following field
           len: be_u8
     // octets representing a curve OID
@@ -64,38 +67,42 @@ named!(ecdh<PublicParams>, do_parse!(
         p: p.to_owned(),
         hash: hash,
         alg_sym: alg_sym,
-    })
-));
+    }))
+}
 
 #[rustfmt::skip]
-named!(elgamal<PublicParams>, do_parse!(
+fn elgamal(input: &[u8]) -> IResult<&[u8], PublicParams, crate::errors::Error> {
+    do_parse!(input,
     // MPI of Elgamal prime p
         p: map!(mpi, to_owned)
     // MPI of Elgamal group generator g
     >> g: map!(mpi, to_owned)
     // MPI of Elgamal public key value y (= g**x mod p where x is secret)
     >> y: map!(mpi, to_owned)
-    >> (PublicParams::Elgamal{ p, g, y })
-));
+    >> (PublicParams::Elgamal{ p, g, y }))
+}
 
 #[rustfmt::skip]
-named!(dsa<PublicParams>, do_parse!(
+fn dsa(input: &[u8]) -> IResult<&[u8], PublicParams, crate::errors::Error> {
+    do_parse!(input,
        p: map!(mpi, to_owned)
     >> q: map!(mpi, to_owned)
     >> g: map!(mpi, to_owned)
     >> y: map!(mpi, to_owned)
-    >> (PublicParams::DSA { p, q, g, y })
-));
+    >> (PublicParams::DSA { p, q, g, y }))
+}
 
 #[rustfmt::skip]
-named!(rsa<PublicParams>, do_parse!(
+fn rsa(input: &[u8]) -> IResult<&[u8], PublicParams, crate::errors::Error> {
+    do_parse!(input,
        n: map!(mpi, to_owned)
     >> e: map!(mpi, to_owned)
-    >> (PublicParams::RSA { n, e })
-));
+    >> (PublicParams::RSA { n, e }))
+}
 
 // Parse the fields of a public key.
-named_args!(pub parse_pub_fields(typ: PublicKeyAlgorithm) <PublicParams>, switch!(
+pub fn parse_pub_fields(input: &[u8], typ: PublicKeyAlgorithm) -> IResult<&[u8], PublicParams, crate::errors::Error> {
+    switch!(input,
     value!(typ),
     PublicKeyAlgorithm::RSA        |
     PublicKeyAlgorithm::RSAEncrypt |
@@ -107,7 +114,8 @@ named_args!(pub parse_pub_fields(typ: PublicKeyAlgorithm) <PublicParams>, switch
     PublicKeyAlgorithm::ElgamalSign => call!(elgamal) |
     PublicKeyAlgorithm::EdDSA       => call!(eddsa)
     // &PublicKeyAlgorithm::DiffieHellman =>
-));
+    )
+}
 
 named_args!(new_public_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
        created_at: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))

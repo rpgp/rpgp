@@ -1,6 +1,6 @@
 use std::io;
 
-use nom::{combinator::rest, number::streaming::be_u8};
+use nom::{IResult, {combinator::rest, number::streaming::be_u8}};
 use num_traits::FromPrimitive;
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -80,7 +80,8 @@ impl SymKeyEncryptedSessionKey {
 }
 
 #[rustfmt::skip]
-named_args!(parse(packet_version: Version) <SymKeyEncryptedSessionKey>, do_parse!(
+fn parse<'a>(input: &[u8], packet_version: Version) -> IResult<&[u8], SymKeyEncryptedSessionKey, crate::errors::Error> {
+    do_parse!(input,
               version: be_u8
     >>        sym_alg: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
     >>            s2k: s2k_parser
@@ -99,8 +100,8 @@ named_args!(parse(packet_version: Version) <SymKeyEncryptedSessionKey>, do_parse
             s2k,
             encrypted_key,
         }
-    })
-));
+    }))
+}
 
 impl Serialize for SymKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

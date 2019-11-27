@@ -36,19 +36,16 @@ pub fn is_base64_token(c: u8) -> bool {
 }
 
 /// Recognizes one or more body tokens
-pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
+pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8], errors::Error> {
     let input_length = input.input_len();
     if input_length == 0 {
-        return Err(Err::Incomplete(nom::Needed::Unknown));
+        return Err(Err::Error(errors::Error::Incomplete(nom::Needed::Unknown)));
     }
 
     for (idx, item) in input.iter_indices() {
         if !is_base64_token(item) {
             if idx == 0 {
-                return Err(Err::Error(error_position!(
-                    input,
-                    nom::error::ErrorKind::AlphaNumeric
-                )));
+                return Err(Err::Failure(errors::Error::ParsingError(nom::error::ErrorKind::AlphaNumeric)));
             } else {
                 return Ok((input.slice(idx..), input.slice(0..idx)));
             }
@@ -98,7 +95,8 @@ where
 
 // Parse a packet length.
 #[rustfmt::skip]
-named!(pub packet_length<usize>, do_parse!(
+pub fn packet_length(input: &[u8]) -> IResult<&[u8], usize, crate::errors::Error> {
+    do_parse!(input,
        olen: be_u8
     >>  len: switch!(value!(olen),
                      // One-Octet Lengths
@@ -110,8 +108,8 @@ named!(pub packet_length<usize>, do_parse!(
                      // Five-Octet Lengths
                      255       => map!(be_u32, u32_as_usize)
     )
-    >> (len)
-));
+    >> (len))
+}
 
 /// Write packet length, including the prefix.
 pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
@@ -140,7 +138,7 @@ pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Resu
 /// Return the length of the remaining input.
 // Adapted from https://github.com/Geal/nom/pull/684
 #[inline]
-pub fn rest_len<T>(input: T) -> IResult<T, usize>
+pub fn rest_len<T>(input: T) -> IResult<T, usize, errors::Error>
 where
     T: Slice<Range<usize>> + Slice<RangeFrom<usize>> + Slice<RangeTo<usize>>,
     T: InputLength,

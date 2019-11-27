@@ -1,6 +1,6 @@
 use std::io;
 
-use nom::number::streaming::be_u8;
+use nom::{IResult, number::streaming::be_u8};
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
 
@@ -184,7 +184,8 @@ fn has_count(typ: StringToKeyType) -> bool {
 }
 
 #[rustfmt::skip]
-named!(pub s2k_parser<StringToKey>, do_parse!(
+pub fn s2k_parser(input: &[u8], typ: StringToKey) -> IResult<&[u8], StringToKey, crate::errors::Error> {
+    do_parse!(input,
          typ: map_opt!(be_u8, StringToKeyType::from_u8)
     >>  hash: map_opt!(be_u8, HashAlgorithm::from_u8)
     >>  salt: cond!(has_salt(typ), map!(take!(8), |v| v.to_vec()))
@@ -194,8 +195,8 @@ named!(pub s2k_parser<StringToKey>, do_parse!(
         hash,
         salt,
         count,
-    })
-));
+    }))
+}
 
 impl Serialize for StringToKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

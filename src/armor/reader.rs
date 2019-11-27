@@ -11,6 +11,7 @@ use nom::{
     self,
     character::streaming::{digit1, line_ending, not_line_ending},
     InputIter, InputLength, Slice,
+    IResult
 };
 
 use crate::base64_decoder::Base64Decoder;
@@ -99,7 +100,9 @@ impl fmt::Display for PKCS1Type {
 }
 
 // Parses a single ascii armor header separator.
-named!(armor_header_sep, tag!("-----"));
+fn armor_header_sep(input: &[u8]) -> IResult<&[u8], &[u8], crate::errors::Error> {
+    tag!(input, "-----")
+}
 
 #[inline]
 fn parse_digit(x: &[u8]) -> Result<usize> {

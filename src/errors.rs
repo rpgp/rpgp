@@ -17,6 +17,8 @@ pub const MPI_TOO_LONG: u32 = 1000;
 pub enum Error {
     #[fail(display = "failed to parse")]
     ParsingError(nom::error::ErrorKind),
+    #[fail(display = "MPI is too long")]
+    MpiTooLong,
     #[fail(display = "invalid input")]
     InvalidInput,
     #[fail(display = "incomplete input: {:?}", _0)]
@@ -80,6 +82,12 @@ impl<I> nom::error::ParseError<I> for Error {
 
     fn append(input: I, kind: nom::error::ErrorKind, _other: Self) -> Self {
         Self::from_error_kind(input, kind)
+    }
+}
+
+impl nom::ErrorConvert<Error> for (((&[u8], usize), nom::error::ErrorKind)) {
+    fn convert(self) -> Error {
+        Error::ParsingError(self.1)
     }
 }
 

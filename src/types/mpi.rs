@@ -5,7 +5,7 @@ use nom::{self, number::streaming::be_u16, InputIter, InputTake};
 use num_bigint::BigUint;
 use zeroize::Zeroize;
 
-use crate::errors;
+use crate::errors::*;
 use crate::ser::Serialize;
 use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
@@ -28,18 +28,14 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 /// );
 /// ```
 ///
-pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>> {
+pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>, crate::errors::Error> {
     let (number, len) = be_u16(input)?;
 
     let bits = u32::from(len);
     let len_actual = ((bits + 7) >> 3) as u32;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
-        Err(nom::Err::Failure(error_position!(
-            input,
-            //nom::error::ErrorKind::Custom(errors::MPI_TOO_LONG)
-            nom::error::ErrorKind::Tag
-        )))
+        Err(nom::Err::Failure(Error::MpiTooLong))
     } else {
         // same as take!
         let cnt = len_actual as usize;
@@ -120,7 +116,7 @@ impl<'a> MpiRef<'a> {
         Mpi(self.0.to_owned())
     }
 
-    pub fn parse(slice: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>> {
+    pub fn parse(slice: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>, crate::errors::Error> {
         mpi(slice)
     }
 
@@ -130,13 +126,13 @@ impl<'a> MpiRef<'a> {
 }
 
 impl Serialize for Mpi {
-    fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
+    fn to_writer<W: io::Write>(&self, w: &mut W) -> Result<()> {
         MpiRef(&self.0).to_writer(w)
     }
 }
 
 impl<'a> Serialize for MpiRef<'a> {
-    fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
+    fn to_writer<W: io::Write>(&self, w: &mut W) -> Result<()> {
         let size = bit_size(self.0);
         w.write_u16::<BigEndian>(size as u16)?;
         w.write_all(self.0)?;

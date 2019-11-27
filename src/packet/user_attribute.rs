@@ -6,6 +6,7 @@ use byteorder::{LittleEndian, WriteBytesExt};
 use nom::{
     combinator::rest,
     number::streaming::{be_u8, le_u16},
+    IResult
 };
 
 use crate::errors::Result;
@@ -95,7 +96,8 @@ impl fmt::Display for UserAttribute {
 }
 
 #[rustfmt::skip]
-named_args!(image(packet_version: Version) <UserAttribute>, do_parse!(
+fn image(input: &[u8], packet_version: Version) -> IResult<&[u8], UserAttribute, crate::errors::Error> {
+    do_parse!(input,
     // little endian, for historical reasons..
        header_len: le_u16
     >>     header: take!(header_len - 2)
@@ -105,11 +107,12 @@ named_args!(image(packet_version: Version) <UserAttribute>, do_parse!(
         packet_version,
         header: header.to_vec(),
         data: img.to_vec()
-    })
-));
+    }))
+}
 
 #[rustfmt::skip]
-named_args!(parse(packet_version: Version) <UserAttribute>, do_parse!(
+fn parse(input: &[u8], packet_version: Version) -> IResult<&[u8], UserAttribute, crate::errors::Error> {
+    do_parse!(input,
         len: packet_length
     >>  typ: be_u8
     >> attr: flat_map!(
@@ -125,8 +128,8 @@ named_args!(parse(packet_version: Version) <UserAttribute>, do_parse!(
     >> ({
         debug!("attr with len {}", len);
         attr
-    })
-));
+    }))
+}
 
 impl Serialize for UserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

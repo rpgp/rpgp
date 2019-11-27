@@ -1,7 +1,7 @@
 use std::io;
 
 use byteorder::{BigEndian, ByteOrder};
-use nom::number::streaming::be_u8;
+use nom::{IResult, number::streaming::be_u8};
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
 
@@ -76,7 +76,8 @@ impl PublicKeyEncryptedSessionKey {
 }
 
 #[rustfmt::skip]
-named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Mpi>>, switch!(
+fn parse_mpis<'a>(input: &'a [u8], alg: &PublicKeyAlgorithm) -> IResult<&'a [u8], Vec<Mpi>, crate::errors::Error> {
+    switch!(input,
     value!(alg),
     &PublicKeyAlgorithm::RSA |
     &PublicKeyAlgorithm::RSASign |
@@ -97,12 +98,13 @@ named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Mpi>>, switch!(
         >> ({
             vec![a.to_owned(), b.into()]
         })
-    )
-));
+    ))
+}
 
 // Parses a Public-Key Encrypted Session Key Packets
 #[rustfmt::skip]
-named_args!(parse(packet_version: Version) <PublicKeyEncryptedSessionKey>, do_parse!(
+fn parse(input: &[u8], packet_version: Version) -> IResult<&[u8], PublicKeyEncryptedSessionKey, crate::errors::Error> {
+    do_parse!(input,
     // version, only 3 is allowed
        version: be_u8
     // the key id this maps to
@@ -117,8 +119,8 @@ named_args!(parse(packet_version: Version) <PublicKeyEncryptedSessionKey>, do_pa
         id,
         algorithm: alg,
         mpis,
-    })
-));
+    }))
+}
 
 impl Serialize for PublicKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

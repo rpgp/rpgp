@@ -11,6 +11,7 @@ use crate::errors::Result;
 use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
+use nom::IResult;
 
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 #[zeroize(drop)]
@@ -302,7 +303,8 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
 }
 
 #[rustfmt::skip]
-named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef<'_>>, switch!(value!(alg),
+fn parse_secret_params(input: &[u8], alg: PublicKeyAlgorithm) -> IResult<&[u8], PlainSecretParamsRef<'_>, crate::errors::Error> {
+    switch!(input, value!(alg),
     PublicKeyAlgorithm::RSA        |
     PublicKeyAlgorithm::RSAEncrypt |
     PublicKeyAlgorithm::RSASign => call!(rsa_secret_params)                                |
@@ -311,14 +313,17 @@ named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef<'
     PublicKeyAlgorithm::ECDH    => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDH(x)))  |
     PublicKeyAlgorithm::ECDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDSA(x))) |
     PublicKeyAlgorithm::EdDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::EdDSA(x)))
-));
+    )
+}
 
 // Parse the decrpyted private params of an RSA private key.
 #[rustfmt::skip]
-named!(rsa_secret_params<PlainSecretParamsRef<'_>>, do_parse!(
-       d: mpi
-    >> p: mpi
-    >> q: mpi
-    >> u: mpi
-    >> (PlainSecretParamsRef::RSA { d, p, q, u })
-));
+fn rsa_secret_params(input: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>, crate::errors::Error> {
+    do_parse!(input,
+           d: mpi
+        >> p: mpi
+        >> q: mpi
+        >> u: mpi
+        >> (PlainSecretParamsRef::RSA { d, p, q, u })
+    )
+}

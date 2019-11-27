@@ -2,6 +2,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use nom::{
     combinator::rest,
     number::streaming::{be_u16, be_u32, be_u8},
+    IResult
 };
 use num_traits::FromPrimitive;
 
@@ -11,33 +12,38 @@ use crate::types::{KeyVersion, PublicParams, SecretParams};
 
 // Parse the whole private key, both public and private fields.
 #[rustfmt::skip]
-named_args!(parse_pub_priv_fields(typ: PublicKeyAlgorithm) <(PublicParams, SecretParams)>, do_parse!(
+fn parse_pub_priv_fields<'a>(input: &'a [u8], typ: PublicKeyAlgorithm) -> IResult<&'a [u8], (PublicParams, SecretParams), crate::errors::Error> {
+  do_parse!(input,
       pub_params: call!(parse_pub_fields, typ)
   >> priv_params: map_res!(rest, |v| SecretParams::from_slice(v, typ))
-  >> (pub_params, priv_params)
-));
+  >> (pub_params, priv_params))
+}
 
 #[rustfmt::skip]
-named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
+fn new_private_key_parser<'a>(input: &'a [u8], key_ver: &'a KeyVersion) -> IResult<&'a [u8], (KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams), crate::errors::Error> {
+    do_parse!(input,
         created_at: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
     >>         alg: map_opt!(be_u8, |v| PublicKeyAlgorithm::from_u8(v))
     >>      params: call!(parse_pub_priv_fields, alg)
-    >> (*key_ver, alg, created_at, None, params.0, params.1)
-));
+    >> (*key_ver, alg, created_at, None, params.0, params.1))
+}
 
 #[rustfmt::skip]
-named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
+fn old_private_key_parser<'a>(input: &'a [u8], key_ver: &'a KeyVersion) -> IResult<&'a [u8], (KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams), crate::errors::Error> {
+    do_parse!(input,
        created_at: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
     >>        exp: be_u16
     >>        alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>     params: call!(parse_pub_priv_fields, alg)
-    >> (*key_ver, alg, created_at, Some(exp), params.0, params.1)
-));
+    >> (*key_ver, alg, created_at, Some(exp), params.0, params.1))
+}
+
 
 // Parse a private key packet (Tag 5)
 // Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 #[rustfmt::skip]
-named!(pub(crate) parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
+pub(crate) fn parse(input: &[u8]) -> IResult<&[u8], (KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams), crate::errors::Error> {
+    do_parse!(input,
        key_ver: map_opt!(be_u8, KeyVersion::from_u8)
     >>     key: switch!(value!(key_ver),
                        KeyVersion::V2 => call!(
@@ -50,5 +56,5 @@ named!(pub(crate) parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u
                            new_private_key_parser, &key_ver
                        )
                 )
-    >> (key)
-));
+    >> (key))
+}
