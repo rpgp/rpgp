@@ -45,7 +45,8 @@ named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
 )));
 
 #[rustfmt::skip]
-named!(read_packet_len(&[u8]) -> PacketLength, do_parse!(
+fn read_packet_len(input: &[u8]) -> IResult<&[u8], PacketLength> {
+    do_parse!(input,
        olen: be_u8
     >>  len: switch!(value!(olen),
                // One-Octet Lengths
@@ -59,8 +60,8 @@ named!(read_packet_len(&[u8]) -> PacketLength, do_parse!(
                // Five-Octet Lengths
                255       => map!(be_u32, |v| u32_as_usize(v).into())
     )
-    >> (len)
-));
+    >> (len))
+}
 
 fn read_partial_bodies<'a>(input: &'a [u8], len: usize) -> IResult<&'a [u8], ParseResult<'a>> {
     if input.len() < len {
