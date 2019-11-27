@@ -93,6 +93,12 @@ impl<'a> From<nom::Err<(&'a [u8], nom::error::ErrorKind)>> for Error {
     }
 }
 
+impl<'a> From<Error> for nom::Err<Error> {
+    fn from(err: Error) -> nom::Err<Error> {
+        nom::Err::Error(err)
+    }
+}
+
 impl<'a> From<Error> for nom::Err<(&'a [u8], nom::error::ErrorKind)> {
     fn from(err: Error) -> nom::Err<(&'a [u8], nom::error::ErrorKind)> {
         //FIXME was: nom::Err::Error((&b""[..], nom::error::ErrorKind::Custom(err.as_code())))
