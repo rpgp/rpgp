@@ -39,14 +39,11 @@ fn dt_from_timestamp(ts: u32) -> DateTime<Utc> {
 
 // Parse a signature creation time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
-named!(
-    signature_creation_time<Subpacket>,
-    map!(
-        // 4-octet time field
-        be_u32,
-        |date| Subpacket::SignatureCreationTime(dt_from_timestamp(date))
-    )
-);
+fn signature_creation_time(i: &[u8]) -> IResult<&[u8], Subpacket> {
+    // 4-octet time field
+    let (rest, date) = be_u32(i)?;
+    Ok((rest, Subpacket::SignatureCreationTime(dt_from_timestamp(date))))
+}
 
 // Parse an issuer subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
