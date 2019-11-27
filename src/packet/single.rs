@@ -23,7 +23,8 @@ use crate::util::{u16_as_usize, u32_as_usize, u8_as_usize};
 // Parses an old format packet header
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
 #[rustfmt::skip]
-named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!(
+fn old_packet_header(input: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
+    bits!(input, do_parse!(
     // First bit is always 1
             tag_bits!(1u8, 1)
     // Version: 0
@@ -41,8 +42,8 @@ named!(old_packet_header(&[u8]) -> (Version, Tag, PacketLength), bits!(do_parse!
         2 => map!(take_bits!(32u8), |val| u32_as_usize(val).into()) |
         3 => value!(PacketLength::Indeterminated)
     )
-    >> ((ver, tag, len))
-)));
+    >> ((ver, tag, len))))
+}
 
 #[rustfmt::skip]
 fn read_packet_len(input: &[u8]) -> IResult<&[u8], PacketLength> {
