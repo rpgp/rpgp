@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io;
 
+use chrono::{DateTime, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::armor;
@@ -74,6 +75,11 @@ impl SignedSecretKey {
             secret_subkeys,
         }
     }
+
+    pub fn expires_at(&self) -> Option<DateTime<Utc>> {
+        self.details.expires_at(self.primary_key.created_at())
+    }
+
     fn verify_public_subkeys(&self) -> Result<()> {
         for subkey in &self.public_subkeys {
             subkey.verify(&self.primary_key)?;

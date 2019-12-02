@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::io;
 
+use chrono::{DateTime, Duration, Utc};
 use smallvec::SmallVec;
 
 use crate::composed::key::KeyDetails;
@@ -50,6 +51,30 @@ impl SignedKeyDetails {
             direct_signatures,
             users,
             user_attributes,
+        }
+    }
+
+    /// Get the key expiration time.
+    ///
+    /// This method finds the signature with the maximum
+    /// `KeyExpirationTime` offset (which should only occur in
+    /// self-signed signatures) and calculates the expiration time.
+    /// The function returns `None` if the key has an infinite
+    /// validity.
+    pub(crate) fn expires_at(&self, created_at: &DateTime<Utc>) -> Option<DateTime<Utc>> {
+        // Find the maximum key_expiration_time in all signatures of all user ids.
+        if let Some(tm) = self
+            .users
+            .iter()
+            .flat_map(|user| &user.signatures)
+            .filter_map(|sig| sig.key_expiration_time())
+            .max()
+        {
+            let key_expiration = Duration::seconds(tm.timestamp());
+            let expires_at = *created_at + key_expiration;
+            Some(expires_at)
+        } else {
+            None
         }
     }
 
