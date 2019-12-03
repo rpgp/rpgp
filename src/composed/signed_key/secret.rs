@@ -76,8 +76,10 @@ impl SignedSecretKey {
         }
     }
 
+    /// Get the secret key expiration as a date.
     pub fn expires_at(&self) -> Option<DateTime<Utc>> {
-        self.details.expires_at(self.primary_key.created_at())
+        let expiration = self.details.key_expiration_time()?;
+        Some(*self.primary_key.created_at() + expiration)
     }
 
     fn verify_public_subkeys(&self) -> Result<()> {
