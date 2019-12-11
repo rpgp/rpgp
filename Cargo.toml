@@ -17,7 +17,7 @@ edition = "2018"
 
 [dependencies]
 crc24 = "^0.1"
-base64 = "^0.10.1"
+base64 = "^0.11.0"
 byteorder = "^1.2"
 chrono = "^0.4"
 failure = "^0.1"
@@ -35,35 +35,35 @@ des = "^0.3"
 block-modes = "^0.3"
 hex = "^0.4"
 cfb-mode = "^0.3.2"
-num-derive = "0.2.3"
+num-derive = "0.3.0"
 num-traits = "0.2.6"
 lazy_static = "1.2.0"
 block-padding = "0.1.2"
 log = "0.4.6"
 try_from = "^0.3"
-derive_builder = "0.7.0"
+derive_builder = "0.9.0"
 bitfield = "0.13.1"
 sha3 = "0.8.1"
-rand = "0.6"
-smallvec = "0.6.9"
+rand = "0.7"
+smallvec = "1.0.0"
 cast5 = "0.6.0"
-rsa = "^0.1.4"
+rsa = "^0.2.0"
 nom = "^4.2"
-zeroize = { version = "0.10.1", features = ["zeroize_derive"] }
+zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 
 [dependencies.x25519-dalek]
-version = "0.5"
+version = "0.6"
 default-features = false
 features = ["std", "u64_backend"]
 
 [dependencies.ed25519-dalek]
-version = "1.0.0-pre.1"
+version = "1.0.0-pre.3"
 default-features = false
 features = ["std", "u64_backend"]
 
 [dependencies.num-bigint]
-version = "0.5"
+version = "0.6"
 features = ["rand", "i128", "u64_digit", "prime", "zeroize"]
 package = "num-bigint-dig"
 
@@ -87,15 +87,14 @@ serde_json = "^1.0"
 glob = "^0.3"
 regex = "^1.1"
 pretty_assertions = "0.6"
-rand_xorshift = "0.1"
-rand_chacha = "0.1"
+rand_xorshift = "0.2"
+rand_chacha = "0.2"
 pretty_env_logger = "0.3"
 
 [features]
 default = ["ringbuf"]
 ringbuf = ["buf_redux/default"]
 nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly", "clear_on_drop/nightly"]
-avx2 = ["ed25519-dalek/avx2_backend"]
 profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
 wasm = ["chrono/wasmbind", "nightly", "rand/wasm-bindgen"]
