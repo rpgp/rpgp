@@ -20,7 +20,7 @@ pub fn write(
     // write armor header
     writer.write_all(&b"-----BEGIN "[..])?;
     typ.to_writer(writer)?;
-    writer.write_all(&b"-----\n"[..])?;
+    writer.write_all(&b"-----\r\n"[..])?;
 
     // write armor headers
     if let Some(headers) = headers {
@@ -28,11 +28,11 @@ pub fn write(
             writer.write_all(key.as_bytes())?;
             writer.write_all(&b": "[..])?;
             writer.write_all(value.as_bytes())?;
-            writer.write_all(&b"\n"[..])?;
+            writer.write_all(&b"\r\n"[..])?;
         }
     }
 
-    writer.write_all(&b"\n"[..])?;
+    writer.write_all(&b"\r\n"[..])?;
 
     // write body
     let mut crc_hasher = Crc24Hasher::init(0x00B7_04CE);
@@ -60,9 +60,9 @@ pub fn write(
     writer.write_all(crc_enc.as_bytes())?;
 
     // write footer
-    writer.write_all(&b"\n-----END "[..])?;
+    writer.write_all(&b"\r\n-----END "[..])?;
     typ.to_writer(writer)?;
-    writer.write_all(&b"-----\n"[..])?;
+    writer.write_all(&b"-----\r\n"[..])?;
 
     Ok(())
 }
