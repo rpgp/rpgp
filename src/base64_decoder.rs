@@ -1,6 +1,5 @@
 //! # base64 decoder module
 
-use std::error::Error;
 use std::fmt;
 use std::io::{self, BufRead, Read, Seek};
 
@@ -148,7 +147,7 @@ fn try_decode_config_slice<T: ?Sized + AsRef<[u8]>>(
 
 // why, why why????
 fn copy_err(err: &io::Error) -> io::Error {
-    io::Error::new(err.kind(), err.description())
+    io::Error::new(err.kind(), err.to_string())
 }
 
 #[cfg(test)]

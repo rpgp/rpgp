@@ -20,7 +20,6 @@ crc24 = "^0.1"
 base64 = "^0.11.0"
 byteorder = "^1.2"
 chrono = "^0.4"
-failure = "^0.1"
 circular = "^0.3"
 sha-1 = "^0.8"
 sha2 = "^0.8"
@@ -51,6 +50,7 @@ rsa = "^0.2.0"
 nom = "^4.2"
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
+thiserror = "1.0.9"
 
 [dependencies.x25519-dalek]
 version = "0.6"

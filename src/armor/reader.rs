@@ -219,7 +219,7 @@ named!(
         pairs: key_value_pairs
             >> (pairs
                 .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
                 .collect())
     )
 );
