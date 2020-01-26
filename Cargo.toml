@@ -102,14 +102,3 @@ wasm = ["chrono/wasmbind", "nightly", "rand/wasm-bindgen"]
 [profile.bench]
 debug = true
 
-[profile.release]
-debug = 0
-debug-assertions = false
-opt-level = "s"
-panic = "abort"
-
-
-[workspace]
-members = [
-  "pgp-ffi"
-]
