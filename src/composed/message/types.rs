@@ -263,7 +263,7 @@ impl Message {
             .collect::<Result<_>>()?;
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(esk, alg, session_key)
+        self.encrypt_symmetric(rng, esk, alg, session_key)
     }
 
     /// Encrytp the message using the given password.
@@ -290,12 +290,13 @@ impl Message {
         )?);
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(vec![skesk], alg, session_key)
+        self.encrypt_symmetric(rng, vec![skesk], alg, session_key)
     }
 
     /// Symmetrically encrypts oneself using the provided `session_key`.
-    fn encrypt_symmetric(
+    fn encrypt_symmetric<R: CryptoRng + Rng>(
         &self,
+        rng: &mut R,
         esk: Vec<Esk>,
         alg: SymmetricKeyAlgorithm,
         session_key: Vec<u8>,
@@ -303,7 +304,7 @@ impl Message {
         let data = self.to_bytes()?;
 
         let edata = vec![Edata::SymEncryptedProtectedData(
-            SymEncryptedProtectedData::encrypt(alg, &session_key, &data)?,
+            SymEncryptedProtectedData::encrypt_with_rng(rng, alg, &session_key, &data)?,
         )];
 
         Ok(Message::Encrypted { esk, edata })

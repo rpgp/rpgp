@@ -5,6 +5,7 @@ use crate::errors::Result;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
+use rand::{thread_rng, CryptoRng, Rng};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
@@ -27,13 +28,26 @@ impl SymEncryptedProtectedData {
     }
 
     /// Encrypts the data using the given symmetric key.
-    pub fn encrypt(alg: SymmetricKeyAlgorithm, key: &[u8], plaintext: &[u8]) -> Result<Self> {
-        let data = alg.encrypt_protected(key, plaintext)?;
+    pub fn encrypt_with_rng<R: CryptoRng + Rng>(
+        rng: &mut R,
+        alg: SymmetricKeyAlgorithm,
+        key: &[u8],
+        plaintext: &[u8],
+    ) -> Result<Self> {
+        let data = alg.encrypt_protected_with_rng(rng, key, plaintext)?;
 
         Ok(SymEncryptedProtectedData {
             packet_version: Default::default(),
             data,
         })
+    }
+
+    /// Same as [`encrypt_with_rng`], but uses [`thread_rng`] for RNG.
+    ///
+    /// [`encrypt_with_rng`]: SymEncryptedProtectedData::encrypt_with_rng
+    /// [`thread_rng`]: rand::thread_rng
+    pub fn encrypt(alg: SymmetricKeyAlgorithm, key: &[u8], plaintext: &[u8]) -> Result<Self> {
+        Self::encrypt_with_rng(&mut thread_rng(), alg, key, plaintext)
     }
 
     pub fn data(&self) -> &[u8] {

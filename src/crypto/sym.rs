@@ -4,7 +4,7 @@ use cast5::Cast5;
 use cfb_mode::stream_cipher::{NewStreamCipher, StreamCipher};
 use cfb_mode::Cfb;
 use des::TdesEde3;
-use rand::{thread_rng, CryptoRng, Rng, RngCore};
+use rand::{thread_rng, CryptoRng, Rng};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
@@ -344,13 +344,17 @@ impl SymmetricKeyAlgorithm {
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
-    pub fn encrypt(self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
+    pub fn encrypt_with_rng<R: CryptoRng + Rng>(
+        self,
+        rng: &mut R,
+        key: &[u8],
+        plaintext: &[u8],
+    ) -> Result<Vec<u8>> {
         debug!("encrypt unprotected");
 
         let iv_vec = vec![0u8; self.block_size()];
 
         let bs = self.block_size();
-        let mut rng = thread_rng();
 
         let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
@@ -371,14 +375,26 @@ impl SymmetricKeyAlgorithm {
         Ok(ciphertext)
     }
 
-    pub fn encrypt_protected<'a>(self, key: &[u8], plaintext: &'a [u8]) -> Result<Vec<u8>> {
+    /// Same as [`encrypt_with_rng`], but uses [`rand::thread_rng`] for RNG.
+    ///
+    /// [`encrypt_with_rng`]: SymmetricKeyAlgorithm::encrypt_with_rng
+    /// [`rand::thread_rng`]: rand::thread_rng
+    pub fn encrypt(self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
+        self.encrypt_with_rng(&mut thread_rng(), key, plaintext)
+    }
+
+    pub fn encrypt_protected_with_rng<'a, R: CryptoRng + Rng>(
+        self,
+        rng: &mut R,
+        key: &[u8],
+        plaintext: &'a [u8],
+    ) -> Result<Vec<u8>> {
         debug!("protected encrypt");
 
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
         let mdc_len = 22;
 
         let bs = self.block_size();
-        let mut rng = thread_rng();
 
         let prefix_len = bs + 2;
         let plaintext_len = plaintext.len();
@@ -407,6 +423,10 @@ impl SymmetricKeyAlgorithm {
         self.encrypt_with_iv(key, &iv_vec, &mut ciphertext, false)?;
 
         Ok(ciphertext)
+    }
+
+    pub fn encrypt_protected<'a>(self, key: &[u8], plaintext: &'a [u8]) -> Result<Vec<u8>> {
+        self.encrypt_protected_with_rng(&mut thread_rng(), key, plaintext)
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
