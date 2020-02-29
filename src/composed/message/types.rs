@@ -739,6 +739,7 @@ mod tests {
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        for _ in 0..1000 {
         let encrypted = compressed_msg
             .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
             .unwrap();
@@ -757,6 +758,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(compressed_msg, decrypted);
+        }
     }
 
     #[test]
