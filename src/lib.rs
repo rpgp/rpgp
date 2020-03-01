@@ -13,14 +13,12 @@
     rust_2018_idioms
 )]
 #![warn(clippy::nursery)]
-#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::missing_const_for_fn, clippy::use_self)]
 
 #[macro_use]
 extern crate nom;
 #[macro_use]
 extern crate num_derive;
-#[macro_use]
-extern crate failure;
 #[macro_use]
 extern crate generic_array;
 #[macro_use]

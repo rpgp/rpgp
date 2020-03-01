@@ -9,13 +9,13 @@ pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
     fn from_bytes(bytes: impl Read) -> Result<Self> {
         let mut el = Self::from_bytes_many(bytes);
-        el.nth(0).ok_or_else(|| Error::NoMatchingPacket)?
+        el.next().ok_or_else(|| Error::NoMatchingPacket)?
     }
 
     /// Parse a single armor encoded composition.
     fn from_string(input: &str) -> Result<(Self, BTreeMap<String, String>)> {
         let (mut el, headers) = Self::from_string_many(input)?;
-        Ok((el.nth(0).ok_or_else(|| Error::NoMatchingPacket)??, headers))
+        Ok((el.next().ok_or_else(|| Error::NoMatchingPacket)??, headers))
     }
 
     /// Parse an armor encoded list of compositions.
@@ -32,7 +32,7 @@ pub trait Deserializable: Sized {
     /// Armored ascii data.
     fn from_armor_single<R: Read + Seek>(input: R) -> Result<(Self, BTreeMap<String, String>)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
-        Ok((el.nth(0).ok_or_else(|| Error::NoMatchingPacket)??, headers))
+        Ok((el.next().ok_or_else(|| Error::NoMatchingPacket)??, headers))
     }
 
     /// Armored ascii data.

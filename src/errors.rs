@@ -13,63 +13,63 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 pub const MPI_TOO_LONG: u32 = 1000;
 
 /// Error types
-#[derive(Debug, Fail)]
+#[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[fail(display = "failed to parse {:?}", _0)]
+    #[error("failed to parse {0:?}")]
     ParsingError(nom::ErrorKind),
-    #[fail(display = "invalid input")]
+    #[error("invalid input")]
     InvalidInput,
-    #[fail(display = "incomplete input: {:?}", _0)]
+    #[error("incomplete input: {0:?}")]
     Incomplete(nom::Needed),
-    #[fail(display = "invalid armor wrappers")]
+    #[error("invalid armor wrappers")]
     InvalidArmorWrappers,
-    #[fail(display = "invalid crc24 checksum")]
+    #[error("invalid crc24 checksum")]
     InvalidChecksum,
-    #[fail(display = "failed to decode base64 {:?}", _0)]
-    Base64DecodeError(base64::DecodeError),
-    #[fail(display = "requested data size is larger than the packet body")]
+    #[error("failed to decode base64 {0:?}")]
+    Base64DecodeError(#[from] base64::DecodeError),
+    #[error("requested data size is larger than the packet body")]
     RequestedSizeTooLarge,
-    #[fail(display = "no matching packet found")]
+    #[error("no matching packet found")]
     NoMatchingPacket,
-    #[fail(display = "more than one matching packet was found")]
+    #[error("more than one matching packet was found")]
     TooManyPackets,
-    #[fail(display = "rsa error: {:?}", _0)]
+    #[error("rsa error: {0:?}")]
     RSAError(rsa::errors::Error),
-    #[fail(display = "io error: {:?}", _0)]
-    IOError(::std::io::Error),
-    #[fail(display = "missing packets")]
+    #[error("io error: {0:?}")]
+    IOError(#[from] std::io::Error),
+    #[error("missing packets")]
     MissingPackets,
-    #[fail(display = "invalid key length")]
+    #[error("invalid key length")]
     InvalidKeyLength,
-    #[fail(display = "block mode error")]
+    #[error("block mode error")]
     BlockMode,
-    #[fail(display = "missing key")]
+    #[error("missing key")]
     MissingKey,
-    #[fail(display = "cfb: invalid key iv length")]
+    #[error("cfb: invalid key iv length")]
     CfbInvalidKeyIvLength,
-    #[fail(display = "Not yet implemented: {:?}", _0)]
+    #[error("Not yet implemented: {0:?}")]
     Unimplemented(String),
-    #[fail(display = "Unsupported: {:?}", _0)]
+    #[error("Unsupported: {0:?}")]
     Unsupported(String),
-    #[fail(display = "{:?}", _0)]
+    #[error("{0:?}")]
     Message(String),
-    #[fail(display = "Invalid Packet {:?}", _0)]
+    #[error("Invalid Packet {0:?}")]
     PacketError(nom::ErrorKind),
-    #[fail(display = "Incomplete Packet")]
+    #[error("Incomplete Packet")]
     PacketIncomplete,
-    #[fail(display = "Unpadding failed")]
+    #[error("Unpadding failed")]
     UnpadError,
-    #[fail(display = "Padding failed")]
+    #[error("Padding failed")]
     PadError,
-    #[fail(display = "Utf8 {:?}", _0)]
-    Utf8Error(::std::str::Utf8Error),
-    #[fail(display = "ParseInt {:?}", _0)]
-    ParseIntError(::std::num::ParseIntError),
-    #[fail(display = "Invalid Packet Content {:?}", _0)]
+    #[error("Utf8 {0:?}")]
+    Utf8Error(#[from] std::str::Utf8Error),
+    #[error("ParseInt {0:?}")]
+    ParseIntError(#[from] std::num::ParseIntError),
+    #[error("Invalid Packet Content {0:?}")]
     InvalidPacketContent(Box<Error>),
-    #[fail(display = "Ed25519 {:?}", _0)]
-    Ed25519SignatureError(SignatureError),
-    #[fail(display = "Modification Detection Code error")]
+    #[error("Ed25519 {0:?}")]
+    Ed25519SignatureError(#[from] SignatureError),
+    #[error("Modification Detection Code error")]
     MdcError,
 }
 
@@ -141,27 +141,15 @@ impl<'a> From<nom::Err<&'a str>> for Error {
     }
 }
 
-impl From<base64::DecodeError> for Error {
-    fn from(err: base64::DecodeError) -> Error {
-        Error::Base64DecodeError(err)
+impl From<block_cipher_trait::InvalidKeyLength> for Error {
+    fn from(_: block_cipher_trait::InvalidKeyLength) -> Error {
+        Error::InvalidKeyLength
     }
 }
 
 impl From<rsa::errors::Error> for Error {
     fn from(err: rsa::errors::Error) -> Error {
         Error::RSAError(err)
-    }
-}
-
-impl From<::std::io::Error> for Error {
-    fn from(err: ::std::io::Error) -> Error {
-        Error::IOError(err)
-    }
-}
-
-impl From<block_cipher_trait::InvalidKeyLength> for Error {
-    fn from(_: block_cipher_trait::InvalidKeyLength) -> Error {
-        Error::InvalidKeyLength
     }
 }
 
@@ -185,24 +173,6 @@ impl From<block_padding::UnpadError> for Error {
 impl From<block_padding::PadError> for Error {
     fn from(_: block_padding::PadError) -> Error {
         Error::PadError
-    }
-}
-
-impl From<::std::str::Utf8Error> for Error {
-    fn from(err: ::std::str::Utf8Error) -> Error {
-        Error::Utf8Error(err)
-    }
-}
-
-impl From<::std::num::ParseIntError> for Error {
-    fn from(err: ::std::num::ParseIntError) -> Error {
-        Error::ParseIntError(err)
-    }
-}
-
-impl From<SignatureError> for Error {
-    fn from(err: SignatureError) -> Error {
-        Error::Ed25519SignatureError(err)
     }
 }
 
