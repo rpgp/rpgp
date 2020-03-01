@@ -263,7 +263,7 @@ impl Message {
             .collect::<Result<_>>()?;
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(esk, alg, session_key)
+        self.encrypt_symmetric(rng, esk, alg, session_key)
     }
 
     /// Encrytp the message using the given password.
@@ -290,12 +290,13 @@ impl Message {
         )?);
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(vec![skesk], alg, session_key)
+        self.encrypt_symmetric(rng, vec![skesk], alg, session_key)
     }
 
     /// Symmetrically encrypts oneself using the provided `session_key`.
-    fn encrypt_symmetric(
+    fn encrypt_symmetric<R: CryptoRng + Rng>(
         &self,
+        rng: &mut R,
         esk: Vec<Esk>,
         alg: SymmetricKeyAlgorithm,
         session_key: Vec<u8>,
@@ -303,7 +304,7 @@ impl Message {
         let data = self.to_bytes()?;
 
         let edata = vec![Edata::SymEncryptedProtectedData(
-            SymEncryptedProtectedData::encrypt(alg, &session_key, &data)?,
+            SymEncryptedProtectedData::encrypt_with_rng(rng, alg, &session_key, &data)?,
         )];
 
         Ok(Message::Encrypted { esk, edata })
@@ -694,6 +695,8 @@ mod tests {
 
     #[test]
     fn test_rsa_encryption() {
+        use rand::SeedableRng;
+
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
@@ -702,13 +705,20 @@ mod tests {
 
         // subkey[0] is the encryption key
         let pkey = skey.secret_subkeys[0].public_key();
-        let mut rng = thread_rng();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(100);
+        let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+
+        // Encrypt and test that rng is the only source of randomness.
         let encrypted = compressed_msg
             .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
             .unwrap();
+        let encrypted2 = compressed_msg
+            .encrypt_to_keys(&mut rng2, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+            .unwrap();
+        assert_eq!(encrypted, encrypted2);
 
         let armored = encrypted.to_armored_bytes(None).unwrap();
         fs::write("./message-rsa.asc", &armored).unwrap();
