@@ -749,24 +749,26 @@ mod tests {
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
-        let encrypted = compressed_msg
-            .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
-            .unwrap();
+        for _ in 0..1000 {
+            let encrypted = compressed_msg
+                .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .unwrap();
 
-        let armored = encrypted.to_armored_bytes(None).unwrap();
-        fs::write("./message-x25519.asc", &armored).unwrap();
+            let armored = encrypted.to_armored_bytes(None).unwrap();
+            fs::write("./message-x25519.asc", &armored).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+            let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
-        let decrypted = parsed
-            .decrypt(|| "".into(), || "".into(), &[&skey])
-            .unwrap()
-            .0
-            .next()
-            .unwrap()
-            .unwrap();
+            let decrypted = parsed
+                .decrypt(|| "".into(), || "".into(), &[&skey])
+                .unwrap()
+                .0
+                .next()
+                .unwrap()
+                .unwrap();
 
-        assert_eq!(compressed_msg, decrypted);
+            assert_eq!(compressed_msg, decrypted);
+        }
     }
 
     #[test]

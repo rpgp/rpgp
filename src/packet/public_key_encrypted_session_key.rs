@@ -1,6 +1,6 @@
 use std::io;
 
-use byteorder::{BigEndian, ByteOrder};
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use nom::be_u8;
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
@@ -95,7 +95,8 @@ named_args!(parse_mpis<'a>(alg: &'a PublicKeyAlgorithm) <Vec<Mpi>>, switch!(
         >> blen: be_u8
         >> b: take!(blen)
         >> ({
-            vec![a.to_owned(), b.into()]
+            let v: [u8; 1] = [blen];
+            vec![a.to_owned(), (&v[..]).into(), b.into()]
         })
     )
 ));
@@ -140,8 +141,16 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 self.mpis[0].to_writer(writer)?;
                 // The second value is not encoded as an actual MPI, but rather as a length prefixed
                 // number.
-                writer.write_all(&[self.mpis[1].len() as u8])?;
-                writer.write_all(self.mpis[1].as_bytes())?;
+                let blen: usize = match self.mpis[1].first() {
+                    Some(l) => *l as usize,
+                    None => 0,
+                };
+                writer.write_all(&[blen as u8])?;
+                let padding_len = blen - self.mpis[2].as_bytes().len();
+                for _ in 0..padding_len {
+                    writer.write_u8(0)?;
+                }
+                writer.write_all(self.mpis[2].as_bytes())?;
             }
             _ => {
                 unimplemented_err!("writing {:?}", self.algorithm);

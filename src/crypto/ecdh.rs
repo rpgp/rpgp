@@ -77,12 +77,12 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
     let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
 
     // 33 = 0x40 + 32bits
-    ensure_eq!(mpis.len(), 2);
+    ensure_eq!(mpis.len(), 3);
     ensure_eq!(mpis[0].len(), 33, "invalid public point");
     ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
 
     // encrypted and wrapped value derived from the session key
-    let encrypted_session_key = mpis[1].as_bytes();
+    let encrypted_session_key = mpis[2].as_bytes();
 
     let their_public = {
         // public part of the ephemeral key (removes 0x40 prefix)
@@ -120,7 +120,17 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
     )?;
 
     // Peform AES Key Unwrap
-    let decrypted_key_padded = aes_kw::unwrap(&z, encrypted_session_key)?;
+    let encrypted_key_len: usize = match mpis[1].first() {
+        Some(l) => *l as usize,
+        None => 0,
+    };
+
+    let mut encrypted_session_key_vec: Vec<u8> = Vec::new();
+    encrypted_session_key_vec.resize(encrypted_key_len, 0);
+    encrypted_session_key_vec[(encrypted_key_len - encrypted_session_key.len())..]
+        .copy_from_slice(encrypted_session_key);
+
+    let decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
 
     // PKCS5 unpadding (PKCS5 is PKCS7 with a blocksize of 8)
     let decrypted_key = Pkcs7::unpad(&decrypted_key_padded)?;
@@ -191,7 +201,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
     encoded_public.push(0x40);
     encoded_public.extend(x25519_dalek::PublicKey::from(&our_secret).as_bytes().iter());
 
-    Ok(vec![encoded_public, encrypted_key])
+    let encrypted_key_len = vec![encrypted_key.len() as u8];
+
+    Ok(vec![encoded_public, encrypted_key_len, encrypted_key])
 }
 
 #[cfg(test)]
