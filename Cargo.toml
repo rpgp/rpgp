@@ -92,8 +92,7 @@ rand_chacha = "0.2"
 pretty_env_logger = "0.3"
 
 [features]
-default = ["ringbuf"]
-ringbuf = ["buf_redux/default"]
+default = []
 nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly", "clear_on_drop/nightly"]
 profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]

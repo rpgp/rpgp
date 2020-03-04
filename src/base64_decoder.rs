@@ -6,8 +6,6 @@ use std::io::{self, BufRead, Read, Seek};
 use base64::{decode_config_slice, CharacterSet, Config};
 use buf_redux::{BufReader, Buffer};
 
-use crate::util;
-
 const BUF_SIZE: usize = 1024;
 const BUF_CAPACITY: usize = BUF_SIZE / 4 * 3;
 
@@ -47,7 +45,7 @@ impl<R: Read + Seek> Base64Decoder<R> {
     pub fn new_with_character_set(input: R, cs: CharacterSet) -> Self {
         Base64Decoder {
             config: Config::new(cs, true),
-            inner: util::new_buf_reader(BUF_SIZE, input),
+            inner: BufReader::with_capacity(BUF_SIZE, input),
             out: Buffer::with_capacity(BUF_CAPACITY),
             out_buffer: [0u8; BUF_CAPACITY],
             err: None,

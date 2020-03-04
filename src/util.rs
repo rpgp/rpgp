@@ -4,7 +4,6 @@ use std::convert::AsMut;
 use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
-use buf_redux::{BufReader, Buffer};
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
@@ -216,30 +215,6 @@ impl<'a, A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'a, A, B> {
 
         Ok(())
     }
-}
-
-#[cfg(feature = "ringbuf")]
-#[inline(always)]
-pub fn new_buffer(capacity: usize) -> Buffer {
-    Buffer::with_capacity_ringbuf(capacity)
-}
-
-#[cfg(not(feature = "ringbuf"))]
-#[inline(always)]
-pub fn new_buffer(capacity: usize) -> Buffer {
-    Buffer::with_capacity(capacity)
-}
-
-#[cfg(feature = "ringbuf")]
-#[inline(always)]
-pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
-    BufReader::with_capacity_ringbuf(capacity, inner)
-}
-
-#[cfg(not(feature = "ringbuf"))]
-#[inline(always)]
-pub fn new_buf_reader<R>(capacity: usize, inner: R) -> BufReader<R> {
-    BufReader::with_capacity(capacity, inner)
 }
 
 /// The same as the std lib, but doesn't choke on write 0. This is a hack, to be compatible with

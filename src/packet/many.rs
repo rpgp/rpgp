@@ -6,7 +6,6 @@ use nom::{Needed, Offset};
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
 use crate::packet::single::{self, ParseResult};
-use crate::util;
 
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
@@ -25,7 +24,7 @@ impl<R: Read> PacketParser<R> {
             // TODO: use a better value than a random guess
             capacity: 1024,
             // TODO: only use when available
-            buffer: util::new_buffer(1024),
+            buffer: Buffer::with_capacity(1024),
             failed: false,
         }
     }
