@@ -143,10 +143,10 @@ impl<'a> PlainSecretParamsRef<'a> {
                     ..
                 } => match *curve {
                     ECCCurve::Curve25519 => {
-                        ensure_eq!(d.len(), 32, "invalid secret");
+                        ensure!(d.len() <= 32, "invalid secret");
 
                         let mut secret = [0u8; 32];
-                        secret.copy_from_slice(d.as_bytes());
+                        secret[32 - d.len()..].copy_from_slice(d.as_bytes());
 
                         Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
                             oid: curve.oid(),
@@ -162,10 +162,10 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::EdDSA(d) => match public_params {
                 PublicParams::EdDSA { ref curve, .. } => match *curve {
                     ECCCurve::Ed25519 => {
-                        ensure_eq!(d.len(), 32, "invalid secret");
+                        ensure!(d.len() <= 32, "invalid secret");
 
                         let mut secret = [0u8; 32];
-                        secret.copy_from_slice(d.as_bytes());
+                        secret[32 - d.len()..].copy_from_slice(d.as_bytes());
 
                         Ok(SecretKeyRepr::EdDSA(EdDSASecretKey {
                             oid: curve.oid(),

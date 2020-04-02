@@ -278,13 +278,13 @@ mod tests {
     use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
     use crate::types::SecretKeyTrait;
 
+    use pretty_env_logger;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     #[test]
     #[ignore] // slow in debug mode
     fn test_key_gen_rsa_2048() {
-        use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
         let mut key_params = SecretKeyParamsBuilder::default();
@@ -392,16 +392,24 @@ mod tests {
         signed_key2.verify().expect("invalid public key");
     }
 
+    #[ignore]
     #[test]
-    fn key_gen_x25519() {
+    fn key_gen_x25519_long() {
         let rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..1_000_000 {
+        for _ in 0..10_000 {
+            gen_x25519(rng);
+        }
+    }
+
+    #[test]
+    fn key_gen_x25519_short() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
             gen_x25519(rng);
         }
     }
 
     fn gen_x25519<R: Rng + CryptoRng>(rng: &mut R) {
-        use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
