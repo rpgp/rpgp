@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use chrono::{self, SubsecRound};
-use rand::thread_rng;
+use rand::{thread_rng, CryptoRng, Rng};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
@@ -134,8 +134,13 @@ impl SecretKeyParamsBuilder {
 
 impl SecretKeyParams {
     pub fn generate(self) -> Result<SecretKey> {
+        let mut rng = thread_rng();
+        self.generate_with_rng(&mut rng)
+    }
+
+    pub fn generate_with_rng<R: Rng + CryptoRng>(self, rng: &mut R) -> Result<SecretKey> {
         let passphrase = self.passphrase;
-        let (public_params, secret_params) = self.key_type.generate(passphrase)?;
+        let (public_params, secret_params) = self.key_type.generate_with_rng(rng, passphrase)?;
         let primary_key = packet::SecretKey {
             details: packet::PublicKey {
                 packet_version: self.packet_version,
@@ -225,17 +230,24 @@ impl KeyType {
         passphrase: Option<String>,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let mut rng = thread_rng();
+        self.generate_with_rng(&mut rng, passphrase)
+    }
 
+    pub fn generate_with_rng<R: Rng + CryptoRng>(
+        self,
+        rng: &mut R,
+        passphrase: Option<String>,
+    ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
-            KeyType::Rsa(bit_size) => rsa::generate_key(&mut rng, bit_size as usize)?,
-            KeyType::ECDH => ecdh::generate_key(&mut rng),
-            KeyType::EdDSA => eddsa::generate_key(&mut rng),
+            KeyType::Rsa(bit_size) => rsa::generate_key(rng, bit_size as usize)?,
+            KeyType::ECDH => ecdh::generate_key(rng),
+            KeyType::EdDSA => eddsa::generate_key(rng),
         };
 
         let secret = match passphrase {
             Some(passphrase) => {
                 // TODO: make configurable
-                let s2k = types::StringToKey::new_default(&mut rng);
+                let s2k = types::StringToKey::new_default(rng);
                 let alg = SymmetricKeyAlgorithm::AES256;
                 // encrypted, sha1 checksum
                 let id = 254;
@@ -244,7 +256,7 @@ impl KeyType {
                 let version = types::KeyVersion::default();
 
                 types::SecretParams::Encrypted(plain.encrypt(
-                    &mut rng,
+                    rng,
                     &passphrase,
                     alg,
                     s2k,
@@ -265,6 +277,9 @@ mod tests {
 
     use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
     use crate::types::SecretKeyTrait;
+
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     #[test]
     #[ignore] // slow in debug mode
@@ -378,7 +393,14 @@ mod tests {
     }
 
     #[test]
-    fn test_key_gen_x25519() {
+    fn key_gen_x25519() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..1_000_000 {
+            gen_x25519(rng);
+        }
+    }
+
+    fn gen_x25519<R: Rng + CryptoRng>(rng: &mut R) {
         use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
@@ -416,7 +438,7 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate()
+            .generate_with_rng(rng)
             .expect("failed to generate secret key");
 
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
