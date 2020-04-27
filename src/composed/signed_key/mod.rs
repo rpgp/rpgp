@@ -96,7 +96,7 @@
 //!
 //! let mut buff = Cursor::new(&mut signature_bytes);
 //! packet::write_packet(&mut buff, &signature)
-//! 	.expect("Write must succeed");
+//!     .expect("Write must succeed");
 //!
 //!
 //! let raw_signature = signature.signature;

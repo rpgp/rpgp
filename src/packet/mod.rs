@@ -19,19 +19,19 @@
 //! #
 //! # let mut key_params = SecretKeyParamsBuilder::default();
 //! # key_params
-//! # 	.key_type(KeyType::Rsa(2048))
-//! # 	.can_create_certificates(false)
-//! # 	.can_sign(true)
-//! # 	.primary_user_id("Me <me@example.com>".into())
-//! # 	.preferred_symmetric_algorithms(smallvec![
-//! # 	     SymmetricKeyAlgorithm::AES256,
-//! # 	])
-//! # 	.preferred_hash_algorithms(smallvec![
-//! # 	     HashAlgorithm::SHA2_256,
-//! # 	])
-//! # 	.preferred_compression_algorithms(smallvec![
-//! # 	     CompressionAlgorithm::ZLIB,
-//! # 	]);
+//! #     .key_type(KeyType::Rsa(2048))
+//! #     .can_create_certificates(false)
+//! #     .can_sign(true)
+//! #     .primary_user_id("Me <me@example.com>".into())
+//! #     .preferred_symmetric_algorithms(smallvec![
+//! #          SymmetricKeyAlgorithm::AES256,
+//! #     ])
+//! #     .preferred_hash_algorithms(smallvec![
+//! #          HashAlgorithm::SHA2_256,
+//! #     ])
+//! #     .preferred_compression_algorithms(smallvec![
+//! #          CompressionAlgorithm::ZLIB,
+//! #     ]);
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
 //! # let secret_key = secret_key_params.generate().expect("Failed to generate a plain key.");
 //! # let passwd_fn = || String::new();
