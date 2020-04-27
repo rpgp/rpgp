@@ -71,8 +71,6 @@
 //!
 //! ```
 
-
-
 mod many;
 mod packet_sum;
 mod single;
