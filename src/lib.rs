@@ -1,6 +1,13 @@
 //! # rPGP
 //!
 //! rPGP is an OpenPGP implementation.
+//!
+//! Usage examples are available under the respective modules:
+//! [Key generation], [signing and verifying with external hashing], [packet based signing and verifying].
+//!
+//! [Key generation]: crate::composed::key
+//! [signing and verifying with external hashing]: crate::composed::signed_key
+//! [packet based signing and verifying]: crate::packet
 
 #![deny(
     clippy::all,
