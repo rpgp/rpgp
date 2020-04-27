@@ -115,7 +115,7 @@
 //!		vec![],
 //!	);
 //!
-//! // sign and and write the package
+//! // sign and and write the package (the package written here is NOT rfc4880 compliant)
 //!	let mut signature_bytes = Vec::with_capacity(1024);
 //!
 //!	let mut buff = Cursor::new(&mut signature_bytes);
