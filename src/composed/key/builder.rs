@@ -278,7 +278,6 @@ mod tests {
     use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
     use crate::types::SecretKeyTrait;
 
-    use pretty_env_logger;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
@@ -328,7 +327,6 @@ mod tests {
             .expect("failed to generate secret key, encrypted");
 
         let key_params_plain = key_params
-            .clone()
             .passphrase(None)
             .subkey(
                 SubkeyParamsBuilder::default()

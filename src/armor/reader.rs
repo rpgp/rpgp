@@ -3,10 +3,9 @@ use std::hash::Hasher;
 use std::io::prelude::*;
 use std::{fmt, io, str};
 
-use base64;
 use buf_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
-use crc24;
+
 use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Slice};
 
 use crate::base64_decoder::Base64Decoder;

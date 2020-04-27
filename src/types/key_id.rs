@@ -1,7 +1,6 @@
 use std::fmt;
 
 use crate::errors::Result;
-use hex;
 
 /// Represents a Key ID.
 #[derive(Clone, Eq, PartialEq)]

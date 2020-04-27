@@ -1,4 +1,3 @@
-use aes;
 use aes::block_cipher_trait::generic_array::sequence::{Concat, Split};
 use aes::block_cipher_trait::generic_array::typenum::U8;
 use aes::block_cipher_trait::generic_array::GenericArray;
@@ -167,8 +166,6 @@ impl_aes_kw!(wrap_256, unwrap_256, 256, aes::Aes256);
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use hex;
 
     macro_rules! test_aes_kw {
         ($name:ident, $kek:expr, $input:expr, $output:expr) => {

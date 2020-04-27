@@ -773,7 +773,6 @@ mod tests {
 
     #[test]
     fn test_password_encryption() {
-        use pretty_env_logger;
         let _ = pretty_env_logger::try_init();
 
         let mut rng = thread_rng();

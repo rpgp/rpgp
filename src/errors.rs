@@ -1,11 +1,6 @@
 use aes::block_cipher_trait;
-use base64;
-use block_modes;
-use block_padding;
-use cfb_mode;
+
 use ed25519_dalek::SignatureError;
-use nom;
-use rsa;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
