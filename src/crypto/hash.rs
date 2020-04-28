@@ -8,8 +8,6 @@ use generic_array::typenum::Unsigned;
 use md5::Md5;
 use ripemd160::Ripemd160;
 use sha1::Sha1;
-use sha2;
-use sha3;
 
 use crate::errors::{Error, Result};
 

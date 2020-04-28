@@ -249,7 +249,6 @@ fn msg_regression_01() {
 
 #[test]
 fn msg_large_indeterminate_len() {
-    use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
 
     let mut msg_file = File::open("./tests/indeterminated.asc").unwrap();

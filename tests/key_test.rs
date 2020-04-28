@@ -130,7 +130,6 @@ parse_dumps!(
 
 #[test]
 fn test_parse_gnupg_v1() {
-    use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
 
     for i in 1..5 {
@@ -222,7 +221,6 @@ fn test_parse_openpgp_sample_rsa_private() {
 
 #[test]
 fn test_parse_details() {
-    use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
 
     let file = File::open("./tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
@@ -487,14 +485,14 @@ fn test_parse_details() {
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
             ),
-            Subpacket::KeyFlags(key_flags.clone()),
-            Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
-            Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
-            Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
+            Subpacket::KeyFlags(key_flags),
+            Subpacket::PreferredSymmetricAlgorithms(p_sym_algs),
+            Subpacket::PreferredHashAlgorithms(p_hash_algs),
+            Subpacket::PreferredCompressionAlgorithms(p_com_algs),
             Subpacket::Features(smallvec![1]),
             Subpacket::KeyServerPreferences(smallvec![128]),
         ],
-        vec![issuer.clone()],
+        vec![issuer],
     );
 
     assert_eq!(ua.signatures, vec![sig3]);
@@ -964,7 +962,6 @@ fn test_invalid() {
 
 #[test]
 fn test_handle_incomplete_packets_end() {
-    use pretty_env_logger;
     let _ = pretty_env_logger::try_init();
     let p = Path::new("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
     let mut file = read_file(p.to_path_buf());
