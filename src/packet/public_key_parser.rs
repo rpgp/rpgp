@@ -62,8 +62,8 @@ named!(ecdh<PublicParams>, do_parse!(
     >> (PublicParams::ECDH {
         curve,
         p: p.to_owned(),
-        hash: hash,
-        alg_sym: alg_sym,
+        hash,
+        alg_sym,
     })
 ));
 
