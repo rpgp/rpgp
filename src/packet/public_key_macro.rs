@@ -181,19 +181,19 @@ macro_rules! impl_public_key {
                             .expect("write to vec");
 
                         let mut h = Sha1::new();
-                        h.input(&[0x99]);
+                        h.update(&[0x99]);
                         h.write_u16::<BigEndian>(packet.len() as u16)
                             .expect("write to hasher");
-                        h.input(&packet);
+                        h.update(&packet);
 
-                        h.result().to_vec()
+                        h.finalize().to_vec()
                     }
                     KeyVersion::V2 | KeyVersion::V3 => {
                         let mut h = Md5::new();
                         self.public_params
                             .to_writer(&mut h)
                             .expect("write to hasher");
-                        h.result().to_vec()
+                        h.finalize().to_vec()
                     }
                 }
             }

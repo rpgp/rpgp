@@ -1,8 +1,8 @@
-use aes::block_cipher_trait::generic_array::sequence::{Concat, Split};
-use aes::block_cipher_trait::generic_array::typenum::U8;
-use aes::block_cipher_trait::generic_array::GenericArray;
-use aes::block_cipher_trait::BlockCipher;
+use aes::{BlockCipher, NewBlockCipher};
 use byteorder::{BigEndian, WriteBytesExt};
+use generic_array::sequence::{Concat, Split};
+use generic_array::typenum::U8;
+use generic_array::GenericArray;
 
 use crate::errors::Result;
 
@@ -68,7 +68,7 @@ macro_rules! impl_aes_kw {
                 for i in 0..n {
                     let t = (n * j + (i + 1)) as u64;
 
-                    let cipher = <$hasher as BlockCipher>::new(&key);
+                    let cipher = <$hasher as NewBlockCipher>::new(&key);
                     // Safe to unwrap, as we know the size of t_arr.
                     (&mut t_arr[..]).write_u64::<BigEndian>(t).unwrap();
 
@@ -123,7 +123,7 @@ macro_rules! impl_aes_kw {
                 for i in (0..n).rev() {
                     let t = (n * j + (i + 1)) as u64;
 
-                    let cipher = <$hasher as BlockCipher>::new(&key);
+                    let cipher = <$hasher as NewBlockCipher>::new(&key);
                     // Safe to unwrap, as we know the size of t_arr.
                     (&mut t_arr[..]).write_u64::<BigEndian>(t).unwrap();
 

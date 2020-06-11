@@ -1,6 +1,6 @@
 use std::boxed::Box;
 
-use rsa::hash::Hashes;
+use rsa::Hash;
 use try_from::TryInto;
 
 use digest::{Digest, FixedOutput};
@@ -39,21 +39,21 @@ impl Default for HashAlgorithm {
     }
 }
 
-impl TryInto<Hashes> for HashAlgorithm {
+impl TryInto<Hash> for HashAlgorithm {
     type Err = Error;
 
-    fn try_into(self) -> Result<Hashes> {
+    fn try_into(self) -> Result<Hash> {
         match self {
             HashAlgorithm::None => Err(format_err!("none")),
-            HashAlgorithm::MD5 => Ok(Hashes::MD5),
-            HashAlgorithm::SHA1 => Ok(Hashes::SHA1),
-            HashAlgorithm::RIPEMD160 => Ok(Hashes::RIPEMD160),
-            HashAlgorithm::SHA2_256 => Ok(Hashes::SHA2_256),
-            HashAlgorithm::SHA2_384 => Ok(Hashes::SHA2_384),
-            HashAlgorithm::SHA2_512 => Ok(Hashes::SHA2_512),
-            HashAlgorithm::SHA2_224 => Ok(Hashes::SHA2_224),
-            HashAlgorithm::SHA3_256 => Ok(Hashes::SHA3_256),
-            HashAlgorithm::SHA3_512 => Ok(Hashes::SHA3_512),
+            HashAlgorithm::MD5 => Ok(Hash::MD5),
+            HashAlgorithm::SHA1 => Ok(Hash::SHA1),
+            HashAlgorithm::RIPEMD160 => Ok(Hash::RIPEMD160),
+            HashAlgorithm::SHA2_256 => Ok(Hash::SHA2_256),
+            HashAlgorithm::SHA2_384 => Ok(Hash::SHA2_384),
+            HashAlgorithm::SHA2_512 => Ok(Hash::SHA2_512),
+            HashAlgorithm::SHA2_224 => Ok(Hash::SHA2_224),
+            HashAlgorithm::SHA3_256 => Ok(Hash::SHA3_256),
+            HashAlgorithm::SHA3_512 => Ok(Hash::SHA3_512),
             HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
         }
     }
@@ -77,11 +77,11 @@ macro_rules! derive_hasher {
 
         impl Hasher for $name {
             fn update(&mut self, data: &[u8]) {
-                self.inner.input(data);
+                self.inner.update(data);
             }
 
             fn finish(self: Box<Self>) -> Vec<u8> {
-                self.inner.result().as_slice().to_vec()
+                self.inner.finalize().as_slice().to_vec()
             }
         }
     };
