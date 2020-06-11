@@ -1,12 +1,3 @@
-extern crate chrono;
-extern crate hex;
-extern crate num_bigint;
-extern crate num_traits;
-extern crate pgp;
-extern crate pretty_env_logger;
-extern crate rand;
-extern crate rsa;
-extern crate serde_json;
 #[macro_use]
 extern crate log;
 #[macro_use]
@@ -23,7 +14,7 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use rand::thread_rng;
 use rsa::padding::PaddingScheme;
-use rsa::{PublicKey as PublicKeyTrait, RSAPrivateKey, RSAPublicKey};
+use rsa::{PublicKey as PublicKeyTrait, PublicKeyParts, RSAPrivateKey, RSAPublicKey};
 use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
@@ -199,12 +190,16 @@ fn test_parse_openpgp_sample_rsa_private() {
                         // TODO: fix this in rust-rsa
                         let k: RSAPrivateKey = k.clone();
                         let pk: RSAPublicKey = k.into();
-                        pk.encrypt(&mut rng, PaddingScheme::PKCS1v15, plaintext.as_slice())
-                            .expect("failed to encrypt")
+                        pk.encrypt(
+                            &mut rng,
+                            PaddingScheme::new_pkcs1v15_encrypt(),
+                            plaintext.as_slice(),
+                        )
+                        .expect("failed to encrypt")
                     };
 
                     let new_plaintext = k
-                        .decrypt(PaddingScheme::PKCS1v15, ciphertext.as_slice())
+                        .decrypt(PaddingScheme::new_pkcs1v15_encrypt(), ciphertext.as_slice())
                         .expect("failed to decrypt");
                     assert_eq!(plaintext, new_plaintext);
                 }

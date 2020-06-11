@@ -2,7 +2,7 @@ use num_bigint::traits::ModInverse;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
-use rsa::{PublicKey, RSAPrivateKey, RSAPublicKey};
+use rsa::{PublicKey, PublicKeyParts, RSAPrivateKey, RSAPublicKey};
 use try_from::TryInto;
 
 use crate::crypto::HashAlgorithm;
@@ -15,7 +15,7 @@ pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> R
     ensure_eq!(mpis.len(), 1, "invalid input");
 
     let mpi = &mpis[0];
-    let m = priv_key.decrypt(PaddingScheme::PKCS1v15, mpi.as_bytes())?;
+    let m = priv_key.decrypt(PaddingScheme::new_pkcs1v15_encrypt(), mpi.as_bytes())?;
 
     Ok(m)
 }
@@ -28,7 +28,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     plaintext: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
     let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
-    let data = key.encrypt(rng, PaddingScheme::PKCS1v15, plaintext)?;
+    let data = key.encrypt(rng, PaddingScheme::new_pkcs1v15_encrypt(), plaintext)?;
 
     Ok(vec![data])
 }
@@ -66,16 +66,16 @@ pub fn generate_key<R: Rng + CryptoRng>(
 /// Verify a RSA, PKCS1v15 padded signature.
 pub fn verify(n: &[u8], e: &[u8], hash: HashAlgorithm, hashed: &[u8], sig: &[u8]) -> Result<()> {
     let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
-    let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
+    let rsa_hash: Option<rsa::Hash> = hash.try_into().ok();
 
-    key.verify(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), &hashed[..], sig)
+    key.verify(PaddingScheme::new_pkcs1v15_sign(rsa_hash), &hashed[..], sig)
         .map_err(Into::into)
 }
 
 /// Sign using RSA, with PKCS1v15 padding.
 pub fn sign(key: &RSAPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
-    let rsa_hash: Option<rsa::hash::Hashes> = hash.try_into().ok();
-    let sig = key.sign(PaddingScheme::PKCS1v15, rsa_hash.as_ref(), digest)?;
+    let rsa_hash: Option<rsa::Hash> = hash.try_into().ok();
+    let sig = key.sign(PaddingScheme::new_pkcs1v15_sign(rsa_hash), digest)?;
 
     Ok(vec![sig])
 }

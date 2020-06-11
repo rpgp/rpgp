@@ -60,8 +60,8 @@
 //! use sha2::{Sha256, Digest};
 //! let digest = {
 //!     let mut hasher = Sha256::new();
-//!     hasher.input(DATA);
-//!     hasher.result()
+//!     hasher.update(DATA);
+//!     hasher.finalize()
 //! };
 //! let digest = digest.as_slice();
 //!

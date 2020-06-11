@@ -1,4 +1,4 @@
-use aes::block_cipher_trait;
+use aes::block_cipher;
 
 use ed25519_dalek::SignatureError;
 
@@ -136,8 +136,8 @@ impl<'a> From<nom::Err<&'a str>> for Error {
     }
 }
 
-impl From<block_cipher_trait::InvalidKeyLength> for Error {
-    fn from(_: block_cipher_trait::InvalidKeyLength) -> Error {
+impl From<block_cipher::InvalidKeyLength> for Error {
+    fn from(_: block_cipher::InvalidKeyLength) -> Error {
         Error::InvalidKeyLength
     }
 }
