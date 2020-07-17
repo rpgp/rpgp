@@ -1,5 +1,6 @@
 use ed25519_dalek::Keypair;
 use rand::{CryptoRng, Rng};
+use signature::{Signature, Signer, Verifier};
 use zeroize::Zeroize;
 
 use crate::crypto::{ECCCurve, HashAlgorithm};

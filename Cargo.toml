@@ -51,6 +51,7 @@ nom = "^4.2"
 zeroize = { version = "1.1.0", features = ["zeroize_derive"] }
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 thiserror = "1.0.9"
+signature = "1.1"
 
 [dependencies.x25519-dalek]
 version = "0.6"
@@ -58,7 +59,7 @@ default-features = false
 features = ["std", "u64_backend"]
 
 [dependencies.ed25519-dalek]
-version = "1.0.0-pre.3"
+version = "1.0.0-pre.4"
 default-features = false
 features = ["std", "u64_backend"]
 
