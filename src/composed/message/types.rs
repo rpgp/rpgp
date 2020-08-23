@@ -356,7 +356,12 @@ impl Message {
                     hashed_subpackets,
                     unhashed_subpackets,
                 );
-                (typ, signature_config.sign(key, key_pw, &self.to_bytes()?)?)
+
+                let data = self.to_bytes()?;
+                let cursor = io::Cursor::new(data);
+                let signature = signature_config.sign(key, key_pw, cursor)?;
+
+                (typ, signature)
             }
         };
         let ops = OnePassSignature::from_details(typ, hash_algorithm, algorithm, key_id);
@@ -387,7 +392,11 @@ impl Message {
                 if let Some(message) = message {
                     match **message {
                         Message::Literal(ref data) => signature.verify(key, data.data()),
-                        _ => signature.verify(key, &message.to_bytes()?),
+                        _ => {
+                            let data = &message.to_bytes()?;
+                            let cursor = io::Cursor::new(data);
+                            signature.verify(key, cursor)
+                        }
                     }
                 } else {
                     unimplemented_err!("no message, what to do?");
