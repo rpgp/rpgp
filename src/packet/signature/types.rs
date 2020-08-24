@@ -79,7 +79,7 @@ impl Signature {
     /// Verify this signature.
     pub fn verify<R>(&self, key: &impl PublicKeyTrait, data: R) -> Result<()>
     where
-        R: Read
+        R: Read,
     {
         if let Some(issuer) = self.issuer() {
             if &key.key_id() != issuer {

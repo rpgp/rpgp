@@ -262,8 +262,8 @@ impl SignatureConfig {
     }
 
     pub fn hash_data_to_sign<R>(&self, hasher: &mut dyn Hasher, mut data: R) -> Result<usize>
-        where
-            R: Read
+    where
+        R: Read,
     {
         match self.typ {
             SignatureType::Text |
@@ -277,7 +277,7 @@ impl SignatureConfig {
                             if e.kind() == std::io::ErrorKind::Interrupted {
                                 continue;
                             } else {
-                                Err(e)?
+                                return Err(e.into())
                             }
                         }
                         Ok(n) => {
