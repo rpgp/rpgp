@@ -21,7 +21,7 @@ No critical flaws were found. We have fixed and are fixing some high, medium and
 low risk ones. We will soon publish the full review report.
 Further independent security reviews are upcoming.
 
-rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit and 64 bit builds.
+rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit (only Windows and Android) and 64 bit builds (for the other platforms).
 
 More details on platform and OpenPGP implementation status: 
 
