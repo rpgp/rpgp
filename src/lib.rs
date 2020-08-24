@@ -9,6 +9,7 @@
 //! [signing and verifying with external hashing]: crate::composed::signed_key
 //! [packet based signing and verifying]: crate::packet
 
+#![forbid(unsafe_code)]
 #![deny(
     clippy::all,
     clippy::style,
