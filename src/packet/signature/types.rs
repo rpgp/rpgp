@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
@@ -76,7 +77,10 @@ impl Signature {
     }
 
     /// Verify this signature.
-    pub fn verify(&self, key: &impl PublicKeyTrait, data: &[u8]) -> Result<()> {
+    pub fn verify<R>(&self, key: &impl PublicKeyTrait, data: R) -> Result<()>
+    where
+        R: Read,
+    {
         if let Some(issuer) = self.issuer() {
             if &key.key_id() != issuer {
                 // TODO: should this be an actual error?

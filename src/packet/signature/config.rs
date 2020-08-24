@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
@@ -52,9 +53,10 @@ impl SignatureConfig {
     }
 
     /// Sign the given data.
-    pub fn sign<F>(self, key: &impl SecretKeyTrait, key_pw: F, data: &[u8]) -> Result<Signature>
+    pub fn sign<F, R>(self, key: &impl SecretKeyTrait, key_pw: F, data: R) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        R: Read,
     {
         let mut hasher = self.hash_alg.new_hasher()?;
 
@@ -259,19 +261,41 @@ impl SignatureConfig {
         }
     }
 
-    pub fn hash_data_to_sign(&self, hasher: &mut dyn Hasher, data: &[u8]) -> Result<usize> {
+    pub fn hash_data_to_sign<R>(&self, hasher: &mut dyn Hasher, mut data: R) -> Result<usize>
+    where
+        R: Read,
+    {
         match self.typ {
-            SignatureType::Binary => {
-                hasher.update(data);
-                Ok(data.len())
-            }
-            SignatureType::Text => {
+            SignatureType::Text |
                 // assumes that the passed in text was already valid utf8 and normalized
-                hasher.update(data);
-                Ok(data.len())
+            SignatureType::Binary => {
+                let mut acc = 0usize;
+                let mut buf = [0u8; 512];
+                loop {
+                    match data.read(&mut buf[..]) {
+                        Err(e) => {
+                            if e.kind() == std::io::ErrorKind::Interrupted {
+                                continue;
+                            } else {
+                                return Err(e.into())
+                            }
+                        }
+                        Ok(n) => {
+                            if n == 0 {
+                                // eof
+                                return Ok(acc);
+                            }
+                            hasher.update(&buf[0..n]);
+                            acc += n;
+                        }
+                    }
+                }
             }
+            SignatureType::Timestamp |
             SignatureType::Standalone => {
-                hasher.update(&[0][..]);
+                let mut val = [0u8;1];
+                data.read_exact(&mut val[..])?;
+                hasher.update(&val[..]);
                 Ok(1)
             }
             SignatureType::CertGeneric
@@ -288,10 +312,6 @@ impl SignatureConfig {
                 unimplemented_err!("{:?}", self.typ);
             }
             SignatureType::KeyRevocation => unimplemented_err!("KeyRevocation"),
-            SignatureType::Timestamp => {
-                hasher.update(&[0][..]);
-                Ok(1)
-            }
             SignatureType::ThirdParty => unimplemented_err!("signing ThirdParty"),
         }
     }
