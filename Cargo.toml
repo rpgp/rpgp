@@ -25,7 +25,7 @@ blowfish = "^0.6"
 byteorder = "^1.2"
 cast5 = "^0.8.0"
 chrono = "^0.4"
-cfb-mode = "^0.4.0"
+cfb-mode = "^0.5.0"
 circular = "^0.3"
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 crc24 = "^0.1"
