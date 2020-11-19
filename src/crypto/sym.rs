@@ -211,7 +211,8 @@ impl SymmetricKeyAlgorithm {
         {
             match self {
                 SymmetricKeyAlgorithm::Plaintext => {}
-                SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+                SymmetricKeyAlgorithm::IDEA => unimplemented_err!("IDEA decrypt"),
+
                 SymmetricKeyAlgorithm::TripleDES => {
                     decrypt!(
                         TdesEde3,
@@ -305,7 +306,7 @@ impl SymmetricKeyAlgorithm {
     ) -> Result<()> {
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
-            SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::IDEA => unimplemented_err!("IDEA decrypt"),
             SymmetricKeyAlgorithm::TripleDES => {
                 decrypt_regular!(TdesEde3, key, iv_vec, ciphertext, self.block_size());
             }
@@ -500,7 +501,7 @@ impl SymmetricKeyAlgorithm {
         // TODO: actual cfb mode used in pgp
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
-            SymmetricKeyAlgorithm::IDEA => unimplemented!("IDEA encrypt"),
+            SymmetricKeyAlgorithm::IDEA => unimplemented_err!("IDEA encrypt"),
             SymmetricKeyAlgorithm::TripleDES => {
                 encrypt_regular!(TdesEde3, key, iv_vec, plaintext, bs);
             }
