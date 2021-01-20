@@ -14,7 +14,7 @@ use crate::types::Tag;
 /// Standalone signature as defined by the cleartext framework.
 #[derive(Debug, Clone)]
 pub struct StandaloneSignature {
-    signature: Signature,
+    pub signature: Signature,
 }
 
 impl StandaloneSignature {
