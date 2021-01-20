@@ -142,3 +142,10 @@ impl fmt::Debug for LiteralData {
             .finish()
     }
 }
+
+#[test]
+fn test_utf8_literal() {
+    let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
+    let literal = LiteralData::from_str("", &slogan);
+    assert!(String::from_utf8(literal.data).unwrap() == slogan);
+}
