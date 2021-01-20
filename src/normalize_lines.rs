@@ -1,27 +1,25 @@
 //! # Line ending normalization module
 //!
-//! This crate provides a `normalize` method that takes a char iterator and returns
-//! a new one with `\n` for all line endings
+//! This crate provides a `normalize` method that takes an u8 iterator and returns
+//! a new one with newlines normalized to a single style.
 //!
 //! Based on https://github.com/derekdreery/normalize-line-endings.
 
 use crate::line_writer::LineBreak;
 use std::iter::Peekable;
 
-/// This struct wraps a `std::io::Chars` to normalize line endings.
-///
-/// Implements `Iterator<Item=char>` so can be used in place
+/// This struct wraps an u8 iterator to normalize line endings.
 pub struct Normalized<I>
 where
-    I: Iterator<Item = char>,
+    I: Iterator<Item = u8>,
 {
     line_break: LineBreak,
     iter: Peekable<I>,
     prev_was_cr: bool,
 }
 
-impl<I: Iterator<Item = char>> Normalized<I> {
-    /// Take a Chars and return similar struct with normalized line endings
+impl<I: Iterator<Item = u8>> Normalized<I> {
+    /// Take a u8 iterator and return similar iterator with normalized line endings
     ///
     /// # Example
     /// ```
@@ -31,7 +29,7 @@ impl<I: Iterator<Item = char>> Normalized<I> {
     ///
     /// let input = "This is a string \n with \r some \n\r\n random newlines\r\r\n\n";
     /// assert_eq!(
-    ///     &String::from_iter(Normalized::new(input.chars(), LineBreak::Lf)),
+    ///     &String::from_utf8(Normalized::new(input.bytes(), LineBreak::Lf).collect()).unwrap(),
     ///     "This is a string \n with \n some \n\n random newlines\n\n\n"
     /// );
     /// ```
@@ -44,12 +42,12 @@ impl<I: Iterator<Item = char>> Normalized<I> {
     }
 }
 
-impl<I: Iterator<Item = char>> Iterator for Normalized<I> {
-    type Item = char;
+impl<I: Iterator<Item = u8>> Iterator for Normalized<I> {
+    type Item = u8;
 
-    fn next(&mut self) -> Option<char> {
+    fn next(&mut self) -> Option<u8> {
         match self.iter.peek() {
-            Some('\n') => {
+            Some(b'\n') => {
                 match self.line_break {
                     LineBreak::Lf => {
                         if self.prev_was_cr {
@@ -67,7 +65,7 @@ impl<I: Iterator<Item = char>> Iterator for Normalized<I> {
                             self.prev_was_cr = false;
                             self.next()
                         } else {
-                            Some('\r')
+                            Some(b'\r')
                         }
                     }
                     LineBreak::Crlf => {
@@ -76,16 +74,16 @@ impl<I: Iterator<Item = char>> Iterator for Normalized<I> {
                             self.iter.next()
                         } else {
                             self.prev_was_cr = true;
-                            Some('\r')
+                            Some(b'\r')
                         }
                     }
                 }
             }
-            Some('\r') => match self.line_break {
+            Some(b'\r') => match self.line_break {
                 LineBreak::Lf => {
                     self.prev_was_cr = true;
                     let _ = self.iter.next();
-                    Some('\n')
+                    Some(b'\n')
                 }
                 LineBreak::Cr => {
                     self.prev_was_cr = true;
@@ -94,7 +92,7 @@ impl<I: Iterator<Item = char>> Iterator for Normalized<I> {
                 LineBreak::Crlf => {
                     if self.prev_was_cr {
                         self.prev_was_cr = false;
-                        Some('\n')
+                        Some(b'\n')
                     } else {
                         self.prev_was_cr = true;
                         self.iter.next()
@@ -109,7 +107,7 @@ impl<I: Iterator<Item = char>> Iterator for Normalized<I> {
                 LineBreak::Crlf => {
                     if self.prev_was_cr {
                         self.prev_was_cr = false;
-                        Some('\n')
+                        Some(b'\n')
                     } else {
                         self.prev_was_cr = false;
                         self.iter.next()
@@ -125,15 +123,13 @@ impl<I: Iterator<Item = char>> Iterator for Normalized<I> {
 mod tests {
     use super::*;
 
-    use std::iter::FromIterator;
-
     use crate::line_writer::LineBreak;
 
     #[test]
     fn normalized_lf() {
         let input = "This is a string \n with \r some \n\r\n random newlines\r\r\n\n";
         assert_eq!(
-            &String::from_iter(Normalized::new(input.chars(), LineBreak::Lf)),
+            &String::from_utf8(Normalized::new(input.bytes(), LineBreak::Lf).collect()).unwrap(),
             "This is a string \n with \n some \n\n random newlines\n\n\n"
         );
     }
@@ -142,7 +138,7 @@ mod tests {
     fn normalized_cr() {
         let input = "This is a string \n with \r some \n\r\n random newlines\r\r\n\n";
         assert_eq!(
-            &String::from_iter(Normalized::new(input.chars(), LineBreak::Cr)),
+            &String::from_utf8(Normalized::new(input.bytes(), LineBreak::Cr).collect()).unwrap(),
             "This is a string \r with \r some \r\r random newlines\r\r\r"
         );
     }
@@ -151,7 +147,7 @@ mod tests {
     fn normalized_crlf() {
         let input = "This is a string \n with \r some \n\r\n random newlines\r\r\n\n";
         assert_eq!(
-            &String::from_iter(Normalized::new(input.chars(), LineBreak::Crlf)),
+            &String::from_utf8(Normalized::new(input.bytes(), LineBreak::Crlf).collect()).unwrap(),
             "This is a string \r\n with \r\n some \r\n\r\n random newlines\r\n\r\n\r\n"
         );
     }
