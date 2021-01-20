@@ -90,13 +90,11 @@ impl SignatureConfig {
         debug!("signing certificate {:#?}", self.typ);
 
         let mut hasher = self.hash_alg.new_hasher()?;
-        let mut key_buf = Vec::new();
-        key.to_writer_old(&mut key_buf)?;
+
+        key.to_writer_old(&mut hasher)?;
 
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
-
-        hasher.update(&key_buf);
 
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
@@ -149,19 +147,10 @@ impl SignatureConfig {
         let mut hasher = self.hash_alg.new_hasher()?;
 
         // Signing Key
-        {
-            let mut key_buf = Vec::new();
-            signing_key.to_writer_old(&mut key_buf)?;
+        signing_key.to_writer_old(&mut hasher)?;
 
-            hasher.update(&key_buf);
-        }
         // Key being bound
-        {
-            let mut key_buf = Vec::new();
-            key.to_writer_old(&mut key_buf)?;
-
-            hasher.update(&key_buf);
-        }
+        key.to_writer_old(&mut hasher)?;
 
         let len = self.hash_signature_data(&mut *hasher)?;
         hasher.update(&self.trailer(len));
@@ -187,12 +176,7 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        {
-            let mut key_buf = Vec::new();
-            key.to_writer_old(&mut key_buf)?;
-
-            hasher.update(&key_buf);
-        }
+        key.to_writer_old(&mut hasher)?;
 
         let len = self.hash_signature_data(&mut *hasher)?;
         hasher.update(&self.trailer(len));
@@ -269,27 +253,7 @@ impl SignatureConfig {
             SignatureType::Text |
                 // assumes that the passed in text was already valid utf8 and normalized
             SignatureType::Binary => {
-                let mut acc = 0usize;
-                let mut buf = [0u8; 512];
-                loop {
-                    match data.read(&mut buf[..]) {
-                        Err(e) => {
-                            if e.kind() == std::io::ErrorKind::Interrupted {
-                                continue;
-                            } else {
-                                return Err(e.into())
-                            }
-                        }
-                        Ok(n) => {
-                            if n == 0 {
-                                // eof
-                                return Ok(acc);
-                            }
-                            hasher.update(&buf[0..n]);
-                            acc += n;
-                        }
-                    }
-                }
+                Ok(std::io::copy(&mut data, hasher)? as usize)
             }
             SignatureType::Timestamp |
             SignatureType::Standalone => {
