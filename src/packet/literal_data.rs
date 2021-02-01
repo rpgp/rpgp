@@ -38,9 +38,7 @@ pub enum DataMode {
 impl LiteralData {
     /// Creates a literal data packet from the given string. Normalizes line endings.
     pub fn from_str(file_name: &str, raw_data: &str) -> Self {
-        let data = Normalized::new(raw_data.chars(), LineBreak::Crlf)
-            .map(|c| c as u8)
-            .collect();
+        let data = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
 
         LiteralData {
             packet_version: Version::New,
@@ -141,4 +139,11 @@ impl fmt::Debug for LiteralData {
             .field("data", &hex::encode(&self.data))
             .finish()
     }
+}
+
+#[test]
+fn test_utf8_literal() {
+    let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
+    let literal = LiteralData::from_str("", &slogan);
+    assert!(String::from_utf8(literal.data).unwrap() == slogan);
 }
