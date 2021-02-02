@@ -61,7 +61,7 @@ impl TryInto<Hash> for HashAlgorithm {
 
 /// Trait to work around the fact that the `Digest` trait from rustcrypto can not
 /// be used as `Box<Digest>`.
-pub trait Hasher {
+pub trait Hasher: std::io::Write {
     /// Update the hash with the given value.
     fn update(&mut self, _: &[u8]);
     /// Finalize the hash and return the result.
@@ -82,6 +82,17 @@ macro_rules! derive_hasher {
 
             fn finish(self: Box<Self>) -> Vec<u8> {
                 self.inner.finalize().as_slice().to_vec()
+            }
+        }
+
+        impl std::io::Write for $name {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.update(buf);
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
             }
         }
     };
