@@ -263,9 +263,12 @@ macro_rules! impl_public_key {
                     PublicParams::Elgamal { .. } => {
                         unimplemented_err!("verify Elgamal");
                     }
-                    PublicParams::DSA { .. } => {
-                        unimplemented_err!("verify DSA");
-                    }
+                    PublicParams::DSA {
+                        ref p,
+                        ref q,
+                        ref g,
+                        ref y,
+                    } => $crate::crypto::dsa::verify(p, q, g, y, hashed, sig),
                 }
             }
 
