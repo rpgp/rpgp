@@ -25,11 +25,11 @@ pub fn verify(p: &Mpi, q: &Mpi, g: &Mpi, y: &Mpi, hashed: &[u8], sig: &[Mpi]) ->
     //     of leftmost bits equal to the number of bits of q.  This (possibly
     //     truncated) hash function result is treated as a number and used
     //     directly in the DSA signature algorithm.
-    let h = {
-        let mut tmp: BigUint = BigUint::from_bytes_be(hashed);
-        tmp >>= tmp.bits().saturating_sub(q.bits());
-        tmp
+    let excess_bits = match (hashed.len() * 8).checked_sub(q.bits()) {
+        Some(b) => b,
+        _ => bail!("invalid signature"), // digest is too small for use with this key
     };
+    let h = BigUint::from_bytes_be(hashed) >> excess_bits;
 
     let w = match s.mod_inverse(&q).and_then(|x| x.to_biguint()) {
         Some(w) => w,
