@@ -1,4 +1,5 @@
 use num_bigint::{traits::ModInverse, BigUint};
+use num_traits::Zero;
 
 use crate::errors::Result;
 use crate::types::Mpi;
@@ -15,9 +16,10 @@ pub fn verify(p: &Mpi, q: &Mpi, g: &Mpi, y: &Mpi, hashed: &[u8], sig: &[Mpi]) ->
     ensure!(sig.len() == 2, "invalid signature");
     let r: BigUint = (&sig[0]).into();
     let s: BigUint = (&sig[1]).into();
-
-    let one: BigUint = 1u32.into();
-    ensure!(one < r && r < q && one < s && s < q, "invalid signature");
+    ensure!(
+        BigUint::zero() < r && r < q && BigUint::zero() < s && s < q,
+        "invalid signature"
+    );
 
     // https://tools.ietf.org/html/rfc4880#section-5.2.2
     //     If the output size of the chosen hash is larger than the number of
