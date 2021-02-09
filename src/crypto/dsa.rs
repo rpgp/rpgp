@@ -1,10 +1,10 @@
-use digest::generic_array::typenum::Unsigned;
+use digest::{generic_array::typenum::Unsigned, Digest};
 use digest::{BlockInput, FixedOutput, Reset, Update};
-use generic_array::ArrayLength;
+use generic_array::{ArrayLength, GenericArray};
 use hmac_drbg::HmacDRBG;
 use md5::Md5;
-use num_bigint::{traits::ModInverse, BigUint};
-use num_traits::Zero;
+use num_bigint::{BigUint, prime::{probably_prime_miller_rabin}, traits::ModInverse};
+use num_traits::{CheckedSub, One, Zero};
 use ripemd160::Ripemd160;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -14,18 +14,117 @@ use crate::types::Mpi;
 
 use super::HashAlgorithm;
 
-/// Rounds up i to the nearest multiple of m
-fn next_multiple_of(i: usize, m: usize) -> usize {
-    (i + m - 1) / m * m
+pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> GenericArray<u8, N>>(
+    plen: usize,
+    qlen: usize,
+    mut next_seed: F,
+) -> Result<(BigUint, BigUint)> {
+    // FIPS.186-4 A.1.1.2 Generation of the Probable Primes p and q Using an Approved Hash Function
+
+    // Some notes on the translation to code:
+    // * Uppercase variable names (W) were turned into doubled variable names (ww)
+    // * 'L' was renamed 'plen', 'N' was renamed 'qlen', as they are the desired bit length of p and q.
+    // * The pseudocode algorithm in the standard is really hard to read.
+    // * Loop bounds are INCLUSIVE, so "0..(n-1)" translates to "0..n" in Rust.
+    //   (I started by stripping out all that "-1" nonsense pretty much.)
+    // * I extracted helper functions to generate "bottom n bits set" and "bit #n set",
+    //   named 'mask(n)' and 'bit(n)'. Note that bit(n) is NOT in mask(n), but bit(n-1) is.
+    // * Once you start simplifying the loop conditions about half the logic just disappears,
+    //   and the rest of it suddenly makes sense.
+
+    // originally named 'outlen'. the number of bits obtained per call to extract()
+    let extractlen = D::OutputSize::to_usize() * 8;
+
+    // the number of bits obtained per call to next_seed()
+    let seedlen = N::to_usize() * 8;
+
+    // List of approved key sizes is in section 4.2 of FIPS.186-4.
+    // The Miller-Rabin repetition numbers are in Appendix C.3 of FIPS.186-4.
+    // "Table C.1. Minimum number of Miller-Rabin iterations for DSA"
+    let mr_reps = match (plen, qlen) {
+        (1024, 160) => 40,
+        (2048, 224) => 56,
+        (2048, 256) => 56,
+        (3072, 256) => 64,
+        _ => {
+            warn!("L = {}, N = {} is not a NIST specified DSA key size", plen, qlen);
+            64
+        }
+    };
+
+    ensure!(seedlen >= qlen && extractlen >= qlen, "invalid parameters");
+
+    let bit = |bit| BigUint::one() << bit;
+    let mask = |bits| (BigUint::one() << bits) - BigUint::one();
+
+    loop {
+        let mut domain_param_seed = next_seed();
+
+        // Closure which extracts the next `extractlen` bits from `domain_param_seed`.
+        // It is a binary counter which we take the hash of and increment every time we need a value.
+        let mut extract = || {
+            // Hash current value and turn it into a BigUint
+            let value = BigUint::from_bytes_be(D::digest(&domain_param_seed).as_slice());
+            // Directly increment `domain_param_seed` as if it is a big endian counter.
+            // This replaces both the j and offset variables in the pseudocode.
+            domain_param_seed.iter_mut().rev().all(|b| {
+                let (b1, carry) = b.overflowing_add(1);
+                *b = b1;
+                carry
+            });
+            value
+        };
+
+        // extract qlen-1 bits from seed
+        let uu = extract() & mask(qlen - 1);
+
+        // append 1 as new msb, set lsb to 1
+        let q = bit(qlen - 1) | uu | bit(0);
+
+        if probably_prime_miller_rabin(&q, mr_reps, false) {
+            for _counter in 0..(4 * plen) {
+                // extract plen-1 bits from seed
+                let mut ww = BigUint::zero();
+                for b in (0..plen).step_by(extractlen) {
+                    ww |= extract() << b;
+                }
+                ww &= mask(plen - 1);
+
+                // append 1 as new msb
+                let xx = bit(plen - 1) | ww;
+
+                // round down to nearest multiple of 2q and add 1
+                let c = &xx % (&q << 1);
+                let p = xx - c + BigUint::one();
+
+                // For comparison to the intermediate output in NIST test vectors
+                debug!("{:?}", hex::encode(&p.to_bytes_be()));
+
+                if p.bits() >= plen && probably_prime_miller_rabin(&p, mr_reps, false) {
+                    return Ok((p, q));
+                }
+            }
+        }
+    }
+}
+
+/// Divides i by j and rounds up to the nearest integer
+fn div_ceil(i: usize, j: usize) -> usize {
+    (i + j - 1) / j
+}
+
+/// Rounds up i to the nearest multiple of j
+fn next_multiple_of(i: usize, j: usize) -> usize {
+    div_ceil(i, j) * j
 }
 
 /// Implements int2octets as defined in RFC6979
 ///
 /// Reference: https://tools.ietf.org/html/rfc6979#section-2.3.3
 fn int_to_octets(i: &BigUint, q: &BigUint) -> Vec<u8> {
-    let q_bytes = next_multiple_of(q.bits(), 8) / 8;
+    let q_bytes = div_ceil(q.bits(), 8);
     assert!(i < q); // should only be called on numbers known to be smaller than q
-    let mut tmp = i.to_bytes_le();
+    let mut tmp = i.to_bytes_le(); // little endian + reverse so resize pads at the big end
     tmp.resize(q_bytes, 0u8);
     tmp.reverse();
     tmp
@@ -37,6 +136,12 @@ fn int_to_octets(i: &BigUint, q: &BigUint) -> Vec<u8> {
 fn bits_to_int(data: &[u8], q: &BigUint) -> BigUint {
     let excess_bits = (data.len() * 8).saturating_sub(q.bits());
     BigUint::from_bytes_be(data) >> excess_bits
+}
+
+/// Equivalent to `bits_to_int(data, q) % q`, but more efficient.
+fn bits_to_int_mod(data: &[u8], q: &BigUint) -> BigUint {
+    let tmp = bits_to_int(data, q);
+    tmp.checked_sub(q).unwrap_or(tmp)
 }
 
 /// Calculate the modular inverse of i mod q. Requires 0 < i < q as a precondition.
@@ -65,7 +170,7 @@ where
 {
     fn next(&mut self, q: &BigUint) -> BigUint {
         let output_size = D::OutputSize::to_usize();
-        let q_bytes = next_multiple_of(q.bits(), 8) / 8;
+        let q_bytes = div_ceil(q.bits(), 8);
         let mut tmp = vec![0u8; next_multiple_of(q_bytes, output_size)];
         self.generate_to_slice(&mut tmp, None);
         bits_to_int(&tmp, &q)
@@ -109,7 +214,7 @@ pub fn sign(
     let x = x; // Nothing to do
 
     // Hash
-    let h = bits_to_int(hashed, &q) % &q;
+    let h = bits_to_int_mod(hashed, &q);
 
     // Choose k and produce signature
     let mut rng = make_k_generator(
@@ -159,7 +264,7 @@ pub fn verify(p: &Mpi, q: &Mpi, g: &Mpi, y: &Mpi, hashed: &[u8], sig: &[Mpi]) ->
     );
 
     // Hash
-    let h = bits_to_int(hashed, &q) % &q;
+    let h = bits_to_int_mod(hashed, &q);
 
     // Check signature
     let w = inverse(&s, &q)?;
@@ -177,6 +282,7 @@ mod test {
     use super::*;
     use num_bigint::BigUint;
     use num_traits::Num;
+    use hex_literal::hex;
 
     fn mpi_hex(s: &str) -> Mpi {
         BigUint::from_str_radix(s, 16).unwrap().into()
@@ -454,5 +560,44 @@ mod test {
                 mpi_hex("C9F0BDABCC0D880BB137A994CC7F3980CE91CC10FAF529FC46565B15CEA854E1"),
             ],
         );
+    }
+
+    /// NIST Cryptographic Algorithm Validation Program (CAVP) -> Test Vectors -> FIPS 186-4 -> DSA
+    /// https://csrc.nist.gov/Projects/cryptographic-algorithm-validation-program/digital-signatures
+    /// Download this zip:
+    /// https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/dss/186-3dsatestvectors.zip
+    /// Look in file PQGGen.txt
+    /// These are just two tests, and these are some of the fastest runs in the list of test vectors.
+    /// But in debug mode each test still costs more than 2 seconds on my local system...
+    #[test]
+    fn test_domain_generation_1() {
+        let _ = pretty_env_logger::try_init();
+
+        let mut seed = Some(hex!("1f5da0af598eeadee6e6665bf880e63d8b609ba2").into());
+        let (p, q) = generate_domain_parameters::<Sha1, _, _>(1024, 160, || seed.take().unwrap())
+        .unwrap();
+
+        assert_eq!(p.to_bytes_be().as_slice(), &hex!("b5cf7916632405a72a407979949ee858c91adfcabfaa6cca0e5456090b0d8eb7f36c34f23dfe1759c4a3adcd776629d871214560e5e11b2f79792f040042987091c55951060bcb5fdf7cb93fed8b45fea26376e7682fc601df883dc7e272489b83181aac7340a1eb0a0fc97f53ac80f3f965cd8abcd7aa5fe1d2e38a357cb9f1")[..]);
+        assert_eq!(
+            q.to_bytes_be().as_slice(),
+            &hex!("ab1a788bce3c557a965a5bfa6908faa665fdeb7d")[..]
+        );
+    }
+
+    /// See above, split out to try and parallelize it.
+    #[test]
+    fn test_domain_generation_2() {
+        let _ = pretty_env_logger::try_init();
+
+        let mut seed = Some(hex!("39f637d1c0b3286d1900b2de9769a14e0f6c9945").into());
+        let (p, q) = generate_domain_parameters::<Sha224, _, _>(1024, 160, || seed.take().unwrap())
+        .unwrap();
+
+        assert_eq!(p.to_bytes_be().as_slice(), &hex!("801052c33c93eac96defda9044c1f26c3089003f9cbd8cf47103e5847e858e30f6114384af7c83ac77b21a130c109ed21027bdf196ba8b36dccdeeda2a6ae326752fddd3b305b1058ca1837457b370a4aea666878704dc11a69686ae4b18a55df6f1a250225d14d58bbe243d77c933aeb15da3b399ca549e60740e946170cb09")[..]);
+        assert_eq!(
+            q.to_bytes_be().as_slice(),
+            &hex!("a02bc4e4265bbfa82b1a7769f4d1ad936744623f")[..]
+        );
+
     }
 }
