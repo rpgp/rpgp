@@ -90,7 +90,7 @@ impl fmt::Debug for ECDSASecretKey {
 /// Secret key for DSA.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct DSASecretKey {
-    x: BigUint,
+    pub x: BigUint,
 }
 
 impl fmt::Debug for DSASecretKey {
