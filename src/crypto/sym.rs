@@ -1,7 +1,7 @@
 use aes::{Aes128, Aes192, Aes256};
 use blowfish::Blowfish;
 use cast5::Cast5;
-use cfb_mode::stream_cipher::{NewStreamCipher, StreamCipher};
+use cfb_mode::cipher::{NewStreamCipher, StreamCipher};
 use cfb_mode::Cfb;
 use des::TdesEde3;
 use rand::{thread_rng, CryptoRng, Rng};

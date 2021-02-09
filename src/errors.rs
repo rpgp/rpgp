@@ -1,5 +1,3 @@
-use aes::block_cipher;
-
 use ed25519_dalek::SignatureError;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
@@ -136,12 +134,6 @@ impl<'a> From<nom::Err<&'a str>> for Error {
     }
 }
 
-impl From<block_cipher::InvalidKeyLength> for Error {
-    fn from(_: block_cipher::InvalidKeyLength) -> Error {
-        Error::InvalidKeyLength
-    }
-}
-
 impl From<rsa::errors::Error> for Error {
     fn from(err: rsa::errors::Error) -> Error {
         Error::RSAError(err)
@@ -154,8 +146,8 @@ impl From<block_modes::BlockModeError> for Error {
     }
 }
 
-impl From<cfb_mode::stream_cipher::InvalidKeyNonceLength> for Error {
-    fn from(_: cfb_mode::stream_cipher::InvalidKeyNonceLength) -> Error {
+impl From<cipher::stream::InvalidKeyNonceLength> for Error {
+    fn from(_: cipher::stream::InvalidKeyNonceLength) -> Error {
         Error::CfbInvalidKeyIvLength
     }
 }
