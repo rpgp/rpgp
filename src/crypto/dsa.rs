@@ -68,10 +68,18 @@ pub fn generate_p_q<D: Digest, R: Rng>(
         rng.fill_bytes(&mut domain_param_seed);
 
         // Closure which extracts the next `extractlen` bits from `domain_param_seed`.
-        // It is a binary counter which we take the hash of and increment every time we need a value.
+        // It is a counter which we take the hash of and increment every time we need a value.
         let mut extract = || {
-            // TODO FIXME figure out if this should ignore leading 0 bytes or not
-            // Hash current value and turn it into a BigUint
+            // Hash current value and turn it into a BigUint.
+            // The spec does not make clear whether leading zero bytes in the domain_param_seed
+            // should be hashed or not (the way it's expressed in the standard seems to require
+            // converting to and from integer, and the way *that* is defined in the spec strongly
+            // suggests leading zeroes ought to be dropped).
+            // I actually asked NIST nicely if they would add a test vector for this case. I'm not
+            // sure if they will or not, but they did share that their internal implementation
+            // strips leading *32 bit zero values* due to implementation details. This does not
+            // seem to me to be a reasonable interpretation of the standard as written.
+            // OpenSSL does the same thing I do here, and assumes a fixed size for the value.
             let value = BigUint::from_bytes_be(D::digest(&domain_param_seed).as_slice());
             // Directly increment `domain_param_seed` as if it is a big endian counter.
             // This replaces both the j and offset variables in the pseudocode.
