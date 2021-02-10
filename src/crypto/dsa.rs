@@ -1,10 +1,11 @@
 use digest::{generic_array::typenum::Unsigned, Digest};
 use digest::{BlockInput, FixedOutput, Reset, Update};
-use generic_array::{ArrayLength, GenericArray};
+use generic_array::ArrayLength;
 use hmac_drbg::HmacDRBG;
 use md5::Md5;
-use num_bigint::{BigUint, prime::{probably_prime_miller_rabin}, traits::ModInverse};
+use num_bigint::{prime::probably_prime_miller_rabin, traits::ModInverse, BigUint, RandBigInt};
 use num_traits::{CheckedSub, One, Zero};
+use rand::Rng;
 use ripemd160::Ripemd160;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -14,10 +15,11 @@ use crate::types::Mpi;
 
 use super::HashAlgorithm;
 
-pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> GenericArray<u8, N>>(
+pub fn generate_p_q<D: Digest, R: Rng>(
+    rng: &mut R,
     plen: usize,
     qlen: usize,
-    mut next_seed: F,
+    seedlen: usize,
 ) -> Result<(BigUint, BigUint)> {
     // FIPS.186-4 A.1.1.2 Generation of the Probable Primes p and q Using an Approved Hash Function
     // https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf
@@ -33,12 +35,6 @@ pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> G
     // * Once you start simplifying the loop conditions about half the logic just disappears,
     //   and the rest of it suddenly makes sense.
 
-    // originally named 'outlen'. the number of bits obtained per call to extract()
-    let extractlen = D::OutputSize::to_usize() * 8;
-
-    // the number of bits obtained per call to next_seed()
-    let seedlen = N::to_usize() * 8;
-
     // List of approved key sizes is in section 4.2 of FIPS.186-4.
     // The Miller-Rabin repetition numbers are in Appendix C.3 of FIPS.186-4.
     // "Table C.1. Minimum number of Miller-Rabin iterations for DSA"
@@ -48,11 +44,20 @@ pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> G
         (2048, 256) => 56,
         (3072, 256) => 64,
         _ => {
-            warn!("L = {}, N = {} is not a NIST specified DSA key size", plen, qlen);
+            // I made this up, it's just a very, very loose sanity check.
+            ensure!(plen > 2 * qlen, "invalid parameters");
+            // If this goes wrong it's entirely your responsibility.
+            warn!(
+                "L = {}, N = {} is not a NIST specified DSA key size",
+                plen, qlen
+            );
             // TODO FIXME even more conservative default
             64
         }
     };
+
+    // originally named 'outlen'. the number of bits obtained per call to extract()
+    let extractlen = D::OutputSize::to_usize() * 8;
 
     ensure!(seedlen >= qlen && extractlen >= qlen, "invalid parameters");
 
@@ -60,7 +65,8 @@ pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> G
     let mask = |bits| (BigUint::one() << bits) - BigUint::one();
 
     loop {
-        let mut domain_param_seed = next_seed();
+        let mut domain_param_seed = vec![0; seedlen / 8];
+        rng.fill_bytes(&mut domain_param_seed);
 
         // Closure which extracts the next `extractlen` bits from `domain_param_seed`.
         // It is a binary counter which we take the hash of and increment every time we need a value.
@@ -109,6 +115,60 @@ pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> G
             }
         }
     }
+}
+
+pub fn generate_g<R: Rng>(rng: &mut R, p: &BigUint, q: &BigUint) -> Result<BigUint> {
+    // FIPS.186-4 A.2.1 Unverifiable Generation of the Generator g
+
+    // "Unverifiable" means you can't prove this procedure was used to generate it.
+
+    let e = (p - BigUint::one()) / q;
+
+    // Generate 1 < h < (p-1)
+    // (but gen_biguint_range takes lower bound as inclusive)
+    let lbound = BigUint::from(2u32);
+    let ubound = p - BigUint::one();
+
+    loop {
+        let h = rng.gen_biguint_range(&lbound, &ubound);
+
+        let g = h.modpow(&e, p);
+
+        if g != BigUint::one() {
+            return Ok(g);
+        }
+    }
+}
+
+pub fn validate_g(p: &BigUint, q: &BigUint, g: &BigUint) -> Result<()> {
+    // FIPS.186-4 A.2.2 Assurance of the Validity of the Generator g
+
+    ensure!(
+        &BigUint::from(2u32) <= g && g <= &(p - BigUint::one()) && g.modpow(q, p) == BigUint::one(),
+        "invalid generator"
+    );
+
+    Ok(())
+}
+
+pub fn generate_x_y<R: Rng>(
+    rng: &mut R,
+    p: &BigUint,
+    q: &BigUint,
+    g: &BigUint,
+) -> Result<(BigUint, BigUint)> {
+    // This does NOT strictly follow either of the two standard methods:
+    // FIPS.186-4 B.1.1 Key Pair Generation Using Extra Random Bits
+    // FIPS.186-4 B.1.2 Key Pair Generation by Testing Candidates
+
+    // Instead, it delegates the generation of uniform random 1 <= x <= p-1 to gen_biguint_range.
+
+    // TODO check assurances that this really is uniform
+    let x = rng.gen_biguint_range(&BigUint::one(), q);
+
+    let y = g.modpow(&x, p);
+
+    Ok((x, y))
 }
 
 /// Divides i by j and rounds up to the nearest integer
@@ -282,10 +342,13 @@ pub fn verify(p: &Mpi, q: &Mpi, g: &Mpi, y: &Mpi, hashed: &[u8], sig: &[Mpi]) ->
 
 #[cfg(test)]
 mod test {
+    use std::io::{Cursor, Read};
+
     use super::*;
+    use hex_literal::hex;
     use num_bigint::BigUint;
     use num_traits::Num;
-    use hex_literal::hex;
+    use rand::{thread_rng, RngCore};
 
     fn mpi_hex(s: &str) -> Mpi {
         BigUint::from_str_radix(s, 16).unwrap().into()
@@ -293,6 +356,49 @@ mod test {
 
     fn hash(hash_algorithm: HashAlgorithm, text: &str) -> Vec<u8> {
         hash_algorithm.digest(text.as_bytes()).unwrap()
+    }
+
+    struct FakeRng {
+        data: Cursor<Vec<u8>>,
+    }
+
+    impl FakeRng {
+        fn new(data: &[u8]) -> Self {
+            Self {
+                data: Cursor::new(data.to_owned()),
+            }
+        }
+    }
+
+    impl RngCore for FakeRng {
+        fn next_u32(&mut self) -> u32 {
+            let mut tmp = 0u32.to_le_bytes();
+            self.fill_bytes(&mut tmp);
+            u32::from_le_bytes(tmp)
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            let mut tmp = 0u64.to_le_bytes();
+            self.fill_bytes(&mut tmp);
+            u64::from_le_bytes(tmp)
+        }
+
+        fn fill_bytes(&mut self, dest: &mut [u8]) {
+            self.try_fill_bytes(dest).unwrap()
+        }
+
+        fn try_fill_bytes(&mut self, dest: &mut [u8]) -> std::result::Result<(), rand::Error> {
+            self.data.read_exact(dest).map_err(|e| rand::Error::new(e))
+        }
+    }
+
+    fn generate_p_q_with_seed<D: Digest>(
+        plen: usize,
+        qlen: usize,
+        seed: &[u8],
+    ) -> Result<(BigUint, BigUint)> {
+        let mut rng = FakeRng::new(seed);
+        generate_p_q::<D, _>(&mut rng, plen, qlen, seed.len() * 8)
     }
 
     /// Test vectors from https://tools.ietf.org/html/rfc6979#appendix-A.2.1
@@ -576,9 +682,8 @@ mod test {
     fn test_domain_generation_1() {
         let _ = pretty_env_logger::try_init();
 
-        let mut seed = Some(hex!("1f5da0af598eeadee6e6665bf880e63d8b609ba2").into());
-        let (p, q) = generate_domain_parameters::<Sha1, _, _>(1024, 160, || seed.take().unwrap())
-        .unwrap();
+        let seed = hex!("1f5da0af598eeadee6e6665bf880e63d8b609ba2");
+        let (p, q) = generate_p_q_with_seed::<Sha1>(1024, 160, &seed).unwrap();
 
         assert_eq!(p.to_bytes_be().as_slice(), &hex!("b5cf7916632405a72a407979949ee858c91adfcabfaa6cca0e5456090b0d8eb7f36c34f23dfe1759c4a3adcd776629d871214560e5e11b2f79792f040042987091c55951060bcb5fdf7cb93fed8b45fea26376e7682fc601df883dc7e272489b83181aac7340a1eb0a0fc97f53ac80f3f965cd8abcd7aa5fe1d2e38a357cb9f1")[..]);
         assert_eq!(
@@ -592,15 +697,52 @@ mod test {
     fn test_domain_generation_2() {
         let _ = pretty_env_logger::try_init();
 
-        let mut seed = Some(hex!("39f637d1c0b3286d1900b2de9769a14e0f6c9945").into());
-        let (p, q) = generate_domain_parameters::<Sha224, _, _>(1024, 160, || seed.take().unwrap())
-        .unwrap();
+        let seed = hex!("39f637d1c0b3286d1900b2de9769a14e0f6c9945");
+        let (p, q) = generate_p_q_with_seed::<Sha224>(1024, 160, &seed).unwrap();
 
         assert_eq!(p.to_bytes_be().as_slice(), &hex!("801052c33c93eac96defda9044c1f26c3089003f9cbd8cf47103e5847e858e30f6114384af7c83ac77b21a130c109ed21027bdf196ba8b36dccdeeda2a6ae326752fddd3b305b1058ca1837457b370a4aea666878704dc11a69686ae4b18a55df6f1a250225d14d58bbe243d77c933aeb15da3b399ca549e60740e946170cb09")[..]);
         assert_eq!(
             q.to_bytes_be().as_slice(),
             &hex!("a02bc4e4265bbfa82b1a7769f4d1ad936744623f")[..]
         );
+    }
 
+    #[test]
+    fn test_end_to_end() {
+        let mut rng = thread_rng();
+
+        let (p, q) = generate_p_q::<Sha256, _>(&mut rng, 1024, 160, 256).unwrap();
+
+        let g = generate_g(&mut rng, &p, &q).unwrap();
+
+        validate_g(&p, &q, &g).unwrap();
+
+        let (x, y) = generate_x_y(&mut rng, &p, &q, &g).unwrap();
+
+        let message = "hello world!".as_bytes();
+
+        let hashed = Sha256::digest(message);
+
+        let sig = sign(
+            &p.clone().into(),
+            &q.clone().into(),
+            &g.clone().into(),
+            &x,
+            HashAlgorithm::SHA2_256,
+            hashed.as_slice(),
+        )
+        .unwrap();
+
+        let sig = sig.iter().map(|i| Mpi::from_slice(&i)).collect::<Vec<_>>();
+
+        verify(
+            &p.clone().into(),
+            &q.clone().into(),
+            &g.clone().into(),
+            &y.clone().into(),
+            hashed.as_slice(),
+            &sig,
+        )
+        .unwrap();
     }
 }
