@@ -205,7 +205,15 @@ macro_rules! impl_secret_key {
                                 } => (p, q, g),
                                 _ => unreachable!("inconsistent key state"),
                             };
-                            $crate::crypto::dsa::sign(&p, &q, &g, &priv_key.x, hash, data)
+                            $crate::crypto::dsa::sign(
+                                &p.into(),
+                                &q.into(),
+                                &g.into(),
+                                &priv_key.x,
+                                hash,
+                                data,
+                            )
+                            .map(|(r, s)| vec![r.to_bytes_be(), s.to_bytes_be()])
                         }
                         SecretKeyRepr::ECDH(_) => {
                             bail!("ECDH can not be used to for signing operations")
