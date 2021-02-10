@@ -20,6 +20,7 @@ pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> G
     mut next_seed: F,
 ) -> Result<(BigUint, BigUint)> {
     // FIPS.186-4 A.1.1.2 Generation of the Probable Primes p and q Using an Approved Hash Function
+    // https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf
 
     // Some notes on the translation to code:
     // * Uppercase variable names (W) were turned into doubled variable names (ww)
@@ -48,6 +49,7 @@ pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> G
         (3072, 256) => 64,
         _ => {
             warn!("L = {}, N = {} is not a NIST specified DSA key size", plen, qlen);
+            // TODO FIXME even more conservative default
             64
         }
     };
@@ -63,6 +65,7 @@ pub fn generate_domain_parameters<D: Digest, N: ArrayLength<u8>, F: FnMut() -> G
         // Closure which extracts the next `extractlen` bits from `domain_param_seed`.
         // It is a binary counter which we take the hash of and increment every time we need a value.
         let mut extract = || {
+            // TODO FIXME figure out if this should ignore leading 0 bytes or not
             // Hash current value and turn it into a BigUint
             let value = BigUint::from_bytes_be(D::digest(&domain_param_seed).as_slice());
             // Directly increment `domain_param_seed` as if it is a big endian counter.
