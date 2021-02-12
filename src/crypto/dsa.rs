@@ -1,7 +1,7 @@
 use digest::{generic_array::typenum::Unsigned, Digest};
 use digest::{BlockInput, FixedOutput, Reset, Update};
-use generic_array::ArrayLength;
-use hmac_drbg::HmacDRBG;
+use generic_array::{ArrayLength, GenericArray};
+use hmac::{Hmac, Mac, NewMac};
 use md5::Md5;
 use num_bigint::{prime::probably_prime_miller_rabin, traits::ModInverse, BigUint, RandBigInt};
 use num_traits::{CheckedSub, One, Zero};
@@ -224,6 +224,65 @@ fn inverse(i: &BigUint, q: &BigUint) -> Result<BigUint> {
     }
 }
 
+// TODO FIXME This is copy/pasted from the ecdsa crate until it can be split out
+struct HmacDrbg<D>
+where
+    D: BlockInput + FixedOutput + Clone + Default + Reset + Update,
+{
+    /// HMAC key `K` (see RFC 6979 Section 3.2.c)
+    k: Hmac<D>,
+
+    /// Chaining value `V` (see RFC 6979 Section 3.2.c)
+    v: GenericArray<u8, D::OutputSize>,
+}
+
+impl<D> HmacDrbg<D>
+where
+    D: BlockInput + FixedOutput + Clone + Default + Reset + Update,
+{
+    /// Initialize `HMAC_DRBG`
+    pub fn new(entropy_input: &[u8], nonce: &[u8], additional_data: &[u8]) -> Self {
+        let mut k = Hmac::new(&Default::default());
+        let mut v = GenericArray::default();
+
+        for b in &mut v {
+            *b = 0x01;
+        }
+
+        for i in 0..=1 {
+            k.update(&v);
+            k.update(&[i]);
+            k.update(entropy_input);
+            k.update(nonce);
+            k.update(additional_data);
+            k = Hmac::new_varkey(&k.finalize().into_bytes()).unwrap();
+
+            // Steps 3.2.e,g: v = HMAC_k(v)
+            k.update(&v);
+            v = k.finalize_reset().into_bytes();
+        }
+
+        Self { k, v }
+    }
+
+    /// Get the next `HMAC_DRBG` output
+    pub fn generate_into(&mut self, out: &mut [u8]) {
+        for out_chunk in out.chunks_mut(self.v.len()) {
+            self.k.update(&self.v);
+            self.v = self.k.finalize_reset().into_bytes();
+            out_chunk.copy_from_slice(&self.v[..out_chunk.len()]);
+        }
+
+        self.k.update(&self.v);
+        self.k.update(&[0x00]);
+        self.k = Hmac::new_varkey(&self.k.finalize_reset().into_bytes()).unwrap();
+        self.k.update(&self.v);
+        self.v = self.k.finalize_reset().into_bytes();
+    }
+}
+
+
+
 /// So we can make a trait object out of differently parameterized HmacDRBG instances.
 /// HMAC DRBG is what RFC6979 uses for generating the k parameter for DSA signatures.
 /// This makes the signatures deterministic and eliminates the risk of leaking secret
@@ -232,7 +291,7 @@ trait KGenerator {
     fn next(&mut self, q: &BigUint) -> BigUint;
 }
 
-impl<D> KGenerator for HmacDRBG<D>
+impl<D> KGenerator for HmacDrbg<D>
 where
     D: Update + FixedOutput + BlockInput + Reset + Clone + Default,
     D::BlockSize: ArrayLength<u8>,
@@ -242,7 +301,7 @@ where
         let output_size = D::OutputSize::to_usize();
         let q_bytes = div_ceil(q.bits(), 8);
         let mut tmp = vec![0u8; next_multiple_of(q_bytes, output_size)];
-        self.generate_to_slice(&mut tmp, None);
+        self.generate_into(&mut tmp);
         bits_to_int(&tmp, &q)
     }
 }
@@ -254,13 +313,13 @@ fn make_k_generator(
     pers: &[u8],
 ) -> Result<Box<dyn KGenerator>> {
     Ok(match hash_algorithm {
-        HashAlgorithm::MD5 => Box::new(HmacDRBG::<Md5>::new(entropy, nonce, pers)),
-        HashAlgorithm::SHA1 => Box::new(HmacDRBG::<Sha1>::new(entropy, nonce, pers)),
-        HashAlgorithm::RIPEMD160 => Box::new(HmacDRBG::<Ripemd160>::new(entropy, nonce, pers)),
-        HashAlgorithm::SHA2_256 => Box::new(HmacDRBG::<Sha256>::new(entropy, nonce, pers)),
-        HashAlgorithm::SHA2_384 => Box::new(HmacDRBG::<Sha384>::new(entropy, nonce, pers)),
-        HashAlgorithm::SHA2_512 => Box::new(HmacDRBG::<Sha512>::new(entropy, nonce, pers)),
-        HashAlgorithm::SHA2_224 => Box::new(HmacDRBG::<Sha224>::new(entropy, nonce, pers)),
+        HashAlgorithm::MD5 => Box::new(HmacDrbg::<Md5>::new(entropy, nonce, pers)),
+        HashAlgorithm::SHA1 => Box::new(HmacDrbg::<Sha1>::new(entropy, nonce, pers)),
+        HashAlgorithm::RIPEMD160 => Box::new(HmacDrbg::<Ripemd160>::new(entropy, nonce, pers)),
+        HashAlgorithm::SHA2_256 => Box::new(HmacDrbg::<Sha256>::new(entropy, nonce, pers)),
+        HashAlgorithm::SHA2_384 => Box::new(HmacDrbg::<Sha384>::new(entropy, nonce, pers)),
+        HashAlgorithm::SHA2_512 => Box::new(HmacDrbg::<Sha512>::new(entropy, nonce, pers)),
+        HashAlgorithm::SHA2_224 => Box::new(HmacDrbg::<Sha224>::new(entropy, nonce, pers)),
         HashAlgorithm::None
         | HashAlgorithm::SHA3_256
         | HashAlgorithm::SHA3_512

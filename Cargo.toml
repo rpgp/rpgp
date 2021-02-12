@@ -43,7 +43,7 @@ md-5 = { version = "^0.10.5", features = ["oid"] }
 nom = "^7.0"
 num_enum = "0.7"
 num-traits = "0.2.6"
-P256 = { version = "^0.13", features = ["ecdsa"] }
+p256 = { version = "^0.13", features = ["ecdsa"] }
 p384 = { version = "^0.13", features = ["ecdsa"] }
 k256 = { version = "0.13", features = ["ecdsa"] }
 rand = "0.8"
@@ -59,7 +59,7 @@ twofish = "^0.7"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 getrandom = { version = "0.2.6", optional = true }
 bstr = { version = "1.4.0", default-features = false, features = ["std"] }
-hmac-drbg = "0.3.0"
+hmac = "0.10.1"
 
 [dependencies.buffer-redux]
 version = "1.0.0"
