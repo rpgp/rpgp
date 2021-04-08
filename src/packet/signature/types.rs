@@ -107,7 +107,7 @@ impl Signature {
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
-    /// Verifies a certificate siganture type.
+    /// Verifies a certificate signature type.
     pub fn verify_certificate(
         &self,
         key: &impl PublicKeyTrait,
