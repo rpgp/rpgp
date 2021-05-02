@@ -811,6 +811,8 @@ mod tests {
         let pkey = skey.public_key();
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        assert!(lit_msg.verify(&pkey).is_err()); // Unsigned message shouldn't verify
+
         let signed_msg = lit_msg
             .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
