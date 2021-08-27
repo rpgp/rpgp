@@ -85,15 +85,16 @@ jobs:
     steps:
       - *restore-workspace
       - *restore-cache
+      - run: rustup install 1.51.0
       - run:
           name: Install Cargo Audit
-          command: cargo install --force cargo-audit
+          command: cargo +1.51.0 install --force cargo-audit
       - run:
           name: Generate lockfile
-          command: cargo generate-lockfile
+          command: cargo +1.51.0 generate-lockfile
       - run:
           name: Run cargo audit
-          command: cargo audit
+          command: cargo +1.51.0 audit
 
   test_macos:
     macos:

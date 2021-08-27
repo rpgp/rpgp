@@ -16,8 +16,7 @@
     clippy::perf,
     clippy::complexity,
     clippy::correctness,
-    clippy::result_unwrap_used,
-    clippy::option_unwrap_used,
+    clippy::unwrap_used,
     rust_2018_idioms
 )]
 #![warn(clippy::nursery)]
