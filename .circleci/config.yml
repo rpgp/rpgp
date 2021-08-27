@@ -47,6 +47,8 @@ jobs:
       - run: rustup default $(cat rust-toolchain)
       - run: rustup component add --toolchain $(cat rust-toolchain) rustfmt
       - run: rustup component add --toolchain $(cat rust-toolchain) clippy
+      - run: rustup install 1.51.0
+      - run: rustup component add --toolchain 1.51.0 clippy
       - run: cargo update
       - run: cargo fetch
       - run: rustc +stable --version
@@ -78,14 +80,13 @@ jobs:
       - *restore-cache
       - run:
           name: Run cargo clippy
-          command: cargo clippy --all
+          command: cargo +1.51.0 clippy --all
 
   audit:
     executor: default
     steps:
       - *restore-workspace
       - *restore-cache
-      - run: rustup install 1.51.0
       - run:
           name: Install Cargo Audit
           command: cargo +1.51.0 install --force cargo-audit

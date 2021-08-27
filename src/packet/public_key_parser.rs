@@ -127,7 +127,7 @@ named_args!(old_public_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, Pub
 // Parse a public key packet (Tag 6)
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
 #[rustfmt::skip]
-named!(pub(crate) parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
+named!(pub parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams)>, do_parse!(
        key_ver: map_opt!(be_u8, KeyVersion::from_u8)
     >>     key: switch!(value!(&key_ver),
                         &KeyVersion::V2 => call!(
