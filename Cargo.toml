@@ -10,7 +10,7 @@ readme = "README.md"
 resolver = "2"
 
 keywords = ["pgp", "gpg", "openpgp", "email", "encryption"]
-categories = ["cryptography", "std", "email"]
+categories = ["cryptography", "email"]
 
 exclude = ["tests/tests/*"]
 
