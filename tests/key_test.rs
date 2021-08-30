@@ -14,7 +14,7 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use rand::thread_rng;
 use rsa::padding::PaddingScheme;
-use rsa::{PublicKey as PublicKeyTrait, PublicKeyParts, RSAPrivateKey, RSAPublicKey};
+use rsa::{PublicKey as PublicKeyTrait, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
@@ -188,8 +188,8 @@ fn test_parse_openpgp_sample_rsa_private() {
 
                     let ciphertext = {
                         // TODO: fix this in rust-rsa
-                        let k: RSAPrivateKey = k.clone();
-                        let pk: RSAPublicKey = k.into();
+                        let k: RsaPrivateKey = k.clone();
+                        let pk: RsaPublicKey = k.into();
                         pk.encrypt(
                             &mut rng,
                             PaddingScheme::new_pkcs1v15_encrypt(),
