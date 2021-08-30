@@ -85,7 +85,28 @@ jobs:
       if: matrix.rust == 'nightly'
       with:
         command: test
-        args: --all  --features asm
+        args: --all --features asm
+
+    - name: tests ignored
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all --release -- --ignored
+
+    - name: nightly ignored
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command: test
+        args: --all --features nightly --release -- --ignored
+
+    - name: asm ignored
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command: test
+        args: --all --features asm --release -- --ignored
+
 
   build_and_test_windows:
     name: Build and test (Windows)
@@ -161,12 +182,34 @@ jobs:
         command: test
         args: --all  --features nightly --target ${{ matrix.target }}
 
-    - name: asm
+    # FIXME
+    # - name: asm
+    #   uses: actions-rs/cargo@v1
+    #   if: matrix.rust == 'nightly' && matrix.target == 'x86_64-pc-windows-gnu'
+    #   with:
+    #     command: test
+    #     args: --all  --features asm --target ${{ matrix.target }}
+
+    - name: tests ignored
       uses: actions-rs/cargo@v1
-      if: matrix.rust == 'nightly' && matrix.target == 'x86_64-pc-windows-gnu'
       with:
         command: test
-        args: --all  --features asm --target ${{ matrix.target }}
+        args: --all  --target ${{ matrix.target }} --release -- --ignored
+
+    - name: nightly ignored
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command: test
+        args: --all  --features nightly --target ${{ matrix.target }} --release -- --ignored
+
+    # FIXME
+    # - name: asm ignored
+    #   uses: actions-rs/cargo@v1
+    #   if: matrix.rust == 'nightly' && matrix.target == 'x86_64-pc-windows-gnu'
+    #   with:
+    #     command: test
+    #     args: --all  --features asm --target ${{ matrix.target }} --release -- --ignored
 
 
   cross:
@@ -202,6 +245,9 @@ jobs:
 
     - name: test
       run: cross test --all --target ${{ matrix.target }}
+
+    - name: test ignored
+      run: cross test --all --target ${{ matrix.target }} --release -- --ignored
 
   check_wasm:
     name: Check wasm targets
