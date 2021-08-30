@@ -143,8 +143,7 @@ jobs:
 
     - name: check asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == 'nightly'
-      if: matrix.target == 'x86_64-pc-windows-gnu'
+      if: matrix.rust == 'nightly' && matrix.target == 'x86_64-pc-windows-gnu'
       with:
         command:  check
         target: ${{ matrix.target }}
@@ -167,8 +166,7 @@ jobs:
 
     - name: asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == 'nightly'
-      if: matrix.target == 'x86_64-pc-windows-gnu'
+      if: matrix.rust == 'nightly' && matrix.target == 'x86_64-pc-windows-gnu'
       with:
         command: test
         target: ${{ matrix.target }}
