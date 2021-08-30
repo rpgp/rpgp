@@ -114,24 +114,21 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: check
-        target: ${{ matrix.target }}
-        args: --all --bins --tests
+        args: --all --bins --tests --target ${{ matrix.target }}
 
     - name: check nightly
       uses: actions-rs/cargo@v1
       if: matrix.rust == 'nightly'
       with:
         command:  check
-        target: ${{ matrix.target }}
-        args: --features nightly --all --bins --examples --tests
+        args: --features nightly --all --bins --examples --tests --target ${{ matrix.target }}
 
     - name: check wasm
       uses: actions-rs/cargo@v1
       with:
         command:  check
-        target: wasm32-unknown-unknown
         override: true
-        args: --features wasm --all --bins
+        args: --features wasm --all --bins --target wasm32-unknown-unknown
 
     - name: check bench
       uses: actions-rs/cargo@v1
@@ -146,31 +143,27 @@ jobs:
       if: matrix.rust == 'nightly' && matrix.target == 'x86_64-pc-windows-gnu'
       with:
         command:  check
-        target: ${{ matrix.target }}
-        args: --features asm
+        args: --features asm  --target ${{ matrix.target }}
         
     - name: tests
       uses: actions-rs/cargo@v1
       with:
         command: test
-        target: ${{ matrix.target }}
-        args: --all 
+        args: --all  --target ${{ matrix.target }}
 
     - name: nightly
       uses: actions-rs/cargo@v1
       if: matrix.rust == 'nightly'
       with:
         command: test
-        target: ${{ matrix.target }}
-        args: --all  --features nightly
+        args: --all  --features nightly --target ${{ matrix.target }}
 
     - name: asm
       uses: actions-rs/cargo@v1
       if: matrix.rust == 'nightly' && matrix.target == 'x86_64-pc-windows-gnu'
       with:
         command: test
-        target: ${{ matrix.target }}
-        args: --all  --features asm
+        args: --all  --features asm --target ${{ matrix.target }}
 
 
   cross:
@@ -181,7 +174,8 @@ jobs:
         target:
           - i686-unknown-linux-gnu
           - powerpc-unknown-linux-gnu
-          - powerpc64-unknown-linux-gnu
+          # FIXME
+          # - powerpc64-unknown-linux-gnu
           - mips-unknown-linux-gnu
           - arm-linux-androideabi
 
