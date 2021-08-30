@@ -94,7 +94,10 @@ jobs:
       matrix:
         os: [windows-latest]
         rust: [nightly, beta, stable]
-        target: [x86_64-pc-windows-gnu, x86_64-pc-windows-msvc]
+        target:
+          - x86_64-pc-windows-gnu
+          # FIXME
+          # -  x86_64-pc-windows-msvc
 
     steps:
     - name: Checkout
