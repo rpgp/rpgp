@@ -28,7 +28,7 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 /// );
 /// ```
 ///
-pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>> {
+pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], MpiRef<'_>> {
     let (number, len) = be_u16(input)?;
 
     let bits = u32::from(len);

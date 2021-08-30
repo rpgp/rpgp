@@ -370,7 +370,7 @@ impl Signature {
                 Subpacket::IsPrimary(d) => Some(*d),
                 _ => None,
             })
-            .unwrap_or_else(|| false)
+            .unwrap_or(false)
     }
 
     pub fn is_revocable(&self) -> bool {
@@ -379,7 +379,7 @@ impl Signature {
                 Subpacket::Revocable(d) => Some(*d),
                 _ => None,
             })
-            .unwrap_or_else(|| true)
+            .unwrap_or(true)
     }
 
     pub fn embedded_signature(&self) -> Option<&Signature> {
@@ -446,7 +446,7 @@ impl Signature {
                 Subpacket::ExportableCertification(d) => Some(*d),
                 _ => None,
             })
-            .unwrap_or_else(|| true)
+            .unwrap_or(true)
     }
 }
 
@@ -595,6 +595,7 @@ pub enum SubpacketType {
     Other(u8),
 }
 
+#[allow(clippy::from_over_into)]
 impl Into<u8> for SubpacketType {
     #[inline]
     fn into(self) -> u8 {

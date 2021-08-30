@@ -142,8 +142,7 @@ pub fn ecc_curve_from_oid(oid: &[u8]) -> Option<ECCCurve> {
 
 fn asn1_der_object_id_val_enc(val: u32) -> Vec<u8> {
     let mut val = val;
-    let mut acc = Vec::new();
-    acc.push((val & 0x7f) as u8);
+    let mut acc = vec![(val & 0x7f) as u8];
     val >>= 7;
 
     while val > 0 {

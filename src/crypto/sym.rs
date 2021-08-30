@@ -426,7 +426,7 @@ impl SymmetricKeyAlgorithm {
         Ok(ciphertext)
     }
 
-    pub fn encrypt_protected<'a>(self, key: &[u8], plaintext: &'a [u8]) -> Result<Vec<u8>> {
+    pub fn encrypt_protected(self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
         self.encrypt_protected_with_rng(&mut thread_rng(), key, plaintext)
     }
 

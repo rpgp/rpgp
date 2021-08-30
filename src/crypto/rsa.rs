@@ -68,7 +68,7 @@ pub fn verify(n: &[u8], e: &[u8], hash: HashAlgorithm, hashed: &[u8], sig: &[u8]
     let key = RsaPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
     let rsa_hash: Option<rsa::Hash> = hash.try_into().ok();
 
-    key.verify(PaddingScheme::new_pkcs1v15_sign(rsa_hash), &hashed[..], sig)
+    key.verify(PaddingScheme::new_pkcs1v15_sign(rsa_hash), hashed, sig)
         .map_err(Into::into)
 }
 

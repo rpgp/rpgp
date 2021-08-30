@@ -196,7 +196,7 @@ named!(
             >> value:
                 map_res!(
                     terminated!(
-                        map!(opt!(not_line_ending), |r| r.unwrap_or_else(|| b"")),
+                        map!(opt!(not_line_ending), |r| r.unwrap_or(b"")),
                         line_ending
                     ),
                     str::from_utf8

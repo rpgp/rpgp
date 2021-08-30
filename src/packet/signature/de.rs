@@ -263,7 +263,7 @@ fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
     Ok((&b""[..], Subpacket::PreferredAeadAlgorithms(list)))
 }
 
-fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpacket> {
+fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
     use self::SubpacketType::*;
     debug!("parsing subpacket: {:?} {}", typ, hex::encode(body));
 
@@ -293,11 +293,8 @@ fn subpacket<'a>(typ: SubpacketType, body: &'a [u8]) -> IResult<&'a [u8], Subpac
         EmbeddedSignature => embedded_sig(body),
         IssuerFingerprint => issuer_fingerprint(body),
         PreferredAead => pref_aead_alg(body),
-        Experimental(n) => Ok((
-            &body[..],
-            Subpacket::Experimental(n, SmallVec::from_slice(body)),
-        )),
-        Other(n) => Ok((&body[..], Subpacket::Other(n, body.to_vec()))),
+        Experimental(n) => Ok((body, Subpacket::Experimental(n, SmallVec::from_slice(body)))),
+        Other(n) => Ok((body, Subpacket::Other(n, body.to_vec()))),
     };
 
     if res.is_err() {
@@ -416,7 +413,7 @@ named_args!(v4_parser(packet_version: Version, version: SignatureVersion) <Signa
     ))
 ));
 
-fn invalid_version<'a>(_body: &'a [u8], version: SignatureVersion) -> IResult<&'a [u8], Signature> {
+fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Signature> {
     unimplemented!("unknown signature version {:?}", version);
 }
 

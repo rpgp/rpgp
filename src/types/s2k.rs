@@ -169,18 +169,15 @@ impl StringToKeyType {
 
 /// Has the given s2k type a salt?
 fn has_salt(typ: StringToKeyType) -> bool {
-    match typ {
-        StringToKeyType::Salted | StringToKeyType::IteratedAndSalted => true,
-        _ => false,
-    }
+    matches!(
+        typ,
+        StringToKeyType::Salted | StringToKeyType::IteratedAndSalted
+    )
 }
 
 /// Has the given s2k type a count?
 fn has_count(typ: StringToKeyType) -> bool {
-    match typ {
-        StringToKeyType::IteratedAndSalted => true,
-        _ => false,
-    }
+    matches!(typ, StringToKeyType::IteratedAndSalted)
 }
 
 #[rustfmt::skip]

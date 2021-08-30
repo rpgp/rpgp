@@ -491,11 +491,7 @@ impl Message {
                             }
                         }
 
-                        if let Some(packet) = packet {
-                            Some((packet, encoding_key, encoding_subkey))
-                        } else {
-                            None
-                        }
+                        packet.map(|packet| (packet, encoding_key, encoding_subkey))
                     })
                     .collect::<Vec<_>>();
 
@@ -551,7 +547,7 @@ impl Message {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt_with_password<'a, F>(&'a self, msg_pw: F) -> Result<MessageDecrypter<'a>>
+    pub fn decrypt_with_password<F>(&self, msg_pw: F) -> Result<MessageDecrypter<'_>>
     where
         F: FnOnce() -> String + Clone,
     {
@@ -593,13 +589,10 @@ impl Message {
     pub fn is_literal(&self) -> bool {
         match self {
             Message::Literal { .. } => true,
-            Message::Signed { message, .. } => {
-                if let Some(msg) = message {
-                    msg.is_literal()
-                } else {
-                    false
-                }
-            }
+            Message::Signed { message, .. } => message
+                .as_ref()
+                .map(|msg| msg.is_literal())
+                .unwrap_or_default(),
             _ => false,
         }
     }
@@ -607,13 +600,7 @@ impl Message {
     pub fn get_literal(&self) -> Option<&LiteralData> {
         match self {
             Message::Literal(ref data) => Some(data),
-            Message::Signed { message, .. } => {
-                if let Some(msg) = message {
-                    msg.get_literal()
-                } else {
-                    None
-                }
-            }
+            Message::Signed { message, .. } => message.as_ref().and_then(|msg| msg.get_literal()),
             _ => None,
         }
     }

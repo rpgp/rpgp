@@ -303,14 +303,14 @@ impl SignatureConfig {
 
     /// Returns if the signature is a certificate or not.
     pub fn is_certificate(&self) -> bool {
-        match self.typ {
+        matches!(
+            self.typ,
             SignatureType::CertGeneric
-            | SignatureType::CertPersona
-            | SignatureType::CertCasual
-            | SignatureType::CertPositive
-            | SignatureType::CertRevocation => true,
-            _ => false,
-        }
+                | SignatureType::CertPersona
+                | SignatureType::CertCasual
+                | SignatureType::CertPositive
+                | SignatureType::CertRevocation
+        )
     }
 
     pub fn created(&self) -> Option<&DateTime<Utc>> {

@@ -105,11 +105,10 @@ impl<I: Iterator<Item = u8>> Iterator for Normalized<I> {
                     self.iter.next()
                 }
                 LineBreak::Crlf => {
+                    self.prev_was_cr = false;
                     if self.prev_was_cr {
-                        self.prev_was_cr = false;
                         Some(b'\n')
                     } else {
-                        self.prev_was_cr = false;
                         self.iter.next()
                     }
                 }
