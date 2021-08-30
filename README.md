@@ -5,7 +5,6 @@
 [![Build Status][build-image]][build-link]
 ![minimum rustc 1.51][msrv-image]
 [![dependency status][deps-image]][deps-link]
-[![Docs][docs-image]][docs-link] 
 [![License][license-image]][license-link]
 
 > OpenPGP implemented in pure Rust, permissively licensed
