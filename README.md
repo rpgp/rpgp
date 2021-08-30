@@ -1,8 +1,14 @@
 # rPGP
 
-> OpenPGP implemented in pure Rust, permissively licensed
+[![crates.io][crate-image]][crate-link]
+[![Documentation][doc-image]][doc-link]
+[![Build Status][build-image]][build-link]
+![minimum rustc 1.51][msrv-image]
+[![dependency status][deps-image]][deps-link]
+[![Docs][docs-image]][docs-link] 
+[![License][license-image]][license-link]
 
-[![crates.io version][crate-shield]][crate] [![CircleCI build status][circle-shield]][circle] [![Appveyor build status][appveyor-shield]][appveyor] [![Docs][docs-shield]][docs] [![License][license-shield]][license]
+> OpenPGP implemented in pure Rust, permissively licensed
 
 rPGP is the only full Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html).
 
@@ -77,13 +83,14 @@ Unless you explicitly state otherwise, any contribution submitted
 for inclusion in rPGP by you, as defined in the Apache-2.0 license, shall be
 dual licensed as above, without any additional terms or conditions.
 
-[circle-shield]: https://img.shields.io/circleci/project/github/rpgp/rpgp/master.svg?style=flat-square
-[circle]: https://circleci.com/gh/rpgp/rpgp/
-[appveyor-shield]: https://ci.appveyor.com/api/projects/status/99y4f73itv7yvt93/branch/master?style=flat-square
-[appveyor]: https://ci.appveyor.com/project/dignifiedquire/pgp/branch/master
-[docs-shield]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
-[docs]: https://docs.rs/crate/pgp/
-[license-shield]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
-[license]: https://github.com/rpgp/rpgp/blob/master/LICENSE.md
-[crate-shield]: https://img.shields.io/crates/v/pgp.svg?style=flat-square
-[crate]: https://crates.io/crates/pgp
+[crate-image]: https://img.shields.io/crates/v/pgp.svg?style=flat-square
+[crate-link]: https://crates.io/crates/pgp
+[docs-image]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
+[docs-link]: https://docs.rs/crate/pgp/
+[license-image]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
+[license-link]: https://github.com/rpgp/rpgp/blob/master/LICENSE.md
+[build-image]: https://github.com/rpgp/rpgp/workflows/CI/badge.svg
+[build-link]: https://github.com/rpgp/rpgp/actions?query=workflow%3ACI+branch%3Amaster
+[msrv-image]: https://img.shields.io/badge/rustc-1.51+-blue.svg
+[deps-image]: https://deps.rs/repo/github/rpgp/rpgp/status.svg
+[deps-link]: https://deps.rs/repo/github/rpgp/rpgp
