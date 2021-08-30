@@ -1,7 +1,7 @@
 use block_padding::{Padding, Pkcs7};
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::crypto::{aes_kw, ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use crate::errors::Result;
@@ -13,10 +13,15 @@ const ANON_SENDER: [u8; 20] = [
     0x20, 0x20, 0x20, 0x20,
 ];
 
+const SECRET_KEY_LENGTH: usize = 32;
+
 /// Generate an ECDH KeyPair.
 /// Currently only support ED25519.
 pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {
-    let secret = StaticSecret::new(rng);
+    let mut secret_key_bytes = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
+    rng.fill_bytes(&mut *secret_key_bytes);
+
+    let secret = StaticSecret::from(*secret_key_bytes);
     let public = PublicKey::from(&secret);
 
     // public key
@@ -179,7 +184,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
         x25519_dalek::PublicKey::from(public_key_arr)
     };
 
-    let our_secret = x25519_dalek::StaticSecret::new(rng);
+    let mut our_secret_key_bytes = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
+    rng.fill_bytes(&mut *our_secret_key_bytes);
+    let our_secret = x25519_dalek::StaticSecret::from(*our_secret_key_bytes);
 
     // derive shared secret
     let shared_secret = our_secret.diffie_hellman(&their_public);

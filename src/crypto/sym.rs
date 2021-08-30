@@ -1,7 +1,7 @@
 use aes::{Aes128, Aes192, Aes256};
 use blowfish::Blowfish;
 use cast5::Cast5;
-use cfb_mode::cipher::{NewStreamCipher, StreamCipher};
+use cfb_mode::cipher::{AsyncStreamCipher, NewCipher};
 use cfb_mode::Cfb;
 use des::TdesEde3;
 use rand::{thread_rng, CryptoRng, Rng};
@@ -13,7 +13,7 @@ use crate::errors::{Error, Result};
 
 macro_rules! decrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
+        let mut mode = Cfb::<$mode>::new_from_slices($key, $iv)?;
         mode.decrypt($prefix);
 
         // quick check, before decrypting the rest
@@ -31,7 +31,7 @@ macro_rules! decrypt {
         if $resync {
             unimplemented!("CFB resync is not here");
         // debug!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
-        // let mut mode = Cfb::<$mode>::new_var($key, &$prefix[2..$bs + 2])?;
+        // let mut mode = Cfb::<$mode>::new_from_slices($key, &$prefix[2..$bs + 2])?;
         // mode.decrypt($data);
         } else {
             mode.decrypt($data);
@@ -41,7 +41,7 @@ macro_rules! decrypt {
 
 macro_rules! encrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
+        let mut mode = Cfb::<$mode>::new_from_slices($key, $iv)?;
         mode.encrypt($prefix);
 
         if $resync {
@@ -57,13 +57,13 @@ macro_rules! encrypt {
 
 macro_rules! decrypt_regular {
     ($mode:ident, $key:expr, $iv:expr, $ciphertext:expr, $bs:expr) => {{
-        let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
+        let mut mode = Cfb::<$mode>::new_from_slices($key, $iv)?;
         mode.decrypt($ciphertext);
     }};
 }
 macro_rules! encrypt_regular {
     ($mode:ident, $key:expr, $iv:expr, $plaintext:expr, $bs:expr) => {{
-        let mut mode = Cfb::<$mode>::new_var($key, $iv)?;
+        let mut mode = Cfb::<$mode>::new_from_slices($key, $iv)?;
         mode.encrypt($plaintext);
     }};
 }
@@ -426,7 +426,7 @@ impl SymmetricKeyAlgorithm {
         Ok(ciphertext)
     }
 
-    pub fn encrypt_protected<'a>(self, key: &[u8], plaintext: &'a [u8]) -> Result<Vec<u8>> {
+    pub fn encrypt_protected(self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
         self.encrypt_protected_with_rng(&mut thread_rng(), key, plaintext)
     }
 

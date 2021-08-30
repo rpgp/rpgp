@@ -2,7 +2,7 @@ use num_bigint::traits::ModInverse;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
-use rsa::{PublicKey, PublicKeyParts, RSAPrivateKey, RSAPublicKey};
+use rsa::{PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use try_from::TryInto;
 
 use crate::crypto::HashAlgorithm;
@@ -10,7 +10,7 @@ use crate::errors::Result;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
 /// RSA decryption using PKCS1v15 padding.
-pub fn decrypt(priv_key: &RSAPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt(priv_key: &RsaPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
     // rsa consist of exactly one mpi
     ensure_eq!(mpis.len(), 1, "invalid input");
 
@@ -27,7 +27,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     e: &[u8],
     plaintext: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
-    let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
+    let key = RsaPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
     let data = key.encrypt(rng, PaddingScheme::new_pkcs1v15_encrypt(), plaintext)?;
 
     Ok(vec![data])
@@ -38,7 +38,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
     rng: &mut R,
     bit_size: usize,
 ) -> Result<(PublicParams, PlainSecretParams)> {
-    let key = RSAPrivateKey::new(rng, bit_size)?;
+    let key = RsaPrivateKey::new(rng, bit_size)?;
 
     let p = &key.primes()[0];
     let q = &key.primes()[1];
@@ -65,15 +65,15 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
 /// Verify a RSA, PKCS1v15 padded signature.
 pub fn verify(n: &[u8], e: &[u8], hash: HashAlgorithm, hashed: &[u8], sig: &[u8]) -> Result<()> {
-    let key = RSAPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
+    let key = RsaPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
     let rsa_hash: Option<rsa::Hash> = hash.try_into().ok();
 
-    key.verify(PaddingScheme::new_pkcs1v15_sign(rsa_hash), &hashed[..], sig)
+    key.verify(PaddingScheme::new_pkcs1v15_sign(rsa_hash), hashed, sig)
         .map_err(Into::into)
 }
 
 /// Sign using RSA, with PKCS1v15 padding.
-pub fn sign(key: &RSAPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+pub fn sign(key: &RsaPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
     let rsa_hash: Option<rsa::Hash> = hash.try_into().ok();
     let sig = key.sign(PaddingScheme::new_pkcs1v15_sign(rsa_hash), digest)?;
 

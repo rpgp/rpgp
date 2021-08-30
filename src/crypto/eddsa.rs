@@ -1,7 +1,7 @@
 use ed25519_dalek::Keypair;
 use rand::{CryptoRng, Rng};
 use signature::{Signature, Signer, Verifier};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::crypto::{ECCCurve, HashAlgorithm};
 use crate::errors::Result;
@@ -9,7 +9,12 @@ use crate::types::{EdDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 
 /// Generate an EdDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {
-    let keypair = Keypair::generate(rng);
+    let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
+    rng.fill_bytes(&mut *bytes);
+    let secret = ed25519_dalek::SecretKey::from_bytes(&*bytes).expect("hard coded length");
+    let public = ed25519_dalek::PublicKey::from(&secret);
+
+    let keypair = Keypair { secret, public };
     let mut bytes = keypair.to_bytes();
 
     // public key

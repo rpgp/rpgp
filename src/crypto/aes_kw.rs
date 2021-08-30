@@ -1,4 +1,4 @@
-use aes::{BlockCipher, NewBlockCipher};
+use aes::cipher::{BlockDecrypt, BlockEncrypt, NewBlockCipher};
 use byteorder::{BigEndian, WriteBytesExt};
 use generic_array::sequence::{Concat, Split};
 use generic_array::typenum::U8;

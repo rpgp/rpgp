@@ -12,19 +12,19 @@ pub trait KeyTrait: ::std::fmt::Debug {
     fn is_signing_key(&self) -> bool {
         use crate::crypto::PublicKeyAlgorithm::*;
 
-        match self.algorithm() {
-            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSA => true,
-            _ => false,
-        }
+        matches!(
+            self.algorithm(),
+            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSA
+        )
     }
 
     fn is_encryption_key(&self) -> bool {
         use crate::crypto::PublicKeyAlgorithm::*;
 
-        match self.algorithm() {
-            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal => true,
-            _ => false,
-        }
+        matches!(
+            self.algorithm(),
+            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal
+        )
     }
 }
 

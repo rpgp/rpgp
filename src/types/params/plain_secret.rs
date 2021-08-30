@@ -3,7 +3,7 @@ use std::{fmt, io};
 
 use byteorder::{BigEndian, ByteOrder};
 use rand::{CryptoRng, Rng};
-use rsa::RSAPrivateKey;
+use rsa::RsaPrivateKey;
 use zeroize::Zeroize;
 
 use crate::crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
@@ -124,7 +124,7 @@ impl<'a> PlainSecretParamsRef<'a> {
         match self {
             PlainSecretParamsRef::RSA { d, p, q, .. } => match public_params {
                 PublicParams::RSA { ref n, ref e } => {
-                    let secret_key = RSAPrivateKey::from_components(
+                    let secret_key = RsaPrivateKey::from_components(
                         n.into(),
                         e.into(),
                         d.into(),

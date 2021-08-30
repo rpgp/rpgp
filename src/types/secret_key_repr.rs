@@ -1,7 +1,7 @@
 use std::fmt;
 
 use num_bigint::BigUint;
-use rsa::RSAPrivateKey;
+use rsa::RsaPrivateKey;
 use zeroize::Zeroize;
 
 use crate::crypto::hash::HashAlgorithm;
@@ -11,7 +11,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 #[allow(clippy::large_enum_variant)] // FIXME
 #[derive(Debug)]
 pub enum SecretKeyRepr {
-    RSA(RSAPrivateKey),
+    RSA(RsaPrivateKey),
     DSA(DSASecretKey),
     ECDSA,
     ECDH(ECDHSecretKey),

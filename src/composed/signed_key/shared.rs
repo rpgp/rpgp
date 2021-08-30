@@ -63,17 +63,12 @@ impl SignedKeyDetails {
     /// validity.
     pub fn key_expiration_time(&self) -> Option<Duration> {
         // Find the maximum key_expiration_time in all signatures of all user ids.
-        if let Some(tm) = self
-            .users
+        self.users
             .iter()
             .flat_map(|user| &user.signatures)
             .filter_map(|sig| sig.key_expiration_time())
             .max()
-        {
-            Some(Duration::seconds(tm.timestamp()))
-        } else {
-            None
-        }
+            .map(|tm| Duration::seconds(tm.timestamp()))
     }
 
     fn verify_users(&self, key: &impl PublicKeyTrait) -> Result<()> {

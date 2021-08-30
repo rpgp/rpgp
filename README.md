@@ -62,6 +62,11 @@ Some key differences:
 - All crypto used in rPGP is implemented in pure Rust,
   whereas sequoia uses Nettle, which is implemented in C.
 
+
+## Minimum Supported Rust Version (MSRV)
+
+All crates in this repository support Rust 1.51 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
+
 ## LICENSE
 
 MIT or Apache 2.0

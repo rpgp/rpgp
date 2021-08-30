@@ -68,10 +68,7 @@ impl LiteralData {
     }
 
     pub fn is_binary(&self) -> bool {
-        match self.mode {
-            DataMode::Binary => true,
-            _ => false,
-        }
+        matches!(self.mode, DataMode::Binary)
     }
 
     pub fn data(&self) -> &[u8] {

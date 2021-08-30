@@ -146,8 +146,8 @@ impl From<block_modes::BlockModeError> for Error {
     }
 }
 
-impl From<cipher::stream::InvalidKeyNonceLength> for Error {
-    fn from(_: cipher::stream::InvalidKeyNonceLength) -> Error {
+impl From<cipher::errors::InvalidLength> for Error {
+    fn from(_: cipher::errors::InvalidLength) -> Error {
         Error::CfbInvalidKeyIvLength
     }
 }
@@ -172,40 +172,40 @@ impl From<String> for Error {
 #[macro_export]
 macro_rules! unimplemented_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unimplemented($e.to_string()));
+        return Err($crate::errors::Error::Unimplemented($e.to_string()))
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unimplemented(format!($fmt, $($arg)+)));
+        return Err($crate::errors::Error::Unimplemented(format!($fmt, $($arg)+)))
     };
 }
 
 #[macro_export]
 macro_rules! unsupported_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unsupported($e.to_string()));
+        return Err($crate::errors::Error::Unsupported($e.to_string()))
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unsupported(format!($fmt, $($arg)+)));
+        return Err($crate::errors::Error::Unsupported(format!($fmt, $($arg)+)))
     };
 }
 
 #[macro_export]
 macro_rules! bail {
     ($e:expr) => {
-        return Err($crate::errors::Error::Message($e.to_string()));
+        return Err($crate::errors::Error::Message($e.to_string()))
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Message(format!($fmt, $($arg)+)));
+        return Err($crate::errors::Error::Message(format!($fmt, $($arg)+)))
     };
 }
 
 #[macro_export]
 macro_rules! format_err {
     ($e:expr) => {
-        $crate::errors::Error::Message($e.to_string());
+        $crate::errors::Error::Message($e.to_string())
     };
     ($fmt:expr, $($arg:tt)+) => {
-        $crate::errors::Error::Message(format!($fmt, $($arg)+));
+        $crate::errors::Error::Message(format!($fmt, $($arg)+))
     };
 }
 
