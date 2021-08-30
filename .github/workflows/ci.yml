@@ -59,6 +59,7 @@ jobs:
 
     - name: check asm
       uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
       with:
         command:  check
         args: --features asm
@@ -76,7 +77,12 @@ jobs:
         command: test
         args: --all  --features nightly
 
-
+    - name: asm
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command: test
+        args: --all  --features asm
 
   cross:
     name: Cross compile
@@ -103,9 +109,6 @@ jobs:
       run: cargo install cross
 
     - name: check
-      run: cross check --all --target ${{ matrix.target }}
-
-    - name: check unstable
       run: cross check --all --target ${{ matrix.target }}
 
     - name: test
@@ -162,7 +165,7 @@ jobs:
       run: cargo fmt --all -- --check
 
     - name: Docs
-      run: cargo doc --features docs
+      run: cargo doc
 
   clippy_check:
     runs-on: ubuntu-latest
