@@ -37,6 +37,7 @@ jobs:
 
     - name: check nightly
       uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
       with:
         command:  check
         args: --features nightly --all --bins --examples --tests
@@ -70,9 +71,11 @@ jobs:
 
     - name: nightly
       uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
       with:
         command: test
         args: --all  --features nightly
+
 
 
   cross:
