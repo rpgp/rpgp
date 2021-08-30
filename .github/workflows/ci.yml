@@ -12,12 +12,12 @@ env:
 
 
 jobs:
-  build_and_test:
-    name: Build and test
+  build_and_test_nix:
+    name: Build and test (Nix)
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         rust: [nightly, beta, stable]
 
     steps:
@@ -62,7 +62,7 @@ jobs:
 
     - name: check asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == 'nightly' && matrix.rust != 'windows-latest'
+      if: matrix.rust == 'nightly'
       with:
         command:  check
         args: --features asm
@@ -82,10 +82,87 @@ jobs:
 
     - name: asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == 'nightly' && matrix.rust != 'windows-latest'
+      if: matrix.rust == 'nightly'
       with:
         command: test
         args: --all  --features asm
+
+  build_and_test_windows:
+    name: Build and test (Windows)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest]
+        rust: [nightly, beta, stable]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@master
+      with:
+        submodules: recursive
+
+    - name: Install ${{ matrix.rust }}
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        override: true
+
+    - uses: msys2/setup-msys2@v2
+    - name: check
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --all --bins --tests
+
+    - name: check nightly
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command:  check
+        args: --features nightly --all --bins --examples --tests
+
+    - name: check wasm
+      uses: actions-rs/cargo@v1
+      with:
+        command:  check
+        target: wasm32-unknown-unknown
+        override: true
+        args: --features wasm --all --bins
+
+    - name: check bench
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command:  check
+        args: --benches
+
+    - name: check asm
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command:  check
+        args: --features asm
+        
+    - name: tests
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all 
+
+    - name: nightly
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command: test
+        args: --all  --features nightly
+
+    - name: asm
+      uses: actions-rs/cargo@v1
+      if: matrix.rust == 'nightly'
+      with:
+        command: test
+        args: --all  --features asm
+
 
   cross:
     name: Cross compile
