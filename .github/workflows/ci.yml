@@ -21,7 +21,10 @@ jobs:
         rust: [nightly, beta, stable]
 
     steps:
-    - uses: actions/checkout@master
+    - name Checkout
+      uses: actions/checkout@master
+      with:
+        submodules: recursive
 
     - name: Install ${{ matrix.rust }}
       uses: actions-rs/toolchain@v1
@@ -97,7 +100,10 @@ jobs:
           - arm-linux-androideabi
 
     steps:
-    - uses: actions/checkout@master
+    - name Checkout
+      uses: actions/checkout@master
+      with:
+        submodules: recursive
 
     - name: Install nightly
       uses: actions-rs/toolchain@v1
