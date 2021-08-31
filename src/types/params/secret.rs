@@ -1,6 +1,6 @@
 use std::io;
 
-use nom::{be_u8, rest_len};
+use nom::{combinator::rest_len, number::streaming::be_u8};
 use num_traits::FromPrimitive;
 use zeroize::Zeroize;
 
@@ -117,7 +117,7 @@ named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<
 
         let res = match s2k_typ {
             0 => {
-                let repr = PlainSecretParams::from_slice(data, alg)?;
+                let repr = PlainSecretParams::from_slice(data, alg).expect("TODO");
                 SecretParams::Plain(repr)
             }
             _ => {

@@ -1,5 +1,9 @@
 use chrono::{DateTime, TimeZone, Utc};
-use nom::{be_u16, be_u32, be_u8, rest};
+use nom::{
+    combinator::rest,
+    number::streaming::{be_u16, be_u32, be_u8},
+    IResult,
+};
 use num_traits::FromPrimitive;
 
 use crate::crypto::PublicKeyAlgorithm;
@@ -33,19 +37,26 @@ named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, Pu
 
 // Parse a private key packet (Tag 5)
 // Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
-#[rustfmt::skip]
-named!(pub parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
-       key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-    >>     key: switch!(value!(&key_ver),
-                       &KeyVersion::V2 => call!(
-                           old_private_key_parser, &key_ver
-                       ) |
-                       &KeyVersion::V3 => call!(
-                           old_private_key_parser, &key_ver
-                       ) |
-                       &KeyVersion::V4 => call!(
-                           new_private_key_parser, &key_ver
-                       )
-                )
-    >> (key)
-));
+pub fn parse(
+    i: &[u8],
+) -> IResult<
+    &[u8],
+    (
+        KeyVersion,
+        PublicKeyAlgorithm,
+        DateTime<Utc>,
+        Option<u16>,
+        PublicParams,
+        SecretParams,
+    ),
+> {
+    let (i, key_ver) = nom::combinator::map_opt(be_u8, KeyVersion::from_u8)(i)?;
+    let (i, key) = match &key_ver {
+        &KeyVersion::V2 => old_private_key_parser(i, &key_ver)?,
+        &KeyVersion::V3 => old_private_key_parser(i, &key_ver)?,
+        &KeyVersion::V4 => new_private_key_parser(i, &key_ver)?,
+        &KeyVersion::V5 => unimplemented!(),
+    };
+
+    Ok((i, key))
+}

@@ -9,7 +9,7 @@ pub const MPI_TOO_LONG: u32 = 1000;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to parse {0:?}")]
-    ParsingError(nom::ErrorKind),
+    ParsingError(nom::error::ErrorKind),
     #[error("invalid input")]
     InvalidInput,
     #[error("incomplete input: {0:?}")]
@@ -47,7 +47,7 @@ pub enum Error {
     #[error("{0:?}")]
     Message(String),
     #[error("Invalid Packet {0:?}")]
-    PacketError(nom::ErrorKind),
+    PacketError(nom::error::ErrorKind),
     #[error("Incomplete Packet")]
     PacketIncomplete,
     #[error("Unpadding failed")]
@@ -101,39 +101,6 @@ impl Error {
     }
 }
 
-impl<'a> From<nom::Err<&'a [u8]>> for Error {
-    fn from(err: nom::Err<&'a [u8]>) -> Error {
-        match err {
-            nom::Err::Incomplete(n) => Error::Incomplete(n),
-            _ => Error::ParsingError(err.into_error_kind()),
-        }
-    }
-}
-
-impl<'a> From<nom::Err<nom::types::CompleteStr<'a>>> for Error {
-    fn from(err: nom::Err<nom::types::CompleteStr<'a>>) -> Error {
-        match err {
-            nom::Err::Incomplete(n) => Error::Incomplete(n),
-            _ => Error::ParsingError(err.into_error_kind()),
-        }
-    }
-}
-
-impl<'a> From<Error> for nom::Err<&'a [u8]> {
-    fn from(err: Error) -> nom::Err<&'a [u8]> {
-        nom::Err::Error(nom::Context::Code(
-            &b""[..],
-            nom::ErrorKind::Custom(err.as_code()),
-        ))
-    }
-}
-
-impl<'a> From<nom::Err<&'a str>> for Error {
-    fn from(err: nom::Err<&'a str>) -> Error {
-        Error::ParsingError(err.into_error_kind())
-    }
-}
-
 impl From<rsa::errors::Error> for Error {
     fn from(err: rsa::errors::Error) -> Error {
         Error::RSAError(err)
@@ -166,6 +133,21 @@ impl From<block_padding::PadError> for Error {
 impl From<String> for Error {
     fn from(err: String) -> Error {
         Error::Message(err)
+    }
+}
+
+impl From<(&[u8], nom::error::ErrorKind)> for Error {
+    fn from(err: (&[u8], nom::error::ErrorKind)) -> Error {
+        Error::ParsingError(err.1)
+    }
+}
+impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for Error {
+    fn from(err: nom::Err<(&[u8], nom::error::ErrorKind)>) -> Error {
+        match err {
+            nom::Err::Incomplete(n) => Error::Incomplete(n),
+            nom::Err::Error((_, e)) => Error::ParsingError(e),
+            nom::Err::Failure((_, e)) => Error::ParsingError(e),
+        }
     }
 }
 

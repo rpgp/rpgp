@@ -5,10 +5,10 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::types::{CompleteByteSlice, CompleteStr};
 use nom::{
-    self, be_u32, be_u8, eol, is_alphanumeric, line_ending, Err, IResult, InputIter, InputLength,
-    Slice,
+    self,
+    number::streaming::{be_u32, be_u8},
+    Err, IResult, InputIter, InputLength, Slice,
 };
 
 use crate::errors;
@@ -30,14 +30,22 @@ pub fn u32_as_usize(a: u32) -> usize {
 
 #[inline]
 pub fn is_base64_token(c: u8) -> bool {
-    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
+    nom::character::is_alphanumeric(c)
+        || c == b'/'
+        || c == b'+'
+        || c == b'='
+        || c == b'\n'
+        || c == b'\r'
 }
 
-named!(pub prefixed<CompleteByteSlice<'_>, CompleteByteSlice<'_>>, do_parse!(
-             many0!(line_ending)
-    >> rest: take_while1!(is_base64_token)
-    >> (rest)
-));
+pub fn prefixed<'a, E: nom::error::ParseError<&'a [u8]>>(
+    i: &'a [u8],
+) -> IResult<&'a [u8], &'a [u8], E> {
+    nom::sequence::preceded(
+        nom::multi::many0(nom::character::complete::line_ending),
+        nom::combinator::recognize(nom::bytes::complete::take_while1(is_base64_token)),
+    )(i)
+}
 
 /// Recognizes one or more body tokens
 pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
@@ -51,7 +59,7 @@ pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
             if idx == 0 {
                 return Err(Err::Error(error_position!(
                     input,
-                    nom::ErrorKind::AlphaNumeric
+                    nom::error::ErrorKind::AlphaNumeric
                 )));
             } else {
                 return Ok((input.slice(idx..), input.slice(0..idx)));
@@ -141,8 +149,8 @@ pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Resu
     Ok(())
 }
 
-pub fn end_of_line(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, CompleteStr<'_>> {
-    alt!(input, eof!() | eol)
+pub fn end_of_line(input: &str) -> IResult<&str, &str> {
+    alt!(input, eof!() | nom::character::streaming::line_ending)
 }
 
 /// Return the length of the remaining input.

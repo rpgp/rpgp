@@ -2,7 +2,11 @@ use std::boxed::Box;
 use std::str;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use nom::{be_u16, be_u32, be_u8, rest, IResult};
+use nom::{
+    combinator::rest,
+    number::streaming::{be_u16, be_u32, be_u8},
+    IResult,
+};
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
@@ -64,32 +68,34 @@ named!(key_expiration<Subpacket>, map!(
 /// Parse a preferred symmetric algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
 fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
-        .iter()
+    todo!()
+    /*let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
+        .ier()
         .map(|v| {
             SymmetricKeyAlgorithm::from_u8(*v)
                 .ok_or_else(|| format_err!("Invalid SymmetricKeyAlgorithm"))
         })
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredSymmetricAlgorithms(list)))
+    Ok((&b""[..], Subpacket::PreferredSymmetricAlgorithms(list)))*/
 }
 
 /// Parse a preferred hash algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.8
 fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    let list: SmallVec<[HashAlgorithm; 8]> = body
+    /*let list: SmallVec<[HashAlgorithm; 8]> = body
         .iter()
         .map(|v| HashAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid HashAlgorithm")))
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredHashAlgorithms(list)))
+    Ok((&b""[..], Subpacket::PreferredHashAlgorithms(list)))*/
+    todo!()
 }
 
 /// Parse a preferred compression algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.9
 fn pref_com_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    let list: SmallVec<[CompressionAlgorithm; 8]> = body
+    /*let list: SmallVec<[CompressionAlgorithm; 8]> = body
         .iter()
         .map(|v| {
             CompressionAlgorithm::from_u8(*v)
@@ -97,7 +103,8 @@ fn pref_com_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
         })
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredCompressionAlgorithms(list)))
+    Ok((&b""[..], Subpacket::PreferredCompressionAlgorithms(list)))*/
+    todo!()
 }
 
 // Parse a signature expiration time subpacket
@@ -255,12 +262,13 @@ named!(issuer_fingerprint<Subpacket>, do_parse!(
 
 /// Parse a preferred aead subpacket
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    let list: SmallVec<[AeadAlgorithm; 2]> = body
+    /*let list: SmallVec<[AeadAlgorithm; 2]> = body
         .iter()
         .map(|v| AeadAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid AeadAlgorithm")))
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredAeadAlgorithms(list)))
+    Ok((&b""[..], Subpacket::PreferredAeadAlgorithms(list)))*/
+    todo!()
 }
 
 fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
@@ -419,18 +427,16 @@ fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Si
 
 // Parse a signature packet (Tag 2)
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version) <Signature>, do_parse!(
-         version: map_opt!(be_u8, SignatureVersion::from_u8)
-    >> signature: switch!(value!(&version),
-                      &SignatureVersion::V2 => call!(v3_parser, packet_version, version) |
-                      &SignatureVersion::V3 => call!(v3_parser, packet_version, version) |
-                      &SignatureVersion::V4 => call!(v4_parser, packet_version, version) |
-                      &SignatureVersion::V5 => call!(v4_parser, packet_version, version) |
-                      _ => call!(invalid_version, version)
-    )
-    >> (signature)
-));
+pub fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], Signature> {
+    let (i, version) = nom::combinator::map_opt(be_u8, SignatureVersion::from_u8)(i)?;
+    let (i, signature) = match &version {
+        &SignatureVersion::V2 => v3_parser(i, packet_version, version)?,
+        &SignatureVersion::V3 => v3_parser(i, packet_version, version)?,
+        &SignatureVersion::V4 => v4_parser(i, packet_version, version)?,
+        &SignatureVersion::V5 => v4_parser(i, packet_version, version)?,
+    };
+    Ok((i, signature))
+}
 
 #[cfg(test)]
 mod tests {
