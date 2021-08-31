@@ -144,7 +144,8 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
         let mut cipher_file = File::open(&cipher_file_path).unwrap();
         let mut expected_bytes = String::new();
         cipher_file.read_to_string(&mut expected_bytes).unwrap();
-        assert_eq!(serialized, expected_bytes);
+        // normalize read in line endings to unix
+        assert_eq!(serialized, expected_bytes.replace("\r\n", "\n"));
     }
 
     // and parse them again

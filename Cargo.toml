@@ -54,6 +54,7 @@ thiserror = "1.0.9"
 try_from = "^0.3"
 twofish = "^0.6"
 zeroize = { version = "~1.4.0", features = ["zeroize_derive"] }
+getrandom = { version = "0.2.3", optional = true }
 
 [dependencies.buf_redux]
 version = "0.8.1"
@@ -96,10 +97,10 @@ serde_json = "^1.0"
 
 [features]
 default = []
-nightly = ["x25519-dalek/nightly", "ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly", "clear_on_drop/nightly"]
+nightly = ["ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly", "clear_on_drop/nightly"]
 profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
-wasm = ["chrono/wasmbind", "nightly"]
+wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 
 [profile.bench]
 debug = true
