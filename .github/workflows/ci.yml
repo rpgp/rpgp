@@ -246,9 +246,6 @@ jobs:
     - name: test
       run: cross test --all --target ${{ matrix.target }}
 
-    - name: test ignored
-      run: cross test --all --target ${{ matrix.target }} --release -- --ignored
-
   check_wasm:
     name: Check wasm targets
     runs-on: ubuntu-latest
