@@ -44,6 +44,42 @@ macro_rules! impl_public_key {
                 })
             }
 
+            pub fn from_params(
+                public_params: $crate::types::PublicParams,
+                created_at: chrono::DateTime<chrono::Utc>,
+                expiration: Option<u16>,
+            ) -> Self {
+                let algorithm = match public_params {
+                    $crate::types::PublicParams::RSA { .. } => {
+                        $crate::crypto::public_key::PublicKeyAlgorithm::RSA
+                    }
+                    $crate::types::PublicParams::DSA { .. } => {
+                        $crate::crypto::public_key::PublicKeyAlgorithm::DSA
+                    }
+                    $crate::types::PublicParams::ECDSA { .. } => {
+                        $crate::crypto::public_key::PublicKeyAlgorithm::ECDSA
+                    }
+                    $crate::types::PublicParams::ECDH { .. } => {
+                        $crate::crypto::public_key::PublicKeyAlgorithm::ECDH
+                    }
+                    $crate::types::PublicParams::Elgamal { .. } => {
+                        $crate::crypto::public_key::PublicKeyAlgorithm::Elgamal
+                    }
+                    $crate::types::PublicParams::EdDSA { .. } => {
+                        $crate::crypto::public_key::PublicKeyAlgorithm::EdDSA
+                    }
+                };
+
+                $name {
+                    packet_version: $crate::types::Version::Old,
+                    version: $crate::types::KeyVersion::V4,
+                    algorithm,
+                    created_at,
+                    expiration,
+                    public_params,
+                }
+            }
+
             pub fn version(&self) -> $crate::types::KeyVersion {
                 self.version
             }
