@@ -1,11 +1,12 @@
 use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
+use nom::error::ParseError;
 use nom::{self, number::streaming::be_u16, Err, InputIter, InputTake};
 use num_bigint::BigUint;
 use zeroize::Zeroize;
 
-use crate::errors;
+use crate::errors::{self, CustomParsingError, ParsingError};
 use crate::ser::Serialize;
 use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
@@ -28,18 +29,14 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 /// );
 /// ```
 ///
-pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], MpiRef<'_>> {
+pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>, ParsingError<&'a [u8]>> {
     let (number, len) = be_u16(input)?;
 
     let bits = u32::from(len);
     let len_actual = ((bits + 7) >> 3) as u32;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
-        todo!()
-        /*Err(Err::Error(error_position!(
-            input,
-            nom::error::ErrorKind::Custom(errors::MPI_TOO_LONG)
-        )))*/
+        Err(ParsingError::Custom(input, CustomParsingError::MpiTooLong))
     } else {
         // same as take!
         let cnt = len_actual as usize;

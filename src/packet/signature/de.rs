@@ -3,14 +3,16 @@ use std::str;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use nom::{
-    combinator::rest,
+    bytes::streaming::{tag, take},
+    combinator::{map, map_opt, map_parser, map_res, rest},
+    multi::many0,
     number::streaming::{be_u16, be_u32, be_u8},
     IResult,
 };
+use num_bigint::ParseBigIntError;
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
-use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -22,6 +24,9 @@ use crate::types::{
     Version,
 };
 use crate::util::{clone_into_array, packet_length, read_string};
+use crate::{crypto::aead::AeadAlgorithm, errors::ParsingError};
+
+type ParseResult<I, O> = std::result::Result<(I, O), ParsingError<I>>;
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -312,103 +317,125 @@ fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
     res
 }
 
-#[rustfmt::skip]
-named!(subpackets(&[u8]) -> Vec<Subpacket>, many0!(complete!(do_parse!(
-    // the subpacket length (1, 2, or 5 octets)
-        len: packet_length
-    // the subpacket type (1 octet)
-    >> typ: map_opt!(be_u8, SubpacketType::from_u8)
-    >>   p: flat_map!(take!(len - 1), |b| subpacket(typ, b))
-    >> (p)
-))));
+fn subpackets(input: &[u8]) -> IResult<&[u8], Vec<Subpacket>, ParsingError<&[u8]>> {
+    let (input, packets) = many0(|input| {
+        // the subpacket length (1, 2, or 5 octets)
+        let (input, len) = packet_length(input)?;
+        // the subpacket type (1 octet)
+        let (input, typ) = map_opt(be_u8, SubpacketType::from_u8)(input)?;
+        let (input, p) = map_parser(take(len - 1), |b| subpacket(typ, b))(input)?;
+        Ok((input, p))
+    })(input)
+    .map_err(nom::combinator::into)?;
 
-named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Mpi>>, switch!(
-    value!(typ),
-    &PublicKeyAlgorithm::RSA |
-    &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| vec![v.to_owned()]) |
-    &PublicKeyAlgorithm::DSA   |
-    &PublicKeyAlgorithm::ECDSA |
-    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<Mpi>, item: MpiRef<'_> | {
-        acc.push(item.to_owned());
-        acc
-    }) |
-    &PublicKeyAlgorithm::Private100 |
-    &PublicKeyAlgorithm::Private101 |
-    &PublicKeyAlgorithm::Private102 |
-    &PublicKeyAlgorithm::Private103 |
-    &PublicKeyAlgorithm::Private104 |
-    &PublicKeyAlgorithm::Private105 |
-    &PublicKeyAlgorithm::Private106 |
-    &PublicKeyAlgorithm::Private107 |
-    &PublicKeyAlgorithm::Private108 |
-    &PublicKeyAlgorithm::Private109 |
-    &PublicKeyAlgorithm::Private110  => map!(call!(mpi), |v| vec![v.to_owned()]) |
-    _ => map!(call!(mpi), |v| vec![v.to_owned()])
-));
+    Ok((input, packets))
+}
+
+fn actual_signature<'a>(
+    input: &'a [u8],
+    typ: &PublicKeyAlgorithm,
+) -> nom::IResult<&'a [u8], Vec<Mpi>, ParsingError<&'a [u8]>> {
+    match typ {
+        &PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
+            mpi(input).map(|(rest, v)| (rest, vec![v.to_owned()]))
+        }
+        &PublicKeyAlgorithm::DSA | &PublicKeyAlgorithm::ECDSA | &PublicKeyAlgorithm::EdDSA => {
+            nom::multi::fold_many_m_nc(
+                input,
+                2,
+                2,
+                mpi,
+                Vec::new(),
+                |mut acc: Vec<Mpi>, item: MpiRef<'_>| {
+                    acc.push(item.to_owned());
+                    acc
+                },
+            )
+        }
+        &PublicKeyAlgorithm::Private100
+        | &PublicKeyAlgorithm::Private101
+        | &PublicKeyAlgorithm::Private102
+        | &PublicKeyAlgorithm::Private103
+        | &PublicKeyAlgorithm::Private104
+        | &PublicKeyAlgorithm::Private105
+        | &PublicKeyAlgorithm::Private106
+        | &PublicKeyAlgorithm::Private107
+        | &PublicKeyAlgorithm::Private108
+        | &PublicKeyAlgorithm::Private109
+        | &PublicKeyAlgorithm::Private110 => mpi(input).map(|(rest, v)| (rest, vec![v.to_owned()])),
+        _ => mpi(input).map(|(rest, v)| (rest, vec![v.to_owned()])),
+    }
+}
 
 // Parse a v2 or v3 signature packet
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.2
-#[rustfmt::skip]
-named_args!(v3_parser(packet_version: Version, version: SignatureVersion) <Signature>, do_parse!(
+fn v3_parser(
+    input: &[u8],
+    packet_version: Version,
+    version: SignatureVersion,
+) -> nom::IResult<&[u8], Signature, ParsingError<&[u8]>> {
     // One-octet length of following hashed material. MUST be 5.
-                 tag!(&[5])
+    let (input, _) = tag(&[5])(input)?;
     // One-octet signature type.
-    >>      typ: map_opt!(be_u8, SignatureType::from_u8)
+    let (input, typ) = map_opt(be_u8, SignatureType::from_u8)(input)?;
     // Four-octet creation time.
-    >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
+    let (input, created) = map(be_u32, |v| Utc.timestamp(i64::from(v), 0))(input)?;
     // Eight-octet Key ID of signer.
-    >>   issuer: map_res!(take!(8), KeyId::from_slice)
+    let (input, issuer) = map_res(take(8u8), KeyId::from_slice)(input)?;
     // One-octet public-key algorithm.
-    >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+    let (input, pub_alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(input)?;
     // One-octet hash algorithm.
-    >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
+    let (input, hash_alg) = map_opt(be_u8, HashAlgorithm::from_u8)(input)?;
     // Two-octet field holding left 16 bits of signed hash value.
-    >>  ls_hash: take!(2)
+    let (input, ls_hash) = take(2u8)(input)?;
     // One or more multiprecision integers comprising the signature.
-    >>      sig: call!(actual_signature, &pub_alg)
-    >> ({
-        let mut s = Signature::new(
-            packet_version,
-            version,
-            typ,
-            pub_alg,
-            hash_alg,
-            clone_into_array(ls_hash),
-            sig,
-            vec![],
-            vec![],
-        );
+    let (input, sig) = actual_signature(input, &pub_alg)?;
 
-        s.config.created = Some(created);
-        s.config.issuer = Some(issuer);
+    let mut s = Signature::new(
+        packet_version,
+        version,
+        typ,
+        pub_alg,
+        hash_alg,
+        clone_into_array(ls_hash),
+        sig,
+        vec![],
+        vec![],
+    );
 
-        s
-    })
-));
+    s.config.created = Some(created);
+    s.config.issuer = Some(issuer);
+
+    Ok((input, s))
+}
 
 // Parse a v4 or v5 signature packet
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3
-#[rustfmt::skip]
-named_args!(v4_parser(packet_version: Version, version: SignatureVersion) <Signature>, do_parse!(
+fn v4_parser(
+    input: &[u8],
+    packet_version: Version,
+    version: SignatureVersion,
+) -> nom::IResult<&[u8], Signature, ParsingError<&[u8]>> {
     // One-octet signature type.
-            typ: map_opt!(be_u8, SignatureType::from_u8)
+    let (input, typ) = map_opt(be_u8, SignatureType::from_u8)(input)?;
     // One-octet public-key algorithm.
-    >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
+    let (input, pub_alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(input)?;
     // One-octet hash algorithm.
-    >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
+    let (input, hash_alg) = map_opt(be_u8, HashAlgorithm::from_u8)(input)?;
     // Two-octet scalar octet count for following hashed subpacket data.
-    >> hsub_len: be_u16
+    let (input, hsub_len) = be_u16(input)?;
     // Hashed subpacket data set (zero or more subpackets).
-    >>     hsub: flat_map!(take!(hsub_len), subpackets)
+    let (input, hsub) = map_parser(take(hsub_len), subpackets)(input)?;
     // Two-octet scalar octet count for the following unhashed subpacket data.
-    >> usub_len: be_u16
+    let (input, usub_len) = be_u16(input)?;
     // Unhashed subpacket data set (zero or more subpackets).
-    >>     usub: flat_map!(take!(usub_len), subpackets)
+    let (input, usub) = map_parser(take(usub_len), subpackets)(input)?;
     // Two-octet field holding the left 16 bits of the signed hash value.
-    >>  ls_hash: take!(2)
+    let (input, ls_hash) = take(2)(input)?;
     // One or more multiprecision integers comprising the signature.
-    >>      sig: call!(actual_signature, &pub_alg)
-    >> (Signature::new(
+    let (input, sig) = actual_signature(input, &pub_alg)?;
+
+    let s = Signature::new(
         packet_version,
         version,
         typ,
@@ -418,8 +445,9 @@ named_args!(v4_parser(packet_version: Version, version: SignatureVersion) <Signa
         sig,
         hsub,
         usub,
-    ))
-));
+    );
+    Ok((input, s))
+}
 
 fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Signature> {
     unimplemented!("unknown signature version {:?}", version);
@@ -427,7 +455,7 @@ fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Si
 
 // Parse a signature packet (Tag 2)
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
-pub fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], Signature> {
+pub fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], Signature, ParsingError<&[u8]>> {
     let (i, version) = nom::combinator::map_opt(be_u8, SignatureVersion::from_u8)(i)?;
     let (i, signature) = match &version {
         &SignatureVersion::V2 => v3_parser(i, packet_version, version)?,

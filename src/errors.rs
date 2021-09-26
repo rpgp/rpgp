@@ -1,15 +1,38 @@
 use ed25519_dalek::SignatureError;
 
+use crate::packet::Packet;
+
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 // custom nom error types
-pub const MPI_TOO_LONG: u32 = 1000;
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParsingError<I> {
+    Incomplete(nom::Needed),
+    Custom(I, CustomParsingError),
+    Nom(I, nom::error::ErrorKind),
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum CustomParsingError {
+    MpiTooLong,
+}
+
+impl<I> nom::error::ParseError<I> for ParsingError<I> {
+    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
+        ParsingError::Nom(input, kind)
+    }
+
+    fn append(_: I, _: nom::error::ErrorKind, other: Self) -> Self {
+        other
+    }
+}
 
 /// Error types
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to parse {0:?}")]
-    ParsingError(nom::error::ErrorKind),
+    ParsingErrorNom(nom::error::ErrorKind),
+    #[error("failed to parse {0:?}")]
+    ParsingErrorCustom(CustomParsingError),
     #[error("invalid input")]
     InvalidInput,
     #[error("incomplete input: {0:?}")]
@@ -66,41 +89,6 @@ pub enum Error {
     MdcError,
 }
 
-impl Error {
-    pub fn as_code(&self) -> u32 {
-        match self {
-            Error::ParsingError(_) => 0,
-            Error::InvalidInput => 1,
-            Error::Incomplete(_) => 2,
-            Error::InvalidArmorWrappers => 3,
-            Error::InvalidChecksum => 4,
-            Error::Base64DecodeError(_) => 5,
-            Error::RequestedSizeTooLarge => 6,
-            Error::NoMatchingPacket => 7,
-            Error::TooManyPackets => 8,
-            Error::RSAError(_) => 9,
-            Error::IOError(_) => 10,
-            Error::MissingPackets => 11,
-            Error::InvalidKeyLength => 12,
-            Error::BlockMode => 13,
-            Error::MissingKey => 14,
-            Error::CfbInvalidKeyIvLength => 15,
-            Error::Unimplemented(_) => 16,
-            Error::Unsupported(_) => 17,
-            Error::Message(_) => 18,
-            Error::PacketError(_) => 19,
-            Error::PacketIncomplete => 20,
-            Error::UnpadError => 21,
-            Error::PadError => 22,
-            Error::Utf8Error(_) => 23,
-            Error::ParseIntError(_) => 24,
-            Error::InvalidPacketContent(_) => 25,
-            Error::Ed25519SignatureError(_) => 26,
-            Error::MdcError => 27,
-        }
-    }
-}
-
 impl From<rsa::errors::Error> for Error {
     fn from(err: rsa::errors::Error) -> Error {
         Error::RSAError(err)
@@ -138,15 +126,46 @@ impl From<String> for Error {
 
 impl From<(&[u8], nom::error::ErrorKind)> for Error {
     fn from(err: (&[u8], nom::error::ErrorKind)) -> Error {
-        Error::ParsingError(err.1)
+        Error::ParsingErrorNom(err.1)
     }
 }
+
+impl From<ParsingError<&[u8]>> for Error {
+    fn from(err: ParsingError<&[u8]>) -> Error {
+        match err {
+            ParsingError::Custom(_, k) => Error::ParsingErrorCustom(k),
+            ParsingError::Nom(_, k) => Error::ParsingErrorNom(k),
+            ParsingError::Incomplete(n) => Error::Incomplete(n),
+        }
+    }
+}
+
+impl From<nom::Err<ParsingError<&[u8]>>> for Error {
+    fn from(err: nom::Err<ParsingError<&[u8]>>) -> Error {
+        match err {
+            nom::Err::Incomplete(n) => Error::Incomplete(n),
+            nom::Err::Error(e) => e.into(),
+            nom::Err::Failure(e) => e.into(),
+        }
+    }
+}
+
 impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for Error {
     fn from(err: nom::Err<(&[u8], nom::error::ErrorKind)>) -> Error {
         match err {
             nom::Err::Incomplete(n) => Error::Incomplete(n),
-            nom::Err::Error((_, e)) => Error::ParsingError(e),
-            nom::Err::Failure((_, e)) => Error::ParsingError(e),
+            nom::Err::Error((_, e)) => Error::ParsingErrorNom(e),
+            nom::Err::Failure((_, e)) => Error::ParsingErrorNom(e),
+        }
+    }
+}
+
+impl<'a> From<nom::Err<(&'a [u8], nom::error::ErrorKind)>> for ParsingError<&'a [u8]> {
+    fn from(err: nom::Err<(&'a [u8], nom::error::ErrorKind)>) -> Self {
+        match err {
+            nom::Err::Incomplete(n) => ParsingError::Incomplete(n),
+            nom::Err::Error((i, e)) => ParsingError::Nom(i, e),
+            nom::Err::Failure((i, e)) => ParsingError::Nom(i, e),
         }
     }
 }
