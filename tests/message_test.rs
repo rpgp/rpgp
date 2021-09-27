@@ -189,7 +189,7 @@ msg_test!(msg_gnupg_v2_0_17_005, "gnupg-v2-0-17-005", true);
 msg_test!(msg_gnupg_v2_0_17_006, "gnupg-v2-0-17-006", true);
 // parsing error
 // ECDH key - nist p256
-// msg_test!(msg_gnupg_v2_1_5_001, "gnupg-v2-1-5-001", true);
+msg_test!(msg_gnupg_v2_1_5_001, "gnupg-v2-1-5-001", true);
 
 // parsing error
 // ECDH key - nist p384

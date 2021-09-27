@@ -55,6 +55,9 @@ try_from = "^0.3"
 twofish = "^0.6"
 zeroize = { version = "~1.4.0", features = ["zeroize_derive"] }
 getrandom = { version = "0.2.3", optional = true }
+p256 = { version = "0.9.0", features = ["ecdsa"] }
+ecdsa = { version = "0.12.4", features = ["hazmat", "digest"] }
+elliptic-curve = { version = "0.10.6", features = ["ecdh"] }
 
 [dependencies.buf_redux]
 version = "0.8.1"

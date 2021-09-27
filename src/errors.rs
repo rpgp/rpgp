@@ -64,6 +64,8 @@ pub enum Error {
     Ed25519SignatureError(#[from] SignatureError),
     #[error("Modification Detection Code error")]
     MdcError,
+    #[error("Elliptic Curve {0:?}")]
+    EllipticCurve(#[from] elliptic_curve::Error),
 }
 
 impl Error {
@@ -97,6 +99,7 @@ impl Error {
             Error::InvalidPacketContent(_) => 25,
             Error::Ed25519SignatureError(_) => 26,
             Error::MdcError => 27,
+            Error::EllipticCurve(_) => 28,
         }
     }
 }

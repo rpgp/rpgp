@@ -1,4 +1,13 @@
+use std::convert::TryInto;
+use std::ops::Add;
+
 use block_padding::{Padding, Pkcs7};
+use elliptic_curve::{
+    consts::U1,
+    generic_array::ArrayLength,
+    sec1::{FromEncodedPoint, ToEncodedPoint, UncompressedPointSize, UntaggedPointSize},
+    AffinePoint, Scalar,
+};
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, Zeroizing};
@@ -77,49 +86,33 @@ pub fn build_ecdh_param(
 
 /// ECDH decryption.
 pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
-    debug!("ECDH decrypt");
+    debug!("ECDH ({}) decrypt", priv_key.curve.to_string());
+    ensure_eq!(mpis.len(), 3);
 
     let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
+    let secret_point = &priv_key.secret;
+    let public_point = mpis[0].as_bytes();
 
-    // 33 = 0x40 + 32bits
-    ensure_eq!(mpis.len(), 3);
-    ensure_eq!(mpis[0].len(), 33, "invalid public point");
-    ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
-
-    // encrypted and wrapped value derived from the session key
-    let encrypted_session_key = mpis[2].as_bytes();
-
-    let their_public = {
-        // public part of the ephemeral key (removes 0x40 prefix)
-        let ephemeral_public_key = &mpis[0].as_bytes()[1..];
-
-        // create montgomery point
-        let mut ephemeral_public_key_arr = [0u8; 32];
-        ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
-
-        x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
+    let shared_secret = match priv_key.curve {
+        ECCCurve::Curve25519 => generate_shared_secret_curve25519(secret_point, public_point)?,
+        ECCCurve::P256 => generate_shared_secret_ecc::<p256::NistP256>(secret_point, public_point)?,
+        ECCCurve::P384
+        | ECCCurve::P521
+        | ECCCurve::Secp256k1
+        | ECCCurve::BrainpoolP256r1
+        | ECCCurve::BrainpoolP384r1
+        | ECCCurve::BrainpoolP512r1 => {
+            unimplemented_err!("ECDH curve: {}", priv_key.curve.to_string())
+        }
+        _ => {
+            unsupported_err!("ECDH curve: {}", priv_key.curve.to_string())
+        }
     };
-
-    let our_secret = {
-        // private key of the recipient.
-        let private_key = &priv_key.secret[..];
-
-        // create scalar and reverse to little endian
-        let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
-        let mut private_key_arr = [0u8; 32];
-        private_key_arr[..].copy_from_slice(&private_key_le);
-        private_key_le.zeroize();
-
-        x25519_dalek::StaticSecret::from(private_key_arr)
-    };
-
-    // derive shared secret
-    let shared_secret = our_secret.diffie_hellman(&their_public);
 
     // Perform key derivation
     let z = kdf(
         priv_key.hash,
-        shared_secret.as_bytes(),
+        &shared_secret,
         priv_key.alg_sym.key_size(),
         &param,
     )?;
@@ -129,6 +122,9 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
         Some(l) => *l as usize,
         None => 0,
     };
+
+    // encrypted and wrapped value derived from the session key
+    let encrypted_session_key = mpis[2].as_bytes();
 
     let mut encrypted_session_key_vec: Vec<u8> = Vec::new();
     encrypted_session_key_vec.resize(encrypted_key_len, 0);
@@ -141,6 +137,67 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
     let decrypted_key = Pkcs7::unpad(&decrypted_key_padded)?;
 
     Ok(decrypted_key.to_vec())
+}
+
+fn generate_shared_secret_curve25519(secret_point: &[u8], public_point: &[u8]) -> Result<[u8; 32]> {
+    // 33 = 0x40 + 32bits
+    ensure_eq!(public_point.len(), 33, "invalid public point");
+    ensure_eq!(secret_point.len(), 32, "invalid secret point");
+
+    let their_public = {
+        // public part of the ephemeral key (removes 0x40 prefix)
+        let ephemeral_public_key = &public_point[1..];
+
+        // create montgomery point
+        let mut ephemeral_public_key_arr = [0u8; 32];
+        ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
+
+        x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
+    };
+
+    let our_secret = {
+        // create scalar and reverse to little endian
+        let mut private_key_le = secret_point.iter().rev().cloned().collect::<Vec<u8>>();
+        let mut private_key_arr = [0u8; 32];
+        private_key_arr[..].copy_from_slice(&private_key_le);
+        private_key_le.zeroize();
+
+        x25519_dalek::StaticSecret::from(private_key_arr)
+    };
+
+    // derive shared secret
+    let shared_secret = *our_secret.diffie_hellman(&their_public).as_bytes();
+    Ok(shared_secret)
+}
+
+fn generate_shared_secret_ecc<C>(secret_point: &[u8], public_point: &[u8]) -> Result<[u8; 32]>
+where
+    C: ecdsa::Curve + elliptic_curve::ProjectiveArithmetic,
+    Scalar<C>: Zeroize,
+    AffinePoint<C>: Zeroize,
+    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
+    UntaggedPointSize<C>: Add<U1> + ArrayLength<u8>,
+    UncompressedPointSize<C>: ArrayLength<u8>,
+{
+    ensure_eq!(public_point.len(), 65, "invalid public point");
+    ensure_eq!(secret_point.len(), 32, "invalid secret point");
+
+    let their_public = elliptic_curve::PublicKey::<C>::from_sec1_bytes(public_point)?;
+
+    let our_secret = {
+        // create scalar and reverse to little endian
+        let mut private_key_le = secret_point.iter().rev().cloned().collect::<Vec<u8>>();
+        elliptic_curve::SecretKey::<C>::from_bytes(&private_key_le)?
+    };
+
+    // derive shared secret
+    let shared_secret = elliptic_curve::ecdh::diffie_hellman(
+        our_secret.to_secret_scalar(),
+        their_public.as_affine(),
+    );
+    let shared_secret = shared_secret.as_bytes().to_vec();
+    let shared_secret = shared_secret.try_into().expect("must be 32 bytes");
+    Ok(shared_secret)
 }
 
 /// Key Derivation Function for ECDH (as defined in RFC 6637).

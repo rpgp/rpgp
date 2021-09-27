@@ -141,22 +141,20 @@ impl<'a> PlainSecretParamsRef<'a> {
                     ref hash,
                     ref alg_sym,
                     ..
-                } => match *curve {
-                    ECCCurve::Curve25519 => {
-                        ensure!(d.len() <= 32, "invalid secret");
+                } => {
+                    ensure!(d.len() <= 32, "invalid secret");
 
-                        let mut secret = [0u8; 32];
-                        secret[32 - d.len()..].copy_from_slice(d.as_bytes());
+                    let mut secret = [0u8; 32];
+                    secret[32 - d.len()..].copy_from_slice(d.as_bytes());
 
-                        Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
-                            oid: curve.oid(),
-                            hash: *hash,
-                            alg_sym: *alg_sym,
-                            secret,
-                        }))
-                    }
-                    _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
-                },
+                    Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
+                        oid: curve.oid(),
+                        curve: *curve,
+                        hash: *hash,
+                        alg_sym: *alg_sym,
+                        secret,
+                    }))
+                }
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::EdDSA(d) => match public_params {

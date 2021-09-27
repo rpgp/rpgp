@@ -5,6 +5,7 @@ pub mod aes_kw;
 pub mod checksum;
 pub mod ecc_curve;
 pub mod ecdh;
+pub mod ecdsa;
 pub mod eddsa;
 pub mod hash;
 pub mod public_key;

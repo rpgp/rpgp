@@ -6,6 +6,7 @@ use zeroize::Zeroize;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::ECCCurve;
 
 /// The version of the secret key that is actually exposed to users to do crypto operations.
 #[allow(clippy::large_enum_variant)] // FIXME
@@ -18,12 +19,13 @@ pub enum SecretKeyRepr {
     EdDSA(EdDSASecretKey),
 }
 
-/// Secret key for ECDH with Curve25519, the only combination we currently support.
+/// Secret key for ECDH.
 #[derive(Clone, PartialEq, Eq, Zeroize)]
 #[zeroize(drop)]
 pub struct ECDHSecretKey {
     /// The secret point.
     pub secret: [u8; 32],
+    pub curve: ECCCurve,
     pub hash: HashAlgorithm,
     pub oid: Vec<u8>,
     pub alg_sym: SymmetricKeyAlgorithm,
