@@ -4,9 +4,11 @@ use std::ops::Add;
 use block_padding::{Padding, Pkcs7};
 use elliptic_curve::{
     consts::U1,
+    ecdh::SharedSecret,
     generic_array::ArrayLength,
+    group::Curve,
     sec1::{FromEncodedPoint, ToEncodedPoint, UncompressedPointSize, UntaggedPointSize},
-    AffinePoint, Scalar,
+    AffinePoint, ProjectivePoint, Scalar,
 };
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -174,21 +176,16 @@ fn generate_shared_secret_ecc<C>(secret_point: &[u8], public_point: &[u8]) -> Re
 where
     C: ecdsa::Curve + elliptic_curve::ProjectiveArithmetic,
     Scalar<C>: Zeroize,
-    AffinePoint<C>: Zeroize,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
+    AffinePoint<C>: Zeroize + FromEncodedPoint<C> + ToEncodedPoint<C>,
     UntaggedPointSize<C>: Add<U1> + ArrayLength<u8>,
     UncompressedPointSize<C>: ArrayLength<u8>,
+    SharedSecret<C>: for<'a> From<&'a AffinePoint<C>>,
 {
     ensure_eq!(public_point.len(), 65, "invalid public point");
     ensure_eq!(secret_point.len(), 32, "invalid secret point");
 
     let their_public = elliptic_curve::PublicKey::<C>::from_sec1_bytes(public_point)?;
-
-    let our_secret = {
-        // create scalar and reverse to little endian
-        let mut private_key_le = secret_point.iter().rev().cloned().collect::<Vec<u8>>();
-        elliptic_curve::SecretKey::<C>::from_bytes(&private_key_le)?
-    };
+    let our_secret = elliptic_curve::SecretKey::<C>::from_bytes(secret_point)?;
 
     // derive shared secret
     let shared_secret = elliptic_curve::ecdh::diffie_hellman(
