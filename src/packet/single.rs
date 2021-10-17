@@ -64,7 +64,7 @@ named!(read_packet_len(&[u8]) -> PacketLength, do_parse!(
 
 fn read_partial_bodies(input: &[u8], len: usize) -> IResult<&[u8], ParseResult<'_>> {
     if input.len() < len {
-        return Err(Err::Incomplete(nom::Needed::Size(len - input.len())));
+        return Err(Err::Incomplete(nom::Needed::new(len - input.len())));
     }
 
     let mut out = vec![&input[0..len]];
@@ -76,14 +76,14 @@ fn read_partial_bodies(input: &[u8], len: usize) -> IResult<&[u8], ParseResult<'
         match res.1 {
             PacketLength::Partial(len) => {
                 if res.0.len() < len {
-                    return Err(Err::Incomplete(nom::Needed::Size(len - res.0.len())));
+                    return Err(Err::Incomplete(nom::Needed::new(len - res.0.len())));
                 }
                 out.push(&res.0[0..len]);
                 rest = &res.0[len..];
             }
             PacketLength::Fixed(len) => {
                 if res.0.len() < len {
-                    return Err(Err::Incomplete(nom::Needed::Size(len - res.0.len())));
+                    return Err(Err::Incomplete(nom::Needed::new(len - res.0.len())));
                 }
 
                 out.push(&res.0[0..len]);

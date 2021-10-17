@@ -13,6 +13,7 @@ use num_bigint::ParseBigIntError;
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -24,9 +25,8 @@ use crate::types::{
     Version,
 };
 use crate::util::{clone_into_array, packet_length, read_string};
-use crate::{crypto::aead::AeadAlgorithm, errors::ParsingError};
 
-type ParseResult<I, O> = std::result::Result<(I, O), ParsingError<I>>;
+type ParseResult<I, O> = std::result::Result<(I, O), nom::Err<nom::error::Error<I>>>;
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -73,43 +73,49 @@ named!(key_expiration<Subpacket>, map!(
 /// Parse a preferred symmetric algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
 fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    todo!()
-    /*let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
-        .ier()
+    let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
+        .iter()
         .map(|v| {
             SymmetricKeyAlgorithm::from_u8(*v)
                 .ok_or_else(|| format_err!("Invalid SymmetricKeyAlgorithm"))
         })
-        .collect::<Result<_>>()?;
+        .collect::<Result<_>>()
+        .map_err(|_err| {
+            nom::Err::Error(nom::error::Error::new(body, nom::error::ErrorKind::MapOpt))
+        })?;
 
-    Ok((&b""[..], Subpacket::PreferredSymmetricAlgorithms(list)))*/
+    Ok((&b""[..], Subpacket::PreferredSymmetricAlgorithms(list)))
 }
 
 /// Parse a preferred hash algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.8
 fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    /*let list: SmallVec<[HashAlgorithm; 8]> = body
+    let list: SmallVec<[HashAlgorithm; 8]> = body
         .iter()
         .map(|v| HashAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid HashAlgorithm")))
-        .collect::<Result<_>>()?;
+        .collect::<Result<_>>()
+        .map_err(|_err| {
+            nom::Err::Error(nom::error::Error::new(body, nom::error::ErrorKind::MapOpt))
+        })?;
 
-    Ok((&b""[..], Subpacket::PreferredHashAlgorithms(list)))*/
-    todo!()
+    Ok((&b""[..], Subpacket::PreferredHashAlgorithms(list)))
 }
 
 /// Parse a preferred compression algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.9
 fn pref_com_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    /*let list: SmallVec<[CompressionAlgorithm; 8]> = body
+    let list: SmallVec<[CompressionAlgorithm; 8]> = body
         .iter()
         .map(|v| {
             CompressionAlgorithm::from_u8(*v)
                 .ok_or_else(|| format_err!("Invalid CompressionAlgorithm"))
         })
-        .collect::<Result<_>>()?;
+        .collect::<Result<_>>()
+        .map_err(|_err| {
+            nom::Err::Error(nom::error::Error::new(body, nom::error::ErrorKind::MapOpt))
+        })?;
 
-    Ok((&b""[..], Subpacket::PreferredCompressionAlgorithms(list)))*/
-    todo!()
+    Ok((&b""[..], Subpacket::PreferredCompressionAlgorithms(list)))
 }
 
 // Parse a signature expiration time subpacket
@@ -267,13 +273,15 @@ named!(issuer_fingerprint<Subpacket>, do_parse!(
 
 /// Parse a preferred aead subpacket
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    /*let list: SmallVec<[AeadAlgorithm; 2]> = body
+    let list: SmallVec<[AeadAlgorithm; 2]> = body
         .iter()
         .map(|v| AeadAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid AeadAlgorithm")))
-        .collect::<Result<_>>()?;
+        .collect::<Result<_>>()
+        .map_err(|_err| {
+            nom::Err::Error(nom::error::Error::new(body, nom::error::ErrorKind::MapOpt))
+        })?;
 
-    Ok((&b""[..], Subpacket::PreferredAeadAlgorithms(list)))*/
-    todo!()
+    Ok((&b""[..], Subpacket::PreferredAeadAlgorithms(list)))
 }
 
 fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
@@ -317,7 +325,7 @@ fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
     res
 }
 
-fn subpackets(input: &[u8]) -> IResult<&[u8], Vec<Subpacket>, ParsingError<&[u8]>> {
+fn subpackets(input: &[u8]) -> IResult<&[u8], Vec<Subpacket>> {
     let (input, packets) = many0(|input| {
         // the subpacket length (1, 2, or 5 octets)
         let (input, len) = packet_length(input)?;
@@ -325,8 +333,7 @@ fn subpackets(input: &[u8]) -> IResult<&[u8], Vec<Subpacket>, ParsingError<&[u8]
         let (input, typ) = map_opt(be_u8, SubpacketType::from_u8)(input)?;
         let (input, p) = map_parser(take(len - 1), |b| subpacket(typ, b))(input)?;
         Ok((input, p))
-    })(input)
-    .map_err(nom::combinator::into)?;
+    })(input)?;
 
     Ok((input, packets))
 }
@@ -334,7 +341,7 @@ fn subpackets(input: &[u8]) -> IResult<&[u8], Vec<Subpacket>, ParsingError<&[u8]
 fn actual_signature<'a>(
     input: &'a [u8],
     typ: &PublicKeyAlgorithm,
-) -> nom::IResult<&'a [u8], Vec<Mpi>, ParsingError<&'a [u8]>> {
+) -> nom::IResult<&'a [u8], Vec<Mpi>> {
     match typ {
         &PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
             mpi(input).map(|(rest, v)| (rest, vec![v.to_owned()]))
@@ -373,7 +380,7 @@ fn v3_parser(
     input: &[u8],
     packet_version: Version,
     version: SignatureVersion,
-) -> nom::IResult<&[u8], Signature, ParsingError<&[u8]>> {
+) -> nom::IResult<&[u8], Signature> {
     // One-octet length of following hashed material. MUST be 5.
     let (input, _) = tag(&[5])(input)?;
     // One-octet signature type.
@@ -415,7 +422,7 @@ fn v4_parser(
     input: &[u8],
     packet_version: Version,
     version: SignatureVersion,
-) -> nom::IResult<&[u8], Signature, ParsingError<&[u8]>> {
+) -> nom::IResult<&[u8], Signature> {
     // One-octet signature type.
     let (input, typ) = map_opt(be_u8, SignatureType::from_u8)(input)?;
     // One-octet public-key algorithm.
@@ -431,7 +438,7 @@ fn v4_parser(
     // Unhashed subpacket data set (zero or more subpackets).
     let (input, usub) = map_parser(take(usub_len), subpackets)(input)?;
     // Two-octet field holding the left 16 bits of the signed hash value.
-    let (input, ls_hash) = take(2)(input)?;
+    let (input, ls_hash) = take(2u8)(input)?;
     // One or more multiprecision integers comprising the signature.
     let (input, sig) = actual_signature(input, &pub_alg)?;
 
@@ -455,7 +462,7 @@ fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Si
 
 // Parse a signature packet (Tag 2)
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
-pub fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], Signature, ParsingError<&[u8]>> {
+pub fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], Signature> {
     let (i, version) = nom::combinator::map_opt(be_u8, SignatureVersion::from_u8)(i)?;
     let (i, signature) = match &version {
         &SignatureVersion::V2 => v3_parser(i, packet_version, version)?,

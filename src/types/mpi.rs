@@ -6,7 +6,7 @@ use nom::{self, number::streaming::be_u16, Err, InputIter, InputTake};
 use num_bigint::BigUint;
 use zeroize::Zeroize;
 
-use crate::errors::{self, CustomParsingError, ParsingError};
+use crate::errors;
 use crate::ser::Serialize;
 use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
@@ -29,26 +29,27 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 /// );
 /// ```
 ///
-pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>, ParsingError<&'a [u8]>> {
+pub fn mpi<'a>(input: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>> {
     let (number, len) = be_u16(input)?;
 
     let bits = u32::from(len);
     let len_actual = ((bits + 7) >> 3) as u32;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
-        Err(ParsingError::Custom(input, CustomParsingError::MpiTooLong))
+        Err(nom::Err::Error(nom::error::Error::new(
+            input,
+            nom::error::ErrorKind::TooLarge,
+        )))
     } else {
         // same as take!
         let cnt = len_actual as usize;
-        match number.slice_index(cnt) {
-            None => Err(nom::Err::Incomplete(nom::Needed::Size(cnt))),
-            Some(index) => {
-                let (rest, n) = number.take_split(index);
-                let n_stripped = strip_leading_zeros(n).into();
+        let index = number
+            .slice_index(cnt)
+            .map_err(|err| nom::Err::Incomplete(err))?;
+        let (rest, n) = number.take_split(index);
+        let n_stripped = strip_leading_zeros(n).into();
 
-                Ok((rest, n_stripped))
-            }
-        }
+        Ok((rest, n_stripped))
     }
 }
 

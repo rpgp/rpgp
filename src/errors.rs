@@ -4,35 +4,11 @@ use crate::packet::Packet;
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
-// custom nom error types
-#[derive(Debug, Clone, PartialEq)]
-pub enum ParsingError<I> {
-    Incomplete(nom::Needed),
-    Custom(I, CustomParsingError),
-    Nom(I, nom::error::ErrorKind),
-}
-#[derive(Debug, Clone, PartialEq)]
-pub enum CustomParsingError {
-    MpiTooLong,
-}
-
-impl<I> nom::error::ParseError<I> for ParsingError<I> {
-    fn from_error_kind(input: I, kind: nom::error::ErrorKind) -> Self {
-        ParsingError::Nom(input, kind)
-    }
-
-    fn append(_: I, _: nom::error::ErrorKind, other: Self) -> Self {
-        other
-    }
-}
-
 /// Error types
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to parse {0:?}")]
     ParsingErrorNom(nom::error::ErrorKind),
-    #[error("failed to parse {0:?}")]
-    ParsingErrorCustom(CustomParsingError),
     #[error("invalid input")]
     InvalidInput,
     #[error("incomplete input: {0:?}")]
@@ -130,22 +106,12 @@ impl From<(&[u8], nom::error::ErrorKind)> for Error {
     }
 }
 
-impl From<ParsingError<&[u8]>> for Error {
-    fn from(err: ParsingError<&[u8]>) -> Error {
-        match err {
-            ParsingError::Custom(_, k) => Error::ParsingErrorCustom(k),
-            ParsingError::Nom(_, k) => Error::ParsingErrorNom(k),
-            ParsingError::Incomplete(n) => Error::Incomplete(n),
-        }
-    }
-}
-
-impl From<nom::Err<ParsingError<&[u8]>>> for Error {
-    fn from(err: nom::Err<ParsingError<&[u8]>>) -> Error {
+impl From<nom::Err<nom::error::Error<&[u8]>>> for Error {
+    fn from(err: nom::Err<nom::error::Error<&[u8]>>) -> Error {
         match err {
             nom::Err::Incomplete(n) => Error::Incomplete(n),
-            nom::Err::Error(e) => e.into(),
-            nom::Err::Failure(e) => e.into(),
+            nom::Err::Error(e) => Error::ParsingErrorNom(e.code),
+            nom::Err::Failure(e) => Error::ParsingErrorNom(e.code),
         }
     }
 }
@@ -156,16 +122,6 @@ impl From<nom::Err<(&[u8], nom::error::ErrorKind)>> for Error {
             nom::Err::Incomplete(n) => Error::Incomplete(n),
             nom::Err::Error((_, e)) => Error::ParsingErrorNom(e),
             nom::Err::Failure((_, e)) => Error::ParsingErrorNom(e),
-        }
-    }
-}
-
-impl<'a> From<nom::Err<(&'a [u8], nom::error::ErrorKind)>> for ParsingError<&'a [u8]> {
-    fn from(err: nom::Err<(&'a [u8], nom::error::ErrorKind)>) -> Self {
-        match err {
-            nom::Err::Incomplete(n) => ParsingError::Incomplete(n),
-            nom::Err::Error((i, e)) => ParsingError::Nom(i, e),
-            nom::Err::Failure((i, e)) => ParsingError::Nom(i, e),
         }
     }
 }
