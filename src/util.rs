@@ -41,10 +41,10 @@ pub fn is_base64_token(c: u8) -> bool {
 pub fn prefixed<'a, E: nom::error::ParseError<&'a [u8]>>(
     i: &'a [u8],
 ) -> IResult<&'a [u8], &'a [u8], E> {
-    nom::sequence::preceded(
-        nom::multi::many0(nom::character::complete::line_ending),
-        nom::combinator::recognize(nom::bytes::complete::take_while1(is_base64_token)),
-    )(i)
+    let (i, _) = nom::multi::many0(nom::character::complete::line_ending)(i)?;
+    let (i, value) =
+        nom::combinator::recognize(nom::bytes::complete::take_while1(is_base64_token))(i)?;
+    Ok((i, value))
 }
 
 /// Recognizes one or more body tokens

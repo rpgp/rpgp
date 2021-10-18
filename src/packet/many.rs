@@ -227,8 +227,7 @@ mod tests {
 
     #[test]
     fn test_many_parser() {
-        // use pretty_env_logger;
-        // let _ = pretty_env_logger::try_init();
+        let _ = pretty_env_logger::try_init();
 
         let p = Path::new("./tests/tests/sks-dump/0000.pgp");
         let file = File::open(p).unwrap();

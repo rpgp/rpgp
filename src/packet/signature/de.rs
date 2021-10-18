@@ -9,7 +9,6 @@ use nom::{
     number::streaming::{be_u16, be_u32, be_u8},
     IResult,
 };
-use num_bigint::ParseBigIntError;
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
@@ -25,8 +24,6 @@ use crate::types::{
     Version,
 };
 use crate::util::{clone_into_array, packet_length, read_string};
-
-type ParseResult<I, O> = std::result::Result<(I, O), nom::Err<nom::error::Error<I>>>;
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -326,14 +323,14 @@ fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
 }
 
 fn subpackets(input: &[u8]) -> IResult<&[u8], Vec<Subpacket>> {
-    let (input, packets) = many0(|input| {
+    let (input, packets) = many0(nom::combinator::complete(|input| {
         // the subpacket length (1, 2, or 5 octets)
         let (input, len) = packet_length(input)?;
         // the subpacket type (1 octet)
         let (input, typ) = map_opt(be_u8, SubpacketType::from_u8)(input)?;
         let (input, p) = map_parser(take(len - 1), |b| subpacket(typ, b))(input)?;
         Ok((input, p))
-    })(input)?;
+    }))(input)?;
 
     Ok((input, packets))
 }
@@ -456,19 +453,15 @@ fn v4_parser(
     Ok((input, s))
 }
 
-fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Signature> {
-    unimplemented!("unknown signature version {:?}", version);
-}
-
 // Parse a signature packet (Tag 2)
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
 pub fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], Signature> {
     let (i, version) = nom::combinator::map_opt(be_u8, SignatureVersion::from_u8)(i)?;
-    let (i, signature) = match &version {
-        &SignatureVersion::V2 => v3_parser(i, packet_version, version)?,
-        &SignatureVersion::V3 => v3_parser(i, packet_version, version)?,
-        &SignatureVersion::V4 => v4_parser(i, packet_version, version)?,
-        &SignatureVersion::V5 => v4_parser(i, packet_version, version)?,
+    let (i, signature) = match version {
+        SignatureVersion::V2 => v3_parser(i, packet_version, version)?,
+        SignatureVersion::V3 => v3_parser(i, packet_version, version)?,
+        SignatureVersion::V4 => v4_parser(i, packet_version, version)?,
+        SignatureVersion::V5 => v4_parser(i, packet_version, version)?,
     };
     Ok((i, signature))
 }

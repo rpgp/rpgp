@@ -37,6 +37,7 @@ named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, Pu
 
 // Parse a private key packet (Tag 5)
 // Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
+#[allow(clippy::type_complexity)]
 pub fn parse(
     i: &[u8],
 ) -> IResult<
@@ -51,11 +52,11 @@ pub fn parse(
     ),
 > {
     let (i, key_ver) = nom::combinator::map_opt(be_u8, KeyVersion::from_u8)(i)?;
-    let (i, key) = match &key_ver {
-        &KeyVersion::V2 => old_private_key_parser(i, &key_ver)?,
-        &KeyVersion::V3 => old_private_key_parser(i, &key_ver)?,
-        &KeyVersion::V4 => new_private_key_parser(i, &key_ver)?,
-        &KeyVersion::V5 => unimplemented!(),
+    let (i, key) = match key_ver {
+        KeyVersion::V2 => old_private_key_parser(i, &key_ver)?,
+        KeyVersion::V3 => old_private_key_parser(i, &key_ver)?,
+        KeyVersion::V4 => new_private_key_parser(i, &key_ver)?,
+        KeyVersion::V5 => unimplemented!(),
     };
 
     Ok((i, key))

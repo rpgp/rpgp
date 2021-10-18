@@ -1,7 +1,5 @@
 use ed25519_dalek::SignatureError;
 
-use crate::packet::Packet;
-
 pub type Result<T> = ::std::result::Result<T, Error>;
 
 /// Error types
