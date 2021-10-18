@@ -7,6 +7,7 @@ use std::{hash, io};
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::{
     self,
+    combinator::map,
     number::streaming::{be_u32, be_u8},
     Err, IResult, InputIter, InputLength, Slice,
 };
@@ -108,22 +109,18 @@ where
     a
 }
 
-// Parse a packet length.
-#[rustfmt::skip]
-named!(pub packet_length<usize>, do_parse!(
-       olen: be_u8
-    >>  len: switch!(value!(olen),
-                     // One-Octet Lengths
-                     0..=191   => value!(olen as usize) |
-                     // Two-Octet Lengths
-                     192..=254 => map!(be_u8, |a| {
-                         ((olen as usize - 192) << 8) + 192 + a as usize
-                     }) |
-                     // Five-Octet Lengths
-                     255       => map!(be_u32, u32_as_usize)
-    )
-    >> (len)
-));
+/// Parse a packet length.
+pub fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
+    let (i, olen) = be_u8(i)?;
+    match olen {
+        // One-Octet Lengths
+        0..=191 => Ok((i, olen as usize)),
+        // Two-Octet Lengths
+        192..=254 => map(be_u8, |a| ((olen as usize - 192) << 8) + 192 + a as usize)(i),
+        // Five-Octet Lengths
+        255 => map(be_u32, u32_as_usize)(i),
+    }
+}
 
 /// Write packet length, including the prefix.
 pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {

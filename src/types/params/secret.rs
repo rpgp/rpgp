@@ -1,5 +1,8 @@
 use std::io;
 
+use nom::bytes::streaming::take;
+use nom::combinator::{cond, map, map_opt};
+use nom::IResult;
 use nom::{combinator::rest_len, number::streaming::be_u8};
 use num_traits::FromPrimitive;
 use zeroize::Zeroize;
@@ -74,62 +77,55 @@ impl Serialize for SecretParams {
     }
 }
 
-// Parse possibly encrypted private fields of a key.
-#[rustfmt::skip]
-named_args!(parse_secret_fields(alg: PublicKeyAlgorithm) <(SecretParams, Option<&[u8]>)>, do_parse!(
-          s2k_typ: be_u8
-    >> enc_params: switch!(value!(s2k_typ),
-                   // 0 is no encryption
-                   0       => value!((None, None, None)) |
-                   // symmetric key algorithm
-                   1..=253 => do_parse!(
-                          sym_alg: map_opt!(
-                                    value!(s2k_typ),
-                                    SymmetricKeyAlgorithm::from_u8
-                                )
-                       >>      iv: take!(sym_alg.block_size())
-                       >> (Some(sym_alg), Some(iv), None)
-                   ) |
-                   // symmetric key + string-to-key
-                   254..=255 => do_parse!(
-                             sym_alg: map_opt!(
-                                        be_u8,
-                                        SymmetricKeyAlgorithm::from_u8
-                                      )
-                       >>        s2k: s2k_parser
-                       >>         iv: take!(sym_alg.block_size())
-                       >> (Some(sym_alg), Some(iv), Some(s2k))
-                   )
-    )
-    >> checksum_len: switch!(value!(s2k_typ),
+/// Parse possibly encrypted private fields of a key.
+fn parse_secret_fields(
+    i: &[u8],
+    alg: PublicKeyAlgorithm,
+) -> IResult<&[u8], (SecretParams, Option<&[u8]>)> {
+    let (i, s2k_typ) = be_u8(i)?;
+    let (i, enc_params) = match s2k_typ {
+        // 0 is no encryption
+        0 => Ok((i, (None, None, None))),
+        // symmetric key algorithm
+        1..=253 => {
+            let (i, sym_alg) = map_opt(|i| Ok((i, s2k_typ)), SymmetricKeyAlgorithm::from_u8)(i)?;
+            let (i, iv) = take(sym_alg.block_size())(i)?;
+            Ok((i, (Some(sym_alg), Some(iv), None)))
+        }
+        // symmetric key + string-to-key
+        254..=255 => {
+            let (i, sym_alg) = map_opt(be_u8, SymmetricKeyAlgorithm::from_u8)(i)?;
+            let (i, s2k) = s2k_parser(i)?;
+            let (i, iv) = take(sym_alg.block_size())(i)?;
+            Ok((i, (Some(sym_alg), Some(iv), Some(s2k))))
+        }
+    }?;
+    let checksum_len = match s2k_typ {
         // 20 octect hash at the end, but part of the encrypted part
-        254 => value!(0) |
+        254 => 0,
         // 2 octet checksum at the end
-        _   => value!(2)
-    )
-    >> data_len: map!(rest_len, |r| r - checksum_len)
-    >>     data: take!(data_len)
-    >> checksum: cond!(checksum_len > 0, take!(checksum_len))
-    >> ({
-        let encryption_algorithm = enc_params.0;
-        let iv = enc_params.1.map(|iv| iv.to_vec());
-        let string_to_key = enc_params.2;
+        _ => 2,
+    };
+    let (i, data_len) = map(rest_len, |r| r - checksum_len)(i)?;
+    let (i, data) = take(data_len)(i)?;
+    let (i, checksum) = cond(checksum_len > 0, take(checksum_len))(i)?;
 
-        let res = match s2k_typ {
-            0 => {
-                let repr = PlainSecretParams::from_slice(data, alg).expect("TODO");
-                SecretParams::Plain(repr)
-            }
-            _ => {
-                SecretParams::Encrypted(EncryptedSecretParams::new(
-                    data.to_vec(),
-                    iv.expect("encrypted"),
-                    encryption_algorithm.expect("encrypted"),
-                    string_to_key.expect("encrypted"),
-                    s2k_typ,
-                ))
-            }
-        };
-        (res, checksum)
-    })
-));
+    let encryption_algorithm = enc_params.0;
+    let iv = enc_params.1.map(|iv| iv.to_vec());
+    let string_to_key = enc_params.2;
+
+    let res = match s2k_typ {
+        0 => {
+            let repr = PlainSecretParams::from_slice(data, alg).expect("TODO");
+            SecretParams::Plain(repr)
+        }
+        _ => SecretParams::Encrypted(EncryptedSecretParams::new(
+            data.to_vec(),
+            iv.expect("encrypted"),
+            encryption_algorithm.expect("encrypted"),
+            string_to_key.expect("encrypted"),
+            s2k_typ,
+        )),
+    };
+    Ok((i, (res, checksum)))
+}

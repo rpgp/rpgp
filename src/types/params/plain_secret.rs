@@ -2,6 +2,7 @@ use std::hash::Hasher;
 use std::{fmt, io};
 
 use byteorder::{BigEndian, ByteOrder};
+use nom::IResult;
 use rand::{CryptoRng, Rng};
 use rsa::RsaPrivateKey;
 use zeroize::Zeroize;
@@ -301,24 +302,53 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
     }
 }
 
-#[rustfmt::skip]
-named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef<'_>>, switch!(value!(alg),
-    PublicKeyAlgorithm::RSA        |
-    PublicKeyAlgorithm::RSAEncrypt |
-    PublicKeyAlgorithm::RSASign => call!(rsa_secret_params)                                |
-    PublicKeyAlgorithm::DSA     => do_parse!(x: mpi >> (PlainSecretParamsRef::DSA(x)))      |
-    PublicKeyAlgorithm::Elgamal => do_parse!(x: mpi >> (PlainSecretParamsRef::Elgamal(x)))  |
-    PublicKeyAlgorithm::ECDH    => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDH(x)))  |
-    PublicKeyAlgorithm::ECDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDSA(x))) |
-    PublicKeyAlgorithm::EdDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::EdDSA(x)))
-));
+fn parse_secret_params(
+    i: &[u8],
+    alg: PublicKeyAlgorithm,
+) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    match alg {
+        PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
+            rsa_secret_params(i)
+        }
+        PublicKeyAlgorithm::DSA => dsa_secret_params(i),
+        PublicKeyAlgorithm::Elgamal => elgamal_secret_params(i),
+        PublicKeyAlgorithm::ECDH => ecdh_secret_params(i),
+        PublicKeyAlgorithm::ECDSA => ecdsa_secret_params(i),
+        PublicKeyAlgorithm::EdDSA => eddsa_secret_params(i),
+        _ => unimplemented!("unkown algorithm: {:?}", alg),
+    }
+}
 
-// Parse the decrpyted private params of an RSA private key.
-#[rustfmt::skip]
-named!(rsa_secret_params<PlainSecretParamsRef<'_>>, do_parse!(
-       d: mpi
-    >> p: mpi
-    >> q: mpi
-    >> u: mpi
-    >> (PlainSecretParamsRef::RSA { d, p, q, u })
-));
+/// Parse the decrpyted private params of an RSA private key.
+fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    let (i, d) = mpi(i)?;
+    let (i, p) = mpi(i)?;
+    let (i, q) = mpi(i)?;
+    let (i, u) = mpi(i)?;
+    Ok((i, PlainSecretParamsRef::RSA { d, p, q, u }))
+}
+
+fn dsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    let (i, x) = mpi(i)?;
+    Ok((i, PlainSecretParamsRef::DSA(x)))
+}
+
+fn elgamal_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    let (i, x) = mpi(i)?;
+    Ok((i, PlainSecretParamsRef::Elgamal(x)))
+}
+
+fn ecdh_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    let (i, x) = mpi(i)?;
+    Ok((i, PlainSecretParamsRef::ECDH(x)))
+}
+
+fn ecdsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    let (i, x) = mpi(i)?;
+    Ok((i, PlainSecretParamsRef::ECDSA(x)))
+}
+
+fn eddsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    let (i, x) = mpi(i)?;
+    Ok((i, PlainSecretParamsRef::EdDSA(x)))
+}

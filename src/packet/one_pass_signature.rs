@@ -1,6 +1,9 @@
 use std::io;
 
+use nom::bytes::streaming::take;
+use nom::combinator::{map_opt, map_res};
 use nom::number::streaming::be_u8;
+use nom::IResult;
 use num_traits::FromPrimitive;
 
 use crate::crypto::hash::HashAlgorithm;
@@ -54,24 +57,27 @@ impl OnePassSignature {
     }
 }
 
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
-         version: be_u8
-    >>       typ: map_opt!(be_u8, SignatureType::from_u8)
-    >>      hash: map_opt!(be_u8, HashAlgorithm::from_u8)
-    >>   pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >>    key_id: map_res!(take!(8), KeyId::from_slice)
-    >> last: be_u8
-    >> (OnePassSignature {
-        packet_version,
-        version,
-        typ,
-        hash_algorithm: hash,
-        pub_algorithm: pub_alg,
-        key_id,
-        last,
-    })
-));
+fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], OnePassSignature> {
+    let (i, version) = be_u8(i)?;
+    let (i, typ) = map_opt(be_u8, SignatureType::from_u8)(i)?;
+    let (i, hash) = map_opt(be_u8, HashAlgorithm::from_u8)(i)?;
+    let (i, pub_alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(i)?;
+    let (i, key_id) = map_res(take(8u8), KeyId::from_slice)(i)?;
+    let (i, last) = be_u8(i)?;
+
+    Ok((
+        i,
+        OnePassSignature {
+            packet_version,
+            version,
+            typ,
+            hash_algorithm: hash,
+            pub_algorithm: pub_alg,
+            key_id,
+            last,
+        },
+    ))
+}
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

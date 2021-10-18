@@ -3,8 +3,10 @@ use std::{fmt, io};
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use nom::{
-    combinator::rest,
+    bytes::streaming::take,
+    combinator::{map, map_opt, rest},
     number::streaming::{be_u32, be_u8},
+    IResult,
 };
 use num_traits::FromPrimitive;
 
@@ -103,21 +105,24 @@ impl Serialize for LiteralData {
     }
 }
 
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
-           mode: map_opt!(be_u8, DataMode::from_u8)
-    >> name_len: be_u8
-    >>     name: map!(take!(name_len), read_string)
-    >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
-    >>     data: rest
-    >> (LiteralData {
+fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], LiteralData> {
+    let (i, mode) = map_opt(be_u8, DataMode::from_u8)(i)?;
+    let (i, name_len) = be_u8(i)?;
+    let (i, name) = map(take(name_len), read_string)(i)?;
+    let (i, created) = map(be_u32, |v| Utc.timestamp(i64::from(v), 0))(i)?;
+    let (i, data) = rest(i)?;
+
+    Ok((
+        i,
+        LiteralData {
             packet_version,
             mode,
             created,
             file_name: name,
             data: data.to_vec(),
-    })
-));
+        },
+    ))
+}
 
 impl PacketTrait for LiteralData {
     fn packet_version(&self) -> Version {

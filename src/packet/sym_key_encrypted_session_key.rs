@@ -1,5 +1,7 @@
 use std::io;
 
+use nom::combinator::map_opt;
+use nom::IResult;
 use nom::{combinator::rest, number::streaming::be_u8};
 use num_traits::FromPrimitive;
 
@@ -79,28 +81,29 @@ impl SymKeyEncryptedSessionKey {
     }
 }
 
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version) <SymKeyEncryptedSessionKey>, do_parse!(
-              version: be_u8
-    >>        sym_alg: map_opt!(be_u8, SymmetricKeyAlgorithm::from_u8)
-    >>            s2k: s2k_parser
-    >>  encrypted_key: rest
-    >> ({
-        let encrypted_key = if encrypted_key.is_empty() {
-            None
-        } else {
-            Some(encrypted_key.to_vec())
-        };
+fn parse(i: &[u8], packet_version: Version) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
+    let (i, version) = be_u8(i)?;
+    let (i, sym_alg) = map_opt(be_u8, SymmetricKeyAlgorithm::from_u8)(i)?;
+    let (i, s2k) = s2k_parser(i)?;
+    let (i, encrypted_key) = rest(i)?;
 
+    let encrypted_key = if encrypted_key.is_empty() {
+        None
+    } else {
+        Some(encrypted_key.to_vec())
+    };
+
+    Ok((
+        i,
         SymKeyEncryptedSessionKey {
             packet_version,
             version,
             sym_algorithm: sym_alg,
             s2k,
             encrypted_key,
-        }
-    })
-));
+        },
+    ))
+}
 
 impl Serialize for SymKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
