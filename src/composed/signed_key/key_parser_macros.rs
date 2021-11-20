@@ -13,7 +13,7 @@ macro_rules! key_parser {
             type Item = $crate::errors::Result<$key_type>;
 
             fn next(&mut self) -> Option<Self::Item> {
-                use try_from::TryInto;
+                use std::convert::TryInto;
                 use $crate::packet::{self, Signature, SignatureType, UserAttribute, UserId};
                 use $crate::types::{KeyVersion, SignedUser, SignedUserAttribute, Tag, KeyTrait};
 

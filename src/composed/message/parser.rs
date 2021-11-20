@@ -1,7 +1,6 @@
 use std::boxed::Box;
+use std::convert::TryInto;
 use std::iter::Peekable;
-
-use try_from::TryInto;
 
 use crate::composed::message::Message;
 use crate::composed::Deserializable;

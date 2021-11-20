@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 use std::iter::Peekable;
-
-use try_from::TryInto;
 
 use crate::armor;
 use crate::composed::Deserializable;

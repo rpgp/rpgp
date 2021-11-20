@@ -1,7 +1,7 @@
 use std::boxed::Box;
+use std::convert::TryInto;
 
 use rsa::Hash;
-use try_from::TryInto;
 
 use digest::{Digest, FixedOutput};
 use generic_array::typenum::Unsigned;
@@ -40,7 +40,7 @@ impl Default for HashAlgorithm {
 }
 
 impl TryInto<Hash> for HashAlgorithm {
-    type Err = Error;
+    type Error = Error;
 
     fn try_into(self) -> Result<Hash> {
         match self {

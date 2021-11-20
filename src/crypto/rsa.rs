@@ -1,9 +1,10 @@
+use std::convert::TryInto;
+
 use num_bigint::traits::ModInverse;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
 use rsa::{PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
-use try_from::TryInto;
 
 use crate::crypto::HashAlgorithm;
 use crate::errors::Result;
