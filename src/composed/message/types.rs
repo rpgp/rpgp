@@ -1,5 +1,6 @@
 use std::boxed::Box;
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::io;
 
 use chrono::{self, SubsecRound};
@@ -7,7 +8,6 @@ use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
-use try_from::TryFrom;
 
 use crate::armor;
 use crate::composed::message::decrypt::*;
@@ -81,7 +81,7 @@ impl Esk {
 }
 
 impl TryFrom<Packet> for Esk {
-    type Err = Error;
+    type Error = Error;
 
     fn try_from(other: Packet) -> Result<Esk> {
         match other {
@@ -126,7 +126,7 @@ impl_try_from_into!(
 );
 
 impl TryFrom<Packet> for Edata {
-    type Err = Error;
+    type Error = Error;
 
     fn try_from(other: Packet) -> Result<Edata> {
         match other {

@@ -161,11 +161,11 @@ where
 macro_rules! impl_try_from_into {
     ($enum_name:ident, $( $name:ident => $variant_type:ty ),*) => {
        $(
-           impl try_from::TryFrom<$enum_name> for $variant_type {
+           impl std::convert::TryFrom<$enum_name> for $variant_type {
                // TODO: Proper error
-               type Err = $crate::errors::Error;
+               type Error = $crate::errors::Error;
 
-               fn try_from(other: $enum_name) -> ::std::result::Result<$variant_type, Self::Err> {
+               fn try_from(other: $enum_name) -> ::std::result::Result<$variant_type, Self::Error> {
                    if let $enum_name::$name(value) = other {
                        Ok(value)
                    } else {
