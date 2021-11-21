@@ -70,7 +70,7 @@ pub trait Hasher: std::io::Write {
 
 macro_rules! derive_hasher {
     ($name:ident, $struct:path) => {
-        #[derive(Default)]
+        #[derive(Clone, Default)]
         pub struct $name {
             inner: $struct,
         }
