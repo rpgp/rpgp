@@ -33,7 +33,7 @@ clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 crc24 = "^0.1"
 derive_builder = "0.9.0"
 des = "^0.7"
-digest = "^0.9"
+digest = "^0.10"
 generic-array = "^0.14"
 hex = "^0.4"
 lazy_static = "1.2.0"
