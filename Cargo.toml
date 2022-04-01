@@ -86,7 +86,7 @@ features = ["std", "u64_backend"]
 [dev-dependencies]
 glob = "^0.3"
 hex-literal = "^0.3"
-pretty_assertions = "0.7"
+pretty_assertions = "1.2"
 pretty_env_logger = "0.4"
 rand_chacha = "0.3"
 rand_xorshift = "0.3"
