@@ -6,12 +6,13 @@ use chrono::{DateTime, Utc};
 
 use crate::crypto::hash::{HashAlgorithm, Hasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket};
 use crate::ser::Serialize;
 use crate::types::{KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
 
 #[derive(Clone, PartialEq, Eq, Builder)]
+#[builder(build_fn(error = "Error"))]
 pub struct SignatureConfig {
     #[builder(default)]
     pub version: SignatureVersion,
