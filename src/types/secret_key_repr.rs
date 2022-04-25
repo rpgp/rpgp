@@ -32,7 +32,7 @@ pub struct ECDHSecretKey {
 impl fmt::Debug for ECDHSecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ECDHSecretKey")
-            .field("secret", &"[..]".to_string())
+            .field("secret", &"[..]")
             .field("hash", &self.hash)
             .field("oid", &hex::encode(&self.oid))
             .field("alg_sym", &self.alg_sym)
@@ -52,7 +52,7 @@ pub struct EdDSASecretKey {
 impl fmt::Debug for EdDSASecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EdDSASecretKey")
-            .field("secret", &"[..]".to_string())
+            .field("secret", &"[..]")
             .field("oid", &hex::encode(&self.oid))
             .finish()
     }
@@ -67,8 +67,6 @@ pub struct DSASecretKey {
 
 impl fmt::Debug for DSASecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DSASecretKey")
-            .field("x", &"[..]".to_string())
-            .finish()
+        f.debug_struct("DSASecretKey").field("x", &"[..]").finish()
     }
 }

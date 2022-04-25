@@ -251,20 +251,20 @@ mod tests {
             })
             .filter(|(offset, _, _)| {
                 // skip certain packages we are not (yet) parsing
-                offset != &"1193538".to_string() && // invalid mpi
-                offset != &"5053086".to_string() && // invalid mpi
-                offset != &"8240010".to_string() && // unknown public key algorithm 100
-                offset != &"9758352".to_string() && // TODO: unclear why this sig fails to parse
-                offset != &"9797527".to_string() && // TODO: unclear why this sig fails to parse
-                offset != &"11855679".to_string() &&  // TODO: unclear why this sig fails to parse
-                offset != &"11855798".to_string() && // TODO: unclear why this sig fails to parse
-                offset != &"11856933".to_string() && // TODO: unclear why this sig fails to parse
-                offset != &"11857023".to_string() && // TODO: unclear why this sig fails to parse
-                offset != &"11857113".to_string() && // TODO: unclear why this sig fails to parse
-                offset != &"12688657".to_string() && // TODO: unclear why this sig fails to parse
-                offset != &"24798372".to_string() && // TODO: unclear why this public sub key fails to parse
-                offset != &"24810682".to_string() && // bad attribute size
-                offset != &"38544535".to_string() // bad attribute size
+                offset != "1193538" && // invalid mpi
+                offset != "5053086" && // invalid mpi
+                offset != "8240010" && // unknown public key algorithm 100
+                offset != "9758352" && // TODO: unclear why this sig fails to parse
+                offset != "9797527" && // TODO: unclear why this sig fails to parse
+                offset != "11855679" && // TODO: unclear why this sig fails to parse
+                offset != "11855798" && // TODO: unclear why this sig fails to parse
+                offset != "11856933" && // TODO: unclear why this sig fails to parse
+                offset != "11857023" && // TODO: unclear why this sig fails to parse
+                offset != "11857113" && // TODO: unclear why this sig fails to parse
+                offset != "12688657" && // TODO: unclear why this sig fails to parse
+                offset != "24798372" && // TODO: unclear why this public sub key fails to parse
+                offset != "24810682" && // bad attribute size
+                offset != "38544535" // bad attribute size
             });
 
         let actual_tags = PacketParser::new(file).filter(|p| p.is_ok());

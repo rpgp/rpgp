@@ -28,7 +28,7 @@ impl<R> fmt::Debug for Base64Decoder<R> {
         let out_buf = format!("{:?}", &self.out_buffer[..]);
         f.debug_struct("Base64Decoder")
             .field("config", &self.config)
-            .field("inner", &"BufReader".to_string())
+            .field("inner", &"BufReader")
             .field("out", &self.out)
             .field("out_buffer", &out_buf)
             .field("err", &self.err)
