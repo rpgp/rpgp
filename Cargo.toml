@@ -17,7 +17,7 @@ exclude = ["tests/tests/*"]
 edition = "2018"
 
 [dependencies]
-aes = "^0.7"
+aes = "^0.8"
 base64 = "^0.13.0"
 bitfield = "0.13.1"
 block-modes = "^0.8"
