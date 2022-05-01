@@ -28,7 +28,7 @@ cast5 = "^0.10.0"
 cfb-mode = "^0.7.0"
 chrono = "^0.4"
 circular = "^0.3"
-cipher = "^0.3"
+cipher = "^0.4"
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 crc24 = "^0.1"
 derive_builder = "0.9.0"
