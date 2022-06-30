@@ -26,7 +26,7 @@ blowfish = "^0.8"
 byteorder = "^1.4"
 cast5 = "^0.10.0"
 cfb-mode = "^0.7.0"
-chrono = "^0.4"
+chrono = { version = "^0.4", default-features = false, features = ["clock", "std"] }
 circular = "^0.3"
 cipher = "^0.3"
 clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
