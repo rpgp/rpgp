@@ -129,7 +129,7 @@ pub enum ParseResult<'a> {
 named!(pub parser<(Version, Tag, PacketLength, ParseResult<'_>)>, do_parse!(
        head: alt!(new_packet_header | old_packet_header)
     >> body: switch!(value!(&head.2),
-        PacketLength::Fixed(length)   => map!(take!(*length), |v| ParseResult::Fixed(v)) |
+        PacketLength::Fixed(length)   => map!(take!(*length), ParseResult::Fixed) |
         PacketLength::Indeterminated  => value!(ParseResult::Indeterminated) |
         PacketLength::Partial(length) => call!(read_partial_bodies, *length)
     )

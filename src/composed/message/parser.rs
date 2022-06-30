@@ -39,18 +39,20 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                         let mut edata = Vec::new();
 
                         // while ESK take em
-                        while let Some(true) = packets.peek().map(|p| {
+                        while packets.peek().map(|p| {
                             p.tag() == Tag::PublicKeyEncryptedSessionKey
                                 || p.tag() == Tag::SymKeyEncryptedSessionKey
-                        }) {
+                        }) == Some(true)
+                        {
                             esk.push(packets.next().expect("peeked").try_into().expect("peeked"));
                         }
 
                         // while edata take em
-                        while let Some(true) = packets.peek().map(|p| {
+                        while packets.peek().map(|p| {
                             p.tag() == Tag::SymEncryptedData
                                 || p.tag() == Tag::SymEncryptedProtectedData
-                        }) {
+                        }) == Some(true)
+                        {
                             edata.push(packets.next().expect("peeked").try_into().expect("peeked"));
                         }
 
@@ -68,10 +70,11 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                         let mut edata = vec![p];
 
                         // while edata take em
-                        while let Some(true) = packets.peek().map(|p| {
+                        while packets.peek().map(|p| {
                             p.tag() == Tag::SymEncryptedData
                                 || p.tag() == Tag::SymEncryptedProtectedData
-                        }) {
+                        }) == Some(true)
+                        {
                             edata.push(packets.next().expect("peeked").try_into().expect("peeked"));
                         }
 
@@ -111,7 +114,7 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                         };
 
                         let signature =
-                            if let Some(true) = packets.peek().map(|p| p.tag() == Tag::Signature) {
+                            if packets.peek().map(|p| p.tag() == Tag::Signature) == Some(true) {
                                 packets.next().expect("peeked").try_into().expect("peeked")
                             } else {
                                 return Some(Err(format_err!(

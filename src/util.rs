@@ -73,11 +73,10 @@ pub fn bit_size(val: &[u8]) -> usize {
 
 #[inline]
 pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
-    if let Some(offset) = bytes.iter().position(|b| b != &0) {
-        &bytes[offset..]
-    } else {
-        bytes
-    }
+    bytes
+        .iter()
+        .position(|b| b != &0)
+        .map_or(bytes, |offset| &bytes[offset..])
 }
 
 #[inline]
