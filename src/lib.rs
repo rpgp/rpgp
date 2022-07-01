@@ -19,7 +19,6 @@
     clippy::unwrap_used,
     rust_2018_idioms
 )]
-#![warn(clippy::nursery)]
 #![allow(clippy::missing_const_for_fn, clippy::use_self)]
 
 #[macro_use]

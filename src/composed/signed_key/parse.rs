@@ -77,10 +77,10 @@ impl<I: Sized + Iterator<Item = Packet>> Iterator for PubPrivIterator<I> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let packets = self.inner.by_ref();
-        if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::SecretKey) {
+        if packets.peek().map(|packet| packet.tag() == Tag::SecretKey) == Some(true) {
             let p: Option<Result<SignedSecretKey>> = SignedSecretKey::from_packets(packets).next();
             p.map(|key| key.map(PublicOrSecret::Secret))
-        } else if let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::PublicKey) {
+        } else if packets.peek().map(|packet| packet.tag() == Tag::PublicKey) == Some(true) {
             let p: Option<Result<SignedPublicKey>> = SignedPublicKey::from_packets(packets).next();
             p.map(|key| key.map(PublicOrSecret::Public))
         } else {

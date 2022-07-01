@@ -113,11 +113,10 @@ impl SignedKeyDetails {
     }
 
     pub fn as_unsigned(&self) -> KeyDetails {
-        let primary_user = if let Some(user) = self.users.iter().find(|u| u.is_primary()) {
-            user
-        } else {
-            self.users.first().expect("missing user ids")
-        };
+        let primary_user = self.users.iter().find(|u| u.is_primary()).map_or_else(
+            || self.users.first().expect("missing user ids"),
+            |user| user,
+        );
 
         let primary_user_id = primary_user.id.clone();
         let primary_sig = primary_user

@@ -22,7 +22,7 @@ macro_rules! key_parser {
                 // -- One Public-Key packet
 
                 // ignore random other packets until we find something useful
-                while let Some(true) = packets.peek().map(|p| p.tag() != $key_tag) {
+                while packets.peek().map(|p| p.tag() != $key_tag) == Some(true) {
                     let p = packets.next().expect("peeked");
                     warn!("ignoring unexpected packet: expected {:?}, got {:?}", $key_tag, p.tag());
                 }
@@ -40,7 +40,7 @@ macro_rules! key_parser {
                 let mut revocation_signatures = Vec::new();
                 let mut direct_signatures = Vec::new();
 
-                while let Some(true) = packets.peek().map(|packet| packet.tag() == Tag::Signature) {
+                while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
                     let packet = packets.next().expect("peeked");
                     debug!("parsing signature {:?}", packet.tag());
                     let sig: Signature = err_opt!(packet.try_into());
@@ -63,13 +63,12 @@ macro_rules! key_parser {
                 let mut users = Vec::new();
                 let mut user_attributes = Vec::new();
 
-                while let Some(true) = packets
+                while packets
                     .peek()
                     .map(|packet| {
                         debug!("peek {:?}", packet.tag());
                         packet.tag() == Tag::UserId || packet.tag() == Tag::UserAttribute
-                    })
-                {
+                    }) == Some(true) {
                     let packet = packets.next().expect("peeked");
                     let tag = packet.tag();
                     debug!("  user data: {:?}", tag);
@@ -81,9 +80,7 @@ macro_rules! key_parser {
 
                             let mut sigs = Vec::new();
 
-                            while let Some(true) =
-                                packets.peek().map(|packet| packet.tag() == Tag::Signature)
-                            {
+                            while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
                                 let packet = packets.next().expect("peeked");
                                 let sig: Signature = err_opt!(packet.try_into());
 
@@ -98,9 +95,7 @@ macro_rules! key_parser {
                             // --- zero or more signature packets
 
                             let mut sigs = Vec::new();
-                            while let Some(true) =
-                                packets.peek().map(|packet| packet.tag() == Tag::Signature)
-                            {
+                            while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
                                 let packet = packets.next().expect("peeked");
                                 let sig: Signature = err_opt!(packet.try_into());
 
@@ -124,10 +119,9 @@ macro_rules! key_parser {
 
                 debug!("  subkeys");
 
-                while let Some(true) = packets.peek().map(|packet| {
+                while packets.peek().map(|packet| {
                     $( packet.tag() == Tag::$subkey_tag || )* false
-                })
-                {
+                }) == Some(true) {
                     // -- Only V4 keys should have sub keys
                     if primary_key.version() != KeyVersion::V4 {
                         return Some(Err(format_err!("only V4 keys can have subkeys")));
@@ -139,9 +133,7 @@ macro_rules! key_parser {
                             Tag::$subkey_tag => {
                                 let subkey: $inner_subkey_type = err_opt!(packet.try_into());
                                 let mut sigs = Vec::new();
-                                while let Some(true) =
-                                    packets.peek().map(|packet| packet.tag() == Tag::Signature)
-                                {
+                                while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
                                     let packet = packets.next().expect("peeked");
                                     let sig: Signature = err_opt!(packet.try_into());
                                     sigs.push(sig);

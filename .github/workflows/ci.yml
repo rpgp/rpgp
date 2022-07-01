@@ -302,9 +302,14 @@ jobs:
   clippy_check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - run: rustup component add clippy
-      - uses: actions-rs/clippy-check@v1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+    - uses: actions/checkout@master
+    - uses: actions-rs/toolchain@v1
+      with:
+          profile: minimal
+          toolchain: nightly
+          override: true
+          components: clippy
+    - uses: actions-rs/clippy-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        args: --all-features
