@@ -59,7 +59,7 @@ And then run tests with `RUST_LOG=pgp=info`.
 
 Some key differences:
 
-- rPGP has a more libre license than Sequoia, that allows a broader usage
+- rPGP has a more libre license than Sequoia, which allows a broader usage
 
 - rPGP is a library with a well-defined, relatively small feature-set
   where Sequoia also tries to be a replacement for the GPG command line tool
