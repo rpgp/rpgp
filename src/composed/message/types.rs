@@ -476,13 +476,10 @@ impl Message {
                             }
 
                             if encoding_key.is_none() {
-                                encoding_subkey = key.secret_subkeys.iter().find_map(|subkey| {
-                                    if &subkey.key_id() == esk_packet.id() {
-                                        Some(subkey)
-                                    } else {
-                                        None
-                                    }
-                                });
+                                encoding_subkey = key
+                                    .secret_subkeys
+                                    .iter()
+                                    .find(|&subkey| &subkey.key_id() == esk_packet.id());
                             }
 
                             if encoding_key.is_some() || encoding_subkey.is_some() {
