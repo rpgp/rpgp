@@ -145,12 +145,6 @@ impl From<rsa::errors::Error> for Error {
     }
 }
 
-impl From<block_modes::BlockModeError> for Error {
-    fn from(_: block_modes::BlockModeError) -> Error {
-        Error::BlockMode
-    }
-}
-
 impl From<cipher::InvalidLength> for Error {
     fn from(_: cipher::InvalidLength) -> Error {
         Error::CfbInvalidKeyIvLength

@@ -2,7 +2,7 @@ use aes::{Aes128, Aes192, Aes256};
 use blowfish::Blowfish;
 use cast5::Cast5;
 use cfb_mode::cipher::{AsyncStreamCipher, KeyIvInit};
-use cfb_mode::{BufferDecryptor, BufferEncryptor, Decryptor, Encryptor};
+use cfb_mode::{BufDecryptor, BufEncryptor, Decryptor, Encryptor};
 use des::TdesEde3;
 use rand::{thread_rng, CryptoRng, Rng};
 use sha1::{Digest, Sha1};
@@ -13,7 +13,7 @@ use crate::errors::{Error, Result};
 
 macro_rules! decrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        let mut mode = BufferDecryptor::<$mode>::new_from_slices($key, $iv)?;
+        let mut mode = BufDecryptor::<$mode>::new_from_slices($key, $iv)?;
         mode.decrypt($prefix);
 
         // quick check, before decrypting the rest
@@ -41,7 +41,7 @@ macro_rules! decrypt {
 
 macro_rules! encrypt {
     ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        let mut mode = BufferEncryptor::<$mode>::new_from_slices($key, $iv)?;
+        let mut mode = BufEncryptor::<$mode>::new_from_slices($key, $iv)?;
         mode.encrypt($prefix);
 
         if $resync {
