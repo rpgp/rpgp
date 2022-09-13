@@ -20,7 +20,7 @@ rust-version = "1.56"
 [dependencies]
 aes = "^0.8"
 base64 = "^0.13.0"
-bitfield = "0.13.1"
+bitfield = "0.14"
 block-padding = "^0.3.2"
 blowfish = "^0.9"
 byteorder = "^1.4"
