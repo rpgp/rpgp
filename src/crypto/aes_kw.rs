@@ -6,9 +6,7 @@ use generic_array::GenericArray;
 
 use crate::errors::Result;
 
-lazy_static! {
-    static ref IV: GenericArray<u8, U8> = arr![u8; 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6];
-}
+const IV: [u8; 8] = [0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6];
 
 /// AES Key Wrap
 /// As defined in RFC 3394.
@@ -56,7 +54,7 @@ macro_rules! impl_aes_kw {
             // 1) Initialize variables
 
             //   Set A to the IV
-            let mut a = *IV;
+            let mut a = GenericArray::from(IV);
 
             //   for i = 1 to n: R[i] = P[i]
             let mut r = p.clone();
@@ -147,7 +145,7 @@ macro_rules! impl_aes_kw {
 
             // 3) output the results
 
-            if a == *IV {
+            if &a == GenericArray::<u8, U8>::from_slice(&IV) {
                 Ok(r.iter().fold(Vec::with_capacity(r.len() * 8), |mut acc, v| {
                     acc.extend(v);
                     acc

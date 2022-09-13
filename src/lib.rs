@@ -28,8 +28,6 @@ extern crate num_derive;
 #[macro_use]
 extern crate generic_array;
 #[macro_use]
-extern crate lazy_static;
-#[macro_use]
 extern crate log;
 #[macro_use]
 extern crate derive_builder;
