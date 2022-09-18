@@ -28,7 +28,6 @@ cast5 = "^0.10.0"
 cfb-mode = "^0.7.0"
 chrono = { version = "^0.4", default-features = false, features = ["clock", "std"] }
 cipher = "^0.3"
-clear_on_drop = { version = "0.2.3", features = ["no_cc"] }
 crc24 = "^0.1"
 derive_builder = "0.9.0"
 des = "^0.7"
@@ -94,7 +93,7 @@ serde_json = "^1.0"
 
 [features]
 default = []
-nightly = ["ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly", "clear_on_drop/nightly"]
+nightly = ["ed25519-dalek/nightly", "rsa/nightly", "rand/nightly", "num-bigint/nightly"]
 profile = ["gperftools"]
 asm = ["sha-1/asm", "sha2/asm", "md-5/asm", "nightly"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
