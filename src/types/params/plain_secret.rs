@@ -129,7 +129,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                         e.into(),
                         d.into(),
                         vec![p.into(), q.into()],
-                    );
+                    )?;
                     secret_key.validate()?;
                     Ok(SecretKeyRepr::RSA(secret_key))
                 }

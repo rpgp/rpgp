@@ -1,14 +1,11 @@
 use std::boxed::Box;
-use std::convert::TryInto;
-
-use rsa::Hash;
 
 use digest::Digest;
 use md5::Md5;
 use ripemd::Ripemd160;
 use sha1::Sha1;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
@@ -35,26 +32,6 @@ impl zeroize::DefaultIsZeroes for HashAlgorithm {}
 impl Default for HashAlgorithm {
     fn default() -> Self {
         HashAlgorithm::SHA2_256
-    }
-}
-
-impl TryInto<Hash> for HashAlgorithm {
-    type Error = Error;
-
-    fn try_into(self) -> Result<Hash> {
-        match self {
-            HashAlgorithm::None => Err(format_err!("none")),
-            HashAlgorithm::MD5 => Ok(Hash::MD5),
-            HashAlgorithm::SHA1 => Ok(Hash::SHA1),
-            HashAlgorithm::RIPEMD160 => Ok(Hash::RIPEMD160),
-            HashAlgorithm::SHA2_256 => Ok(Hash::SHA2_256),
-            HashAlgorithm::SHA2_384 => Ok(Hash::SHA2_384),
-            HashAlgorithm::SHA2_512 => Ok(Hash::SHA2_512),
-            HashAlgorithm::SHA2_224 => Ok(Hash::SHA2_224),
-            HashAlgorithm::SHA3_256 => Ok(Hash::SHA3_256),
-            HashAlgorithm::SHA3_512 => Ok(Hash::SHA3_512),
-            HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
-        }
     }
 }
 
