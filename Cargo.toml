@@ -25,7 +25,7 @@ block-padding = "0.2.0"
 blowfish = "^0.8"
 byteorder = "^1.4"
 cast5 = "^0.10.0"
-cfb-mode = "^0.7.0"
+cfb-mode = "^0.8.2"
 chrono = { version = "^0.4", default-features = false, features = ["clock", "std"] }
 cipher = "^0.3"
 crc24 = "^0.1"
