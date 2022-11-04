@@ -55,7 +55,7 @@ pub fn write(
         (crc >> 8) as u8,
         crc as u8,
     ];
-    let crc_enc = base64::encode_config(&crc_buf, base64::STANDARD);
+    let crc_enc = base64::encode_config(crc_buf, base64::STANDARD);
 
     writer.write_all(crc_enc.as_bytes())?;
 

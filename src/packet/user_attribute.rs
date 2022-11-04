@@ -167,7 +167,7 @@ impl fmt::Debug for UserAttribute {
                 .finish(),
             UserAttribute::Unknown { typ, ref data, .. } => f
                 .debug_struct("UserAttribute::Image")
-                .field("type", &hex::encode(&[*typ]))
+                .field("type", &hex::encode([*typ]))
                 .field("data", &hex::encode(data))
                 .finish(),
         }

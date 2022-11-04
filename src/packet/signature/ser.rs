@@ -57,11 +57,11 @@ impl Subpacket {
                 writer.write_all(&write_string(reason))?;
             }
             Subpacket::IsPrimary(is_primary) => {
-                let val = if *is_primary { 1u8 } else { 0u8 };
+                let val = u8::from(*is_primary);
                 writer.write_all(&[val])?;
             }
             Subpacket::Revocable(is_revocable) => {
-                let val = if *is_revocable { 1u8 } else { 0u8 };
+                let val = u8::from(*is_revocable);
                 writer.write_all(&[val])?;
             }
             Subpacket::EmbeddedSignature(inner_sig) => {
@@ -100,7 +100,7 @@ impl Subpacket {
                 writer.write_all(&write_string(regexp))?;
             }
             Subpacket::ExportableCertification(is_exportable) => {
-                let val = if *is_exportable { 1 } else { 0 };
+                let val = u8::from(*is_exportable);
                 writer.write_all(&[val])?;
             }
             Subpacket::IssuerFingerprint(version, fp) => {
