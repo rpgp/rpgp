@@ -68,6 +68,8 @@ pub struct SubkeyParams {
     can_create_certificates: bool,
     #[builder(default)]
     can_encrypt: bool,
+    #[builder(default)]
+    can_authenticate: bool,
 
     #[builder(default)]
     user_ids: Vec<UserId>,
@@ -185,6 +187,7 @@ impl SecretKeyParams {
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
                     keyflags.set_encrypt_storage(subkey.can_encrypt);
                     keyflags.set_sign(subkey.can_sign);
+                    keyflags.set_authentication(subkey.can_authenticate);
 
                     Ok(SecretSubkey::new(
                         packet::SecretSubkey {
