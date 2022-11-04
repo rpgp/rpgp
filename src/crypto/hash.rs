@@ -1,15 +1,11 @@
 use std::boxed::Box;
-use std::convert::TryInto;
 
-use rsa::Hash;
-
-use digest::{Digest, FixedOutput};
-use generic_array::typenum::Unsigned;
+use digest::Digest;
 use md5::Md5;
-use ripemd160::Ripemd160;
+use ripemd::Ripemd160;
 use sha1::Sha1;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
@@ -36,26 +32,6 @@ impl zeroize::DefaultIsZeroes for HashAlgorithm {}
 impl Default for HashAlgorithm {
     fn default() -> Self {
         HashAlgorithm::SHA2_256
-    }
-}
-
-impl TryInto<Hash> for HashAlgorithm {
-    type Error = Error;
-
-    fn try_into(self) -> Result<Hash> {
-        match self {
-            HashAlgorithm::None => Err(format_err!("none")),
-            HashAlgorithm::MD5 => Ok(Hash::MD5),
-            HashAlgorithm::SHA1 => Ok(Hash::SHA1),
-            HashAlgorithm::RIPEMD160 => Ok(Hash::RIPEMD160),
-            HashAlgorithm::SHA2_256 => Ok(Hash::SHA2_256),
-            HashAlgorithm::SHA2_384 => Ok(Hash::SHA2_384),
-            HashAlgorithm::SHA2_512 => Ok(Hash::SHA2_512),
-            HashAlgorithm::SHA2_224 => Ok(Hash::SHA2_224),
-            HashAlgorithm::SHA3_256 => Ok(Hash::SHA3_256),
-            HashAlgorithm::SHA3_512 => Ok(Hash::SHA3_512),
-            HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
-        }
     }
 }
 
@@ -147,15 +123,15 @@ impl HashAlgorithm {
     /// Returns the expected digest size for the given algorithm.
     pub fn digest_size(self) -> usize {
         match self {
-            HashAlgorithm::MD5 => <Md5 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA1 => <Sha1 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::RIPEMD160 => <Ripemd160 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA2_256 => <sha2::Sha256 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA2_384 => <sha2::Sha384 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA2_512 => <sha2::Sha512 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA2_224 => <sha2::Sha224 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA3_256 => <sha3::Sha3_256 as FixedOutput>::OutputSize::to_usize(),
-            HashAlgorithm::SHA3_512 => <sha3::Sha3_512 as FixedOutput>::OutputSize::to_usize(),
+            HashAlgorithm::MD5 => Md5::output_size(),
+            HashAlgorithm::SHA1 => Sha1::output_size(),
+            HashAlgorithm::RIPEMD160 => Ripemd160::output_size(),
+            HashAlgorithm::SHA2_256 => sha2::Sha256::output_size(),
+            HashAlgorithm::SHA2_384 => sha2::Sha384::output_size(),
+            HashAlgorithm::SHA2_512 => sha2::Sha512::output_size(),
+            HashAlgorithm::SHA2_224 => sha2::Sha224::output_size(),
+            HashAlgorithm::SHA3_256 => sha3::Sha3_256::output_size(),
+            HashAlgorithm::SHA3_512 => sha3::Sha3_512::output_size(),
             _ => 0,
         }
     }

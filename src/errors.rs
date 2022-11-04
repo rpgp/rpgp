@@ -60,8 +60,8 @@ pub enum Error {
     ParseIntError(#[from] std::num::ParseIntError),
     #[error("Invalid Packet Content {0:?}")]
     InvalidPacketContent(Box<Error>),
-    #[error("Ed25519 {0:?}")]
-    Ed25519SignatureError(#[from] SignatureError),
+    #[error("Signature {0:?}")]
+    SignatureError(#[from] SignatureError),
     #[error("Modification Detection Code error")]
     MdcError,
 }
@@ -95,7 +95,7 @@ impl Error {
             Error::Utf8Error(_) => 23,
             Error::ParseIntError(_) => 24,
             Error::InvalidPacketContent(_) => 25,
-            Error::Ed25519SignatureError(_) => 26,
+            Error::SignatureError(_) => 26,
             Error::MdcError => 27,
         }
     }

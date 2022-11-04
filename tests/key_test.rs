@@ -107,16 +107,16 @@ macro_rules! parse_dumps {
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 19323),
-    (test_parse_dumps_1, 1, 19245),
-    (test_parse_dumps_2, 2, 19299),
-    (test_parse_dumps_3, 3, 19354),
-    (test_parse_dumps_4, 4, 19260),
-    (test_parse_dumps_5, 5, 19297),
-    (test_parse_dumps_6, 6, 19299),
-    (test_parse_dumps_7, 7, 19389),
-    (test_parse_dumps_8, 8, 19333),
-    (test_parse_dumps_9, 9, 19254),
+    (test_parse_dumps_0, 0, 19347),
+    (test_parse_dumps_1, 1, 19261),
+    (test_parse_dumps_2, 2, 19318),
+    (test_parse_dumps_3, 3, 19379),
+    (test_parse_dumps_4, 4, 19282),
+    (test_parse_dumps_5, 5, 19308),
+    (test_parse_dumps_6, 6, 19318),
+    (test_parse_dumps_7, 7, 19407),
+    (test_parse_dumps_8, 8, 19355),
+    (test_parse_dumps_9, 9, 19276),
 );
 
 #[test]

@@ -1,14 +1,24 @@
-use std::convert::TryInto;
-
 use num_bigint::traits::ModInverse;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use rsa::padding::PaddingScheme;
+use rsa::pkcs1v15::{Signature as RsaSignature, SigningKey, VerifyingKey};
 use rsa::{PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 
 use crate::crypto::HashAlgorithm;
 use crate::errors::Result;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
+
+use digest::{const_oid::AssociatedOid, Digest};
+use md5::Md5;
+use ripemd::Ripemd160;
+use sha1::Sha1;
+use sha2::{Sha224, Sha256, Sha384, Sha512};
+use sha3::{Sha3_256, Sha3_512};
+use signature::hazmat::{PrehashSigner, PrehashVerifier};
+use signature::Signature;
+
+const MAX_KEY_SIZE: usize = 16384;
 
 /// RSA decryption using PKCS1v15 padding.
 pub fn decrypt(priv_key: &RsaPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
@@ -28,7 +38,11 @@ pub fn encrypt<R: CryptoRng + Rng>(
     e: &[u8],
     plaintext: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
-    let key = RsaPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
+    let key = RsaPublicKey::new_with_max_size(
+        BigUint::from_bytes_be(n),
+        BigUint::from_bytes_be(e),
+        MAX_KEY_SIZE,
+    )?;
     let data = key.encrypt(rng, PaddingScheme::new_pkcs1v15_encrypt(), plaintext)?;
 
     Ok(vec![data])
@@ -64,19 +78,64 @@ pub fn generate_key<R: Rng + CryptoRng>(
     ))
 }
 
+fn verify_int<D>(key: RsaPublicKey, hashed: &[u8], signature: &RsaSignature) -> Result<()>
+where
+    D: Digest + AssociatedOid,
+{
+    VerifyingKey::<D>::new_with_prefix(key)
+        .verify_prehash(hashed, signature)
+        .map_err(Into::into)
+}
+
+fn sign_int<D>(key: RsaPrivateKey, digest: &[u8]) -> Result<RsaSignature>
+where
+    D: Digest + AssociatedOid,
+{
+    SigningKey::<D>::new_with_prefix(key)
+        .sign_prehash(digest)
+        .map_err(Into::into)
+}
+
 /// Verify a RSA, PKCS1v15 padded signature.
 pub fn verify(n: &[u8], e: &[u8], hash: HashAlgorithm, hashed: &[u8], sig: &[u8]) -> Result<()> {
-    let key = RsaPublicKey::new(BigUint::from_bytes_be(n), BigUint::from_bytes_be(e))?;
-    let rsa_hash: Option<rsa::Hash> = hash.try_into().ok();
+    let signature = Signature::from_bytes(sig)?;
+    let key = RsaPublicKey::new_with_max_size(
+        BigUint::from_bytes_be(n),
+        BigUint::from_bytes_be(e),
+        MAX_KEY_SIZE,
+    )?;
 
-    key.verify(PaddingScheme::new_pkcs1v15_sign(rsa_hash), hashed, sig)
-        .map_err(Into::into)
+    match hash {
+        HashAlgorithm::None => Err(format_err!("none")),
+        HashAlgorithm::MD5 => verify_int::<Md5>(key, hashed, &signature),
+        HashAlgorithm::RIPEMD160 => verify_int::<Ripemd160>(key, hashed, &signature),
+        HashAlgorithm::SHA1 => verify_int::<Sha1>(key, hashed, &signature),
+        HashAlgorithm::SHA2_224 => verify_int::<Sha224>(key, hashed, &signature),
+        HashAlgorithm::SHA2_256 => verify_int::<Sha256>(key, hashed, &signature),
+        HashAlgorithm::SHA2_384 => verify_int::<Sha384>(key, hashed, &signature),
+        HashAlgorithm::SHA2_512 => verify_int::<Sha512>(key, hashed, &signature),
+        HashAlgorithm::SHA3_256 => verify_int::<Sha3_256>(key, hashed, &signature),
+        HashAlgorithm::SHA3_512 => verify_int::<Sha3_512>(key, hashed, &signature),
+        HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+    }
+    .map_err(Into::into)
 }
 
 /// Sign using RSA, with PKCS1v15 padding.
 pub fn sign(key: &RsaPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
-    let rsa_hash: Option<rsa::Hash> = hash.try_into().ok();
-    let sig = key.sign(PaddingScheme::new_pkcs1v15_sign(rsa_hash), digest)?;
+    let sig = match hash {
+        HashAlgorithm::None => return Err(format_err!("none")),
+        HashAlgorithm::MD5 => sign_int::<Md5>(key.clone(), digest),
+        HashAlgorithm::RIPEMD160 => sign_int::<Ripemd160>(key.clone(), digest),
+        HashAlgorithm::SHA1 => sign_int::<Sha1>(key.clone(), digest),
+        HashAlgorithm::SHA2_224 => sign_int::<Sha224>(key.clone(), digest),
+        HashAlgorithm::SHA2_256 => sign_int::<Sha256>(key.clone(), digest),
+        HashAlgorithm::SHA2_384 => sign_int::<Sha384>(key.clone(), digest),
+        HashAlgorithm::SHA2_512 => sign_int::<Sha512>(key.clone(), digest),
+        HashAlgorithm::SHA3_256 => sign_int::<Sha3_256>(key.clone(), digest),
+        HashAlgorithm::SHA3_512 => sign_int::<Sha3_512>(key.clone(), digest),
+        HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+    }?;
 
-    Ok(vec![sig])
+    Ok(vec![sig.to_vec()])
 }
