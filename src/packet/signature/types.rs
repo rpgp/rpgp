@@ -152,7 +152,7 @@ impl Signature {
 
                 let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
                 BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
-                debug!("prefix: {}", hex::encode(&prefix_buf));
+                debug!("prefix: {}", hex::encode(prefix_buf));
 
                 // prefixes
                 hasher.update(&prefix_buf);
@@ -777,7 +777,7 @@ impl fmt::Debug for Signature {
         f.debug_struct("Signature")
             .field("packet_version", &self.packet_version)
             .field("config", &self.config)
-            .field("signed_hash_value", &hex::encode(&self.signed_hash_value))
+            .field("signed_hash_value", &hex::encode(self.signed_hash_value))
             .field(
                 "signature",
                 &format_args!(

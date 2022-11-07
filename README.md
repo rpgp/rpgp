@@ -3,7 +3,7 @@
 [![crates.io][crate-image]][crate-link]
 [![Documentation][doc-image]][doc-link]
 [![Build Status][build-image]][build-link]
-![minimum rustc 1.51][msrv-image]
+![minimum rustc 1.56][msrv-image]
 [![dependency status][deps-image]][deps-link]
 [![License][license-image]][license-link]
 
@@ -70,7 +70,7 @@ Some key differences:
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.51 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
+All crates in this repository support Rust 1.56 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
 
 ## LICENSE
 
@@ -90,6 +90,6 @@ dual licensed as above, without any additional terms or conditions.
 [license-link]: https://github.com/rpgp/rpgp/blob/master/LICENSE.md
 [build-image]: https://github.com/rpgp/rpgp/workflows/CI/badge.svg
 [build-link]: https://github.com/rpgp/rpgp/actions?query=workflow%3ACI+branch%3Amaster
-[msrv-image]: https://img.shields.io/badge/rustc-1.51+-blue.svg
+[msrv-image]: https://img.shields.io/badge/rustc-1.56+-blue.svg
 [deps-image]: https://deps.rs/repo/github/rpgp/rpgp/status.svg
 [deps-link]: https://deps.rs/repo/github/rpgp/rpgp
