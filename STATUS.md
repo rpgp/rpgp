@@ -37,8 +37,9 @@ Symbols:
   - [X] NIST P256
   - [X] NIST P384
   - [ ] NIST P521
-  - [ ] brainpool256rl
-  - [ ] brainpool521rl
+  - [ ] brainpoolP256r1
+  - [ ] brainpoolP384r1
+  - [ ] brainpoolP512r1
   - [x] Curve 25519
 - [x] Symmetric Algorithms
   - [x] Plaintext
