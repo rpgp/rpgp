@@ -33,6 +33,7 @@ crc24 = "^0.1"
 derive_builder = "^0.12.0"
 des = "^0.8"
 digest = "^0.10"
+elliptic-curve = "^0.12"
 generic-array = "^0.14"
 hex = "^0.4"
 idea = "^0.5"
@@ -41,6 +42,8 @@ md-5 = { version = "^0.10.5", features = ["oid"] }
 nom = "^4.2"
 num-derive = "0.3.0"
 num-traits = "0.2.6"
+p256 = { version = "^0.11", features = ["ecdsa"] }
+p384 = { version = "^0.11", features = ["ecdsa"] }
 rand = "0.8"
 ripemd = { version = "^0.1.3", features = ["oid"] }
 rsa = { version = "^0.7.0", features = ["hazmat"] }

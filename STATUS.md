@@ -34,8 +34,8 @@ Symbols:
   - [ ] ECDSA
   - [x] EdDSA
 - [ ] Supported Elliptic Curves
-  - [ ] NIST P256
-  - [ ] NIST P384
+  - [X] NIST P256
+  - [X] NIST P384
   - [ ] NIST P521
   - [ ] brainpool256rl
   - [ ] brainpool521rl

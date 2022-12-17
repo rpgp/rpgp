@@ -268,8 +268,8 @@ macro_rules! impl_public_key {
                     PublicParams::EdDSA { ref curve, ref q } => {
                         $crate::crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
                     }
-                    PublicParams::ECDSA { ref curve, .. } => {
-                        unimplemented_err!("verify ECDSA: {:?}", curve);
+                    PublicParams::ECDSA { ref curve, ref p } => {
+                        $crate::crypto::ecdsa::verify(curve, p.as_bytes(), hash, hashed, sig)
                     }
                     PublicParams::ECDH {
                         ref curve,

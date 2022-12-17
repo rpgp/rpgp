@@ -1,6 +1,6 @@
 use crate::crypto::public_key::PublicKeyAlgorithm;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Copy)]
 pub enum ECCCurve {
     Curve25519,
     Ed25519,
