@@ -56,13 +56,13 @@ macro_rules! encrypt {
 }
 
 macro_rules! decrypt_regular {
-    ($mode:ident, $key:expr, $iv:expr, $ciphertext:expr, $bs:expr) => {{
+    ($mode:ident, $key:expr, $iv:expr, $ciphertext:expr) => {{
         let mode = Decryptor::<$mode>::new_from_slices($key, $iv)?;
         mode.decrypt($ciphertext);
     }};
 }
 macro_rules! encrypt_regular {
-    ($mode:ident, $key:expr, $iv:expr, $plaintext:expr, $bs:expr) => {{
+    ($mode:ident, $key:expr, $iv:expr, $plaintext:expr) => {{
         let mode = Encryptor::<$mode>::new_from_slices($key, $iv)?;
         mode.encrypt($plaintext);
     }};
@@ -308,23 +308,23 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented_err!("IDEA decrypt"),
             SymmetricKeyAlgorithm::TripleDES => {
-                decrypt_regular!(TdesEde3, key, iv_vec, ciphertext, self.block_size());
+                decrypt_regular!(TdesEde3, key, iv_vec, ciphertext);
             }
-            SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, iv_vec, ciphertext, bs),
+            SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, iv_vec, ciphertext),
             SymmetricKeyAlgorithm::Blowfish => {
-                decrypt_regular!(Blowfish, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Blowfish, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::AES128 => {
-                decrypt_regular!(Aes128, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Aes128, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::AES192 => {
-                decrypt_regular!(Aes192, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Aes192, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::AES256 => {
-                decrypt_regular!(Aes256, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Aes256, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::Twofish => {
-                decrypt_regular!(Twofish, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Twofish, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::Camellia128 => {
                 unimplemented_err!("Camellia 128 not yet available")
@@ -503,16 +503,16 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => unimplemented_err!("IDEA encrypt"),
             SymmetricKeyAlgorithm::TripleDES => {
-                encrypt_regular!(TdesEde3, key, iv_vec, plaintext, bs);
+                encrypt_regular!(TdesEde3, key, iv_vec, plaintext);
             }
-            SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, iv_vec, plaintext),
             SymmetricKeyAlgorithm::Blowfish => {
-                encrypt_regular!(Blowfish, key, iv_vec, plaintext, bs)
+                encrypt_regular!(Blowfish, key, iv_vec, plaintext)
             }
-            SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, iv_vec, plaintext, bs),
-            SymmetricKeyAlgorithm::Twofish => encrypt_regular!(Twofish, key, iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, iv_vec, plaintext),
+            SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, iv_vec, plaintext),
+            SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, iv_vec, plaintext),
+            SymmetricKeyAlgorithm::Twofish => encrypt_regular!(Twofish, key, iv_vec, plaintext),
             SymmetricKeyAlgorithm::Camellia128 => {
                 unimplemented_err!("Camellia 128 not yet available")
             }
