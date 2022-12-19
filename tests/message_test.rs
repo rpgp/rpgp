@@ -213,8 +213,7 @@ msg_test!(msg_pgp_10_0_003, "pgp-10-0-003", false);
 msg_test!(msg_pgp_10_0_004, "pgp-10-0-004", false);
 msg_test!(msg_pgp_10_0_005, "pgp-10-0-005", false);
 msg_test!(msg_pgp_10_0_006, "pgp-10-0-006", false);
-// IDEA
-// msg_test!(msg_pgp_10_0_007, "pgp-10-0-007", true);
+msg_test!(msg_pgp_10_0_007, "pgp-10-0-007", false);
 
 // ECDH
 // msg_test!(msg_openkeychain_001, "openkeychain-001", true);
