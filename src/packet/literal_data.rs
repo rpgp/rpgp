@@ -105,7 +105,7 @@ named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
            mode: map_opt!(be_u8, DataMode::from_u8)
     >> name_len: be_u8
     >>     name: map!(take!(name_len), read_string)
-    >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
+    >>  created: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
     >>     data: rest
     >> (LiteralData {
             packet_version,

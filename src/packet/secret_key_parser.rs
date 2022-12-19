@@ -16,7 +16,7 @@ named_args!(parse_pub_priv_fields(typ: PublicKeyAlgorithm) <(PublicParams, Secre
 
 #[rustfmt::skip]
 named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
-        created_at: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
+        created_at: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
     >>         alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>      params: call!(parse_pub_priv_fields, alg)
     >> (*key_ver, alg, created_at, None, params.0, params.1)
@@ -24,7 +24,7 @@ named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, Pu
 
 #[rustfmt::skip]
 named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
-       created_at: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
+       created_at: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
     >>        exp: be_u16
     >>        alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >>     params: call!(parse_pub_priv_fields, alg)
