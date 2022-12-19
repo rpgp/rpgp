@@ -5,7 +5,9 @@ use rand::{thread_rng, CryptoRng, Rng};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
-use crate::crypto::{ecdh, eddsa, rsa, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use crate::crypto::{
+    ecdh, ecdsa, eddsa, rsa, ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm,
+};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, UserAttribute, UserId};
 use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey};
@@ -100,6 +102,17 @@ impl SecretKeyParamsBuilder {
                     if can_encrypt {
                         return Err("EdDSA can only be used for signing keys".into());
                     }
+                }
+            }
+            Some(KeyType::ECDSA(curve)) => {
+                if let Some(can_encrypt) = self.can_encrypt {
+                    if can_encrypt {
+                        return Err("ECDSA can only be used for signing keys".into());
+                    }
+                };
+                match curve {
+                    ECCCurve::P256 | ECCCurve::P384 => {}
+                    _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
                 }
             }
             Some(KeyType::ECDH) => {
@@ -217,6 +230,8 @@ pub enum KeyType {
     ECDH,
     /// Signing with Curve25519
     EdDSA,
+    /// Signing with ECDSA
+    ECDSA(ECCCurve),
 }
 
 impl KeyType {
@@ -225,6 +240,7 @@ impl KeyType {
             KeyType::Rsa(_) => PublicKeyAlgorithm::RSA,
             KeyType::ECDH => PublicKeyAlgorithm::ECDH,
             KeyType::EdDSA => PublicKeyAlgorithm::EdDSA,
+            KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
         }
     }
 
@@ -245,6 +261,7 @@ impl KeyType {
             KeyType::Rsa(bit_size) => rsa::generate_key(rng, bit_size as usize)?,
             KeyType::ECDH => ecdh::generate_key(rng),
             KeyType::EdDSA => eddsa::generate_key(rng),
+            KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
         };
 
         let secret = match passphrase {
@@ -481,5 +498,94 @@ mod tests {
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
         signed_key2.verify().expect("invalid public key");
+    }
+
+    fn gen_ecdsa<R: Rng + CryptoRng>(rng: &mut R, curve: ECCCurve) {
+        let _ = pretty_env_logger::try_init();
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .key_type(KeyType::ECDSA(curve))
+            .can_create_certificates(true)
+            .can_sign(true)
+            .primary_user_id("Me-X <me-ecdsa@mail.com>".into())
+            .passphrase(None)
+            .preferred_symmetric_algorithms(smallvec![
+                SymmetricKeyAlgorithm::AES256,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES128,
+            ])
+            .preferred_hash_algorithms(smallvec![
+                HashAlgorithm::SHA2_256,
+                HashAlgorithm::SHA2_384,
+                HashAlgorithm::SHA2_512,
+                HashAlgorithm::SHA2_224,
+                HashAlgorithm::SHA1,
+            ])
+            .preferred_compression_algorithms(smallvec![
+                CompressionAlgorithm::ZLIB,
+                CompressionAlgorithm::ZIP,
+            ])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .key_type(KeyType::ECDH)
+                    .can_encrypt(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate_with_rng(rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+
+        let armor = signed_key
+            .to_armored_string(None)
+            .expect("failed to serialize key");
+
+        std::fs::write("sample-ecdsa.sec.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        signed_key2.verify().expect("invalid key");
+
+        assert_eq!(signed_key, signed_key2);
+
+        let public_key = signed_key.public_key();
+
+        let public_signed_key = public_key
+            .sign(&signed_key, || "".into())
+            .expect("failed to sign public key");
+
+        public_signed_key.verify().expect("invalid public key");
+
+        let armor = public_signed_key
+            .to_armored_string(None)
+            .expect("failed to serialize public key");
+
+        std::fs::write("sample-ecdsa.pub.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
+        signed_key2.verify().expect("invalid public key");
+    }
+
+    #[test]
+    fn key_gen_ecdsa_p256() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            gen_ecdsa(rng, ECCCurve::P256);
+        }
+    }
+
+    #[test]
+    fn key_gen_ecdsa_p384() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            gen_ecdsa(rng, ECCCurve::P384);
+        }
     }
 }

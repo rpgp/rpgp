@@ -1,6 +1,6 @@
 use crate::crypto::public_key::PublicKeyAlgorithm;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Copy)]
 pub enum ECCCurve {
     Curve25519,
     Ed25519,
@@ -24,7 +24,7 @@ impl ECCCurve {
             ECCCurve::P521 => "NIST P-521",
             ECCCurve::BrainpoolP256r1 => "brainpoolP256r1",
             ECCCurve::BrainpoolP384r1 => "brainpoolP384r1",
-            ECCCurve::BrainpoolP512r1 => "brainpool5126r1",
+            ECCCurve::BrainpoolP512r1 => "brainpoolP512r1",
             ECCCurve::Secp256k1 => "secp256k1",
         }
     }

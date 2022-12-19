@@ -28,7 +28,7 @@ where
                 rsa::decrypt(priv_key, mpis, &locked_key.fingerprint())?
             }
             SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
-            SecretKeyRepr::ECDSA => bail!("ECDSA is only used for signing"),
+            SecretKeyRepr::ECDSA(_) => bail!("ECDSA is only used for signing"),
             SecretKeyRepr::ECDH(ref priv_key) => {
                 ecdh::decrypt(priv_key, mpis, &locked_key.fingerprint())?
             }

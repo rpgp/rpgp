@@ -107,16 +107,16 @@ macro_rules! parse_dumps {
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 19347),
-    (test_parse_dumps_1, 1, 19261),
+    (test_parse_dumps_0, 0, 19348),
+    (test_parse_dumps_1, 1, 19263),
     (test_parse_dumps_2, 2, 19318),
-    (test_parse_dumps_3, 3, 19379),
-    (test_parse_dumps_4, 4, 19282),
-    (test_parse_dumps_5, 5, 19308),
-    (test_parse_dumps_6, 6, 19318),
-    (test_parse_dumps_7, 7, 19407),
+    (test_parse_dumps_3, 3, 19380),
+    (test_parse_dumps_4, 4, 19283),
+    (test_parse_dumps_5, 5, 19309),
+    (test_parse_dumps_6, 6, 19320),
+    (test_parse_dumps_7, 7, 19409),
     (test_parse_dumps_8, 8, 19355),
-    (test_parse_dumps_9, 9, 19276),
+    (test_parse_dumps_9, 9, 19278),
 );
 
 #[test]
@@ -739,22 +739,22 @@ openpgp_key!(
 openpgp_key!(
     key_openpgp_samplekeys_ecc_sample_1_pub,
     "samplekeys/ecc-sample-1-pub.asc",
-    false
+    true
 );
 openpgp_key!(
     key_openpgp_samplekeys_ecc_sample_1_sec,
     "samplekeys/ecc-sample-1-sec.asc",
-    false
+    true
 );
 openpgp_key!(
     key_openpgp_samplekeys_ecc_sample_2_pub,
     "samplekeys/ecc-sample-2-pub.asc",
-    false
+    true
 );
 openpgp_key!(
     key_openpgp_samplekeys_ecc_sample_2_sec,
     "samplekeys/ecc-sample-2-sec.asc",
-    false
+    true
 );
 openpgp_key!(
     key_openpgp_samplekeys_ecc_sample_3_pub,
@@ -831,8 +831,61 @@ openpgp_key!(
 openpgp_key!(
     key_openpgp_samplekeys_whats_new_in_2_1,
     "samplekeys/whats-new-in-2.1.asc",
-    false
+    true
 );
+
+#[test]
+fn private_ecc1_verify() {
+    let f = read_file("./tests/openpgp/samplekeys/ecc-sample-1-sec.asc");
+    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    sk.verify().expect("invalid key");
+    assert_eq!(sk.secret_subkeys.len(), 1);
+    assert_eq!(hex::encode(&sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
+    sk.unlock(
+        || "ecc".to_string(),
+        |k| {
+            match k {
+                SecretKeyRepr::ECDSA(ref inner_key) => {
+                    assert_eq!(inner_key.oid, ECCCurve::P256.oid());
+                }
+                _ => panic!("invalid key"),
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    let pub_key = sk.public_key();
+    assert_eq!(pub_key.key_id(), sk.key_id());
+}
+
+#[test]
+fn private_ecc2_verify() {
+    let f = read_file("./tests/openpgp/samplekeys/ecc-sample-2-sec.asc");
+    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    sk.verify().expect("invalid key");
+    assert_eq!(sk.secret_subkeys.len(), 0);
+    assert_eq!(hex::encode(&sk.key_id()).to_uppercase(), "098033880F54719F",);
+    sk.unlock(
+        || "ecc".to_string(),
+        |k| {
+            match k {
+                SecretKeyRepr::ECDSA(ref inner_key) => {
+                    assert_eq!(inner_key.oid, ECCCurve::P384.oid());
+                }
+                _ => panic!("invalid key"),
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    /*
+     * No user IDs, getting public key fails
+    let pub_key = sk.public_key();
+    assert_eq!(pub_key.key_id(), sk.key_id());
+    */
+}
 
 #[test]
 fn private_x25519_verify() {
