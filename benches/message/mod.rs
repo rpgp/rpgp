@@ -65,11 +65,7 @@ fn bench_message_parse_decrypt_rsa(b: &mut Bencher) {
 
         black_box(
             message
-                .decrypt(
-                    || "".to_string(),
-                    || "test".to_string(),
-                    &[&decrypt_key][..],
-                )
+                .decrypt(|| "test".to_string(), &[&decrypt_key][..])
                 .unwrap(),
         );
     });
@@ -92,11 +88,7 @@ fn bench_message_parse_decrypt_x25519(b: &mut Bencher) {
 
         black_box(
             message
-                .decrypt(
-                    || "".to_string(),
-                    || "moon".to_string(),
-                    &[&decrypt_key][..],
-                )
+                .decrypt(|| "moon".to_string(), &[&decrypt_key][..])
                 .unwrap(),
         );
     });

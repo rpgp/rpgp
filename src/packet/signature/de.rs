@@ -29,18 +29,18 @@ impl Deserialize for Signature {
 }
 
 /// Convert an epoch timestamp to a `DateTime`
-fn dt_from_timestamp(ts: u32) -> DateTime<Utc> {
-    DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(i64::from(ts), 0), Utc)
+fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
+    NaiveDateTime::from_timestamp_opt(i64::from(ts), 0).map(|ts| DateTime::<Utc>::from_utc(ts, Utc))
 }
 
 // Parse a signature creation time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
 named!(
     signature_creation_time<Subpacket>,
-    map!(
+    map_opt!(
         // 4-octet time field
         be_u32,
-        |date| Subpacket::SignatureCreationTime(dt_from_timestamp(date))
+        |date| dt_from_timestamp(date).map(Subpacket::SignatureCreationTime)
     )
 );
 
@@ -55,10 +55,10 @@ named!(issuer<Subpacket>, map!(
 // Parse a key expiration time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
 #[rustfmt::skip]
-named!(key_expiration<Subpacket>, map!(
+named!(key_expiration<Subpacket>, map_opt!(
     // 4-octet time field
     be_u32,
-    |date| Subpacket::KeyExpirationTime(dt_from_timestamp(date))
+    |date| dt_from_timestamp(date).map(Subpacket::KeyExpirationTime)
 ));
 
 /// Parse a preferred symmetric algorithms subpacket
@@ -103,10 +103,10 @@ fn pref_com_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
 // Parse a signature expiration time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
 #[rustfmt::skip]
-named!(signature_expiration_time<Subpacket>, map!(
+named!(signature_expiration_time<Subpacket>, map_opt!(
     // 4-octet time field
     be_u32,
-    |date| Subpacket::SignatureExpirationTime(dt_from_timestamp(date))
+    |date| dt_from_timestamp(date).map(Subpacket::SignatureExpirationTime)
 ));
 
 // Parse a exportable certification subpacket.
@@ -347,7 +347,7 @@ named_args!(v3_parser(packet_version: Version, version: SignatureVersion) <Signa
     // One-octet signature type.
     >>      typ: map_opt!(be_u8, SignatureType::from_u8)
     // Four-octet creation time.
-    >>  created: map!(be_u32, |v| Utc.timestamp(i64::from(v), 0))
+    >>  created: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
     // Eight-octet Key ID of signer.
     >>   issuer: map_res!(take!(8), KeyId::from_slice)
     // One-octet public-key algorithm.

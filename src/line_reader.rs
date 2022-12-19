@@ -34,7 +34,7 @@ impl<R: Read + Seek> Seek for LineReader<R> {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
         match pos {
             io::SeekFrom::Current(n) => {
-                let current_pos = self.inner.seek(io::SeekFrom::Current(0))?;
+                let current_pos = self.inner.stream_position()?;
                 let mut target_pos = u64::try_from(
                     i64::try_from(current_pos)
                         .expect("Current position is too large to be converted to signed")
@@ -86,7 +86,7 @@ impl<R: Read + Seek> Read for LineReader<R> {
                     offset += 1;
                 } else {
                     // store the line break position
-                    let r_pos = self.inner.seek(io::SeekFrom::Current(0))?;
+                    let r_pos = self.inner.stream_position()?;
                     let offset = (r_pos - n as u64) + i as u64;
 
                     // As we might be going back and forth in the source, we need to make sure

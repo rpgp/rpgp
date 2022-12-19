@@ -32,7 +32,7 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], MpiRef<'_>> {
     let (number, len) = be_u16(input)?;
 
     let bits = u32::from(len);
-    let len_actual = ((bits + 7) >> 3) as u32;
+    let len_actual = (bits + 7) >> 3;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
         Err(Err::Error(error_position!(
