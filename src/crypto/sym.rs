@@ -335,7 +335,7 @@ impl SymmetricKeyAlgorithm {
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
             SymmetricKeyAlgorithm::IDEA => {
-                decrypt_regular!(Idea, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Idea, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::TripleDES => {
                 decrypt_regular!(TdesEde3, key, iv_vec, ciphertext);
@@ -357,13 +357,13 @@ impl SymmetricKeyAlgorithm {
                 decrypt_regular!(Twofish, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::Camellia128 => {
-                decrypt_regular!(Camellia128, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Camellia128, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::Camellia192 => {
-                decrypt_regular!(Camellia192, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Camellia192, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::Camellia256 => {
-                decrypt_regular!(Camellia256, key, iv_vec, ciphertext, self.block_size())
+                decrypt_regular!(Camellia256, key, iv_vec, ciphertext)
             }
             SymmetricKeyAlgorithm::Private10 => {
                 unimplemented_err!("Private10 should not be used, and only exist for compatability")
@@ -533,7 +533,7 @@ impl SymmetricKeyAlgorithm {
         // TODO: actual cfb mode used in pgp
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
-            SymmetricKeyAlgorithm::IDEA => encrypt_regular!(Idea, key, iv_vec, plaintext, bs),
+            SymmetricKeyAlgorithm::IDEA => encrypt_regular!(Idea, key, iv_vec, plaintext),
             SymmetricKeyAlgorithm::TripleDES => {
                 encrypt_regular!(TdesEde3, key, iv_vec, plaintext);
             }
@@ -546,13 +546,13 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, iv_vec, plaintext),
             SymmetricKeyAlgorithm::Twofish => encrypt_regular!(Twofish, key, iv_vec, plaintext),
             SymmetricKeyAlgorithm::Camellia128 => {
-                encrypt_regular!(Camellia128, key, iv_vec, plaintext, bs)
+                encrypt_regular!(Camellia128, key, iv_vec, plaintext)
             }
             SymmetricKeyAlgorithm::Camellia192 => {
-                encrypt_regular!(Camellia192, key, iv_vec, plaintext, bs)
+                encrypt_regular!(Camellia192, key, iv_vec, plaintext)
             }
             SymmetricKeyAlgorithm::Camellia256 => {
-                encrypt_regular!(Camellia256, key, iv_vec, plaintext, bs)
+                encrypt_regular!(Camellia256, key, iv_vec, plaintext)
             }
             SymmetricKeyAlgorithm::Private10 => {
                 unimplemented_err!("Private10 should not be used, and only exist for compatability")
