@@ -428,14 +428,12 @@ impl Message {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt<'a, F, G>(
+    pub fn decrypt<'a, G>(
         &'a self,
-        msg_pw: F, // TODO: remove
         key_pw: G,
         keys: &[&SignedSecretKey],
     ) -> Result<(MessageDecrypter<'a>, Vec<KeyId>)>
     where
-        F: FnOnce() -> String + Clone,
         G: FnOnce() -> String + Clone,
     {
         match self {
@@ -443,7 +441,7 @@ impl Message {
                 bail!("not encrypted");
             }
             Message::Signed { message, .. } => match message {
-                Some(message) => message.as_ref().decrypt(msg_pw, key_pw, keys),
+                Some(message) => message.as_ref().decrypt(key_pw, keys),
                 None => bail!("not encrypted"),
             },
             Message::Encrypted { esk, edata, .. } => {
@@ -719,7 +717,7 @@ mod tests {
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
         let decrypted = parsed
-            .decrypt(|| "".into(), || "test".into(), &[&skey])
+            .decrypt(|| "test".into(), &[&skey])
             .unwrap()
             .0
             .next()
@@ -753,7 +751,7 @@ mod tests {
             let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
             let decrypted = parsed
-                .decrypt(|| "".into(), || "".into(), &[&skey])
+                .decrypt(|| "".into(), &[&skey])
                 .unwrap()
                 .0
                 .next()

@@ -88,16 +88,15 @@ impl HashAlgorithm {
     /// Create a new hasher.
     pub fn new_hasher(self) -> Result<Box<dyn Hasher>> {
         match self {
-            HashAlgorithm::MD5 => Ok(Box::new(Md5Hasher::default())),
-            HashAlgorithm::SHA1 => Ok(Box::new(Sha1Hasher::default())),
-            HashAlgorithm::RIPEMD160 => Ok(Box::new(Ripemd160Hasher::default())),
-            HashAlgorithm::SHA2_256 => Ok(Box::new(Sha2_256Hasher::default())),
-            HashAlgorithm::SHA2_384 => Ok(Box::new(Sha2_384Hasher::default())),
-            HashAlgorithm::SHA2_512 => Ok(Box::new(Sha2_512Hasher::default())),
-            HashAlgorithm::SHA2_224 => Ok(Box::new(Sha2_224Hasher::default())),
-            HashAlgorithm::SHA3_256 => Ok(Box::new(Sha3_256Hasher::default())),
-            HashAlgorithm::SHA3_512 => Ok(Box::new(Sha3_512Hasher::default())),
-
+            HashAlgorithm::MD5 => Ok(Box::<Md5Hasher>::default()),
+            HashAlgorithm::SHA1 => Ok(Box::<Sha1Hasher>::default()),
+            HashAlgorithm::RIPEMD160 => Ok(Box::<Ripemd160Hasher>::default()),
+            HashAlgorithm::SHA2_256 => Ok(Box::<Sha2_256Hasher>::default()),
+            HashAlgorithm::SHA2_384 => Ok(Box::<Sha2_384Hasher>::default()),
+            HashAlgorithm::SHA2_512 => Ok(Box::<Sha2_512Hasher>::default()),
+            HashAlgorithm::SHA2_224 => Ok(Box::<Sha2_224Hasher>::default()),
+            HashAlgorithm::SHA3_256 => Ok(Box::<Sha3_256Hasher>::default()),
+            HashAlgorithm::SHA3_512 => Ok(Box::<Sha3_512Hasher>::default()),
             _ => unimplemented_err!("hasher {:?}", self),
         }
     }
