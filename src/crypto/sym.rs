@@ -298,11 +298,11 @@ impl SymmetricKeyAlgorithm {
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     /// This is regular CFB, not OpenPgP CFB.
-    pub fn decrypt_with_iv_regular<'a>(
+    pub fn decrypt_with_iv_regular(
         self,
         key: &[u8],
         iv_vec: &[u8],
-        ciphertext: &'a mut [u8],
+        ciphertext: &mut [u8],
     ) -> Result<()> {
         match self {
             SymmetricKeyAlgorithm::Plaintext => {}
@@ -384,11 +384,11 @@ impl SymmetricKeyAlgorithm {
         self.encrypt_with_rng(&mut thread_rng(), key, plaintext)
     }
 
-    pub fn encrypt_protected_with_rng<'a, R: CryptoRng + Rng>(
+    pub fn encrypt_protected_with_rng<R: CryptoRng + Rng>(
         self,
         rng: &mut R,
         key: &[u8],
-        plaintext: &'a [u8],
+        plaintext: &[u8],
     ) -> Result<Vec<u8>> {
         debug!("protected encrypt");
 
@@ -437,11 +437,11 @@ impl SymmetricKeyAlgorithm {
     /// octets BS+1 and BS+2 match octets BS-1 and BS. It does a CFB
     /// resynchronization after encrypting those BS+2 octets.
     #[allow(clippy::cognitive_complexity)] // FIXME
-    pub fn encrypt_with_iv<'a>(
+    pub fn encrypt_with_iv(
         self,
         key: &[u8],
         iv_vec: &[u8],
-        ciphertext: &'a mut [u8],
+        ciphertext: &mut [u8],
         resync: bool,
     ) -> Result<()> {
         let bs = self.block_size();
