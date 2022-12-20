@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use crate::crypto::hash::{HashAlgorithm, Hasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, Result};
-use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket};
+use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData};
 use crate::ser::Serialize;
 use crate::types::{KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
 
@@ -319,8 +319,8 @@ impl SignatureConfig {
             return self.created.as_ref();
         }
 
-        self.subpackets().find_map(|p| match p {
-            Subpacket::SignatureCreationTime(d) => Some(d),
+        self.subpackets().find_map(|p| match p.data {
+            SubpacketData::SignatureCreationTime(ref d) => Some(d),
             _ => None,
         })
     }
@@ -330,8 +330,8 @@ impl SignatureConfig {
             return self.issuer.as_ref();
         }
 
-        self.subpackets().find_map(|p| match p {
-            Subpacket::Issuer(id) => Some(id),
+        self.subpackets().find_map(|p| match p.data {
+            SubpacketData::Issuer(ref id) => Some(id),
             _ => None,
         })
     }

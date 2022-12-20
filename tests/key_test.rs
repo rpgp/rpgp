@@ -22,7 +22,8 @@ use pgp::composed::Deserializable;
 use pgp::crypto::{ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use pgp::errors::Error;
 use pgp::packet::{
-    KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, UserAttribute, UserId,
+    KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, UserAttribute,
+    UserId,
 };
 use pgp::ser::Serialize;
 use pgp::types::{
@@ -255,9 +256,9 @@ fn test_parse_details() {
     // TODO: examine subkey details
     assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
-    let issuer = Subpacket::Issuer(
+    let issuer = Subpacket::regular(SubpacketData::Issuer(
         KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
-    );
+    ));
     let key_flags: SmallVec<[u8; 1]> = KeyFlags(0x03).into();
     let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
@@ -327,17 +328,21 @@ fn test_parse_details() {
         ]
         .into()],
         vec![
-            Subpacket::SignatureCreationTime(
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
                 DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            ),
-            Subpacket::KeyFlags(key_flags.clone()),
-            Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
-            Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
-            Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(smallvec![1]),
-            Subpacket::KeyServerPreferences(smallvec![128]),
+            )),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())),
+            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
+                p_sym_algs.clone(),
+            )),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone())),
+            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
+                p_com_algs.clone(),
+            )),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer.clone()],
     );
@@ -395,17 +400,21 @@ fn test_parse_details() {
         ]
         .into()],
         vec![
-            Subpacket::SignatureCreationTime(
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
                 DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            ),
-            Subpacket::KeyFlags(key_flags.clone()),
-            Subpacket::PreferredSymmetricAlgorithms(p_sym_algs.clone()),
-            Subpacket::PreferredHashAlgorithms(p_hash_algs.clone()),
-            Subpacket::PreferredCompressionAlgorithms(p_com_algs.clone()),
-            Subpacket::Features(smallvec![1]),
-            Subpacket::KeyServerPreferences(smallvec![128]),
+            )),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())),
+            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
+                p_sym_algs.clone(),
+            )),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone())),
+            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
+                p_com_algs.clone(),
+            )),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer.clone()],
     );
@@ -475,17 +484,17 @@ fn test_parse_details() {
         ]
         .into()],
         vec![
-            Subpacket::SignatureCreationTime(
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
                 DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            ),
-            Subpacket::KeyFlags(key_flags),
-            Subpacket::PreferredSymmetricAlgorithms(p_sym_algs),
-            Subpacket::PreferredHashAlgorithms(p_hash_algs),
-            Subpacket::PreferredCompressionAlgorithms(p_com_algs),
-            Subpacket::Features(smallvec![1]),
-            Subpacket::KeyServerPreferences(smallvec![128]),
+            )),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags)),
+            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(p_sym_algs)),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs)),
+            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(p_com_algs)),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer],
     );

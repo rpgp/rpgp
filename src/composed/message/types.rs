@@ -19,7 +19,7 @@ use crate::errors::{Error, Result};
 use crate::packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType, Subpacket,
-    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
+    SubpacketData, SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
@@ -323,10 +323,15 @@ impl Message {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
         let hashed_subpackets = vec![
-            Subpacket::IssuerFingerprint(KeyVersion::V4, SmallVec::from_slice(&key.fingerprint())),
-            Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                KeyVersion::V4,
+                SmallVec::from_slice(&key.fingerprint()),
+            )),
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            )),
         ];
-        let unhashed_subpackets = vec![Subpacket::Issuer(key_id.clone())];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id.clone()))];
 
         let (typ, signature) = match self {
             Message::Literal(ref l) => {

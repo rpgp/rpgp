@@ -4,7 +4,9 @@ use smallvec::SmallVec;
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
 use crate::crypto::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket};
+use crate::packet::{
+    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
+};
 use crate::types::{KeyId, KeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a secret key.
@@ -88,19 +90,23 @@ impl SecretSubkey {
     {
         let key = self.key;
         let hashed_subpackets = vec![
-            Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
-            Subpacket::KeyFlags(self.keyflags.into()),
-            Subpacket::IssuerFingerprint(
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            )),
+            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
                 Default::default(),
                 SmallVec::from_slice(&sec_key.fingerprint()),
-            ),
+            )),
         ];
 
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::SubkeyBinding)
             .pub_alg(sec_key.algorithm())
             .hashed_subpackets(hashed_subpackets)
-            .unhashed_subpackets(vec![Subpacket::Issuer(sec_key.key_id())])
+            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
+                sec_key.key_id(),
+            ))])
             .build()?;
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 

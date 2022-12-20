@@ -138,10 +138,14 @@ macro_rules! impl_secret_key {
 
                 config
                     .pub_alg(key.algorithm())
-                    .hashed_subpackets(vec![$crate::packet::Subpacket::SignatureCreationTime(
-                        chrono::Utc::now().trunc_subsecs(0),
+                    .hashed_subpackets(vec![$crate::packet::Subpacket::regular(
+                        $crate::packet::SubpacketData::SignatureCreationTime(
+                            chrono::Utc::now().trunc_subsecs(0),
+                        ),
                     )])
-                    .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(key.key_id())])
+                    .unhashed_subpackets(vec![$crate::packet::Subpacket::regular(
+                        $crate::packet::SubpacketData::Issuer(key.key_id()),
+                    )])
                     .build()?
                     .sign_key(key, key_pw, &self)
             }

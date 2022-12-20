@@ -21,56 +21,56 @@ impl Serialize for Signature {
 
 impl Subpacket {
     fn body_to_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        match self {
-            Subpacket::SignatureCreationTime(t) => {
+        match &self.data {
+            SubpacketData::SignatureCreationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp() as u32)?;
             }
-            Subpacket::SignatureExpirationTime(t) => {
+            SubpacketData::SignatureExpirationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp() as u32)?;
             }
-            Subpacket::KeyExpirationTime(t) => {
+            SubpacketData::KeyExpirationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp() as u32)?;
             }
-            Subpacket::Issuer(id) => {
+            SubpacketData::Issuer(id) => {
                 writer.write_all(id.as_ref())?;
             }
-            Subpacket::PreferredSymmetricAlgorithms(algs) => {
+            SubpacketData::PreferredSymmetricAlgorithms(algs) => {
                 writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
             }
-            Subpacket::PreferredHashAlgorithms(algs) => {
+            SubpacketData::PreferredHashAlgorithms(algs) => {
                 writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
             }
-            Subpacket::PreferredCompressionAlgorithms(algs) => {
+            SubpacketData::PreferredCompressionAlgorithms(algs) => {
                 writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
             }
-            Subpacket::KeyServerPreferences(prefs) => {
+            SubpacketData::KeyServerPreferences(prefs) => {
                 writer.write_all(prefs)?;
             }
-            Subpacket::KeyFlags(flags) => {
+            SubpacketData::KeyFlags(flags) => {
                 writer.write_all(flags)?;
             }
-            Subpacket::Features(features) => {
+            SubpacketData::Features(features) => {
                 writer.write_all(features)?;
             }
-            Subpacket::RevocationReason(code, reason) => {
+            SubpacketData::RevocationReason(code, reason) => {
                 writer.write_all(&[*code as u8])?;
                 writer.write_all(&write_string(reason))?;
             }
-            Subpacket::IsPrimary(is_primary) => {
+            SubpacketData::IsPrimary(is_primary) => {
                 let val = u8::from(*is_primary);
                 writer.write_all(&[val])?;
             }
-            Subpacket::Revocable(is_revocable) => {
+            SubpacketData::Revocable(is_revocable) => {
                 let val = u8::from(*is_revocable);
                 writer.write_all(&[val])?;
             }
-            Subpacket::EmbeddedSignature(inner_sig) => {
+            SubpacketData::EmbeddedSignature(inner_sig) => {
                 (*inner_sig).to_writer(writer)?;
             }
-            Subpacket::PreferredKeyServer(server) => {
+            SubpacketData::PreferredKeyServer(server) => {
                 writer.write_all(&write_string(server))?;
             }
-            Subpacket::Notation(notation) => {
+            SubpacketData::Notation(notation) => {
                 let is_readable = if notation.readable { 0x80 } else { 0 };
                 writer.write_all(&[is_readable, 0, 0, 0])?;
 
@@ -83,40 +83,40 @@ impl Subpacket {
                 writer.write_all(&name_bytes)?;
                 writer.write_all(&value_bytes)?;
             }
-            Subpacket::RevocationKey(rev_key) => {
+            SubpacketData::RevocationKey(rev_key) => {
                 writer.write_all(&[rev_key.class as u8, rev_key.algorithm as u8])?;
                 writer.write_all(&rev_key.fingerprint[..])?;
             }
-            Subpacket::SignersUserID(body) => {
+            SubpacketData::SignersUserID(body) => {
                 writer.write_all(body.as_ref())?;
             }
-            Subpacket::PolicyURI(uri) => {
+            SubpacketData::PolicyURI(uri) => {
                 writer.write_all(&write_string(uri))?;
             }
-            Subpacket::TrustSignature(depth, value) => {
+            SubpacketData::TrustSignature(depth, value) => {
                 writer.write_all(&[*depth, *value])?;
             }
-            Subpacket::RegularExpression(regexp) => {
+            SubpacketData::RegularExpression(regexp) => {
                 writer.write_all(&write_string(regexp))?;
             }
-            Subpacket::ExportableCertification(is_exportable) => {
+            SubpacketData::ExportableCertification(is_exportable) => {
                 let val = u8::from(*is_exportable);
                 writer.write_all(&[val])?;
             }
-            Subpacket::IssuerFingerprint(version, fp) => {
+            SubpacketData::IssuerFingerprint(version, fp) => {
                 writer.write_all(&[*version as u8])?;
                 writer.write_all(fp)?;
             }
-            Subpacket::PreferredAeadAlgorithms(algs) => {
+            SubpacketData::PreferredAeadAlgorithms(algs) => {
                 writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
             }
-            Subpacket::Experimental(_, body) => {
+            SubpacketData::Experimental(_, body) => {
                 writer.write_all(body)?;
             }
-            Subpacket::Other(_, body) => {
+            SubpacketData::Other(_, body) => {
                 writer.write_all(body)?;
             }
-            Subpacket::SignatureTarget(pub_alg, hash_alg, hash) => {
+            SubpacketData::SignatureTarget(pub_alg, hash_alg, hash) => {
                 writer.write_all(&[*pub_alg as u8, *hash_alg as u8])?;
                 writer.write_all(hash)?;
             }
@@ -126,80 +126,82 @@ impl Subpacket {
     }
 
     fn body_len(&self) -> Result<usize> {
-        let len = match self {
-            Subpacket::SignatureCreationTime(_) => 4,
-            Subpacket::SignatureExpirationTime(_) => 4,
-            Subpacket::KeyExpirationTime(_) => 4,
-            Subpacket::Issuer(_) => 8,
-            Subpacket::PreferredSymmetricAlgorithms(algs) => algs.len(),
-            Subpacket::PreferredHashAlgorithms(algs) => algs.len(),
-            Subpacket::PreferredCompressionAlgorithms(algs) => algs.len(),
-            Subpacket::KeyServerPreferences(prefs) => prefs.len(),
-            Subpacket::KeyFlags(flags) => flags.len(),
-            Subpacket::Features(features) => features.len(),
-            Subpacket::RevocationReason(_, reason) => 1 + reason.chars().count(),
-            Subpacket::IsPrimary(_) => 1,
-            Subpacket::Revocable(_) => 1,
-            Subpacket::EmbeddedSignature(sig) => {
+        let len = match &self.data {
+            SubpacketData::SignatureCreationTime(_) => 4,
+            SubpacketData::SignatureExpirationTime(_) => 4,
+            SubpacketData::KeyExpirationTime(_) => 4,
+            SubpacketData::Issuer(_) => 8,
+            SubpacketData::PreferredSymmetricAlgorithms(algs) => algs.len(),
+            SubpacketData::PreferredHashAlgorithms(algs) => algs.len(),
+            SubpacketData::PreferredCompressionAlgorithms(algs) => algs.len(),
+            SubpacketData::KeyServerPreferences(prefs) => prefs.len(),
+            SubpacketData::KeyFlags(flags) => flags.len(),
+            SubpacketData::Features(features) => features.len(),
+            SubpacketData::RevocationReason(_, reason) => 1 + reason.chars().count(),
+            SubpacketData::IsPrimary(_) => 1,
+            SubpacketData::Revocable(_) => 1,
+            SubpacketData::EmbeddedSignature(sig) => {
                 // TODO: find a more efficient way of doing this, if this gets expensive
                 let mut buf = Vec::new();
                 (*sig).to_writer(&mut buf)?;
                 buf.len()
             }
-            Subpacket::PreferredKeyServer(server) => server.chars().count(),
-            Subpacket::Notation(n) => 4 + 2 + 2 + n.name.chars().count() + n.value.chars().count(),
-            Subpacket::RevocationKey(_) => 22,
-            Subpacket::SignersUserID(body) => {
+            SubpacketData::PreferredKeyServer(server) => server.chars().count(),
+            SubpacketData::Notation(n) => {
+                4 + 2 + 2 + n.name.chars().count() + n.value.chars().count()
+            }
+            SubpacketData::RevocationKey(_) => 22,
+            SubpacketData::SignersUserID(body) => {
                 let bytes: &[u8] = body.as_ref();
                 bytes.len()
             }
-            Subpacket::PolicyURI(uri) => uri.as_bytes().len(),
-            Subpacket::TrustSignature(_, _) => 2,
-            Subpacket::RegularExpression(regexp) => regexp.as_bytes().len(),
-            Subpacket::ExportableCertification(_) => 1,
-            Subpacket::IssuerFingerprint(_, fp) => 1 + fp.len(),
-            Subpacket::PreferredAeadAlgorithms(algs) => algs.len(),
-            Subpacket::Experimental(_, body) => body.len(),
-            Subpacket::Other(_, body) => body.len(),
-            Subpacket::SignatureTarget(_, _, hash) => 2 + hash.len(),
+            SubpacketData::PolicyURI(uri) => uri.as_bytes().len(),
+            SubpacketData::TrustSignature(_, _) => 2,
+            SubpacketData::RegularExpression(regexp) => regexp.as_bytes().len(),
+            SubpacketData::ExportableCertification(_) => 1,
+            SubpacketData::IssuerFingerprint(_, fp) => 1 + fp.len(),
+            SubpacketData::PreferredAeadAlgorithms(algs) => algs.len(),
+            SubpacketData::Experimental(_, body) => body.len(),
+            SubpacketData::Other(_, body) => body.len(),
+            SubpacketData::SignatureTarget(_, _, hash) => 2 + hash.len(),
         };
 
         Ok(len)
     }
 
     pub fn typ(&self) -> SubpacketType {
-        match self {
-            Subpacket::SignatureCreationTime(_) => SubpacketType::SignatureCreationTime,
-            Subpacket::SignatureExpirationTime(_) => SubpacketType::SignatureExpirationTime,
-            Subpacket::KeyExpirationTime(_) => SubpacketType::KeyExpirationTime,
-            Subpacket::Issuer(_) => SubpacketType::Issuer,
-            Subpacket::PreferredSymmetricAlgorithms(_) => {
+        match &self.data {
+            SubpacketData::SignatureCreationTime(_) => SubpacketType::SignatureCreationTime,
+            SubpacketData::SignatureExpirationTime(_) => SubpacketType::SignatureExpirationTime,
+            SubpacketData::KeyExpirationTime(_) => SubpacketType::KeyExpirationTime,
+            SubpacketData::Issuer(_) => SubpacketType::Issuer,
+            SubpacketData::PreferredSymmetricAlgorithms(_) => {
                 SubpacketType::PreferredSymmetricAlgorithms
             }
-            Subpacket::PreferredHashAlgorithms(_) => SubpacketType::PreferredHashAlgorithms,
-            Subpacket::PreferredCompressionAlgorithms(_) => {
+            SubpacketData::PreferredHashAlgorithms(_) => SubpacketType::PreferredHashAlgorithms,
+            SubpacketData::PreferredCompressionAlgorithms(_) => {
                 SubpacketType::PreferredCompressionAlgorithms
             }
-            Subpacket::KeyServerPreferences(_) => SubpacketType::KeyServerPreferences,
-            Subpacket::KeyFlags(_) => SubpacketType::KeyFlags,
-            Subpacket::Features(_) => SubpacketType::Features,
-            Subpacket::RevocationReason(_, _) => SubpacketType::RevocationReason,
-            Subpacket::IsPrimary(_) => SubpacketType::PrimaryUserId,
-            Subpacket::Revocable(_) => SubpacketType::Revocable,
-            Subpacket::EmbeddedSignature(_) => SubpacketType::EmbeddedSignature,
-            Subpacket::PreferredKeyServer(_) => SubpacketType::PreferredKeyServer,
-            Subpacket::Notation(_) => SubpacketType::Notation,
-            Subpacket::RevocationKey(_) => SubpacketType::RevocationKey,
-            Subpacket::SignersUserID(_) => SubpacketType::SignersUserID,
-            Subpacket::PolicyURI(_) => SubpacketType::PolicyURI,
-            Subpacket::TrustSignature(_, _) => SubpacketType::TrustSignature,
-            Subpacket::RegularExpression(_) => SubpacketType::RegularExpression,
-            Subpacket::ExportableCertification(_) => SubpacketType::ExportableCertification,
-            Subpacket::IssuerFingerprint(_, _) => SubpacketType::IssuerFingerprint,
-            Subpacket::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
-            Subpacket::Experimental(n, _) => SubpacketType::Experimental(*n),
-            Subpacket::Other(n, _) => SubpacketType::Other(*n),
-            Subpacket::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
+            SubpacketData::KeyServerPreferences(_) => SubpacketType::KeyServerPreferences,
+            SubpacketData::KeyFlags(_) => SubpacketType::KeyFlags,
+            SubpacketData::Features(_) => SubpacketType::Features,
+            SubpacketData::RevocationReason(_, _) => SubpacketType::RevocationReason,
+            SubpacketData::IsPrimary(_) => SubpacketType::PrimaryUserId,
+            SubpacketData::Revocable(_) => SubpacketType::Revocable,
+            SubpacketData::EmbeddedSignature(_) => SubpacketType::EmbeddedSignature,
+            SubpacketData::PreferredKeyServer(_) => SubpacketType::PreferredKeyServer,
+            SubpacketData::Notation(_) => SubpacketType::Notation,
+            SubpacketData::RevocationKey(_) => SubpacketType::RevocationKey,
+            SubpacketData::SignersUserID(_) => SubpacketType::SignersUserID,
+            SubpacketData::PolicyURI(_) => SubpacketType::PolicyURI,
+            SubpacketData::TrustSignature(_, _) => SubpacketType::TrustSignature,
+            SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
+            SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
+            SubpacketData::IssuerFingerprint(_, _) => SubpacketType::IssuerFingerprint,
+            SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
+            SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
+            SubpacketData::Other(n, _) => SubpacketType::Other(*n),
+            SubpacketData::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
         }
     }
 }
@@ -207,7 +209,7 @@ impl Subpacket {
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         write_packet_length(1 + self.body_len()?, writer)?;
-        writer.write_all(&[self.typ().into()])?;
+        writer.write_all(&[self.typ().as_u8(self.is_critical)])?;
         self.body_to_writer(writer)?;
 
         Ok(())

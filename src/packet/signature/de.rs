@@ -36,34 +36,34 @@ fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
 // Parse a signature creation time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
 named!(
-    signature_creation_time<Subpacket>,
+    signature_creation_time<SubpacketData>,
     map_opt!(
         // 4-octet time field
         be_u32,
-        |date| dt_from_timestamp(date).map(Subpacket::SignatureCreationTime)
+        |date| dt_from_timestamp(date).map(SubpacketData::SignatureCreationTime)
     )
 );
 
 // Parse an issuer subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
 #[rustfmt::skip]
-named!(issuer<Subpacket>, map!(
+named!(issuer<SubpacketData>, map!(
     map_res!(complete!(take!(8)), KeyId::from_slice),
-    Subpacket::Issuer
+    SubpacketData::Issuer
 ));
 
 // Parse a key expiration time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
 #[rustfmt::skip]
-named!(key_expiration<Subpacket>, map_opt!(
+named!(key_expiration<SubpacketData>, map_opt!(
     // 4-octet time field
     be_u32,
-    |date| dt_from_timestamp(date).map(Subpacket::KeyExpirationTime)
+    |date| dt_from_timestamp(date).map(SubpacketData::KeyExpirationTime)
 ));
 
 /// Parse a preferred symmetric algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
-fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
         .iter()
         .map(|v| {
@@ -72,23 +72,23 @@ fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
         })
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredSymmetricAlgorithms(list)))
+    Ok((&b""[..], SubpacketData::PreferredSymmetricAlgorithms(list)))
 }
 
 /// Parse a preferred hash algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.8
-fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[HashAlgorithm; 8]> = body
         .iter()
         .map(|v| HashAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid HashAlgorithm")))
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredHashAlgorithms(list)))
+    Ok((&b""[..], SubpacketData::PreferredHashAlgorithms(list)))
 }
 
 /// Parse a preferred compression algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.9
-fn pref_com_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+fn pref_com_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[CompressionAlgorithm; 8]> = body
         .iter()
         .map(|v| {
@@ -97,59 +97,63 @@ fn pref_com_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
         })
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredCompressionAlgorithms(list)))
+    Ok((
+        &b""[..],
+        SubpacketData::PreferredCompressionAlgorithms(list),
+    ))
 }
 
 // Parse a signature expiration time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
 #[rustfmt::skip]
-named!(signature_expiration_time<Subpacket>, map_opt!(
+named!(signature_expiration_time<SubpacketData>, map_opt!(
     // 4-octet time field
     be_u32,
-    |date| dt_from_timestamp(date).map(Subpacket::SignatureExpirationTime)
+    |date| dt_from_timestamp(date).map(SubpacketData::SignatureExpirationTime)
 ));
 
 // Parse a exportable certification subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
 named!(
-    exportable_certification<Subpacket>,
-    map!(complete!(be_u8), |v| Subpacket::ExportableCertification(
-        v == 1
-    ))
+    exportable_certification<SubpacketData>,
+    map!(
+        complete!(be_u8),
+        |v| SubpacketData::ExportableCertification(v == 1)
+    )
 );
 
 // Parse a revocable subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
 named!(
-    revocable<Subpacket>,
-    map!(complete!(be_u8), |v| Subpacket::Revocable(v == 1))
+    revocable<SubpacketData>,
+    map!(complete!(be_u8), |v| SubpacketData::Revocable(v == 1))
 );
 
 // Parse a trust signature subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.13
 #[rustfmt::skip]
-named!(trust_signature<Subpacket>, do_parse!(
+named!(trust_signature<SubpacketData>, do_parse!(
        depth: be_u8
     >> value: be_u8
-    >> (Subpacket::TrustSignature(depth, value))
+    >> (SubpacketData::TrustSignature(depth, value))
 ));
 
 // Parse a regular expression subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
 #[rustfmt::skip]
-named!(regular_expression<Subpacket>, map!(
-    map!(rest, read_string), Subpacket::RegularExpression
+named!(regular_expression<SubpacketData>, map!(
+    map!(rest, read_string), SubpacketData::RegularExpression
 ));
 
 // Parse a revocation key subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
 #[rustfmt::skip]
-named!(revocation_key<Subpacket>, do_parse!(
+named!(revocation_key<SubpacketData>, do_parse!(
              class: map_opt!(be_u8, RevocationKeyClass::from_u8)
     >>   algorithm: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     // TODO: V5 Keys have 32 octets here
     >>          fp: take!(20)
-    >> (Subpacket::RevocationKey(RevocationKey::new(
+    >> (SubpacketData::RevocationKey(RevocationKey::new(
         class,
         algorithm,
         fp,
@@ -159,7 +163,7 @@ named!(revocation_key<Subpacket>, do_parse!(
 // Parse a notation data subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.16
 #[rustfmt::skip]
-named!(notation_data<Subpacket>, do_parse!(
+named!(notation_data<SubpacketData>, do_parse!(
                   // Flags
         readable: map!(be_u8, |v| v == 0x80)
     >>            tag!(&[0, 0, 0])
@@ -167,103 +171,109 @@ named!(notation_data<Subpacket>, do_parse!(
     >> value_len: be_u16
     >>      name: map!(take!(name_len), read_string)
     >>     value: map!(take!(value_len), read_string)
-    >> (Subpacket::Notation(Notation { readable, name, value }))
+    >> (SubpacketData::Notation(Notation { readable, name, value }))
 ));
 
 /// Parse a key server preferences subpacket
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2.3.17
-fn key_server_prefs(body: &[u8]) -> IResult<&[u8], Subpacket> {
+fn key_server_prefs(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((
         &b""[..],
-        Subpacket::KeyServerPreferences(SmallVec::from_slice(body)),
+        SubpacketData::KeyServerPreferences(SmallVec::from_slice(body)),
     ))
 }
 
 // Parse a preferred key server subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.18
 #[rustfmt::skip]
-named!(preferred_key_server<Subpacket>,do_parse!(
+named!(preferred_key_server<SubpacketData>,do_parse!(
        body: map_res!(rest, str::from_utf8)
-    >> ({ Subpacket::PreferredKeyServer(body.to_string()) })
+    >> ({ SubpacketData::PreferredKeyServer(body.to_string()) })
 ));
 
 // Parse a primary user id subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.19
 named!(
-    primary_userid<Subpacket>,
-    map!(be_u8, |a| Subpacket::IsPrimary(a == 1))
+    primary_userid<SubpacketData>,
+    map!(be_u8, |a| SubpacketData::IsPrimary(a == 1))
 );
 
 // Parse a policy URI subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
 #[rustfmt::skip]
-named!(policy_uri<Subpacket>, map!(
-    map!(rest, read_string), Subpacket::PolicyURI
+named!(policy_uri<SubpacketData>, map!(
+    map!(rest, read_string), SubpacketData::PolicyURI
 ));
 
 /// Parse a key flags subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.21
-fn key_flags(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    Ok((&b""[..], Subpacket::KeyFlags(SmallVec::from_slice(body))))
+fn key_flags(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+    Ok((
+        &b""[..],
+        SubpacketData::KeyFlags(SmallVec::from_slice(body)),
+    ))
 }
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
 #[rustfmt::skip]
-named!(signers_userid<Subpacket>, do_parse!(
+named!(signers_userid<SubpacketData>, do_parse!(
        body: map_res!(rest, str::from_utf8)
-    >> (Subpacket::SignersUserID(body.to_string())))
+    >> (SubpacketData::SignersUserID(body.to_string())))
 );
 
 /// Parse a features subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.24
-fn features(body: &[u8]) -> IResult<&[u8], Subpacket> {
-    Ok((&b""[..], Subpacket::Features(SmallVec::from_slice(body))))
+fn features(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+    Ok((
+        &b""[..],
+        SubpacketData::Features(SmallVec::from_slice(body)),
+    ))
 }
 
 // Parse a revocation reason subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.23
 #[rustfmt::skip]
-named!(rev_reason<Subpacket>, do_parse!(
+named!(rev_reason<SubpacketData>, do_parse!(
          code: map_opt!(be_u8, RevocationCode::from_u8)
     >> reason: map!(rest, read_string)
-    >> (Subpacket::RevocationReason(code, reason))
+    >> (SubpacketData::RevocationReason(code, reason))
 ));
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.25
 #[rustfmt::skip]
-named!(sig_target<Subpacket>, do_parse!(
+named!(sig_target<SubpacketData>, do_parse!(
         pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
     >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
     >>     hash: rest
-    >> (Subpacket::SignatureTarget(pub_alg, hash_alg, hash.to_vec()))
+    >> (SubpacketData::SignatureTarget(pub_alg, hash_alg, hash.to_vec()))
 ));
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
 #[rustfmt::skip]
-named!(embedded_sig<Subpacket>, map!(call!(parse, Version::New), |sig| {
-    Subpacket::EmbeddedSignature(Box::new(sig))
+named!(embedded_sig<SubpacketData>, map!(call!(parse, Version::New), |sig| {
+    SubpacketData::EmbeddedSignature(Box::new(sig))
 }));
 
 // Parse an issuer subpacket
 // Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
 #[rustfmt::skip]
-named!(issuer_fingerprint<Subpacket>, do_parse!(
+named!(issuer_fingerprint<SubpacketData>, do_parse!(
            version: map_opt!(be_u8, KeyVersion::from_u8)
     >> fingerprint: rest
-    >> (Subpacket::IssuerFingerprint(version, SmallVec::from_slice(fingerprint)))
+    >> (SubpacketData::IssuerFingerprint(version, SmallVec::from_slice(fingerprint)))
 ));
 
 /// Parse a preferred aead subpacket
-fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], Subpacket> {
+fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[AeadAlgorithm; 2]> = body
         .iter()
         .map(|v| AeadAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid AeadAlgorithm")))
         .collect::<Result<_>>()?;
 
-    Ok((&b""[..], Subpacket::PreferredAeadAlgorithms(list)))
+    Ok((&b""[..], SubpacketData::PreferredAeadAlgorithms(list)))
 }
 
-fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
+fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8], Subpacket> {
     use self::SubpacketType::*;
     debug!("parsing subpacket: {:?} {}", typ, hex::encode(body));
 
@@ -293,9 +303,14 @@ fn subpacket(typ: SubpacketType, body: &[u8]) -> IResult<&[u8], Subpacket> {
         EmbeddedSignature => embedded_sig(body),
         IssuerFingerprint => issuer_fingerprint(body),
         PreferredAead => pref_aead_alg(body),
-        Experimental(n) => Ok((body, Subpacket::Experimental(n, SmallVec::from_slice(body)))),
-        Other(n) => Ok((body, Subpacket::Other(n, body.to_vec()))),
+        Experimental(n) => Ok((
+            body,
+            SubpacketData::Experimental(n, SmallVec::from_slice(body)),
+        )),
+        Other(n) => Ok((body, SubpacketData::Other(n, body.to_vec()))),
     };
+
+    let res = res.map(|(body, data)| (body, Subpacket { is_critical, data }));
 
     if res.is_err() {
         warn!("invalid subpacket: {:?} {:?}", typ, res);
@@ -309,8 +324,8 @@ named!(subpackets(&[u8]) -> Vec<Subpacket>, many0!(complete!(do_parse!(
     // the subpacket length (1, 2, or 5 octets)
         len: packet_length
     // the subpacket type (1 octet)
-    >> typ: map_opt!(be_u8, SubpacketType::from_u8)
-    >>   p: flat_map!(take!(len - 1), |b| subpacket(typ, b))
+    >> typ: map!(be_u8, SubpacketType::from_u8)
+    >>   p: flat_map!(take!(len - 1), |b| subpacket(typ.0, typ.1, b))
     >> (p)
 ))));
 
@@ -442,7 +457,7 @@ mod tests {
         let (_, res) = pref_sym_alg(input.as_slice()).unwrap();
         assert_eq!(
             res,
-            Subpacket::PreferredSymmetricAlgorithms(
+            SubpacketData::PreferredSymmetricAlgorithms(
                 input
                     .iter()
                     .map(|i| SymmetricKeyAlgorithm::from_u8(*i).unwrap())
