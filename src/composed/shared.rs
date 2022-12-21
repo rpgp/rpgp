@@ -87,11 +87,11 @@ pub trait Deserializable: Sized {
             }
         });
 
-        Self::from_packets(packets)
+        Self::from_packets(packets.peekable())
     }
 
     /// Turn a list of packets into a usable representation.
-    fn from_packets<'a>(
-        packets: impl Iterator<Item = Packet> + 'a,
+    fn from_packets<'a, I: Iterator<Item = Packet> + 'a>(
+        packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a>;
 }
