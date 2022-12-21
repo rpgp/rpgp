@@ -82,12 +82,13 @@ impl Signature {
     {
         if let Some(issuer) = self.issuer() {
             if &key.key_id() != issuer {
-                // TODO: should this be an actual error?
                 warn!(
                     "validating signature with a non matching Key ID {:?} != {:?}",
                     &key.key_id(),
                     issuer
                 );
+                // We can't validate this against this key, as there is a missmatch.
+                return Ok(());
             }
         }
 
@@ -118,48 +119,53 @@ impl Signature {
 
         if let Some(issuer) = self.issuer() {
             if &key.key_id() != issuer {
-                // TODO: should this be an actual error?
                 warn!(
                     "validating certificate with a non matching Key ID {:?} != {:?}",
                     &key.key_id(),
                     issuer
                 );
+                // We can't validate this against this key, as there is a missmatch.
+                return Ok(());
             }
         }
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
-        let mut key_buf = Vec::new();
-        key.to_writer_old(&mut key_buf)?;
 
-        let mut packet_buf = Vec::new();
-        id.to_writer(&mut packet_buf)?;
-
-        debug!("packet: {}", hex::encode(&packet_buf));
-
-        hasher.update(&key_buf);
-
-        match self.config.version {
-            SignatureVersion::V2 | SignatureVersion::V3 => {
-                // Nothing to do
-            }
-            SignatureVersion::V4 | SignatureVersion::V5 => {
-                let prefix = match tag {
-                    Tag::UserId => 0xB4,
-                    Tag::UserAttribute => 0xD1,
-                    _ => bail!("invalid tag for certificate validation: {:?}", tag),
-                };
-
-                let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
-                BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
-                debug!("prefix: {}", hex::encode(prefix_buf));
-
-                // prefixes
-                hasher.update(&prefix_buf);
-            }
+        // the key
+        {
+            let mut key_buf = Vec::new();
+            key.to_writer_old(&mut key_buf)?;
+            hasher.update(&key_buf);
         }
 
         // the packet content
-        hasher.update(&packet_buf);
+        {
+            let mut packet_buf = Vec::new();
+            id.to_writer(&mut packet_buf)?;
+
+            match self.config.version {
+                SignatureVersion::V2 | SignatureVersion::V3 => {
+                    // Nothing to do
+                }
+                SignatureVersion::V4 | SignatureVersion::V5 => {
+                    let prefix = match tag {
+                        Tag::UserId => 0xB4,
+                        Tag::UserAttribute => 0xD1,
+                        _ => bail!("invalid tag for certificate validation: {:?}", tag),
+                    };
+
+                    let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
+                    BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
+                    debug!("prefix: {}", hex::encode(prefix_buf));
+
+                    // prefixes
+                    hasher.update(&prefix_buf);
+                }
+            }
+            debug!("packet: {}", hex::encode(&packet_buf));
+
+            hasher.update(&packet_buf);
+        }
 
         let len = self.config.hash_signature_data(&mut *hasher)?;
         hasher.update(&self.config.trailer(len));
@@ -233,11 +239,12 @@ impl Signature {
         let key_id = key.key_id();
         if let Some(issuer) = self.issuer() {
             if &key_id != issuer {
-                // TODO: should this be an actual error?
                 warn!(
                     "validating key (revocation) with a non matching Key ID {:?} != {:?}",
                     &key_id, issuer
                 );
+                // We can't validate this against this key, as there is a missmatch.
+                return Ok(());
             }
         }
 
