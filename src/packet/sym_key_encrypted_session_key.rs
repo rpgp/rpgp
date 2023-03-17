@@ -1,7 +1,8 @@
 use std::io;
 
-use nom::combinator::{map_opt, rest};
+use nom::combinator::{map, map_opt, rest};
 use nom::number::streaming::be_u8;
+use nom::sequence::tuple;
 use num_traits::FromPrimitive;
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -82,25 +83,29 @@ impl SymKeyEncryptedSessionKey {
 
 fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
     move |i: &[u8]| {
-        let (i, version) = be_u8(i)?;
-        let (i, sym_alg) = map_opt(be_u8, SymmetricKeyAlgorithm::from_u8)(i)?;
-        let (i, s2k) = s2k_parser(i)?;
-        let (i, encrypted_key) = rest(i)?;
-        Ok((i, {
-            let encrypted_key = if encrypted_key.is_empty() {
-                None
-            } else {
-                Some(encrypted_key.to_vec())
-            };
+        map(
+            tuple((
+                be_u8,
+                map_opt(be_u8, SymmetricKeyAlgorithm::from_u8),
+                s2k_parser,
+                rest,
+            )),
+            |(version, sym_alg, s2k, encrypted_key)| {
+                let encrypted_key = if encrypted_key.is_empty() {
+                    None
+                } else {
+                    Some(encrypted_key.to_vec())
+                };
 
-            SymKeyEncryptedSessionKey {
-                packet_version,
-                version,
-                sym_algorithm: sym_alg,
-                s2k,
-                encrypted_key,
-            }
-        }))
+                SymKeyEncryptedSessionKey {
+                    packet_version,
+                    version,
+                    sym_algorithm: sym_alg,
+                    s2k,
+                    encrypted_key,
+                }
+            },
+        )(i)
     }
 }
 

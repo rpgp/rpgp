@@ -229,22 +229,28 @@ fn features(body: &[u8]) -> IResult<&[u8], Subpacket> {
 // Parse a revocation reason subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.23
 fn rev_reason(i: &[u8]) -> IResult<&[u8], Subpacket> {
-    let (i, code) = map_opt(be_u8, RevocationCode::from_u8)(i)?;
-    let (i, reason) = map(rest, read_string)(i)?;
-    Ok((i, Subpacket::RevocationReason(code, reason)))
+    map(
+        pair(
+            map_opt(be_u8, RevocationCode::from_u8),
+            map(rest, read_string),
+        ),
+        |(code, reason)| Subpacket::RevocationReason(code, reason),
+    )(i)
 }
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.25
 
 fn sig_target(i: &[u8]) -> IResult<&[u8], Subpacket> {
-    let (i, pub_alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(i)?;
-    let (i, hash_alg) = map_opt(be_u8, HashAlgorithm::from_u8)(i)?;
-    let (i, hash) = rest(i)?;
-
-    Ok((
-        i,
-        Subpacket::SignatureTarget(pub_alg, hash_alg, hash.to_vec()),
-    ))
+    map(
+        tuple((
+            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            map_opt(be_u8, HashAlgorithm::from_u8),
+            rest,
+        )),
+        |(pub_alg, hash_alg, hash): (_, _, &[u8])| {
+            Subpacket::SignatureTarget(pub_alg, hash_alg, hash.to_vec())
+        },
+    )(i)
 }
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
