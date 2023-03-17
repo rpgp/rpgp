@@ -501,6 +501,8 @@ impl<R: Read + Seek> Read for Dearmor<R> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use std::io::Cursor;
 

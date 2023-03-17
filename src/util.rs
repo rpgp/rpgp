@@ -230,6 +230,8 @@ pub fn write_all(writer: &mut impl io::Write, mut buf: &[u8]) -> io::Result<()> 
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     #[test]

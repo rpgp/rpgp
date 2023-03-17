@@ -315,6 +315,8 @@ impl Signature {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use std::fs::File;
     use std::io::Read;

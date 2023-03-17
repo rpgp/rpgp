@@ -70,6 +70,8 @@ pub fn write(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;

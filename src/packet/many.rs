@@ -130,6 +130,8 @@ impl<R: Read> Iterator for PacketParser<R> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use num_traits::FromPrimitive;
     use regex::Regex;

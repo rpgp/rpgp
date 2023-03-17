@@ -56,6 +56,8 @@ impl<R: Read + Seek> Read for Base64Reader<R> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use std::io::Cursor;
     use std::io::Read;

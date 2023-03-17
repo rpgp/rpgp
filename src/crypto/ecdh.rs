@@ -246,6 +246,8 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     use rand::{RngCore, SeedableRng};
