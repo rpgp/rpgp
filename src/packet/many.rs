@@ -117,7 +117,7 @@ impl<R: Read> Iterator for PacketParser<R> {
 
             // if the parser returned `Incomplete`, and it needs more data than the buffer can hold, we grow the buffer.
             if let Some(Needed::Size(sz)) = needed {
-                if b.usable_space() < sz && self.capacity * 2 < MAX_CAPACITY {
+                if b.usable_space() < sz.into() && self.capacity * 2 < MAX_CAPACITY {
                     self.capacity *= 2;
                     let capacity = self.capacity;
                     b.make_room();
@@ -130,6 +130,8 @@ impl<R: Read> Iterator for PacketParser<R> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use num_traits::FromPrimitive;
     use regex::Regex;

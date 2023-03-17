@@ -2,18 +2,19 @@ use std::hash::Hasher;
 use std::{fmt, io};
 
 use byteorder::{BigEndian, ByteOrder};
+use nom::combinator::map;
+use nom::sequence::tuple;
 use rand::{CryptoRng, Rng};
 use rsa::RsaPrivateKey;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
-use crate::errors::Result;
+use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
 
-#[derive(Clone, PartialEq, Eq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum PlainSecretParams {
     RSA { d: Mpi, p: Mpi, q: Mpi, u: Mpi },
     DSA(Mpi),
@@ -40,8 +41,7 @@ pub enum PlainSecretParamsRef<'a> {
 
 impl<'a> PlainSecretParamsRef<'a> {
     pub fn from_slice(data: &'a [u8], alg: PublicKeyAlgorithm) -> Result<Self> {
-        let (_, repr) = parse_secret_params(data, alg)?;
-
+        let (_, repr) = parse_secret_params(alg)(data)?;
         Ok(repr)
     }
 
@@ -320,24 +320,27 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
     }
 }
 
-#[rustfmt::skip]
-named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef<'_>>, switch!(value!(alg),
-    PublicKeyAlgorithm::RSA        |
-    PublicKeyAlgorithm::RSAEncrypt |
-    PublicKeyAlgorithm::RSASign => call!(rsa_secret_params)                                |
-    PublicKeyAlgorithm::DSA     => do_parse!(x: mpi >> (PlainSecretParamsRef::DSA(x)))      |
-    PublicKeyAlgorithm::Elgamal => do_parse!(x: mpi >> (PlainSecretParamsRef::Elgamal(x)))  |
-    PublicKeyAlgorithm::ECDH    => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDH(x)))  |
-    PublicKeyAlgorithm::ECDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDSA(x))) |
-    PublicKeyAlgorithm::EdDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::EdDSA(x)))
-));
+fn parse_secret_params(
+    alg: PublicKeyAlgorithm,
+) -> impl Fn(&[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    move |i: &[u8]| match alg {
+        PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
+            rsa_secret_params(i)
+        }
+        PublicKeyAlgorithm::DSA => map(mpi, PlainSecretParamsRef::DSA)(i),
+        PublicKeyAlgorithm::Elgamal => map(mpi, PlainSecretParamsRef::Elgamal)(i),
+        PublicKeyAlgorithm::ECDH => map(mpi, PlainSecretParamsRef::ECDH)(i),
+        PublicKeyAlgorithm::ECDSA => map(mpi, PlainSecretParamsRef::ECDSA)(i),
+        PublicKeyAlgorithm::EdDSA => map(mpi, PlainSecretParamsRef::EdDSA)(i),
+        _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
+            nom::error::ErrorKind::Switch,
+        ))),
+    }
+}
 
 // Parse the decrpyted private params of an RSA private key.
-#[rustfmt::skip]
-named!(rsa_secret_params<PlainSecretParamsRef<'_>>, do_parse!(
-       d: mpi
-    >> p: mpi
-    >> q: mpi
-    >> u: mpi
-    >> (PlainSecretParamsRef::RSA { d, p, q, u })
-));
+fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+    map(tuple((mpi, mpi, mpi, mpi)), |(d, p, q, u)| {
+        PlainSecretParamsRef::RSA { d, p, q, u }
+    })(i)
+}

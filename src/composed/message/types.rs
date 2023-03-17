@@ -639,6 +639,8 @@ impl Message {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use rand::thread_rng;
     use std::fs;
@@ -652,10 +654,7 @@ mod tests {
     fn test_compression_zlib() {
         let lit_msg = Message::new_literal("hello-zlib.txt", "hello world");
 
-        let compressed_msg = lit_msg
-            .clone()
-            .compress(CompressionAlgorithm::ZLIB)
-            .unwrap();
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
         let uncompressed_msg = compressed_msg.decompress().unwrap();
 
         assert_eq!(&lit_msg, &uncompressed_msg);
@@ -665,7 +664,7 @@ mod tests {
     fn test_compression_zip() {
         let lit_msg = Message::new_literal("hello-zip.txt", "hello world");
 
-        let compressed_msg = lit_msg.clone().compress(CompressionAlgorithm::ZIP).unwrap();
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZIP).unwrap();
         let uncompressed_msg = compressed_msg.decompress().unwrap();
 
         assert_eq!(&lit_msg, &uncompressed_msg);
@@ -676,7 +675,6 @@ mod tests {
         let lit_msg = Message::new_literal("hello.txt", "hello world");
 
         let compressed_msg = lit_msg
-            .clone()
             .compress(CompressionAlgorithm::Uncompressed)
             .unwrap();
         let uncompressed_msg = compressed_msg.decompress().unwrap();

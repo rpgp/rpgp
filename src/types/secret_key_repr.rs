@@ -2,7 +2,7 @@ use std::fmt;
 
 use num_bigint::BigUint;
 use rsa::RsaPrivateKey;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -19,8 +19,7 @@ pub enum SecretKeyRepr {
 }
 
 /// Secret key for ECDH with Curve25519, the only combination we currently support.
-#[derive(Clone, PartialEq, Eq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct ECDHSecretKey {
     /// The secret point.
     pub secret: [u8; 32],
@@ -41,8 +40,7 @@ impl fmt::Debug for ECDHSecretKey {
 }
 
 /// Secret key for EdDSA with Curve25519, the only combination we currently support.
-#[derive(Clone, PartialEq, Eq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct EdDSASecretKey {
     /// The secret point.
     pub secret: [u8; 32],
@@ -58,8 +56,7 @@ impl fmt::Debug for EdDSASecretKey {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct ECDSASecretKey {
     /// The secret point.
     pub x: BigUint,
@@ -76,8 +73,7 @@ impl fmt::Debug for ECDSASecretKey {
 }
 
 /// Secret key for DSA.
-#[derive(Clone, PartialEq, Eq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct DSASecretKey {
     x: BigUint,
 }
