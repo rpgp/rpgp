@@ -51,12 +51,7 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
         let cnt = len_actual as usize;
         match number.slice_index(cnt) {
             Err(needed) => {
-                // if input.at_eof() {
-                //     Err(nom::Err::Failure(nom::error::Error::new(input, nom::error::ErrorKind::Eof)))
-                // } else {
-                // FIXME what about eof?
                 Err(nom::Err::Incomplete(needed))
-                // }
             }
             Ok(index) => {
                 let (rest, n) = number.take_split(index);
