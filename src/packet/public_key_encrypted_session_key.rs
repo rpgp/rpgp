@@ -78,7 +78,7 @@ impl PublicKeyEncryptedSessionKey {
     }
 }
 
-fn parse_mpis<'a, 'i>(alg: &'a PublicKeyAlgorithm, i: &'i [u8]) -> IResult<&'i [u8], Vec<Mpi>> {
+fn parse_mpis<'i>(alg: &PublicKeyAlgorithm, i: &'i [u8]) -> IResult<&'i [u8], Vec<Mpi>> {
     match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSASign | PublicKeyAlgorithm::RSAEncrypt => {
             map(mpi, |v| vec![v.to_owned()])(i)
