@@ -36,23 +36,12 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
     let len_actual = (bits + 7) >> 3;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
-        /*
-            Err(Err::Error(
-                error_position!(
-                input,
-                nom::error::ErrorKind::Custom(errors::MPI_TOO_LONG)
-            )))
-            FIXME should this give more information in the error?
-            FIXME is this the right Error Variant?
-        */
         Err(Err::Error(Error::InvalidInput))
     } else {
         // same as take!
         let cnt = len_actual as usize;
         match number.slice_index(cnt) {
-            Err(needed) => {
-                Err(nom::Err::Incomplete(needed))
-            }
+            Err(needed) => Err(nom::Err::Incomplete(needed)),
             Ok(index) => {
                 let (rest, n) = number.take_split(index);
                 let n_stripped = strip_leading_zeros(n).into();
