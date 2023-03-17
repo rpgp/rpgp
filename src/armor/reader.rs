@@ -113,6 +113,7 @@ fn parse_digit(x: &[u8]) -> Result<usize> {
     Ok(digit)
 }
 
+// Parses the type inside of an ascii armor header.
 fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
     alt((
         map(tag("PGP PUBLIC KEY BLOCK"), |_| BlockType::PublicKey),
@@ -278,6 +279,7 @@ fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
 
 // Parses a single armor footer line
 fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
+    // Only 3, because we parsed two already in the `footer_parser`.
     delimited(
         tag(b"---END "),
         armor_header_type,
