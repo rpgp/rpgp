@@ -1,6 +1,10 @@
 use std::io;
 
-use nom::be_u8;
+use nom::bytes::streaming::take;
+use nom::combinator::{map, map_opt, map_res};
+use nom::number::streaming::be_u8;
+use nom::sequence::tuple;
+use nom::IResult;
 use num_traits::FromPrimitive;
 
 use crate::crypto::hash::HashAlgorithm;
@@ -27,7 +31,7 @@ pub struct OnePassSignature {
 impl OnePassSignature {
     /// Parses a `OnePassSignature` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(input, packet_version)?;
+        let (_, pk) = parse(packet_version)(input)?;
 
         Ok(pk)
     }
@@ -54,24 +58,29 @@ impl OnePassSignature {
     }
 }
 
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version) <OnePassSignature>, do_parse!(
-         version: be_u8
-    >>       typ: map_opt!(be_u8, SignatureType::from_u8)
-    >>      hash: map_opt!(be_u8, HashAlgorithm::from_u8)
-    >>   pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >>    key_id: map_res!(take!(8), KeyId::from_slice)
-    >> last: be_u8
-    >> (OnePassSignature {
-        packet_version,
-        version,
-        typ,
-        hash_algorithm: hash,
-        pub_algorithm: pub_alg,
-        key_id,
-        last,
-    })
-));
+fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSignature> {
+    move |i: &[u8]| {
+        map(
+            tuple((
+                be_u8,
+                map_opt(be_u8, SignatureType::from_u8),
+                map_opt(be_u8, HashAlgorithm::from_u8),
+                map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+                map_res(take(8usize), KeyId::from_slice),
+                be_u8,
+            )),
+            |(version, typ, hash, pub_alg, key_id, last)| OnePassSignature {
+                packet_version,
+                version,
+                typ,
+                hash_algorithm: hash,
+                pub_algorithm: pub_alg,
+                key_id,
+                last,
+            },
+        )(i)
+    }
+}
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

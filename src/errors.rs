@@ -1,6 +1,10 @@
 use std::num::TryFromIntError;
 
 use ed25519_dalek::SignatureError;
+use nom::{
+    error::{FromExternalError, ParseError},
+    ErrorConvert,
+};
 
 pub type Result<T> = ::std::result::Result<T, Error>;
 
@@ -11,7 +15,7 @@ pub const MPI_TOO_LONG: u32 = 1000;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to parse {0:?}")]
-    ParsingError(nom::ErrorKind),
+    ParsingError(nom::error::ErrorKind),
     #[error("invalid input")]
     InvalidInput,
     #[error("incomplete input: {0:?}")]
@@ -49,7 +53,7 @@ pub enum Error {
     #[error("{0:?}")]
     Message(String),
     #[error("Invalid Packet {0:?}")]
-    PacketError(nom::ErrorKind),
+    PacketError(nom::error::ErrorKind),
     #[error("Incomplete Packet")]
     PacketIncomplete,
     #[error("Unpadding failed")]
@@ -106,36 +110,57 @@ impl Error {
     }
 }
 
-impl<'a> From<nom::Err<&'a [u8]>> for Error {
-    fn from(err: nom::Err<&'a [u8]>) -> Error {
+pub(crate) type IResult<I, O, E = Error> = nom::IResult<I, O, E>;
+
+impl<T> From<nom::error::Error<T>> for Error {
+    fn from(err: nom::error::Error<T>) -> Self {
+        Self::PacketError(err.code)
+    }
+}
+
+impl<I> ParseError<I> for Error {
+    fn from_error_kind(_input: I, kind: nom::error::ErrorKind) -> Self {
+        Self::ParsingError(kind)
+    }
+
+    fn append(_input: I, _kind: nom::error::ErrorKind, other: Self) -> Self {
+        other
+    }
+}
+
+impl<I, E> FromExternalError<I, E> for Error {
+    fn from_external_error(input: I, kind: nom::error::ErrorKind, e: E) -> Self {
+        nom::error::Error::from_external_error(input, kind, e).into()
+    }
+}
+
+impl From<Error> for nom::Err<Error> {
+    fn from(err: Error) -> Self {
+        Self::Error(err)
+    }
+}
+
+impl ErrorConvert<Self> for Error {
+    fn convert(self) -> Self {
+        self
+    }
+}
+
+impl From<nom::Err<Error>> for Error {
+    fn from(err: nom::Err<Error>) -> Self {
         match err {
-            nom::Err::Incomplete(n) => Error::Incomplete(n),
-            _ => Error::ParsingError(err.into_error_kind()),
+            nom::Err::Incomplete(err) => Self::Incomplete(err),
+            nom::Err::Error(err) | nom::Err::Failure(err) => err,
         }
     }
 }
 
-impl<'a> From<nom::Err<nom::types::CompleteStr<'a>>> for Error {
-    fn from(err: nom::Err<nom::types::CompleteStr<'a>>) -> Error {
+impl<T> From<nom::Err<nom::error::Error<T>>> for Error {
+    fn from(err: nom::Err<nom::error::Error<T>>) -> Error {
         match err {
-            nom::Err::Incomplete(n) => Error::Incomplete(n),
-            _ => Error::ParsingError(err.into_error_kind()),
+            nom::Err::Incomplete(err) => Self::Incomplete(err),
+            nom::Err::Error(err) | nom::Err::Failure(err) => Self::ParsingError(err.code),
         }
-    }
-}
-
-impl<'a> From<Error> for nom::Err<&'a [u8]> {
-    fn from(err: Error) -> nom::Err<&'a [u8]> {
-        nom::Err::Error(nom::Context::Code(
-            &b""[..],
-            nom::ErrorKind::Custom(err.as_code()),
-        ))
-    }
-}
-
-impl<'a> From<nom::Err<&'a str>> for Error {
-    fn from(err: nom::Err<&'a str>) -> Error {
-        Error::ParsingError(err.into_error_kind())
     }
 }
 

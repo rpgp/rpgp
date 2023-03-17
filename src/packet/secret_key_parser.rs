@@ -1,51 +1,101 @@
 use chrono::{DateTime, TimeZone, Utc};
-use nom::{be_u16, be_u32, be_u8, rest};
+use nom::combinator::{map_opt, map_res, rest};
+use nom::number::streaming::{be_u16, be_u32, be_u8};
+use nom::sequence::tuple;
 use num_traits::FromPrimitive;
 
 use crate::crypto::PublicKeyAlgorithm;
+use crate::errors::IResult;
 use crate::packet::public_key_parser::parse_pub_fields;
 use crate::types::{KeyVersion, PublicParams, SecretParams};
 
 // Parse the whole private key, both public and private fields.
-#[rustfmt::skip]
-named_args!(parse_pub_priv_fields(typ: PublicKeyAlgorithm) <(PublicParams, SecretParams)>, do_parse!(
-      pub_params: call!(parse_pub_fields, typ)
-  >> priv_params: map_res!(rest, |v| SecretParams::from_slice(v, typ))
-  >> (pub_params, priv_params)
-));
+fn parse_pub_priv_fields(
+    typ: PublicKeyAlgorithm,
+) -> impl Fn(&[u8]) -> IResult<&[u8], (PublicParams, SecretParams)> {
+    move |i| {
+        tuple((
+            parse_pub_fields(typ),
+            map_res(rest, |v| SecretParams::from_slice(v, typ)),
+        ))(i)
+    }
+}
 
-#[rustfmt::skip]
-named_args!(new_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
-        created_at: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
-    >>         alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >>      params: call!(parse_pub_priv_fields, alg)
-    >> (*key_ver, alg, created_at, None, params.0, params.1)
-));
+fn new_private_key_parser(
+    key_ver: &KeyVersion,
+) -> impl Fn(
+    &[u8],
+) -> IResult<
+    &[u8],
+    (
+        KeyVersion,
+        PublicKeyAlgorithm,
+        DateTime<Utc>,
+        Option<u16>,
+        PublicParams,
+        SecretParams,
+    ),
+> + '_ {
+    |i: &[u8]| {
+        let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
+        let (i, alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(i)?;
+        let (i, params) = parse_pub_priv_fields(alg)(i)?;
+        Ok((i, (*key_ver, alg, created_at, None, params.0, params.1)))
+    }
+}
 
-#[rustfmt::skip]
-named_args!(old_private_key_parser<'a>(key_ver: &'a KeyVersion) <(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
-       created_at: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
-    >>        exp: be_u16
-    >>        alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >>     params: call!(parse_pub_priv_fields, alg)
-    >> (*key_ver, alg, created_at, Some(exp), params.0, params.1)
-));
+fn old_private_key_parser(
+    key_ver: &KeyVersion,
+) -> impl Fn(
+    &[u8],
+) -> IResult<
+    &[u8],
+    (
+        KeyVersion,
+        PublicKeyAlgorithm,
+        DateTime<Utc>,
+        Option<u16>,
+        PublicParams,
+        SecretParams,
+    ),
+> + '_ {
+    |i: &[u8]| {
+        let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
+        let (i, exp) = be_u16(i)?;
+        let (i, alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(i)?;
+        let (i, params) = parse_pub_priv_fields(alg)(i)?;
+        Ok((
+            i,
+            (*key_ver, alg, created_at, Some(exp), params.0, params.1),
+        ))
+    }
+}
 
 // Parse a private key packet (Tag 5)
 // Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
-#[rustfmt::skip]
-named!(pub parse<(KeyVersion, PublicKeyAlgorithm, DateTime<Utc>, Option<u16>, PublicParams, SecretParams)>, do_parse!(
-       key_ver: map_opt!(be_u8, KeyVersion::from_u8)
-    >>     key: switch!(value!(&key_ver),
-                       &KeyVersion::V2 => call!(
-                           old_private_key_parser, &key_ver
-                       ) |
-                       &KeyVersion::V3 => call!(
-                           old_private_key_parser, &key_ver
-                       ) |
-                       &KeyVersion::V4 => call!(
-                           new_private_key_parser, &key_ver
-                       )
-                )
-    >> (key)
-));
+#[allow(clippy::type_complexity)]
+pub(crate) fn parse(
+    i: &[u8],
+) -> IResult<
+    &[u8],
+    (
+        KeyVersion,
+        PublicKeyAlgorithm,
+        DateTime<Utc>,
+        Option<u16>,
+        PublicParams,
+        SecretParams,
+    ),
+> {
+    let (i, key_ver) = map_opt(be_u8, KeyVersion::from_u8)(i)?;
+    let (i, key) = match &key_ver {
+        &KeyVersion::V2 | &KeyVersion::V3 => old_private_key_parser(&key_ver)(i)?,
+        &KeyVersion::V4 => new_private_key_parser(&key_ver)(i)?,
+        KeyVersion::V5 => {
+            return Err(nom::Err::Error(crate::errors::Error::ParsingError(
+                nom::error::ErrorKind::Switch,
+            )))
+        }
+    };
+    Ok((i, key))
+}

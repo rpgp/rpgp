@@ -39,7 +39,7 @@ hex = "^0.4"
 idea = "^0.5"
 log = "0.4.6"
 md-5 = { version = "^0.10.5", features = ["oid"] }
-nom = "^4.2"
+nom = "^7.0"
 num-derive = "0.3.0"
 num-traits = "0.2.6"
 p256 = { version = "^0.11", features = ["ecdsa"] }

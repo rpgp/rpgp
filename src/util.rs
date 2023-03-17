@@ -5,13 +5,17 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::types::{CompleteByteSlice, CompleteStr};
-use nom::{
-    self, be_u32, be_u8, eol, is_alphanumeric, line_ending, Err, IResult, InputIter, InputLength,
-    Slice,
-};
+use nom::branch::alt;
+use nom::bytes::streaming::take_while1;
+use nom::character::is_alphanumeric;
+use nom::character::streaming::line_ending;
+use nom::combinator::{eof, map};
+use nom::multi::many0;
+use nom::number::streaming::{be_u32, be_u8};
+use nom::sequence::preceded;
+use nom::{Err, InputIter, InputLength, Slice};
 
-use crate::errors;
+use crate::errors::{self, IResult};
 
 #[inline]
 pub fn u8_as_usize(a: u8) -> usize {
@@ -33,11 +37,9 @@ pub fn is_base64_token(c: u8) -> bool {
     is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
 }
 
-named!(pub prefixed<CompleteByteSlice<'_>, CompleteByteSlice<'_>>, do_parse!(
-             many0!(line_ending)
-    >> rest: take_while1!(is_base64_token)
-    >> (rest)
-));
+pub fn prefixed(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    preceded(many0(line_ending), take_while1(is_base64_token))(input)
+}
 
 /// Recognizes one or more body tokens
 pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
@@ -51,7 +53,7 @@ pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
             if idx == 0 {
                 return Err(Err::Error(error_position!(
                     input,
-                    nom::ErrorKind::AlphaNumeric
+                    nom::error::ErrorKind::AlphaNumeric
                 )));
             } else {
                 return Ok((input.slice(idx..), input.slice(0..idx)));
@@ -100,21 +102,17 @@ where
 }
 
 // Parse a packet length.
-#[rustfmt::skip]
-named!(pub packet_length<usize>, do_parse!(
-       olen: be_u8
-    >>  len: switch!(value!(olen),
-                     // One-Octet Lengths
-                     0..=191   => value!(olen as usize) |
-                     // Two-Octet Lengths
-                     192..=254 => map!(be_u8, |a| {
-                         ((olen as usize - 192) << 8) + 192 + a as usize
-                     }) |
-                     // Five-Octet Lengths
-                     255       => map!(be_u32, u32_as_usize)
-    )
-    >> (len)
-));
+pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
+    let (i, olen) = be_u8(i)?;
+    match olen {
+        // One-Octet Lengths
+        0..=191 => Ok((i, olen as usize)),
+        // Two-Octet Lengths
+        192..=254 => map(be_u8, |a| ((olen as usize - 192) << 8) + 192 + a as usize)(i),
+        // Five-Octet Lengths
+        255 => map(be_u32, u32_as_usize)(i),
+    }
+}
 
 /// Write packet length, including the prefix.
 pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
@@ -140,8 +138,8 @@ pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Resu
     Ok(())
 }
 
-pub fn end_of_line(input: CompleteStr<'_>) -> IResult<CompleteStr<'_>, CompleteStr<'_>> {
-    alt!(input, eof!() | eol)
+pub fn end_of_line(input: &[u8]) -> IResult<&[u8], &[u8]> {
+    alt((eof, end_of_line))(input)
 }
 
 /// Return the length of the remaining input.
