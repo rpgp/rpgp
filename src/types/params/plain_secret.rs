@@ -6,7 +6,7 @@ use nom::combinator::map;
 use nom::sequence::tuple;
 use rand::{CryptoRng, Rng};
 use rsa::RsaPrivateKey;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use crate::errors::{IResult, Result};
@@ -14,8 +14,7 @@ use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
 
-#[derive(Clone, PartialEq, Eq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum PlainSecretParams {
     RSA { d: Mpi, p: Mpi, q: Mpi, u: Mpi },
     DSA(Mpi),
