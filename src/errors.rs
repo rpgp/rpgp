@@ -30,6 +30,8 @@ pub enum Error {
     TooManyPackets,
     #[error("rsa error: {0:?}")]
     RSAError(rsa::errors::Error),
+    #[error("elliptic error: {0:?}")]
+    EllipticCurve(#[from] elliptic_curve::Error),
     #[error("io error: {0:?}")]
     IOError(#[from] std::io::Error),
     #[error("missing packets")]
@@ -102,6 +104,7 @@ impl Error {
             Error::SignatureError(_) => 26,
             Error::MdcError => 27,
             Error::TryFromInt(_) => 28,
+            Error::EllipticCurve(_) => 29,
         }
     }
 }

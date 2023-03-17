@@ -307,7 +307,7 @@ impl Signature {
 
         // the actual signature
         for val in &self.signature {
-            debug!("writing: {}", hex::encode(val));
+            debug!("writing signature: {}", hex::encode(val));
             val.to_writer(writer)?;
         }
 

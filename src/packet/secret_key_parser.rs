@@ -10,7 +10,7 @@ use crate::types::{KeyVersion, PublicParams, SecretParams};
 #[rustfmt::skip]
 named_args!(parse_pub_priv_fields(typ: PublicKeyAlgorithm) <(PublicParams, SecretParams)>, do_parse!(
       pub_params: call!(parse_pub_fields, typ)
-  >> priv_params: map_res!(rest, |v| SecretParams::from_slice(v, typ))
+  >> priv_params: map_res!(rest, |v| SecretParams::from_slice(v, typ, &pub_params))
   >> (pub_params, priv_params)
 ));
 

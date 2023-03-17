@@ -217,13 +217,13 @@ impl SignatureConfig {
                 // TODO: reduce duplication with serialization code
 
                 let mut res = vec![
-                    // version
+                    // the signature version
                     self.version as u8,
-                    // type
+                    // the signature type
                     self.typ as u8,
-                    // public algorithm
+                    // the public-key algorithm
                     self.pub_alg as u8,
-                    // hash algorithm
+                    // the hash algorithm
                     self.hash_alg as u8,
                     // will be filled with the length
                     0u8,
@@ -233,6 +233,7 @@ impl SignatureConfig {
                 // hashed subpackets
                 let mut hashed_subpackets = Vec::new();
                 for packet in &self.hashed_subpackets {
+                    debug!("hashing {:#?}", packet);
                     packet.to_writer(&mut hashed_subpackets)?;
                 }
 
@@ -240,6 +241,9 @@ impl SignatureConfig {
                 res.extend(hashed_subpackets);
 
                 hasher.update(&res);
+
+                // TODO: V5 signatures hash additional values here
+                // see https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-rfc4880bis-10#name-computing-signatures
 
                 Ok(res.len())
             }

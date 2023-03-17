@@ -20,3 +20,21 @@ impl<'a, T: Serialize> Serialize for &'a T {
         (*self).to_writer(writer)
     }
 }
+
+impl<'a, T: Serialize> Serialize for &'a [T] {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        for x in self.iter() {
+            (*x).to_writer(writer)?;
+        }
+        Ok(())
+    }
+}
+
+impl<T: Serialize> Serialize for Vec<T> {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        for x in self.iter() {
+            (*x).to_writer(writer)?;
+        }
+        Ok(())
+    }
+}

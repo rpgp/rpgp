@@ -4,7 +4,7 @@ use std::{fmt, io};
 use byteorder::{BigEndian, ByteOrder};
 use rand::{CryptoRng, Rng};
 use rsa::RsaPrivateKey;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use crate::errors::Result;
@@ -12,8 +12,7 @@ use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
 
-#[derive(Clone, PartialEq, Eq, Zeroize)]
-#[zeroize(drop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum PlainSecretParams {
     RSA { d: Mpi, p: Mpi, q: Mpi, u: Mpi },
     DSA(Mpi),
@@ -39,10 +38,27 @@ pub enum PlainSecretParamsRef<'a> {
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
-    pub fn from_slice(data: &'a [u8], alg: PublicKeyAlgorithm) -> Result<Self> {
-        let (_, repr) = parse_secret_params(data, alg)?;
+    pub fn from_slice(
+        data: &'a [u8],
+        alg: PublicKeyAlgorithm,
+        params: &PublicParams,
+    ) -> Result<Self> {
+        let (_, mut repr) = parse_secret_params(data, alg)?;
+
+        repr.normalize(params);
 
         Ok(repr)
+    }
+
+    fn normalize(&mut self, params: &PublicParams) {
+        match (self, params) {
+            (PlainSecretParamsRef::ECDSA(secret_mpi), PublicParams::ECDSA(pub_params)) => {
+                match pub_params {
+                    EcdsaPublicParams::P256(_) => {}
+                }
+            }
+            _ => {}
+        }
     }
 
     pub fn to_owned(&self) -> PlainSecretParams {
@@ -77,7 +93,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                 (*x).to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDSA(x) => {
-                (*x).to_writer(writer)?;
+                (*x).strip_trailing_zeroes().to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDH(x) => {
                 (*x).to_writer(writer)?;
@@ -183,24 +199,22 @@ impl<'a> PlainSecretParamsRef<'a> {
                 unimplemented_err!("Elgamal");
             }
             PlainSecretParamsRef::ECDSA(d) => match public_params {
-                PublicParams::ECDSA { ref curve, .. } => match *curve {
-                    ECCCurve::P256 => {
-                        ensure!(d.len() <= 32, "invalid secret");
+                PublicParams::ECDSA(params) => match params {
+                    EcdsaPublicParams::P256(_) => {
+                        ensure!(d.len() != 32, "invalid secret");
+                        let secret = p256::SecretKey::from_be_bytes(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey {
-                            oid: curve.oid(),
-                            x: d.into(),
-                        }))
+                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P256(secret)))
                     }
-                    ECCCurve::P384 => {
-                        ensure!(d.len() <= 48, "invalid secret");
+                    EcdsaPublicParams::P384(_) => {
+                        ensure!(d.len() != 48, "invalid secret");
+                        let secret = p384::SecretKey::from_be_bytes(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey {
-                            oid: curve.oid(),
-                            x: d.into(),
-                        }))
+                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P384(secret)))
                     }
-                    _ => unsupported_err!("curve {:?} for ECDSA", curve.to_string()),
+                    EcdsaPublicParams::Unsupported { curve, .. } => {
+                        unsupported_err!("curve {:?} for ECDSA", curve.to_string())
+                    }
                 },
                 _ => unreachable!("inconsistent key state"),
             },
@@ -209,8 +223,8 @@ impl<'a> PlainSecretParamsRef<'a> {
 }
 
 impl PlainSecretParams {
-    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm) -> Result<Self> {
-        let ref_params = PlainSecretParamsRef::from_slice(data, alg)?;
+    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
+        let ref_params = PlainSecretParamsRef::from_slice(data, alg, params)?;
         Ok(ref_params.to_owned())
     }
 
@@ -313,7 +327,9 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::RSA { .. } => write!(f, "PlainSecretParams(RSA)"),
             PlainSecretParamsRef::DSA(_) => write!(f, "PlainSecretParams(DSA)"),
             PlainSecretParamsRef::Elgamal(_) => write!(f, "PlainSecretParams(Elgamal)"),
-            PlainSecretParamsRef::ECDSA(_) => write!(f, "PlainSecretParams(ECDSA)"),
+            PlainSecretParamsRef::ECDSA(x) => {
+                write!(f, "PlainSecretParams(ECDSA {})", hex::encode(x.as_bytes()))
+            }
             PlainSecretParamsRef::ECDH(_) => write!(f, "PlainSecretParams(ECDH)"),
             PlainSecretParamsRef::EdDSA(_) => write!(f, "PlainSecretParams(EdDSA)"),
         }
@@ -327,8 +343,12 @@ named_args!(parse_secret_params(alg: PublicKeyAlgorithm) <PlainSecretParamsRef<'
     PublicKeyAlgorithm::RSASign => call!(rsa_secret_params)                                |
     PublicKeyAlgorithm::DSA     => do_parse!(x: mpi >> (PlainSecretParamsRef::DSA(x)))      |
     PublicKeyAlgorithm::Elgamal => do_parse!(x: mpi >> (PlainSecretParamsRef::Elgamal(x)))  |
-    PublicKeyAlgorithm::ECDH    => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDH(x)))  |
-    PublicKeyAlgorithm::ECDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::ECDSA(x))) |
+    PublicKeyAlgorithm::ECDH    => do_parse!(
+        x: mpi >> (PlainSecretParamsRef::ECDH(x))
+    ) |
+    PublicKeyAlgorithm::ECDSA   => do_parse!(
+        x: mpi >> (PlainSecretParamsRef::ECDSA(x))
+    ) |
     PublicKeyAlgorithm::EdDSA   => do_parse!(x: mpi >> (PlainSecretParamsRef::EdDSA(x)))
 ));
 

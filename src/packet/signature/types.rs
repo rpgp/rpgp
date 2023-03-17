@@ -115,14 +115,14 @@ impl Signature {
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()> {
-        debug!("verifying certificate {:#?}", self);
+        let key_id = key.key_id();
+        debug!("verifying certificate {:?} {:#?}", key_id, self);
 
         if let Some(issuer) = self.issuer() {
-            if &key.key_id() != issuer {
+            if &key_id != issuer {
                 warn!(
                     "validating certificate with a non matching Key ID {:?} != {:?}",
-                    &key.key_id(),
-                    issuer
+                    key_id, issuer
                 );
                 // We can't validate this against this key, as there is a missmatch.
                 return Ok(());
@@ -134,6 +134,7 @@ impl Signature {
         // the key
         {
             let mut key_buf = Vec::new();
+            // TODO: this is different for V5
             key.to_writer_old(&mut key_buf)?;
             hasher.update(&key_buf);
         }
@@ -156,13 +157,11 @@ impl Signature {
 
                     let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
                     BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
-                    debug!("prefix: {}", hex::encode(prefix_buf));
 
                     // prefixes
                     hasher.update(&prefix_buf);
                 }
             }
-            debug!("packet: {}", hex::encode(&packet_buf));
 
             hasher.update(&packet_buf);
         }
@@ -199,6 +198,7 @@ impl Signature {
                     "validating key binding with a non matching Key ID {:?} != {:?}",
                     &key_id, issuer
                 );
+                return Ok(());
             }
         }
 
@@ -644,9 +644,8 @@ impl SubpacketType {
     #[inline]
     pub fn from_u8(n: u8) -> (Self, bool) {
         let is_critical = (n >> 7) == 1;
-        let x = n & 0b0111_1111; // remove critical bit
-        debug!("[de] subpacket type: {:0b} - {:0b} ({})", x, n, is_critical);
-        let n = x;
+        // remove critical bit
+        let n = n & 0b0111_1111;
 
         let m = match n {
             2 => SubpacketType::SignatureCreationTime,

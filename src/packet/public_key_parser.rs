@@ -4,7 +4,7 @@ use num_traits::FromPrimitive;
 
 use crate::crypto::ecc_curve::ecc_curve_from_oid;
 use crate::crypto::{HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
-use crate::types::{mpi, KeyVersion, Mpi, MpiRef, PublicParams};
+use crate::types::{mpi, EcdsaPublicParams, KeyVersion, Mpi, MpiRef, PublicParams};
 
 #[inline]
 fn to_owned(mref: MpiRef<'_>) -> Mpi {
@@ -15,15 +15,12 @@ fn to_owned(mref: MpiRef<'_>) -> Mpi {
 #[rustfmt::skip]
 named!(ecdsa<PublicParams>, do_parse!(
     // a one-octet size of the following field
-         len: be_u8
+          len: be_u8
     // octets representing a curve OID
-    >> curve: map_opt!(take!(len), ecc_curve_from_oid)
+    >>  curve: map_opt!(take!(len), ecc_curve_from_oid)
     // MPI of an EC point representing a public key
-    >>   p: mpi
-    >> (PublicParams::ECDSA {
-        curve,
-        p: p.to_owned(),
-    })
+    >> params: map_res!(mpi, |p| EcdsaPublicParams::from_mpi(p, curve))
+    >> (PublicParams::ECDSA(params))
 ));
 
 // https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4

@@ -3,7 +3,7 @@ use std::{fmt, io};
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::{self, be_u16, Err, InputIter, InputTake};
 use num_bigint::BigUint;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::errors;
 use crate::ser::Serialize;
@@ -46,7 +46,7 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], MpiRef<'_>> {
             None => nom::need_more(number, nom::Needed::Size(cnt)),
             Some(index) => {
                 let (rest, n) = number.take_split(index);
-                let n_stripped = strip_leading_zeros(n).into();
+                let n_stripped: MpiRef<'_> = strip_leading_zeros(n).into();
 
                 Ok((rest, n_stripped))
             }
@@ -56,7 +56,7 @@ pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], MpiRef<'_>> {
 
 /// Represents an owned MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
-#[derive(Default, Clone, PartialEq, Eq, Zeroize)]
+#[derive(Default, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Mpi(Vec<u8>);
 
 /// Represents a borrowed MPI value.
@@ -92,6 +92,26 @@ impl Mpi {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
+
+    /// Strip trailing zeroes.
+    pub fn strip_trailing_zeroes(&mut self) {
+        let mut end = self.0.len();
+        for byte in self.0.iter().rev() {
+            if *byte == 0 {
+                end -= 1;
+            } else {
+                break;
+            }
+        }
+        self.0.truncate(end);
+    }
+
+    pub fn pad_right(&mut self, new_len: usize) {
+        if new_len <= self.0.len() {
+            return;
+        }
+        self.0.resize(new_len, 0u8);
+    }
 }
 
 impl std::ops::Deref for Mpi {
@@ -126,6 +146,19 @@ impl<'a> MpiRef<'a> {
     pub fn as_bytes(&self) -> &[u8] {
         self.0
     }
+
+    /// Strip trailing zeroes.
+    pub fn strip_trailing_zeroes(&self) -> Self {
+        let mut end = self.0.len();
+        for byte in self.0.iter().rev() {
+            if *byte == 0 {
+                end -= 1;
+            } else {
+                break;
+            }
+        }
+        MpiRef::from_slice(&self.0[..end])
+    }
 }
 
 impl Serialize for Mpi {
@@ -136,9 +169,10 @@ impl Serialize for Mpi {
 
 impl<'a> Serialize for MpiRef<'a> {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
-        let size = bit_size(self.0);
+        let bytes = &self.0;
+        let size = bit_size(bytes);
         w.write_u16::<BigEndian>(size as u16)?;
-        w.write_all(self.0)?;
+        w.write_all(bytes)?;
 
         Ok(())
     }
@@ -262,5 +296,32 @@ mod tests {
             assert_eq!(rest.len(), 0);
             assert_eq!(n_big, n_big2.into());
         }
+    }
+
+    #[test]
+    fn test_strip_trailing_zeroes() {
+        let bytes = [1, 2, 3, 4, 0];
+        assert_eq!(
+            MpiRef::from_slice(&bytes)
+                .strip_trailing_zeroes()
+                .as_bytes(),
+            &[1, 2, 3, 4],
+        );
+
+        let bytes = [0, 1, 2, 3, 4];
+        assert_eq!(
+            MpiRef::from_slice(&bytes)
+                .strip_trailing_zeroes()
+                .as_bytes(),
+            &[0, 1, 2, 3, 4],
+        );
+
+        let bytes = [1, 2, 0, 3, 4];
+        assert_eq!(
+            MpiRef::from_slice(&bytes)
+                .strip_trailing_zeroes()
+                .as_bytes(),
+            &[1, 2, 0, 3, 4],
+        );
     }
 }

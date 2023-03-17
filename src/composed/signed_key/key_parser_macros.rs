@@ -34,9 +34,7 @@ macro_rules! key_parser {
                 let packets = self.inner.by_ref();
 
                 // Check if we are done
-                if packets.peek().is_none() {
-                    return None;
-                }
+                packets.peek()?;
 
                 // -- One Public-Key packet
 

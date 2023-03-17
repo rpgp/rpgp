@@ -91,7 +91,12 @@ impl EncryptedSecretParams {
         }
     }
 
-    pub fn unlock<F>(&self, pw: F, alg: PublicKeyAlgorithm) -> Result<PlainSecretParams>
+    pub fn unlock<F>(
+        &self,
+        pw: F,
+        alg: PublicKeyAlgorithm,
+        params: &PublicParams,
+    ) -> Result<PlainSecretParams>
     where
         F: FnOnce() -> String,
     {
@@ -104,7 +109,7 @@ impl EncryptedSecretParams {
         self.encryption_algorithm
             .decrypt_with_iv_regular(&key, &self.iv, &mut plaintext)?;
 
-        PlainSecretParams::from_slice(&plaintext, alg)
+        PlainSecretParams::from_slice(&plaintext, alg, params)
     }
 }
 

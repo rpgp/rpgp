@@ -72,7 +72,7 @@ macro_rules! impl_secret_key {
             where
                 F: FnOnce() -> String,
             {
-                let plain = ciphertext.unlock(pw, self.details.algorithm)?;
+                let plain = ciphertext.unlock(pw, self.details.algorithm, self.public_params())?;
                 self.repr_from_plaintext(&plain)
             }
 
@@ -191,8 +191,8 @@ macro_rules! impl_secret_key {
                         }
                         SecretKeyRepr::DSA(_) => unimplemented_err!("sign DSA"),
                         SecretKeyRepr::ECDSA(ref priv_key) => match self.public_params() {
-                            PublicParams::ECDSA { ref curve, .. } => {
-                                $crate::crypto::ecdsa::sign(curve, priv_key, hash, data)
+                            PublicParams::ECDSA(ref _params) => {
+                                $crate::crypto::ecdsa::sign(priv_key, hash, data)
                             }
                             _ => unreachable!("inconsistent key state"),
                         },
