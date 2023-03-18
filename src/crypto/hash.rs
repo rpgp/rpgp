@@ -11,11 +11,13 @@ use crate::errors::Result;
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum HashAlgorithm {
     None = 0,
     MD5 = 1,
     SHA1 = 2,
     RIPEMD160 = 3,
+    #[default]
     SHA2_256 = 8,
     SHA2_384 = 9,
     SHA2_512 = 10,
@@ -28,12 +30,6 @@ pub enum HashAlgorithm {
 }
 
 impl zeroize::DefaultIsZeroes for HashAlgorithm {}
-
-impl Default for HashAlgorithm {
-    fn default() -> Self {
-        HashAlgorithm::SHA2_256
-    }
-}
 
 /// Trait to work around the fact that the `Digest` trait from rustcrypto can not
 /// be used as `Box<Digest>`.

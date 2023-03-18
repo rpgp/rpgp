@@ -1,9 +1,6 @@
 use elliptic_curve::sec1::ToEncodedPoint;
 use rand::{CryptoRng, Rng};
-use signature::{
-    hazmat::{PrehashSigner, PrehashVerifier},
-    Signature as SigSignature,
-};
+use signature::hazmat::{PrehashSigner, PrehashVerifier};
 
 use crate::crypto::{ECCCurve, HashAlgorithm};
 use crate::errors::Result;
@@ -23,7 +20,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
                     curve,
                     p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
                 },
-                PlainSecretParams::ECDSA(Mpi::from_raw_slice(secret.to_be_bytes().as_slice())),
+                PlainSecretParams::ECDSA(Mpi::from_raw_slice(secret.to_bytes().as_slice())),
             ))
         }
 
@@ -35,7 +32,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
                     curve,
                     p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
                 },
-                PlainSecretParams::ECDSA(Mpi::from_raw_slice(secret.to_be_bytes().as_slice())),
+                PlainSecretParams::ECDSA(Mpi::from_raw_slice(secret.to_bytes().as_slice())),
             ))
         }
 
@@ -71,7 +68,7 @@ pub fn verify(
             sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
-            let sig = p256::ecdsa::Signature::from_bytes(&sig_bytes)?;
+            let sig = p256::ecdsa::Signature::try_from(&sig_bytes[..])?;
 
             pk.verify_prehash(hashed, &sig)?;
 
@@ -96,7 +93,7 @@ pub fn verify(
             sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
-            let sig = p384::ecdsa::Signature::from_bytes(&sig_bytes)?;
+            let sig = p384::ecdsa::Signature::try_from(&sig_bytes[..])?;
 
             pk.verify_prehash(hashed, &sig)?;
 
@@ -117,14 +114,14 @@ pub fn sign(
 
     let (r, s) = match curve {
         ECCCurve::P256 => {
-            let secret = p256::ecdsa::SigningKey::from_bytes(&d)?;
-            let signature = secret.sign_prehash(digest)?;
+            let secret = p256::ecdsa::SigningKey::from_slice(&d)?;
+            let signature: p256::ecdsa::Signature = secret.sign_prehash(digest)?;
             let (r, s) = signature.split_bytes();
             (r.to_vec(), s.to_vec())
         }
         ECCCurve::P384 => {
-            let secret = p384::ecdsa::SigningKey::from_bytes(&d)?;
-            let signature = secret.sign_prehash(digest)?;
+            let secret = p384::ecdsa::SigningKey::from_slice(&d)?;
+            let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
             let (r, s) = signature.split_bytes();
             (r.to_vec(), s.to_vec())
         }

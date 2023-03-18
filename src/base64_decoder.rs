@@ -5,9 +5,10 @@ use std::io::{self, BufRead, Read, Seek};
 
 use base64::{
     alphabet::Alphabet,
-    decode_engine_slice,
-    engine::fast_portable::{FastPortable, PAD},
-    engine::Engine,
+    engine::{
+        general_purpose::{GeneralPurpose, PAD},
+        Engine,
+    },
 };
 use buf_redux::{BufReader, Buffer};
 
@@ -41,7 +42,7 @@ impl<E: Engine, R> fmt::Debug for Base64Decoder<E, R> {
     }
 }
 
-impl<R: Read + Seek> Base64Decoder<FastPortable, R> {
+impl<R: Read + Seek> Base64Decoder<GeneralPurpose, R> {
     /// Creates a new `Base64Decoder`.
     pub fn new(input: R) -> Self {
         Self::new_with_character_set(input, &base64::alphabet::STANDARD)
@@ -49,7 +50,7 @@ impl<R: Read + Seek> Base64Decoder<FastPortable, R> {
 
     pub fn new_with_character_set(input: R, cs: &Alphabet) -> Self {
         Base64Decoder {
-            engine: FastPortable::from(cs, PAD),
+            engine: GeneralPurpose::new(cs, PAD),
             inner: BufReader::with_capacity(BUF_SIZE, input),
             out: Buffer::with_capacity(BUF_CAPACITY),
             out_buffer: [0u8; BUF_CAPACITY],
@@ -133,7 +134,7 @@ fn try_decode_engine_slice<E: Engine, T: ?Sized + AsRef<[u8]>>(
     let input_bytes = input.as_ref();
     let mut n = input_bytes.len();
     while n > 0 {
-        match decode_engine_slice(&input_bytes[..n], output, engine) {
+        match engine.decode_slice(&input_bytes[..n], output) {
             Ok(size) => {
                 return (n, size);
             }
@@ -163,7 +164,6 @@ mod tests {
 
     use std::io::Cursor;
 
-    use base64::encode_engine;
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -177,7 +177,8 @@ mod tests {
 
         for i in 0..n {
             let data: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
-            let encoded_data = encode_engine(&data, &FastPortable::from(&cs, PAD));
+            let engine = GeneralPurpose::new(&cs, PAD);
+            let encoded_data = engine.encode(&data);
 
             let mut r = Base64Decoder::new_with_character_set(Cursor::new(encoded_data), &cs);
             let mut out = Vec::new();

@@ -1,22 +1,20 @@
+use digest::{const_oid::AssociatedOid, Digest};
+use md5::Md5;
 use num_bigint::traits::ModInverse;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
-use rsa::padding::PaddingScheme;
-use rsa::pkcs1v15::{Signature as RsaSignature, SigningKey, VerifyingKey};
-use rsa::{PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
-
-use crate::crypto::HashAlgorithm;
-use crate::errors::Result;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
-
-use digest::{const_oid::AssociatedOid, Digest};
-use md5::Md5;
 use ripemd::Ripemd160;
+use rsa::pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey};
+use rsa::{PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
-use signature::Signature;
+use signature::SignatureEncoding;
+
+use crate::crypto::HashAlgorithm;
+use crate::errors::Result;
+use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
 const MAX_KEY_SIZE: usize = 16384;
 
@@ -26,7 +24,7 @@ pub fn decrypt(priv_key: &RsaPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> R
     ensure_eq!(mpis.len(), 1, "invalid input");
 
     let mpi = &mpis[0];
-    let m = priv_key.decrypt(PaddingScheme::new_pkcs1v15_encrypt(), mpi.as_bytes())?;
+    let m = priv_key.decrypt(Pkcs1v15Encrypt, mpi.as_bytes())?;
 
     Ok(m)
 }
@@ -43,7 +41,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
         BigUint::from_bytes_be(e),
         MAX_KEY_SIZE,
     )?;
-    let data = key.encrypt(rng, PaddingScheme::new_pkcs1v15_encrypt(), plaintext)?;
+    let data = key.encrypt(rng, Pkcs1v15Encrypt, plaintext)?;
 
     Ok(vec![data])
 }
@@ -97,8 +95,14 @@ where
 }
 
 /// Verify a RSA, PKCS1v15 padded signature.
-pub fn verify(n: &[u8], e: &[u8], hash: HashAlgorithm, hashed: &[u8], sig: &[u8]) -> Result<()> {
-    let signature = Signature::from_bytes(sig)?;
+pub fn verify(
+    n: &[u8],
+    e: &[u8],
+    hash: HashAlgorithm,
+    hashed: &[u8],
+    signature: &[u8],
+) -> Result<()> {
+    let signature = RsaSignature::try_from(signature)?;
     let key = RsaPublicKey::new_with_max_size(
         BigUint::from_bytes_be(n),
         BigUint::from_bytes_be(e),

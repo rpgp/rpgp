@@ -196,11 +196,11 @@ mod tests {
     fn packet_roundtrip(dump: &str, skips: Vec<(usize, i64)>) {
         let _ = pretty_env_logger::try_init();
 
-        let path = format!("./tests/tests/sks-dump/{}.pgp", dump);
+        let path = format!("./tests/tests/sks-dump/{dump}.pgp");
         let p = Path::new(&path);
-        let file = File::open(&p).unwrap();
+        let file = File::open(p).unwrap();
 
-        let mut bytes = File::open(&p).unwrap();
+        let mut bytes = File::open(p).unwrap();
 
         let packets = PacketParser::new(file);
 
