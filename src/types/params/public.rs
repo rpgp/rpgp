@@ -198,7 +198,7 @@ impl fmt::Debug for PublicParams {
                 .field("y", &g)
                 .finish(),
             PublicParams::ECDSA(params) => {
-                write!(f, "PublicParams::ECDSA({:?})", params)
+                write!(f, "PublicParams::ECDSA({params:?})")
             }
             PublicParams::ECDH {
                 ref curve,
