@@ -69,14 +69,14 @@ impl BlockType {
         match self {
             BlockType::PublicKey => "PGP PUBLIC KEY BLOCK".into(),
             BlockType::PrivateKey => "PGP PRIVATE KEY BLOCK".into(),
-            BlockType::MultiPartMessage(x, y) => format!("PGP MESSAGE, PART {}/{}", x, y),
+            BlockType::MultiPartMessage(x, y) => format!("PGP MESSAGE, PART {x}/{y}"),
             BlockType::Message => "PGP MESSAGE".into(),
             BlockType::Signature => "PGP SIGNATURE".into(),
             BlockType::File => "PGP ARMORED FILE".into(),
-            BlockType::PublicKeyPKCS1(typ) => format!("{} PUBLIC KEY", typ),
+            BlockType::PublicKeyPKCS1(typ) => format!("{typ} PUBLIC KEY"),
             BlockType::PublicKeyPKCS8 => "PUBLIC KEY".into(),
             BlockType::PublicKeyOpenssh => "OPENSSH PUBLIC KEY".into(),
-            BlockType::PrivateKeyPKCS1(typ) => format!("{} PRIVATE KEY", typ),
+            BlockType::PrivateKeyPKCS1(typ) => format!("{typ} PRIVATE KEY"),
             BlockType::PrivateKeyPKCS8 => "PRIVATE KEY".into(),
             BlockType::PrivateKeyOpenssh => "OPENSSH PRIVATE KEY".into(),
         }
@@ -366,7 +366,7 @@ impl<R: Read + Seek> Dearmor<R> {
                     self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor header: {:?}", err),
+                        format!("invalid ascii armor header: {err:?}"),
                     ));
                 }
             };
@@ -465,7 +465,7 @@ impl<R: Read + Seek> Dearmor<R> {
                     self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor footer: {:?}", err),
+                        format!("invalid ascii armor footer: {err:?}"),
                     ));
                 }
             };

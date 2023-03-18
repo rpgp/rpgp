@@ -335,7 +335,7 @@ mod tests {
             if let Packet::Signature(_) = p {
                 p.to_writer(&mut serialized).unwrap();
             } else {
-                panic!("unexpected packet: {:?}", p);
+                panic!("unexpected packet: {p:?}");
             };
         }
 

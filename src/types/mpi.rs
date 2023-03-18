@@ -248,7 +248,7 @@ mod tests {
         ];
 
         for (i, (raw, encoded)) in fixtures.iter().enumerate() {
-            println!("fixture {}", i);
+            println!("fixture {i}");
             let n = hex::decode(raw).unwrap();
 
             let n_big = BigUint::from_bytes_be(&n);

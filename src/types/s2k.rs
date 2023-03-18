@@ -131,10 +131,12 @@ impl StringToKey {
 /// Available String-To-Key types
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Default)]
 pub enum StringToKeyType {
     Simple = 0,
     Salted = 1,
     Reserved = 2,
+    #[default]
     IteratedAndSalted = 3,
     Private100 = 100,
     Private101 = 101,
@@ -149,11 +151,7 @@ pub enum StringToKeyType {
     Private110 = 110,
 }
 
-impl Default for StringToKeyType {
-    fn default() -> Self {
-        StringToKeyType::IteratedAndSalted
-    }
-}
+
 
 impl StringToKeyType {
     pub fn param_len(self) -> usize {
