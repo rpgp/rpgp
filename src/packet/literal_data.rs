@@ -2,7 +2,11 @@ use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use nom::{be_u32, be_u8, rest};
+use nom::combinator::{map, map_opt, rest};
+use nom::multi::length_data;
+use nom::number::streaming::{be_u32, be_u8};
+use nom::sequence::tuple;
+use nom::IResult;
 use num_traits::FromPrimitive;
 
 use crate::errors::Result;
@@ -62,7 +66,7 @@ impl LiteralData {
 
     /// Parses a `LiteralData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(input, packet_version)?;
+        let (_, pk) = parse(packet_version)(input)?;
 
         Ok(pk)
     }
@@ -100,21 +104,25 @@ impl Serialize for LiteralData {
     }
 }
 
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version)<LiteralData>, do_parse!(
-           mode: map_opt!(be_u8, DataMode::from_u8)
-    >> name_len: be_u8
-    >>     name: map!(take!(name_len), read_string)
-    >>  created: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
-    >>     data: rest
-    >> (LiteralData {
-            packet_version,
-            mode,
-            created,
-            file_name: name,
-            data: data.to_vec(),
-    })
-));
+fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], LiteralData> {
+    move |i: &[u8]| {
+        map(
+            tuple((
+                map_opt(be_u8, DataMode::from_u8),
+                map(length_data(be_u8), read_string),
+                map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
+                rest,
+            )),
+            |(mode, name, created, data)| LiteralData {
+                packet_version,
+                mode,
+                created,
+                file_name: name,
+                data: data.to_vec(),
+            },
+        )(i)
+    }
+}
 
 impl PacketTrait for LiteralData {
     fn packet_version(&self) -> Version {
@@ -140,7 +148,9 @@ impl fmt::Debug for LiteralData {
 
 #[test]
 fn test_utf8_literal() {
+    #![allow(clippy::unwrap_used)]
+
     let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
-    let literal = LiteralData::from_str("", &slogan);
+    let literal = LiteralData::from_str("", slogan);
     assert!(String::from_utf8(literal.data).unwrap() == slogan);
 }

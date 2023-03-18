@@ -73,6 +73,7 @@ macro_rules! encrypt_regular {
 /// Available [symmetric key algorithms](https://tools.ietf.org/html/rfc4880#section-9.2).
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
     Plaintext = 0,
@@ -86,6 +87,7 @@ pub enum SymmetricKeyAlgorithm {
     Blowfish = 4,
     // 5 & 6 are reserved for DES/SK
     /// AES with 128-bit key
+    #[default]
     AES128 = 7,
     /// AES with 192-bit key
     AES192 = 8,
@@ -103,12 +105,6 @@ pub enum SymmetricKeyAlgorithm {
 }
 
 impl zeroize::DefaultIsZeroes for SymmetricKeyAlgorithm {}
-
-impl Default for SymmetricKeyAlgorithm {
-    fn default() -> Self {
-        SymmetricKeyAlgorithm::AES128
-    }
-}
 
 impl SymmetricKeyAlgorithm {
     /// The size of a single block in bytes.

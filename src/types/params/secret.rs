@@ -1,12 +1,15 @@
 use std::io;
 
-use nom::{be_u8, rest_len};
+use nom::bytes::streaming::take;
+use nom::combinator::{cond, map, map_opt, rest_len, success};
+use nom::multi::length_data;
+use nom::number::streaming::be_u8;
 use num_traits::FromPrimitive;
 use zeroize::Zeroize;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -36,7 +39,7 @@ impl SecretParams {
     }
 
     pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
-        let (_, (params, cs)) = parse_secret_fields(data, alg, params)?;
+        let (_, (params, cs)) = parse_secret_fields(alg, params)(data)?;
 
         params.compare_checksum(cs)?;
 
@@ -75,42 +78,45 @@ impl Serialize for SecretParams {
 }
 
 // Parse possibly encrypted private fields of a key.
-#[rustfmt::skip]
-fn parse_secret_fields<'a, 'b>(
-    input: &'b [u8],
+fn parse_secret_fields(
     alg: PublicKeyAlgorithm,
-    public_params: &'a PublicParams,
-) -> nom::IResult<&'b [u8], (SecretParams, Option<&'b [u8]>)> {
-    do_parse!(input, 
-              s2k_typ: be_u8
-        >> enc_params: switch!(value!(s2k_typ),
-                        // 0 is no encryption
-                        0       => value!((None, None, None)) |
-                        // symmetric key algorithm
-                        1..=253 => do_parse!(
-                                      sym_alg: map_opt!(value!(s2k_typ), SymmetricKeyAlgorithm::from_u8)
-                                   >>      iv: take!(sym_alg.block_size())
-                                   >> (Some(sym_alg), Some(iv), None)
-                                   ) |
-                       // symmetric key + string-to-key
-                       254..=255 => do_parse!(
-                                        sym_alg: map_opt!(be_u8,SymmetricKeyAlgorithm::from_u8)
-                                    >>      s2k: s2k_parser
-                                    >>       iv: take!(sym_alg.block_size())
-                                    >> (Some(sym_alg), Some(iv), Some(s2k))
-                                    )
-                       )
-        >> checksum_len:
-                switch!(value!(s2k_typ),
-                    // 20 octect hash at the end, but part of the encrypted part
-                    254 => value!(0) |
-                    // 2 octet checksum at the end
-                    _   => value!(2)
-                )
-        >> data_len: map!(rest_len, |r| r - checksum_len)
-        >> data: take!(data_len)
-        >> checksum: cond!(checksum_len > 0, take!(checksum_len))
-        >> ({
+    public_params: &PublicParams,
+) -> impl Fn(&[u8]) -> IResult<&[u8], (SecretParams, Option<&[u8]>)> + '_ {
+    move |i: &[u8]| {
+        let (i, s2k_typ) = be_u8(i)?;
+        let (i, enc_params) = match s2k_typ{
+            // 0 is no encryption
+            0       => (i,(None, None, None)) ,
+            // symmetric key algorithm
+            1..=253 => {
+
+                let (i, sym_alg) = map_opt(success(s2k_typ), SymmetricKeyAlgorithm::from_u8) (i)?;
+                let (i, iv)= take(sym_alg.block_size())(i)?;
+                (i, (Some(sym_alg), Some(iv), None))
+            }
+             ,
+            // symmetric key + string-to-key
+            254..=255 => {
+                    let (i, sym_alg) = map_opt(
+                                be_u8,
+                                SymmetricKeyAlgorithm::from_u8
+                            )(i)?;
+
+                let (i, s2k) = s2k_parser(i)?;
+                let (i, iv)= take(sym_alg.block_size())(i)?;
+                (i, (Some(sym_alg), Some(iv), Some(s2k)))
+            }
+
+        };
+        let checksum_len = match s2k_typ {
+            // 20 octect hash at the end, but part of the encrypted part
+            254 => 0,
+            // 2 octet checksum at the end
+            _ => 2,
+        };
+        let (i, data) = length_data(map(rest_len, |r| r - checksum_len))(i)?;
+        let (i, checksum) = cond(checksum_len > 0, take(checksum_len))(i)?;
+        Ok((i, {
             let encryption_algorithm = enc_params.0;
             let iv = enc_params.1.map(|iv| iv.to_vec());
             let string_to_key = enc_params.2;
@@ -129,6 +135,6 @@ fn parse_secret_fields<'a, 'b>(
                 )),
             };
             (res, checksum)
-        })
-    )
+        }))
+    }
 }

@@ -1,11 +1,12 @@
 use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::{self, be_u16, Err, InputIter, InputTake};
+use nom::number::streaming::be_u16;
+use nom::{self, Err, InputIter, InputTake};
 use num_bigint::BigUint;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::errors;
+use crate::errors::{self, Error, IResult};
 use crate::ser::Serialize;
 use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
@@ -28,23 +29,20 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 /// );
 /// ```
 ///
-pub fn mpi(input: &[u8]) -> nom::IResult<&[u8], MpiRef<'_>> {
+pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
     let (number, len) = be_u16(input)?;
 
     let bits = u32::from(len);
     let len_actual = (bits + 7) >> 3;
 
     if len_actual > MAX_EXTERN_MPI_BITS {
-        Err(Err::Error(error_position!(
-            input,
-            nom::ErrorKind::Custom(errors::MPI_TOO_LONG)
-        )))
+        Err(Err::Error(Error::InvalidInput))
     } else {
         // same as take!
         let cnt = len_actual as usize;
         match number.slice_index(cnt) {
-            None => nom::need_more(number, nom::Needed::Size(cnt)),
-            Some(index) => {
+            Err(needed) => Err(nom::Err::Incomplete(needed)),
+            Ok(index) => {
                 let (rest, n) = number.take_split(index);
                 let n_stripped: MpiRef<'_> = strip_leading_zeros(n).into();
 
@@ -139,7 +137,7 @@ impl<'a> MpiRef<'a> {
         Mpi(self.0.to_owned())
     }
 
-    pub fn parse(slice: &'a [u8]) -> nom::IResult<&'a [u8], MpiRef<'a>> {
+    pub fn parse(slice: &'a [u8]) -> IResult<&'a [u8], MpiRef<'a>> {
         mpi(slice)
     }
 
@@ -246,6 +244,8 @@ impl fmt::Debug for Mpi {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     #[test]
@@ -282,7 +282,7 @@ mod tests {
         ];
 
         for (i, (raw, encoded)) in fixtures.iter().enumerate() {
-            println!("fixture {}", i);
+            println!("fixture {i}");
             let n = hex::decode(raw).unwrap();
 
             let n_big = BigUint::from_bytes_be(&n);

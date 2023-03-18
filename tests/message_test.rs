@@ -32,7 +32,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
     let _ = pretty_env_logger::try_init();
 
     // TODO: verify filename
-    let n = format!("{}/{}", base_path, entry);
+    let n = format!("{base_path}/{entry}");
     let mut file = File::open(&n).unwrap_or_else(|_| panic!("no file: {}", &n));
 
     let details: Testcase = serde_json::from_reader(&mut file).unwrap();
@@ -47,7 +47,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
         .expect("failed to read decryption key");
     decrypt_key.verify().expect("invalid decryption key");
 
-    let decrypt_id = hex::encode(&decrypt_key.key_id());
+    let decrypt_id = hex::encode(decrypt_key.key_id());
 
     info!("decrypt key (ID={})", &decrypt_id);
     if let Some(id) = &details.keyid {
@@ -55,12 +55,12 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
     }
 
     let verify_key = if let Some(verify_key_str) = details.verify_key.clone() {
-        let mut verify_key_file = File::open(format!("{}/{}", base_path, verify_key_str)).unwrap();
+        let mut verify_key_file = File::open(format!("{base_path}/{verify_key_str}")).unwrap();
         let (verify_key, _headers) = SignedPublicKey::from_armor_single(&mut verify_key_file)
             .expect("failed to read verification key");
         verify_key.verify().expect("invalid verification key");
 
-        let verify_id = hex::encode(&verify_key.key_id());
+        let verify_id = hex::encode(verify_key.key_id());
         info!("verify key (ID={})", &verify_id);
         Some(verify_key)
     } else {
@@ -68,7 +68,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
     };
 
     let file_name = entry.replace(".json", ".asc");
-    let cipher_file_path = format!("{}/{}", base_path, file_name);
+    let cipher_file_path = format!("{base_path}/{file_name}");
     let mut cipher_file = File::open(&cipher_file_path).unwrap();
 
     let (message, headers) =
@@ -116,16 +116,16 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
 
                     m.get_literal().unwrap().clone()
                 }
-                _ => panic!("unexpected message type: {:?}", decrypted),
+                _ => panic!("unexpected message type: {decrypted:?}"),
             };
 
             assert_eq!(
                 ::std::str::from_utf8(raw.data()).unwrap(),
-                details.textcontent.unwrap_or_else(|| "".to_string())
+                details.textcontent.unwrap_or_default()
             );
         }
         Message::Signed { signature, .. } => {
-            println!("signature: {:?}", signature);
+            println!("signature: {signature:?}");
         }
         _ => {
             // TODO: some other checks?
@@ -270,7 +270,7 @@ fn msg_large_indeterminate_len() {
 
             m.get_literal().unwrap().clone()
         }
-        _ => panic!("unexpected message type: {:?}", decrypted),
+        _ => panic!("unexpected message type: {decrypted:?}"),
     };
 
     assert_eq!(

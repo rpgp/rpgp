@@ -205,10 +205,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     use crate::util::write_all;
-    use base64::engine::DEFAULT_ENGINE;
+    use base64::engine::general_purpose;
     use generic_array::typenum::{self, U10};
     use std::io::Write;
 
@@ -294,7 +296,8 @@ mod tests {
         {
             let mut buf = Vec::new();
             {
-                let mut enc = base64::write::EncoderWriter::from(&mut buf, &DEFAULT_ENGINE);
+                let mut enc =
+                    base64::write::EncoderWriter::new(&mut buf, &general_purpose::STANDARD);
                 enc.write_all(&content).unwrap();
             }
 
@@ -333,7 +336,8 @@ mod tests {
         let mut buf = Vec::new();
         {
             let mut line_wrapper = LineWriter::<_, typenum::U64>::new(&mut buf, LineBreak::Lf);
-            let mut enc = base64::write::EncoderWriter::from(&mut line_wrapper, &DEFAULT_ENGINE);
+            let mut enc =
+                base64::write::EncoderWriter::new(&mut line_wrapper, &general_purpose::STANDARD);
             write_all(&mut enc, &content).unwrap();
         }
 

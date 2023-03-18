@@ -3,9 +3,13 @@ use std::{fmt, io};
 use chrono::{SubsecRound, Utc};
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use nom::{be_u8, le_u16, rest};
+use nom::bytes::streaming::take;
+use nom::combinator::{map, map_parser, rest};
+use nom::multi::length_data;
+use nom::number::streaming::{be_u8, le_u16};
+use nom::sequence::pair;
 
-use crate::errors::Result;
+use crate::errors::{IResult, Result};
 use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use crate::ser::Serialize;
 use crate::types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
@@ -32,7 +36,7 @@ pub enum UserAttribute {
 impl UserAttribute {
     /// Parses a `UserAttribute` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(input, packet_version)?;
+        let (_, pk) = parse(packet_version)(input)?;
 
         Ok(pk)
     }
@@ -95,39 +99,42 @@ impl fmt::Display for UserAttribute {
     }
 }
 
-#[rustfmt::skip]
-named_args!(image(packet_version: Version) <UserAttribute>, do_parse!(
-    // little endian, for historical reasons..
-       header_len: le_u16
-    >>     header: take!(header_len - 2)
-    // the actual image is the rest
-    >>         img: rest
-    >> (UserAttribute::Image {
-        packet_version,
-        header: header.to_vec(),
-        data: img.to_vec()
-    })
-));
+fn image(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
+    move |i: &[u8]| {
+        map(
+            pair(
+                // little endian, for historical reasons..
+                length_data(map(le_u16, |l| l - 2)),
+                // the actual image is the rest
+                rest,
+            ),
+            |(header, img): (&[u8], &[u8])| UserAttribute::Image {
+                packet_version,
+                header: header.to_vec(),
+                data: img.to_vec(),
+            },
+        )(i)
+    }
+}
 
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version) <UserAttribute>, do_parse!(
-        len: packet_length
-    >>  typ: be_u8
-    >> attr: flat_map!(
-        take!(len-1),
-        switch!(value!(typ),
-                1 => call!(image, packet_version) |
-                _ => map!(rest, |data| UserAttribute::Unknown {
-                    packet_version,
-                    typ,
-                    data: data.to_vec()
-                })
-        ))
-    >> ({
-        debug!("attr with len {}", len);
-        attr
-    })
-));
+fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
+    move |i: &[u8]| {
+        let (i, len) = packet_length(i)?;
+        let (i, typ) = be_u8(i)?;
+        let (i, attr) = map_parser(take(len - 1), |i| match typ {
+            1 => image(packet_version)(i),
+            _ => map(rest, |data: &[u8]| UserAttribute::Unknown {
+                packet_version,
+                typ,
+                data: data.to_vec(),
+            })(i),
+        })(i)?;
+        Ok((i, {
+            debug!("attr with len {}", len);
+            attr
+        }))
+    }
+}
 
 impl Serialize for UserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {

@@ -72,17 +72,13 @@ pub enum Tag {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum Version {
     /// Old Packet Format
     Old = 0,
     /// New Packet Format
+    #[default]
     New = 1,
-}
-
-impl Default for Version {
-    fn default() -> Self {
-        Version::New
-    }
 }
 
 impl Version {
@@ -127,21 +123,19 @@ impl Version {
 // TODO: find a better place for this
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum KeyVersion {
     V2 = 2,
     V3 = 3,
+    #[default]
     V4 = 4,
     V5 = 5,
 }
 
-impl Default for KeyVersion {
-    fn default() -> Self {
-        KeyVersion::V4
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     #[test]

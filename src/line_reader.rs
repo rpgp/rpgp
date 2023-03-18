@@ -111,6 +111,8 @@ impl<R: Read + Seek> Read for LineReader<R> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use std::io::Cursor;
     use std::io::Read;

@@ -14,7 +14,6 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use pgp::armor;
 use rand::thread_rng;
-use rsa::padding::PaddingScheme;
 use rsa::{PublicKey as PublicKeyTrait, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use smallvec::SmallVec;
 
@@ -37,7 +36,7 @@ fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
     match File::open(&path) {
         // The `description` method of `io::Error` returns a string that
         // describes the error
-        Err(why) => panic!("couldn't open {:?}: {}", path, why),
+        Err(why) => panic!("couldn't open {path:?}: {why}"),
         Ok(file) => file,
     }
 }
@@ -49,7 +48,7 @@ fn get_test_key(name: &str) -> File {
 fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
     let _ = pretty_env_logger::try_init();
 
-    let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{}.pgp", i)));
+    let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")));
 
     let mut valid_count = 0;
     let mut total_count = 0;
@@ -130,7 +129,7 @@ fn test_parse_gnupg_v1() {
     let _ = pretty_env_logger::try_init();
 
     for i in 1..5 {
-        let name = format!("gnupg-v1-00{}.asc", i);
+        let name = format!("gnupg-v1-00{i}.asc");
         let mut file = get_test_key(&name);
         let mut buf = vec![];
         file.read_to_end(&mut buf).unwrap();
@@ -142,7 +141,7 @@ fn test_parse_gnupg_v1() {
             Err(Error::Unimplemented(err)) => {
                 warn!("verification failed: {:?}", err);
             }
-            Err(err) => panic!("{:?}", err),
+            Err(err) => panic!("{err:?}"),
             // all good
             Ok(_) => {}
         }
@@ -198,18 +197,18 @@ fn test_parse_openpgp_sample_rsa_private() {
                         let pk: RsaPublicKey = k.into();
                         pk.encrypt(
                             &mut rng,
-                            PaddingScheme::new_pkcs1v15_encrypt(),
+                            rsa::pkcs1v15::Pkcs1v15Encrypt,
                             plaintext.as_slice(),
                         )
                         .expect("failed to encrypt")
                     };
 
                     let new_plaintext = k
-                        .decrypt(PaddingScheme::new_pkcs1v15_encrypt(), ciphertext.as_slice())
+                        .decrypt(rsa::pkcs1v15::Pkcs1v15Encrypt, ciphertext.as_slice())
                         .expect("failed to decrypt");
                     assert_eq!(plaintext, new_plaintext);
                 }
-                _ => panic!("unexpected params type {:?}", unlocked_key),
+                _ => panic!("unexpected params type {unlocked_key:?}"),
             }
             Ok(())
         },
@@ -570,15 +569,13 @@ fn encrypted_private_key() {
 fn get_test_fingerprint(filename: &str) -> (serde_json::Value, SignedPublicKey) {
     let mut asc = read_file(
         Path::new(&format!(
-            "./tests/opengpg-interop/testcases/keys/{}.asc",
-            filename
+            "./tests/opengpg-interop/testcases/keys/{filename}.asc"
         ))
         .to_path_buf(),
     );
     let json_file = read_file(
         Path::new(&format!(
-            "./tests/opengpg-interop/testcases/keys/{}.json",
-            filename
+            "./tests/opengpg-interop/testcases/keys/{filename}.json"
         ))
         .to_path_buf(),
     );
@@ -935,7 +932,7 @@ fn private_ecc1_verify() {
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
-    assert_eq!(hex::encode(&sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
+    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
     sk.unlock(
         || "ecc".to_string(),
         |k| {
@@ -960,7 +957,7 @@ fn private_ecc2_verify() {
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 0);
-    assert_eq!(hex::encode(&sk.key_id()).to_uppercase(), "098033880F54719F",);
+    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "098033880F54719F",);
     sk.unlock(
         || "ecc".to_string(),
         |k| {
@@ -988,7 +985,7 @@ fn private_x25519_verify() {
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
-    assert_eq!(hex::encode(&sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
+    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
     sk.unlock(
         || "moon".to_string(),
         |k| {
@@ -1013,10 +1010,10 @@ fn pub_x25519_little_verify() {
     let (pk, _headers) = SignedPublicKey::from_armor_single(f).expect("failed to parse key");
     pk.verify().expect("invalid key");
     assert_eq!(pk.public_subkeys.len(), 1);
-    assert_eq!(hex::encode(&pk.key_id()).to_uppercase(), "C062C165CA61C215",);
+    assert_eq!(hex::encode(pk.key_id()).to_uppercase(), "C062C165CA61C215",);
 
     assert_eq!(
-        hex::encode(&pk.public_subkeys[0].key_id()).to_uppercase(),
+        hex::encode(pk.public_subkeys[0].key_id()).to_uppercase(),
         "A586D1DD06BD97BC",
     );
     assert_eq!(pk.details.users.len(), 1);
@@ -1117,7 +1114,7 @@ fn test_handle_incomplete_packets_end() {
     key.verify().expect("invalid key");
 
     // add overflow of "b60ed7"
-    let raw = hex::decode(hex::encode(&key.to_bytes().unwrap()) + "b60ed7").unwrap();
+    let raw = hex::decode(hex::encode(key.to_bytes().unwrap()) + "b60ed7").unwrap();
     let key = SignedSecretKey::from_bytes(Cursor::new(raw)).expect("failed");
     key.verify().expect("invalid key");
 }

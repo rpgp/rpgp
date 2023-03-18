@@ -1,8 +1,5 @@
 use rand::{CryptoRng, Rng};
-use signature::{
-    hazmat::{PrehashSigner, PrehashVerifier},
-    Signature as SigSignature,
-};
+use signature::hazmat::{PrehashSigner, PrehashVerifier};
 
 use crate::errors::Result;
 use crate::types::{ECDSASecretKey, Mpi, PlainSecretParams, PublicParams};
@@ -20,7 +17,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
         ECCCurve::P256 => {
             let secret = p256::SecretKey::random(rng);
             let public = secret.public_key();
-            let secret = Mpi::from_raw_slice(secret.to_be_bytes().as_slice());
+            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P256(public)),
@@ -31,7 +28,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
         ECCCurve::P384 => {
             let secret = p384::SecretKey::random(rng);
             let public = secret.public_key();
-            let secret = Mpi::from_raw_slice(secret.to_be_bytes().as_slice());
+            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P384(public)),
@@ -64,8 +61,9 @@ pub fn verify(
             sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
-            let sig = p256::ecdsa::Signature::from_bytes(&sig_bytes)?;
+            let sig = p256::ecdsa::Signature::try_from(&sig_bytes[..])?;
             let pk = p256::ecdsa::VerifyingKey::from_affine(p.as_affine().to_owned())?;
+
             pk.verify_prehash(hashed, &sig)?;
 
             Ok(())
@@ -87,7 +85,7 @@ pub fn verify(
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
             let pk = p384::ecdsa::VerifyingKey::from_affine(p.as_affine().to_owned())?;
-            let sig = p384::ecdsa::Signature::from_bytes(&sig_bytes)?;
+            let sig = p384::ecdsa::Signature::try_from(&sig_bytes[..])?;
 
             pk.verify_prehash(hashed, &sig)?;
 
@@ -108,13 +106,13 @@ pub fn sign(
     let (r, s) = match secret_key {
         ECDSASecretKey::P256(secret_key) => {
             let secret = p256::ecdsa::SigningKey::from(secret_key);
-            let signature = secret.sign_prehash(digest)?;
+            let signature: p256::ecdsa::Signature = secret.sign_prehash(digest)?;
             let (r, s) = signature.split_bytes();
             (r.to_vec(), s.to_vec())
         }
         ECDSASecretKey::P384(secret_key) => {
             let secret = p384::ecdsa::SigningKey::from(secret_key);
-            let signature = secret.sign_prehash(digest)?;
+            let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
             let (r, s) = signature.split_bytes();
             (r.to_vec(), s.to_vec())
         }

@@ -3,11 +3,18 @@ use std::hash::Hasher;
 use std::io::prelude::*;
 use std::{fmt, io, str};
 
-use base64::engine::{fast_portable::FastPortable, DEFAULT_ENGINE};
+use base64::engine::{general_purpose::STANDARD, Engine as _};
 use buf_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 
-use nom::{self, digit, line_ending, not_line_ending, InputIter, InputLength, Slice};
+use nom::branch::alt;
+use nom::bytes::streaming::tag;
+use nom::bytes::streaming::{take, take_until};
+use nom::character::streaming::{digit1, line_ending, not_line_ending};
+use nom::combinator::{complete, map, map_res, opt, success, value};
+use nom::multi::many0;
+use nom::sequence::{delimited, pair, preceded, terminated};
+use nom::{IResult, InputIter, InputLength, Slice};
 
 use crate::base64_decoder::Base64Decoder;
 use crate::base64_reader::Base64Reader;
@@ -62,14 +69,14 @@ impl BlockType {
         match self {
             BlockType::PublicKey => "PGP PUBLIC KEY BLOCK".into(),
             BlockType::PrivateKey => "PGP PRIVATE KEY BLOCK".into(),
-            BlockType::MultiPartMessage(x, y) => format!("PGP MESSAGE, PART {}/{}", x, y),
+            BlockType::MultiPartMessage(x, y) => format!("PGP MESSAGE, PART {x}/{y}"),
             BlockType::Message => "PGP MESSAGE".into(),
             BlockType::Signature => "PGP SIGNATURE".into(),
             BlockType::File => "PGP ARMORED FILE".into(),
-            BlockType::PublicKeyPKCS1(typ) => format!("{} PUBLIC KEY", typ),
+            BlockType::PublicKeyPKCS1(typ) => format!("{typ} PUBLIC KEY"),
             BlockType::PublicKeyPKCS8 => "PUBLIC KEY".into(),
             BlockType::PublicKeyOpenssh => "OPENSSH PUBLIC KEY".into(),
-            BlockType::PrivateKeyPKCS1(typ) => format!("{} PRIVATE KEY", typ),
+            BlockType::PrivateKeyPKCS1(typ) => format!("{typ} PRIVATE KEY"),
             BlockType::PrivateKeyPKCS8 => "PRIVATE KEY".into(),
             BlockType::PrivateKeyOpenssh => "OPENSSH PRIVATE KEY".into(),
         }
@@ -95,7 +102,9 @@ impl fmt::Display for PKCS1Type {
 }
 
 // Parses a single ascii armor header separator.
-named!(armor_header_sep, tag!("-----"));
+fn armor_header_sep(i: &[u8]) -> IResult<&[u8], &[u8]> {
+    tag(b"-----")(i)
+}
 
 #[inline]
 fn parse_digit(x: &[u8]) -> Result<usize> {
@@ -105,64 +114,74 @@ fn parse_digit(x: &[u8]) -> Result<usize> {
 }
 
 // Parses the type inside of an ascii armor header.
-#[rustfmt::skip]
-named!(
-    armor_header_type<BlockType>,
-    alt_complete!(
-        map!(tag!("PGP PUBLIC KEY BLOCK"), |_| BlockType::PublicKey)
-      | map!(tag!("PGP PRIVATE KEY BLOCK"), |_| BlockType::PrivateKey)
-      | do_parse!(
-          tag!("PGP MESSAGE, PART ")
-        >> x: map_res!(digit, parse_digit)
-        >> y: opt!(preceded!(tag!("/"), map_res!(digit, parse_digit)))
-        >> ({
-            BlockType::MultiPartMessage(x, y.unwrap_or(0))
-        })
-      )
-      | map!(tag!("PGP MESSAGE"), |_| BlockType::Message)
-      | map!(tag!("PGP SIGNATURE"), |_| BlockType::Signature)
-      | map!(tag!("PGP ARMORED FILE"), |_| BlockType::File)
+fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
+    alt((
+        value(BlockType::PublicKey, tag("PGP PUBLIC KEY BLOCK")),
+        value(BlockType::PrivateKey, tag("PGP PRIVATE KEY BLOCK")),
+        map(
+            preceded(
+                tag("PGP MESSAGE, PART "),
+                pair(
+                    map_res(digit1, parse_digit),
+                    opt(preceded(tag("/"), map_res(digit1, parse_digit))),
+                ),
+            ),
+            |(x, y)| BlockType::MultiPartMessage(x, y.unwrap_or(0)),
+        ),
+        value(BlockType::Message, tag("PGP MESSAGE")),
+        value(BlockType::Signature, tag("PGP SIGNATURE")),
+        value(BlockType::File, tag("PGP ARMORED FILE")),
+        // OpenSSL formats
 
-      // OpenSSL formats
-
-      // Public Key File PKCS#1
-      | map!(tag!("RSA PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1(PKCS1Type::RSA))
-      // Public Key File PKCS#1
-      | map!(tag!("DSA PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1(PKCS1Type::DSA))
-      // Public Key File PKCS#1
-      | map!(tag!("EC PUBLIC KEY"), |_| BlockType::PublicKeyPKCS1(PKCS1Type::EC))
-      // Public Key File PKCS#8
-      | map!(tag!("PUBLIC KEY"), |_| BlockType::PublicKeyPKCS8)
-
-      // OpenSSH Public Key File
-      | map!(tag!("OPENSSH PUBLIC KEY"), |_| BlockType::PublicKeyOpenssh)
-
-      // Private Key File PKCS#1
-      | map!(tag!("RSA PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1(PKCS1Type::RSA))
-      // Private Key File PKCS#1
-      | map!(tag!("DSA PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1(PKCS1Type::DSA))
-      // Private Key File PKCS#1
-      | map!(tag!("EC PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS1(PKCS1Type::EC))
-      // Private Key File PKCS#8
-      | map!(tag!("PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS8)
-
-      // OpenSSH Private Key File
-      | map!(tag!("OPENSSH PRIVATE KEY"), |_| BlockType::PrivateKeyOpenssh)
-    )
-);
+        // Public Key File PKCS#1
+        value(
+            BlockType::PublicKeyPKCS1(PKCS1Type::RSA),
+            tag("RSA PUBLIC KEY"),
+        ),
+        // Public Key File PKCS#1
+        value(
+            BlockType::PublicKeyPKCS1(PKCS1Type::DSA),
+            tag("DSA PUBLIC KEY"),
+        ),
+        // Public Key File PKCS#1
+        value(
+            BlockType::PublicKeyPKCS1(PKCS1Type::EC),
+            tag("EC PUBLIC KEY"),
+        ),
+        // Public Key File PKCS#8
+        value(BlockType::PublicKeyPKCS8, tag("PUBLIC KEY")),
+        // OpenSSH Public Key File
+        value(BlockType::PublicKeyOpenssh, tag("OPENSSH PUBLIC KEY")),
+        // Private Key File PKCS#1
+        value(
+            BlockType::PrivateKeyPKCS1(PKCS1Type::RSA),
+            tag("RSA PRIVATE KEY"),
+        ),
+        // Private Key File PKCS#1
+        value(
+            BlockType::PrivateKeyPKCS1(PKCS1Type::DSA),
+            tag("DSA PRIVATE KEY"),
+        ),
+        // Private Key File PKCS#1
+        value(
+            BlockType::PrivateKeyPKCS1(PKCS1Type::EC),
+            tag("EC PRIVATE KEY"),
+        ),
+        // Private Key File PKCS#8
+        value(BlockType::PrivateKeyPKCS8, tag("PRIVATE KEY")),
+        // OpenSSH Private Key File
+        value(BlockType::PrivateKeyOpenssh, tag("OPENSSH PRIVATE KEY")),
+    ))(i)
+}
 
 // Parses a single armor header line.
-named!(
-    armor_header_line<BlockType>,
-    do_parse!(
-        armor_header_sep
-            >> tag!("BEGIN ")
-            >> typ: armor_header_type
-            >> armor_header_sep
-            >> line_ending
-            >> (typ)
-    )
-);
+fn armor_header_line(i: &[u8]) -> IResult<&[u8], BlockType> {
+    delimited(
+        pair(armor_header_sep, tag(b"BEGIN ")),
+        armor_header_type,
+        pair(armor_header_sep, line_ending),
+    )(i)
+}
 
 /// Recognizes one or more key tokens.
 fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
@@ -190,51 +209,44 @@ fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
 }
 
 // Parses a single key value pair, for the header.
-named!(
-    key_value_pair<(&str, &str)>,
-    do_parse!(
-        key: map_res!(key_token, str::from_utf8)
-            >> value:
-                map_res!(
-                    terminated!(
-                        map!(opt!(not_line_ending), |r| r.unwrap_or(b"")),
-                        line_ending
-                    ),
-                    str::from_utf8
-                )
-            >> (key, value)
-    )
-);
+fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
+    terminated(
+        pair(
+            map_res(key_token, str::from_utf8),
+            map_res(opt(not_line_ending), |r| {
+                str::from_utf8(r.unwrap_or(b"".as_slice()))
+            }),
+        ),
+        line_ending,
+    )(i)
+}
 
 // Parses a list of key value pairs.
-named!(
-    key_value_pairs<Vec<(&str, &str)>>,
-    many0!(complete!(key_value_pair))
-);
+fn key_value_pairs(i: &[u8]) -> IResult<&[u8], Vec<(&str, &str)>> {
+    many0(complete(key_value_pair))(i)
+}
 
 // Parses the full armor header.
-named!(
-    armor_headers<BTreeMap<String, String>>,
-    do_parse!(
-        pairs: key_value_pairs
-            >> (pairs
-                .iter()
-                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
-                .collect())
-    )
-);
+fn armor_headers(i: &[u8]) -> IResult<&[u8], BTreeMap<String, String>> {
+    map(key_value_pairs, |pairs| {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect()
+    })(i)
+}
 
 // Armor Header
-named!(armor_header(&[u8]) -> (BlockType, BTreeMap<String, String>), do_parse!(
-    typ:     armor_header_line >>
-    headers: armor_headers     >>
-    (typ, headers)
-));
+
+fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, String>)> {
+    pair(armor_header_line, armor_headers)(i)
+}
 
 /// Read the checksum from an base64 encoded buffer.
 fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
-    let checksum =
-        base64::decode_engine(input, &DEFAULT_ENGINE).map_err(|_| io::ErrorKind::InvalidData)?;
+    let checksum = STANDARD
+        .decode(input)
+        .map_err(|_| io::ErrorKind::InvalidData)?;
 
     let mut buf = [0; 4];
     let mut i = checksum.len();
@@ -246,44 +258,41 @@ fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
     Ok(u64::from(BigEndian::read_u32(&buf)))
 }
 
-#[rustfmt::skip]
-named!(header_parser(&[u8]) -> (BlockType, BTreeMap<String, String>), do_parse!(
-               take_until!("-----")
-    >>   head: armor_header
-    >>         many0!(line_ending)
-    >> (head.0, head.1)
-));
+fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, String>)> {
+    delimited(
+        take_until(b"-----".as_slice()),
+        armor_header,
+        many0(line_ending),
+    )(i)
+}
 
-#[rustfmt::skip]
-named!(footer_parser<(Option<&[u8]>, BlockType)>, do_parse!(
-           crc: alt!(do_parse!(
-                            tag!("=")
-                    >> crc: take!(4)
-                    >>      many0!(line_ending)
-                    >>      tag!("--")
-                    >> ({ Some(crc) })
-                ) |
-                   do_parse!(
-                          many0!(tag!("="))
-                       >> many0!(line_ending)
-                       >> tag!("--")
-                       >> (None)
-                   )
-                )
-     >> footer: armor_footer_line
-     >> (crc, footer)
-));
+fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
+    pair(
+        alt((
+            delimited(
+                tag(b"="),
+                map(take(4u8), Some),
+                pair(many0(line_ending), tag(b"--")),
+            ),
+            delimited(
+                many0(tag(b"=")),
+                success(None),
+                pair(many0(line_ending), tag(b"--")),
+            ),
+        )),
+        armor_footer_line,
+    )(i)
+}
 
 // Parses a single armor footer line
-#[rustfmt::skip]
-named!(armor_footer_line<BlockType>, do_parse!(
-            // Only 3, because we parsed two already in the `footer_parser`.
-            tag!("---END ")
-    >> typ: armor_header_type
-    >>      armor_header_sep
-    >>      opt!(complete!(line_ending))
-    >> (typ)
-));
+fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
+    // Only 3, because we parsed two already in the `footer_parser`.
+    delimited(
+        tag(b"---END "),
+        armor_header_type,
+        pair(armor_header_sep, opt(complete(line_ending))),
+    )(i)
+}
 
 /// Streaming based ascii armor parsing.
 pub struct Dearmor<R> {
@@ -298,7 +307,9 @@ pub struct Dearmor<R> {
     /// the underlying data source, wrapped in a BufferedReader
     inner: Option<BufReader<R>>,
     /// base64 decoder
-    base_decoder: Option<Base64Decoder<FastPortable, Base64Reader<LineReader<BufReader<R>>>>>,
+    base_decoder: Option<
+        Base64Decoder<base64::engine::GeneralPurpose, Base64Reader<LineReader<BufReader<R>>>>,
+    >,
     /// Are we done?
     done: bool,
     crc: crc24::Crc24Hasher,
@@ -355,7 +366,7 @@ impl<R: Read + Seek> Dearmor<R> {
                     self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor header: {:?}", err),
+                        format!("invalid ascii armor header: {err:?}"),
                     ));
                 }
             };
@@ -454,7 +465,7 @@ impl<R: Read + Seek> Dearmor<R> {
                     self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor footer: {:?}", err),
+                        format!("invalid ascii armor footer: {err:?}"),
                     ));
                 }
             };
@@ -501,6 +512,8 @@ impl<R: Read + Seek> Read for Dearmor<R> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
     use std::io::Cursor;
 

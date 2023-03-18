@@ -458,18 +458,14 @@ impl Signature {
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum SignatureVersion {
     /// Deprecated
     V2 = 2,
     V3 = 3,
+    #[default]
     V4 = 4,
     V5 = 5,
-}
-
-impl Default for SignatureVersion {
-    fn default() -> Self {
-        SignatureVersion::V4
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]

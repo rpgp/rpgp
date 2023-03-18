@@ -2,7 +2,11 @@ use std::boxed::Box;
 use std::str;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use nom::{be_u16, be_u32, be_u8, rest, IResult};
+use nom::bytes::streaming::{tag, take};
+use nom::combinator::{complete, map, map_opt, map_parser, map_res, rest};
+use nom::multi::{fold_many_m_n, length_data, many0};
+use nom::number::streaming::{be_u16, be_u32, be_u8};
+use nom::sequence::{pair, tuple};
 use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
@@ -11,7 +15,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::de::Deserialize;
-use crate::errors::Result;
+use crate::errors::{IResult, Result};
 use crate::packet::signature::types::*;
 use crate::types::{
     mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
@@ -22,7 +26,7 @@ use crate::util::{clone_into_array, packet_length, read_string};
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
     fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(input, packet_version)?;
+        let (_, pk) = parse(packet_version)(input)?;
 
         Ok(pk)
     }
@@ -35,31 +39,32 @@ fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
 
 // Parse a signature creation time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
-named!(
-    signature_creation_time<SubpacketData>,
-    map_opt!(
+fn signature_creation_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map_opt(
         // 4-octet time field
         be_u32,
-        |date| dt_from_timestamp(date).map(SubpacketData::SignatureCreationTime)
-    )
-);
+        |date| dt_from_timestamp(date).map(SubpacketData::SignatureCreationTime),
+    )(i)
+}
 
 // Parse an issuer subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
-#[rustfmt::skip]
-named!(issuer<SubpacketData>, map!(
-    map_res!(complete!(take!(8)), KeyId::from_slice),
-    SubpacketData::Issuer
-));
+fn issuer(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(
+        map_res(complete(take(8u8)), KeyId::from_slice),
+        SubpacketData::Issuer,
+    )(i)
+}
 
 // Parse a key expiration time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
-#[rustfmt::skip]
-named!(key_expiration<SubpacketData>, map_opt!(
-    // 4-octet time field
-    be_u32,
-    |date| dt_from_timestamp(date).map(SubpacketData::KeyExpirationTime)
-));
+fn key_expiration(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map_opt(
+        // 4-octet time field
+        be_u32,
+        |date| dt_from_timestamp(date).map(SubpacketData::KeyExpirationTime),
+    )(i)
+}
 
 /// Parse a preferred symmetric algorithms subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
@@ -105,74 +110,78 @@ fn pref_com_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 
 // Parse a signature expiration time subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
-#[rustfmt::skip]
-named!(signature_expiration_time<SubpacketData>, map_opt!(
-    // 4-octet time field
-    be_u32,
-    |date| dt_from_timestamp(date).map(SubpacketData::SignatureExpirationTime)
-));
+fn signature_expiration_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map_opt(
+        // 4-octet time field
+        be_u32,
+        |date| dt_from_timestamp(date).map(SubpacketData::SignatureExpirationTime),
+    )(i)
+}
 
 // Parse a exportable certification subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
-named!(
-    exportable_certification<SubpacketData>,
-    map!(
-        complete!(be_u8),
-        |v| SubpacketData::ExportableCertification(v == 1)
-    )
-);
+fn exportable_certification(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(complete(be_u8), |v| {
+        SubpacketData::ExportableCertification(v == 1)
+    })(i)
+}
 
 // Parse a revocable subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
-named!(
-    revocable<SubpacketData>,
-    map!(complete!(be_u8), |v| SubpacketData::Revocable(v == 1))
-);
+fn revocable(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(complete(be_u8), |v| SubpacketData::Revocable(v == 1))(i)
+}
 
 // Parse a trust signature subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.13
-#[rustfmt::skip]
-named!(trust_signature<SubpacketData>, do_parse!(
-       depth: be_u8
-    >> value: be_u8
-    >> (SubpacketData::TrustSignature(depth, value))
-));
+fn trust_signature(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(pair(be_u8, be_u8), |(depth, value)| {
+        SubpacketData::TrustSignature(depth, value)
+    })(i)
+}
 
 // Parse a regular expression subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
-#[rustfmt::skip]
-named!(regular_expression<SubpacketData>, map!(
-    map!(rest, read_string), SubpacketData::RegularExpression
-));
+fn regular_expression(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(map(rest, read_string), SubpacketData::RegularExpression)(i)
+}
 
 // Parse a revocation key subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
-#[rustfmt::skip]
-named!(revocation_key<SubpacketData>, do_parse!(
-             class: map_opt!(be_u8, RevocationKeyClass::from_u8)
-    >>   algorithm: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    // TODO: V5 Keys have 32 octets here
-    >>          fp: take!(20)
-    >> (SubpacketData::RevocationKey(RevocationKey::new(
-        class,
-        algorithm,
-        fp,
-    )))
-));
+fn revocation_key(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(
+        tuple((
+            map_opt(be_u8, RevocationKeyClass::from_u8),
+            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            // TODO: V5 Keys have 32 octets here
+            take(20u8),
+        )),
+        |(class, algorithm, fp)| {
+            SubpacketData::RevocationKey(RevocationKey::new(class, algorithm, fp))
+        },
+    )(i)
+}
 
 // Parse a notation data subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.16
-#[rustfmt::skip]
-named!(notation_data<SubpacketData>, do_parse!(
-                  // Flags
-        readable: map!(be_u8, |v| v == 0x80)
-    >>            tag!(&[0, 0, 0])
-    >>  name_len: be_u16
-    >> value_len: be_u16
-    >>      name: map!(take!(name_len), read_string)
-    >>     value: map!(take!(value_len), read_string)
-    >> (SubpacketData::Notation(Notation { readable, name, value }))
-));
+fn notation_data(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    // Flags
+    let (i, readable) = map(be_u8, |v| v == 0x80)(i)?;
+    let (i, _) = tag(&[0, 0, 0])(i)?;
+    let (i, name_len) = be_u16(i)?;
+    let (i, value_len) = be_u16(i)?;
+    let (i, name) = map(take(name_len), read_string)(i)?;
+    let (i, value) = map(take(value_len), read_string)(i)?;
+
+    Ok((
+        i,
+        SubpacketData::Notation(Notation {
+            readable,
+            name,
+            value,
+        }),
+    ))
+}
 
 /// Parse a key server preferences subpacket
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2.3.17
@@ -185,25 +194,23 @@ fn key_server_prefs(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 
 // Parse a preferred key server subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.18
-#[rustfmt::skip]
-named!(preferred_key_server<SubpacketData>,do_parse!(
-       body: map_res!(rest, str::from_utf8)
-    >> ({ SubpacketData::PreferredKeyServer(body.to_string()) })
-));
+fn preferred_key_server(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(map_res(rest, str::from_utf8), |body| {
+        SubpacketData::PreferredKeyServer(body.to_string())
+    })(i)
+}
 
 // Parse a primary user id subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.19
-named!(
-    primary_userid<SubpacketData>,
-    map!(be_u8, |a| SubpacketData::IsPrimary(a == 1))
-);
+fn primary_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(be_u8, |a| SubpacketData::IsPrimary(a == 1))(i)
+}
 
 // Parse a policy URI subpacket.
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
-#[rustfmt::skip]
-named!(policy_uri<SubpacketData>, map!(
-    map!(rest, read_string), SubpacketData::PolicyURI
-));
+fn policy_uri(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(map(rest, read_string), SubpacketData::PolicyURI)(i)
+}
 
 /// Parse a key flags subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.21
@@ -215,11 +222,11 @@ fn key_flags(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 }
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
-#[rustfmt::skip]
-named!(signers_userid<SubpacketData>, do_parse!(
-       body: map_res!(rest, str::from_utf8)
-    >> (SubpacketData::SignersUserID(body.to_string())))
-);
+fn signers_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(map_res(rest, str::from_utf8), |body| {
+        SubpacketData::SignersUserID(body.to_string())
+    })(i)
+}
 
 /// Parse a features subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.24
@@ -232,36 +239,47 @@ fn features(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 
 // Parse a revocation reason subpacket
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.23
-#[rustfmt::skip]
-named!(rev_reason<SubpacketData>, do_parse!(
-         code: map_opt!(be_u8, RevocationCode::from_u8)
-    >> reason: map!(rest, read_string)
-    >> (SubpacketData::RevocationReason(code, reason))
-));
+fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(
+        pair(
+            map_opt(be_u8, RevocationCode::from_u8),
+            map(rest, read_string),
+        ),
+        |(code, reason)| SubpacketData::RevocationReason(code, reason),
+    )(i)
+}
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.25
-#[rustfmt::skip]
-named!(sig_target<SubpacketData>, do_parse!(
-        pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
-    >>     hash: rest
-    >> (SubpacketData::SignatureTarget(pub_alg, hash_alg, hash.to_vec()))
-));
+fn sig_target(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(
+        tuple((
+            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            map_opt(be_u8, HashAlgorithm::from_u8),
+            rest,
+        )),
+        |(pub_alg, hash_alg, hash): (_, _, &[u8])| {
+            SubpacketData::SignatureTarget(pub_alg, hash_alg, hash.to_vec())
+        },
+    )(i)
+}
 
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
-#[rustfmt::skip]
-named!(embedded_sig<SubpacketData>, map!(call!(parse, Version::New), |sig| {
-    SubpacketData::EmbeddedSignature(Box::new(sig))
-}));
+fn embedded_sig(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(parse(Version::New), |sig| {
+        SubpacketData::EmbeddedSignature(Box::new(sig))
+    })(i)
+}
 
 // Parse an issuer subpacket
 // Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
-#[rustfmt::skip]
-named!(issuer_fingerprint<SubpacketData>, do_parse!(
-           version: map_opt!(be_u8, KeyVersion::from_u8)
-    >> fingerprint: rest
-    >> (SubpacketData::IssuerFingerprint(version, SmallVec::from_slice(fingerprint)))
-));
+fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    map(
+        pair(map_opt(be_u8, KeyVersion::from_u8), rest),
+        |(version, fingerprint)| {
+            SubpacketData::IssuerFingerprint(version, SmallVec::from_slice(fingerprint))
+        },
+    )(i)
+}
 
 /// Parse a preferred aead subpacket
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
@@ -319,114 +337,136 @@ fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8
     res
 }
 
-#[rustfmt::skip]
-named!(subpackets(&[u8]) -> Vec<Subpacket>, many0!(complete!(do_parse!(
-    // the subpacket length (1, 2, or 5 octets)
-        len: packet_length
-    // the subpacket type (1 octet)
-    >> typ: map!(be_u8, SubpacketType::from_u8)
-    >>   p: flat_map!(take!(len - 1), |b| subpacket(typ.0, typ.1, b))
-    >> (p)
-))));
+fn subpackets<'a>(i: &'a [u8]) -> IResult<&'a [u8], Vec<Subpacket>> {
+    many0(complete(|i: &'a [u8]| {
+        // the subpacket length (1, 2, or 5 octets)
+        let (i, len) = packet_length(i)?;
+        // the subpacket type (1 octet)
+        let (i, typ) = map(be_u8, SubpacketType::from_u8)(i)?;
+        map_parser(take(len - 1), move |b| subpacket(typ.0, typ.1, b))(i)
+    }))(i)
+}
 
-named_args!(actual_signature<'a>(typ: &PublicKeyAlgorithm) <&'a [u8], Vec<Mpi>>, switch!(
-    value!(typ),
-    &PublicKeyAlgorithm::RSA |
-    &PublicKeyAlgorithm::RSASign => map!(call!(mpi), |v| vec![v.to_owned()]) |
-    &PublicKeyAlgorithm::DSA   |
-    &PublicKeyAlgorithm::ECDSA |
-    &PublicKeyAlgorithm::EdDSA     => fold_many_m_n!(2, 2, mpi, Vec::new(), |mut acc: Vec<Mpi>, item: MpiRef<'_> | {
-        acc.push(item.to_owned());
-        acc
-    }) |
-    &PublicKeyAlgorithm::Private100 |
-    &PublicKeyAlgorithm::Private101 |
-    &PublicKeyAlgorithm::Private102 |
-    &PublicKeyAlgorithm::Private103 |
-    &PublicKeyAlgorithm::Private104 |
-    &PublicKeyAlgorithm::Private105 |
-    &PublicKeyAlgorithm::Private106 |
-    &PublicKeyAlgorithm::Private107 |
-    &PublicKeyAlgorithm::Private108 |
-    &PublicKeyAlgorithm::Private109 |
-    &PublicKeyAlgorithm::Private110  => map!(call!(mpi), |v| vec![v.to_owned()]) |
-    _ => map!(call!(mpi), |v| vec![v.to_owned()])
-));
+fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], Vec<Mpi>> + '_ {
+    move |i: &[u8]| match typ {
+        &PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
+            map(mpi, |v| vec![v.to_owned()])(i)
+        }
+        &PublicKeyAlgorithm::DSA | &PublicKeyAlgorithm::ECDSA | &PublicKeyAlgorithm::EdDSA => {
+            fold_many_m_n(
+                2,
+                2,
+                mpi,
+                Vec::new,
+                |mut acc: Vec<Mpi>, item: MpiRef<'_>| {
+                    acc.push(item.to_owned());
+                    acc
+                },
+            )(i)
+        }
+        &PublicKeyAlgorithm::Private100
+        | &PublicKeyAlgorithm::Private101
+        | &PublicKeyAlgorithm::Private102
+        | &PublicKeyAlgorithm::Private103
+        | &PublicKeyAlgorithm::Private104
+        | &PublicKeyAlgorithm::Private105
+        | &PublicKeyAlgorithm::Private106
+        | &PublicKeyAlgorithm::Private107
+        | &PublicKeyAlgorithm::Private108
+        | &PublicKeyAlgorithm::Private109
+        | &PublicKeyAlgorithm::Private110 => map(mpi, |v| vec![v.to_owned()])(i),
+        _ => map(mpi, |v| vec![v.to_owned()])(i),
+    }
+}
 
 // Parse a v2 or v3 signature packet
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.2
-#[rustfmt::skip]
-named_args!(v3_parser(packet_version: Version, version: SignatureVersion) <Signature>, do_parse!(
-    // One-octet length of following hashed material. MUST be 5.
-                 tag!(&[5])
-    // One-octet signature type.
-    >>      typ: map_opt!(be_u8, SignatureType::from_u8)
-    // Four-octet creation time.
-    >>  created: map_opt!(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())
-    // Eight-octet Key ID of signer.
-    >>   issuer: map_res!(take!(8), KeyId::from_slice)
-    // One-octet public-key algorithm.
-    >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    // One-octet hash algorithm.
-    >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
-    // Two-octet field holding left 16 bits of signed hash value.
-    >>  ls_hash: take!(2)
-    // One or more multiprecision integers comprising the signature.
-    >>      sig: call!(actual_signature, &pub_alg)
-    >> ({
-        let mut s = Signature::new(
-            packet_version,
-            version,
-            typ,
-            pub_alg,
-            hash_alg,
-            clone_into_array(ls_hash),
-            sig,
-            vec![],
-            vec![],
-        );
+fn v3_parser(
+    packet_version: Version,
+    version: SignatureVersion,
+) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
+    move |i: &[u8]| {
+        let (i, (_tag, typ, created, issuer, pub_alg, hash_alg, ls_hash)) = tuple((
+            // One-octet length of following hashed material. MUST be 5.
+            tag(&[5]),
+            // One-octet signature type.
+            map_opt(be_u8, SignatureType::from_u8),
+            // Four-octet creation time.
+            map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
+            // Eight-octet Key ID of signer.
+            map_res(take(8usize), KeyId::from_slice),
+            // One-octet public-key algorithm.
+            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            // One-octet hash algorithm.
+            map_opt(be_u8, HashAlgorithm::from_u8),
+            // Two-octet field holding left 16 bits of signed hash value.
+            take(2usize),
+        ))(i)?;
+        // One or more multiprecision integers comprising the signature.
+        let (i, sig) = actual_signature(&pub_alg)(i)?;
+        Ok((i, {
+            let mut s = Signature::new(
+                packet_version,
+                version,
+                typ,
+                pub_alg,
+                hash_alg,
+                clone_into_array(ls_hash),
+                sig,
+                vec![],
+                vec![],
+            );
 
-        s.config.created = Some(created);
-        s.config.issuer = Some(issuer);
+            s.config.created = Some(created);
+            s.config.issuer = Some(issuer);
 
-        s
-    })
-));
+            s
+        }))
+    }
+}
 
 // Parse a v4 or v5 signature packet
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3
-#[rustfmt::skip]
-named_args!(v4_parser(packet_version: Version, version: SignatureVersion) <Signature>, do_parse!(
-    // One-octet signature type.
-            typ: map_opt!(be_u8, SignatureType::from_u8)
-    // One-octet public-key algorithm.
-    >>  pub_alg: map_opt!(be_u8, PublicKeyAlgorithm::from_u8)
-    // One-octet hash algorithm.
-    >> hash_alg: map_opt!(be_u8, HashAlgorithm::from_u8)
-    // Two-octet scalar octet count for following hashed subpacket data.
-    >> hsub_len: be_u16
-    // Hashed subpacket data set (zero or more subpackets).
-    >>     hsub: flat_map!(take!(hsub_len), subpackets)
-    // Two-octet scalar octet count for the following unhashed subpacket data.
-    >> usub_len: be_u16
-    // Unhashed subpacket data set (zero or more subpackets).
-    >>     usub: flat_map!(take!(usub_len), subpackets)
-    // Two-octet field holding the left 16 bits of the signed hash value.
-    >>  ls_hash: take!(2)
-    // One or more multiprecision integers comprising the signature.
-    >>      sig: call!(actual_signature, &pub_alg)
-    >> (Signature::new(
-        packet_version,
-        version,
-        typ,
-        pub_alg,
-        hash_alg,
-        clone_into_array(ls_hash),
-        sig,
-        hsub,
-        usub,
-    ))
-));
+
+fn v4_parser(
+    packet_version: Version,
+    version: SignatureVersion,
+) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
+    move |i: &[u8]| {
+        let (i, (typ, pub_alg, hash_alg, hsub, usub, ls_hash)) = tuple((
+            // One-octet signature type.
+            map_opt(be_u8, SignatureType::from_u8),
+            // One-octet public-key algorithm.
+            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            // One-octet hash algorithm.
+            map_opt(be_u8, HashAlgorithm::from_u8),
+            // Two-octet scalar octet count for following hashed subpacket data.
+            // Hashed subpacket data set (zero or more subpackets).
+            map_parser(length_data(be_u16), subpackets),
+            // Two-octet scalar octet count for the following unhashed subpacket data.
+            // Unhashed subpacket data set (zero or more subpackets).
+            map_parser(length_data(be_u16), subpackets),
+            // Two-octet field holding the left 16 bits of the signed hash value.
+            take(2usize),
+        ))(i)?;
+        // One or more multiprecision integers comprising the signature.
+        let (i, sig) = actual_signature(&pub_alg)(i)?;
+        Ok((
+            i,
+            Signature::new(
+                packet_version,
+                version,
+                typ,
+                pub_alg,
+                hash_alg,
+                clone_into_array(ls_hash),
+                sig,
+                hsub,
+                usub,
+            ),
+        ))
+    }
+}
 
 fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Signature> {
     unimplemented!("unknown signature version {:?}", version);
@@ -434,21 +474,23 @@ fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Si
 
 // Parse a signature packet (Tag 2)
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
-#[rustfmt::skip]
-named_args!(parse(packet_version: Version) <Signature>, do_parse!(
-         version: map_opt!(be_u8, SignatureVersion::from_u8)
-    >> signature: switch!(value!(&version),
-                      &SignatureVersion::V2 => call!(v3_parser, packet_version, version) |
-                      &SignatureVersion::V3 => call!(v3_parser, packet_version, version) |
-                      &SignatureVersion::V4 => call!(v4_parser, packet_version, version) |
-                      &SignatureVersion::V5 => call!(v4_parser, packet_version, version) |
-                      _ => call!(invalid_version, version)
-    )
-    >> (signature)
-));
+fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
+    move |i: &[u8]| {
+        let (i, version) = map_opt(be_u8, SignatureVersion::from_u8)(i)?;
+        let (i, signature) = match &version {
+            &SignatureVersion::V2 | &SignatureVersion::V3 => v3_parser(packet_version, version)(i),
+            &SignatureVersion::V4 | &SignatureVersion::V5 => v4_parser(packet_version, version)(i),
+            #[allow(unreachable_patterns)]
+            _ => invalid_version(i, version),
+        }?;
+        Ok((i, signature))
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     #[test]
