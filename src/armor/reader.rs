@@ -11,7 +11,7 @@ use nom::branch::alt;
 use nom::bytes::streaming::tag;
 use nom::bytes::streaming::{take, take_until};
 use nom::character::streaming::{digit1, line_ending, not_line_ending};
-use nom::combinator::{complete, map, map_res, opt, success};
+use nom::combinator::{complete, map, map_res, opt, success, value};
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{IResult, InputIter, InputLength, Slice};
@@ -113,10 +113,11 @@ fn parse_digit(x: &[u8]) -> Result<usize> {
     Ok(digit)
 }
 
+// Parses the type inside of an ascii armor header.
 fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
     alt((
-        map(tag("PGP PUBLIC KEY BLOCK"), |_| BlockType::PublicKey),
-        map(tag("PGP PRIVATE KEY BLOCK"), |_| BlockType::PrivateKey),
+        value(BlockType::PublicKey, tag("PGP PUBLIC KEY BLOCK")),
+        value(BlockType::PrivateKey, tag("PGP PRIVATE KEY BLOCK")),
         map(
             preceded(
                 tag("PGP MESSAGE, PART "),
@@ -127,43 +128,49 @@ fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
             ),
             |(x, y)| BlockType::MultiPartMessage(x, y.unwrap_or(0)),
         ),
-        map(tag("PGP MESSAGE"), |_| BlockType::Message),
-        map(tag("PGP SIGNATURE"), |_| BlockType::Signature),
-        map(tag("PGP ARMORED FILE"), |_| BlockType::File),
+        value(BlockType::Message, tag("PGP MESSAGE")),
+        value(BlockType::Signature, tag("PGP SIGNATURE")),
+        value(BlockType::File, tag("PGP ARMORED FILE")),
         // OpenSSL formats
 
         // Public Key File PKCS#1
-        map(tag("RSA PUBLIC KEY"), |_| {
-            BlockType::PublicKeyPKCS1(PKCS1Type::RSA)
-        }),
+        value(
+            BlockType::PublicKeyPKCS1(PKCS1Type::RSA),
+            tag("RSA PUBLIC KEY"),
+        ),
         // Public Key File PKCS#1
-        map(tag("DSA PUBLIC KEY"), |_| {
-            BlockType::PublicKeyPKCS1(PKCS1Type::DSA)
-        }),
+        value(
+            BlockType::PublicKeyPKCS1(PKCS1Type::DSA),
+            tag("DSA PUBLIC KEY"),
+        ),
         // Public Key File PKCS#1
-        map(tag("EC PUBLIC KEY"), |_| {
-            BlockType::PublicKeyPKCS1(PKCS1Type::EC)
-        }),
+        value(
+            BlockType::PublicKeyPKCS1(PKCS1Type::EC),
+            tag("EC PUBLIC KEY"),
+        ),
         // Public Key File PKCS#8
-        map(tag("PUBLIC KEY"), |_| BlockType::PublicKeyPKCS8),
+        value(BlockType::PublicKeyPKCS8, tag("PUBLIC KEY")),
         // OpenSSH Public Key File
-        map(tag("OPENSSH PUBLIC KEY"), |_| BlockType::PublicKeyOpenssh),
+        value(BlockType::PublicKeyOpenssh, tag("OPENSSH PUBLIC KEY")),
         // Private Key File PKCS#1
-        map(tag("RSA PRIVATE KEY"), |_| {
-            BlockType::PrivateKeyPKCS1(PKCS1Type::RSA)
-        }),
+        value(
+            BlockType::PrivateKeyPKCS1(PKCS1Type::RSA),
+            tag("RSA PRIVATE KEY"),
+        ),
         // Private Key File PKCS#1
-        map(tag("DSA PRIVATE KEY"), |_| {
-            BlockType::PrivateKeyPKCS1(PKCS1Type::DSA)
-        }),
+        value(
+            BlockType::PrivateKeyPKCS1(PKCS1Type::DSA),
+            tag("DSA PRIVATE KEY"),
+        ),
         // Private Key File PKCS#1
-        map(tag("EC PRIVATE KEY"), |_| {
-            BlockType::PrivateKeyPKCS1(PKCS1Type::EC)
-        }),
+        value(
+            BlockType::PrivateKeyPKCS1(PKCS1Type::EC),
+            tag("EC PRIVATE KEY"),
+        ),
         // Private Key File PKCS#8
-        map(tag("PRIVATE KEY"), |_| BlockType::PrivateKeyPKCS8),
+        value(BlockType::PrivateKeyPKCS8, tag("PRIVATE KEY")),
         // OpenSSH Private Key File
-        map(tag("OPENSSH PRIVATE KEY"), |_| BlockType::PrivateKeyOpenssh),
+        value(BlockType::PrivateKeyOpenssh, tag("OPENSSH PRIVATE KEY")),
     ))(i)
 }
 
@@ -278,6 +285,7 @@ fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
 
 // Parses a single armor footer line
 fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
+    // Only 3, because we parsed two already in the `footer_parser`.
     delimited(
         tag(b"---END "),
         armor_header_type,

@@ -18,7 +18,10 @@ fn to_owned(mref: MpiRef<'_>) -> Mpi {
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    // a one-octet size of the following field
+    // octets representing a curve OID
     let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
+    // MPI of an EC point representing a public key
     let (i, p) = mpi(i)?;
     Ok((
         i,
@@ -31,7 +34,10 @@ fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
 
 // https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
 fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    // a one-octet size of the following field
+    // octets representing a curve OID
     let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
+    // MPI of an EC point representing a public key
     let (i, q) = mpi(i)?;
     Ok((
         i,
@@ -46,11 +52,19 @@ fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
 fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
     map(
         tuple((
+            // a one-octet size of the following field
+            // octets representing a curve OID
             map_opt(length_data(be_u8), ecc_curve_from_oid),
+            // MPI of an EC point representing a public key
             mpi,
+            // a one-octet size of the following fields
             be_u8,
+            // a one-octet value 01, reserved for future extensions
             tag(&[1][..]),
+            // a one-octet hash function ID used with a KDF
             map_opt(be_u8, HashAlgorithm::from_u8),
+            // a one-octet algorithm ID for the symmetric algorithm used to wrap
+            // the symmetric key used for the message encryption
             map_opt(be_u8, SymmetricKeyAlgorithm::from_u8),
         )),
         |(curve, p, _len2, _tag, hash, alg_sym)| PublicParams::ECDH {

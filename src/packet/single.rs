@@ -8,6 +8,7 @@ use nom::branch::alt;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_opt};
 use nom::number::streaming::{be_u32, be_u8};
+use nom::sequence::{preceded, tuple};
 use nom::Err;
 use num_traits::FromPrimitive;
 
@@ -29,14 +30,16 @@ fn old_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     #[allow(non_snake_case)]
     bits::bits::<_, _, crate::errors::Error, _, _>(|I| {
         use bits::streaming::{tag, take};
-        // First bit is always 1
-        let (I, _) = tag(0b1, 1usize)(I)?;
-        // Version: 0
-        let (I, ver) = map_opt(tag(0b0, 1usize), Version::from_u8)(I)?;
-        // Packet Tag
-        let (I, tag) = map_opt(take(4usize), Tag::from_u8)(I)?;
-        // Packet Length Type
-        let (I, len_type) = take(2usize)(I)?;
+        let (I, (_, ver, tag, len_type)) = tuple((
+            // First bit is always 1
+            tag(0b1, 1usize),
+            // Version: 0
+            map_opt(tag(0b0, 1usize), Version::from_u8),
+            // Packet Tag
+            map_opt(take(4usize), Tag::from_u8),
+            // Packet Length Type
+            take(2usize),
+        ))(I)?;
         let (I, len) = match len_type {
             // One-Octet Lengths
             0 => map(take(8usize), |val| u8_as_usize(val).into())(I)?,
@@ -118,18 +121,21 @@ fn read_partial_bodies(input: &[u8], len: usize) -> IResult<&[u8], ParseResult<'
 // Parses a new format packet header
 // Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
 fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
+    use bits::streaming::*;
+
     #[allow(non_snake_case)]
     bits::bits(|I| {
-        use bits::streaming::*;
-        // First bit is always 1
-        let (I, _) = tag(0b1, 1usize)(I)?;
-        // Version: 1
-        let (I, ver) = map_opt(tag(0b1, 1usize), Version::from_u8)(I)?;
-        // Packet Tag
-        let (I, tag) = map_opt(take(6usize), Tag::from_u8)(I)?;
-        let (I, len) = bits::bytes(read_packet_len)(I)?;
-
-        Ok((I, (ver, tag, len)))
+        preceded(
+            // First bit is always 1
+            tag(0b1, 1usize),
+            tuple((
+                // Version: 1
+                map_opt(tag(0b1, 1usize), Version::from_u8),
+                // Packet Tag
+                map_opt(take(6usize), Tag::from_u8),
+                bits::bytes(read_packet_len),
+            )),
+        )(I)
     })(i)
 }
 
