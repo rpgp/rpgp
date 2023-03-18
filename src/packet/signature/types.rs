@@ -462,8 +462,6 @@ pub enum SignatureVersion {
     V5 = 5,
 }
 
-
-
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
 #[repr(u8)]
 pub enum SignatureType {

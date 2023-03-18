@@ -106,8 +106,6 @@ pub enum SymmetricKeyAlgorithm {
 
 impl zeroize::DefaultIsZeroes for SymmetricKeyAlgorithm {}
 
-
-
 impl SymmetricKeyAlgorithm {
     /// The size of a single block in bytes.
     /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher

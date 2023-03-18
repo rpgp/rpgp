@@ -31,8 +31,6 @@ pub enum HashAlgorithm {
 
 impl zeroize::DefaultIsZeroes for HashAlgorithm {}
 
-
-
 /// Trait to work around the fact that the `Digest` trait from rustcrypto can not
 /// be used as `Box<Digest>`.
 pub trait Hasher: std::io::Write {

@@ -9,5 +9,3 @@ pub enum AeadAlgorithm {
     Eax = 1,
     Ocb = 2,
 }
-
-

@@ -81,8 +81,6 @@ pub enum Version {
     New = 1,
 }
 
-
-
 impl Version {
     pub fn write_header(self, writer: &mut impl io::Write, tag: u8, len: usize) -> Result<()> {
         debug!("write_header {:?} {} {}", self, tag, len);
@@ -131,8 +129,6 @@ pub enum KeyVersion {
     V4 = 4,
     V5 = 5,
 }
-
-
 
 #[cfg(test)]
 mod tests {
