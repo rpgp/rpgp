@@ -6,7 +6,8 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, UserAttribute, UserId,
+    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
+    UserAttribute, UserId,
 };
 use crate::types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
@@ -62,26 +63,36 @@ impl KeyDetails {
         {
             let id = self.primary_user_id;
             let mut hashed_subpackets = vec![
-                Subpacket::IsPrimary(true),
-                Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
-                Subpacket::KeyFlags(keyflags.clone()),
-                Subpacket::PreferredSymmetricAlgorithms(preferred_symmetric_algorithms.clone()),
-                Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
-                Subpacket::PreferredCompressionAlgorithms(preferred_compression_algorithms.clone()),
-                Subpacket::IssuerFingerprint(
+                Subpacket::regular(SubpacketData::IsPrimary(true)),
+                Subpacket::regular(SubpacketData::SignatureCreationTime(
+                    chrono::Utc::now().trunc_subsecs(0),
+                )),
+                Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone())),
+                Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
+                    preferred_symmetric_algorithms.clone(),
+                )),
+                Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
+                    preferred_hash_algorithms.clone(),
+                )),
+                Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
+                    preferred_compression_algorithms.clone(),
+                )),
+                Subpacket::regular(SubpacketData::IssuerFingerprint(
                     Default::default(),
                     SmallVec::from_slice(&key.fingerprint()),
-                ),
+                )),
             ];
             if let Some(rkey) = revocation_key {
-                hashed_subpackets.push(Subpacket::RevocationKey(rkey));
+                hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey)));
             }
 
             let config = SignatureConfigBuilder::default()
                 .typ(SignatureType::CertGeneric)
                 .pub_alg(key.algorithm())
                 .hashed_subpackets(hashed_subpackets)
-                .unhashed_subpackets(vec![Subpacket::Issuer(key.key_id())])
+                .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
+                    key.key_id(),
+                ))])
                 .build()?;
 
             let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
@@ -99,21 +110,27 @@ impl KeyDetails {
                         .typ(SignatureType::CertGeneric)
                         .pub_alg(key.algorithm())
                         .hashed_subpackets(vec![
-                            Subpacket::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
-                            Subpacket::KeyFlags(keyflags.clone()),
-                            Subpacket::PreferredSymmetricAlgorithms(
+                            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                                chrono::Utc::now().trunc_subsecs(0),
+                            )),
+                            Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone())),
+                            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                                 preferred_symmetric_algorithms.clone(),
-                            ),
-                            Subpacket::PreferredHashAlgorithms(preferred_hash_algorithms.clone()),
-                            Subpacket::PreferredCompressionAlgorithms(
+                            )),
+                            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
+                                preferred_hash_algorithms.clone(),
+                            )),
+                            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                                 preferred_compression_algorithms.clone(),
-                            ),
-                            Subpacket::IssuerFingerprint(
+                            )),
+                            Subpacket::regular(SubpacketData::IssuerFingerprint(
                                 Default::default(),
                                 SmallVec::from_slice(&key.fingerprint()),
-                            ),
+                            )),
                         ])
-                        .unhashed_subpackets(vec![Subpacket::Issuer(key.key_id())])
+                        .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
+                            key.key_id(),
+                        ))])
                         .build()?;
 
                     let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;

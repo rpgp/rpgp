@@ -138,10 +138,14 @@ macro_rules! impl_public_key {
 
                 config
                     .pub_alg(key.algorithm())
-                    .hashed_subpackets(vec![$crate::packet::Subpacket::SignatureCreationTime(
-                        chrono::Utc::now().trunc_subsecs(0),
+                    .hashed_subpackets(vec![$crate::packet::Subpacket::regular(
+                        $crate::packet::SubpacketData::SignatureCreationTime(
+                            chrono::Utc::now().trunc_subsecs(0),
+                        ),
                     )])
-                    .unhashed_subpackets(vec![$crate::packet::Subpacket::Issuer(key.key_id())])
+                    .unhashed_subpackets(vec![$crate::packet::Subpacket::regular(
+                        $crate::packet::SubpacketData::Issuer(key.key_id()),
+                    )])
                     .build()?
                     .sign_key(key, key_pw, &self)
             }
@@ -182,7 +186,13 @@ macro_rules! impl_public_key {
                 use $crate::types::KeyVersion;
 
                 match self.version() {
-                    KeyVersion::V5 => unimplemented!("V5 keys"),
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        let mut h = Md5::new();
+                        self.public_params
+                            .to_writer(&mut h)
+                            .expect("write to hasher");
+                        h.finalize().to_vec()
+                    }
                     KeyVersion::V4 => {
                         // A one-octet version number (4).
                         let mut packet = vec![4, 0, 0, 0, 0];
@@ -207,13 +217,7 @@ macro_rules! impl_public_key {
 
                         h.finalize().to_vec()
                     }
-                    KeyVersion::V2 | KeyVersion::V3 => {
-                        let mut h = Md5::new();
-                        self.public_params
-                            .to_writer(&mut h)
-                            .expect("write to hasher");
-                        h.finalize().to_vec()
-                    }
+                    KeyVersion::V5 => unimplemented!("V5 keys"),
                 }
             }
 
@@ -221,14 +225,6 @@ macro_rules! impl_public_key {
                 use $crate::types::{KeyId, KeyVersion, PublicParams};
 
                 match self.version() {
-                    KeyVersion::V5 => unimplemented!("V5 keys"),
-                    KeyVersion::V4 => {
-                        // Lower 64 bits
-                        let f = self.fingerprint();
-                        let offset = f.len() - 8;
-
-                        KeyId::from_slice(&f[offset..]).expect("fixed size slice")
-                    }
                     KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                         PublicParams::RSA { n, .. } => {
                             let offset = n.len() - 8;
@@ -237,6 +233,14 @@ macro_rules! impl_public_key {
                         }
                         _ => panic!("invalid key constructed: {:?}", &self.public_params),
                     },
+                    KeyVersion::V4 => {
+                        // Lower 64 bits
+                        let f = self.fingerprint();
+                        let offset = f.len() - 8;
+
+                        KeyId::from_slice(&f[offset..]).expect("fixed size slice")
+                    }
+                    KeyVersion::V5 => unimplemented!("V5 keys"),
                 }
             }
 
@@ -268,8 +272,8 @@ macro_rules! impl_public_key {
                     PublicParams::EdDSA { ref curve, ref q } => {
                         $crate::crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
                     }
-                    PublicParams::ECDSA { ref curve, ref p } => {
-                        $crate::crypto::ecdsa::verify(curve, p.as_bytes(), hash, hashed, sig)
+                    PublicParams::ECDSA(ref params) => {
+                        $crate::crypto::ecdsa::verify(params, hash, hashed, sig)
                     }
                     PublicParams::ECDH {
                         ref curve,

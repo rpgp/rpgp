@@ -24,7 +24,7 @@ pub struct SignedPublicKey {
 
 key_parser!(
     SignedPublicKey,
-    PublicKeyParser,
+    SignedPublicKeyParser,
     Tag::PublicKey,
     packet::PublicKey,
     (

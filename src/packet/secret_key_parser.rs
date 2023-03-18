@@ -5,19 +5,19 @@ use nom::sequence::tuple;
 use num_traits::FromPrimitive;
 
 use crate::crypto::PublicKeyAlgorithm;
-use crate::errors::IResult;
+use crate::errors::{Error, IResult};
 use crate::packet::public_key_parser::parse_pub_fields;
 use crate::types::{KeyVersion, PublicParams, SecretParams};
 
-// Parse the whole private key, both public and private fields.
+/// Parse the whole private key, both public and private fields.
 fn parse_pub_priv_fields(
     typ: PublicKeyAlgorithm,
 ) -> impl Fn(&[u8]) -> IResult<&[u8], (PublicParams, SecretParams)> {
     move |i| {
-        tuple((
-            parse_pub_fields(typ),
-            map_res(rest, |v| SecretParams::from_slice(v, typ)),
-        ))(i)
+        map_res(tuple((parse_pub_fields(typ), rest)), |(pub_params, v)| {
+            let secret_params = SecretParams::from_slice(v, typ, &pub_params)?;
+            Ok::<_, Error>((pub_params, secret_params))
+        })(i)
     }
 }
 

@@ -15,6 +15,8 @@ use crate::ser::Serialize;
 use crate::types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
 use crate::util::{packet_length, write_packet_length};
 
+use super::SubpacketData;
+
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
 #[derive(Clone, PartialEq, Eq)]
@@ -66,10 +68,12 @@ impl UserAttribute {
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::CertGeneric)
             .pub_alg(key.algorithm())
-            .hashed_subpackets(vec![Subpacket::SignatureCreationTime(
-                Utc::now().trunc_subsecs(0),
+            .hashed_subpackets(vec![Subpacket::regular(
+                SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
             )])
-            .unhashed_subpackets(vec![Subpacket::Issuer(key.key_id())])
+            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
+                key.key_id(),
+            ))])
             .build()?;
 
         let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;

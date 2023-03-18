@@ -85,8 +85,8 @@
 //!     [digest[0], digest[1]],
 //!     signature,
 //!     vec![
-//!         packet::Subpacket::SignatureCreationTime(now),
-//!         packet::Subpacket::Issuer(signing_key.key_id()),
+//!         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
+//!         packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
 //!     ],
 //!     vec![],
 //! );

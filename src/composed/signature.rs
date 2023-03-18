@@ -55,12 +55,10 @@ impl Serialize for StandaloneSignature {
 
 impl Deserializable for StandaloneSignature {
     /// Parse a signature.
-    fn from_packets<'a>(
-        packets: impl Iterator<Item = Packet> + 'a,
+    fn from_packets<'a, I: Iterator<Item = Packet> + 'a>(
+        packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
-        Box::new(SignatureParser {
-            source: packets.peekable(),
-        })
+        Box::new(SignatureParser { source: packets })
     }
 }
 

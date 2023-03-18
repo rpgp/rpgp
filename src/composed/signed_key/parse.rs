@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 use std::{io, iter};
 
 use crate::armor::{self, BlockType};
-use crate::composed::shared::Deserializable;
-use crate::composed::signed_key::{PublicOrSecret, SignedPublicKey, SignedSecretKey};
+use crate::composed::signed_key::{
+    PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey, SignedSecretKeyParser,
+};
 use crate::errors::Result;
 use crate::packet::{Packet, PacketParser};
 use crate::types::Tag;
@@ -65,26 +66,44 @@ pub fn from_bytes_many<'a>(
         })
         .peekable();
 
-    Box::new(PubPrivIterator { inner: packets })
+    Box::new(PubPrivIterator {
+        inner: Some(packets),
+    })
 }
 
 pub struct PubPrivIterator<I: Sized + Iterator<Item = Packet>> {
-    inner: iter::Peekable<I>,
+    inner: Option<iter::Peekable<I>>,
 }
 
 impl<I: Sized + Iterator<Item = Packet>> Iterator for PubPrivIterator<I> {
     type Item = Result<PublicOrSecret>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let packets = self.inner.by_ref();
-        if packets.peek().map(|packet| packet.tag() == Tag::SecretKey) == Some(true) {
-            let p: Option<Result<SignedSecretKey>> = SignedSecretKey::from_packets(packets).next();
-            p.map(|key| key.map(PublicOrSecret::Secret))
-        } else if packets.peek().map(|packet| packet.tag() == Tag::PublicKey) == Some(true) {
-            let p: Option<Result<SignedPublicKey>> = SignedPublicKey::from_packets(packets).next();
-            p.map(|key| key.map(PublicOrSecret::Public))
-        } else {
-            None
+        match self.inner.take() {
+            None => None,
+            Some(mut packets) => {
+                let peeked_tag = packets.peek().map(|p| p.tag());
+                let (res, packets) = if peeked_tag == Some(Tag::SecretKey) {
+                    let mut parser = SignedSecretKeyParser::from_packets(packets);
+                    let p: Option<Result<SignedSecretKey>> = parser.next();
+                    (
+                        p.map(|key| key.map(PublicOrSecret::Secret)),
+                        parser.into_inner(),
+                    )
+                } else if peeked_tag == Some(Tag::PublicKey) {
+                    let mut parser = SignedPublicKeyParser::from_packets(packets);
+                    let p: Option<Result<SignedPublicKey>> = parser.next();
+                    (
+                        p.map(|key| key.map(PublicOrSecret::Public)),
+                        parser.into_inner(),
+                    )
+                } else {
+                    (None, packets)
+                };
+                self.inner = Some(packets);
+
+                res
+            }
         }
     }
 }

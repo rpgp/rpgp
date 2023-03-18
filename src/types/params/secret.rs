@@ -38,8 +38,8 @@ impl SecretParams {
         }
     }
 
-    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm) -> Result<Self> {
-        let (_, (params, cs)) = parse_secret_fields(alg)(data)?;
+    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
+        let (_, (params, cs)) = parse_secret_fields(alg, params)(data)?;
 
         params.compare_checksum(cs)?;
 
@@ -80,7 +80,8 @@ impl Serialize for SecretParams {
 // Parse possibly encrypted private fields of a key.
 fn parse_secret_fields(
     alg: PublicKeyAlgorithm,
-) -> impl Fn(&[u8]) -> IResult<&[u8], (SecretParams, Option<&[u8]>)> {
+    public_params: &PublicParams,
+) -> impl Fn(&[u8]) -> IResult<&[u8], (SecretParams, Option<&[u8]>)> + '_ {
     move |i: &[u8]| {
         let (i, s2k_typ) = be_u8(i)?;
         let (i, enc_params) = match s2k_typ{
@@ -122,7 +123,7 @@ fn parse_secret_fields(
 
             let res = match s2k_typ {
                 0 => {
-                    let repr = PlainSecretParams::from_slice(data, alg)?;
+                    let repr = PlainSecretParams::from_slice(data, alg, public_params)?;
                     SecretParams::Plain(repr)
                 }
                 _ => SecretParams::Encrypted(EncryptedSecretParams::new(

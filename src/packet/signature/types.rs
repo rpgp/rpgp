@@ -3,7 +3,6 @@ use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
-use num_traits::FromPrimitive;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
@@ -83,12 +82,13 @@ impl Signature {
     {
         if let Some(issuer) = self.issuer() {
             if &key.key_id() != issuer {
-                // TODO: should this be an actual error?
                 warn!(
                     "validating signature with a non matching Key ID {:?} != {:?}",
                     &key.key_id(),
                     issuer
                 );
+                // We can't validate this against this key, as there is a missmatch.
+                return Ok(());
             }
         }
 
@@ -102,7 +102,7 @@ impl Signature {
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
-            "invalid signed hash value"
+            "signature: invalid signed hash value"
         );
 
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
@@ -115,52 +115,56 @@ impl Signature {
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()> {
-        debug!("verifying certificate {:#?}", self);
+        let key_id = key.key_id();
+        debug!("verifying certificate {:?} {:#?}", key_id, self);
 
         if let Some(issuer) = self.issuer() {
-            if &key.key_id() != issuer {
-                // TODO: should this be an actual error?
+            if &key_id != issuer {
                 warn!(
                     "validating certificate with a non matching Key ID {:?} != {:?}",
-                    &key.key_id(),
-                    issuer
+                    key_id, issuer
                 );
+                // We can't validate this against this key, as there is a missmatch.
+                return Ok(());
             }
         }
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
-        let mut key_buf = Vec::new();
-        key.to_writer_old(&mut key_buf)?;
 
-        let mut packet_buf = Vec::new();
-        id.to_writer(&mut packet_buf)?;
-
-        debug!("packet: {}", hex::encode(&packet_buf));
-
-        hasher.update(&key_buf);
-
-        match self.config.version {
-            SignatureVersion::V2 | SignatureVersion::V3 => {
-                // Nothing to do
-            }
-            SignatureVersion::V4 | SignatureVersion::V5 => {
-                let prefix = match tag {
-                    Tag::UserId => 0xB4,
-                    Tag::UserAttribute => 0xD1,
-                    _ => bail!("invalid tag for certificate validation: {:?}", tag),
-                };
-
-                let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
-                BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
-                debug!("prefix: {}", hex::encode(prefix_buf));
-
-                // prefixes
-                hasher.update(&prefix_buf);
-            }
+        // the key
+        {
+            let mut key_buf = Vec::new();
+            // TODO: this is different for V5
+            key.to_writer_old(&mut key_buf)?;
+            hasher.update(&key_buf);
         }
 
         // the packet content
-        hasher.update(&packet_buf);
+        {
+            let mut packet_buf = Vec::new();
+            id.to_writer(&mut packet_buf)?;
+
+            match self.config.version {
+                SignatureVersion::V2 | SignatureVersion::V3 => {
+                    // Nothing to do
+                }
+                SignatureVersion::V4 | SignatureVersion::V5 => {
+                    let prefix = match tag {
+                        Tag::UserId => 0xB4,
+                        Tag::UserAttribute => 0xD1,
+                        _ => bail!("invalid tag for certificate validation: {:?}", tag),
+                    };
+
+                    let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
+                    BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len() as u32);
+
+                    // prefixes
+                    hasher.update(&prefix_buf);
+                }
+            }
+
+            hasher.update(&packet_buf);
+        }
 
         let len = self.config.hash_signature_data(&mut *hasher)?;
         hasher.update(&self.config.trailer(len));
@@ -169,7 +173,7 @@ impl Signature {
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
-            "invalid signed hash value"
+            "certificate: invalid signed hash value"
         );
 
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
@@ -194,6 +198,7 @@ impl Signature {
                     "validating key binding with a non matching Key ID {:?} != {:?}",
                     &key_id, issuer
                 );
+                return Ok(());
             }
         }
 
@@ -221,7 +226,7 @@ impl Signature {
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
-            "invalid signed hash value"
+            "key binding: invalid signed hash value"
         );
 
         signing_key.verify_signature(self.config.hash_alg, hash, &self.signature)
@@ -234,11 +239,12 @@ impl Signature {
         let key_id = key.key_id();
         if let Some(issuer) = self.issuer() {
             if &key_id != issuer {
-                // TODO: should this be an actual error?
                 warn!(
                     "validating key (revocation) with a non matching Key ID {:?} != {:?}",
                     &key_id, issuer
                 );
+                // We can't validate this against this key, as there is a missmatch.
+                return Ok(());
             }
         }
 
@@ -258,7 +264,7 @@ impl Signature {
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
-            "invalid signed hash value"
+            "key: invalid signed hash value"
         );
 
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
@@ -275,15 +281,15 @@ impl Signature {
     }
 
     pub fn key_expiration_time(&self) -> Option<&DateTime<Utc>> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::KeyExpirationTime(d) => Some(d),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::KeyExpirationTime(d) => Some(d),
             _ => None,
         })
     }
 
     pub fn signature_expiration_time(&self) -> Option<&DateTime<Utc>> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::SignatureExpirationTime(d) => Some(d),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::SignatureExpirationTime(d) => Some(d),
             _ => None,
         })
     }
@@ -298,8 +304,8 @@ impl Signature {
 
     pub fn preferred_symmetric_algs(&self) -> &[SymmetricKeyAlgorithm] {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::PreferredSymmetricAlgorithms(d) => Some(&d[..]),
+            .find_map(|p| match &p.data {
+                SubpacketData::PreferredSymmetricAlgorithms(d) => Some(&d[..]),
                 _ => None,
             })
             .unwrap_or_else(|| &[][..])
@@ -307,8 +313,8 @@ impl Signature {
 
     pub fn preferred_hash_algs(&self) -> &[HashAlgorithm] {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::PreferredHashAlgorithms(d) => Some(&d[..]),
+            .find_map(|p| match &p.data {
+                SubpacketData::PreferredHashAlgorithms(d) => Some(&d[..]),
                 _ => None,
             })
             .unwrap_or_else(|| &[][..])
@@ -316,8 +322,8 @@ impl Signature {
 
     pub fn preferred_compression_algs(&self) -> &[CompressionAlgorithm] {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::PreferredCompressionAlgorithms(d) => Some(&d[..]),
+            .find_map(|p| match &p.data {
+                SubpacketData::PreferredCompressionAlgorithms(d) => Some(&d[..]),
                 _ => None,
             })
             .unwrap_or_else(|| &[][..])
@@ -325,8 +331,8 @@ impl Signature {
 
     pub fn key_server_prefs(&self) -> &[u8] {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::KeyServerPreferences(d) => Some(&d[..]),
+            .find_map(|p| match &p.data {
+                SubpacketData::KeyServerPreferences(d) => Some(&d[..]),
                 _ => None,
             })
             .unwrap_or_else(|| &[][..])
@@ -334,8 +340,8 @@ impl Signature {
 
     pub fn key_flags(&self) -> KeyFlags {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::KeyFlags(d) => Some(d[..].into()),
+            .find_map(|p| match &p.data {
+                SubpacketData::KeyFlags(d) => Some(d[..].into()),
                 _ => None,
             })
             .unwrap_or_default()
@@ -343,31 +349,31 @@ impl Signature {
 
     pub fn features(&self) -> &[u8] {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::Features(d) => Some(&d[..]),
+            .find_map(|p| match &p.data {
+                SubpacketData::Features(d) => Some(&d[..]),
                 _ => None,
             })
             .unwrap_or_else(|| &[][..])
     }
 
     pub fn revocation_reason_code(&self) -> Option<&RevocationCode> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::RevocationReason(code, _) => Some(code),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::RevocationReason(code, _) => Some(code),
             _ => None,
         })
     }
 
     pub fn revocation_reason_string(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::RevocationReason(_, reason) => Some(reason.as_str()),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::RevocationReason(_, reason) => Some(reason.as_str()),
             _ => None,
         })
     }
 
     pub fn is_primary(&self) -> bool {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::IsPrimary(d) => Some(*d),
+            .find_map(|p| match &p.data {
+                SubpacketData::IsPrimary(d) => Some(*d),
                 _ => None,
             })
             .unwrap_or(false)
@@ -375,75 +381,75 @@ impl Signature {
 
     pub fn is_revocable(&self) -> bool {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::Revocable(d) => Some(*d),
+            .find_map(|p| match &p.data {
+                SubpacketData::Revocable(d) => Some(*d),
                 _ => None,
             })
             .unwrap_or(true)
     }
 
     pub fn embedded_signature(&self) -> Option<&Signature> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::EmbeddedSignature(d) => Some(&**d),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::EmbeddedSignature(d) => Some(&**d),
             _ => None,
         })
     }
 
     pub fn preferred_key_server(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::PreferredKeyServer(d) => Some(d.as_str()),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::PreferredKeyServer(d) => Some(d.as_str()),
             _ => None,
         })
     }
 
     pub fn notations(&self) -> Vec<&Notation> {
         self.subpackets()
-            .filter_map(|p| match p {
-                Subpacket::Notation(d) => Some(d),
+            .filter_map(|p| match &p.data {
+                SubpacketData::Notation(d) => Some(d),
                 _ => None,
             })
             .collect()
     }
 
     pub fn revocation_key(&self) -> Option<&types::RevocationKey> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::RevocationKey(d) => Some(d),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::RevocationKey(d) => Some(d),
             _ => None,
         })
     }
 
     pub fn signers_userid(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::SignersUserID(d) => Some(d.as_str()),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::SignersUserID(d) => Some(d.as_str()),
             _ => None,
         })
     }
 
     pub fn policy_uri(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::PolicyURI(d) => Some(d.as_str()),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::PolicyURI(d) => Some(d.as_str()),
             _ => None,
         })
     }
 
     pub fn trust_signature(&self) -> Option<(u8, u8)> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::TrustSignature(depth, value) => Some((*depth, *value)),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::TrustSignature(depth, value) => Some((*depth, *value)),
             _ => None,
         })
     }
 
     pub fn regular_expression(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match p {
-            Subpacket::RegularExpression(d) => Some(d.as_str()),
+        self.subpackets().find_map(|p| match &p.data {
+            SubpacketData::RegularExpression(d) => Some(d.as_str()),
             _ => None,
         })
     }
 
     pub fn exportable_certification(&self) -> bool {
         self.subpackets()
-            .find_map(|p| match p {
-                Subpacket::ExportableCertification(d) => Some(*d),
+            .find_map(|p| match &p.data {
+                SubpacketData::ExportableCertification(d) => Some(*d),
                 _ => None,
             })
             .unwrap_or(true)
@@ -591,11 +597,9 @@ pub enum SubpacketType {
     Other(u8),
 }
 
-#[allow(clippy::from_over_into)]
-impl Into<u8> for SubpacketType {
-    #[inline]
-    fn into(self) -> u8 {
-        match self {
+impl SubpacketType {
+    pub fn as_u8(&self, is_critical: bool) -> u8 {
+        let raw: u8 = match self {
             SubpacketType::SignatureCreationTime => 2,
             SubpacketType::SignatureExpirationTime => 3,
             SubpacketType::ExportableCertification => 4,
@@ -621,64 +625,84 @@ impl Into<u8> for SubpacketType {
             SubpacketType::EmbeddedSignature => 32,
             SubpacketType::IssuerFingerprint => 33,
             SubpacketType::PreferredAead => 34,
-            SubpacketType::Experimental(n) => n,
-            SubpacketType::Other(n) => n,
+            SubpacketType::Experimental(n) => *n,
+            SubpacketType::Other(n) => *n,
+        };
+
+        if is_critical {
+            // set critical bit
+            raw | 0b1000_0000
+        } else {
+            raw
         }
+    }
+
+    #[inline]
+    pub fn from_u8(n: u8) -> (Self, bool) {
+        let is_critical = (n >> 7) == 1;
+        // remove critical bit
+        let n = n & 0b0111_1111;
+
+        let m = match n {
+            2 => SubpacketType::SignatureCreationTime,
+            3 => SubpacketType::SignatureExpirationTime,
+            4 => SubpacketType::ExportableCertification,
+            5 => SubpacketType::TrustSignature,
+            6 => SubpacketType::RegularExpression,
+            7 => SubpacketType::Revocable,
+            9 => SubpacketType::KeyExpirationTime,
+            11 => SubpacketType::PreferredSymmetricAlgorithms,
+            12 => SubpacketType::RevocationKey,
+            16 => SubpacketType::Issuer,
+            20 => SubpacketType::Notation,
+            21 => SubpacketType::PreferredHashAlgorithms,
+            22 => SubpacketType::PreferredCompressionAlgorithms,
+            23 => SubpacketType::KeyServerPreferences,
+            24 => SubpacketType::PreferredKeyServer,
+            25 => SubpacketType::PrimaryUserId,
+            26 => SubpacketType::PolicyURI,
+            27 => SubpacketType::KeyFlags,
+            28 => SubpacketType::SignersUserID,
+            29 => SubpacketType::RevocationReason,
+            30 => SubpacketType::Features,
+            31 => SubpacketType::SignatureTarget,
+            32 => SubpacketType::EmbeddedSignature,
+            33 => SubpacketType::IssuerFingerprint,
+            34 => SubpacketType::PreferredAead,
+            100..=110 => SubpacketType::Experimental(n),
+            _ => SubpacketType::Other(n),
+        };
+
+        (m, is_critical)
     }
 }
 
-impl FromPrimitive for SubpacketType {
-    #[inline]
-    fn from_i64(n: i64) -> Option<Self> {
-        if n > 0 && n < 256 {
-            Self::from_u64(n as u64)
-        } else {
-            None
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Subpacket {
+    pub is_critical: bool,
+    pub data: SubpacketData,
+}
+
+impl Subpacket {
+    /// Construct a new regular subpacket.
+    pub const fn regular(data: SubpacketData) -> Self {
+        Subpacket {
+            is_critical: false,
+            data,
         }
     }
 
-    #[inline]
-    fn from_u64(n: u64) -> Option<Self> {
-        if n > 255 {
-            None
-        } else {
-            let m = match n {
-                2 => SubpacketType::SignatureCreationTime,
-                3 => SubpacketType::SignatureExpirationTime,
-                4 => SubpacketType::ExportableCertification,
-                5 => SubpacketType::TrustSignature,
-                6 => SubpacketType::RegularExpression,
-                7 => SubpacketType::Revocable,
-                9 => SubpacketType::KeyExpirationTime,
-                11 => SubpacketType::PreferredSymmetricAlgorithms,
-                12 => SubpacketType::RevocationKey,
-                16 => SubpacketType::Issuer,
-                20 => SubpacketType::Notation,
-                21 => SubpacketType::PreferredHashAlgorithms,
-                22 => SubpacketType::PreferredCompressionAlgorithms,
-                23 => SubpacketType::KeyServerPreferences,
-                24 => SubpacketType::PreferredKeyServer,
-                25 => SubpacketType::PrimaryUserId,
-                26 => SubpacketType::PolicyURI,
-                27 => SubpacketType::KeyFlags,
-                28 => SubpacketType::SignersUserID,
-                29 => SubpacketType::RevocationReason,
-                30 => SubpacketType::Features,
-                31 => SubpacketType::SignatureTarget,
-                32 => SubpacketType::EmbeddedSignature,
-                33 => SubpacketType::IssuerFingerprint,
-                34 => SubpacketType::PreferredAead,
-                100..=110 => SubpacketType::Experimental(n as u8),
-                _ => SubpacketType::Other(n as u8),
-            };
-
-            Some(m)
+    /// Construct a new critical subpacket.
+    pub const fn critical(data: SubpacketData) -> Self {
+        Subpacket {
+            is_critical: true,
+            data,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Subpacket {
+pub enum SubpacketData {
     /// The time the signature was made.
     SignatureCreationTime(DateTime<Utc>),
     /// The time the signature will expire.

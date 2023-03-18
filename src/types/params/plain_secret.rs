@@ -40,11 +40,6 @@ pub enum PlainSecretParamsRef<'a> {
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
-    pub fn from_slice(data: &'a [u8], alg: PublicKeyAlgorithm) -> Result<Self> {
-        let (_, repr) = parse_secret_params(alg)(data)?;
-        Ok(repr)
-    }
-
     pub fn to_owned(&self) -> PlainSecretParams {
         match self {
             PlainSecretParamsRef::RSA { d, p, q, u } => PlainSecretParams::RSA {
@@ -77,7 +72,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                 (*x).to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDSA(x) => {
-                (*x).to_writer(writer)?;
+                (*x).strip_trailing_zeroes().to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDH(x) => {
                 (*x).to_writer(writer)?;
@@ -183,24 +178,20 @@ impl<'a> PlainSecretParamsRef<'a> {
                 unimplemented_err!("Elgamal");
             }
             PlainSecretParamsRef::ECDSA(d) => match public_params {
-                PublicParams::ECDSA { ref curve, .. } => match *curve {
-                    ECCCurve::P256 => {
-                        ensure!(d.len() <= 32, "invalid secret");
+                PublicParams::ECDSA(params) => match params {
+                    EcdsaPublicParams::P256(_) => {
+                        let secret = p256::SecretKey::from_slice(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey {
-                            oid: curve.oid(),
-                            x: d.into(),
-                        }))
+                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P256(secret)))
                     }
-                    ECCCurve::P384 => {
-                        ensure!(d.len() <= 48, "invalid secret");
+                    EcdsaPublicParams::P384(_) => {
+                        let secret = p384::SecretKey::from_slice(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey {
-                            oid: curve.oid(),
-                            x: d.into(),
-                        }))
+                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P384(secret)))
                     }
-                    _ => unsupported_err!("curve {:?} for ECDSA", curve.to_string()),
+                    EcdsaPublicParams::Unsupported { curve, .. } => {
+                        unsupported_err!("curve {:?} for ECDSA", curve.to_string())
+                    }
                 },
                 _ => unreachable!("inconsistent key state"),
             },
@@ -209,9 +200,31 @@ impl<'a> PlainSecretParamsRef<'a> {
 }
 
 impl PlainSecretParams {
-    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm) -> Result<Self> {
-        let ref_params = PlainSecretParamsRef::from_slice(data, alg)?;
-        Ok(ref_params.to_owned())
+    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
+        let (_, mut repr) = parse_secret_params(alg)(data)?;
+        repr.normalize(params);
+        Ok(repr)
+    }
+
+    /// Normalize internal storage.
+    #[allow(clippy::single_match)]
+    fn normalize(&mut self, params: &PublicParams) {
+        match (self, params) {
+            (PlainSecretParams::ECDSA(secret_mpi), PublicParams::ECDSA(pub_params)) => {
+                // ECDSA varies in its storage of padded vs unpadded.
+                // This normalizes it to store the padded version in memory.
+                match pub_params {
+                    EcdsaPublicParams::P256(_) => {
+                        secret_mpi.pad_right(32);
+                    }
+                    EcdsaPublicParams::P384(_) => {
+                        secret_mpi.pad_right(48);
+                    }
+                    EcdsaPublicParams::Unsupported { .. } => {}
+                }
+            }
+            _ => {}
+        }
     }
 
     pub fn string_to_key_id(&self) -> u8 {
@@ -313,7 +326,9 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::RSA { .. } => write!(f, "PlainSecretParams(RSA)"),
             PlainSecretParamsRef::DSA(_) => write!(f, "PlainSecretParams(DSA)"),
             PlainSecretParamsRef::Elgamal(_) => write!(f, "PlainSecretParams(Elgamal)"),
-            PlainSecretParamsRef::ECDSA(_) => write!(f, "PlainSecretParams(ECDSA)"),
+            PlainSecretParamsRef::ECDSA(x) => {
+                write!(f, "PlainSecretParams(ECDSA {})", hex::encode(x.as_bytes()))
+            }
             PlainSecretParamsRef::ECDH(_) => write!(f, "PlainSecretParams(ECDH)"),
             PlainSecretParamsRef::EdDSA(_) => write!(f, "PlainSecretParams(EdDSA)"),
         }
@@ -322,16 +337,16 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
 
 fn parse_secret_params(
     alg: PublicKeyAlgorithm,
-) -> impl Fn(&[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+) -> impl Fn(&[u8]) -> IResult<&[u8], PlainSecretParams> {
     move |i: &[u8]| match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
             rsa_secret_params(i)
         }
-        PublicKeyAlgorithm::DSA => map(mpi, PlainSecretParamsRef::DSA)(i),
-        PublicKeyAlgorithm::Elgamal => map(mpi, PlainSecretParamsRef::Elgamal)(i),
-        PublicKeyAlgorithm::ECDH => map(mpi, PlainSecretParamsRef::ECDH)(i),
-        PublicKeyAlgorithm::ECDSA => map(mpi, PlainSecretParamsRef::ECDSA)(i),
-        PublicKeyAlgorithm::EdDSA => map(mpi, PlainSecretParamsRef::EdDSA)(i),
+        PublicKeyAlgorithm::DSA => map(mpi, |m| PlainSecretParams::DSA(m.to_owned()))(i),
+        PublicKeyAlgorithm::Elgamal => map(mpi, |m| PlainSecretParams::Elgamal(m.to_owned()))(i),
+        PublicKeyAlgorithm::ECDH => map(mpi, |m| PlainSecretParams::ECDH(m.to_owned()))(i),
+        PublicKeyAlgorithm::ECDSA => map(mpi, |m| PlainSecretParams::ECDSA(m.to_owned()))(i),
+        PublicKeyAlgorithm::EdDSA => map(mpi, |m| PlainSecretParams::EdDSA(m.to_owned()))(i),
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
             nom::error::ErrorKind::Switch,
         ))),
@@ -339,8 +354,13 @@ fn parse_secret_params(
 }
 
 // Parse the decrpyted private params of an RSA private key.
-fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParamsRef<'_>> {
+fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParams> {
     map(tuple((mpi, mpi, mpi, mpi)), |(d, p, q, u)| {
-        PlainSecretParamsRef::RSA { d, p, q, u }
+        PlainSecretParams::RSA {
+            d: d.to_owned(),
+            p: p.to_owned(),
+            q: q.to_owned(),
+            u: u.to_owned(),
+        }
     })(i)
 }

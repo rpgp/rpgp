@@ -9,6 +9,20 @@ macro_rules! key_parser {
             inner: std::iter::Peekable<I>,
         }
 
+        impl<I: Sized + Iterator<Item = $crate::packet::Packet>> $key_type_parser<I> {
+            pub fn into_inner(self) -> std::iter::Peekable<I> {
+                self.inner
+            }
+
+            pub fn from_packets (
+                packets: std::iter::Peekable<I>,
+            ) -> Self {
+                $key_type_parser {
+                    inner: packets,
+                }
+            }
+        }
+
         impl<I: Sized + Iterator<Item = $crate::packet::Packet>> Iterator for $key_type_parser<I> {
             type Item = $crate::errors::Result<$key_type>;
 
@@ -18,6 +32,9 @@ macro_rules! key_parser {
                 use $crate::types::{KeyVersion, SignedUser, SignedUserAttribute, Tag, KeyTrait};
 
                 let packets = self.inner.by_ref();
+
+                // Check if we are done
+                packets.peek()?;
 
                 // -- One Public-Key packet
 
@@ -120,6 +137,7 @@ macro_rules! key_parser {
                 debug!("  subkeys");
 
                 while packets.peek().map(|packet| {
+                    debug!("  peek {:?}", packet.tag());
                     $( packet.tag() == Tag::$subkey_tag || )* false
                 }) == Some(true) {
                     // -- Only V4 keys should have sub keys
@@ -133,7 +151,9 @@ macro_rules! key_parser {
                             Tag::$subkey_tag => {
                                 let subkey: $inner_subkey_type = err_opt!(packet.try_into());
                                 let mut sigs = Vec::new();
-                                while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
+                                while packets.peek().map(|packet| {
+                                    packet.tag() == Tag::Signature
+                                }) == Some(true) {
                                     let packet = packets.next().expect("peeked");
                                     let sig: Signature = err_opt!(packet.try_into());
                                     sigs.push(sig);
@@ -162,12 +182,10 @@ macro_rules! key_parser {
         impl $crate::composed::Deserializable for $key_type {
             /// Parse a transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-            fn from_packets<'a>(
-                packets: impl Iterator<Item = $crate::packet::Packet> + 'a,
+            fn from_packets<'a, I: Iterator<Item = $crate::packet::Packet> + 'a> (
+                packets: std::iter::Peekable<I>,
             ) -> Box<dyn Iterator<Item = $crate::errors::Result<Self>> + 'a> {
-                Box::new($key_type_parser {
-                    inner: packets.peekable(),
-                })
+                Box::new($key_type_parser::from_packets(packets))
             }
         }
     };

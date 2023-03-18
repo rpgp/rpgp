@@ -88,18 +88,20 @@ impl Version {
         match self {
             Version::Old => {
                 if len < 256 {
+                    // one octet
                     writer.write_all(&[0b1000_0000 | tag << 2, len as u8])?;
                 } else if len < 65536 {
+                    // two octets
                     writer.write_all(&[0b1000_0001 | tag << 2])?;
                     writer.write_u16::<BigEndian>(len as u16)?;
                 } else {
+                    // four octets
                     writer.write_all(&[0b1000_0010 | tag << 2])?;
                     writer.write_u32::<BigEndian>(len as u32)?;
                 }
             }
             Version::New => {
                 writer.write_all(&[0b1100_0000 | tag])?;
-
                 if len < 192 {
                     writer.write_all(&[len as u8])?;
                 } else if len < 8384 {

@@ -58,8 +58,8 @@
 //!      .created(Some(now))
 //!      .unhashed_subpackets(vec![]) // must be initialized
 //!      .hashed_subpackets(vec![
-//!           packet::Subpacket::SignatureCreationTime(now),
-//!           packet::Subpacket::Issuer(signing_key.key_id()),
+//!           packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
+//!           packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
 //!      ]) // must be initialized
 //!      .build()
 //!      .unwrap();

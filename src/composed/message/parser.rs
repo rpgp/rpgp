@@ -155,8 +155,8 @@ impl<I: Sized + Iterator<Item = Packet>> Iterator for MessageParser<I> {
 impl Deserializable for Message {
     /// Parse a composed message.
     /// Ref: https://tools.ietf.org/html/rfc4880#section-11.3
-    fn from_packets<'a>(
-        packets: impl Iterator<Item = Packet> + 'a,
+    fn from_packets<'a, I: Iterator<Item = Packet> + 'a>(
+        packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
         Box::new(MessageParser {
             source: packets.peekable(),

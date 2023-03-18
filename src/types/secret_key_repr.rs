@@ -6,10 +6,13 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::ECCCurve;
+
+use super::Mpi;
 
 /// The version of the secret key that is actually exposed to users to do crypto operations.
 #[allow(clippy::large_enum_variant)] // FIXME
-#[derive(Debug)]
+#[derive(Debug, ZeroizeOnDrop)]
 pub enum SecretKeyRepr {
     RSA(RsaPrivateKey),
     DSA(DSASecretKey),
@@ -56,19 +59,29 @@ impl fmt::Debug for EdDSASecretKey {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct ECDSASecretKey {
-    /// The secret point.
-    pub x: BigUint,
-    pub oid: Vec<u8>,
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop)]
+pub enum ECDSASecretKey {
+    P256(p256::SecretKey),
+    P384(p384::SecretKey),
+    Unsupported {
+        /// The secret point.
+        x: Mpi,
+        #[zeroize(skip)]
+        curve: ECCCurve,
+    },
 }
 
 impl fmt::Debug for ECDSASecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ECDSASecretKey")
-            .field("x", &"[..]")
-            .field("oid", &hex::encode(&self.oid))
-            .finish()
+        match self {
+            ECDSASecretKey::P256(_) => write!(f, "ECDSASecretKey::P256([..])"),
+            ECDSASecretKey::P384(_) => write!(f, "ECDSASecretKey::P384([..])"),
+            ECDSASecretKey::Unsupported { curve, .. } => f
+                .debug_struct("ECDSASecretKey::Unsupported")
+                .field("x", &"[..]")
+                .field("curve", &curve)
+                .finish(),
+        }
     }
 }
 

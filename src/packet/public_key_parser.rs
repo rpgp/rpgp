@@ -9,7 +9,7 @@ use num_traits::FromPrimitive;
 use crate::crypto::ecc_curve::ecc_curve_from_oid;
 use crate::crypto::{HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
 use crate::errors::IResult;
-use crate::types::{mpi, KeyVersion, Mpi, MpiRef, PublicParams};
+use crate::types::{mpi, EcdsaPublicParams, KeyVersion, Mpi, MpiRef, PublicParams};
 
 #[inline]
 fn to_owned(mref: MpiRef<'_>) -> Mpi {
@@ -18,25 +18,29 @@ fn to_owned(mref: MpiRef<'_>) -> Mpi {
 
 // Ref: https://tools.ietf.org/html/rfc6637#section-9
 fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    // a one-octet size of the following field
-    // octets representing a curve OID
-    let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
+    let (i, curve) = map_opt(
+        // a one-octet size of the following field
+        length_data(be_u8),
+        // octets representing a curve OID
+        ecc_curve_from_oid,
+    )(i)?;
+
     // MPI of an EC point representing a public key
     let (i, p) = mpi(i)?;
     Ok((
         i,
-        PublicParams::ECDSA {
-            curve,
-            p: p.to_owned(),
-        },
+        PublicParams::ECDSA(EcdsaPublicParams::from_mpi(p, curve)?),
     ))
 }
 
 // https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
 fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    // a one-octet size of the following field
-    // octets representing a curve OID
-    let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
+    let (i, curve) = map_opt(
+        // a one-octet size of the following field
+        length_data(be_u8),
+        // octets representing a curve OID
+        ecc_curve_from_oid,
+    )(i)?;
     // MPI of an EC point representing a public key
     let (i, q) = mpi(i)?;
     Ok((
