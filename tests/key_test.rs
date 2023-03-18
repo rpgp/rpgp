@@ -684,6 +684,14 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
         };
         armor::write(&pk, typ, &mut ser, Some(&headers)).unwrap();
         let ser_str = std::str::from_utf8(&ser).unwrap();
+
+        // normalize line endings
+        let orig = orig.replace("\r\n", "\n").replace('\r', "\n");
+        let ser_str = ser_str
+            .to_string()
+            .replace("\r\n", "\n")
+            .replace('\r', "\n");
+
         assert_eq!(orig, ser_str);
     }
 
