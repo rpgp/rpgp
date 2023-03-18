@@ -3,7 +3,7 @@ use std::hash::Hasher;
 use std::io::prelude::*;
 use std::{fmt, io, str};
 
-use base64::engine::{fast_portable::FastPortable, DEFAULT_ENGINE};
+use base64::engine::{general_purpose::STANDARD, Engine as _};
 use buf_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 
@@ -244,8 +244,9 @@ fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, String>
 
 /// Read the checksum from an base64 encoded buffer.
 fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
-    let checksum =
-        base64::decode_engine(input, &DEFAULT_ENGINE).map_err(|_| io::ErrorKind::InvalidData)?;
+    let checksum = STANDARD
+        .decode(input)
+        .map_err(|_| io::ErrorKind::InvalidData)?;
 
     let mut buf = [0; 4];
     let mut i = checksum.len();
@@ -306,7 +307,9 @@ pub struct Dearmor<R> {
     /// the underlying data source, wrapped in a BufferedReader
     inner: Option<BufReader<R>>,
     /// base64 decoder
-    base_decoder: Option<Base64Decoder<FastPortable, Base64Reader<LineReader<BufReader<R>>>>>,
+    base_decoder: Option<
+        Base64Decoder<base64::engine::GeneralPurpose, Base64Reader<LineReader<BufReader<R>>>>,
+    >,
     /// Are we done?
     done: bool,
     crc: crc24::Crc24Hasher,
