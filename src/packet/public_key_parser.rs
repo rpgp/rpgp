@@ -16,7 +16,7 @@ fn to_owned(mref: MpiRef<'_>) -> Mpi {
     mref.to_owned()
 }
 
-// Ref: https://tools.ietf.org/html/rfc6637#section-9
+/// Ref: https://tools.ietf.org/html/rfc6637#section-9
 fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     let (i, curve) = map_opt(
         // a one-octet size of the following field
@@ -33,7 +33,7 @@ fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
-// https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
+/// https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
 fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     let (i, curve) = map_opt(
         // a one-octet size of the following field
@@ -52,7 +52,7 @@ fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
-// Ref: https://tools.ietf.org/html/rfc6637#section-9
+/// Ref: https://tools.ietf.org/html/rfc6637#section-9
 fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
     map(
         tuple((
@@ -112,7 +112,7 @@ fn rsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     })(i)
 }
 
-// Parse the fields of a public key.
+/// Parse the fields of a public key.
 pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
     move |i: &[u8]| match typ {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
@@ -175,8 +175,8 @@ fn old_public_key_parser(
     }
 }
 
-// Parse a public key packet (Tag 6)
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
+/// Parse a public key packet (Tag 6)
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
 #[allow(clippy::type_complexity)]
 pub(crate) fn parse(
     i: &[u8],

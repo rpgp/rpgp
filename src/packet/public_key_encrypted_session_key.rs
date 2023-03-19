@@ -104,8 +104,7 @@ fn parse_mpis<'i>(alg: &PublicKeyAlgorithm, i: &'i [u8]) -> IResult<&'i [u8], Ve
     }
 }
 
-// Parses a Public-Key Encrypted Session Key Packets
-
+/// Parses a Public-Key Encrypted Session Key Packets.
 fn parse(
     packet_version: Version,
 ) -> impl Fn(&[u8]) -> IResult<&[u8], PublicKeyEncryptedSessionKey> {

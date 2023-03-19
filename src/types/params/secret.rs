@@ -77,7 +77,7 @@ impl Serialize for SecretParams {
     }
 }
 
-// Parse possibly encrypted private fields of a key.
+/// Parse possibly encrypted private fields of a key.
 fn parse_secret_fields(
     alg: PublicKeyAlgorithm,
     public_params: &PublicParams,
