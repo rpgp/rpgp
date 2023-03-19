@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::io;
 
+use bstr::BStr;
 use chrono::{self, SubsecRound};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
@@ -200,12 +201,12 @@ impl Serialize for Message {
 }
 
 impl Message {
-    pub fn new_literal(file_name: &str, data: &str) -> Self {
-        Message::Literal(LiteralData::from_str(file_name, data))
+    pub fn new_literal(file_name: impl AsRef<BStr>, data: &str) -> Self {
+        Message::Literal(LiteralData::from_str(file_name.as_ref(), data))
     }
 
-    pub fn new_literal_bytes(file_name: &str, data: &[u8]) -> Self {
-        Message::Literal(LiteralData::from_bytes(file_name, data))
+    pub fn new_literal_bytes(file_name: impl AsRef<BStr>, data: &[u8]) -> Self {
+        Message::Literal(LiteralData::from_bytes(file_name.as_ref(), data))
     }
 
     /// Compresses the message.

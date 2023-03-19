@@ -1,5 +1,6 @@
 use std::{fmt, io, str};
 
+use bstr::{BStr, BString};
 use chrono::{SubsecRound, Utc};
 
 use crate::errors::Result;
@@ -8,33 +9,33 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{SecretKeyTrait, SignedUser, Tag, Version};
-use crate::util::{read_string, write_string};
 
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserId {
     packet_version: Version,
-    id: String,
+    id: BString,
 }
 
 impl UserId {
     /// Parses a `UserId` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let id = read_string(input);
-
-        Ok(UserId { packet_version, id })
+        Ok(UserId {
+            packet_version,
+            id: BString::from(input),
+        })
     }
 
     pub fn from_str(packet_version: Version, input: &str) -> Self {
         UserId {
             packet_version,
-            id: input.to_string(),
+            id: BString::from(input),
         }
     }
 
-    pub fn id(&self) -> &str {
-        self.id.as_str()
+    pub fn id(&self) -> &BStr {
+        self.id.as_ref()
     }
 
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUser>
@@ -64,7 +65,7 @@ impl UserId {
 
 impl Serialize for UserId {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&write_string(&self.id))?;
+        writer.write_all(&self.id)?;
 
         Ok(())
     }

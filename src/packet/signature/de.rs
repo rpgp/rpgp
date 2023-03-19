@@ -1,6 +1,7 @@
 use std::boxed::Box;
 use std::str;
 
+use bstr::BString;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::{complete, map, map_opt, map_parser, map_res, rest};
@@ -21,7 +22,7 @@ use crate::types::{
     mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
     Version,
 };
-use crate::util::{clone_into_array, packet_length, read_string};
+use crate::util::{clone_into_array, packet_length};
 
 impl Deserialize for Signature {
     /// Parses a `Signature` packet from the given slice.
@@ -143,7 +144,7 @@ fn trust_signature(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse a regular expression subpacket.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
 fn regular_expression(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    map(map(rest, read_string), SubpacketData::RegularExpression)(i)
+    map(map(rest, BString::from), SubpacketData::RegularExpression)(i)
 }
 
 /// Parse a revocation key subpacket
@@ -170,8 +171,8 @@ fn notation_data(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     let (i, _) = tag(&[0, 0, 0])(i)?;
     let (i, name_len) = be_u16(i)?;
     let (i, value_len) = be_u16(i)?;
-    let (i, name) = map(take(name_len), read_string)(i)?;
-    let (i, value) = map(take(value_len), read_string)(i)?;
+    let (i, name) = map(take(name_len), BString::from)(i)?;
+    let (i, value) = map(take(value_len), BString::from)(i)?;
 
     Ok((
         i,
@@ -209,7 +210,7 @@ fn primary_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse a policy URI subpacket.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
 fn policy_uri(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    map(map(rest, read_string), SubpacketData::PolicyURI)(i)
+    map(map(rest, BString::from), SubpacketData::PolicyURI)(i)
 }
 
 /// Parse a key flags subpacket
@@ -243,7 +244,7 @@ fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         pair(
             map_opt(be_u8, RevocationCode::from_u8),
-            map(rest, read_string),
+            map(rest, BString::from),
         ),
         |(code, reason)| SubpacketData::RevocationReason(code, reason),
     )(i)

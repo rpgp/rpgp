@@ -180,14 +180,6 @@ macro_rules! impl_try_from_into {
     }
 }
 
-pub fn write_string(val: &str) -> Vec<u8> {
-    val.chars().map(|c| c as u8).collect()
-}
-
-pub fn read_string(raw: &[u8]) -> String {
-    raw.iter().map(|c| *c as char).collect::<String>()
-}
-
 pub struct TeeWriter<'a, A, B> {
     a: &'a mut A,
     b: &'a mut B,
@@ -233,36 +225,6 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-
-    #[test]
-    fn test_read_string() {
-        assert_eq!(read_string(b"hello"), "hello".to_string());
-        assert_eq!(
-            read_string(&[
-                74, 252, 114, 103, 101, 110, 32, 77, 97, 114, 115, 99, 104, 97, 108, 108, 32, 60,
-                106, 117, 101, 114, 103, 101, 110, 46, 109, 97, 114, 115, 99, 104, 97, 108, 108,
-                64, 112, 114, 111, 109, 112, 116, 46, 100, 101, 62
-            ]),
-            "Jürgen Marschall <juergen.marschall@prompt.de>".to_string()
-        );
-    }
-
-    #[test]
-    fn test_write_string() {
-        let vals = vec![
-            vec![
-                74, 252, 114, 103, 101, 110, 32, 77, 97, 114, 115, 99, 104, 97, 108, 108, 32, 60,
-                106, 117, 101, 114, 103, 101, 110, 46, 109, 97, 114, 115, 99, 104, 97, 108, 108,
-                64, 112, 114, 111, 109, 112, 116, 46, 100, 101, 62,
-            ],
-            hex::decode("4275527354664c6f3064203c73616d75656c2e726f7474406f72616e67652e66723e")
-                .unwrap(),
-        ];
-
-        for val in &vals {
-            assert_eq!(&write_string(&read_string(val)), val);
-        }
-    }
 
     #[test]
     fn test_write_packet_len() {

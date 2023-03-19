@@ -6,7 +6,7 @@ use crate::errors::Result;
 use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
 use crate::ser::Serialize;
-use crate::util::{write_packet_length, write_string};
+use crate::util::write_packet_length;
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -54,7 +54,7 @@ impl Subpacket {
             }
             SubpacketData::RevocationReason(code, reason) => {
                 writer.write_all(&[*code as u8])?;
-                writer.write_all(&write_string(reason))?;
+                writer.write_all(reason)?;
             }
             SubpacketData::IsPrimary(is_primary) => {
                 let val = u8::from(*is_primary);
@@ -68,20 +68,18 @@ impl Subpacket {
                 (*inner_sig).to_writer(writer)?;
             }
             SubpacketData::PreferredKeyServer(server) => {
-                writer.write_all(&write_string(server))?;
+                writer.write_all(server.as_bytes())?;
             }
             SubpacketData::Notation(notation) => {
                 let is_readable = if notation.readable { 0x80 } else { 0 };
                 writer.write_all(&[is_readable, 0, 0, 0])?;
 
-                let name_bytes = write_string(&notation.name);
-                writer.write_u16::<BigEndian>(name_bytes.len() as u16)?;
+                writer.write_u16::<BigEndian>(notation.name.len() as u16)?;
 
-                let value_bytes = write_string(&notation.value);
-                writer.write_u16::<BigEndian>(value_bytes.len() as u16)?;
+                writer.write_u16::<BigEndian>(notation.value.len() as u16)?;
 
-                writer.write_all(&name_bytes)?;
-                writer.write_all(&value_bytes)?;
+                writer.write_all(&notation.name)?;
+                writer.write_all(&notation.value)?;
             }
             SubpacketData::RevocationKey(rev_key) => {
                 writer.write_all(&[rev_key.class as u8, rev_key.algorithm as u8])?;
@@ -91,13 +89,13 @@ impl Subpacket {
                 writer.write_all(body.as_ref())?;
             }
             SubpacketData::PolicyURI(uri) => {
-                writer.write_all(&write_string(uri))?;
+                writer.write_all(uri)?;
             }
             SubpacketData::TrustSignature(depth, value) => {
                 writer.write_all(&[*depth, *value])?;
             }
             SubpacketData::RegularExpression(regexp) => {
-                writer.write_all(&write_string(regexp))?;
+                writer.write_all(regexp)?;
             }
             SubpacketData::ExportableCertification(is_exportable) => {
                 let val = u8::from(*is_exportable);
@@ -137,7 +135,11 @@ impl Subpacket {
             SubpacketData::KeyServerPreferences(prefs) => prefs.len(),
             SubpacketData::KeyFlags(flags) => flags.len(),
             SubpacketData::Features(features) => features.len(),
-            SubpacketData::RevocationReason(_, reason) => 1 + reason.chars().count(),
+
+            SubpacketData::RevocationReason(_, reason) => {
+                // 1 byte for revocation code + n for the reason
+                1 + reason.len()
+            }
             SubpacketData::IsPrimary(_) => 1,
             SubpacketData::Revocable(_) => 1,
             SubpacketData::EmbeddedSignature(sig) => {
@@ -148,16 +150,17 @@ impl Subpacket {
             }
             SubpacketData::PreferredKeyServer(server) => server.chars().count(),
             SubpacketData::Notation(n) => {
-                4 + 2 + 2 + n.name.chars().count() + n.value.chars().count()
+                // 4 for the flags, 2 for the name length, 2 for the value length, m for the name, n for the value
+                4 + 2 + 2 + n.name.len() + n.value.len()
             }
             SubpacketData::RevocationKey(_) => 22,
             SubpacketData::SignersUserID(body) => {
                 let bytes: &[u8] = body.as_ref();
                 bytes.len()
             }
-            SubpacketData::PolicyURI(uri) => uri.as_bytes().len(),
+            SubpacketData::PolicyURI(uri) => uri.len(),
             SubpacketData::TrustSignature(_, _) => 2,
-            SubpacketData::RegularExpression(regexp) => regexp.as_bytes().len(),
+            SubpacketData::RegularExpression(regexp) => regexp.len(),
             SubpacketData::ExportableCertification(_) => 1,
             SubpacketData::IssuerFingerprint(_, fp) => 1 + fp.len(),
             SubpacketData::PreferredAeadAlgorithms(algs) => algs.len(),
