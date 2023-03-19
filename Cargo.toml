@@ -59,6 +59,7 @@ getrandom = { version = "0.2.6", optional = true }
 
 [dependencies.buffer-redux]
 version = "1.0.0"
+default-features = false
 
 [dependencies.ed25519-dalek]
 version = "2.0.0-pre.0"
