@@ -57,8 +57,8 @@ twofish = "^0.7"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 getrandom = { version = "0.2.6", optional = true }
 
-[dependencies.buf_redux]
-version = "0.8.4"
+[dependencies.buffer-redux]
+version = "1.0.0"
 default-features = false
 
 [dependencies.ed25519-dalek]

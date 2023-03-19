@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use buf_redux::Buffer;
+use buffer_redux::Buffer;
 use nom::{Needed, Offset};
 
 use crate::errors::{Error, Result};

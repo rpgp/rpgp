@@ -10,7 +10,7 @@ use base64::{
         Engine,
     },
 };
-use buf_redux::{BufReader, Buffer};
+use buffer_redux::{BufReader, Buffer};
 
 const BUF_SIZE: usize = 1024;
 const BUF_CAPACITY: usize = BUF_SIZE / 4 * 3;

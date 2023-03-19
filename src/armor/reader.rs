@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::{fmt, io, str};
 
 use base64::engine::{general_purpose::STANDARD, Engine as _};
-use buf_redux::BufReader;
+use buffer_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 
 use nom::branch::alt;
