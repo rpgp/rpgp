@@ -37,8 +37,8 @@ fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
     NaiveDateTime::from_timestamp_opt(i64::from(ts), 0).map(|ts| DateTime::<Utc>::from_utc(ts, Utc))
 }
 
-// Parse a signature creation time subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
+/// Parse a signature creation time subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
 fn signature_creation_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
@@ -47,8 +47,8 @@ fn signature_creation_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-// Parse an issuer subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
+/// Parse an issuer subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
 fn issuer(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         map_res(complete(take(8u8)), KeyId::from_slice),
@@ -56,8 +56,8 @@ fn issuer(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-// Parse a key expiration time subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
+/// Parse a key expiration time subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
 fn key_expiration(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
@@ -108,8 +108,8 @@ fn pref_com_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-// Parse a signature expiration time subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
+/// Parse a signature expiration time subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
 fn signature_expiration_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
@@ -118,36 +118,36 @@ fn signature_expiration_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-// Parse a exportable certification subpacket.
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
+/// Parse a exportable certification subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
 fn exportable_certification(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(complete(be_u8), |v| {
         SubpacketData::ExportableCertification(v == 1)
     })(i)
 }
 
-// Parse a revocable subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
+/// Parse a revocable subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
 fn revocable(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(complete(be_u8), |v| SubpacketData::Revocable(v == 1))(i)
 }
 
-// Parse a trust signature subpacket.
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.13
+/// Parse a trust signature subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.13
 fn trust_signature(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(pair(be_u8, be_u8), |(depth, value)| {
         SubpacketData::TrustSignature(depth, value)
     })(i)
 }
 
-// Parse a regular expression subpacket.
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
+/// Parse a regular expression subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
 fn regular_expression(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(map(rest, read_string), SubpacketData::RegularExpression)(i)
 }
 
-// Parse a revocation key subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
+/// Parse a revocation key subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
 fn revocation_key(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         tuple((
@@ -162,8 +162,8 @@ fn revocation_key(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-// Parse a notation data subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.16
+/// Parse a notation data subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.16
 fn notation_data(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     // Flags
     let (i, readable) = map(be_u8, |v| v == 0x80)(i)?;
@@ -192,22 +192,22 @@ fn key_server_prefs(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-// Parse a preferred key server subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.18
+/// Parse a preferred key server subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.18
 fn preferred_key_server(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(map_res(rest, str::from_utf8), |body| {
         SubpacketData::PreferredKeyServer(body.to_string())
     })(i)
 }
 
-// Parse a primary user id subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.19
+/// Parse a primary user id subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.19
 fn primary_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(be_u8, |a| SubpacketData::IsPrimary(a == 1))(i)
 }
 
-// Parse a policy URI subpacket.
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
+/// Parse a policy URI subpacket.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
 fn policy_uri(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(map(rest, read_string), SubpacketData::PolicyURI)(i)
 }
@@ -221,7 +221,7 @@ fn key_flags(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
 fn signers_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(map_res(rest, str::from_utf8), |body| {
         SubpacketData::SignersUserID(body.to_string())
@@ -237,8 +237,8 @@ fn features(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-// Parse a revocation reason subpacket
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.23
+/// Parse a revocation reason subpacket
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.23
 fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         pair(
@@ -249,7 +249,7 @@ fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.25
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.25
 fn sig_target(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         tuple((
@@ -263,15 +263,15 @@ fn sig_target(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
 fn embedded_sig(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(parse(Version::New), |sig| {
         SubpacketData::EmbeddedSignature(Box::new(sig))
     })(i)
 }
 
-// Parse an issuer subpacket
-// Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
+/// Parse an issuer subpacket
+/// Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
 fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         pair(map_opt(be_u8, KeyVersion::from_u8), rest),
@@ -379,8 +379,8 @@ fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8]
     }
 }
 
-// Parse a v2 or v3 signature packet
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.2
+/// Parse a v2 or v3 signature packet
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.2
 fn v3_parser(
     packet_version: Version,
     version: SignatureVersion,
@@ -425,9 +425,8 @@ fn v3_parser(
     }
 }
 
-// Parse a v4 or v5 signature packet
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3
-
+/// Parse a v4 or v5 signature packet
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3
 fn v4_parser(
     packet_version: Version,
     version: SignatureVersion,
@@ -472,8 +471,8 @@ fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Si
     unimplemented!("unknown signature version {:?}", version);
 }
 
-// Parse a signature packet (Tag 2)
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
+/// Parse a signature packet (Tag 2)
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
 fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
     move |i: &[u8]| {
         let (i, version) = map_opt(be_u8, SignatureVersion::from_u8)(i)?;

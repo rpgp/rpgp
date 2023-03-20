@@ -24,8 +24,8 @@ use crate::packet::{
 use crate::types::{PacketLength, Tag, Version};
 use crate::util::{u16_as_usize, u32_as_usize, u8_as_usize};
 
-// Parses an old format packet header
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
+/// Parses an old format packet header
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
 fn old_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     #[allow(non_snake_case)]
     bits::bits::<_, _, crate::errors::Error, _, _>(|I| {
@@ -118,8 +118,8 @@ fn read_partial_bodies(input: &[u8], len: usize) -> IResult<&[u8], ParseResult<'
     Ok((rest, ParseResult::Partial(out)))
 }
 
-// Parses a new format packet header
-// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
+/// Parses a new format packet header
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
 fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     use bits::streaming::*;
 
@@ -146,9 +146,8 @@ pub enum ParseResult<'a> {
     Partial(Vec<&'a [u8]>),
 }
 
-// Parse a single Packet
-// https://tools.ietf.org/html/rfc4880.html#section-4.2
-
+/// Parse a single Packet
+/// https://tools.ietf.org/html/rfc4880.html#section-4.2
 pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength, ParseResult<'_>)> {
     let (i, head) = alt((new_packet_header, old_packet_header))(i)?;
     let (i, body) = match head.2 {

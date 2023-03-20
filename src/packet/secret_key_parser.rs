@@ -71,8 +71,8 @@ fn old_private_key_parser(
     }
 }
 
-// Parse a private key packet (Tag 5)
-// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
+/// Parse a private key packet (Tag 5)
+/// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 #[allow(clippy::type_complexity)]
 pub(crate) fn parse(
     i: &[u8],
