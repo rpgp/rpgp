@@ -6,7 +6,7 @@ use pgp::composed::{
     Deserializable, KeyType, SecretKey, SecretKeyParamsBuilder, SignedSecretKey,
     SubkeyParamsBuilder,
 };
-use pgp::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
+use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 use pgp::ser::Serialize;
 use pgp::types::CompressionAlgorithm;
 
