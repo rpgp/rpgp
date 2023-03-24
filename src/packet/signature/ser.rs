@@ -374,6 +374,7 @@ mod tests {
         test_roundtrip("sig-2-keys-2.sig");
     }
 
+    // Tries to roundtrip a signature containing a name + E-Mail with complicated multibyte unicode characters
     #[test]
     fn packet_signature_roundtrip_openpgp_with_unicode() {
         test_roundtrip("unicode.sig");
