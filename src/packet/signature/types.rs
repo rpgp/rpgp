@@ -419,14 +419,19 @@ impl Signature {
         })
     }
 
-    pub fn signers_userid(&self) -> Option<&str> {
+    /// Gets the user id of the signer
+    ///
+    /// Note that the user id may not be valid utf-8, if it was created
+    /// using a different encoding. But since the RFC describes every
+    /// text as utf-8 it is up to the caller whether to error on non utf-8 data.
+    pub fn signers_userid(&self) -> Option<&BStr> {
         self.subpackets().find_map(|p| match &p.data {
-            SubpacketData::SignersUserID(d) => Some(d.as_str()),
+            SubpacketData::SignersUserID(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
-    pub fn policy_uri(&self) -> Option<&BStr> {
+    pub fn policy_uri(&self) -> Option<&str> {
         self.subpackets().find_map(|p| match &p.data {
             SubpacketData::PolicyURI(d) => Some(d.as_ref()),
             _ => None,
@@ -728,9 +733,9 @@ pub enum SubpacketData {
     PreferredKeyServer(String),
     Notation(Notation),
     RevocationKey(types::RevocationKey),
-    SignersUserID(String),
+    SignersUserID(BString),
     /// The URI of the policy under which the signature was issued
-    PolicyURI(BString),
+    PolicyURI(String),
     TrustSignature(u8, u8),
     RegularExpression(BString),
     ExportableCertification(bool),

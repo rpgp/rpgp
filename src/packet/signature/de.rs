@@ -210,7 +210,9 @@ fn primary_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse a policy URI subpacket.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
 fn policy_uri(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    map(map(rest, BString::from), SubpacketData::PolicyURI)(i)
+    map(map_res(rest, str::from_utf8), |body| {
+        SubpacketData::PolicyURI(body.to_owned())
+    })(i)
 }
 
 /// Parse a key flags subpacket
@@ -224,9 +226,7 @@ fn key_flags(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
 fn signers_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    map(map_res(rest, str::from_utf8), |body| {
-        SubpacketData::SignersUserID(body.to_string())
-    })(i)
+    Ok((&[], SubpacketData::SignersUserID(BString::from(i))))
 }
 
 /// Parse a features subpacket

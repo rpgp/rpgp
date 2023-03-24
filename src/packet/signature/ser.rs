@@ -89,7 +89,7 @@ impl Subpacket {
                 writer.write_all(body.as_ref())?;
             }
             SubpacketData::PolicyURI(uri) => {
-                writer.write_all(uri)?;
+                writer.write_all(uri.as_bytes())?;
             }
             SubpacketData::TrustSignature(depth, value) => {
                 writer.write_all(&[*depth, *value])?;
@@ -372,5 +372,10 @@ mod tests {
     #[test]
     fn packet_signature_roundtrip_openpgp_sig_2_keys_2() {
         test_roundtrip("sig-2-keys-2.sig");
+    }
+
+    #[test]
+    fn packet_signature_roundtrip_openpgp_with_unicode() {
+        test_roundtrip("unicode.sig");
     }
 }
