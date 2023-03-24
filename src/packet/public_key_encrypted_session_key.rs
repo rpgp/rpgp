@@ -8,7 +8,9 @@ use nom::sequence::pair;
 use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
 
-use crate::crypto::{checksum, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use crate::crypto::checksum;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;

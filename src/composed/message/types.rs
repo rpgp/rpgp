@@ -14,7 +14,8 @@ use crate::composed::message::decrypt::*;
 use crate::composed::shared::Deserializable;
 use crate::composed::signed_key::SignedSecretKey;
 use crate::composed::StandaloneSignature;
-use crate::crypto::{HashAlgorithm, SymmetricKeyAlgorithm};
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
@@ -652,7 +653,8 @@ mod tests {
     use std::io::Cursor;
 
     use crate::composed::{Deserializable, Message, SignedSecretKey};
-    use crate::crypto::SymmetricKeyAlgorithm;
+    use crate::crypto::hash::HashAlgorithm;
+    use crate::crypto::sym::SymmetricKeyAlgorithm;
     use crate::types::{CompressionAlgorithm, SecretKeyTrait};
 
     #[test]

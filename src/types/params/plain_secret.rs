@@ -8,7 +8,10 @@ use rand::{CryptoRng, Rng};
 use rsa::RsaPrivateKey;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::crypto::{checksum, ECCCurve, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use crate::crypto::checksum;
+use crate::crypto::ecc_curve::ECCCurve;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
 use crate::types::*;

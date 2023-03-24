@@ -5,9 +5,11 @@ use rand::{thread_rng, CryptoRng, Rng};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
-use crate::crypto::{
-    ecdh, ecdsa, eddsa, rsa, ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm,
-};
+use crate::crypto::ecc_curve::ECCCurve;
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::{ecdh, ecdsa, eddsa, rsa};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, UserAttribute, UserId};
 use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey};
@@ -298,6 +300,7 @@ mod tests {
     use super::*;
 
     use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
+    use crate::crypto::hash::HashAlgorithm;
     use crate::types::SecretKeyTrait;
 
     use rand::SeedableRng;

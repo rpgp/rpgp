@@ -4,7 +4,7 @@ use nom::number::streaming::{be_u16, be_u32, be_u8};
 use nom::sequence::tuple;
 use num_traits::FromPrimitive;
 
-use crate::crypto::PublicKeyAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, IResult};
 use crate::packet::public_key_parser::parse_pub_fields;
 use crate::types::{KeyVersion, PublicParams, SecretParams};

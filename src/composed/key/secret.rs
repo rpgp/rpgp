@@ -2,7 +2,7 @@ use chrono::{self, SubsecRound};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
-use crate::crypto::PublicKeyAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
     self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,

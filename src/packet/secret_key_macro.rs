@@ -179,7 +179,7 @@ macro_rules! impl_secret_key {
             where
                 F: FnOnce() -> String,
             {
-                use $crate::crypto::ECCCurve;
+                use $crate::crypto::ecc_curve::ECCCurve;
                 use $crate::types::{PublicParams, SecretKeyRepr};
 
                 let mut signature: Option<Vec<$crate::types::Mpi>> = None;

@@ -12,7 +12,7 @@ use sha3::{Sha3_256, Sha3_512};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
 use signature::SignatureEncoding;
 
-use crate::crypto::HashAlgorithm;
+use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
