@@ -101,7 +101,7 @@ impl fmt::Display for PKCS1Type {
     }
 }
 
-// Parses a single ascii armor header separator.
+/// Parses a single ascii armor header separator.
 fn armor_header_sep(i: &[u8]) -> IResult<&[u8], &[u8]> {
     tag(b"-----")(i)
 }
@@ -113,7 +113,7 @@ fn parse_digit(x: &[u8]) -> Result<usize> {
     Ok(digit)
 }
 
-// Parses the type inside of an ascii armor header.
+/// Parses the type inside of an ascii armor header.
 fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
     alt((
         value(BlockType::PublicKey, tag("PGP PUBLIC KEY BLOCK")),
@@ -174,7 +174,7 @@ fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
     ))(i)
 }
 
-// Parses a single armor header line.
+/// Parses a single armor header line.
 fn armor_header_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     delimited(
         pair(armor_header_sep, tag(b"BEGIN ")),
@@ -208,7 +208,7 @@ fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
     Ok((input.slice(input_length..), input))
 }
 
-// Parses a single key value pair, for the header.
+/// Parses a single key value pair, for the header.
 fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
     terminated(
         pair(
@@ -221,12 +221,12 @@ fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
     )(i)
 }
 
-// Parses a list of key value pairs.
+/// Parses a list of key value pairs.
 fn key_value_pairs(i: &[u8]) -> IResult<&[u8], Vec<(&str, &str)>> {
     many0(complete(key_value_pair))(i)
 }
 
-// Parses the full armor header.
+/// Parses the full armor header.
 fn armor_headers(i: &[u8]) -> IResult<&[u8], BTreeMap<String, String>> {
     map(key_value_pairs, |pairs| {
         pairs
@@ -236,8 +236,7 @@ fn armor_headers(i: &[u8]) -> IResult<&[u8], BTreeMap<String, String>> {
     })(i)
 }
 
-// Armor Header
-
+/// Armor Header
 fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, String>)> {
     pair(armor_header_line, armor_headers)(i)
 }
@@ -284,7 +283,7 @@ fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
     )(i)
 }
 
-// Parses a single armor footer line
+/// Parses a single armor footer line
 fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     // Only 3, because we parsed two already in the `footer_parser`.
     delimited(

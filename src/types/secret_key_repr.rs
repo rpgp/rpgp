@@ -4,9 +4,9 @@ use num_bigint::BigUint;
 use rsa::RsaPrivateKey;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::ECCCurve;
 
 use super::Mpi;
 

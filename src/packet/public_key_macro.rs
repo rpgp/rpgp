@@ -21,7 +21,7 @@ macro_rules! impl_public_key {
                 expiration: Option<u16>,
                 public_params: $crate::types::PublicParams,
             ) -> $crate::errors::Result<Self> {
-                use $crate::crypto::PublicKeyAlgorithm;
+                use $crate::crypto::public_key::PublicKeyAlgorithm;
                 use $crate::types::KeyVersion;
 
                 if version == KeyVersion::V2 || version == KeyVersion::V3 {

@@ -1,11 +1,12 @@
 use std::{fmt, io};
 
-use crate::crypto::SymmetricKeyAlgorithm;
+use rand::{thread_rng, CryptoRng, Rng};
+
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
-use rand::{thread_rng, CryptoRng, Rng};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12

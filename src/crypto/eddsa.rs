@@ -2,7 +2,8 @@ use rand::{CryptoRng, Rng};
 use signature::{Signer, Verifier};
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::crypto::{ECCCurve, HashAlgorithm};
+use crate::crypto::ecc_curve::ECCCurve;
+use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::types::{EdDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 

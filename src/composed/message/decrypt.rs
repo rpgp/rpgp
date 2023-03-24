@@ -5,7 +5,8 @@ use num_traits::FromPrimitive;
 
 use crate::composed::message::types::{Edata, Message};
 use crate::composed::shared::Deserializable;
-use crate::crypto::{checksum, ecdh, rsa, SymmetricKeyAlgorithm};
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::{checksum, ecdh, rsa};
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
 use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait, Tag};

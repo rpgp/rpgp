@@ -10,8 +10,7 @@ pub trait KeyTrait: ::std::fmt::Debug {
     fn algorithm(&self) -> PublicKeyAlgorithm;
 
     fn is_signing_key(&self) -> bool {
-        use crate::crypto::PublicKeyAlgorithm::*;
-
+        use crate::crypto::public_key::PublicKeyAlgorithm::*;
         matches!(
             self.algorithm(),
             RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSA
@@ -19,7 +18,7 @@ pub trait KeyTrait: ::std::fmt::Debug {
     }
 
     fn is_encryption_key(&self) -> bool {
-        use crate::crypto::PublicKeyAlgorithm::*;
+        use crate::crypto::public_key::PublicKeyAlgorithm::*;
 
         matches!(
             self.algorithm(),

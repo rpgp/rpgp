@@ -5,7 +5,8 @@ use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
-use crate::crypto::{HashAlgorithm, PublicKeyAlgorithm};
+use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
     self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,

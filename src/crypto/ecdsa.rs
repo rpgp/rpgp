@@ -1,12 +1,11 @@
 use rand::{CryptoRng, Rng};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
 
+use crate::crypto::ecc_curve::ECCCurve;
+use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
+use crate::types::EcdsaPublicParams;
 use crate::types::{ECDSASecretKey, Mpi, PlainSecretParams, PublicParams};
-use crate::{
-    crypto::{ECCCurve, HashAlgorithm},
-    types::EcdsaPublicParams,
-};
 
 /// Generate an ECDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(

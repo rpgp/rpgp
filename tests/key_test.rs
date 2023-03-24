@@ -19,7 +19,10 @@ use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
-use pgp::crypto::{ECCCurve, HashAlgorithm, PublicKeyAlgorithm, SymmetricKeyAlgorithm};
+use pgp::crypto::{
+    ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
+    sym::SymmetricKeyAlgorithm,
+};
 use pgp::errors::Error;
 use pgp::packet::{
     KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, UserAttribute,
