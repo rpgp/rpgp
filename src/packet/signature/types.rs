@@ -1,6 +1,7 @@
 use std::fmt;
 use std::io::Read;
 
+use bstr::{BStr, BString};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
 
@@ -363,9 +364,9 @@ impl Signature {
         })
     }
 
-    pub fn revocation_reason_string(&self) -> Option<&str> {
+    pub fn revocation_reason_string(&self) -> Option<&BStr> {
         self.subpackets().find_map(|p| match &p.data {
-            SubpacketData::RevocationReason(_, reason) => Some(reason.as_str()),
+            SubpacketData::RevocationReason(_, reason) => Some(reason.as_ref()),
             _ => None,
         })
     }
@@ -418,16 +419,21 @@ impl Signature {
         })
     }
 
-    pub fn signers_userid(&self) -> Option<&str> {
+    /// Gets the user id of the signer
+    ///
+    /// Note that the user id may not be valid utf-8, if it was created
+    /// using a different encoding. But since the RFC describes every
+    /// text as utf-8 it is up to the caller whether to error on non utf-8 data.
+    pub fn signers_userid(&self) -> Option<&BStr> {
         self.subpackets().find_map(|p| match &p.data {
-            SubpacketData::SignersUserID(d) => Some(d.as_str()),
+            SubpacketData::SignersUserID(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
     pub fn policy_uri(&self) -> Option<&str> {
         self.subpackets().find_map(|p| match &p.data {
-            SubpacketData::PolicyURI(d) => Some(d.as_str()),
+            SubpacketData::PolicyURI(d) => Some(d.as_ref()),
             _ => None,
         })
     }
@@ -439,9 +445,9 @@ impl Signature {
         })
     }
 
-    pub fn regular_expression(&self) -> Option<&str> {
+    pub fn regular_expression(&self) -> Option<&BStr> {
         self.subpackets().find_map(|p| match &p.data {
-            SubpacketData::RegularExpression(d) => Some(d.as_str()),
+            SubpacketData::RegularExpression(d) => Some(d.as_ref()),
             _ => None,
         })
     }
@@ -720,17 +726,18 @@ pub enum SubpacketData {
     KeyServerPreferences(SmallVec<[u8; 4]>),
     KeyFlags(SmallVec<[u8; 1]>),
     Features(SmallVec<[u8; 1]>),
-    RevocationReason(RevocationCode, String),
+    RevocationReason(RevocationCode, BString),
     IsPrimary(bool),
     Revocable(bool),
     EmbeddedSignature(Box<Signature>),
     PreferredKeyServer(String),
     Notation(Notation),
     RevocationKey(types::RevocationKey),
-    SignersUserID(String),
+    SignersUserID(BString),
+    /// The URI of the policy under which the signature was issued
     PolicyURI(String),
     TrustSignature(u8, u8),
-    RegularExpression(String),
+    RegularExpression(BString),
     ExportableCertification(bool),
     IssuerFingerprint(KeyVersion, SmallVec<[u8; 20]>),
     PreferredAeadAlgorithms(SmallVec<[AeadAlgorithm; 2]>),
@@ -772,8 +779,8 @@ impl From<KeyFlags> for SmallVec<[u8; 1]> {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Notation {
     pub readable: bool,
-    pub name: String,
-    pub value: String,
+    pub name: BString,
+    pub value: BString,
 }
 
 /// Codes for revocation reasons

@@ -1,5 +1,6 @@
 use std::{fmt, io};
 
+use bstr::{BStr, BString};
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use nom::combinator::{map, map_opt, rest};
@@ -15,7 +16,6 @@ use crate::normalize_lines::Normalized;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
-use crate::util::{read_string, write_string};
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
@@ -23,7 +23,8 @@ use crate::util::{read_string, write_string};
 pub struct LiteralData {
     packet_version: Version,
     mode: DataMode,
-    file_name: String,
+    /// The filename, may contain non utf-8 bytes
+    file_name: BString,
     created: DateTime<Utc>,
     /// Raw data, stored normalized to CRLF line endings, to make signing and verification
     /// simpler.
@@ -41,20 +42,20 @@ pub enum DataMode {
 
 impl LiteralData {
     /// Creates a literal data packet from the given string. Normalizes line endings.
-    pub fn from_str(file_name: &str, raw_data: &str) -> Self {
+    pub fn from_str(file_name: impl Into<BString>, raw_data: &str) -> Self {
         let data = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
 
         LiteralData {
             packet_version: Version::New,
             mode: DataMode::Utf8,
-            file_name: file_name.to_owned(),
+            file_name: file_name.into(),
             created: Utc::now().trunc_subsecs(0),
             data,
         }
     }
 
     /// Creates a literal data packet from the given bytes.
-    pub fn from_bytes(file_name: &str, data: &[u8]) -> Self {
+    pub fn from_bytes(file_name: &BStr, data: &[u8]) -> Self {
         LiteralData {
             packet_version: Version::New,
             mode: DataMode::Binary,
@@ -91,9 +92,9 @@ impl LiteralData {
 
 impl Serialize for LiteralData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        let name = write_string(&self.file_name);
+        let name = &self.file_name;
         writer.write_all(&[self.mode as u8, name.len() as u8])?;
-        writer.write_all(&name)?;
+        writer.write_all(name)?;
         writer.write_u32::<BigEndian>(self.created.timestamp() as u32)?;
 
         // Line endings are stored internally normalized, so we do not need to worry
@@ -109,7 +110,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], LiteralDat
         map(
             tuple((
                 map_opt(be_u8, DataMode::from_u8),
-                map(length_data(be_u8), read_string),
+                map(length_data(be_u8), BStr::new::<[u8]>),
                 map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
                 rest,
             )),
@@ -117,7 +118,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], LiteralDat
                 packet_version,
                 mode,
                 created,
-                file_name: name,
+                file_name: name.to_owned(),
                 data: data.to_vec(),
             },
         )(i)
