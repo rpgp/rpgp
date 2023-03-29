@@ -88,8 +88,8 @@ impl Signature {
                     &key.key_id(),
                     issuer
                 );
-                // We can't validate this against this key, as there is a missmatch.
-                return Ok(());
+                // We can't validate this against this key, as there is a mismatch.
+                bail!("key ID mismatch");
             }
         }
 
@@ -125,8 +125,8 @@ impl Signature {
                     "validating certificate with a non matching Key ID {:?} != {:?}",
                     key_id, issuer
                 );
-                // We can't validate this against this key, as there is a missmatch.
-                return Ok(());
+                // We can't validate this against this key, as there is a mismatch.
+                bail!("key ID mismatch");
             }
         }
 
@@ -244,8 +244,8 @@ impl Signature {
                     "validating key (revocation) with a non matching Key ID {:?} != {:?}",
                     &key_id, issuer
                 );
-                // We can't validate this against this key, as there is a missmatch.
-                return Ok(());
+                // We can't validate this against this key, as there is a mismatch.
+                bail!("key ID mismatch");
             }
         }
 
