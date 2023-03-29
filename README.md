@@ -21,10 +21,9 @@ For ECC crypto support we are using [Curve25519-dalek](https://crates.io/crates/
 
 ## Status (Last updated: October 2019)
 
-rPGP and its RSA dependency got a first independent security review mid 2019.
-No critical flaws were found. We have fixed and are fixing some high, medium and
-low risk ones. We will soon publish the full review report.
-Further independent security reviews are upcoming.
+rPGP and its RSA dependency got an independent security audit mid 2019, 
+see here for the [full report from IncludeSecurity](https://delta.chat/assets/blog/2019-first-security-review.pdf). 
+No critical flaws were found and we have fixed most high, medium and low risk ones. 
 
 rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit (only Windows and Android) and 64 bit builds (for the other platforms).
 
