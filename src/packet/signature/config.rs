@@ -237,7 +237,7 @@ impl SignatureConfig {
                     packet.to_writer(&mut hashed_subpackets)?;
                 }
 
-                BigEndian::write_u16(&mut res[4..6], hashed_subpackets.len() as u16);
+                BigEndian::write_u16(&mut res[4..6], hashed_subpackets.len().try_into()?);
                 res.extend(hashed_subpackets);
 
                 hasher.update(&res);

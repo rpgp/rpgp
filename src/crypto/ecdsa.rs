@@ -1,3 +1,4 @@
+use elliptic_curve::sec1::ToEncodedPoint;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
 
@@ -19,7 +20,10 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
             Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P256(public)),
+                PublicParams::ECDSA(EcdsaPublicParams::P256 {
+                    key: public,
+                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
+                }),
                 PlainSecretParams::ECDSA(secret),
             ))
         }
@@ -30,7 +34,10 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
             Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P384(public)),
+                PublicParams::ECDSA(EcdsaPublicParams::P384 {
+                    key: public,
+                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
+                }),
                 PlainSecretParams::ECDSA(secret),
             ))
         }
@@ -47,7 +54,7 @@ pub fn verify(
     sig: &[Mpi],
 ) -> Result<()> {
     match p {
-        EcdsaPublicParams::P256(p) => {
+        EcdsaPublicParams::P256 { key, .. } => {
             const FLEN: usize = 32;
             ensure_eq!(sig.len(), 2);
             let r = sig[0].as_bytes();
@@ -61,13 +68,13 @@ pub fn verify(
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
             let sig = p256::ecdsa::Signature::try_from(&sig_bytes[..])?;
-            let pk = p256::ecdsa::VerifyingKey::from_affine(p.as_affine().to_owned())?;
+            let pk = p256::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
 
             pk.verify_prehash(hashed, &sig)?;
 
             Ok(())
         }
-        EcdsaPublicParams::P384(p) => {
+        EcdsaPublicParams::P384 { key, .. } => {
             const FLEN: usize = 48;
             ensure_eq!(sig.len(), 2);
 
@@ -83,7 +90,7 @@ pub fn verify(
             sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
-            let pk = p384::ecdsa::VerifyingKey::from_affine(p.as_affine().to_owned())?;
+            let pk = p384::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
             let sig = p384::ecdsa::Signature::try_from(&sig_bytes[..])?;
 
             pk.verify_prehash(hashed, &sig)?;
