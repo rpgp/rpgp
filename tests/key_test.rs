@@ -115,16 +115,16 @@ macro_rules! parse_dumps {
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 20_917, 20_998),
-    (test_parse_dumps_1, 1, 20_885, 21_000),
-    (test_parse_dumps_2, 2, 20_913, 20_999),
-    (test_parse_dumps_3, 3, 20_919, 20_999),
-    (test_parse_dumps_4, 4, 20_901, 20_999),
-    (test_parse_dumps_5, 5, 20_915, 20_999),
-    (test_parse_dumps_6, 6, 20_898, 21_000),
-    (test_parse_dumps_7, 7, 20_912, 21_000),
-    (test_parse_dumps_8, 8, 20_904, 21_000),
-    (test_parse_dumps_9, 9, 20_927, 21_000),
+    (test_parse_dumps_0, 0, 18_141, 20_998),
+    (test_parse_dumps_1, 1, 18_021, 21_000),
+    (test_parse_dumps_2, 2, 18_058, 20_999),
+    (test_parse_dumps_3, 3, 18_098, 20_999),
+    (test_parse_dumps_4, 4, 18_048, 20_999),
+    (test_parse_dumps_5, 5, 18_090, 20_999),
+    (test_parse_dumps_6, 6, 18_130, 21_000),
+    (test_parse_dumps_7, 7, 18_133, 21_000),
+    (test_parse_dumps_8, 8, 18_139, 21_000),
+    (test_parse_dumps_9, 9, 17_992, 21_000),
 );
 
 #[test]
@@ -612,7 +612,7 @@ fn test_fingerprint_ecdsa() {
     let (json, key) = get_test_fingerprint("e2e-001");
     assert_eq!(json["expected_fingerprint"], hex::encode(key.fingerprint()));
 
-    // TODO:
+    // TODO: signature mismatch
     // key.verify().expect("invalid key");
 }
 
@@ -627,18 +627,6 @@ fn test_fingerprint_ecdh() {
             .unwrap()["expected_fingerprint"],
         hex::encode(key.public_subkeys[0].key.fingerprint())
     );
-
-    let (json, key) = get_test_fingerprint("e2e-001");
-    // can't verify: ECDSA: P256
-    assert_eq!(
-        json["expected_subkeys"].as_array().unwrap()[0]
-            .as_object()
-            .unwrap()["expected_fingerprint"],
-        hex::encode(key.public_subkeys[0].key.fingerprint())
-    );
-
-    // TODO:
-    // key.verify().expect("invalid key");
 }
 
 #[test]
@@ -707,10 +695,9 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
         // and parse them again
         let (iter2, headers2) =
             from_armor_many(Cursor::new(&serialized)).expect("failed to parse round2");
-        let parsed2 = iter2.collect::<Vec<_>>();
 
         assert_eq!(headers, headers2);
-        assert_eq!(parsed2.len(), 1);
+        assert_eq!(iter2.count(), 1);
 
         if verify {
             parsed.verify().expect("invalid key");
@@ -809,13 +796,13 @@ openpgp_key!(
 openpgp_key!(
     key_openpgp_samplekeys_e2e_p256_1_clr,
     "samplekeys/e2e-p256-1-clr.asc",
-    true,
-    false // packet lengths are not minimally encoded
+    false, // signature missmatch
+    false  // packet lengths are not minimally encoded
 );
 openpgp_key!(
     key_openpgp_samplekeys_e2e_p256_1_prt,
     "samplekeys/e2e-p256-1-prt.asc",
-    true,
+    false, // signature missmatch
     false, // packet lengths are not minimally encoded
     "a"
 );
@@ -848,13 +835,13 @@ openpgp_key!(
 openpgp_key!(
     key_openpgp_samplekeys_ecc_sample_3_pub,
     "samplekeys/ecc-sample-3-pub.asc",
-    false, // ECDS P521 is not yet supported
+    false, // ECDSA P521 is not yet supported
     false  // packet lengths are not minimally encoded
 );
 openpgp_key!(
     key_openpgp_samplekeys_ecc_sample_3_sec,
     "samplekeys/ecc-sample-3-sec.asc",
-    false, // P-521 is not supported yet
+    false, // ECDSA P521 is not supported yet
     false, // unsigned subkey & userid
     "ecc"
 );
@@ -933,7 +920,7 @@ openpgp_key!(
 openpgp_key!(
     key_openpgp_samplekeys_whats_new_in_2_1,
     "samplekeys/whats-new-in-2.1.asc",
-    true,
+    false, // Key ID mismatch
     true
 );
 

@@ -571,7 +571,7 @@ mod tests {
             .to_armored_string(None)
             .expect("failed to serialize public key");
 
-        std::fs::write("sample-ecdsa.pub.asc", &armor).unwrap();
+        std::fs::write(format!("sample-ecdsa-{curve:?}.pub.asc"), &armor).unwrap();
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
