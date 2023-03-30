@@ -83,13 +83,11 @@ impl Signature {
     {
         if let Some(issuer) = self.issuer() {
             if &key.key_id() != issuer {
-                warn!(
+                bail!(
                     "validating signature with a non matching Key ID {:?} != {:?}",
                     &key.key_id(),
                     issuer
                 );
-                // We can't validate this against this key, as there is a missmatch.
-                return Ok(());
             }
         }
 
@@ -121,12 +119,11 @@ impl Signature {
 
         if let Some(issuer) = self.issuer() {
             if &key_id != issuer {
-                warn!(
+                bail!(
                     "validating certificate with a non matching Key ID {:?} != {:?}",
-                    key_id, issuer
+                    key_id,
+                    issuer
                 );
-                // We can't validate this against this key, as there is a missmatch.
-                return Ok(());
             }
         }
 
@@ -194,12 +191,11 @@ impl Signature {
         let key_id = signing_key.key_id();
         if let Some(issuer) = self.issuer() {
             if &key_id != issuer {
-                // TODO: should this be an actual error?
-                warn!(
+                bail!(
                     "validating key binding with a non matching Key ID {:?} != {:?}",
-                    &key_id, issuer
+                    &key_id,
+                    issuer
                 );
-                return Ok(());
             }
         }
 
@@ -240,12 +236,11 @@ impl Signature {
         let key_id = key.key_id();
         if let Some(issuer) = self.issuer() {
             if &key_id != issuer {
-                warn!(
+                bail!(
                     "validating key (revocation) with a non matching Key ID {:?} != {:?}",
-                    &key_id, issuer
+                    &key_id,
+                    issuer
                 );
-                // We can't validate this against this key, as there is a missmatch.
-                return Ok(());
             }
         }
 
