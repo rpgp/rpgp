@@ -1,7 +1,5 @@
 use std::{fmt, io};
 
-use elliptic_curve::sec1::ToEncodedPoint;
-
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -42,13 +40,24 @@ pub enum PublicParams {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum EcdsaPublicParams {
-    P256(p256::PublicKey),
-    P384(p384::PublicKey),
-    Unsupported { curve: ECCCurve, p: Mpi },
+    P256 {
+        key: p256::PublicKey,
+        /// Stores the original Mpi, to ensure we keep the padding around.
+        p: Mpi,
+    },
+    P384 {
+        key: p384::PublicKey,
+        /// Stores the original Mpi, to ensure we keep the padding around.
+        p: Mpi,
+    },
+    Unsupported {
+        curve: ECCCurve,
+        p: Mpi,
+    },
 }
 
 impl EcdsaPublicParams {
-    pub fn from_mpi(p: MpiRef<'_>, curve: ECCCurve) -> Result<Self> {
+    pub fn try_from_mpi(p: MpiRef<'_>, curve: ECCCurve) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
                 ensure!(p.len() <= 65, "invalid public key length");
@@ -56,7 +65,10 @@ impl EcdsaPublicParams {
                 key[..p.len()].copy_from_slice(p.as_bytes());
 
                 let public = p256::PublicKey::from_sec1_bytes(&key)?;
-                Ok(EcdsaPublicParams::P256(public))
+                Ok(EcdsaPublicParams::P256 {
+                    key: public,
+                    p: p.to_owned(),
+                })
             }
             ECCCurve::P384 => {
                 ensure!(p.len() <= 97, "invalid public key length");
@@ -64,7 +76,10 @@ impl EcdsaPublicParams {
                 key[..p.len()].copy_from_slice(p.as_bytes());
 
                 let public = p384::PublicKey::from_sec1_bytes(&key)?;
-                Ok(EcdsaPublicParams::P384(public))
+                Ok(EcdsaPublicParams::P384 {
+                    key: public,
+                    p: p.to_owned(),
+                })
             }
             _ => Ok(EcdsaPublicParams::Unsupported {
                 curve,
@@ -75,8 +90,8 @@ impl EcdsaPublicParams {
 
     pub const fn secret_key_length(&self) -> Option<usize> {
         match self {
-            EcdsaPublicParams::P256(_) => Some(32),
-            EcdsaPublicParams::P384(_) => Some(48),
+            EcdsaPublicParams::P256 { .. } => Some(32),
+            EcdsaPublicParams::P384 { .. } => Some(48),
             EcdsaPublicParams::Unsupported { .. } => None,
         }
     }
@@ -85,8 +100,8 @@ impl EcdsaPublicParams {
 impl Serialize for EcdsaPublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let oid = match self {
-            EcdsaPublicParams::P256(_) => ECCCurve::P256.oid(),
-            EcdsaPublicParams::P384(_) => ECCCurve::P384.oid(),
+            EcdsaPublicParams::P256 { .. } => ECCCurve::P256.oid(),
+            EcdsaPublicParams::P384 { .. } => ECCCurve::P384.oid(),
             EcdsaPublicParams::Unsupported { curve, .. } => curve.oid(),
         };
 
@@ -94,15 +109,11 @@ impl Serialize for EcdsaPublicParams {
         writer.write_all(&oid)?;
 
         match self {
-            EcdsaPublicParams::P256(public_key) => {
-                let key = public_key.to_encoded_point(false);
-                let mpi = MpiRef::from_slice(key.as_bytes()).strip_trailing_zeroes();
-                mpi.to_writer(writer)?;
+            EcdsaPublicParams::P256 { p, .. } => {
+                p.as_ref().to_writer(writer)?;
             }
-            EcdsaPublicParams::P384(public_key) => {
-                let key = public_key.to_encoded_point(false);
-                let mpi = MpiRef::from_slice(key.as_bytes()).strip_trailing_zeroes();
-                mpi.to_writer(writer)?;
+            EcdsaPublicParams::P384 { p, .. } => {
+                p.as_ref().to_writer(writer)?;
             }
             EcdsaPublicParams::Unsupported { p, .. } => {
                 p.as_ref().to_writer(writer)?;

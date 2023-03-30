@@ -182,12 +182,12 @@ impl<'a> PlainSecretParamsRef<'a> {
             }
             PlainSecretParamsRef::ECDSA(d) => match public_params {
                 PublicParams::ECDSA(params) => match params {
-                    EcdsaPublicParams::P256(_) => {
+                    EcdsaPublicParams::P256 { .. } => {
                         let secret = p256::SecretKey::from_slice(d.as_bytes())?;
 
                         Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P256(secret)))
                     }
-                    EcdsaPublicParams::P384(_) => {
+                    EcdsaPublicParams::P384 { .. } => {
                         let secret = p384::SecretKey::from_slice(d.as_bytes())?;
 
                         Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P384(secret)))
@@ -216,14 +216,8 @@ impl PlainSecretParams {
             (PlainSecretParams::ECDSA(secret_mpi), PublicParams::ECDSA(pub_params)) => {
                 // ECDSA varies in its storage of padded vs unpadded.
                 // This normalizes it to store the padded version in memory.
-                match pub_params {
-                    EcdsaPublicParams::P256(_) => {
-                        secret_mpi.pad_right(32);
-                    }
-                    EcdsaPublicParams::P384(_) => {
-                        secret_mpi.pad_right(48);
-                    }
-                    EcdsaPublicParams::Unsupported { .. } => {}
+                if let Some(len) = pub_params.secret_key_length() {
+                    secret_mpi.pad_right(len);
                 }
             }
             _ => {}

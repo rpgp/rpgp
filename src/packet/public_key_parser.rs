@@ -31,7 +31,7 @@ fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     let (i, p) = mpi(i)?;
     Ok((
         i,
-        PublicParams::ECDSA(EcdsaPublicParams::from_mpi(p, curve)?),
+        PublicParams::ECDSA(EcdsaPublicParams::try_from_mpi(p, curve)?),
     ))
 }
 
