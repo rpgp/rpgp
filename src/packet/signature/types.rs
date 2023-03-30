@@ -859,4 +859,43 @@ mod tests {
         flags.set_group(true);
         assert_eq!(flags.0, 0x80);
     }
+
+    #[test]
+    fn test_critical() {
+        use SubpacketType::*;
+
+        let cases = [
+            SignatureCreationTime,
+            SignatureExpirationTime,
+            ExportableCertification,
+            TrustSignature,
+            RegularExpression,
+            Revocable,
+            KeyExpirationTime,
+            PreferredSymmetricAlgorithms,
+            RevocationKey,
+            Issuer,
+            Notation,
+            PreferredHashAlgorithms,
+            PreferredCompressionAlgorithms,
+            KeyServerPreferences,
+            PreferredKeyServer,
+            PrimaryUserId,
+            PolicyURI,
+            KeyFlags,
+            SignersUserID,
+            RevocationReason,
+            Features,
+            SignatureTarget,
+            EmbeddedSignature,
+            IssuerFingerprint,
+            PreferredAead,
+            Experimental(101),
+            Other(95),
+        ];
+        for case in cases {
+            assert_eq!(SubpacketType::from_u8(case.as_u8(false)), (case, false));
+            assert_eq!(SubpacketType::from_u8(case.as_u8(true)), (case, true));
+        }
+    }
 }
