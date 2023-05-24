@@ -5,7 +5,10 @@ use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use ripemd::Ripemd160;
 use rsa::pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey};
-use rsa::{RsaPrivateKey, RsaPublicKey, traits::{PrivateKeyParts, PublicKeyParts}};
+use rsa::{
+    traits::{PrivateKeyParts, PublicKeyParts},
+    RsaPrivateKey, RsaPublicKey,
+};
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};

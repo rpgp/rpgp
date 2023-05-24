@@ -14,7 +14,10 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use pgp::armor;
 use rand::thread_rng;
-use rsa::{traits::{PrivateKeyParts, PublicKeyParts}, RsaPrivateKey, RsaPublicKey};
+use rsa::{
+    traits::{PrivateKeyParts, PublicKeyParts},
+    RsaPrivateKey, RsaPublicKey,
+};
 use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
