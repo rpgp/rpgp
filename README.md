@@ -64,7 +64,7 @@ Some key differences:
   where Sequoia also tries to be a replacement for the GPG command line tool
 
 - All crypto used in rPGP is implemented in pure Rust,
-  whereas sequoia uses Nettle, which is implemented in C.
+  whereas Sequoia by default uses Nettle, which is implemented in C.
 
 
 ## Minimum Supported Rust Version (MSRV)
