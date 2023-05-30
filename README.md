@@ -9,7 +9,7 @@
 
 > OpenPGP implemented in pure Rust, permissively licensed
 
-rPGP is the only full Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html).
+rPGP is the only pure Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html).
 
 rPGP is regularly published as [the `pgp` Crate](https://crates.io/crates/pgp/) and its [RSA](https://crates.io/crates/rsa) implementation
 lives under the collective [RustCrypto umbrella](https://github.com/RustCrypto/RSA).
