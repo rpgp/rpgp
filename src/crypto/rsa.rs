@@ -105,12 +105,22 @@ pub fn verify(
     hashed: &[u8],
     signature: &[u8],
 ) -> Result<()> {
-    let signature = RsaSignature::try_from(signature)?;
     let key = RsaPublicKey::new_with_max_size(
         BigUint::from_bytes_be(n),
         BigUint::from_bytes_be(e),
         MAX_KEY_SIZE,
     )?;
+
+    let signature = if signature.len() < key.size() {
+        // RSA short signatures are allowed by PGP, but not by the by the
+        // RSA crate. So we pad out the signature if we encounter a short one.
+        let mut signature_padded = vec![0u8; key.size()];
+        let diff = key.size() - signature.len();
+        signature_padded[diff..].copy_from_slice(signature);
+        RsaSignature::try_from(&signature_padded[..])?
+    } else {
+        RsaSignature::try_from(signature)?
+    };
 
     match hash {
         HashAlgorithm::None => Err(format_err!("none")),
