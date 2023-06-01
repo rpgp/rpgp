@@ -80,7 +80,7 @@ fn verify_int<D>(key: RsaPublicKey, hashed: &[u8], signature: &RsaSignature) -> 
 where
     D: Digest + AssociatedOid,
 {
-    VerifyingKey::<D>::new_with_prefix(key)
+    VerifyingKey::<D>::new(key)
         .verify_prehash(hashed, signature)
         .map_err(Into::into)
 }
@@ -89,7 +89,7 @@ fn sign_int<D>(key: RsaPrivateKey, digest: &[u8]) -> Result<RsaSignature>
 where
     D: Digest + AssociatedOid,
 {
-    SigningKey::<D>::new_with_prefix(key)
+    SigningKey::<D>::new(key)
         .sign_prehash(digest)
         .map_err(Into::into)
 }
