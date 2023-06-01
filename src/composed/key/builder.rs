@@ -310,7 +310,15 @@ mod tests {
     #[ignore] // slow in debug mode
     fn test_key_gen_rsa_2048() {
         let _ = pretty_env_logger::try_init();
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
 
+        for i in 0..50 {
+            println!("round {}", i);
+            gen_rsa_2048(rng);
+        }
+    }
+
+    fn gen_rsa_2048<R: Rng + CryptoRng>(rng: &mut R) {
         let mut key_params = SecretKeyParamsBuilder::default();
         key_params
             .key_type(KeyType::Rsa(2048))
@@ -348,7 +356,7 @@ mod tests {
             .build()
             .unwrap();
         let key_enc = key_params_enc
-            .generate()
+            .generate_with_rng(rng)
             .expect("failed to generate secret key, encrypted");
 
         let key_params_plain = key_params
@@ -363,7 +371,7 @@ mod tests {
             .build()
             .unwrap();
         let key_plain = key_params_plain
-            .generate()
+            .generate_with_rng(rng)
             .expect("failed to generate secret key");
 
         let signed_key_enc = key_enc.sign(|| "hello".into()).expect("failed to sign key");

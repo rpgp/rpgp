@@ -5,7 +5,10 @@ use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use ripemd::Ripemd160;
 use rsa::pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey};
-use rsa::{PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
+use rsa::{
+    traits::{PrivateKeyParts, PublicKeyParts},
+    RsaPrivateKey, RsaPublicKey,
+};
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};
@@ -102,12 +105,22 @@ pub fn verify(
     hashed: &[u8],
     signature: &[u8],
 ) -> Result<()> {
-    let signature = RsaSignature::try_from(signature)?;
     let key = RsaPublicKey::new_with_max_size(
         BigUint::from_bytes_be(n),
         BigUint::from_bytes_be(e),
         MAX_KEY_SIZE,
     )?;
+
+    let signature = if signature.len() < key.size() {
+        // RSA short signatures are allowed by PGP, but not by the by the
+        // RSA crate. So we pad out the signature if we encounter a short one.
+        let mut signature_padded = vec![0u8; key.size()];
+        let diff = key.size() - signature.len();
+        signature_padded[diff..].copy_from_slice(signature);
+        RsaSignature::try_from(&signature_padded[..])?
+    } else {
+        RsaSignature::try_from(signature)?
+    };
 
     match hash {
         HashAlgorithm::None => Err(format_err!("none")),
