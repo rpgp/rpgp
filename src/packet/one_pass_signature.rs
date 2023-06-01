@@ -19,13 +19,13 @@ use crate::types::{KeyId, Tag, Version};
 /// https://tools.ietf.org/html/rfc4880.html#section-5.4
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OnePassSignature {
-    packet_version: Version,
-    version: u8,
-    typ: SignatureType,
-    hash_algorithm: HashAlgorithm,
-    pub_algorithm: PublicKeyAlgorithm,
-    key_id: KeyId,
-    last: u8,
+    pub packet_version: Version,
+    pub version: u8,
+    pub typ: SignatureType,
+    pub hash_algorithm: HashAlgorithm,
+    pub pub_algorithm: PublicKeyAlgorithm,
+    pub key_id: KeyId,
+    pub last: u8,
 }
 
 impl OnePassSignature {
