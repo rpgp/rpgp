@@ -874,10 +874,12 @@ mod tests {
     fn test_rsa_signing_string() {
         for _ in 0..100 {
             let (skey, _headers) = SignedSecretKey::from_armor_single(
-                fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-                    .unwrap(),
+                fs::File::open(
+                    "./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc",
+                )
+                .unwrap(),
             )
-                .unwrap();
+            .unwrap();
 
             let pkey = skey.public_key();
 
