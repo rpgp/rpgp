@@ -9,7 +9,7 @@
 
 > OpenPGP implemented in pure Rust, permissively licensed
 
-rPGP is the only full Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html).
+rPGP is the only pure Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html).
 
 rPGP is regularly published as [the `pgp` Crate](https://crates.io/crates/pgp/) and its [RSA](https://crates.io/crates/rsa) implementation
 lives under the collective [RustCrypto umbrella](https://github.com/RustCrypto/RSA).
@@ -58,13 +58,13 @@ And then run tests with `RUST_LOG=pgp=info`.
 
 Some key differences:
 
-- rPGP has a more libre license than Sequoia, which allows a broader usage
+- rPGP has a more permissive license than Sequoia, which allows a broader usage
 
 - rPGP is a library with a well-defined, relatively small feature-set
   where Sequoia also tries to be a replacement for the GPG command line tool
 
 - All crypto used in rPGP is implemented in pure Rust,
-  whereas sequoia uses Nettle, which is implemented in C.
+  whereas Sequoia by default uses Nettle, which is implemented in C.
 
 
 ## Minimum Supported Rust Version (MSRV)
