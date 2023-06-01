@@ -872,26 +872,28 @@ mod tests {
 
     #[test]
     fn test_rsa_signing_string() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-                .unwrap(),
-        )
-        .unwrap();
+        for _ in 0..100 {
+            let (skey, _headers) = SignedSecretKey::from_armor_single(
+                fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                    .unwrap(),
+            )
+                .unwrap();
 
-        let pkey = skey.public_key();
+            let pkey = skey.public_key();
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
-        let signed_msg = lit_msg
-            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
-            .unwrap();
+            let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+            let signed_msg = lit_msg
+                .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+                .unwrap();
 
-        let armored = signed_msg.to_armored_bytes(None).unwrap();
-        fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
+            let armored = signed_msg.to_armored_bytes(None).unwrap();
+            fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
-        signed_msg.verify(&pkey).unwrap();
+            signed_msg.verify(&pkey).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
-        parsed.verify(&pkey).unwrap();
+            let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+            parsed.verify(&pkey).unwrap();
+        }
     }
 
     #[test]

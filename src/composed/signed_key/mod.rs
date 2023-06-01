@@ -108,10 +108,10 @@
 #[macro_use]
 mod key_parser_macros;
 
-pub mod parse;
-pub mod public;
-pub mod secret;
-pub mod shared;
+mod parse;
+mod public;
+mod secret;
+mod shared;
 
 pub use self::parse::*;
 pub use self::public::*;
