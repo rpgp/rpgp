@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # [Unreleased]
 
+## Changed
+
+- Made members of `OnePassSignature` public [#234](https://github.com/rpgp/rpgp/pull/234)
+- Update to newly published `rsa@0.9.0` [#240](https://github.com/rpgp/rpgp/pull/240)
+
+
 # [v0.10.1]
 
 ## Breaking
