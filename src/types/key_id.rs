@@ -31,3 +31,17 @@ impl fmt::Debug for KeyId {
         write!(f, "KeyId({})", hex::encode(self.as_ref()))
     }
 }
+
+impl fmt::LowerHex for KeyId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", hex::encode(self.as_ref()))
+    }
+}
+
+impl fmt::UpperHex for KeyId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut encoded = hex::encode(self.as_ref());
+        encoded.make_ascii_uppercase();
+        write!(f, "{}", encoded)
+    }
+}
