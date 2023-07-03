@@ -86,21 +86,18 @@ mod tests {
         assert_eq!(read_exact(data, 10), &data[0..10]);
 
         // one new line
-        assert_eq!(
-            read_exact(data, 66),
-            vec![&data[0..64], &data[65..67]].concat()
-        );
+        assert_eq!(read_exact(data, 66), [&data[0..64], &data[65..67]].concat());
 
         // two new lines
         assert_eq!(
             read_exact(data, 130),
-            vec![&data[0..64], &data[65..129], &data[130..132]].concat()
+            [&data[0..64], &data[65..129], &data[130..132]].concat()
         );
 
         // all
         assert_eq!(
             read_exact(data, 6 * 64),
-            vec![
+            [
                 &data[0..64],
                 &data[65..129],
                 &data[130..194],
