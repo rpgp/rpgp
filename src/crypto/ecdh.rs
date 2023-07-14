@@ -115,7 +115,7 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
         private_key_arr[..].copy_from_slice(&private_key_le);
         private_key_le.zeroize();
 
-        x25519_dalek::StaticSecret::from(private_key_arr)
+        StaticSecret::from(private_key_arr)
     };
 
     // derive shared secret
@@ -210,7 +210,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
     let mut our_secret_key_bytes = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
     rng.fill_bytes(&mut *our_secret_key_bytes);
-    let our_secret = x25519_dalek::StaticSecret::from(*our_secret_key_bytes);
+    let our_secret = StaticSecret::from(*our_secret_key_bytes);
 
     // derive shared secret
     let shared_secret = our_secret.diffie_hellman(&their_public);
