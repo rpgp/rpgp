@@ -30,12 +30,17 @@ pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecr
     let public = PublicKey::from(&secret);
 
     // public key
+    let p_raw = public.to_bytes();
+
     let mut p = Vec::with_capacity(33);
     p.push(0x40);
-    p.extend_from_slice(&public.as_bytes()[..]);
+    p.extend_from_slice(&p_raw);
 
     // secret key
-    let q = secret.to_bytes().iter().cloned().rev().collect::<Vec<u8>>();
+    // Clamp, as `to_bytes` does not clamp.
+    let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
+    // Big Endian
+    let q = q_raw.into_iter().rev().collect::<Vec<u8>>();
 
     // TODO: make these configurable and/or check for good defaults
     let hash = HashAlgorithm::default();
@@ -115,7 +120,7 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
         private_key_arr[..].copy_from_slice(&private_key_le);
         private_key_le.zeroize();
 
-        x25519_dalek::StaticSecret::from(private_key_arr)
+        StaticSecret::from(private_key_arr)
     };
 
     // derive shared secret
@@ -210,7 +215,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
     let mut our_secret_key_bytes = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
     rng.fill_bytes(&mut *our_secret_key_bytes);
-    let our_secret = x25519_dalek::StaticSecret::from(*our_secret_key_bytes);
+    let our_secret = StaticSecret::from(*our_secret_key_bytes);
 
     // derive shared secret
     let shared_secret = our_secret.diffie_hellman(&their_public);
