@@ -30,18 +30,17 @@ pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecr
     let public = PublicKey::from(&secret);
 
     // public key
+    let p_raw = public.to_bytes();
+
     let mut p = Vec::with_capacity(33);
     p.push(0x40);
-    // Clamp
-    let p_raw = curve25519_dalek::scalar::clamp_integer(public.to_bytes());
     p.extend_from_slice(&p_raw);
 
     // secret key
-    let q = secret.to_bytes();
     // Clamp, as `to_bytes` does not clamp.
-    let q = curve25519_dalek::scalar::clamp_integer(q);
+    let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
     // Big Endian
-    let q = q.into_iter().rev().collect::<Vec<u8>>();
+    let q = q_raw.into_iter().rev().collect::<Vec<u8>>();
 
     // TODO: make these configurable and/or check for good defaults
     let hash = HashAlgorithm::default();
