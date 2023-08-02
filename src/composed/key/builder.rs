@@ -113,7 +113,7 @@ impl SecretKeyParamsBuilder {
                     }
                 };
                 match curve {
-                    ECCCurve::P256 | ECCCurve::P384 => {}
+                    ECCCurve::P256 | ECCCurve::P384 | ECCCurve::Secp256k1 => {}
                     _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
                 }
             }

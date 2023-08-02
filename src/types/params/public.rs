@@ -50,6 +50,11 @@ pub enum EcdsaPublicParams {
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
+    Secp256k1 {
+        key: libsecp256k1::PublicKey,
+        /// Stores the original Mpi, to ensure we keep the padding around.
+        p: Mpi,
+    },
     Unsupported {
         curve: ECCCurve,
         p: Mpi,
@@ -92,6 +97,7 @@ impl EcdsaPublicParams {
         match self {
             EcdsaPublicParams::P256 { .. } => Some(32),
             EcdsaPublicParams::P384 { .. } => Some(48),
+            EcdsaPublicParams::Secp256k1 { .. } => Some(32),
             EcdsaPublicParams::Unsupported { .. } => None,
         }
     }
@@ -102,6 +108,7 @@ impl Serialize for EcdsaPublicParams {
         let oid = match self {
             EcdsaPublicParams::P256 { .. } => ECCCurve::P256.oid(),
             EcdsaPublicParams::P384 { .. } => ECCCurve::P384.oid(),
+            EcdsaPublicParams::Secp256k1 { .. } => ECCCurve::Secp256k1.oid(),
             EcdsaPublicParams::Unsupported { curve, .. } => curve.oid(),
         };
 
@@ -113,6 +120,9 @@ impl Serialize for EcdsaPublicParams {
                 p.as_ref().to_writer(writer)?;
             }
             EcdsaPublicParams::P384 { p, .. } => {
+                p.as_ref().to_writer(writer)?;
+            }
+            EcdsaPublicParams::Secp256k1 { p, .. } => {
                 p.as_ref().to_writer(writer)?;
             }
             EcdsaPublicParams::Unsupported { p, .. } => {

@@ -42,6 +42,21 @@ pub fn generate_key<R: Rng + CryptoRng>(
             ))
         }
 
+        ECCCurve::Secp256k1 => {
+
+            let secret = libsecp256k1::SecretKey::random(rng);
+            let public = libsecp256k1::PublicKey::from_secret_key(&secret);
+            let secret = Mpi::from_raw_slice(secret.serialize().as_slice());
+
+            Ok((
+                PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
+                    key: public,
+                    p: Mpi::from_raw_slice(public.serialize_compressed().as_slice()),
+                }),
+                PlainSecretParams::ECDSA(secret),
+            ))
+        }
+
         _ => unsupported_err!("curve {:?} for ECDSA", curve),
     }
 }
@@ -97,6 +112,29 @@ pub fn verify(
 
             Ok(())
         }
+        EcdsaPublicParams::Secp256k1 { key, .. } => {
+
+            const FLEN: usize = 32;
+            ensure_eq!(sig.len(), 2);
+            let r = sig[0].as_bytes();
+            let s = sig[1].as_bytes();
+            ensure!(r.len() <= FLEN, "invalid R (len)");
+            ensure!(s.len() <= FLEN, "invalid S (len)");
+            let mut sig_bytes = [0u8; 2 * FLEN];
+
+            // add padding if the values were encoded short
+            sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
+            sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
+
+            let signature = libsecp256k1::Signature::parse_standard(&sig_bytes).unwrap();
+            let message = libsecp256k1::Message::parse(&hashed.try_into().unwrap());
+            let verified = libsecp256k1::verify(&message, &signature, key);
+            if !verified {
+                return Err(crate::errors::Error::SignatureError(signature::Error::new()))
+            }
+
+            Ok(())
+        }
         EcdsaPublicParams::Unsupported { curve, .. } => {
             unsupported_err!("curve {:?} for ECDSA", curve.to_string())
         }
@@ -121,6 +159,11 @@ pub fn sign(
             let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
             let (r, s) = signature.split_bytes();
             (r.to_vec(), s.to_vec())
+        }
+        ECDSASecretKey::Secp256k1(secret_key) => {
+            let message = libsecp256k1::Message::parse(&digest.try_into().unwrap());
+            let (signature, _) = libsecp256k1::sign(&message, secret_key);
+            (signature.r.b32().to_vec(), signature.s.b32().to_vec())
         }
         ECDSASecretKey::Unsupported { curve, .. } => {
             unsupported_err!("curve {:?} for ECDSA", curve)
