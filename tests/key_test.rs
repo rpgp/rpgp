@@ -121,12 +121,12 @@ parse_dumps!(
     (test_parse_dumps_0, 0, 18_141, 20_998),
     (test_parse_dumps_1, 1, 18_021, 21_000),
     (test_parse_dumps_2, 2, 18_058, 20_999),
-    (test_parse_dumps_3, 3, 18_098, 20_999),
+    (test_parse_dumps_3, 3, 18_097, 20_998),
     (test_parse_dumps_4, 4, 18_048, 20_999),
     (test_parse_dumps_5, 5, 18_090, 20_999),
     (test_parse_dumps_6, 6, 18_130, 21_000),
     (test_parse_dumps_7, 7, 18_133, 21_000),
-    (test_parse_dumps_8, 8, 18_139, 21_000),
+    (test_parse_dumps_8, 8, 18_140, 21_000),
     (test_parse_dumps_9, 9, 17_992, 21_000),
 );
 

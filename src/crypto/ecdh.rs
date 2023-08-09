@@ -140,7 +140,7 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
         None => 0,
     };
 
-    let mut encrypted_session_key_vec: Vec<u8> = Vec::new();
+    let mut encrypted_session_key_vec: Vec<u8> = vec![0; encrypted_key_len];
     encrypted_session_key_vec.resize(encrypted_key_len, 0);
     encrypted_session_key_vec[(encrypted_key_len - encrypted_session_key.len())..]
         .copy_from_slice(encrypted_session_key);
