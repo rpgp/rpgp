@@ -86,6 +86,17 @@ impl EcdsaPublicParams {
                     p: p.to_owned(),
                 })
             }
+            ECCCurve::Secp256k1 => {
+                ensure!(p.len() <= 65, "invalid public key length");
+                let mut key = [0u8; 65];
+                key[..p.len()].copy_from_slice(p.as_bytes());
+
+                let public = libsecp256k1::PublicKey::parse(&key).unwrap();
+                Ok(EcdsaPublicParams::Secp256k1 {
+                    key: public,
+                    p: p.to_owned(),
+                })
+            }
             _ => Ok(EcdsaPublicParams::Unsupported {
                 curve,
                 p: p.to_owned(),
