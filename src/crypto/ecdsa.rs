@@ -51,7 +51,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
                     key: public,
-                    p: Mpi::from_raw_slice(public.serialize_compressed().as_slice()),
+                    p: Mpi::from_raw_slice(public.serialize().as_slice()),
                 }),
                 PlainSecretParams::ECDSA(secret),
             ))
