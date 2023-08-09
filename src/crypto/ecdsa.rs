@@ -4,7 +4,7 @@ use signature::hazmat::{PrehashSigner, PrehashVerifier};
 
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::types::EcdsaPublicParams;
 use crate::types::{ECDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 
@@ -43,7 +43,6 @@ pub fn generate_key<R: Rng + CryptoRng>(
         }
 
         ECCCurve::Secp256k1 => {
-
             let secret = libsecp256k1::SecretKey::random(rng);
             let public = libsecp256k1::PublicKey::from_secret_key(&secret);
             let secret = Mpi::from_raw_slice(secret.serialize().as_slice());
@@ -113,7 +112,6 @@ pub fn verify(
             Ok(())
         }
         EcdsaPublicParams::Secp256k1 { key, .. } => {
-
             const FLEN: usize = 32;
             ensure_eq!(sig.len(), 2);
             let r = sig[0].as_bytes();
@@ -126,11 +124,13 @@ pub fn verify(
             sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
-            let signature = libsecp256k1::Signature::parse_standard(&sig_bytes).unwrap();
-            let message = libsecp256k1::Message::parse(&hashed.try_into().unwrap());
+            let signature = libsecp256k1::Signature::parse_standard(&sig_bytes)
+                .map_err(|_| Error::InvalidInput)?;
+            let hashed_fixed = hashed.try_into().map_err(|_| Error::InvalidInput)?;
+            let message = libsecp256k1::Message::parse(&hashed_fixed);
             let verified = libsecp256k1::verify(&message, &signature, key);
             if !verified {
-                return Err(crate::errors::Error::SignatureError(signature::Error::new()))
+                return Err(Error::SignatureError(signature::Error::new()));
             }
 
             Ok(())
@@ -161,7 +161,10 @@ pub fn sign(
             (r.to_vec(), s.to_vec())
         }
         ECDSASecretKey::Secp256k1(secret_key) => {
-            let message = libsecp256k1::Message::parse(&digest.try_into().unwrap());
+            let digest_fixed = digest
+                .try_into()
+                .map_err(|_| crate::errors::Error::InvalidInput)?;
+            let message = libsecp256k1::Message::parse(&digest_fixed);
             let (signature, _) = libsecp256k1::sign(&message, secret_key);
             (signature.r.b32().to_vec(), signature.s.b32().to_vec())
         }

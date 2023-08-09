@@ -3,7 +3,7 @@ use std::{fmt, io};
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::ser::Serialize;
 use crate::types::{Mpi, MpiRef};
 
@@ -91,7 +91,8 @@ impl EcdsaPublicParams {
                 let mut key = [0u8; 65];
                 key[..p.len()].copy_from_slice(p.as_bytes());
 
-                let public = libsecp256k1::PublicKey::parse(&key).unwrap();
+                let public =
+                    libsecp256k1::PublicKey::parse(&key).map_err(|_| Error::InvalidInput)?;
                 Ok(EcdsaPublicParams::Secp256k1 {
                     key: public,
                     p: p.to_owned(),
