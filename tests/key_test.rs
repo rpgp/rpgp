@@ -849,6 +849,19 @@ openpgp_key!(
     "ecc"
 );
 openpgp_key!(
+    key_openpgp_samplekeys_ecc_sample_4_pub,
+    "samplekeys/ecc-sample-4-pub.asc",
+    true,
+    false
+);
+openpgp_key!(
+    key_openpgp_samplekeys_ecc_sample_4_sec,
+    "samplekeys/ecc-sample-4-sec.asc",
+    true,
+    false,
+    "ecc"
+);
+openpgp_key!(
     key_openpgp_samplekeys_ed25519_cv25519_sample_1,
     "samplekeys/ed25519-cv25519-sample-1.asc",
     true,
