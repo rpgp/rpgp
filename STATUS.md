@@ -41,6 +41,7 @@ Symbols:
   - [ ] brainpoolP384r1
   - [ ] brainpoolP512r1
   - [x] Curve 25519
+  - [x] Secp256k1
 - [x] Symmetric Algorithms
   - [x] Plaintext
   - [x] IDEA
