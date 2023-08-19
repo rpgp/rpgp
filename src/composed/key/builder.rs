@@ -603,4 +603,12 @@ mod tests {
             gen_ecdsa(rng, ECCCurve::P384);
         }
     }
+
+    #[test]
+    fn key_gen_ecdsa_secp256k1() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            gen_ecdsa(rng, ECCCurve::Secp256k1);
+        }
+    }
 }
