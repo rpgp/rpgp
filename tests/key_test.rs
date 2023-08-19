@@ -981,6 +981,31 @@ fn private_ecc2_verify() {
 }
 
 #[test]
+fn private_ecc3_verify() {
+    let f = read_file("./tests/openpgp/samplekeys/ecc-sample-4-sec.asc");
+    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    sk.verify().expect("invalid key");
+    assert_eq!(sk.secret_subkeys.len(), 1);
+    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "E15A9BB15A23A43F",);
+    sk.unlock(
+        || "ecc".to_string(),
+        |k| {
+            match k {
+                SecretKeyRepr::ECDSA(ref inner_key) => {
+                    assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
+                }
+                _ => panic!("invalid key"),
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    let pub_key = sk.public_key();
+    assert_eq!(pub_key.key_id(), sk.key_id());
+}
+
+#[test]
 fn private_x25519_verify() {
     let f = read_file("./tests/openpgpjs/x25519.sec.asc");
     let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
