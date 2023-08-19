@@ -44,7 +44,7 @@ num_enum = "0.7"
 num-traits = "0.2.6"
 p256 = { version = "^0.13", features = ["ecdsa"] }
 p384 = { version = "^0.13", features = ["ecdsa"] }
-libsecp256k1 = "0.7.1"
+k256 = { version = "0.13", features = ["ecdsa"] }
 rand = "0.8"
 ripemd = { version = "^0.1.3", features = ["oid"] }
 rsa = { version = "0.9.0" }
