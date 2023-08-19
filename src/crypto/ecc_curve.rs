@@ -181,6 +181,10 @@ mod tests {
             ECCCurve::Curve25519.oid(),
             vec![0x2B, 0x06, 0x01, 0x04, 0x01, 0x97, 0x55, 0x01, 0x05, 0x01]
         );
+        assert_eq!(
+            ECCCurve::Secp256k1.oid(),
+            vec![0x2B, 0x81, 0x04, 0x00, 0x0A]
+        );
     }
 
     #[test]

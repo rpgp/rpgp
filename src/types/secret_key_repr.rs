@@ -63,8 +63,7 @@ impl fmt::Debug for EdDSASecretKey {
 pub enum ECDSASecretKey {
     P256(p256::SecretKey),
     P384(p384::SecretKey),
-    #[zeroize(skip)]
-    Secp256k1(libsecp256k1::SecretKey),
+    Secp256k1(k256::SecretKey),
     Unsupported {
         /// The secret point.
         x: Mpi,

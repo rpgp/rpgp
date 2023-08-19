@@ -4,7 +4,7 @@ use signature::hazmat::{PrehashSigner, PrehashVerifier};
 
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::types::EcdsaPublicParams;
 use crate::types::{ECDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 
@@ -43,14 +43,14 @@ pub fn generate_key<R: Rng + CryptoRng>(
         }
 
         ECCCurve::Secp256k1 => {
-            let secret = libsecp256k1::SecretKey::random(rng);
-            let public = libsecp256k1::PublicKey::from_secret_key(&secret);
-            let secret = Mpi::from_raw_slice(secret.serialize().as_slice());
+            let secret = k256::SecretKey::random(rng);
+            let public = secret.public_key();
+            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
                     key: public,
-                    p: Mpi::from_raw_slice(public.serialize().as_slice()),
+                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
                 }),
                 PlainSecretParams::ECDSA(secret),
             ))
@@ -124,14 +124,10 @@ pub fn verify(
             sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
             sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
 
-            let signature = libsecp256k1::Signature::parse_standard(&sig_bytes)
-                .map_err(|_| Error::InvalidInput)?;
-            let hashed_fixed = hashed.try_into().map_err(|_| Error::InvalidInput)?;
-            let message = libsecp256k1::Message::parse(&hashed_fixed);
-            let verified = libsecp256k1::verify(&message, &signature, key);
-            if !verified {
-                return Err(Error::SignatureError(signature::Error::new()));
-            }
+            let pk = k256::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
+            let sig = k256::ecdsa::Signature::try_from(&sig_bytes[..])?;
+
+            pk.verify_prehash(hashed, &sig)?;
 
             Ok(())
         }
@@ -161,12 +157,10 @@ pub fn sign(
             (r.to_vec(), s.to_vec())
         }
         ECDSASecretKey::Secp256k1(secret_key) => {
-            let digest_fixed = digest
-                .try_into()
-                .map_err(|_| crate::errors::Error::InvalidInput)?;
-            let message = libsecp256k1::Message::parse(&digest_fixed);
-            let (signature, _) = libsecp256k1::sign(&message, secret_key);
-            (signature.r.b32().to_vec(), signature.s.b32().to_vec())
+            let secret = k256::ecdsa::SigningKey::from(secret_key);
+            let signature: k256::ecdsa::Signature = secret.sign_prehash(digest)?;
+            let (r, s) = signature.split_bytes();
+            (r.to_vec(), s.to_vec())
         }
         ECDSASecretKey::Unsupported { curve, .. } => {
             unsupported_err!("curve {:?} for ECDSA", curve)
