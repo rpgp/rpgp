@@ -12,7 +12,7 @@ use crate::crypto::checksum;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, IResult, Result};
+use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
@@ -193,8 +193,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                         Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P384(secret)))
                     }
                     EcdsaPublicParams::Secp256k1 { .. } => {
-                        let secret = libsecp256k1::SecretKey::parse_slice(d.as_bytes())
-                            .map_err(|_| Error::InvalidInput)?;
+                        let secret = k256::SecretKey::from_slice(d.as_bytes())?;
 
                         Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::Secp256k1(secret)))
                     }
