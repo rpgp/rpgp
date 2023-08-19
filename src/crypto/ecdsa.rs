@@ -49,8 +49,8 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
-                    key: public.into(),
-                    p: Mpi::from_raw_slice(&public.to_encoded_point(false).as_bytes()),
+                    key: public,
+                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
                 }),
                 PlainSecretParams::ECDSA(secret),
             ))
