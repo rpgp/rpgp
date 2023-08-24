@@ -63,12 +63,12 @@ version = "1.0.0"
 default-features = false
 
 [dependencies.curve25519-dalek]
-version = "4.0.0-rc.3"
+version = "4.0.0"
 default-features = false
 features = ["alloc", "precomputed-tables", "zeroize"]
 
 [dependencies.ed25519-dalek]
-version = "2.0.0-rc.3"
+version = "2.0.0"
 default-features = false
 features = ["std", "zeroize", "fast"]
 
