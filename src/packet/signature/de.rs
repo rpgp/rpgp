@@ -35,7 +35,8 @@ impl Deserialize for Signature {
 
 /// Convert an epoch timestamp to a `DateTime`
 fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
-    NaiveDateTime::from_timestamp_opt(i64::from(ts), 0).map(|ts| DateTime::<Utc>::from_utc(ts, Utc))
+    NaiveDateTime::from_timestamp_opt(i64::from(ts), 0)
+        .map(|ts| DateTime::<Utc>::from_naive_utc_and_offset(ts, Utc))
 }
 
 /// Parse a signature creation time subpacket
