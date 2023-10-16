@@ -2,11 +2,11 @@
 //!
 //! Handles everything in relationship to packets.
 //!
-//! [`Key generation`] is handled seperately as well as
-//! [`signing and verifying with external hashing`] applied.
+//! [Key generation] is handled seperately as well as
+//! [signing and verifying with external hashing] applied.
 //!
-//! [`Key generation`]: super::composed::key
-//! [`signing and verifying with external hashing`]: super::composed::signed_key
+//! [Key generation]: super::composed::key
+//! [signing and verifying with external hashing]: super::composed::signed_key
 //!
 //! ```rust
 //! # const DATA :&'static [u8] = b"Hello World";
