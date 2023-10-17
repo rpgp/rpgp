@@ -234,7 +234,7 @@ jobs:
     - name: Install stabley
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: 1.72
         target: ${{ matrix.target }}
         override: true
 
