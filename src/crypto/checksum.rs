@@ -82,6 +82,14 @@ impl Hasher for SimpleChecksum {
 
 /// SHA1 checksum, first 20 octets.
 #[inline]
-pub fn calculate_sha1(data: &[u8]) -> Vec<u8> {
-    Sha1::digest(data)[..20].to_vec()
+pub fn calculate_sha1<I, T>(data: I) -> Vec<u8>
+where
+    T: AsRef<[u8]>,
+    I: IntoIterator<Item = T>,
+{
+    let mut digest = Sha1::new();
+    for chunk in data {
+        digest.update(chunk.as_ref());
+    }
+    digest.finalize()[..20].to_vec()
 }

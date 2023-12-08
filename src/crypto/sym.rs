@@ -169,7 +169,7 @@ impl SymmetricKeyAlgorithm {
         let mdc_len = 22;
         let (data, mdc) = res.split_at(res.len() - mdc_len);
 
-        let sha1 = checksum::calculate_sha1(&[prefix, data, &mdc[0..2]].concat());
+        let sha1 = checksum::calculate_sha1([prefix, data, &mdc[0..2]]);
         if mdc[0] != 0xD3 || // Invalid MDC tag
            mdc[1] != 0x14 || // Invalid MDC length
            mdc[2..] != sha1[..]
