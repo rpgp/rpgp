@@ -115,7 +115,7 @@ impl<'a> PlainSecretParamsRef<'a> {
     pub fn checksum_sha1(&self) -> Vec<u8> {
         let mut buf = Vec::new();
         self.to_writer_raw(&mut buf).expect("known write target");
-        checksum::calculate_sha1(&buf)
+        checksum::calculate_sha1([&buf])
     }
 
     pub fn as_repr(&self, public_params: &PublicParams) -> Result<SecretKeyRepr> {
