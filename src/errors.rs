@@ -74,6 +74,8 @@ pub enum Error {
     MdcError,
     #[error("Invalid size conversion {0}")]
     TryFromInt(#[from] TryFromIntError),
+    #[error("invalid SHA-1 hash")]
+    InvalidSha1Hash,
 }
 
 impl Error {
@@ -109,6 +111,7 @@ impl Error {
             Error::MdcError => 27,
             Error::TryFromInt(_) => 28,
             Error::EllipticCurve(_) => 29,
+            Error::InvalidSha1Hash => 30,
         }
     }
 }
