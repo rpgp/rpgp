@@ -113,13 +113,13 @@ impl EncryptedSecretParams {
         // See RFC 4880, "5.5.3 Secret-Key Packet Formats" for details.
         if self.string_to_key_id == 254 {
             if plaintext.len() < 20 {
-                return Err(Error::InvalidSha1Hash);
+                return Err(Error::InvalidInput);
             }
             let expected_sha1 = &plaintext[plaintext.len() - 20..];
             let calculated_sha1 = checksum::calculate_sha1([&plaintext[..plaintext.len() - 20]]);
             let checksum_correct = expected_sha1 == calculated_sha1;
             if !checksum_correct {
-                return Err(Error::InvalidSha1Hash);
+                return Err(Error::InvalidInput);
             }
         }
 

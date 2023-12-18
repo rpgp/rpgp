@@ -1146,14 +1146,14 @@ fn test_encrypted_key() {
     key.verify().expect("invalid key");
     let unsigned_pubkey = key.public_key();
 
-    // Incorrect password results in InvalidSha1Hash error.
+    // Incorrect password results in InvalidInput error.
     assert!(matches!(
         unsigned_pubkey
             .clone()
             .sign(&key, || "".into())
             .err()
             .unwrap(),
-        pgp::errors::Error::InvalidSha1Hash
+        pgp::errors::Error::InvalidInput
     ));
 
     let _signed_key = unsigned_pubkey.sign(&key, || "123".into()).unwrap();
