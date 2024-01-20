@@ -10,7 +10,7 @@ use byteorder::{BigEndian, ByteOrder};
 use nom::branch::alt;
 use nom::bytes::streaming::tag;
 use nom::bytes::streaming::{take, take_until};
-use nom::character::streaming::{digit1, line_ending, not_line_ending};
+use nom::character::streaming::{digit1, line_ending, not_line_ending, space0};
 use nom::combinator::{complete, map, map_res, opt, success, value};
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, preceded, terminated};
@@ -261,7 +261,7 @@ fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, String
     delimited(
         take_until(b"-----".as_slice()),
         armor_header,
-        many0(line_ending),
+        many0(pair(space0, line_ending)),
     )(i)
 }
 
