@@ -8,7 +8,6 @@ use nom::combinator::{complete, map, map_opt, map_parser, map_res, rest};
 use nom::multi::{fold_many_m_n, length_data, many0};
 use nom::number::streaming::{be_u16, be_u32, be_u8};
 use nom::sequence::{pair, tuple};
-use num_traits::FromPrimitive;
 use smallvec::SmallVec;
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -74,8 +73,8 @@ fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
         .iter()
         .map(|v| {
-            SymmetricKeyAlgorithm::from_u8(*v)
-                .ok_or_else(|| format_err!("Invalid SymmetricKeyAlgorithm"))
+            SymmetricKeyAlgorithm::try_from(*v)
+                .map_err(|_| format_err!("Invalid SymmetricKeyAlgorithm"))
         })
         .collect::<Result<_>>()?;
 
@@ -87,7 +86,7 @@ fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[HashAlgorithm; 8]> = body
         .iter()
-        .map(|v| HashAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid HashAlgorithm")))
+        .map(|v| HashAlgorithm::try_from(*v).map_err(|_| format_err!("Invalid HashAlgorithm")))
         .collect::<Result<_>>()?;
 
     Ok((&b""[..], SubpacketData::PreferredHashAlgorithms(list)))
@@ -99,8 +98,8 @@ fn pref_com_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[CompressionAlgorithm; 8]> = body
         .iter()
         .map(|v| {
-            CompressionAlgorithm::from_u8(*v)
-                .ok_or_else(|| format_err!("Invalid CompressionAlgorithm"))
+            CompressionAlgorithm::try_from(*v)
+                .map_err(|_| format_err!("Invalid CompressionAlgorithm"))
         })
         .collect::<Result<_>>()?;
 
@@ -153,8 +152,8 @@ fn regular_expression(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 fn revocation_key(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         tuple((
-            map_opt(be_u8, RevocationKeyClass::from_u8),
-            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            map_res(be_u8, RevocationKeyClass::try_from),
+            map_res(be_u8, PublicKeyAlgorithm::try_from),
             // TODO: V5 Keys have 32 octets here
             take(20u8),
         )),
@@ -244,7 +243,7 @@ fn features(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         pair(
-            map_opt(be_u8, RevocationCode::from_u8),
+            map_res(be_u8, RevocationCode::try_from),
             map(rest, BString::from),
         ),
         |(code, reason)| SubpacketData::RevocationReason(code, reason),
@@ -255,8 +254,8 @@ fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 fn sig_target(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         tuple((
-            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
-            map_opt(be_u8, HashAlgorithm::from_u8),
+            map_res(be_u8, PublicKeyAlgorithm::try_from),
+            map_res(be_u8, HashAlgorithm::try_from),
             rest,
         )),
         |(pub_alg, hash_alg, hash): (_, _, &[u8])| {
@@ -276,7 +275,7 @@ fn embedded_sig(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
 fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
-        pair(map_opt(be_u8, KeyVersion::from_u8), rest),
+        pair(map_res(be_u8, KeyVersion::try_from), rest),
         |(version, fingerprint)| {
             SubpacketData::IssuerFingerprint(version, SmallVec::from_slice(fingerprint))
         },
@@ -287,7 +286,7 @@ fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[AeadAlgorithm; 2]> = body
         .iter()
-        .map(|v| AeadAlgorithm::from_u8(*v).ok_or_else(|| format_err!("Invalid AeadAlgorithm")))
+        .map(|v| AeadAlgorithm::try_from(*v).map_err(|_| format_err!("Invalid AeadAlgorithm")))
         .collect::<Result<_>>()?;
 
     Ok((&b""[..], SubpacketData::PreferredAeadAlgorithms(list)))
@@ -392,15 +391,15 @@ fn v3_parser(
             // One-octet length of following hashed material. MUST be 5.
             tag(&[5]),
             // One-octet signature type.
-            map_opt(be_u8, SignatureType::from_u8),
+            map_res(be_u8, SignatureType::try_from),
             // Four-octet creation time.
             map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
             // Eight-octet Key ID of signer.
             map_res(take(8usize), KeyId::from_slice),
             // One-octet public-key algorithm.
-            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            map_res(be_u8, PublicKeyAlgorithm::try_from),
             // One-octet hash algorithm.
-            map_opt(be_u8, HashAlgorithm::from_u8),
+            map_res(be_u8, HashAlgorithm::try_from),
             // Two-octet field holding left 16 bits of signed hash value.
             take(2usize),
         ))(i)?;
@@ -436,11 +435,11 @@ fn v4_parser(
     move |i: &[u8]| {
         let (i, (typ, pub_alg, hash_alg, hsub, usub, ls_hash)) = tuple((
             // One-octet signature type.
-            map_opt(be_u8, SignatureType::from_u8),
+            map_res(be_u8, SignatureType::try_from),
             // One-octet public-key algorithm.
-            map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+            map_res(be_u8, PublicKeyAlgorithm::try_from),
             // One-octet hash algorithm.
-            map_opt(be_u8, HashAlgorithm::from_u8),
+            map_res(be_u8, HashAlgorithm::try_from),
             // Two-octet scalar octet count for following hashed subpacket data.
             // Hashed subpacket data set (zero or more subpackets).
             map_parser(length_data(be_u16), subpackets),
@@ -477,7 +476,7 @@ fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Si
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
 fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
     move |i: &[u8]| {
-        let (i, version) = map_opt(be_u8, SignatureVersion::from_u8)(i)?;
+        let (i, version) = map_res(be_u8, SignatureVersion::try_from)(i)?;
         let (i, signature) = match &version {
             &SignatureVersion::V2 | &SignatureVersion::V3 => v3_parser(packet_version, version)(i),
             &SignatureVersion::V4 | &SignatureVersion::V5 => v4_parser(packet_version, version)(i),
@@ -503,7 +502,7 @@ mod tests {
             SubpacketData::PreferredSymmetricAlgorithms(
                 input
                     .iter()
-                    .map(|i| SymmetricKeyAlgorithm::from_u8(*i).unwrap())
+                    .map(|i| SymmetricKeyAlgorithm::try_from(*i).unwrap())
                     .collect()
             )
         );

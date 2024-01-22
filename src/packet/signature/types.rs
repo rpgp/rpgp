@@ -4,6 +4,7 @@ use std::io::Read;
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
+use num_enum::TryFromPrimitive;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
@@ -457,7 +458,7 @@ impl Signature {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
 pub enum SignatureVersion {
@@ -469,7 +470,7 @@ pub enum SignatureVersion {
     V5 = 5,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 pub enum SignatureType {
     /// Signature of a binary document.
@@ -779,7 +780,7 @@ pub struct Notation {
 }
 
 /// Codes for revocation reasons
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 pub enum RevocationCode {
     /// No reason specified (key revocations or cert revocations)

@@ -40,7 +40,7 @@ idea = "^0.5"
 log = "0.4.6"
 md-5 = { version = "^0.10.5", features = ["oid"] }
 nom = "^7.0"
-num-derive = "0.4.0"
+num_enum = "0.7"
 num-traits = "0.2.6"
 p256 = { version = "^0.13", features = ["ecdsa"] }
 p384 = { version = "^0.13", features = ["ecdsa"] }

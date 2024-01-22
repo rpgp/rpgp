@@ -1,10 +1,9 @@
 use std::io;
 
 use nom::bytes::streaming::take;
-use nom::combinator::{cond, map, map_opt, rest_len, success};
+use nom::combinator::{cond, map, map_res, rest_len, success};
 use nom::multi::length_data;
 use nom::number::streaming::be_u8;
-use num_traits::FromPrimitive;
 use zeroize::Zeroize;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
@@ -90,16 +89,16 @@ fn parse_secret_fields(
             // symmetric key algorithm
             1..=253 => {
 
-                let (i, sym_alg) = map_opt(success(s2k_typ), SymmetricKeyAlgorithm::from_u8) (i)?;
+                let (i, sym_alg) = map_res(success(s2k_typ), SymmetricKeyAlgorithm::try_from) (i)?;
                 let (i, iv)= take(sym_alg.block_size())(i)?;
                 (i, (Some(sym_alg), Some(iv), None))
             }
              ,
             // symmetric key + string-to-key
             254..=255 => {
-                    let (i, sym_alg) = map_opt(
+                    let (i, sym_alg) = map_res(
                                 be_u8,
-                                SymmetricKeyAlgorithm::from_u8
+                                SymmetricKeyAlgorithm::try_from
                             )(i)?;
 
                 let (i, s2k) = s2k_parser(i)?;

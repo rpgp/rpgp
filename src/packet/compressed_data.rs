@@ -2,7 +2,6 @@ use std::fmt;
 use std::io::{self, Cursor, Read};
 
 use flate2::read::{DeflateDecoder, ZlibDecoder};
-use num_traits::FromPrimitive;
 
 use crate::errors::Result;
 use crate::packet::PacketTrait;
@@ -39,8 +38,8 @@ impl CompressedData {
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         ensure!(input.len() > 1, "input too short");
 
-        let alg = CompressionAlgorithm::from_u8(input[0])
-            .ok_or_else(|| format_err!("invalid compression algorithm"))?;
+        let alg = CompressionAlgorithm::try_from(input[0])
+            .map_err(|_| format_err!("invalid compression algorithm"))?;
         Ok(CompressedData {
             packet_version,
             compression_algorithm: alg,

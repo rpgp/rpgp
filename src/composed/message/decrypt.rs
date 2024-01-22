@@ -1,8 +1,6 @@
 use std::boxed::Box;
 use std::io::Cursor;
 
-use num_traits::FromPrimitive;
-
 use crate::composed::message::types::{Edata, Message};
 use crate::composed::shared::Deserializable;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -35,8 +33,8 @@ where
             }
             SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
         };
-        let algorithm = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
-            .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
+        let algorithm = SymmetricKeyAlgorithm::try_from(decrypted_key[0])
+            .map_err(|_| format_err!("invalid symmetric key algorithm"))?;
         alg = Some(algorithm);
         debug!("alg: {:?}", alg);
 
@@ -88,8 +86,8 @@ where
                 .sym_algorithm()
                 .decrypt_with_iv_regular(&key, &iv, &mut decrypted_key)?;
 
-            let alg = SymmetricKeyAlgorithm::from_u8(decrypted_key[0])
-                .ok_or_else(|| format_err!("invalid symmetric key algorithm"))?;
+            let alg = SymmetricKeyAlgorithm::try_from(decrypted_key[0])
+                .map_err(|_| format_err!("invalid symmetric key algorithm"))?;
 
             Ok((decrypted_key[1..].to_vec(), alg))
         }

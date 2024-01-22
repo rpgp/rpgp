@@ -1,9 +1,8 @@
 use std::io;
 
-use nom::combinator::{map, map_opt, rest};
+use nom::combinator::{map, map_res, rest};
 use nom::number::streaming::be_u8;
 use nom::sequence::tuple;
-use num_traits::FromPrimitive;
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
@@ -86,7 +85,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncr
         map(
             tuple((
                 be_u8,
-                map_opt(be_u8, SymmetricKeyAlgorithm::from_u8),
+                map_res(be_u8, SymmetricKeyAlgorithm::try_from),
                 s2k_parser,
                 rest,
             )),

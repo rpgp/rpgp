@@ -2,10 +2,9 @@ use std::io;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use nom::bytes::streaming::take;
-use nom::combinator::{map, map_opt, map_res};
+use nom::combinator::{map, map_res};
 use nom::number::streaming::be_u8;
 use nom::sequence::pair;
-use num_traits::FromPrimitive;
 use rand::{CryptoRng, Rng};
 
 use crate::crypto::checksum;
@@ -116,7 +115,7 @@ fn parse(
         // the key id this maps to
         let (i, id) = map_res(take(8u8), KeyId::from_slice)(i)?;
         // the symmetric key algorithm
-        let (i, alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(i)?;
+        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
 
         // key algorithm specific data
         let (i, mpis) = parse_mpis(&alg, i)?;

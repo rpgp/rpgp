@@ -1,11 +1,10 @@
 use std::io;
 
 use nom::bytes::streaming::take;
-use nom::combinator::{map, map_opt, map_res};
+use nom::combinator::{map, map_res};
 use nom::number::streaming::be_u8;
 use nom::sequence::tuple;
 use nom::IResult;
-use num_traits::FromPrimitive;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
@@ -63,9 +62,9 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
         map(
             tuple((
                 be_u8,
-                map_opt(be_u8, SignatureType::from_u8),
-                map_opt(be_u8, HashAlgorithm::from_u8),
-                map_opt(be_u8, PublicKeyAlgorithm::from_u8),
+                map_res(be_u8, SignatureType::try_from),
+                map_res(be_u8, HashAlgorithm::try_from),
+                map_res(be_u8, PublicKeyAlgorithm::try_from),
                 map_res(take(8usize), KeyId::from_slice),
                 be_u8,
             )),
