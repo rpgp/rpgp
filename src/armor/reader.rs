@@ -628,6 +628,24 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_armor_whitespace() {
+        let c = Cursor::new(
+            "\
+             -----BEGIN PGP MESSAGE-----\n\
+             \t \n\
+             aGVsbG8gd29ybGQ=\n\
+             -----END PGP MESSAGE----\
+             ",
+        );
+
+        let (typ, headers, res) = parse(c).unwrap();
+
+        assert_eq!(typ, (BlockType::Message));
+        assert!(headers.is_empty());
+        assert_eq!(res.as_slice(), &b"hello world"[..]);
+    }
+
+    #[test]
     fn test_parse_armor_two_entries() {
         let mut map = BTreeMap::new();
         map.insert("hello".to_string(), "world".to_string());
