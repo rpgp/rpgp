@@ -242,10 +242,7 @@ fn features(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.23
 fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
-        pair(
-            map_res(be_u8, RevocationCode::try_from),
-            map(rest, BString::from),
-        ),
+        pair(map(be_u8, RevocationCode::from), map(rest, BString::from)),
         |(code, reason)| SubpacketData::RevocationReason(code, reason),
     )(i)
 }
