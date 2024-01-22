@@ -133,7 +133,6 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use num_traits::FromPrimitive;
     use regex::Regex;
     use std::fs::File;
     use std::io::{BufRead, BufReader, Seek, SeekFrom};
@@ -276,7 +275,7 @@ mod tests {
 
             // println!("\n-- checking: {:?} {}", packet.tag(), e);
 
-            let tag = Tag::from_u8(tag.parse().unwrap()).unwrap();
+            let tag: Tag = u8::try_into(tag.parse().unwrap()).unwrap();
             assert_eq!(tag, packet.tag(), "missmatch in packet {:?} ({})", p, e);
         }
     }

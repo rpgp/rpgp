@@ -1,3 +1,4 @@
+use num_enum::TryFromPrimitive;
 use smallvec::SmallVec;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
@@ -9,7 +10,7 @@ pub struct RevocationKey {
     pub fingerprint: SmallVec<[u8; 20]>,
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 pub enum RevocationKeyClass {
     Default = 0x80,

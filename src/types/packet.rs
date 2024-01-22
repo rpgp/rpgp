@@ -1,6 +1,7 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
+use num_enum::TryFromPrimitive;
 
 use crate::errors::Result;
 
@@ -31,7 +32,7 @@ impl From<usize> for PacketLength {
 }
 
 /// Packet tag as defined in RFC 4880, Section 4.3 "Packet Tags"
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 pub enum Tag {
     /// Public-Key Encrypted Session Key Packet
@@ -70,7 +71,7 @@ pub enum Tag {
     ModDetectionCode = 19,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
 pub enum Version {
@@ -121,7 +122,7 @@ impl Version {
 }
 
 // TODO: find a better place for this
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
 pub enum KeyVersion {

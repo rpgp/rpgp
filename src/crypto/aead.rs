@@ -1,5 +1,7 @@
+use num_enum::TryFromPrimitive;
+
 /// Available AEAD algorithms.
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
 pub enum AeadAlgorithm {

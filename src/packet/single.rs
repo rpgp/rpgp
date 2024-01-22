@@ -6,11 +6,10 @@ use std::num::NonZeroUsize;
 use nom::bits;
 use nom::branch::alt;
 use nom::bytes::streaming::take;
-use nom::combinator::{map, map_opt};
+use nom::combinator::{map, map_res};
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::{preceded, tuple};
 use nom::Err;
-use num_traits::FromPrimitive;
 
 use crate::de::Deserialize;
 use crate::errors::{Error, IResult, Result};
@@ -34,9 +33,9 @@ fn old_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
             // First bit is always 1
             tag(0b1, 1usize),
             // Version: 0
-            map_opt(tag(0b0, 1usize), Version::from_u8),
+            map_res(tag(0b0, 1usize), Version::try_from),
             // Packet Tag
-            map_opt(take(4usize), Tag::from_u8),
+            map_res(take(4usize), u8::try_into),
             // Packet Length Type
             take(2usize),
         ))(I)?;
@@ -130,9 +129,9 @@ fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
             tag(0b1, 1usize),
             tuple((
                 // Version: 1
-                map_opt(tag(0b1, 1usize), Version::from_u8),
+                map_res(tag(0b1, 1usize), Version::try_from),
                 // Packet Tag
-                map_opt(take(6usize), Tag::from_u8),
+                map_res(take(6usize), u8::try_into),
                 bits::bytes(read_packet_len),
             )),
         )(I)

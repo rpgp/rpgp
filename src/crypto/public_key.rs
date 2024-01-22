@@ -1,4 +1,6 @@
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+use num_enum::TryFromPrimitive;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 pub enum PublicKeyAlgorithm {
     /// RSA (Encrypt and Sign)

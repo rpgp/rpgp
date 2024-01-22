@@ -42,6 +42,6 @@ impl fmt::UpperHex for KeyId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut encoded = hex::encode(self.as_ref());
         encoded.make_ascii_uppercase();
-        write!(f, "{}", encoded)
+        write!(f, "{encoded}")
     }
 }

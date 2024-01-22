@@ -3,12 +3,12 @@ use std::{fmt, io};
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use nom::combinator::{map, map_opt, rest};
+use nom::combinator::{map, map_opt, map_res, rest};
 use nom::multi::length_data;
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::tuple;
 use nom::IResult;
-use num_traits::FromPrimitive;
+use num_enum::TryFromPrimitive;
 
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
@@ -31,7 +31,7 @@ pub struct LiteralData {
     data: Vec<u8>,
 }
 
-#[derive(Debug, Copy, Clone, FromPrimitive, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, TryFromPrimitive, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DataMode {
     Binary = b'b',
@@ -109,7 +109,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], LiteralDat
     move |i: &[u8]| {
         map(
             tuple((
-                map_opt(be_u8, DataMode::from_u8),
+                map_res(be_u8, DataMode::try_from),
                 map(length_data(be_u8), BStr::new::<[u8]>),
                 map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
                 rest,

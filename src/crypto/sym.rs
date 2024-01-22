@@ -6,6 +6,7 @@ use cfb_mode::cipher::{AsyncStreamCipher, KeyIvInit};
 use cfb_mode::{BufDecryptor, BufEncryptor, Decryptor, Encryptor};
 use des::TdesEde3;
 use idea::Idea;
+use num_enum::TryFromPrimitive;
 use rand::{thread_rng, CryptoRng, Rng};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
@@ -71,7 +72,7 @@ macro_rules! encrypt_regular {
 }
 
 /// Available [symmetric key algorithms](https://tools.ietf.org/html/rfc4880#section-9.2).
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
 pub enum SymmetricKeyAlgorithm {

@@ -2,6 +2,7 @@ use std::boxed::Box;
 
 use digest::Digest;
 use md5::Md5;
+use num_enum::TryFromPrimitive;
 use ripemd::Ripemd160;
 use sha1::Sha1;
 
@@ -9,7 +10,7 @@ use crate::errors::Result;
 
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
 pub enum HashAlgorithm {

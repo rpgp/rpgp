@@ -1,10 +1,9 @@
 use chrono::{DateTime, TimeZone, Utc};
 use nom::bytes::streaming::tag;
-use nom::combinator::{map, map_opt};
+use nom::combinator::{map, map_opt, map_res};
 use nom::multi::length_data;
 use nom::number::streaming::{be_u16, be_u32, be_u8};
 use nom::sequence::{pair, tuple};
-use num_traits::FromPrimitive;
 
 use crate::crypto::ecc_curve::ecc_curve_from_oid;
 use crate::crypto::hash::HashAlgorithm;
@@ -68,10 +67,10 @@ fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
             // a one-octet value 01, reserved for future extensions
             tag(&[1][..]),
             // a one-octet hash function ID used with a KDF
-            map_opt(be_u8, HashAlgorithm::from_u8),
+            map_res(be_u8, HashAlgorithm::try_from),
             // a one-octet algorithm ID for the symmetric algorithm used to wrap
             // the symmetric key used for the message encryption
-            map_opt(be_u8, SymmetricKeyAlgorithm::from_u8),
+            map_res(be_u8, SymmetricKeyAlgorithm::try_from),
         )),
         |(curve, p, _len2, _tag, hash, alg_sym)| PublicParams::ECDH {
             curve,
@@ -147,7 +146,7 @@ fn new_public_key_parser(
 > + '_ {
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
-        let (i, alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(i)?;
+        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
         let (i, params) = parse_pub_fields(alg)(i)?;
         Ok((i, (*key_ver, alg, created_at, None, params)))
     }
@@ -170,7 +169,7 @@ fn old_public_key_parser(
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, exp) = be_u16(i)?;
-        let (i, alg) = map_opt(be_u8, PublicKeyAlgorithm::from_u8)(i)?;
+        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
         let (i, params) = parse_pub_fields(alg)(i)?;
 
         Ok((i, (*key_ver, alg, created_at, Some(exp), params)))
@@ -192,7 +191,7 @@ pub(crate) fn parse(
         PublicParams,
     ),
 > {
-    let (i, key_ver) = map_opt(be_u8, KeyVersion::from_u8)(i)?;
+    let (i, key_ver) = map_res(be_u8, KeyVersion::try_from)(i)?;
     let (i, key) = match &key_ver {
         &KeyVersion::V2 | &KeyVersion::V3 => old_public_key_parser(&key_ver)(i)?,
         &KeyVersion::V4 => new_public_key_parser(&key_ver)(i)?,

@@ -1,4 +1,6 @@
-#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive)]
+use num_enum::TryFromPrimitive;
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 /// Available compression algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.3
 #[repr(u8)]
