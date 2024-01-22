@@ -25,14 +25,17 @@ macro_rules! impl_public_key {
                 use $crate::types::KeyVersion;
 
                 if version == KeyVersion::V2 || version == KeyVersion::V3 {
-                    ensure!(
-                        algorithm == PublicKeyAlgorithm::RSA
-                            || algorithm == PublicKeyAlgorithm::RSAEncrypt
-                            || algorithm == PublicKeyAlgorithm::RSASign,
-                        "Invalid algorithm {:?} for key version: {:?}",
-                        algorithm,
-                        version,
-                    );
+                    if !(algorithm == PublicKeyAlgorithm::RSA
+                        || algorithm == PublicKeyAlgorithm::RSAEncrypt
+                        || algorithm == PublicKeyAlgorithm::RSASign)
+                    {
+                        // It's sufficient to throw a "soft" Error::Unsupported
+                        unsupported_err!(
+                            "Invalid algorithm {:?} for key version: {:?}",
+                            algorithm,
+                            version,
+                        );
+                    }
                 }
 
                 Ok($name {
@@ -95,7 +98,7 @@ macro_rules! impl_public_key {
                     self.expiration
                         .expect("old key versions have an expiration"),
                 )?;
-                writer.write_all(&[self.algorithm as u8])?;
+                writer.write_all(&[self.algorithm.into()])?;
                 self.public_params.to_writer(writer)?;
 
                 Ok(())
@@ -109,7 +112,7 @@ macro_rules! impl_public_key {
                 use $crate::ser::Serialize;
 
                 writer.write_u32::<BigEndian>(self.created_at.timestamp() as u32)?;
-                writer.write_all(&[self.algorithm as u8])?;
+                writer.write_all(&[self.algorithm.into()])?;
                 self.public_params.to_writer(writer)?;
 
                 Ok(())
@@ -153,7 +156,7 @@ macro_rules! impl_public_key {
 
         impl $crate::ser::Serialize for $name {
             fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> $crate::errors::Result<()> {
-                writer.write_all(&[self.version as u8])?;
+                writer.write_all(&[u8::from(self.version)])?;
 
                 match self.version {
                     $crate::types::KeyVersion::V2 | $crate::types::KeyVersion::V3 => {
@@ -161,6 +164,9 @@ macro_rules! impl_public_key {
                     }
                     $crate::types::KeyVersion::V4 => self.to_writer_new(writer),
                     $crate::types::KeyVersion::V5 => unimplemented_err!("V5 keys"),
+                    $crate::types::KeyVersion::Other(v) => {
+                        unimplemented_err!("Unsupported key version {}", v)
+                    }
                 }
             }
         }
@@ -204,7 +210,7 @@ macro_rules! impl_public_key {
                         );
 
                         // A one-octet number denoting the public-key algorithm of this key.
-                        packet.push(self.algorithm() as u8);
+                        packet.push(self.algorithm().into());
                         self.public_params
                             .to_writer(&mut packet)
                             .expect("write to vec");
@@ -218,6 +224,7 @@ macro_rules! impl_public_key {
                         h.finalize().to_vec()
                     }
                     KeyVersion::V5 => unimplemented!("V5 keys"),
+                    KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
                 }
             }
 
@@ -241,6 +248,7 @@ macro_rules! impl_public_key {
                         KeyId::from_slice(&f[offset..]).expect("fixed size slice")
                     }
                     KeyVersion::V5 => unimplemented!("V5 keys"),
+                    KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
                 }
             }
 
@@ -304,6 +312,9 @@ macro_rules! impl_public_key {
                             sig[1].clone().into(),
                         )
                     }
+                    PublicParams::Unknown { .. } => {
+                        unimplemented_err!("verify unknown");
+                    }
                 }
             }
 
@@ -336,6 +347,7 @@ macro_rules! impl_public_key {
                     ),
                     PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
                     PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
+                    PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
                 }?;
 
                 Ok(res

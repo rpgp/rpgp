@@ -140,7 +140,7 @@ impl Serialize for EncryptedSecretParams {
             254..=255 => {
                 let s2k = &self.string_to_key;
 
-                writer.write_all(&[self.encryption_algorithm as u8])?;
+                writer.write_all(&[u8::from(self.encryption_algorithm)])?;
                 s2k.to_writer(writer)?;
                 writer.write_all(&self.iv)?;
             }

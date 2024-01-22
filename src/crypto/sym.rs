@@ -6,7 +6,7 @@ use cfb_mode::cipher::{AsyncStreamCipher, KeyIvInit};
 use cfb_mode::{BufDecryptor, BufEncryptor, Decryptor, Encryptor};
 use des::TdesEde3;
 use idea::Idea;
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{thread_rng, CryptoRng, Rng};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
@@ -72,9 +72,8 @@ macro_rules! encrypt_regular {
 }
 
 /// Available [symmetric key algorithms](https://tools.ietf.org/html/rfc4880#section-9.2).
-#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
-#[derive(Default)]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
     Plaintext = 0,
@@ -88,7 +87,6 @@ pub enum SymmetricKeyAlgorithm {
     Blowfish = 4,
     // 5 & 6 are reserved for DES/SK
     /// AES with 128-bit key
-    #[default]
     AES128 = 7,
     /// AES with 192-bit key
     AES192 = 8,
@@ -103,6 +101,15 @@ pub enum SymmetricKeyAlgorithm {
     /// [Camellia](https://tools.ietf.org/html/rfc5581#section-3) with 256-bit key
     Camellia256 = 13,
     Private10 = 110,
+
+    #[num_enum(catch_all)]
+    Other(u8),
+}
+
+impl Default for SymmetricKeyAlgorithm {
+    fn default() -> Self {
+        Self::AES128
+    }
 }
 
 impl zeroize::DefaultIsZeroes for SymmetricKeyAlgorithm {}
@@ -124,7 +131,7 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Camellia128 => 16,
             SymmetricKeyAlgorithm::Camellia192 => 16,
             SymmetricKeyAlgorithm::Camellia256 => 16,
-            SymmetricKeyAlgorithm::Private10 => 0,
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => 0,
         }
     }
 
@@ -145,7 +152,8 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Camellia128 => 16,
             SymmetricKeyAlgorithm::Camellia192 => 24,
             SymmetricKeyAlgorithm::Camellia256 => 32,
-            SymmetricKeyAlgorithm::Private10 => 0,
+
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => 0,
         }
     }
 
@@ -312,9 +320,9 @@ impl SymmetricKeyAlgorithm {
                     bs,
                     resync
                 ),
-                SymmetricKeyAlgorithm::Private10 => unimplemented_err!(
-                    "Private10 should not be used, and only exist for compatability"
-                ),
+                SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                    unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
+                }
             }
         }
 
@@ -362,8 +370,8 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Camellia256 => {
                 decrypt_regular!(Camellia256, key, iv_vec, ciphertext)
             }
-            SymmetricKeyAlgorithm::Private10 => {
-                unimplemented_err!("Private10 should not be used, and only exist for compatability")
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
             }
         }
 
@@ -511,8 +519,8 @@ impl SymmetricKeyAlgorithm {
                 SymmetricKeyAlgorithm::Camellia256 => {
                     encrypt!(Camellia256, key, iv_vec, prefix, data, bs, resync)
                 }
-                SymmetricKeyAlgorithm::Private10 => {
-                    bail!("Private10 should not be used, and only exist for compatability")
+                SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                    bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
                 }
             }
         }
@@ -551,8 +559,8 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Camellia256 => {
                 encrypt_regular!(Camellia256, key, iv_vec, plaintext)
             }
-            SymmetricKeyAlgorithm::Private10 => {
-                unimplemented_err!("Private10 should not be used, and only exist for compatability")
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
             }
         }
         Ok(())

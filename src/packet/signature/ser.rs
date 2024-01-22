@@ -11,11 +11,12 @@ use crate::util::write_packet_length;
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[self.config.version as u8])?;
+        writer.write_all(&[u8::from(self.config.version)])?;
 
         match self.config.version {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
             SignatureVersion::V4 | SignatureVersion::V5 => self.to_writer_v4(writer),
+            SignatureVersion::Other(version) => bail!("Unsupported signature version {}", version),
         }
     }
 }
@@ -42,13 +43,13 @@ impl Subpacket {
                 writer.write_all(id.as_ref())?;
             }
             SubpacketData::PreferredSymmetricAlgorithms(algs) => {
-                writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
+                writer.write_all(&algs.iter().map(|&alg| u8::from(alg)).collect::<Vec<_>>())?;
             }
             SubpacketData::PreferredHashAlgorithms(algs) => {
-                writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
+                writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
             }
             SubpacketData::PreferredCompressionAlgorithms(algs) => {
-                writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
+                writer.write_all(&algs.iter().map(|&alg| u8::from(alg)).collect::<Vec<_>>())?;
             }
             SubpacketData::KeyServerPreferences(prefs) => {
                 writer.write_all(prefs)?;
@@ -89,7 +90,7 @@ impl Subpacket {
                 writer.write_all(&notation.value)?;
             }
             SubpacketData::RevocationKey(rev_key) => {
-                writer.write_all(&[rev_key.class as u8, rev_key.algorithm as u8])?;
+                writer.write_all(&[rev_key.class as u8, rev_key.algorithm.into()])?;
                 writer.write_all(&rev_key.fingerprint[..])?;
             }
             SubpacketData::SignersUserID(body) => {
@@ -109,7 +110,7 @@ impl Subpacket {
                 writer.write_all(&[val])?;
             }
             SubpacketData::IssuerFingerprint(version, fp) => {
-                writer.write_all(&[*version as u8])?;
+                writer.write_all(&[u8::from(*version)])?;
                 writer.write_all(fp)?;
             }
             SubpacketData::PreferredAeadAlgorithms(algs) => {
@@ -122,7 +123,7 @@ impl Subpacket {
                 writer.write_all(body)?;
             }
             SubpacketData::SignatureTarget(pub_alg, hash_alg, hash) => {
-                writer.write_all(&[*pub_alg as u8, *hash_alg as u8])?;
+                writer.write_all(&[u8::from(*pub_alg), u8::from(*hash_alg)])?;
                 writer.write_all(hash)?;
             }
         }
@@ -250,9 +251,9 @@ impl SignatureConfig {
         )?;
         writer.write_all(&[
             // public algorithm
-            self.pub_alg as u8,
+            u8::from(self.pub_alg),
             // hash algorithm
-            self.hash_alg as u8,
+            u8::from(self.hash_alg),
         ])?;
 
         Ok(())
@@ -264,9 +265,9 @@ impl SignatureConfig {
             // type
             self.typ as u8,
             // public algorithm
-            self.pub_alg as u8,
+            u8::from(self.pub_alg),
             // hash algorithm
-            self.hash_alg as u8,
+            u8::from(self.hash_alg),
         ])?;
 
         // hashed subpackets

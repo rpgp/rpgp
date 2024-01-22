@@ -8,7 +8,7 @@ use nom::multi::length_data;
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::tuple;
 use nom::IResult;
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
@@ -31,13 +31,16 @@ pub struct LiteralData {
     data: Vec<u8>,
 }
 
-#[derive(Debug, Copy, Clone, TryFromPrimitive, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
 #[repr(u8)]
 pub enum DataMode {
     Binary = b'b',
     Text = b't',
     Utf8 = b'u',
     Mime = b'm',
+
+    #[num_enum(catch_all)]
+    Other(u8),
 }
 
 impl LiteralData {
@@ -93,7 +96,7 @@ impl LiteralData {
 impl Serialize for LiteralData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let name = &self.file_name;
-        writer.write_all(&[self.mode as u8, name.len() as u8])?;
+        writer.write_all(&[u8::from(self.mode), name.len() as u8])?;
         writer.write_all(name)?;
         writer.write_u32::<BigEndian>(self.created.timestamp() as u32)?;
 

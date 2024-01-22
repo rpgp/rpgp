@@ -63,7 +63,7 @@ impl SignatureConfig {
 
         self.hash_data_to_sign(&mut *hasher, data)?;
         let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
 
@@ -114,13 +114,16 @@ impl SignatureConfig {
                 // prefixes
                 hasher.update(&prefix_buf);
             }
+            SignatureVersion::Other(version) => {
+                bail!("unsupported signature version {}", version)
+            }
         }
 
         // the packet content
         hasher.update(&packet_buf);
 
         let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
 
@@ -154,7 +157,7 @@ impl SignatureConfig {
         key.to_writer_old(&mut hasher)?;
 
         let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
         let signed_hash_value = [hash[0], hash[1]];
@@ -180,7 +183,7 @@ impl SignatureConfig {
         key.to_writer_old(&mut hasher)?;
 
         let len = self.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.trailer(len));
+        hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
         let signed_hash_value = [hash[0], hash[1]];
@@ -218,13 +221,13 @@ impl SignatureConfig {
 
                 let mut res = vec![
                     // the signature version
-                    self.version as u8,
+                    self.version.into(),
                     // the signature type
                     self.typ as u8,
                     // the public-key algorithm
-                    self.pub_alg as u8,
+                    self.pub_alg.into(),
                     // the hash algorithm
-                    self.hash_alg as u8,
+                    self.hash_alg.into(),
                     // will be filled with the length
                     0u8,
                     0u8,
@@ -246,6 +249,9 @@ impl SignatureConfig {
                 // see https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-rfc4880bis-10#name-computing-signatures
 
                 Ok(res.len())
+            }
+            SignatureVersion::Other(version) => {
+                bail!("unsupported signature version {}", version)
             }
         }
     }
@@ -285,16 +291,19 @@ impl SignatureConfig {
         }
     }
 
-    pub fn trailer(&self, len: usize) -> Vec<u8> {
+    pub fn trailer(&self, len: usize) -> Result<Vec<u8>> {
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
                 // Nothing to do
-                Vec::new()
+                Ok(Vec::new())
             }
             SignatureVersion::V4 | SignatureVersion::V5 => {
                 let mut trailer = vec![0x04, 0xFF, 0, 0, 0, 0];
                 BigEndian::write_u32(&mut trailer[2..], len as u32);
-                trailer
+                Ok(trailer)
+            }
+            SignatureVersion::Other(version) => {
+                bail!("unsupported signature version {}", version)
             }
         }
     }

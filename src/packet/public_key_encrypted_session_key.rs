@@ -31,7 +31,9 @@ impl PublicKeyEncryptedSessionKey {
     pub fn from_slice(version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(version)(input)?;
 
-        ensure_eq!(pk.version, 3, "invalid version");
+        if pk.version != 3 {
+            unsupported_err!("unsupported PKESK version {}", pk.version);
+        }
 
         Ok(pk)
     }
@@ -46,7 +48,7 @@ impl PublicKeyEncryptedSessionKey {
         // the session key is prefixed with symmetric key algorithm
         let len = session_key.len();
         let mut data = vec![0u8; len + 3];
-        data[0] = alg as u8;
+        data[0] = u8::from(alg);
         data[1..=len].copy_from_slice(session_key);
 
         // and appended a checksum
@@ -99,6 +101,7 @@ fn parse_mpis<'i>(alg: &PublicKeyAlgorithm, i: &'i [u8]) -> IResult<&'i [u8], Ve
             let v: [u8; 1] = [blen];
             Ok((i, vec![a.to_owned(), (&v[..]).into(), b.into()]))
         }
+        PublicKeyAlgorithm::Unknown(_) => Ok((i, vec![])), // we don't know the format of this data
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
             nom::error::ErrorKind::Switch,
         ))),
@@ -115,7 +118,7 @@ fn parse(
         // the key id this maps to
         let (i, id) = map_res(take(8u8), KeyId::from_slice)(i)?;
         // the symmetric key algorithm
-        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
+        let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
 
         // key algorithm specific data
         let (i, mpis) = parse_mpis(&alg, i)?;
@@ -137,7 +140,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[self.version])?;
         writer.write_all(self.id.as_ref())?;
-        writer.write_all(&[self.algorithm as u8])?;
+        writer.write_all(&[self.algorithm.into()])?;
 
         match self.algorithm {
             PublicKeyAlgorithm::RSA

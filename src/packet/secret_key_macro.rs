@@ -249,7 +249,7 @@ macro_rules! impl_secret_key {
 
         impl $crate::ser::Serialize for $name {
             fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> $crate::errors::Result<()> {
-                writer.write_all(&[self.version() as u8])?;
+                writer.write_all(&[u8::from(self.version())])?;
 
                 match self.version() {
                     $crate::types::KeyVersion::V2 | $crate::types::KeyVersion::V3 => {
@@ -257,6 +257,9 @@ macro_rules! impl_secret_key {
                     }
                     $crate::types::KeyVersion::V4 => self.to_writer_new(writer),
                     $crate::types::KeyVersion::V5 => unimplemented_err!("V5 keys"),
+                    $crate::types::KeyVersion::Other(v) => {
+                        unimplemented_err!("Unsupported key version {}", v)
+                    }
                 }
             }
         }

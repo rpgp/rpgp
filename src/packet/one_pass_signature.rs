@@ -32,6 +32,10 @@ impl OnePassSignature {
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
 
+        if pk.version != 2 && pk.version != 3 && pk.version != 4 && pk.version != 5 {
+            unsupported_err!("unsupported signature version {}", pk.version);
+        }
+
         Ok(pk)
     }
 
@@ -63,8 +67,8 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
             tuple((
                 be_u8,
                 map_res(be_u8, SignatureType::try_from),
-                map_res(be_u8, HashAlgorithm::try_from),
-                map_res(be_u8, PublicKeyAlgorithm::try_from),
+                map(be_u8, HashAlgorithm::from),
+                map(be_u8, PublicKeyAlgorithm::from),
                 map_res(take(8usize), KeyId::from_slice),
                 be_u8,
             )),
@@ -86,8 +90,8 @@ impl Serialize for OnePassSignature {
         writer.write_all(&[
             self.version,
             self.typ as u8,
-            self.hash_algorithm as u8,
-            self.pub_algorithm as u8,
+            self.hash_algorithm.into(),
+            self.pub_algorithm.into(),
         ])?;
         writer.write_all(self.key_id.as_ref())?;
         writer.write_all(&[self.last])?;

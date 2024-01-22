@@ -33,8 +33,7 @@ where
             }
             SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
         };
-        let algorithm = SymmetricKeyAlgorithm::try_from(decrypted_key[0])
-            .map_err(|_| format_err!("invalid symmetric key algorithm"))?;
+        let algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
         alg = Some(algorithm);
         debug!("alg: {:?}", alg);
 
@@ -86,8 +85,7 @@ where
                 .sym_algorithm()
                 .decrypt_with_iv_regular(&key, &iv, &mut decrypted_key)?;
 
-            let alg = SymmetricKeyAlgorithm::try_from(decrypted_key[0])
-                .map_err(|_| format_err!("invalid symmetric key algorithm"))?;
+            let alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
 
             Ok((decrypted_key[1..].to_vec(), alg))
         }

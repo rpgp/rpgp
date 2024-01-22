@@ -93,9 +93,9 @@ pub struct SubkeyParams {
 
 impl SecretKeyParamsBuilder {
     fn validate(&self) -> std::result::Result<(), String> {
-        match self.key_type {
+        match &self.key_type {
             Some(KeyType::Rsa(size)) => {
-                if size < 2048 {
+                if *size < 2048 {
                     return Err("Keys with less than 2048bits are considered insecure".into());
                 }
             }
@@ -231,7 +231,7 @@ impl SecretKeyParams {
     }
 }
 
-#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum KeyType {
     /// Encryption & Signing with RSA and the given bitsize.
     Rsa(u32),
@@ -268,7 +268,7 @@ impl From<DsaKeySize> for dsa::KeySize {
 }
 
 impl KeyType {
-    pub fn to_alg(self) -> PublicKeyAlgorithm {
+    pub fn to_alg(&self) -> PublicKeyAlgorithm {
         match self {
             KeyType::Rsa(_) => PublicKeyAlgorithm::RSA,
             KeyType::ECDH => PublicKeyAlgorithm::ECDH,
@@ -279,7 +279,7 @@ impl KeyType {
     }
 
     pub fn generate(
-        self,
+        &self,
         passphrase: Option<String>,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let mut rng = thread_rng();
@@ -287,16 +287,16 @@ impl KeyType {
     }
 
     pub fn generate_with_rng<R: Rng + CryptoRng>(
-        self,
+        &self,
         rng: &mut R,
         passphrase: Option<String>,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
-            KeyType::Rsa(bit_size) => rsa::generate_key(rng, bit_size as usize)?,
+            KeyType::Rsa(bit_size) => rsa::generate_key(rng, *bit_size as usize)?,
             KeyType::ECDH => ecdh::generate_key(rng),
             KeyType::EdDSA => eddsa::generate_key(rng),
             KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
-            KeyType::Dsa(key_size) => dsa::generate_key(rng, key_size.into())?,
+            KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
         };
 
         let secret = match passphrase {
@@ -552,7 +552,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
-            .key_type(KeyType::ECDSA(curve))
+            .key_type(KeyType::ECDSA(curve.clone()))
             .can_create_certificates(true)
             .can_sign(true)
             .primary_user_id("Me-X <me-ecdsa@mail.com>".into())

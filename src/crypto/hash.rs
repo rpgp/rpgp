@@ -2,7 +2,7 @@ use std::boxed::Box;
 
 use digest::Digest;
 use md5::Md5;
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive};
 use ripemd::Ripemd160;
 use sha1::Sha1;
 
@@ -10,15 +10,14 @@ use crate::errors::Result;
 
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
-#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
-#[derive(Default)]
 pub enum HashAlgorithm {
     None = 0,
     MD5 = 1,
     SHA1 = 2,
     RIPEMD160 = 3,
-    #[default]
+
     SHA2_256 = 8,
     SHA2_384 = 9,
     SHA2_512 = 10,
@@ -28,6 +27,15 @@ pub enum HashAlgorithm {
 
     /// Do not use, just for compatability with GnuPG.
     Private10 = 110,
+
+    #[num_enum(catch_all)]
+    Other(u8),
+}
+
+impl Default for HashAlgorithm {
+    fn default() -> Self {
+        Self::SHA2_256
+    }
 }
 
 impl zeroize::DefaultIsZeroes for HashAlgorithm {}

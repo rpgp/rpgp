@@ -1,7 +1,7 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::errors::Result;
 
@@ -122,15 +122,22 @@ impl Version {
 }
 
 // TODO: find a better place for this
-#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
-#[derive(Default)]
 pub enum KeyVersion {
     V2 = 2,
     V3 = 3,
-    #[default]
     V4 = 4,
     V5 = 5,
+
+    #[num_enum(catch_all)]
+    Other(u8),
+}
+
+impl Default for KeyVersion {
+    fn default() -> Self {
+        Self::V4
+    }
 }
 
 #[cfg(test)]

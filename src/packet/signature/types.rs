@@ -106,7 +106,7 @@ impl Signature {
             self.config.hash_data_to_sign(&mut *hasher, data)?;
         }
         let len = self.config.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.config.trailer(len));
+        hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -170,13 +170,16 @@ impl Signature {
                     // prefixes
                     hasher.update(&prefix_buf);
                 }
+                SignatureVersion::Other(version) => {
+                    bail!("unsupported signature version: {:?}", version)
+                }
             }
 
             hasher.update(&packet_buf);
         }
 
         let len = self.config.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.config.trailer(len));
+        hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -266,7 +269,7 @@ impl Signature {
         }
 
         let len = self.config.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.config.trailer(len));
+        hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -303,7 +306,7 @@ impl Signature {
         }
 
         let len = self.config.hash_signature_data(&mut *hasher)?;
-        hasher.update(&self.config.trailer(len));
+        hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
         ensure_eq!(
@@ -506,16 +509,23 @@ impl Signature {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
-#[derive(Default)]
 pub enum SignatureVersion {
     /// Deprecated
     V2 = 2,
     V3 = 3,
-    #[default]
     V4 = 4,
     V5 = 5,
+
+    #[num_enum(catch_all)]
+    Other(u8),
+}
+
+impl Default for SignatureVersion {
+    fn default() -> Self {
+        Self::V4
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]

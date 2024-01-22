@@ -67,16 +67,18 @@ pub fn build_ecdh_param(
     let kdf_params = vec![
         0x03, // length of the following fields
         0x01, // reserved for future extensions
-        hash as u8,
-        alg_sym as u8,
+        hash.into(),
+        u8::from(alg_sym),
     ];
 
     let oid_len = [oid.len() as u8];
 
+    let pkalgo = [u8::from(PublicKeyAlgorithm::ECDH)];
+
     let values: Vec<&[u8]> = vec![
         &oid_len,
         oid,
-        &[PublicKeyAlgorithm::ECDH as u8],
+        &pkalgo,
         &kdf_params,
         &ANON_SENDER[..],
         fingerprint,
