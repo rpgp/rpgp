@@ -903,6 +903,12 @@ openpgp_key!(
     true,
     true
 );
+openpgp_key!(
+    key_openpgp_samplekeys_leading_marker,
+    "samplekeys/alice-marker.sec.asc",
+    true,
+    false // marker packet gets dropped during parsing
+);
 
 // PKCS#1
 // openpgp_key!(key_openpgp_samplekeys_ssh_dsa, "samplekeys/ssh-dsa.key", true);
