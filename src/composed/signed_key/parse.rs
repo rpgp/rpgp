@@ -56,12 +56,17 @@ pub fn from_bytes_many<'a>(
 ) -> Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a> {
     let packets = PacketParser::new(bytes)
         .filter_map(|p| {
-            // for now we are skipping any packets that we failed to parse
-            if p.is_ok() {
-                p.ok()
-            } else {
-                warn!("skipping packet: {:?}", p);
-                None
+            match p {
+                Ok(Packet::Marker(_m)) => {
+                    debug!("skipping marker packet");
+                    None
+                }
+                Ok(p) => Some(p),
+                Err(_) => {
+                    // for now we are skipping any packets that we failed to parse
+                    warn!("skipping packet: {:?}", p);
+                    None
+                }
             }
         })
         .peekable();
