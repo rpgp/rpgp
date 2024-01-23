@@ -489,6 +489,8 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use crate::{Deserializable, StandaloneSignature};
+    use std::io::Cursor;
 
     #[test]
     fn test_subpacket_pref_sym_alg() {
@@ -503,5 +505,25 @@ mod tests {
                     .collect()
             )
         );
+    }
+
+    #[test]
+    fn test_unknown_revocation_code() {
+        let revocation = "-----BEGIN PGP SIGNATURE-----
+
+wsASBCAWCgCEBYJlrwiYCRACvMqAWdPpHUcUAAAAAAAeACBzYWx0QG5vdGF0aW9u
+cy5zZXF1b2lhLXBncC5vcmfPfjVZJ9PXSt4854s05WU+Tj5QZwuhA5+LEHEUborP
+PxQdQnJldm9jYXRpb24gbWVzc2FnZRYhBKfuT6/w5BLl1XTGUgK8yoBZ0+kdAABi
+lQEAkpvZ3A2RGtRdCne/dOZtqoX7oCCZKCPyfZS9I9roc5oBAOj4aklEBejYuTKF
+SW+kj0jFDKC2xb/o8hbkTpwPtsoI
+=0ajX
+-----END PGP SIGNATURE-----";
+
+        let (sig, _) = StandaloneSignature::from_armor_single(Cursor::new(revocation)).unwrap();
+
+        let rc = sig.signature.revocation_reason_code();
+
+        assert!(rc.is_some());
+        assert!(matches!(rc.unwrap(), RevocationCode::Other(0x42)));
     }
 }
