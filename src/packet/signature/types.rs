@@ -4,7 +4,7 @@ use std::io::Read;
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
@@ -780,7 +780,7 @@ pub struct Notation {
 }
 
 /// Codes for revocation reasons
-#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum RevocationCode {
     /// No reason specified (key revocations or cert revocations)
@@ -793,6 +793,23 @@ pub enum RevocationCode {
     KeyRetired = 3,
     /// User ID information is no longer valid (cert revocations)
     CertUserIdInvalid = 32,
+
+    /// Private Use range (from OpenGPG)
+    Private100 = 100,
+    Private101 = 101,
+    Private102 = 102,
+    Private103 = 103,
+    Private104 = 104,
+    Private105 = 105,
+    Private106 = 106,
+    Private107 = 107,
+    Private108 = 108,
+    Private109 = 109,
+    Private110 = 110,
+
+    /// Undefined code
+    #[num_enum(catch_all)]
+    Other(u8),
 }
 
 impl fmt::Debug for Signature {

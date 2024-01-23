@@ -53,7 +53,7 @@ impl Subpacket {
                 writer.write_all(features)?;
             }
             SubpacketData::RevocationReason(code, reason) => {
-                writer.write_all(&[*code as u8])?;
+                writer.write_all(&[u8::from(*code)])?;
                 writer.write_all(reason)?;
             }
             SubpacketData::IsPrimary(is_primary) => {
