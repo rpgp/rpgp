@@ -413,9 +413,10 @@ impl Message {
                 let msg = Message::from_bytes(data.decompress()?)?;
                 msg.verify(key)
             }
-            // Nothing to do for others.
-            // TODO: should this return an error?
-            _ => Ok(()),
+            // We don't know how to verify a signature for other Message types, and shouldn't return Ok
+            _ => Err(Error::Unsupported(format!(
+                "Unexpected message format: {self:?}",
+            ))),
         }
     }
 
