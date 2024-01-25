@@ -3,7 +3,7 @@ use std::io::Read;
 
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, ByteOrder};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -315,14 +315,14 @@ impl Signature {
         self.config.subpackets()
     }
 
-    pub fn key_expiration_time(&self) -> Option<&DateTime<Utc>> {
+    pub fn key_expiration_time(&self) -> Option<&Duration> {
         self.subpackets().find_map(|p| match &p.data {
             SubpacketData::KeyExpirationTime(d) => Some(d),
             _ => None,
         })
     }
 
-    pub fn signature_expiration_time(&self) -> Option<&DateTime<Utc>> {
+    pub fn signature_expiration_time(&self) -> Option<&Duration> {
         self.subpackets().find_map(|p| match &p.data {
             SubpacketData::SignatureExpirationTime(d) => Some(d),
             _ => None,
@@ -746,9 +746,9 @@ pub enum SubpacketData {
     /// The time the signature was made.
     SignatureCreationTime(DateTime<Utc>),
     /// The time the signature will expire.
-    SignatureExpirationTime(DateTime<Utc>),
+    SignatureExpirationTime(Duration),
     /// When the key is going to expire
-    KeyExpirationTime(DateTime<Utc>),
+    KeyExpirationTime(Duration),
     /// The OpenPGP Key ID of the key issuing the signature.
     Issuer(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.

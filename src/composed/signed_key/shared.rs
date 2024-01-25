@@ -68,7 +68,7 @@ impl SignedKeyDetails {
             .flat_map(|user| &user.signatures)
             .filter_map(|sig| sig.key_expiration_time())
             .max()
-            .map(|tm| Duration::seconds(tm.timestamp()))
+            .cloned()
     }
 
     fn verify_users(&self, key: &impl PublicKeyTrait) -> Result<()> {

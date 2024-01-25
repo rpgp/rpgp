@@ -2,7 +2,7 @@ use std::boxed::Box;
 use std::str;
 
 use bstr::BString;
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::{complete, map, map_opt, map_parser, map_res, rest};
 use nom::multi::{fold_many_m_n, length_data, many0};
@@ -38,6 +38,11 @@ fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
         .map(|ts| DateTime::<Utc>::from_naive_utc_and_offset(ts, Utc))
 }
 
+/// Convert a u32 to a `Duration`
+fn duration_from_timestamp(ts: u32) -> Option<Duration> {
+    Some(Duration::seconds(i64::from(ts)))
+}
+
 /// Parse a signature creation time subpacket
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
 fn signature_creation_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
@@ -63,7 +68,7 @@ fn key_expiration(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
         be_u32,
-        |date| dt_from_timestamp(date).map(SubpacketData::KeyExpirationTime),
+        |date| duration_from_timestamp(date).map(SubpacketData::KeyExpirationTime),
     )(i)
 }
 
@@ -115,7 +120,7 @@ fn signature_expiration_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
         be_u32,
-        |date| dt_from_timestamp(date).map(SubpacketData::SignatureExpirationTime),
+        |date| duration_from_timestamp(date).map(SubpacketData::SignatureExpirationTime),
     )(i)
 }
 

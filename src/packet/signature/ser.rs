@@ -1,6 +1,7 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
+use chrono::Duration;
 
 use crate::errors::Result;
 use crate::packet::signature::types::*;
@@ -20,16 +21,22 @@ impl Serialize for Signature {
 }
 
 impl Subpacket {
+    /// Convert expiration time "Duration" data to OpenPGP u32 format.
+    /// Use u32:MAX on overflow.
+    fn duration_to_u32(d: &Duration) -> u32 {
+        u32::try_from(d.num_seconds()).unwrap_or(u32::MAX)
+    }
+
     fn body_to_writer(&self, writer: &mut impl io::Write) -> Result<()> {
         match &self.data {
             SubpacketData::SignatureCreationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp() as u32)?;
             }
-            SubpacketData::SignatureExpirationTime(t) => {
-                writer.write_u32::<BigEndian>(t.timestamp() as u32)?;
+            SubpacketData::SignatureExpirationTime(d) => {
+                writer.write_u32::<BigEndian>(Self::duration_to_u32(d))?;
             }
-            SubpacketData::KeyExpirationTime(t) => {
-                writer.write_u32::<BigEndian>(t.timestamp() as u32)?;
+            SubpacketData::KeyExpirationTime(d) => {
+                writer.write_u32::<BigEndian>(Self::duration_to_u32(d))?;
             }
             SubpacketData::Issuer(id) => {
                 writer.write_all(id.as_ref())?;
