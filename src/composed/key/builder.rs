@@ -313,7 +313,7 @@ mod tests {
         let rng = &mut ChaCha8Rng::seed_from_u64(0);
 
         for i in 0..50 {
-            println!("round {}", i);
+            println!("round {i}");
             gen_rsa_2048(rng);
         }
     }
@@ -428,7 +428,7 @@ mod tests {
     fn key_gen_x25519_long() {
         let rng = &mut ChaCha8Rng::seed_from_u64(0);
         for i in 0..10_000 {
-            println!("round {}", i);
+            println!("round {i}");
             gen_x25519(rng);
         }
     }
@@ -487,7 +487,7 @@ mod tests {
             .to_armored_string(None)
             .expect("failed to serialize key");
 
-        println!("armor: {:?}", armor);
+        println!("armor: {armor:?}");
         std::fs::write("sample-x25519.sec.asc", &armor).unwrap();
 
         let (signed_key2, _headers) =

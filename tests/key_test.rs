@@ -1129,6 +1129,6 @@ fn test_handle_incomplete_packets_end() {
 #[test]
 fn test_keyid_formatters() {
     let keyid = KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap();
-    assert_eq!("4C073AE0C8445C0C", format!("{:X}", keyid));
-    assert_eq!("4c073ae0c8445c0c", format!("{:x}", keyid));
+    assert_eq!("4C073AE0C8445C0C", format!("{keyid:X}"));
+    assert_eq!("4c073ae0c8445c0c", format!("{keyid:x}"));
 }
