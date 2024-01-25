@@ -7,7 +7,6 @@ use bstr::BStr;
 use chrono::{self, SubsecRound};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
-use iter_read::IterRead;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 
@@ -19,8 +18,6 @@ use crate::composed::StandaloneSignature;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
-use crate::line_writer::LineBreak;
-use crate::normalize_lines::Normalized;
 use crate::packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType, Subpacket,
@@ -401,16 +398,7 @@ impl Message {
             } => {
                 if let Some(message) = message {
                     match **message {
-                        Message::Literal(ref data) => {
-                            if matches!(signature.typ(), SignatureType::Text) {
-                                let normalized =
-                                    Normalized::new(data.data().iter().copied(), LineBreak::Crlf);
-
-                                signature.verify(key, IterRead::new(normalized))
-                            } else {
-                                signature.verify(key, data.data())
-                            }
-                        }
+                        Message::Literal(ref data) => signature.verify(key, data.data()),
                         _ => {
                             let data = &message.to_bytes()?;
                             let cursor = io::Cursor::new(data);
