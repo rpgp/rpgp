@@ -178,11 +178,37 @@ impl Signature {
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
-    /// Verifies a key binding.
+    /// Verifies a key binding (which binds a subkey to the primary key).
+    ///
+    /// "Subkey Binding Signature (type ID 0x18)"
     pub fn verify_key_binding(
         &self,
         signing_key: &impl PublicKeyTrait,
         key: &impl PublicKeyTrait,
+    ) -> Result<()> {
+        self.verify_key_binding_internal(signing_key, key, false)
+    }
+
+    /// Verifies a primary key binding signature, or "back signature" (which links the primary to a signing subkey).
+    ///
+    /// "Primary Key Binding Signature (type ID 0x19)"
+    pub fn verify_backwards_key_binding(
+        &self,
+        signing_key: &impl PublicKeyTrait,
+        key: &impl PublicKeyTrait,
+    ) -> Result<()> {
+        self.verify_key_binding_internal(signing_key, key, true)
+    }
+
+    /// Verify subkey binding signatures, either regular subkey binding, or a "back signature".
+    ///
+    /// - when backsig is false: verify a "Subkey Binding Signature (type ID 0x18)"
+    /// - when backsig is true: verify a "Primary Key Binding Signature (type ID 0x19)"
+    fn verify_key_binding_internal(
+        &self,
+        signing_key: &impl PublicKeyTrait,
+        key: &impl PublicKeyTrait,
+        backsig: bool,
     ) -> Result<()> {
         debug!(
             "verifying key binding: {:#?} - {:#?} - {:#?}",
@@ -202,17 +228,29 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        // Signing Key
+        // Hash the two keys:
+        // - for a regular binding signature, first the signer (primary), the the signee (subkey)
+        // - for a "backward signature" (Primary Key Binding Signature), the order of hashing is signee (primary), signer (subkey)
+
+        // First key to hash
         {
             let mut key_buf = Vec::new();
-            signing_key.to_writer_old(&mut key_buf)?;
+            if !backsig {
+                signing_key.to_writer_old(&mut key_buf)?;
+            } else {
+                key.to_writer_old(&mut key_buf)?;
+            }
 
             hasher.update(&key_buf);
         }
-        // Key being bound
+        // Second key to hash
         {
             let mut key_buf = Vec::new();
-            key.to_writer_old(&mut key_buf)?;
+            if !backsig {
+                key.to_writer_old(&mut key_buf)?;
+            } else {
+                signing_key.to_writer_old(&mut key_buf)?;
+            }
 
             hasher.update(&key_buf);
         }
