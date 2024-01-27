@@ -295,13 +295,13 @@ macro_rules! impl_public_key {
                         ensure_eq!(sig.len(), 2, "invalid signature");
 
                         $crate::crypto::dsa::verify(
-                            &p.into(),
-                            &q.into(),
-                            &g.into(),
-                            &y.into(),
+                            p.into(),
+                            q.into(),
+                            g.into(),
+                            y.into(),
                             hashed,
-                            &sig[0].clone().into(),
-                            &sig[1].clone().into(),
+                            sig[0].clone().into(),
+                            sig[1].clone().into(),
                         )
                     }
                 }

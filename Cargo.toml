@@ -33,6 +33,7 @@ crc24 = "^0.1"
 derive_builder = "^0.12.0"
 des = "^0.8"
 digest = "^0.10"
+dsa = "^0.6.2"
 elliptic-curve = "^0.13"
 generic-array = "^0.14"
 hex = "^0.4"
@@ -59,7 +60,6 @@ twofish = "^0.7"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 getrandom = { version = "0.2.6", optional = true }
 bstr = { version = "1.4.0", default-features = false, features = ["std"] }
-hmac = "0.10.1"
 
 [dependencies.buffer-redux]
 version = "1.0.0"

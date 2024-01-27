@@ -77,12 +77,8 @@ fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
         let is_ok = match key.verify() {
             // Skip these for now
             Err(Error::Unimplemented(err)) => {
-                if err == "verify DSA" {
-                    true
-                } else {
                     warn!("unimplemented: {:?}", err);
                     false
-                }
             }
             Err(err) => {
                 warn!(
@@ -622,7 +618,7 @@ fn test_fingerprint_ecdsa() {
 #[test]
 fn test_fingerprint_ecdh() {
     let (json, key) = get_test_fingerprint("gnupg-v1-001");
-    // can't verify: DSA
+    key.verify().expect("invalid key");
 
     assert_eq!(
         json["expected_subkeys"].as_array().unwrap()[0]

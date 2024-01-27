@@ -196,20 +196,21 @@ macro_rules! impl_secret_key {
                             _ => unreachable!("inconsistent key state"),
                         },
                         SecretKeyRepr::DSA(ref priv_key) => {
-                            let (p, q, g) = match self.public_params() {
+                            let (p, q, g, y) = match self.public_params() {
                                 PublicParams::DSA {
                                     ref p,
                                     ref q,
                                     ref g,
-                                    ..
-                                } => (p, q, g),
+                                    ref y,
+                                } => (p, q, g, y),
                                 _ => unreachable!("inconsistent key state"),
                             };
                             $crate::crypto::dsa::sign(
-                                &p.into(),
-                                &q.into(),
-                                &g.into(),
-                                &priv_key.x,
+                                p.into(),
+                                q.into(),
+                                g.into(),
+                                priv_key.x.clone(),
+                                y.into(),
                                 hash,
                                 data,
                             )
