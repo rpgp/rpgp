@@ -1,6 +1,6 @@
 use dsa::{Components, Signature, SigningKey, VerifyingKey};
 use num_bigint::BigUint;
-use signature::hazmat::{PrehashSigner, PrehashVerifier};
+use signature::hazmat::{PrehashVerifier};
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
@@ -19,7 +19,18 @@ pub fn sign(
     let verifying_key = VerifyingKey::from_components(components, y)?;
     let signing_key = SigningKey::from_components(verifying_key, x)?;
 
-    let signature = signing_key.sign_prehash(hashed)?;
+    let signature = match hash_algorithm {
+        HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(hashed),
+        HashAlgorithm::SHA1 => signing_key.sign_prehashed_rfc6979::<sha1::Sha1>(hashed),
+        HashAlgorithm::RIPEMD160 => signing_key.sign_prehashed_rfc6979::<ripemd::Ripemd160>(hashed),
+        HashAlgorithm::SHA2_256 => signing_key.sign_prehashed_rfc6979::<sha2::Sha256>(hashed),
+        HashAlgorithm::SHA2_384 => signing_key.sign_prehashed_rfc6979::<sha2::Sha384>(hashed),
+        HashAlgorithm::SHA2_512 => signing_key.sign_prehashed_rfc6979::<sha2::Sha512>(hashed),
+        HashAlgorithm::SHA2_224 => signing_key.sign_prehashed_rfc6979::<sha2::Sha224>(hashed),
+        HashAlgorithm::SHA3_256 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_256>(hashed),
+        HashAlgorithm::SHA3_512 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_512>(hashed),
+        _ => unimplemented_err!("hasher {:?}", hash_algorithm),
+    }?;
     Ok((signature.r().clone(), signature.s().clone()))
 }
 
@@ -99,7 +110,7 @@ mod test {
                     &hashed,
                 )
                 .unwrap();
-                // assert_eq!((&new_r, &new_s), (&r, &s));
+                assert_eq!((&new_r, &new_s), (&r, &s));
                 verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s).unwrap();
             };
 
@@ -230,7 +241,7 @@ mod test {
                     &hashed,
                 )
                 .unwrap();
-                // assert_eq!((&new_r, &new_s), (&r, &s));
+                assert_eq!((&new_r, &new_s), (&r, &s));
                 verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s).unwrap();
             };
 
