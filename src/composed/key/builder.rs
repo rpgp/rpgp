@@ -9,7 +9,7 @@ use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{ecdh, ecdsa, eddsa, rsa};
+use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, UserAttribute, UserId};
 use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey};
@@ -124,6 +124,13 @@ impl SecretKeyParamsBuilder {
                     }
                 }
             }
+            Some(KeyType::Dsa(_)) => {
+                if let Some(can_encrypt) = self.can_encrypt {
+                    if can_encrypt {
+                        return Err("DSA can only be used for signing keys".into());
+                    }
+                }
+            }
             _ => {}
         }
 
@@ -226,7 +233,7 @@ impl SecretKeyParams {
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
 pub enum KeyType {
-    /// Encryption & Signing with RSA an the given bitsize.
+    /// Encryption & Signing with RSA and the given bitsize.
     Rsa(u32),
     /// Encrypting with Curve25519
     ECDH,
@@ -234,6 +241,30 @@ pub enum KeyType {
     EdDSA,
     /// Signing with ECDSA
     ECDSA(ECCCurve),
+    /// Signing with DSA for the given bitsize.
+    Dsa(DsaKeySize),
+}
+
+#[derive(Clone, Debug, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum DsaKeySize {
+    /// DSA parameter size constant: L = 1024, N = 160
+    B1024 = 1024,
+    /// DSA parameter size constant: L = 2048, N = 256
+    B2048 = 2048,
+    /// DSA parameter size constant: L = 3072, N = 256
+    B3072 = 3072,
+}
+
+impl From<DsaKeySize> for dsa::KeySize {
+    fn from(value: DsaKeySize) -> Self {
+        match value {
+            #[allow(deprecated)]
+            DsaKeySize::B1024 => dsa::KeySize::DSA_1024_160,
+            DsaKeySize::B2048 => dsa::KeySize::DSA_2048_256,
+            DsaKeySize::B3072 => dsa::KeySize::DSA_3072_256,
+        }
+    }
 }
 
 impl KeyType {
@@ -243,6 +274,7 @@ impl KeyType {
             KeyType::ECDH => PublicKeyAlgorithm::ECDH,
             KeyType::EdDSA => PublicKeyAlgorithm::EdDSA,
             KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
+            KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
         }
     }
 
@@ -264,6 +296,7 @@ impl KeyType {
             KeyType::ECDH => ecdh::generate_key(rng),
             KeyType::EdDSA => eddsa::generate_key(rng),
             KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
+            KeyType::Dsa(key_size) => dsa::generate_key(rng, key_size.into())?,
         };
 
         let secret = match passphrase {
@@ -609,6 +642,103 @@ mod tests {
         let rng = &mut ChaCha8Rng::seed_from_u64(0);
         for _ in 0..100 {
             gen_ecdsa(rng, ECCCurve::Secp256k1);
+        }
+    }
+
+    fn gen_dsa<R: Rng + CryptoRng>(rng: &mut R, key_size: DsaKeySize) {
+        let _ = pretty_env_logger::try_init();
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .key_type(KeyType::Dsa(key_size))
+            .can_create_certificates(true)
+            .can_sign(true)
+            .primary_user_id("Me-X <me-ecdsa@mail.com>".into())
+            .passphrase(None)
+            .preferred_symmetric_algorithms(smallvec![
+                SymmetricKeyAlgorithm::AES256,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES128,
+            ])
+            .preferred_hash_algorithms(smallvec![
+                HashAlgorithm::SHA2_256,
+                HashAlgorithm::SHA2_384,
+                HashAlgorithm::SHA2_512,
+                HashAlgorithm::SHA2_224,
+                HashAlgorithm::SHA1,
+            ])
+            .preferred_compression_algorithms(smallvec![
+                CompressionAlgorithm::ZLIB,
+                CompressionAlgorithm::ZIP,
+            ])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .key_type(KeyType::ECDH)
+                    .can_encrypt(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate_with_rng(rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+
+        let armor = signed_key
+            .to_armored_string(None)
+            .expect("failed to serialize key");
+
+        std::fs::write("sample-ecdsa.sec.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        signed_key2.verify().expect("invalid key");
+
+        assert_eq!(signed_key, signed_key2);
+
+        let public_key = signed_key.public_key();
+
+        let public_signed_key = public_key
+            .sign(&signed_key, || "".into())
+            .expect("failed to sign public key");
+
+        public_signed_key.verify().expect("invalid public key");
+
+        let armor = public_signed_key
+            .to_armored_string(None)
+            .expect("failed to serialize public key");
+
+        std::fs::write(format!("sample-dsa-{key_size:?}.pub.asc"), &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
+        signed_key2.verify().expect("invalid public key");
+    }
+
+    #[test]
+    fn key_gen_dsa_1024() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            gen_dsa(rng, DsaKeySize::B1024);
+        }
+    }
+
+    #[test]
+    fn key_gen_dsa_2048() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            gen_dsa(rng, DsaKeySize::B2048);
+        }
+    }
+
+    #[test]
+    fn key_gen_dsa_3072() {
+        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            gen_dsa(rng, DsaKeySize::B3072);
         }
     }
 }

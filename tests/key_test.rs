@@ -77,8 +77,8 @@ fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
         let is_ok = match key.verify() {
             // Skip these for now
             Err(Error::Unimplemented(err)) => {
-                    warn!("unimplemented: {:?}", err);
-                    false
+                warn!("unimplemented: {:?}", err);
+                false
             }
             Err(err) => {
                 warn!(

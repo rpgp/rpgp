@@ -1,9 +1,13 @@
 use dsa::{Components, Signature, SigningKey, VerifyingKey};
 use num_bigint::BigUint;
-use signature::hazmat::{PrehashVerifier};
+use rand::{CryptoRng, Rng};
+use signature::hazmat::PrehashVerifier;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
+use crate::types::{PlainSecretParams, PublicParams};
+
+pub use dsa::KeySize;
 
 /// Produce a DSA signature
 pub fn sign(
@@ -51,6 +55,30 @@ pub fn verify(
     verifying_key.verify_prehash(hashed, &signature)?;
 
     Ok(())
+}
+
+/// Generate an DSA KeyPair.
+pub fn generate_key<R: Rng + CryptoRng>(
+    rng: &mut R,
+    key_size: KeySize,
+) -> Result<(PublicParams, PlainSecretParams)> {
+    let components = Components::generate(rng, key_size);
+    let signing_key = SigningKey::generate(rng, components);
+    let verifying_key = signing_key.verifying_key();
+    let p = verifying_key.components().p();
+    let q = verifying_key.components().q();
+    let g = verifying_key.components().g();
+    let y = verifying_key.y();
+
+    let x = signing_key.x();
+    let public_params = PublicParams::DSA {
+        p: p.into(),
+        q: q.into(),
+        g: g.into(),
+        y: y.into(),
+    };
+    let secret_params = PlainSecretParams::DSA(x.into());
+    Ok((public_params, secret_params))
 }
 
 #[cfg(test)]
