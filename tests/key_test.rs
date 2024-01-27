@@ -1132,3 +1132,29 @@ fn test_keyid_formatters() {
     assert_eq!("4C073AE0C8445C0C", format!("{keyid:X}"));
     assert_eq!("4c073ae0c8445c0c", format!("{keyid:x}"));
 }
+
+#[test]
+fn test_encrypted_key() {
+    let p = Path::new("./tests/key-with-password-123.asc");
+    let mut file = read_file(p.to_path_buf());
+
+    let mut buf = vec![];
+    file.read_to_end(&mut buf).unwrap();
+
+    let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
+    let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
+    key.verify().expect("invalid key");
+    let unsigned_pubkey = key.public_key();
+
+    // Incorrect password results in InvalidInput error.
+    assert!(matches!(
+        unsigned_pubkey
+            .clone()
+            .sign(&key, || "".into())
+            .err()
+            .unwrap(),
+        pgp::errors::Error::InvalidInput
+    ));
+
+    let _signed_key = unsigned_pubkey.sign(&key, || "123".into()).unwrap();
+}

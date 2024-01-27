@@ -5,7 +5,7 @@ use byteorder::{BigEndian, ByteOrder};
 use crate::crypto::checksum;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -109,7 +109,22 @@ impl EncryptedSecretParams {
         self.encryption_algorithm
             .decrypt_with_iv_regular(&key, &self.iv, &mut plaintext)?;
 
-        PlainSecretParams::from_slice(&plaintext, alg, params)
+        // Check SHA-1 hash if it is present.
+        // See RFC 4880, "5.5.3 Secret-Key Packet Formats" for details.
+        if self.string_to_key_id == 254 {
+            if plaintext.len() < 20 {
+                return Err(Error::InvalidInput);
+            }
+            let expected_sha1 = &plaintext[plaintext.len() - 20..];
+            let calculated_sha1 = checksum::calculate_sha1([&plaintext[..plaintext.len() - 20]]);
+            let checksum_correct = expected_sha1 == calculated_sha1;
+            if !checksum_correct {
+                return Err(Error::InvalidInput);
+            }
+        }
+
+        let res = PlainSecretParams::from_slice(&plaintext, alg, params)?;
+        Ok(res)
     }
 }
 
