@@ -947,4 +947,44 @@ mod tests {
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
         parsed.verify(&pkey).unwrap();
     }
+
+    #[test]
+    fn test_text_signature_normalization() {
+        // Test verifying an inlined signed message.
+        //
+        // The signature type is 0x01 ("Signature of a canonical text document").
+        //
+        // The literal data packet (which is in binary mode) contains the output of:
+        // echo -en "foo\nbar\r\nbaz"
+        //
+        // RFC 4880 mandates that the hash for signature type 0x01 has to be calculated over normalized line endings,
+        // so the hash for this message is calculated over "foo\r\nbar\r\nbaz".
+        //
+        // So it must also be verified against a hash digest over this normalized format.
+        let (signed_msg, _header) = Message::from_armor_single(
+            fs::File::open("./tests/unit-tests/text_signature_normalization.msg").unwrap(),
+        )
+        .unwrap();
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/unit-tests/text_signature_normalization_alice.key").unwrap(),
+        )
+        .unwrap();
+
+        // Manually find the signing subkey
+        let signing = skey
+            .secret_subkeys
+            .iter()
+            .find(|key| {
+                key.key_id()
+                    == KeyId::from_slice(&[0x64, 0x35, 0x7E, 0xB6, 0xBB, 0x55, 0xDE, 0x12]).unwrap()
+            })
+            .unwrap();
+
+        // And transform it into a public subkey for signature verification
+        let verify = signing.public_key();
+
+        // verify the signature with alice's signing subkey
+        signed_msg.verify(&verify).expect("signature seems bad");
+    }
 }

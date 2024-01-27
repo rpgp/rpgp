@@ -4,6 +4,7 @@ use std::io::Read;
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Duration, Utc};
+use iter_read::IterRead;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -11,6 +12,8 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
+use crate::line_writer::LineBreak;
+use crate::normalize_lines::Normalized;
 use crate::packet::signature::SignatureConfig;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
@@ -94,7 +97,14 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        self.config.hash_data_to_sign(&mut *hasher, data)?;
+        if matches!(self.typ(), SignatureType::Text) {
+            let normalized = Normalized::new(data.bytes().flat_map(|b| b.ok()), LineBreak::Crlf);
+
+            self.config
+                .hash_data_to_sign(&mut *hasher, IterRead::new(normalized))?;
+        } else {
+            self.config.hash_data_to_sign(&mut *hasher, data)?;
+        }
         let len = self.config.hash_signature_data(&mut *hasher)?;
         hasher.update(&self.config.trailer(len));
 

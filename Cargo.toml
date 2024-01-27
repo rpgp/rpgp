@@ -37,6 +37,7 @@ elliptic-curve = "^0.13"
 generic-array = "^0.14"
 hex = "^0.4"
 idea = "^0.5"
+iter-read = "1"
 log = "0.4.6"
 md-5 = { version = "^0.10.5", features = ["oid"] }
 nom = "^7.0"
