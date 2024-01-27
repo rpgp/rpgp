@@ -121,7 +121,7 @@ parse_dumps!(
     (test_parse_dumps_0, 0, 18_141, 20_998),
     (test_parse_dumps_1, 1, 18_021, 21_000),
     (test_parse_dumps_2, 2, 18_058, 20_999),
-    (test_parse_dumps_3, 3, 18_098, 20_999),
+    (test_parse_dumps_3, 3, 18_097, 20_998),
     (test_parse_dumps_4, 4, 18_048, 20_999),
     (test_parse_dumps_5, 5, 18_090, 20_999),
     (test_parse_dumps_6, 6, 18_130, 21_000),
@@ -849,6 +849,19 @@ openpgp_key!(
     "ecc"
 );
 openpgp_key!(
+    key_openpgp_samplekeys_ecc_sample_4_pub,
+    "samplekeys/ecc-sample-4-pub.asc",
+    true,
+    false
+);
+openpgp_key!(
+    key_openpgp_samplekeys_ecc_sample_4_sec,
+    "samplekeys/ecc-sample-4-sec.asc",
+    true,
+    false,
+    "ecc"
+);
+openpgp_key!(
     key_openpgp_samplekeys_ed25519_cv25519_sample_1,
     "samplekeys/ed25519-cv25519-sample-1.asc",
     true,
@@ -984,6 +997,31 @@ fn private_ecc2_verify() {
     let pub_key = sk.public_key();
     assert_eq!(pub_key.key_id(), sk.key_id());
     */
+}
+
+#[test]
+fn private_ecc3_verify() {
+    let f = read_file("./tests/openpgp/samplekeys/ecc-sample-4-sec.asc");
+    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    sk.verify().expect("invalid key");
+    assert_eq!(sk.secret_subkeys.len(), 1);
+    assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "E15A9BB15A23A43F",);
+    sk.unlock(
+        || "ecc".to_string(),
+        |k| {
+            match k {
+                SecretKeyRepr::ECDSA(ref inner_key) => {
+                    assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
+                }
+                _ => panic!("invalid key"),
+            }
+            Ok(())
+        },
+    )
+    .unwrap();
+
+    let pub_key = sk.public_key();
+    assert_eq!(pub_key.key_id(), sk.key_id());
 }
 
 #[test]

@@ -42,6 +42,20 @@ pub fn generate_key<R: Rng + CryptoRng>(
             ))
         }
 
+        ECCCurve::Secp256k1 => {
+            let secret = k256::SecretKey::random(rng);
+            let public = secret.public_key();
+            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
+
+            Ok((
+                PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
+                    key: public,
+                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
+                }),
+                PlainSecretParams::ECDSA(secret),
+            ))
+        }
+
         _ => unsupported_err!("curve {:?} for ECDSA", curve),
     }
 }
@@ -97,6 +111,26 @@ pub fn verify(
 
             Ok(())
         }
+        EcdsaPublicParams::Secp256k1 { key, .. } => {
+            const FLEN: usize = 32;
+            ensure_eq!(sig.len(), 2);
+            let r = sig[0].as_bytes();
+            let s = sig[1].as_bytes();
+            ensure!(r.len() <= FLEN, "invalid R (len)");
+            ensure!(s.len() <= FLEN, "invalid S (len)");
+            let mut sig_bytes = [0u8; 2 * FLEN];
+
+            // add padding if the values were encoded short
+            sig_bytes[(FLEN - r.len())..FLEN].copy_from_slice(r);
+            sig_bytes[FLEN + (FLEN - s.len())..].copy_from_slice(s);
+
+            let pk = k256::ecdsa::VerifyingKey::from_affine(key.as_affine().to_owned())?;
+            let sig = k256::ecdsa::Signature::try_from(&sig_bytes[..])?;
+
+            pk.verify_prehash(hashed, &sig)?;
+
+            Ok(())
+        }
         EcdsaPublicParams::Unsupported { curve, .. } => {
             unsupported_err!("curve {:?} for ECDSA", curve.to_string())
         }
@@ -119,6 +153,12 @@ pub fn sign(
         ECDSASecretKey::P384(secret_key) => {
             let secret = p384::ecdsa::SigningKey::from(secret_key);
             let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
+            let (r, s) = signature.split_bytes();
+            (r.to_vec(), s.to_vec())
+        }
+        ECDSASecretKey::Secp256k1(secret_key) => {
+            let secret = k256::ecdsa::SigningKey::from(secret_key);
+            let signature: k256::ecdsa::Signature = secret.sign_prehash(digest)?;
             let (r, s) = signature.split_bytes();
             (r.to_vec(), s.to_vec())
         }

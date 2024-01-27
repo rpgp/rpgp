@@ -192,6 +192,11 @@ impl<'a> PlainSecretParamsRef<'a> {
 
                         Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P384(secret)))
                     }
+                    EcdsaPublicParams::Secp256k1 { .. } => {
+                        let secret = k256::SecretKey::from_slice(d.as_bytes())?;
+
+                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::Secp256k1(secret)))
+                    }
                     EcdsaPublicParams::Unsupported { curve, .. } => {
                         unsupported_err!("curve {:?} for ECDSA", curve.to_string())
                     }
