@@ -12,6 +12,7 @@ Symbols:
   - [x] Old Format (v3)
   - [x] New Format (v4)
   - [ ] 🚧 New New Format (v5)
+  - [ ] v6
 - [x] ASCII Armor
   - [x] Reading
   - [x] Writing
@@ -26,12 +27,12 @@ Symbols:
   - [x] Generation
   - [x] Export
   - [x] Import
-- [ ] Public-Key Algorithms
+- [x] Public-Key Algorithms
   - [x] RSA
   - [ ] 🚫 Elgamal (Encrypt only)
-  - [ ] DSA
+  - [x] DSA
   - [x] ECDH
-  - [ ] ECDSA
+  - [x] ECDSA
   - [x] EdDSA
 - [ ] Supported Elliptic Curves
   - [X] NIST P256
