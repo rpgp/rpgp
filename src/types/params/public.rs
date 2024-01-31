@@ -251,8 +251,8 @@ impl fmt::Debug for PublicParams {
             } => f
                 .debug_struct("PublicParams::Elgamal")
                 .field("p", &p)
-                .field("g", &y)
-                .field("y", &g)
+                .field("g", &g)
+                .field("y", &y)
                 .finish(),
 
             PublicParams::EdDSA { ref curve, ref q } => f
