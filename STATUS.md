@@ -4,29 +4,40 @@ Symbols:
 
 - 🚧 Work in Progress
 - 🚫 Not planned
-- ❓Mabe implement
+- ❓ Maybe implement
 
 ## Low Level API
 
-- [x] Paket Parser
-  - [x] Old Format (v3)
-  - [x] New Format (v4)
-  - [ ] 🚧 New New Format (v5)
-  - [ ] v6
+- [x] Packet Parser
+  - [x] Old Format ("v3")
+  - [x] New Format (RFC 2440, 4880) ("v4")
+  - [ ] draft-koch-librepgp Format ("v5")
+  - [ ] draft-ietf-openpgp-crypto-refresh Format ("v6")
+- [x] Packet Generation
 - [x] ASCII Armor
   - [x] Reading
   - [x] Writing
 - [ ] Cleartext Signature Framework
-- [x] Paket Generation
-- [x] Signatures
+- [x] Signatures (v4)
   - [x] Validation
   - [x] Generation
-- [x] Encryption
-- [x] Decryption
-- [x] Keys
+- [ ] Signatures (v6)
+  - [ ] Validation
+  - [ ] Generation
+- [ ] Encryption
+  - [x] PKESK v3, SKESK v4, SEIPD v1
+  - [ ] PKESK v6, SKESK v6, SEIPD v2
+- [ ] Decryption
+  - [x] PKESK v3, SKESK v4, SEIPD v1
+  - [ ] PKESK v6, SKESK v6, SEIPD v2
+- [x] Keys (v4)
   - [x] Generation
   - [x] Export
   - [x] Import
+- [ ] Keys (v6)
+  - [ ] Generation
+  - [ ] Export
+  - [ ] Import
 - [x] Public-Key Algorithms
   - [x] RSA
   - [ ] 🚫 Elgamal (Encrypt only)
@@ -42,6 +53,7 @@ Symbols:
   - [ ] brainpoolP384r1
   - [ ] brainpoolP512r1
   - [x] Curve 25519
+  - [ ] Curve 448
   - [x] Secp256k1
 - [x] Symmetric Algorithms
   - [x] Plaintext
@@ -71,12 +83,12 @@ Symbols:
   - [x] ZLIB
   - [ ] 🚫 BZip2
 - [ ] AEAD Algorithms
-  - [ ] EAX
   - [ ] OCB
-
-
-
-
+  - [ ] EAX
+  - [ ] GCM
+- S2K
+  - [x] Iterated and Salted
+  - [ ] Argon2
 
 ## High Level API
 
