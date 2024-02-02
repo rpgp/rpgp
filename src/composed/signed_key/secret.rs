@@ -4,7 +4,6 @@ use std::io;
 use chrono::{DateTime, Utc};
 use rand::{CryptoRng, Rng};
 
-use crate::armor;
 use crate::composed::key::{PublicKey, PublicSubkey};
 use crate::composed::signed_key::{SignedKeyDetails, SignedPublicSubKey};
 use crate::crypto::hash::HashAlgorithm;
@@ -13,6 +12,7 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait};
+use crate::{armor, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -313,5 +313,27 @@ impl PublicKeyTrait for SignedSecretSubKey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.key.to_writer_old(writer)
+    }
+}
+
+impl From<SignedSecretKey> for SignedPublicKey {
+    fn from(value: SignedSecretKey) -> Self {
+        let primary = value.primary_key.public_key();
+        let details = value.details;
+
+        let mut subkeys = value.public_subkeys;
+
+        value
+            .secret_subkeys
+            .into_iter()
+            .for_each(|key| subkeys.push(key.into()));
+
+        SignedPublicKey::new(primary, details, subkeys)
+    }
+}
+
+impl From<SignedSecretSubKey> for SignedPublicSubKey {
+    fn from(value: SignedSecretSubKey) -> Self {
+        SignedPublicSubKey::new(value.key.public_key(), value.signatures)
     }
 }
