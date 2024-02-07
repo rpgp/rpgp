@@ -9,7 +9,7 @@ on:
 env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: -Dwarnings
-  RUST_NIGHTLY: nightly-2024-02-03
+  RUST_NIGHTLY: nightly-2024-02-07
 
 jobs:
   build_and_test_nix:
@@ -19,7 +19,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - nightly-2024-02-03 #${{ env.RUST_NIGHTLY }}
+          - nightly-2024-02-07
           - beta
           - stable
 
@@ -118,7 +118,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2024-02-03 # ${{ env.RUST_NIGHTLY }}
+          - nightly-2024-02-07
           - beta
           - stable
         target:
@@ -256,7 +256,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2024-02-03 #${{ env.RUST_NIGHTLY }}
+          - nightly-2024-02-07
           - beta
           - stable
 
