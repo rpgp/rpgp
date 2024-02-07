@@ -691,7 +691,7 @@ mod tests {
             .to_armored_string(None)
             .expect("failed to serialize key");
 
-        std::fs::write("sample-ecdsa.sec.asc", &armor).unwrap();
+        std::fs::write("sample-dsa.sec.asc", &armor).unwrap();
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
