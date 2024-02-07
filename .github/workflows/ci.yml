@@ -18,7 +18,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest]
-        rust: [${{ RUST_NIGHTLY }}, beta, stable]
+        rust:
+          - nightly-2024-02-03
+          - beta
+          - stable
 
     steps:
     - name: Checkout
