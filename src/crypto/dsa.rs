@@ -88,11 +88,13 @@ mod test {
     use num_traits::Num;
 
     fn hex_num(s: &str) -> BigUint {
-        BigUint::from_str_radix(s, 16).unwrap()
+        BigUint::from_str_radix(s, 16).expect("invalid hex")
     }
 
     fn hash(hash_algorithm: HashAlgorithm, text: &str) -> Vec<u8> {
-        hash_algorithm.digest(text.as_bytes()).unwrap()
+        hash_algorithm
+            .digest(text.as_bytes())
+            .expect("unable to hash")
     }
 
     /// Test vectors from https://tools.ietf.org/html/rfc6979#appendix-A.2.1
@@ -137,9 +139,10 @@ mod test {
                     hash_algorithm,
                     &hashed,
                 )
-                .unwrap();
+                .expect("failed to sign");
                 assert_eq!((&new_r, &new_s), (&r, &s));
-                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s).unwrap();
+                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
+                    .expect("failed to verify");
             };
 
         check(
@@ -268,9 +271,10 @@ mod test {
                     hash_algorithm,
                     &hashed,
                 )
-                .unwrap();
+                .expect("failed to sign");
                 assert_eq!((&new_r, &new_s), (&r, &s));
-                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s).unwrap();
+                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
+                    .expect("failed to verify");
             };
 
         check(

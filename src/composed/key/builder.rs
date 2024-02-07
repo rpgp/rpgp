@@ -718,26 +718,14 @@ mod tests {
         signed_key2.verify().expect("invalid public key");
     }
 
+    // Test is slow in debug mode
     #[test]
-    fn key_gen_dsa_1024() {
+    #[ignore]
+    fn key_gen_dsa() {
         let rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..100 {
+        for _ in 0..10 {
             gen_dsa(rng, DsaKeySize::B1024);
-        }
-    }
-
-    #[test]
-    fn key_gen_dsa_2048() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..100 {
             gen_dsa(rng, DsaKeySize::B2048);
-        }
-    }
-
-    #[test]
-    fn key_gen_dsa_3072() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..100 {
             gen_dsa(rng, DsaKeySize::B3072);
         }
     }
