@@ -652,7 +652,7 @@ mod tests {
             .key_type(KeyType::Dsa(key_size))
             .can_create_certificates(true)
             .can_sign(true)
-            .primary_user_id("Me-X <me-ecdsa@mail.com>".into())
+            .primary_user_id("Me-X <me-dsa@mail.com>".into())
             .passphrase(None)
             .preferred_symmetric_algorithms(smallvec![
                 SymmetricKeyAlgorithm::AES256,
