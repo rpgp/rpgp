@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest]
-        rust: [$RUST_NIGHTLY, beta, stable]
+        rust: [${{RUST_NIGHTLY}}, beta, stable]
 
     steps:
     - name: Checkout
@@ -41,7 +41,7 @@ jobs:
 
     - name: check nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command:  check
         args: --features nightly --all --bins --examples --tests
@@ -56,34 +56,34 @@ jobs:
 
     - name: check bench
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command:  check
         args: --benches
 
     - name: check asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command:  check
         args: --features asm
-        
+
     - name: tests
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --all 
+        args: --all
 
     - name: nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command: test
         args: --all  --features nightly
 
     - name: asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command: test
         args: --all --features asm
@@ -96,14 +96,14 @@ jobs:
 
     - name: nightly ignored
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command: test
         args: --all --features nightly --release -- --ignored
 
     - name: asm ignored
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command: test
         args: --all --features asm --release -- --ignored
@@ -115,7 +115,7 @@ jobs:
     strategy:
       matrix:
         os: [windows-latest]
-        rust: [$RUST_NIGHTLY, beta, stable]
+        rust: [${{ RUST_NIGHTLY }}, beta, stable]
         target:
           - x86_64-pc-windows-gnu
           # FIXME
@@ -143,7 +143,7 @@ jobs:
 
     - name: check nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command:  check
         args: --features nightly --all --bins --examples --tests --target ${{ matrix.target }}
@@ -157,7 +157,7 @@ jobs:
 
     - name: check bench
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command:  check
         target: ${{ matrix.target }}
@@ -165,11 +165,11 @@ jobs:
 
     - name: check asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY' && matrix.target == 'x86_64-pc-windows-gnu'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}' && matrix.target == 'x86_64-pc-windows-gnu'
       with:
         command:  check
         args: --features asm  --target ${{ matrix.target }}
-        
+
     - name: tests
       uses: actions-rs/cargo@v1
       with:
@@ -178,7 +178,7 @@ jobs:
 
     - name: nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command: test
         args: --all  --features nightly --target ${{ matrix.target }}
@@ -186,7 +186,7 @@ jobs:
     # FIXME
     # - name: asm
     #   uses: actions-rs/cargo@v1
-    #   if: matrix.rust == '$RUST_NIGHTLY' && matrix.target == 'x86_64-pc-windows-gnu'
+    #   if: matrix.rust == '${{ RUST_NIGHTLY }}' && matrix.target == 'x86_64-pc-windows-gnu'
     #   with:
     #     command: test
     #     args: --all  --features asm --target ${{ matrix.target }}
@@ -199,7 +199,7 @@ jobs:
 
     - name: nightly ignored
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '$RUST_NIGHTLY'
+      if: matrix.rust == '${{ RUST_NIGHTLY }}'
       with:
         command: test
         args: --all  --features nightly --target ${{ matrix.target }} --release -- --ignored
@@ -207,7 +207,7 @@ jobs:
     # FIXME
     # - name: asm ignored
     #   uses: actions-rs/cargo@v1
-    #   if: matrix.rust == '$RUST_NIGHTLY' && matrix.target == 'x86_64-pc-windows-gnu'
+    #   if: matrix.rust == '${{ RUST_NIGHTLY }}' && matrix.target == 'x86_64-pc-windows-gnu'
     #   with:
     #     command: test
     #     args: --all  --features asm --target ${{ matrix.target }} --release -- --ignored
@@ -250,7 +250,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: [$RUST_NIGHTLY, beta, stable]
+        rust: [${{ RUST_NIGHTLY }}, beta, stable]
 
     steps:
     - uses: actions/checkout@master
@@ -273,7 +273,7 @@ jobs:
       with:
         command: check
         args: --target wasm32-unknown-unknown --features wasm
-        
+
   check_fmt_and_docs:
     name: Checking fmt and docs
     runs-on: ubuntu-latest
@@ -283,7 +283,7 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
           profile: minimal
-          toolchain: $RUST_NIGHTLY
+          toolchain: ${{ RUST_NIGHTLY }}
           override: true
           components: rustfmt
 
@@ -305,7 +305,7 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
           profile: minimal
-          toolchain: $RUST_NIGHTLY
+          toolchain: ${{ RUST_NIGHTLY }}
           override: true
           components: clippy
     - uses: actions-rs/clippy-check@v1
