@@ -57,7 +57,7 @@ pub fn verify(
     Ok(())
 }
 
-/// Generate an DSA KeyPair.
+/// Generate a DSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(
     rng: &mut R,
     key_size: KeySize,
