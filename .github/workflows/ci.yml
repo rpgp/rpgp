@@ -19,7 +19,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - ${{ env.RUST_NIGHTLY }}
+          - nightly-2024-02-03 #${{ env.RUST_NIGHTLY }}
           - beta
           - stable
 
@@ -118,7 +118,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - ${{ env.RUST_NIGHTLY }}
+          - nightly-2024-02-03 # ${{ env.RUST_NIGHTLY }}
           - beta
           - stable
         target:
@@ -256,7 +256,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - ${{ env.RUST_NIGHTLY }}
+          - nightly-2024-02-03 #${{ env.RUST_NIGHTLY }}
           - beta
           - stable
 
