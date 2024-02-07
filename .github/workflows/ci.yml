@@ -43,7 +43,7 @@ jobs:
 
     - name: check nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command:  check
         args: --features nightly --all --bins --examples --tests
@@ -58,14 +58,14 @@ jobs:
 
     - name: check bench
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command:  check
         args: --benches
 
     - name: check asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command:  check
         args: --features asm
@@ -78,14 +78,14 @@ jobs:
 
     - name: nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command: test
         args: --all  --features nightly
 
     - name: asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command: test
         args: --all --features asm
@@ -98,14 +98,14 @@ jobs:
 
     - name: nightly ignored
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command: test
         args: --all --features nightly --release -- --ignored
 
     - name: asm ignored
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command: test
         args: --all --features asm --release -- --ignored
@@ -148,7 +148,7 @@ jobs:
 
     - name: check nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command:  check
         args: --features nightly --all --bins --examples --tests --target ${{ matrix.target }}
@@ -162,7 +162,7 @@ jobs:
 
     - name: check bench
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command:  check
         target: ${{ matrix.target }}
@@ -170,7 +170,7 @@ jobs:
 
     - name: check asm
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}' && matrix.target == 'x86_64-pc-windows-gnu'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }} && matrix.target == 'x86_64-pc-windows-gnu'
       with:
         command:  check
         args: --features asm  --target ${{ matrix.target }}
@@ -183,7 +183,7 @@ jobs:
 
     - name: nightly
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command: test
         args: --all  --features nightly --target ${{ matrix.target }}
@@ -191,7 +191,7 @@ jobs:
     # FIXME
     # - name: asm
     #   uses: actions-rs/cargo@v1
-    #   if: matrix.rust == '${{ env.RUST_NIGHTLY }}' && matrix.target == 'x86_64-pc-windows-gnu'
+    #   if: ${{ matrix.rust == env.RUST_NIGHTLY }} && matrix.target == 'x86_64-pc-windows-gnu'
     #   with:
     #     command: test
     #     args: --all  --features asm --target ${{ matrix.target }}
@@ -204,7 +204,7 @@ jobs:
 
     - name: nightly ignored
       uses: actions-rs/cargo@v1
-      if: matrix.rust == '${{ env.RUST_NIGHTLY }}'
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command: test
         args: --all  --features nightly --target ${{ matrix.target }} --release -- --ignored
@@ -212,7 +212,7 @@ jobs:
     # FIXME
     # - name: asm ignored
     #   uses: actions-rs/cargo@v1
-    #   if: matrix.rust == '${{ env.RUST_NIGHTLY }}' && matrix.target == 'x86_64-pc-windows-gnu'
+    #   if: ${{ matrix.rust == env.RUST_NIGHTLY }} && matrix.target == 'x86_64-pc-windows-gnu'
     #   with:
     #     command: test
     #     args: --all  --features asm --target ${{ matrix.target }} --release -- --ignored
