@@ -189,13 +189,33 @@ macro_rules! impl_secret_key {
                         SecretKeyRepr::RSA(ref priv_key) => {
                             $crate::crypto::rsa::sign(priv_key, hash, data)
                         }
-                        SecretKeyRepr::DSA(_) => unimplemented_err!("sign DSA"),
                         SecretKeyRepr::ECDSA(ref priv_key) => match self.public_params() {
                             PublicParams::ECDSA(ref _params) => {
                                 $crate::crypto::ecdsa::sign(priv_key, hash, data)
                             }
                             _ => unreachable!("inconsistent key state"),
                         },
+                        SecretKeyRepr::DSA(ref priv_key) => {
+                            let (p, q, g, y) = match self.public_params() {
+                                PublicParams::DSA {
+                                    ref p,
+                                    ref q,
+                                    ref g,
+                                    ref y,
+                                } => (p, q, g, y),
+                                _ => unreachable!("inconsistent key state"),
+                            };
+                            $crate::crypto::dsa::sign(
+                                p.into(),
+                                q.into(),
+                                g.into(),
+                                priv_key.x.clone(),
+                                y.into(),
+                                hash,
+                                data,
+                            )
+                            .map(|(r, s)| vec![r.to_bytes_be(), s.to_bytes_be()])
+                        }
                         SecretKeyRepr::ECDH(_) => {
                             bail!("ECDH can not be used to for signing operations")
                         }

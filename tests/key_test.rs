@@ -77,12 +77,8 @@ fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
         let is_ok = match key.verify() {
             // Skip these for now
             Err(Error::Unimplemented(err)) => {
-                if err == "verify DSA" {
-                    true
-                } else {
-                    warn!("unimplemented: {:?}", err);
-                    false
-                }
+                warn!("unimplemented: {:?}", err);
+                false
             }
             Err(err) => {
                 warn!(
@@ -118,16 +114,16 @@ macro_rules! parse_dumps {
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 18_141, 20_998),
-    (test_parse_dumps_1, 1, 18_021, 21_000),
-    (test_parse_dumps_2, 2, 18_058, 20_999),
-    (test_parse_dumps_3, 3, 18_097, 20_998),
-    (test_parse_dumps_4, 4, 18_048, 20_999),
-    (test_parse_dumps_5, 5, 18_090, 20_999),
-    (test_parse_dumps_6, 6, 18_130, 21_000),
-    (test_parse_dumps_7, 7, 18_133, 21_000),
-    (test_parse_dumps_8, 8, 18_139, 21_000),
-    (test_parse_dumps_9, 9, 17_992, 21_000),
+    (test_parse_dumps_0, 0, 17_697, 20_998),
+    (test_parse_dumps_1, 1, 17_538, 21_000),
+    (test_parse_dumps_2, 2, 17_580, 20_999),
+    (test_parse_dumps_3, 3, 17_647, 20_998),
+    (test_parse_dumps_4, 4, 17_580, 20_999),
+    (test_parse_dumps_5, 5, 17_607, 20_999),
+    (test_parse_dumps_6, 6, 17_664, 21_000),
+    (test_parse_dumps_7, 7, 17_684, 21_000),
+    (test_parse_dumps_8, 8, 17_690, 21_000),
+    (test_parse_dumps_9, 9, 17_544, 21_000),
 );
 
 #[test]
@@ -622,7 +618,7 @@ fn test_fingerprint_ecdsa() {
 #[test]
 fn test_fingerprint_ecdh() {
     let (json, key) = get_test_fingerprint("gnupg-v1-001");
-    // can't verify: DSA
+    key.verify().expect("invalid key");
 
     assert_eq!(
         json["expected_subkeys"].as_array().unwrap()[0]

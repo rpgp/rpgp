@@ -3,7 +3,7 @@
 [![crates.io][crate-image]][crate-link]
 [![Documentation][doc-image]][doc-link]
 [![Build Status][build-image]][build-link]
-![minimum rustc 1.65][msrv-image]
+![minimum rustc 1.69][msrv-image]
 [![dependency status][deps-image]][deps-link]
 [![License][license-image]][license-link]
 
@@ -21,13 +21,13 @@ For ECC crypto support we are using [Curve25519-dalek](https://crates.io/crates/
 
 ## Status (Last updated: October 2019)
 
-rPGP and its RSA dependency got an independent security audit mid 2019, 
-see here for the [full report from IncludeSecurity](https://delta.chat/assets/blog/2019-first-security-review.pdf). 
-No critical flaws were found and we have fixed most high, medium and low risk ones. 
+rPGP and its RSA dependency got an independent security audit mid 2019,
+see here for the [full report from IncludeSecurity](https://delta.chat/assets/blog/2019-first-security-review.pdf).
+No critical flaws were found and we have fixed most high, medium and low risk ones.
 
 rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit (only Windows and Android) and 64 bit builds (for the other platforms).
 
-More details on platform and OpenPGP implementation status: 
+More details on platform and OpenPGP implementation status:
 
 - [OpenPGP Status document](STATUS.md) which describes what of OpenPGP is supported
 - [Platform status document](PLATFORMS.md) which describes current platform support.
@@ -69,7 +69,7 @@ Some key differences:
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.65 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
+All crates in this repository support Rust 1.69 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
 
 ## LICENSE
 
