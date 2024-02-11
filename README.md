@@ -3,7 +3,7 @@
 [![crates.io][crate-image]][crate-link]
 [![Documentation][doc-image]][doc-link]
 [![Build Status][build-image]][build-link]
-![minimum rustc 1.69][msrv-image]
+![minimum rustc 1.70][msrv-image]
 [![dependency status][deps-image]][deps-link]
 [![License][license-image]][license-link]
 
@@ -69,7 +69,7 @@ Some key differences:
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.69 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
+All crates in this repository support Rust 1.70 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
 
 ## LICENSE
 
