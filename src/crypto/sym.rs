@@ -19,17 +19,11 @@ macro_rules! decrypt {
         let mut mode = BufDecryptor::<$mode>::new_from_slices($key, $iv)?;
         mode.decrypt($prefix);
 
-        // quick check, before decrypting the rest
-        ensure_eq!(
-            $prefix[$bs - 2],
-            $prefix[$bs],
-            "cfb decrypt, quick check part 1"
-        );
-        ensure_eq!(
-            $prefix[$bs - 1],
-            $prefix[$bs + 1],
-            "cfb decrypt, quick check part 2"
-        );
+        // We do not do "quick check" here.
+        // See "Security Considerations" section
+        // in <https://tools.ietf.org/html/rfc4880#page-84>
+        // and paper <https://eprint.iacr.org/2005/033>
+        // for details.
 
         if $resync {
             unimplemented!("CFB resync is not here");
