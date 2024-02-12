@@ -134,6 +134,7 @@ pub fn verify(
         HashAlgorithm::SHA3_256 => verify_int::<Sha3_256>(key, hashed, &signature),
         HashAlgorithm::SHA3_512 => verify_int::<Sha3_512>(key, hashed, &signature),
         HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+        HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
     }
     .map_err(Into::into)
 }
@@ -152,6 +153,7 @@ pub fn sign(key: &RsaPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<V
         HashAlgorithm::SHA3_256 => sign_int::<Sha3_256>(key.clone(), digest),
         HashAlgorithm::SHA3_512 => sign_int::<Sha3_512>(key.clone(), digest),
         HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+        HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
     }?;
 
     Ok(vec![sig.to_vec()])

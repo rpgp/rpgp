@@ -15,7 +15,7 @@ categories = ["cryptography", "email"]
 exclude = ["tests/tests/*"]
 
 edition = "2021"
-rust-version = "1.69"
+rust-version = "1.70"
 
 [dependencies]
 aes = "^0.8"
@@ -29,6 +29,7 @@ chrono = { version = "^0.4.23", default-features = false, features = ["clock", "
 cast5 = "^0.11.0"
 cfb-mode = "^0.8.1"
 cipher = "^0.4"
+const-oid = "0.9"
 crc24 = "^0.1"
 derive_builder = "^0.12.0"
 des = "^0.8"

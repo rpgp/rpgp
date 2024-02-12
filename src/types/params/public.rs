@@ -36,6 +36,9 @@ pub enum PublicParams {
         curve: ECCCurve,
         q: Mpi,
     },
+    Unknown {
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -183,8 +186,8 @@ impl Serialize for PublicParams {
                     0x03,
                     // fixed tag
                     0x01,
-                    *hash as u8,
-                    *alg_sym as u8,
+                    (*hash).into(),
+                    u8::from(*alg_sym),
                 ])?;
             }
             PublicParams::Elgamal {
@@ -202,6 +205,9 @@ impl Serialize for PublicParams {
                 writer.write_all(&oid)?;
 
                 q.to_writer(writer)?;
+            }
+            PublicParams::Unknown { ref data } => {
+                writer.write_all(data)?;
             }
         }
 
@@ -259,6 +265,11 @@ impl fmt::Debug for PublicParams {
                 .debug_struct("PublicParams::EdDSA")
                 .field("curve", curve)
                 .field("q", &q)
+                .finish(),
+
+            PublicParams::Unknown { ref data } => f
+                .debug_struct("PublicParams::Unknown")
+                .field("data", data)
                 .finish(),
         }
     }

@@ -55,18 +55,18 @@ impl Serialize for StandaloneSignature {
 
 impl Deserializable for StandaloneSignature {
     /// Parse a signature.
-    fn from_packets<'a, I: Iterator<Item = Packet> + 'a>(
+    fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
         Box::new(SignatureParser { source: packets })
     }
 }
 
-pub struct SignatureParser<I: Sized + Iterator<Item = Packet>> {
+pub struct SignatureParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
 }
 
-impl<I: Sized + Iterator<Item = Packet>> Iterator for SignatureParser<I> {
+impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignatureParser<I> {
     type Item = Result<StandaloneSignature>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -74,14 +74,15 @@ impl<I: Sized + Iterator<Item = Packet>> Iterator for SignatureParser<I> {
     }
 }
 
-fn next<I: Iterator<Item = Packet>>(
+fn next<I: Iterator<Item = Result<Packet>>>(
     packets: &mut Peekable<I>,
 ) -> Option<Result<StandaloneSignature>> {
-    if let Some(packet) = packets.by_ref().next() {
-        match packet.tag() {
-            Tag::Signature => return Some(packet.try_into().map(StandaloneSignature::new)),
-            _ => return Some(Err(format_err!("unexpected packet {:?}", packet.tag()))),
-        }
+    match packets.by_ref().next() {
+        Some(Ok(packet)) => match packet.tag() {
+            Tag::Signature => Some(packet.try_into().map(StandaloneSignature::new)),
+            _ => Some(Err(format_err!("unexpected packet {:?}", packet.tag()))),
+        },
+        Some(Err(e)) => Some(Err(e)),
+        None => None,
     }
-    None
 }

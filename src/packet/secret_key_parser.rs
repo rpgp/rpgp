@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
-use nom::combinator::{map_opt, map_res, rest};
+use nom::combinator::{map, map_opt, map_res, rest};
 use nom::number::streaming::{be_u16, be_u32, be_u8};
 use nom::sequence::tuple;
 
@@ -37,7 +37,7 @@ fn new_private_key_parser(
 > + '_ {
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
-        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
+        let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
         let (i, params) = parse_pub_priv_fields(alg)(i)?;
         Ok((i, (*key_ver, alg, created_at, None, params.0, params.1)))
     }
@@ -61,7 +61,7 @@ fn old_private_key_parser(
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, exp) = be_u16(i)?;
-        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
+        let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
         let (i, params) = parse_pub_priv_fields(alg)(i)?;
         Ok((
             i,
@@ -86,14 +86,15 @@ pub(crate) fn parse(
         SecretParams,
     ),
 > {
-    let (i, key_ver) = map_res(be_u8, KeyVersion::try_from)(i)?;
+    let (i, key_ver) = map(be_u8, KeyVersion::from)(i)?;
     let (i, key) = match &key_ver {
         &KeyVersion::V2 | &KeyVersion::V3 => old_private_key_parser(&key_ver)(i)?,
         &KeyVersion::V4 => new_private_key_parser(&key_ver)(i)?,
-        KeyVersion::V5 => {
-            return Err(nom::Err::Error(crate::errors::Error::ParsingError(
-                nom::error::ErrorKind::Switch,
-            )))
+        KeyVersion::V5 | KeyVersion::Other(_) => {
+            return Err(nom::Err::Error(Error::Unsupported(format!(
+                "Unsupported key version {}",
+                u8::from(key_ver)
+            ))))
         }
     };
     Ok((i, key))

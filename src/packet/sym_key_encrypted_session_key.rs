@@ -1,6 +1,6 @@
 use std::io;
 
-use nom::combinator::{map, map_res, rest};
+use nom::combinator::{map, rest};
 use nom::number::streaming::be_u8;
 use nom::sequence::tuple;
 
@@ -26,10 +26,9 @@ impl SymKeyEncryptedSessionKey {
     pub fn from_slice(version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(version)(input)?;
 
-        ensure!(
-            pk.version == 0x04 || pk.version == 0x05,
-            "Version 4 and 5 are the only known version"
-        );
+        if pk.version != 4 && pk.version != 5 {
+            unsupported_err!("unsupported SKESK version {}", pk.version);
+        }
 
         Ok(pk)
     }
@@ -63,7 +62,7 @@ impl SymKeyEncryptedSessionKey {
         let key = s2k.derive_key(&msg_pw(), alg.key_size())?;
 
         let mut private_key = Vec::with_capacity(session_key.len());
-        private_key.push(alg as u8);
+        private_key.push(u8::from(alg));
         private_key.extend(session_key);
 
         let iv = vec![0u8; alg.block_size()];
@@ -85,7 +84,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncr
         map(
             tuple((
                 be_u8,
-                map_res(be_u8, SymmetricKeyAlgorithm::try_from),
+                map(be_u8, SymmetricKeyAlgorithm::from),
                 s2k_parser,
                 rest,
             )),
@@ -110,7 +109,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncr
 
 impl Serialize for SymKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[self.version, self.sym_algorithm as u8])?;
+        writer.write_all(&[self.version, u8::from(self.sym_algorithm)])?;
         self.s2k.to_writer(writer)?;
 
         if let Some(ref key) = self.encrypted_key {

@@ -1,6 +1,6 @@
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 /// Available compression algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.3
 #[repr(u8)]
@@ -11,4 +11,7 @@ pub enum CompressionAlgorithm {
     BZip2 = 3,
     /// Do not use, just for compatability with GnuPG.
     Private10 = 110,
+
+    #[num_enum(catch_all)]
+    Other(u8),
 }

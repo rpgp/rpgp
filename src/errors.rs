@@ -51,7 +51,7 @@ pub enum Error {
     #[error("Not yet implemented: {0:?}")]
     Unimplemented(String),
     #[error("Unsupported: {0:?}")]
-    Unsupported(String),
+    Unsupported(String), // Signals packet versions and parameters we don't support, but can safely ignore
     #[error("{0:?}")]
     Message(String),
     #[error("Invalid Packet {0:?}")]

@@ -5,11 +5,11 @@ macro_rules! key_parser {
     ( $key_type:ty, $key_type_parser: ident, $key_tag:expr, $inner_key_type:ty, $( ($subkey_tag:ident, $inner_subkey_type:ty, $subkey_type:ty, $subkey_container:ident) ),* ) => {
         /// Parse a transferable keys from the given packets.
         /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-        pub struct $key_type_parser<I: Sized + Iterator<Item = $crate::packet::Packet>> {
+        pub struct $key_type_parser<I: Sized + Iterator<Item = $crate::errors::Result<$crate::packet::Packet>>> {
             inner: std::iter::Peekable<I>,
         }
 
-        impl<I: Sized + Iterator<Item = $crate::packet::Packet>> $key_type_parser<I> {
+        impl<I: Sized + Iterator<Item = $crate::errors::Result<$crate::packet::Packet>>> $key_type_parser<I> {
             pub fn into_inner(self) -> std::iter::Peekable<I> {
                 self.inner
             }
@@ -23,7 +23,7 @@ macro_rules! key_parser {
             }
         }
 
-        impl<I: Sized + Iterator<Item = $crate::packet::Packet>> Iterator for $key_type_parser<I> {
+        impl<I: Sized + Iterator<Item = $crate::errors::Result<$crate::packet::Packet>>> Iterator for $key_type_parser<I> {
             type Item = $crate::errors::Result<$key_type>;
 
             fn next(&mut self) -> Option<Self::Item> {
@@ -39,14 +39,22 @@ macro_rules! key_parser {
                 // -- One Public-Key packet
 
                 // ignore random other packets until we find something useful
-                while packets.peek().map(|p| p.tag() != $key_tag) == Some(true) {
-                    let p = packets.next().expect("peeked");
-                    warn!("ignoring unexpected packet: expected {:?}, got {:?}", $key_tag, p.tag());
+                while let Some(packet) = packets.next_if(|p| {
+                    p.as_ref().is_ok_and(|p| p.tag() != $key_tag)
+                }) {
+                    match packet {
+                        Ok(p) => {
+                            warn!("ignoring unexpected packet: expected {:?}, got {:?}", $key_tag, p.tag());
+                            // FIXME: return error?
+                        },
+                        Err(e) => return Some(Err(e)),
+                    }
                 }
 
                 let next = match packets.next() {
-                    Some(n) => n,
-                    None => return None
+                    Some(Ok(n)) => n,
+                    Some(Err(e)) => return Some(Err(e)),
+                    None => return None,
                 };
                 let primary_key: $inner_key_type = err_opt!(next.try_into());
                 debug!("primary key: {:?}", primary_key.key_id());
@@ -57,20 +65,26 @@ macro_rules! key_parser {
                 let mut revocation_signatures = Vec::new();
                 let mut direct_signatures = Vec::new();
 
-                while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
-                    let packet = packets.next().expect("peeked");
-                    debug!("parsing signature {:?}", packet.tag());
-                    let sig: Signature = err_opt!(packet.try_into());
-                    let typ = sig.typ();
+               while let Some(packet) = packets.next_if(|p| {
+                    p.as_ref().is_ok_and(|p| p.tag() == Tag::Signature)
+                }) {
+                    match packet {
+                        Ok(packet) => {
+                            debug!("parsing signature {:?}", packet.tag());
+                            let sig: Signature = err_opt!(packet.try_into());
+                            let typ = sig.typ();
 
-                    if typ == SignatureType::KeyRevocation {
-                        revocation_signatures.push(sig);
-                    } else {
-                        if primary_key.version() != KeyVersion::V4 {
-                            // no direct signatures on V2|V3 keys
-                            info!("WARNING: unexpected signature: {:?}", typ);
-                        }
-                        direct_signatures.push(sig);
+                            if typ == SignatureType::KeyRevocation {
+                                revocation_signatures.push(sig);
+                            } else {
+                                if primary_key.version() != KeyVersion::V4 {
+                                    // no direct signatures on V2|V3 keys
+                                    warn!("unexpected signature: {:?}", typ);
+                                }
+                                direct_signatures.push(sig);
+                            }
+                        },
+                        Err(e) => return Some(Err(e)),
                     }
                 }
 
@@ -80,13 +94,17 @@ macro_rules! key_parser {
                 let mut users = Vec::new();
                 let mut user_attributes = Vec::new();
 
-                while packets
-                    .peek()
-                    .map(|packet| {
-                        debug!("peek {:?}", packet.tag());
-                        packet.tag() == Tag::UserId || packet.tag() == Tag::UserAttribute
-                    }) == Some(true) {
-                    let packet = packets.next().expect("peeked");
+                while let Some(packet) = packets.next_if(|p| {
+                        p.as_ref().is_ok_and(|p| {
+                            debug!("peek {:?}", p.tag());
+                            p.tag() == Tag::UserId || p.tag() == Tag::UserAttribute
+                        })
+                    }) {
+                    let packet = match packet {
+                        Ok(packet) => packet,
+                        Err(err) => return Some(Err(err)),
+                    };
+
                     let tag = packet.tag();
                     debug!("  user data: {:?}", tag);
                     match tag {
@@ -97,8 +115,13 @@ macro_rules! key_parser {
 
                             let mut sigs = Vec::new();
 
-                            while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
-                                let packet = packets.next().expect("peeked");
+                            while let Some(res) = packets.next_if(|p| {
+                                p.as_ref().is_ok_and(|p| p.tag() == Tag::Signature)
+                            }) {
+                                let packet = match res {
+                                    Ok(packet) => packet,
+                                    Err(e) => return Some(Err(e)),
+                                };
                                 let sig: Signature = err_opt!(packet.try_into());
 
                                 sigs.push(sig);
@@ -112,8 +135,13 @@ macro_rules! key_parser {
                             // --- zero or more signature packets
 
                             let mut sigs = Vec::new();
-                            while packets.peek().map(|packet| packet.tag() == Tag::Signature) == Some(true) {
-                                let packet = packets.next().expect("peeked");
+                            while let Some(res) = packets.next_if(|p| {
+                                p.as_ref().is_ok_and(|p| p.tag() == Tag::Signature)
+                            }) {
+                                let packet = match res {
+                                    Ok(packet) => packet,
+                                    Err(e) => return Some(Err(e)),
+                                };
                                 let sig: Signature = err_opt!(packet.try_into());
 
                                 sigs.push(sig);
@@ -136,27 +164,37 @@ macro_rules! key_parser {
 
                 debug!("  subkeys");
 
-                while packets.peek().map(|packet| {
-                    debug!("  peek {:?}", packet.tag());
-                    $( packet.tag() == Tag::$subkey_tag || )* false
-                }) == Some(true) {
+                while let Some(res) = packets.next_if(|p|
+                    p.as_ref().is_ok_and(|p| {
+                        debug!("  peek {:?}", p.tag());
+                        $( p.tag() == Tag::$subkey_tag || )* false
+                    }
+                )) {
                     // -- Only V4 keys should have sub keys
                     if primary_key.version() != KeyVersion::V4 {
                         return Some(Err(format_err!("only V4 keys can have subkeys")));
                     }
 
-                    let packet = packets.next().expect("peeked");
+                    let packet = match res {
+                        Ok(packet) => packet,
+                        Err(e) => return Some(Err(e)),
+                    };
+
                     match packet.tag() {
                         $(
                             Tag::$subkey_tag => {
                                 let subkey: $inner_subkey_type = err_opt!(packet.try_into());
                                 let mut sigs = Vec::new();
-                                while packets.peek().map(|packet| {
-                                    packet.tag() == Tag::Signature
-                                }) == Some(true) {
-                                    let packet = packets.next().expect("peeked");
-                                    let sig: Signature = err_opt!(packet.try_into());
-                                    sigs.push(sig);
+                                while let Some(res) = packets.next_if(|packet| {
+                                    packet.is_ok() && packet.as_ref().unwrap().tag() == Tag::Signature
+                                }) {
+                                    match res {
+                                        Ok(packet) => {
+                                            let sig: Signature = err_opt!(packet.try_into());
+                                            sigs.push(sig);
+                                        }
+                                        Err(e) => return Some(Err(e)),
+                                    }
                                 }
 
                                 $subkey_container.push(<$subkey_type>::new(subkey, sigs));
@@ -182,7 +220,7 @@ macro_rules! key_parser {
         impl $crate::composed::Deserializable for $key_type {
             /// Parse a transferable key from packets.
             /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
-            fn from_packets<'a, I: Iterator<Item = $crate::packet::Packet> + 'a> (
+            fn from_packets<'a, I: Iterator<Item = $crate::errors::Result<$crate::packet::Packet>> + 'a> (
                 packets: std::iter::Peekable<I>,
             ) -> Box<dyn Iterator<Item = $crate::errors::Result<Self>> + 'a> {
                 Box::new($key_type_parser::from_packets(packets))

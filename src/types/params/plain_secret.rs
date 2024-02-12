@@ -288,6 +288,7 @@ impl PlainSecretParams {
                 data
             }
             KeyVersion::V5 => unimplemented_err!("v5 encryption"),
+            KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
         };
 
         Ok(EncryptedSecretParams::new(enc_data, iv, alg, s2k, id))

@@ -228,7 +228,9 @@ impl Message {
                 enc.finish()?
             }
             CompressionAlgorithm::BZip2 => unimplemented_err!("BZip2"),
-            CompressionAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+            CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => {
+                unsupported_err!("CompressionAlgorithm {} is unsupported", u8::from(alg))
+            }
         };
 
         Ok(Message::Compressed(CompressedData::from_compressed(

@@ -11,7 +11,7 @@ use crate::types::{ECDSASecretKey, Mpi, PlainSecretParams, PublicParams};
 /// Generate an ECDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(
     rng: &mut R,
-    curve: ECCCurve,
+    curve: &ECCCurve,
 ) -> Result<(PublicParams, PlainSecretParams)> {
     match curve {
         ECCCurve::P256 => {

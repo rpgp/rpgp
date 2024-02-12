@@ -1,6 +1,6 @@
-use num_enum::TryFromPrimitive;
+use num_enum::{FromPrimitive, IntoPrimitive};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum PublicKeyAlgorithm {
     /// RSA (Encrypt and Sign)
@@ -24,7 +24,6 @@ pub enum PublicKeyAlgorithm {
     /// EdDSA (not yet assigned)
     EdDSA = 22,
     /// Private experimental range (from OpenGPG)
-    // TODO: genenric Unknown(u8)
     Private100 = 100,
     Private101 = 101,
     Private102 = 102,
@@ -36,4 +35,7 @@ pub enum PublicKeyAlgorithm {
     Private108 = 108,
     Private109 = 109,
     Private110 = 110,
+
+    #[num_enum(catch_all)]
+    Unknown(u8),
 }

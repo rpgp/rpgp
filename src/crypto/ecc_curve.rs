@@ -1,6 +1,7 @@
 use crate::crypto::public_key::PublicKeyAlgorithm;
+use const_oid::ObjectIdentifier;
 
-#[derive(Clone, Debug, Eq, PartialEq, Copy)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ECCCurve {
     Curve25519,
     Ed25519,
@@ -11,12 +12,13 @@ pub enum ECCCurve {
     BrainpoolP384r1,
     BrainpoolP512r1,
     Secp256k1,
+    Unknown(ObjectIdentifier),
 }
 
 impl ECCCurve {
     /// Standard name
     pub fn name(&self) -> &str {
-        match *self {
+        match self {
             ECCCurve::Curve25519 => "Curve25519",
             ECCCurve::Ed25519 => "Ed25519",
             ECCCurve::P256 => "NIST P-256",
@@ -26,27 +28,29 @@ impl ECCCurve {
             ECCCurve::BrainpoolP384r1 => "brainpoolP384r1",
             ECCCurve::BrainpoolP512r1 => "brainpoolP512r1",
             ECCCurve::Secp256k1 => "secp256k1",
+            ECCCurve::Unknown(_oid) => "unknown",
         }
     }
 
     /// IETF formatted OID
-    pub fn oid_str(&self) -> &str {
-        match *self {
-            ECCCurve::Curve25519 => "1.3.6.1.4.1.3029.1.5.1",
-            ECCCurve::Ed25519 => "1.3.6.1.4.1.11591.15.1",
-            ECCCurve::P256 => "1.2.840.10045.3.1.7",
-            ECCCurve::P384 => "1.3.132.0.34",
-            ECCCurve::P521 => "1.3.132.0.35",
-            ECCCurve::BrainpoolP256r1 => "1.3.36.3.3.2.8.1.1.7",
-            ECCCurve::BrainpoolP384r1 => "1.3.36.3.3.2.8.1.1.11",
-            ECCCurve::BrainpoolP512r1 => "1.3.36.3.3.2.8.1.1.13",
-            ECCCurve::Secp256k1 => "1.3.132.0.10",
+    pub fn oid_str(&self) -> String {
+        match self {
+            ECCCurve::Curve25519 => "1.3.6.1.4.1.3029.1.5.1".into(),
+            ECCCurve::Ed25519 => "1.3.6.1.4.1.11591.15.1".into(),
+            ECCCurve::P256 => "1.2.840.10045.3.1.7".into(),
+            ECCCurve::P384 => "1.3.132.0.34".into(),
+            ECCCurve::P521 => "1.3.132.0.35".into(),
+            ECCCurve::BrainpoolP256r1 => "1.3.36.3.3.2.8.1.1.7".into(),
+            ECCCurve::BrainpoolP384r1 => "1.3.36.3.3.2.8.1.1.11".into(),
+            ECCCurve::BrainpoolP512r1 => "1.3.36.3.3.2.8.1.1.13".into(),
+            ECCCurve::Secp256k1 => "1.3.132.0.10".into(),
+            ECCCurve::Unknown(oid) => oid.to_string(),
         }
     }
 
     /// Nominal bit length of the curve
     pub fn nbits(&self) -> u16 {
-        match *self {
+        match self {
             ECCCurve::Curve25519 => 255,
             ECCCurve::Ed25519 => 255,
             ECCCurve::P256 => 256,
@@ -56,12 +60,13 @@ impl ECCCurve {
             ECCCurve::BrainpoolP384r1 => 384,
             ECCCurve::BrainpoolP512r1 => 512,
             ECCCurve::Secp256k1 => 256,
+            ECCCurve::Unknown(_oid) => 0, // FIXME?
         }
     }
 
     /// Alternative name of the curve
     pub fn alias(&self) -> Option<&str> {
-        match *self {
+        match self {
             ECCCurve::Curve25519 => Some("cv25519"),
             ECCCurve::Ed25519 => Some("ed25519"),
             ECCCurve::P256 => Some("nistp256"),
@@ -71,12 +76,13 @@ impl ECCCurve {
             ECCCurve::BrainpoolP384r1 => None,
             ECCCurve::BrainpoolP512r1 => None,
             ECCCurve::Secp256k1 => None,
+            ECCCurve::Unknown(_oid) => None,
         }
     }
 
     /// Required algo, or None for ECDSA/ECDH
     pub fn pubkey_algo(&self) -> Option<PublicKeyAlgorithm> {
-        match *self {
+        match self {
             ECCCurve::Curve25519 => Some(PublicKeyAlgorithm::ECDH),
             ECCCurve::Ed25519 => Some(PublicKeyAlgorithm::EdDSA),
             ECCCurve::P256 => None,
@@ -86,6 +92,7 @@ impl ECCCurve {
             ECCCurve::BrainpoolP384r1 => None,
             ECCCurve::BrainpoolP512r1 => None,
             ECCCurve::Secp256k1 => None,
+            ECCCurve::Unknown(_oid) => None,
         }
     }
 
@@ -137,7 +144,12 @@ pub fn ecc_curve_from_oid(oid: &[u8]) -> Option<ECCCurve> {
     if ECCCurve::Secp256k1.oid().as_slice() == oid {
         return Some(ECCCurve::Secp256k1);
     }
-    None
+
+    if let Ok(oid) = ObjectIdentifier::from_bytes(oid) {
+        Some(ECCCurve::Unknown(oid))
+    } else {
+        None
+    }
 }
 
 fn asn1_der_object_id_val_enc(val: u32) -> Vec<u8> {
@@ -192,7 +204,21 @@ mod tests {
         let one = vec![0x2A, 0x86, 0x48, 0xCE, 0x3D, 0x03, 0x01, 0x07];
         assert_eq!(ecc_curve_from_oid(one.as_slice()).unwrap(), ECCCurve::P256);
 
-        assert_eq!(ecc_curve_from_oid(vec![1, 2, 3].as_slice()), None);
+        assert_eq!(
+            ecc_curve_from_oid(vec![1, 2, 3].as_slice()),
+            Some(ECCCurve::Unknown(
+                ObjectIdentifier::from_bytes(&[1, 2, 3]).unwrap()
+            ))
+        );
+    }
+
+    #[test]
+    fn test_unknown_ecc_curve() {
+        // brainpoolP160r1 (an OID we don't handle explicitly in ECCCurve)
+        const OID: &[u8] = &[0x2B, 0x24, 0x03, 0x03, 0x02, 0x08, 0x01, 0x01, 0x01];
+
+        let bp_p160r1 = ecc_curve_from_oid(OID).unwrap();
+        assert_eq!(bp_p160r1.oid_str(), "1.3.36.3.3.2.8.1.1.1");
     }
 
     #[test]

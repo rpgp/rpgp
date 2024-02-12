@@ -8,13 +8,17 @@ use crate::errors::Result;
 use crate::packet::Packet;
 use crate::types::Tag;
 
-pub struct MessageParser<I: Sized + Iterator<Item = Packet>> {
+pub struct MessageParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
 }
 
-fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<Message>> {
-    while let Some(packet) = packets.by_ref().next() {
-        // for packet in packets.by_ref() {
+fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option<Result<Message>> {
+    while let Some(res) = packets.by_ref().next() {
+        let packet = match res {
+            Ok(packet) => packet,
+            Err(err) => return Some(Err(err)),
+        };
+
         debug!("{:?}: ", packet);
         let tag = packet.tag();
         match tag {
@@ -39,21 +43,29 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                         let mut edata = Vec::new();
 
                         // while ESK take em
-                        while packets.peek().map(|p| {
-                            p.tag() == Tag::PublicKeyEncryptedSessionKey
-                                || p.tag() == Tag::SymKeyEncryptedSessionKey
-                        }) == Some(true)
-                        {
-                            esk.push(packets.next().expect("peeked").try_into().expect("peeked"));
+                        while let Some(res) = packets.next_if(|res| {
+                            res.as_ref().is_ok_and(|p| {
+                                p.tag() == Tag::PublicKeyEncryptedSessionKey
+                                    || p.tag() == Tag::SymKeyEncryptedSessionKey
+                            })
+                        }) {
+                            match res {
+                                Ok(packet) => esk.push(packet.try_into().expect("peeked")),
+                                Err(e) => return Some(Err(e)),
+                            }
                         }
 
-                        // while edata take em
-                        while packets.peek().map(|p| {
-                            p.tag() == Tag::SymEncryptedData
-                                || p.tag() == Tag::SymEncryptedProtectedData
-                        }) == Some(true)
-                        {
-                            edata.push(packets.next().expect("peeked").try_into().expect("peeked"));
+                        // while edata take em (FIXME: the message grammar only allows one "Encrypted Data" packet)
+                        while let Some(res) = packets.next_if(|res| {
+                            res.as_ref().is_ok_and(|p| {
+                                p.tag() == Tag::SymEncryptedData
+                                    || p.tag() == Tag::SymEncryptedProtectedData
+                            })
+                        }) {
+                            match res {
+                                Ok(packet) => edata.push(packet.try_into().expect("peeked")),
+                                Err(e) => return Some(Err(e)),
+                            }
                         }
 
                         Some(Ok(Message::Encrypted { esk, edata }))
@@ -69,13 +81,17 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                         let esk = Vec::new();
                         let mut edata = vec![p];
 
-                        // while edata take em
-                        while packets.peek().map(|p| {
-                            p.tag() == Tag::SymEncryptedData
-                                || p.tag() == Tag::SymEncryptedProtectedData
-                        }) == Some(true)
-                        {
-                            edata.push(packets.next().expect("peeked").try_into().expect("peeked"));
+                        // while edata take em (FIXME: the message grammar only allows one "Encrypted Data" packet)
+                        while let Some(res) = packets.next_if(|res| {
+                            res.as_ref().is_ok_and(|p| {
+                                p.tag() == Tag::SymEncryptedData
+                                    || p.tag() == Tag::SymEncryptedProtectedData
+                            })
+                        }) {
+                            match res {
+                                Ok(packet) => edata.push(packet.try_into().expect("peeked")),
+                                Err(e) => return Some(Err(e)),
+                            }
                         }
 
                         Some(Ok(Message::Encrypted { esk, edata }))
@@ -86,11 +102,10 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
             Tag::Signature => {
                 return match packet.try_into() {
                     Ok(signature) => {
-                        let m = next(packets.by_ref());
-                        let message = if let Some(Err(err)) = m {
-                            return Some(Err(err));
-                        } else {
-                            m.map(|m| Box::new(m.expect("already checked")))
+                        let message = match next(packets.by_ref()) {
+                            Some(Ok(m)) => Some(Box::new(m)),
+                            Some(Err(err)) => return Some(Err(err)),
+                            None => None,
                         };
 
                         Some(Ok(Message::Signed {
@@ -106,21 +121,25 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
                 return match packet.try_into() {
                     Ok(p) => {
                         let one_pass_signature = Some(p);
-                        let m = next(packets.by_ref());
-                        let message = if let Some(Err(err)) = m {
-                            return Some(Err(err));
-                        } else {
-                            m.map(|m| Box::new(m.expect("already checked")))
+
+                        let message = match next(packets.by_ref()) {
+                            Some(Ok(m)) => Some(Box::new(m)),
+                            Some(Err(err)) => return Some(Err(err)),
+                            None => None,
                         };
 
-                        let signature =
-                            if packets.peek().map(|p| p.tag() == Tag::Signature) == Some(true) {
-                                packets.next().expect("peeked").try_into().expect("peeked")
-                            } else {
-                                return Some(Err(format_err!(
-                                    "missing signature for, one pass signature"
-                                )));
-                            };
+                        let signature = if let Some(res) = packets
+                            .next_if(|res| res.as_ref().is_ok_and(|p| p.tag() == Tag::Signature))
+                        {
+                            match res {
+                                Ok(packet) => packet.try_into().expect("peeked"),
+                                Err(e) => return Some(Err(e)),
+                            }
+                        } else {
+                            return Some(Err(format_err!(
+                                "missing signature for, one pass signature"
+                            )));
+                        };
 
                         Some(Ok(Message::Signed {
                             message,
@@ -144,7 +163,7 @@ fn next<I: Iterator<Item = Packet>>(packets: &mut Peekable<I>) -> Option<Result<
     None
 }
 
-impl<I: Sized + Iterator<Item = Packet>> Iterator for MessageParser<I> {
+impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for MessageParser<I> {
     type Item = Result<Message>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -155,7 +174,7 @@ impl<I: Sized + Iterator<Item = Packet>> Iterator for MessageParser<I> {
 impl Deserializable for Message {
     /// Parse a composed message.
     /// Ref: https://tools.ietf.org/html/rfc4880#section-11.3
-    fn from_packets<'a, I: Iterator<Item = Packet> + 'a>(
+    fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
         Box::new(MessageParser {

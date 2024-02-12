@@ -38,8 +38,7 @@ impl CompressedData {
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         ensure!(input.len() > 1, "input too short");
 
-        let alg = CompressionAlgorithm::try_from(input[0])
-            .map_err(|_| format_err!("invalid compression algorithm"))?;
+        let alg = CompressionAlgorithm::from(input[0]);
         Ok(CompressedData {
             packet_version,
             compression_algorithm: alg,
@@ -67,7 +66,10 @@ impl CompressedData {
                 &self.compressed_data[..],
             ))),
             CompressionAlgorithm::BZip2 => unimplemented_err!("BZip2"),
-            CompressionAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+            CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => unsupported_err!(
+                "CompressionAlgorithm {} is unsupported",
+                u8::from(self.compression_algorithm)
+            ),
         }
     }
 
@@ -78,7 +80,7 @@ impl CompressedData {
 
 impl Serialize for CompressedData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[self.compression_algorithm as u8])?;
+        writer.write_all(&[u8::from(self.compression_algorithm)])?;
         writer.write_all(&self.compressed_data)?;
 
         Ok(())

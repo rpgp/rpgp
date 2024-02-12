@@ -67,7 +67,7 @@ fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
             // a one-octet value 01, reserved for future extensions
             tag(&[1][..]),
             // a one-octet hash function ID used with a KDF
-            map_res(be_u8, HashAlgorithm::try_from),
+            map(be_u8, HashAlgorithm::from),
             // a one-octet algorithm ID for the symmetric algorithm used to wrap
             // the symmetric key used for the message encryption
             map_res(be_u8, SymmetricKeyAlgorithm::try_from),
@@ -113,6 +113,10 @@ fn rsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     })(i)
 }
 
+fn unknown(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    Ok((i, PublicParams::Unknown { data: vec![] })) // FIXME
+}
+
 /// Parse the fields of a public key.
 pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
     move |i: &[u8]| match typ {
@@ -124,9 +128,20 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
         PublicKeyAlgorithm::ECDH => ecdh(i),
         PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => elgamal(i),
         PublicKeyAlgorithm::EdDSA => eddsa(i),
-        _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
-            nom::error::ErrorKind::Switch,
-        ))),
+
+        PublicKeyAlgorithm::DiffieHellman
+        | PublicKeyAlgorithm::Private100
+        | PublicKeyAlgorithm::Private101
+        | PublicKeyAlgorithm::Private102
+        | PublicKeyAlgorithm::Private103
+        | PublicKeyAlgorithm::Private104
+        | PublicKeyAlgorithm::Private105
+        | PublicKeyAlgorithm::Private106
+        | PublicKeyAlgorithm::Private107
+        | PublicKeyAlgorithm::Private108
+        | PublicKeyAlgorithm::Private109
+        | PublicKeyAlgorithm::Private110
+        | PublicKeyAlgorithm::Unknown(_) => unknown(i),
     }
 }
 
@@ -146,7 +161,7 @@ fn new_public_key_parser(
 > + '_ {
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
-        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
+        let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
         let (i, params) = parse_pub_fields(alg)(i)?;
         Ok((i, (*key_ver, alg, created_at, None, params)))
     }
@@ -169,7 +184,7 @@ fn old_public_key_parser(
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, exp) = be_u16(i)?;
-        let (i, alg) = map_res(be_u8, PublicKeyAlgorithm::try_from)(i)?;
+        let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
         let (i, params) = parse_pub_fields(alg)(i)?;
 
         Ok((i, (*key_ver, alg, created_at, Some(exp), params)))
@@ -191,14 +206,15 @@ pub(crate) fn parse(
         PublicParams,
     ),
 > {
-    let (i, key_ver) = map_res(be_u8, KeyVersion::try_from)(i)?;
+    let (i, key_ver) = map(be_u8, KeyVersion::from)(i)?;
     let (i, key) = match &key_ver {
         &KeyVersion::V2 | &KeyVersion::V3 => old_public_key_parser(&key_ver)(i)?,
         &KeyVersion::V4 => new_public_key_parser(&key_ver)(i)?,
-        KeyVersion::V5 => {
-            return Err(nom::Err::Error(crate::errors::Error::ParsingError(
-                nom::error::ErrorKind::Switch,
-            )))
+        KeyVersion::V5 | KeyVersion::Other(_) => {
+            return Err(nom::Err::Error(crate::errors::Error::Unsupported(format!(
+                "Unsupported key version {}",
+                u8::from(key_ver)
+            ))))
         }
     };
     Ok((i, key))
