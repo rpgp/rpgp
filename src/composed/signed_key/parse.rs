@@ -5,7 +5,7 @@ use crate::armor::{self, BlockType};
 use crate::composed::signed_key::{
     PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey, SignedSecretKeyParser,
 };
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::packet::{Packet, PacketParser};
 use crate::types::Tag;
 
@@ -55,20 +55,7 @@ pub fn from_bytes_many<'a>(
     bytes: impl io::Read + 'a,
 ) -> Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a> {
     let packets = PacketParser::new(bytes)
-        .filter_map(|p| {
-            match p {
-                Ok(Packet::Marker(_m)) => {
-                    debug!("skipping marker packet");
-                    None
-                }
-                Ok(p) => Some(p),
-                Err(_) => {
-                    // for now we are skipping any packets that we failed to parse
-                    warn!("skipping packet: {:?}", p);
-                    None
-                }
-            }
-        })
+        .filter_map(crate::composed::shared::filter_parsed_packet_results)
         .peekable();
 
     Box::new(PubPrivIterator {
@@ -76,39 +63,45 @@ pub fn from_bytes_many<'a>(
     })
 }
 
-pub struct PubPrivIterator<I: Sized + Iterator<Item = Packet>> {
+pub struct PubPrivIterator<I: Sized + Iterator<Item = Result<Packet>>> {
     inner: Option<iter::Peekable<I>>,
 }
 
-impl<I: Sized + Iterator<Item = Packet>> Iterator for PubPrivIterator<I> {
+impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for PubPrivIterator<I> {
     type Item = Result<PublicOrSecret>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.inner.take() {
             None => None,
-            Some(mut packets) => {
-                let peeked_tag = packets.peek().map(|p| p.tag());
-                let (res, packets) = if peeked_tag == Some(Tag::SecretKey) {
-                    let mut parser = SignedSecretKeyParser::from_packets(packets);
-                    let p: Option<Result<SignedSecretKey>> = parser.next();
-                    (
-                        p.map(|key| key.map(PublicOrSecret::Secret)),
-                        parser.into_inner(),
-                    )
-                } else if peeked_tag == Some(Tag::PublicKey) {
-                    let mut parser = SignedPublicKeyParser::from_packets(packets);
-                    let p: Option<Result<SignedPublicKey>> = parser.next();
-                    (
-                        p.map(|key| key.map(PublicOrSecret::Public)),
-                        parser.into_inner(),
-                    )
-                } else {
-                    (None, packets)
-                };
-                self.inner = Some(packets);
+            Some(mut packets) => match packets.peek() {
+                Some(Ok(peeked_packet)) => {
+                    let (res, packets) = match peeked_packet.tag() {
+                        Tag::SecretKey => {
+                            let mut parser = SignedSecretKeyParser::from_packets(packets);
+                            let p: Option<Result<SignedSecretKey>> = parser.next();
+                            (
+                                p.map(|key| key.map(PublicOrSecret::Secret)),
+                                parser.into_inner(),
+                            )
+                        }
+                        Tag::PublicKey => {
+                            let mut parser = SignedPublicKeyParser::from_packets(packets);
+                            let p: Option<Result<SignedPublicKey>> = parser.next();
+                            (
+                                p.map(|key| key.map(PublicOrSecret::Public)),
+                                parser.into_inner(),
+                            )
+                        }
+                        _ => (None, packets),
+                    };
 
-                res
-            }
+                    self.inner = Some(packets);
+
+                    res
+                }
+                Some(Err(e)) => Some(Err(Error::Message(e.to_string()))),
+                None => None,
+            },
         }
     }
 }

@@ -77,21 +77,60 @@ pub trait Deserializable: Sized {
 
     /// Parse a list of compositions in raw byte format.
     fn from_bytes_many<'a>(bytes: impl Read + 'a) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
-        let packets = PacketParser::new(bytes).filter_map(|p| {
-            // for now we are skipping any packets that we failed to parse
-            if p.is_ok() {
-                p.ok()
-            } else {
-                warn!("skipping packet: {:?}", p);
-                None
-            }
-        });
+        let packets = PacketParser::new(bytes).filter_map(filter_parsed_packet_results);
 
         Self::from_packets(packets.peekable())
     }
 
     /// Turn a list of packets into a usable representation.
-    fn from_packets<'a, I: Iterator<Item = Packet> + 'a>(
+    fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a>;
+}
+
+/// Process results from low level packet parser:
+///
+/// - Skip Marker packets.
+/// - Pass through other packets.
+/// - Skip any `Error::Unsupported`, those were marked as "safe to ignore" by the low level parser.
+/// - Skip `Error::Incomplete`
+/// - Skip `Error::EllipticCurve`
+/// - Pass through other errors.
+pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<Packet>> {
+    match &p {
+        Ok(Packet::Marker(_m)) => {
+            debug!("skipping marker packet");
+            None
+        }
+        Ok(_) => Some(p),
+        Err(e) => {
+            if let Error::InvalidPacketContent(b) = &e {
+                let err: &Error = b; // unbox
+                if let Error::Unsupported(e) = err {
+                    // "Error::Unsupported" signals parser errors that we can safely ignore
+                    // (e.g. packets with unsupported versions)
+                    warn!("skipping unsupported packet: {p:?}");
+                    debug!("error: {e:?}");
+                    return None;
+                }
+                if let Error::EllipticCurve(e) = err {
+                    // this error happens in one SKS test certificate, presumably bad public key material.
+                    // ignoring the packet seems safe.
+                    warn!("skipping bad elliptic curve data: {p:?}");
+                    debug!("error: {e:?}");
+                    return None;
+                }
+            }
+            if let Error::Incomplete(_i) = e {
+                // We ignore incomplete packets for now (some of these occur in the SKS dumps under `tests`)
+                warn!("skipping incomplete packet: {p:?}");
+                return None;
+            }
+
+            // Pass through all other errors from the low level parser, they should be surfaced
+            Some(Err(Error::Message(format!(
+                "unexpected packet data: {e:?}"
+            ))))
+        }
+    }
 }
