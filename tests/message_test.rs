@@ -247,7 +247,7 @@ fn msg_regression_01() {
 fn msg_large_indeterminate_len() {
     let _ = pretty_env_logger::try_init();
 
-    let mut msg_file = File::open("./tests/indeterminated.asc").unwrap();
+    let mut msg_file = File::open("./tests/indeterminate.asc").unwrap();
     let (message, _headers) =
         Message::from_armor_single(&mut msg_file).expect("failed to parse message");
 

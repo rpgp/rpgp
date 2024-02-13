@@ -21,7 +21,7 @@ pub struct Packet {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PacketLength {
     Fixed(usize),
-    Indeterminated,
+    Indeterminate,
     Partial(usize),
 }
 

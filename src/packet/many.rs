@@ -74,7 +74,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                 Err(err) => Err(err.into()),
             }
             .and_then(|(rest, (ver, tag, _packet_length, body))| match body {
-                ParseResult::Indeterminated => {
+                ParseResult::Indeterminate => {
                     let mut body = rest.to_vec();
                     inner.read_to_end(&mut body)?;
                     match single::body_parser(ver, tag, &body) {
