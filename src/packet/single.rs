@@ -46,7 +46,7 @@ fn old_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
             1 => map(take(16usize), |val| u16_as_usize(val).into())(I)?,
             // Four-Octet Lengths
             2 => map(take(32usize), |val| u32_as_usize(val).into())(I)?,
-            3 => (I, PacketLength::Indeterminated),
+            3 => (I, PacketLength::Indeterminate),
             _ => {
                 return Err(nom::Err::Error(crate::errors::Error::ParsingError(
                     nom::error::ErrorKind::Switch,
@@ -102,7 +102,7 @@ fn read_partial_bodies(input: &[u8], len: usize) -> IResult<&[u8], ParseResult<'
                 // this is the last one
                 break;
             }
-            PacketLength::Indeterminated => {
+            PacketLength::Indeterminate => {
                 // this should not happen, as this is a new style
                 // packet, but lets handle it anyway
                 out.push(res.0);
@@ -141,7 +141,7 @@ fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
 #[derive(Debug)]
 pub enum ParseResult<'a> {
     Fixed(&'a [u8]),
-    Indeterminated,
+    Indeterminate,
     Partial(Vec<&'a [u8]>),
 }
 
@@ -151,7 +151,7 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength, ParseResu
     let (i, head) = alt((new_packet_header, old_packet_header))(i)?;
     let (i, body) = match head.2 {
         PacketLength::Fixed(length) => map(take(length), ParseResult::Fixed)(i),
-        PacketLength::Indeterminated => Ok((i, ParseResult::Indeterminated)),
+        PacketLength::Indeterminate => Ok((i, ParseResult::Indeterminate)),
         PacketLength::Partial(length) => read_partial_bodies(i, length),
     }?;
     Ok((i, (head.0, head.1, head.2, body)))
