@@ -270,7 +270,7 @@ impl Message {
         self.encrypt_symmetric(rng, esk, alg, session_key)
     }
 
-    /// Encrytp the message using the given password.
+    /// Encrypt the message using the given password.
     pub fn encrypt_with_password<R, F>(
         &self,
         rng: &mut R,
@@ -533,8 +533,8 @@ impl Message {
                 ensure!(!session_keys.is_empty(), "failed to decrypt session key");
 
                 // make sure all the keys are the same, otherwise we are in a bad place
-                let (session_key, alg) = {
-                    let k0 = &session_keys[0].1;
+                let (session_key, session_key_algorithm) = {
+                    let (_key_id, k0) = &session_keys[0];
                     if !session_keys.iter().skip(1).all(|(_, k)| k0 == k) {
                         bail!("found inconsistent session keys, possible message corruption");
                     }
@@ -544,8 +544,15 @@ impl Message {
                 };
 
                 let ids = session_keys.into_iter().map(|(k, _)| k).collect();
+                ensure!(
+                    session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
+                    "session key algorithm cannot be plaintext"
+                );
 
-                Ok((MessageDecrypter::new(session_key, alg, edata), ids))
+                Ok((
+                    MessageDecrypter::new(session_key, session_key_algorithm, edata),
+                    ids,
+                ))
             }
         }
     }
@@ -573,10 +580,18 @@ impl Message {
 
                 ensure!(skesk.is_some(), "message is not password protected");
 
-                let (session_key, alg) =
+                let (session_key, session_key_algorithm) =
                     decrypt_session_key_with_password(skesk.expect("checked above"), msg_pw)?;
+                ensure!(
+                    session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
+                    "session key algorithm cannot be plaintext"
+                );
 
-                Ok(MessageDecrypter::new(session_key, alg, edata))
+                Ok(MessageDecrypter::new(
+                    session_key,
+                    session_key_algorithm,
+                    edata,
+                ))
             }
         }
     }
@@ -801,6 +816,55 @@ mod tests {
             .unwrap();
 
         assert_eq!(compressed_msg, decrypted);
+    }
+
+    #[test]
+    fn test_no_plaintext_decryption() {
+        // Invalid message "encrypted" with plaintext algorithm.
+        // Generated with the Python script below.
+        let msg_raw = b"\xc3\x04\x04\x00\x00\x08\xd2-\x01\x00\x00\xcb\x12b\x00\x00\x00\x00\x00Hello world!\xd3\x14\xc3\xadw\x022\x05\x0ek'k\x8d\x12\xaa8\r'\x8d\xc0\x82)";
+        /*
+                import hashlib
+                import sys
+                data = (
+                    b"\xc3"  # PTag = 11000011, new packet format, tag 3 = SKESK
+                    b"\x04"  # Packet length, 4
+                    b"\x04"  # Version number, 4
+                    b"\x00"  # Algorithm, plaintext
+                    b"\x00\x08"  # S2K specifier, Simple S2K, SHA256
+                    b"\xd2"  # PTag = 1101 0010, new packet format, tag 18 = SEIPD
+                    b"\x2d"  # Packet length, 45
+                    b"\x01"  # Version number, 1
+                )
+                inner_data = (
+                    b"\x00\x00"  # IV
+                    b"\xcb"  # PTag = 11001011, new packet format, tag 11 = literal data packet
+                    b"\x12"  # Packet length, 18
+                    b"\x62"  # Binary data ('b')
+                    b"\x00"  # No filename, empty filename length
+                    b"\x00\x00\x00\x00"  # Date
+                    b"Hello world!"
+                )
+                data += inner_data
+                data += (
+                    b"\xd3"  # Modification Detection Code packet, tag 19
+                    b"\x14"  # MDC packet length, 20 bytes
+                )
+                data += hashlib.new("SHA1", inner_data + b"\xd3\x14").digest()
+                print(data)
+        */
+
+        let msg = Message::from_bytes(&msg_raw[..]).unwrap();
+
+        // Before the fix message eventually decrypted to
+        //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
+        // where "48656c6c6f20776f726c6421" is an encoded "Hello world!" string.
+        assert!(msg
+            .decrypt_with_password(|| "foobarbaz".into())
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("plaintext"));
     }
 
     #[test]
