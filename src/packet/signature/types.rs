@@ -219,16 +219,16 @@ impl Signature {
     /// - when backsig is true: verify a "Primary Key Binding Signature (type ID 0x19)"
     fn verify_key_binding_internal(
         &self,
-        signing_key: &impl PublicKeyTrait,
-        key: &impl PublicKeyTrait,
+        signer: &impl PublicKeyTrait,
+        signee: &impl PublicKeyTrait,
         backsig: bool,
     ) -> Result<()> {
         debug!(
-            "verifying key binding: {:#?} - {:#?} - {:#?}",
-            self, signing_key, key
+            "verifying key binding: {:#?} - {:#?} - {:#?} (backsig: {})",
+            self, signer, signee, backsig
         );
 
-        let key_id = signing_key.key_id();
+        let key_id = signer.key_id();
         if let Some(issuer) = self.issuer() {
             if &key_id != issuer {
                 bail!(
@@ -242,16 +242,16 @@ impl Signature {
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
         // Hash the two keys:
-        // - for a regular binding signature, first the signer (primary), the the signee (subkey)
+        // - for a regular binding signature, first the signer (primary), then the signee (subkey)
         // - for a "backward signature" (Primary Key Binding Signature), the order of hashing is signee (primary), signer (subkey)
 
         // First key to hash
         {
             let mut key_buf = Vec::new();
             if !backsig {
-                signing_key.to_writer_old(&mut key_buf)?;
+                signer.to_writer_old(&mut key_buf)?; // primary
             } else {
-                key.to_writer_old(&mut key_buf)?;
+                signee.to_writer_old(&mut key_buf)?; // primary
             }
 
             hasher.update(&key_buf);
@@ -260,9 +260,9 @@ impl Signature {
         {
             let mut key_buf = Vec::new();
             if !backsig {
-                key.to_writer_old(&mut key_buf)?;
+                signee.to_writer_old(&mut key_buf)?; // subkey
             } else {
-                signing_key.to_writer_old(&mut key_buf)?;
+                signer.to_writer_old(&mut key_buf)?; // subkey
             }
 
             hasher.update(&key_buf);
@@ -278,7 +278,7 @@ impl Signature {
             "key binding: invalid signed hash value"
         );
 
-        signing_key.verify_signature(self.config.hash_alg, hash, &self.signature)
+        signer.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a direct key signature or a revocation.
