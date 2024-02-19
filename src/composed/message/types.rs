@@ -611,7 +611,16 @@ impl Message {
     }
 
     /// Returns the underlying content and `None` if the message is encrypted.
+    ///
+    /// Decompresses up to one layer of compressed data.
     pub fn get_content(&self) -> Result<Option<Vec<u8>>> {
+        self.get_content_internal(true)
+    }
+
+    /// Returns the underlying content and `None` if the message is encrypted.
+    ///
+    /// If `decompress` is true, may decompress a compressed message.
+    fn get_content_internal(&self, decompress: bool) -> Result<Option<Vec<u8>>> {
         match self {
             Message::Literal(ref data) => Ok(Some(data.data().to_vec())),
             Message::Signed { message, .. } => Ok(message
@@ -619,8 +628,12 @@ impl Message {
                 .and_then(|m| m.get_literal())
                 .map(|l| l.data().to_vec())),
             Message::Compressed(data) => {
-                let msg = Message::from_bytes(data.decompress()?)?;
-                msg.get_content()
+                if decompress {
+                    let msg = Message::from_bytes(data.decompress()?)?;
+                    msg.get_content_internal(false)
+                } else {
+                    bail!("Recursive decompression not allowed");
+                }
             }
             Message::Encrypted { .. } => Ok(None),
         }
@@ -990,5 +1003,14 @@ mod tests {
 
         // verify the signature with alice's signing subkey
         signed_msg.verify(&verify).expect("signature seems bad");
+    }
+
+    /// Tests that decompressing compression quine does not result in stack overflow.
+    /// quine.out comes from <https://mumble.net/~campbell/misc/pgp-quine/>
+    /// See <https://mumble.net/~campbell/2013/10/08/compression> for details.
+    #[test]
+    fn test_compression_quine() {
+        let msg = Message::from_bytes(&include_bytes!("../../../tests/quine.out")[..]).unwrap();
+        assert!(msg.get_content().is_err());
     }
 }
