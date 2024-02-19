@@ -323,20 +323,15 @@ impl Signature {
         self.config.is_certification()
     }
 
-    /// Returns an iterator over all subpackets of this signature.
-    fn subpackets(&self) -> impl Iterator<Item = &Subpacket> {
-        self.config.subpackets()
-    }
-
     pub fn key_expiration_time(&self) -> Option<&Duration> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::KeyExpirationTime(d) => Some(d),
             _ => None,
         })
     }
 
     pub fn signature_expiration_time(&self) -> Option<&Duration> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::SignatureExpirationTime(d) => Some(d),
             _ => None,
         })
@@ -351,7 +346,8 @@ impl Signature {
     }
 
     pub fn preferred_symmetric_algs(&self) -> &[SymmetricKeyAlgorithm] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::PreferredSymmetricAlgorithms(d) => Some(&d[..]),
                 _ => None,
@@ -360,7 +356,8 @@ impl Signature {
     }
 
     pub fn preferred_hash_algs(&self) -> &[HashAlgorithm] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::PreferredHashAlgorithms(d) => Some(&d[..]),
                 _ => None,
@@ -369,7 +366,8 @@ impl Signature {
     }
 
     pub fn preferred_compression_algs(&self) -> &[CompressionAlgorithm] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::PreferredCompressionAlgorithms(d) => Some(&d[..]),
                 _ => None,
@@ -378,7 +376,8 @@ impl Signature {
     }
 
     pub fn key_server_prefs(&self) -> &[u8] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::KeyServerPreferences(d) => Some(&d[..]),
                 _ => None,
@@ -387,7 +386,8 @@ impl Signature {
     }
 
     pub fn key_flags(&self) -> KeyFlags {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::KeyFlags(d) => Some(d[..].into()),
                 _ => None,
@@ -396,7 +396,8 @@ impl Signature {
     }
 
     pub fn features(&self) -> &[u8] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::Features(d) => Some(&d[..]),
                 _ => None,
@@ -405,21 +406,22 @@ impl Signature {
     }
 
     pub fn revocation_reason_code(&self) -> Option<&RevocationCode> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RevocationReason(code, _) => Some(code),
             _ => None,
         })
     }
 
     pub fn revocation_reason_string(&self) -> Option<&BStr> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RevocationReason(_, reason) => Some(reason.as_ref()),
             _ => None,
         })
     }
 
     pub fn is_primary(&self) -> bool {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::IsPrimary(d) => Some(*d),
                 _ => None,
@@ -428,7 +430,8 @@ impl Signature {
     }
 
     pub fn is_revocable(&self) -> bool {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::Revocable(d) => Some(*d),
                 _ => None,
@@ -437,21 +440,29 @@ impl Signature {
     }
 
     pub fn embedded_signature(&self) -> Option<&Signature> {
-        self.subpackets().find_map(|p| match &p.data {
-            SubpacketData::EmbeddedSignature(d) => Some(&**d),
-            _ => None,
-        })
+        // We consider data from both the hashed and unhashed area here, because the embedded
+        // signature is inherently cryptographically secured. An attacker can't add a valid
+        // embedded signature, canonicalization will remove any invalid embedded signature
+        // subpackets.
+        self.config
+            .hashed_subpackets()
+            .chain(self.config.unhashed_subpackets())
+            .find_map(|p| match &p.data {
+                SubpacketData::EmbeddedSignature(d) => Some(&**d),
+                _ => None,
+            })
     }
 
     pub fn preferred_key_server(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::PreferredKeyServer(d) => Some(d.as_str()),
             _ => None,
         })
     }
 
     pub fn notations(&self) -> Vec<&Notation> {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .filter_map(|p| match &p.data {
                 SubpacketData::Notation(d) => Some(d),
                 _ => None,
@@ -460,7 +471,7 @@ impl Signature {
     }
 
     pub fn revocation_key(&self) -> Option<&types::RevocationKey> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RevocationKey(d) => Some(d),
             _ => None,
         })
@@ -472,35 +483,36 @@ impl Signature {
     /// using a different encoding. But since the RFC describes every
     /// text as utf-8 it is up to the caller whether to error on non utf-8 data.
     pub fn signers_userid(&self) -> Option<&BStr> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::SignersUserID(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
     pub fn policy_uri(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::PolicyURI(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
     pub fn trust_signature(&self) -> Option<(u8, u8)> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::TrustSignature(depth, value) => Some((*depth, *value)),
             _ => None,
         })
     }
 
     pub fn regular_expression(&self) -> Option<&BStr> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RegularExpression(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
     pub fn exportable_certification(&self) -> bool {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::ExportableCertification(d) => Some(*d),
                 _ => None,

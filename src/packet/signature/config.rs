@@ -308,11 +308,23 @@ impl SignatureConfig {
         }
     }
 
-    /// Returns an iterator over all subpackets of this signature.
+    /// Returns an iterator of all subpackets in the signature: all subpackets in the hashed area
+    /// followed by all subpackets in the unhashed area.
+    #[deprecated(
+        note = "Usually only hashed_subpackets should be used. unhashed_subpackets are only safe and useful to access in rare circumstances. When they are needed, unhashed_subpackets should be explicitly called."
+    )]
     pub fn subpackets(&self) -> impl Iterator<Item = &Subpacket> {
-        self.hashed_subpackets
-            .iter()
-            .chain(self.unhashed_subpackets.iter())
+        self.hashed_subpackets().chain(self.unhashed_subpackets())
+    }
+
+    /// Returns an iterator over the hashed subpackets of this signature.
+    pub fn hashed_subpackets(&self) -> impl Iterator<Item = &Subpacket> {
+        self.hashed_subpackets.iter()
+    }
+
+    /// Returns an iterator over the unhashed subpackets of this signature.
+    pub fn unhashed_subpackets(&self) -> impl Iterator<Item = &Subpacket> {
+        self.unhashed_subpackets.iter()
     }
 
     /// Returns if the signature is a certification or not.
@@ -327,26 +339,43 @@ impl SignatureConfig {
         )
     }
 
+    /// Signature Creation Time.
+    ///
+    /// The time the signature was made.
+    /// MUST be present in the hashed area.
+    ///
+    /// https://datatracker.ietf.org/doc/html/rfc4880#section-5.2.3.4
+    ///
+    /// Returns the first Signature Creation Time subpacket, only from the hashed area.
     pub fn created(&self) -> Option<&DateTime<Utc>> {
         if self.created.is_some() {
             return self.created.as_ref();
         }
 
-        self.subpackets().find_map(|p| match p.data {
+        self.hashed_subpackets().find_map(|p| match p.data {
             SubpacketData::SignatureCreationTime(ref d) => Some(d),
             _ => None,
         })
     }
 
     pub fn issuer(&self) -> Option<&KeyId> {
-        if self.issuer.is_some() {
-            return self.issuer.as_ref();
+        // legacy v2/v3 signatures have an explicit "issuer" field
+        if let Some(issuer) = self.issuer.as_ref() {
+            return Some(issuer);
         }
 
-        self.subpackets().find_map(|p| match p.data {
-            SubpacketData::Issuer(ref id) => Some(id),
-            _ => None,
-        })
+        // v4+ signatures use subpackets
+        //
+        // We consider data from both the hashed and unhashed area here, because the issuer Key ID
+        // only acts as a hint. The signature will be cryptographically checked using the purported
+        // issuer's key material. An attacker cannot successfully claim an issuer Key ID that they
+        // can't produce a cryptographically valid signature for.
+        self.hashed_subpackets()
+            .chain(self.unhashed_subpackets())
+            .find_map(|p| match p.data {
+                SubpacketData::Issuer(ref id) => Some(id),
+                _ => None,
+            })
     }
 }
 
