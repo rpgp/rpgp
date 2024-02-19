@@ -80,20 +80,36 @@ impl Signature {
         self.config.typ()
     }
 
+    /// Does `key` match any issuer or issuer_fingerprint subpacket in `sig`?
+    /// If yes, we consider `key` a candidate to verify `sig` against.
+    ///
+    /// We also consider `key` a match for `sig` by default, if `sig` contains no issuer-related
+    /// subpackets.
+    fn match_identity(sig: &Signature, key: &impl PublicKeyTrait) -> bool {
+        let issuers = sig.issuer();
+        let issuer_fps = sig.issuer_fingerprint();
+
+        // If there is no subpacket that signals the issuer, we consider `sig` and `key` a
+        // potential match, and will check the cryptographic validity.
+        if issuers.is_empty() && issuer_fps.is_empty() {
+            return true;
+        }
+
+        // Does any issuer or issuer fingerprint subpacket matche the identity of `sig`?
+        issuers.iter().any(|&key_id| key_id == &key.key_id())
+            || issuer_fps.iter().any(|&fp| fp == key.fingerprint())
+    }
+
     /// Verify this signature.
     pub fn verify<R>(&self, key: &impl PublicKeyTrait, data: R) -> Result<()>
     where
         R: Read,
     {
-        if let Some(issuer) = self.issuer() {
-            if &key.key_id() != issuer {
-                bail!(
-                    "validating signature with a non matching Key ID {:?} != {:?}",
-                    &key.key_id(),
-                    issuer
-                );
-            }
-        }
+        ensure!(
+            Self::match_identity(self, key),
+            "verify: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            &key.key_id(),
+        );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
@@ -128,15 +144,11 @@ impl Signature {
         let key_id = key.key_id();
         debug!("verifying certification {:?} {:#?}", key_id, self);
 
-        if let Some(issuer) = self.issuer() {
-            if &key_id != issuer {
-                bail!(
-                    "validating certification with a non matching Key ID {:?} != {:?}",
-                    key_id,
-                    issuer
-                );
-            }
-        }
+        ensure!(
+            Self::match_identity(self, key),
+            "verify_certification: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            key_id,
+        );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
@@ -228,17 +240,6 @@ impl Signature {
             self, signer, signee, backsig
         );
 
-        let key_id = signer.key_id();
-        if let Some(issuer) = self.issuer() {
-            if &key_id != issuer {
-                bail!(
-                    "validating key binding with a non matching Key ID {:?} != {:?}",
-                    &key_id,
-                    issuer
-                );
-            }
-        }
-
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
         // Hash the two keys:
@@ -285,16 +286,11 @@ impl Signature {
     pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
         debug!("verifying key (revocation): {:#?} - {:#?}", self, key);
 
-        let key_id = key.key_id();
-        if let Some(issuer) = self.issuer() {
-            if &key_id != issuer {
-                bail!(
-                    "validating key (revocation) with a non matching Key ID {:?} != {:?}",
-                    &key_id,
-                    issuer
-                );
-            }
-        }
+        ensure!(
+            Self::match_identity(self, key),
+            "verify_key: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            &key.key_id(),
+        );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
@@ -341,8 +337,12 @@ impl Signature {
         self.config.created()
     }
 
-    pub fn issuer(&self) -> Option<&KeyId> {
+    pub fn issuer(&self) -> Vec<&KeyId> {
         self.config.issuer()
+    }
+
+    pub fn issuer_fingerprint(&self) -> Vec<&[u8]> {
+        self.config.issuer_fingerprint()
     }
 
     pub fn preferred_symmetric_algs(&self) -> &[SymmetricKeyAlgorithm] {

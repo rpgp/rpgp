@@ -358,10 +358,17 @@ impl SignatureConfig {
         })
     }
 
-    pub fn issuer(&self) -> Option<&KeyId> {
+    /// Issuer.
+    ///
+    /// The OpenPGP Key ID of the key issuing the signature.
+    ///
+    /// https://datatracker.ietf.org/doc/html/rfc4880#section-5.2.3.5
+    ///
+    /// Returns Issuer subpacket data from both the hashed and unhashed area.
+    pub fn issuer(&self) -> Vec<&KeyId> {
         // legacy v2/v3 signatures have an explicit "issuer" field
         if let Some(issuer) = self.issuer.as_ref() {
-            return Some(issuer);
+            return vec![issuer];
         }
 
         // v4+ signatures use subpackets
@@ -372,10 +379,31 @@ impl SignatureConfig {
         // can't produce a cryptographically valid signature for.
         self.hashed_subpackets()
             .chain(self.unhashed_subpackets())
-            .find_map(|p| match p.data {
+            .filter_map(|sp| match sp.data {
                 SubpacketData::Issuer(ref id) => Some(id),
                 _ => None,
             })
+            .collect()
+    }
+
+    /// Issuer Fingerprint.
+    ///
+    /// The OpenPGP Key fingerprint of the key issuing the signature.
+    ///
+    /// This subpacket type was introduced after RFC 4880, in the RFC 4880-bis lifecycle.
+    /// It sees some use in the wild for v4 signatures, in both the hashed and unhashed areas.
+    ///
+    /// https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-rfc4880bis-10#name-issuer-fingerprint
+    ///
+    /// Returns Issuer Fingerprint subpacket data from both the hashed and unhashed area.
+    pub fn issuer_fingerprint(&self) -> Vec<&[u8]> {
+        self.hashed_subpackets()
+            .chain(self.unhashed_subpackets())
+            .filter_map(|sp| match &sp.data {
+                SubpacketData::IssuerFingerprint(_, fp) => Some(fp.as_slice()),
+                _ => None,
+            })
+            .collect()
     }
 }
 
