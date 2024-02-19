@@ -7,7 +7,7 @@ use zeroize::{Zeroize, Zeroizing};
 use crate::crypto::{
     aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
 };
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::types::{ECDHSecretKey, Mpi, PlainSecretParams, PublicParams};
 
 use super::hash::HashAlgorithm;
@@ -147,20 +147,48 @@ pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Re
         .copy_from_slice(encrypted_session_key);
 
     let mut decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
-    // PKCS5 unpadding (PKCS5 is PKCS7 with a blocksize of 8)
+    // PKCS5-style unpadding (PKCS5 is PKCS7 with a blocksize of 8).
+    //
+    // RFC 6637 describes the padding:
+    // a) "The result is padded using the method described in [PKCS5] to the 8-byte granularity."
+    // b) "For example, assuming that an AES algorithm is used for the session key, the sender MAY
+    // use 21, 13, and 5 bytes of padding for AES-128, AES-192, and AES-256, respectively, to
+    // provide the same number of octets, 40 total, as an input to the key wrapping method."
+    //
+    // So while the padding ensures that the length of the padded message is a multiple of 8, the
+    // padding may exceed 8 bytes in size.
     {
         let len = decrypted_key_padded.len();
         let block_size = 8;
         ensure!(len % block_size == 0, "invalid key length {}", len);
         ensure!(!decrypted_key_padded.is_empty(), "empty key is not valid");
 
-        // grab the last block
-        let offset = len - block_size;
-        let last_block = GenericArray::<u8, U8>::from_slice(&decrypted_key_padded[offset..]);
-        let unpadded_last_block = Pkcs7::unpad(last_block)?;
-        let unpadded_len = offset + unpadded_last_block.len();
+        // The last byte should contain the padding symbol, which is also the padding length
+        let pad = decrypted_key_padded.last().expect("is not empty");
+
+        // Padding length seems to exceed size of the padded message
+        if *pad as usize > len {
+            return Err(Error::UnpadError);
+        }
+
+        // Expected length of the unpadded message
+        let unpadded_len = len - *pad as usize;
+
+        // All bytes that constitute the padding must have the value of `pad`
+        if decrypted_key_padded[unpadded_len..]
+            .iter()
+            .any(|byte| byte != pad)
+        {
+            return Err(Error::UnpadError);
+        }
+
         decrypted_key_padded.truncate(unpadded_len);
     }
+
+    ensure!(
+        !decrypted_key_padded.is_empty(),
+        "empty unpadded key is not valid"
+    );
 
     Ok(decrypted_key_padded)
 }
@@ -259,7 +287,9 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
+    use std::fs;
 
+    use crate::{Deserializable, Message, SignedSecretKey};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
@@ -307,6 +337,31 @@ mod tests {
 
                 assert_eq!(&plain[..], &decrypted[..]);
             }
+        }
+    }
+
+    #[test]
+    fn test_decrypt_padding() {
+        let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/unit-tests/padding/alice.key").unwrap(),
+        )
+        .expect("failed to read decryption key");
+
+        for msg_file in [
+            "./tests/unit-tests/padding/msg-short-padding.pgp",
+            "./tests/unit-tests/padding/msg-long-padding.pgp",
+        ] {
+            let (message, _headers) = Message::from_armor_single(fs::File::open(msg_file).unwrap())
+                .expect("failed to parse message");
+
+            let (mut decrypter, _ids) = message
+                .decrypt(String::default, &[&decrypt_key])
+                .expect("failed to init decryption");
+
+            let msg = decrypter.next().unwrap().unwrap();
+            let data = msg.get_literal().unwrap().data();
+
+            assert_eq!(data, "hello\n".as_bytes());
         }
     }
 }
