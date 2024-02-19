@@ -16,7 +16,7 @@ impl SignedUser {
         let signatures = signatures
             .into_iter()
             .filter(|sig| {
-                if !sig.is_certificate() {
+                if !sig.is_certification() {
                     warn!(
                         "ignoring unexpected signature {:?} after User ID packet",
                         sig.typ()
@@ -37,7 +37,7 @@ impl SignedUser {
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
-            signature.verify_certificate(key, Tag::UserId, &self.id)?;
+            signature.verify_certification(key, Tag::UserId, &self.id)?;
         }
 
         Ok(())
@@ -70,7 +70,7 @@ impl SignedUserAttribute {
         let signatures = signatures
             .into_iter()
             .filter(|sig| {
-                if !sig.is_certificate() {
+                if !sig.is_certification() {
                     warn!(
                         "ignoring unexpected signature {:?} after User Attribute packet",
                         sig.typ()
@@ -91,7 +91,7 @@ impl SignedUserAttribute {
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
-            signature.verify_certificate(key, Tag::UserAttribute, &self.attr)?;
+            signature.verify_certification(key, Tag::UserAttribute, &self.attr)?;
         }
 
         Ok(())

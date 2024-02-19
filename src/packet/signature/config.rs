@@ -73,8 +73,8 @@ impl SignatureConfig {
         Ok(Signature::from_config(self, signed_hash_value, signature))
     }
 
-    /// Create a certificate siganture.
-    pub fn sign_certificate<F>(
+    /// Create a certification siganture.
+    pub fn sign_certification<F>(
         self,
         key: &impl SecretKeyTrait,
         key_pw: F,
@@ -85,10 +85,10 @@ impl SignatureConfig {
         F: FnOnce() -> String,
     {
         ensure!(
-            self.is_certificate(),
-            "can not sign non certificate as certificate"
+            self.is_certification(),
+            "can not sign non certification as certification"
         );
-        debug!("signing certificate {:#?}", self.typ);
+        debug!("signing certification {:#?}", self.typ);
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
@@ -105,7 +105,7 @@ impl SignatureConfig {
                 let prefix = match tag {
                     Tag::UserId => 0xB4,
                     Tag::UserAttribute => 0xD1,
-                    _ => bail!("invalid tag for certificate validation: {:?}", tag),
+                    _ => bail!("invalid tag for certification validation: {:?}", tag),
                 };
 
                 let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
@@ -315,8 +315,8 @@ impl SignatureConfig {
             .chain(self.unhashed_subpackets.iter())
     }
 
-    /// Returns if the signature is a certificate or not.
-    pub fn is_certificate(&self) -> bool {
+    /// Returns if the signature is a certification or not.
+    pub fn is_certification(&self) -> bool {
         matches!(
             self.typ,
             SignatureType::CertGeneric

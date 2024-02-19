@@ -118,20 +118,20 @@ impl Signature {
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
-    /// Verifies a certificate siganture type.
-    pub fn verify_certificate(
+    /// Verifies a certification signature type.
+    pub fn verify_certification(
         &self,
         key: &impl PublicKeyTrait,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()> {
         let key_id = key.key_id();
-        debug!("verifying certificate {:?} {:#?}", key_id, self);
+        debug!("verifying certification {:?} {:#?}", key_id, self);
 
         if let Some(issuer) = self.issuer() {
             if &key_id != issuer {
                 bail!(
-                    "validating certificate with a non matching Key ID {:?} != {:?}",
+                    "validating certification with a non matching Key ID {:?} != {:?}",
                     key_id,
                     issuer
                 );
@@ -161,7 +161,7 @@ impl Signature {
                     let prefix = match tag {
                         Tag::UserId => 0xB4,
                         Tag::UserAttribute => 0xD1,
-                        _ => bail!("invalid tag for certificate validation: {:?}", tag),
+                        _ => bail!("invalid tag for certification validation: {:?}", tag),
                     };
 
                     let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
@@ -185,7 +185,7 @@ impl Signature {
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
-            "certificate: invalid signed hash value"
+            "certification: invalid signed hash value"
         );
 
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
@@ -318,9 +318,9 @@ impl Signature {
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
-    /// Returns if the signature is a certificate or not.
-    pub fn is_certificate(&self) -> bool {
-        self.config.is_certificate()
+    /// Returns if the signature is a certification or not.
+    pub fn is_certification(&self) -> bool {
+        self.config.is_certification()
     }
 
     /// Returns an iterator over all subpackets of this signature.

@@ -23,7 +23,7 @@ pub struct SecretKeyParams {
     #[builder(default)]
     can_sign: bool,
     #[builder(default)]
-    can_create_certificates: bool,
+    can_certify: bool,
     #[builder(default)]
     can_encrypt: bool,
 
@@ -69,7 +69,7 @@ pub struct SubkeyParams {
     #[builder(default)]
     can_sign: bool,
     #[builder(default)]
-    can_create_certificates: bool,
+    can_certify: bool,
     #[builder(default)]
     can_encrypt: bool,
     #[builder(default)]
@@ -178,7 +178,7 @@ impl SecretKeyParams {
         };
 
         let mut keyflags = KeyFlags::default();
-        keyflags.set_certify(self.can_create_certificates);
+        keyflags.set_certify(self.can_certify);
         keyflags.set_encrypt_comms(self.can_encrypt);
         keyflags.set_encrypt_storage(self.can_encrypt);
         keyflags.set_sign(self.can_sign);
@@ -205,7 +205,7 @@ impl SecretKeyParams {
                     let passphrase = subkey.passphrase;
                     let (public_params, secret_params) = subkey.key_type.generate(passphrase)?;
                     let mut keyflags = KeyFlags::default();
-                    keyflags.set_certify(subkey.can_create_certificates);
+                    keyflags.set_certify(subkey.can_certify);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
                     keyflags.set_encrypt_storage(subkey.can_encrypt);
                     keyflags.set_sign(subkey.can_sign);
@@ -355,7 +355,7 @@ mod tests {
         let mut key_params = SecretKeyParamsBuilder::default();
         key_params
             .key_type(KeyType::Rsa(2048))
-            .can_create_certificates(true)
+            .can_certify(true)
             .can_sign(true)
             .primary_user_id("Me <me@mail.com>".into())
             .preferred_symmetric_algorithms(smallvec![
@@ -479,7 +479,7 @@ mod tests {
 
         let key_params = SecretKeyParamsBuilder::default()
             .key_type(KeyType::EdDSA)
-            .can_create_certificates(true)
+            .can_certify(true)
             .can_sign(true)
             .primary_user_id("Me-X <me-x25519@mail.com>".into())
             .passphrase(None)
@@ -553,7 +553,7 @@ mod tests {
 
         let key_params = SecretKeyParamsBuilder::default()
             .key_type(KeyType::ECDSA(curve.clone()))
-            .can_create_certificates(true)
+            .can_certify(true)
             .can_sign(true)
             .primary_user_id("Me-X <me-ecdsa@mail.com>".into())
             .passphrase(None)
@@ -650,7 +650,7 @@ mod tests {
 
         let key_params = SecretKeyParamsBuilder::default()
             .key_type(KeyType::Dsa(key_size))
-            .can_create_certificates(true)
+            .can_certify(true)
             .can_sign(true)
             .primary_user_id("Me-X <me-dsa@mail.com>".into())
             .passphrase(None)

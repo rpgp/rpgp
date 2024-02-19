@@ -114,7 +114,7 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
                     return None;
                 }
                 if let Error::EllipticCurve(e) = err {
-                    // this error happens in one SKS test certificate, presumably bad public key material.
+                    // this error happens in one SKS test key, presumably bad public key material.
                     // ignoring the packet seems safe.
                     warn!("skipping bad elliptic curve data: {p:?}");
                     debug!("error: {e:?}");

@@ -76,7 +76,7 @@ impl UserAttribute {
             ))])
             .build()?;
 
-        let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;
+        let sig = config.sign_certification(key, key_pw, self.tag(), &self)?;
 
         Ok(SignedUserAttribute::new(self.clone(), vec![sig]))
     }

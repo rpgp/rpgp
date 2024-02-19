@@ -95,7 +95,7 @@ impl KeyDetails {
                 ))])
                 .build()?;
 
-            let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
+            let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
 
             users.push(id.into_signed(sig));
         }
@@ -133,7 +133,7 @@ impl KeyDetails {
                         ))])
                         .build()?;
 
-                    let sig = config.sign_certificate(key, key_pw.clone(), id.tag(), &id)?;
+                    let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
 
                     Ok(id.into_signed(sig))
                 })
