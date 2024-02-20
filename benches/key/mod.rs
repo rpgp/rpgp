@@ -51,7 +51,7 @@ fn bench_secret_key_rsa_parse(b: &mut Bencher) {
 fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
     let key_params = SecretKeyParamsBuilder::default()
         .key_type(kt)
-        .can_create_certificates(true)
+        .can_certify(true)
         .can_sign(true)
         .primary_user_id("Me <me@mail.com>".into())
         .preferred_symmetric_algorithms(smallvec![

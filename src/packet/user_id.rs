@@ -53,7 +53,7 @@ impl UserId {
             ))])
             .build()?;
 
-        let sig = config.sign_certificate(key, key_pw, self.tag(), &self)?;
+        let sig = config.sign_certification(key, key_pw, self.tag(), &self)?;
 
         Ok(SignedUser::new(self.clone(), vec![sig]))
     }

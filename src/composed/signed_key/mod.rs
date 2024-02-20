@@ -25,7 +25,7 @@
 //! # let mut key_params = SecretKeyParamsBuilder::default();
 //! # key_params
 //! # .key_type(KeyType::Rsa(2048))
-//! # .can_create_certificates(false)
+//! # .can_certify(false)
 //! # .can_sign(true)
 //! # .primary_user_id("Me <me@example.com>".into())
 //! # .preferred_symmetric_algorithms(smallvec![
