@@ -6,6 +6,7 @@ use nom::{Needed, Offset};
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
 use crate::packet::single::{self, ParseResult};
+use crate::types::Tag;
 
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
@@ -87,6 +88,32 @@ impl<R: Read> Iterator for PacketParser<R> {
                     Ok((b.buf().offset(rest), p))
                 }
                 ParseResult::Partial(body) => {
+                    ensure!(
+                        // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                        // "An implementation MAY use Partial Body Lengths for data packets, be
+                        // they literal, compressed, or encrypted [...]
+                        // Partial Body Lengths MUST NOT be used for any other packet types"
+                        matches!(
+                            tag,
+                            Tag::LiteralData
+                                | Tag::CompressedData
+                                | Tag::SymEncryptedData
+                                | Tag::SymEncryptedProtectedData
+                        ),
+                        "Partial body length is not allowed for packet type {:?}",
+                        tag
+                    );
+
+                    if let Some(first) = body.first() {
+                        // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                        // "The first partial length MUST be at least 512 octets long."
+                        ensure!(
+                            first.len() >= 512,
+                            "Illegal first partial body length {} (shorter than 512 bytes)",
+                            first.len()
+                        );
+                    }
+
                     let p = single::body_parser(ver, tag, &body.concat());
                     Ok((b.buf().offset(rest), p))
                 }
@@ -291,5 +318,35 @@ mod tests {
             }
         });
         assert!(packets.next().is_none());
+    }
+
+    #[test]
+    fn test_partial_length_encoding() {
+        use crate::{Deserializable, Message};
+
+        const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n";
+
+        for msg_file in [
+            // Literal Data Packet with two octet length encoding
+            "./tests/unit-tests/partial-body-length/literal.packet-two-octet-length.asc",
+            // Literal Data Packet with first partial length of 512 bytes, followed by a part with five octet length encoding
+            "./tests/unit-tests/partial-body-length/literal.packet-partial.512.asc",
+        ] {
+            let (message, _headers) = Message::from_armor_single(File::open(msg_file).unwrap())
+                .expect("failed to parse message");
+
+            let Message::Literal(data) = &message else {
+                panic!("expected Literal")
+            };
+
+            assert_eq!(data.data(), TEXT.as_bytes());
+        }
+
+        // Literal Data Packet with illegal first partial length of 256 bytes
+        let res = Message::from_armor_single(
+            File::open("./tests/unit-tests/partial-body-length/literal.packet-partial.256.asc")
+                .unwrap(),
+        );
+        assert!(res.is_err());
     }
 }
