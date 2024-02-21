@@ -87,8 +87,8 @@ dual licensed as above, without any additional terms or conditions.
 [doc-link]: https://docs.rs/crate/pgp/
 [license-image]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
 [license-link]: https://github.com/rpgp/rpgp/blob/master/LICENSE.md
-[build-image]: https://github.com/rpgp/rpgp/workflows/CI/badge.svg
+[build-image]: https://github.com/rpgp/rpgp/actions/workflows/ci.yml/badge.svg
 [build-link]: https://github.com/rpgp/rpgp/actions?query=workflow%3ACI+branch%3Amaster
-[msrv-image]: https://img.shields.io/badge/rustc-1.65+-blue.svg
+[msrv-image]: https://img.shields.io/badge/rustc-1.70+-blue.svg
 [deps-image]: https://deps.rs/repo/github/rpgp/rpgp/status.svg
 [deps-link]: https://deps.rs/repo/github/rpgp/rpgp
