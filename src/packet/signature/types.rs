@@ -80,20 +80,36 @@ impl Signature {
         self.config.typ()
     }
 
+    /// Does `key` match any issuer or issuer_fingerprint subpacket in `sig`?
+    /// If yes, we consider `key` a candidate to verify `sig` against.
+    ///
+    /// We also consider `key` a match for `sig` by default, if `sig` contains no issuer-related
+    /// subpackets.
+    fn match_identity(sig: &Signature, key: &impl PublicKeyTrait) -> bool {
+        let issuers = sig.issuer();
+        let issuer_fps = sig.issuer_fingerprint();
+
+        // If there is no subpacket that signals the issuer, we consider `sig` and `key` a
+        // potential match, and will check the cryptographic validity.
+        if issuers.is_empty() && issuer_fps.is_empty() {
+            return true;
+        }
+
+        // Does any issuer or issuer fingerprint subpacket matche the identity of `sig`?
+        issuers.iter().any(|&key_id| key_id == &key.key_id())
+            || issuer_fps.iter().any(|&fp| fp == key.fingerprint())
+    }
+
     /// Verify this signature.
     pub fn verify<R>(&self, key: &impl PublicKeyTrait, data: R) -> Result<()>
     where
         R: Read,
     {
-        if let Some(issuer) = self.issuer() {
-            if &key.key_id() != issuer {
-                bail!(
-                    "validating signature with a non matching Key ID {:?} != {:?}",
-                    &key.key_id(),
-                    issuer
-                );
-            }
-        }
+        ensure!(
+            Self::match_identity(self, key),
+            "verify: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            &key.key_id(),
+        );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
@@ -128,15 +144,11 @@ impl Signature {
         let key_id = key.key_id();
         debug!("verifying certification {:?} {:#?}", key_id, self);
 
-        if let Some(issuer) = self.issuer() {
-            if &key_id != issuer {
-                bail!(
-                    "validating certification with a non matching Key ID {:?} != {:?}",
-                    key_id,
-                    issuer
-                );
-            }
-        }
+        ensure!(
+            Self::match_identity(self, key),
+            "verify_certification: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            key_id,
+        );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
@@ -219,39 +231,28 @@ impl Signature {
     /// - when backsig is true: verify a "Primary Key Binding Signature (type ID 0x19)"
     fn verify_key_binding_internal(
         &self,
-        signing_key: &impl PublicKeyTrait,
-        key: &impl PublicKeyTrait,
+        signer: &impl PublicKeyTrait,
+        signee: &impl PublicKeyTrait,
         backsig: bool,
     ) -> Result<()> {
         debug!(
-            "verifying key binding: {:#?} - {:#?} - {:#?}",
-            self, signing_key, key
+            "verifying key binding: {:#?} - {:#?} - {:#?} (backsig: {})",
+            self, signer, signee, backsig
         );
-
-        let key_id = signing_key.key_id();
-        if let Some(issuer) = self.issuer() {
-            if &key_id != issuer {
-                bail!(
-                    "validating key binding with a non matching Key ID {:?} != {:?}",
-                    &key_id,
-                    issuer
-                );
-            }
-        }
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
         // Hash the two keys:
-        // - for a regular binding signature, first the signer (primary), the the signee (subkey)
+        // - for a regular binding signature, first the signer (primary), then the signee (subkey)
         // - for a "backward signature" (Primary Key Binding Signature), the order of hashing is signee (primary), signer (subkey)
 
         // First key to hash
         {
             let mut key_buf = Vec::new();
             if !backsig {
-                signing_key.to_writer_old(&mut key_buf)?;
+                signer.to_writer_old(&mut key_buf)?; // primary
             } else {
-                key.to_writer_old(&mut key_buf)?;
+                signee.to_writer_old(&mut key_buf)?; // primary
             }
 
             hasher.update(&key_buf);
@@ -260,9 +261,9 @@ impl Signature {
         {
             let mut key_buf = Vec::new();
             if !backsig {
-                key.to_writer_old(&mut key_buf)?;
+                signee.to_writer_old(&mut key_buf)?; // subkey
             } else {
-                signing_key.to_writer_old(&mut key_buf)?;
+                signer.to_writer_old(&mut key_buf)?; // subkey
             }
 
             hasher.update(&key_buf);
@@ -278,23 +279,18 @@ impl Signature {
             "key binding: invalid signed hash value"
         );
 
-        signing_key.verify_signature(self.config.hash_alg, hash, &self.signature)
+        signer.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a direct key signature or a revocation.
     pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
         debug!("verifying key (revocation): {:#?} - {:#?}", self, key);
 
-        let key_id = key.key_id();
-        if let Some(issuer) = self.issuer() {
-            if &key_id != issuer {
-                bail!(
-                    "validating key (revocation) with a non matching Key ID {:?} != {:?}",
-                    &key_id,
-                    issuer
-                );
-            }
-        }
+        ensure!(
+            Self::match_identity(self, key),
+            "verify_key: No matching issuer or issuer_fingerprint for Key ID: {:?}",
+            &key.key_id(),
+        );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
@@ -323,20 +319,15 @@ impl Signature {
         self.config.is_certification()
     }
 
-    /// Returns an iterator over all subpackets of this signature.
-    fn subpackets(&self) -> impl Iterator<Item = &Subpacket> {
-        self.config.subpackets()
-    }
-
     pub fn key_expiration_time(&self) -> Option<&Duration> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::KeyExpirationTime(d) => Some(d),
             _ => None,
         })
     }
 
     pub fn signature_expiration_time(&self) -> Option<&Duration> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::SignatureExpirationTime(d) => Some(d),
             _ => None,
         })
@@ -346,12 +337,17 @@ impl Signature {
         self.config.created()
     }
 
-    pub fn issuer(&self) -> Option<&KeyId> {
+    pub fn issuer(&self) -> Vec<&KeyId> {
         self.config.issuer()
     }
 
+    pub fn issuer_fingerprint(&self) -> Vec<&[u8]> {
+        self.config.issuer_fingerprint()
+    }
+
     pub fn preferred_symmetric_algs(&self) -> &[SymmetricKeyAlgorithm] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::PreferredSymmetricAlgorithms(d) => Some(&d[..]),
                 _ => None,
@@ -360,7 +356,8 @@ impl Signature {
     }
 
     pub fn preferred_hash_algs(&self) -> &[HashAlgorithm] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::PreferredHashAlgorithms(d) => Some(&d[..]),
                 _ => None,
@@ -369,7 +366,8 @@ impl Signature {
     }
 
     pub fn preferred_compression_algs(&self) -> &[CompressionAlgorithm] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::PreferredCompressionAlgorithms(d) => Some(&d[..]),
                 _ => None,
@@ -378,7 +376,8 @@ impl Signature {
     }
 
     pub fn key_server_prefs(&self) -> &[u8] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::KeyServerPreferences(d) => Some(&d[..]),
                 _ => None,
@@ -387,7 +386,8 @@ impl Signature {
     }
 
     pub fn key_flags(&self) -> KeyFlags {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::KeyFlags(d) => Some(d[..].into()),
                 _ => None,
@@ -396,7 +396,8 @@ impl Signature {
     }
 
     pub fn features(&self) -> &[u8] {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::Features(d) => Some(&d[..]),
                 _ => None,
@@ -405,21 +406,22 @@ impl Signature {
     }
 
     pub fn revocation_reason_code(&self) -> Option<&RevocationCode> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RevocationReason(code, _) => Some(code),
             _ => None,
         })
     }
 
     pub fn revocation_reason_string(&self) -> Option<&BStr> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RevocationReason(_, reason) => Some(reason.as_ref()),
             _ => None,
         })
     }
 
     pub fn is_primary(&self) -> bool {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::IsPrimary(d) => Some(*d),
                 _ => None,
@@ -428,7 +430,8 @@ impl Signature {
     }
 
     pub fn is_revocable(&self) -> bool {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::Revocable(d) => Some(*d),
                 _ => None,
@@ -437,21 +440,29 @@ impl Signature {
     }
 
     pub fn embedded_signature(&self) -> Option<&Signature> {
-        self.subpackets().find_map(|p| match &p.data {
-            SubpacketData::EmbeddedSignature(d) => Some(&**d),
-            _ => None,
-        })
+        // We consider data from both the hashed and unhashed area here, because the embedded
+        // signature is inherently cryptographically secured. An attacker can't add a valid
+        // embedded signature, canonicalization will remove any invalid embedded signature
+        // subpackets.
+        self.config
+            .hashed_subpackets()
+            .chain(self.config.unhashed_subpackets())
+            .find_map(|p| match &p.data {
+                SubpacketData::EmbeddedSignature(d) => Some(&**d),
+                _ => None,
+            })
     }
 
     pub fn preferred_key_server(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::PreferredKeyServer(d) => Some(d.as_str()),
             _ => None,
         })
     }
 
     pub fn notations(&self) -> Vec<&Notation> {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .filter_map(|p| match &p.data {
                 SubpacketData::Notation(d) => Some(d),
                 _ => None,
@@ -460,7 +471,7 @@ impl Signature {
     }
 
     pub fn revocation_key(&self) -> Option<&types::RevocationKey> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RevocationKey(d) => Some(d),
             _ => None,
         })
@@ -472,35 +483,36 @@ impl Signature {
     /// using a different encoding. But since the RFC describes every
     /// text as utf-8 it is up to the caller whether to error on non utf-8 data.
     pub fn signers_userid(&self) -> Option<&BStr> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::SignersUserID(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
     pub fn policy_uri(&self) -> Option<&str> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::PolicyURI(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
     pub fn trust_signature(&self) -> Option<(u8, u8)> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::TrustSignature(depth, value) => Some((*depth, *value)),
             _ => None,
         })
     }
 
     pub fn regular_expression(&self) -> Option<&BStr> {
-        self.subpackets().find_map(|p| match &p.data {
+        self.config.hashed_subpackets().find_map(|p| match &p.data {
             SubpacketData::RegularExpression(d) => Some(d.as_ref()),
             _ => None,
         })
     }
 
     pub fn exportable_certification(&self) -> bool {
-        self.subpackets()
+        self.config
+            .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::ExportableCertification(d) => Some(*d),
                 _ => None,
