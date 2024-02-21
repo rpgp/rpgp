@@ -2,7 +2,7 @@
 
 All notable changes to rpgp will be documented in this file.
 
-## [unreleased]
+## [0.11.0](https://github.com/rpgp/rpgp/compare/v0.10.2..0.11.0) - 2024-02-21
 
 ### ⛰️  Features
 
@@ -39,6 +39,7 @@ All notable changes to rpgp will be documented in this file.
 - Remove unnecessary backticks ([#252](https://github.com/rpgp/rpgp/issues/252)) - ([2b17b30](https://github.com/rpgp/rpgp/commit/2b17b30b8acb2eff0d330c60bb46080ce59e837b))
 - Roughly reflect formats/mechanisms from draft-ietf-openpgp-crypto-refresh - ([97edf8f](https://github.com/rpgp/rpgp/commit/97edf8fd3073eac2f11cd717896db288c61f6589))
 - Clarify parameters in verify_key_binding_internal - ([b82cd3f](https://github.com/rpgp/rpgp/commit/b82cd3f71d1c4ffacb27ea287d5041e8ec0f8959))
+- Switch to git-cliff for changelog - ([39444e5](https://github.com/rpgp/rpgp/commit/39444e5a316168412eab0c59c072fc5feaf4b275))
 
 ### ⚡ Performance
 
