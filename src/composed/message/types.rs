@@ -393,7 +393,18 @@ impl Message {
     /// Verify this message.
     /// For signed messages this verifies the signature and for compressed messages
     /// they are decompressed and checked for signatures to verify.
+    ///
+    /// Decompresses up to one layer of compressed data.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        self.verify_internal(key, true)
+    }
+
+    /// Verifies this message.
+    /// For signed messages this verifies the signature.
+    ///
+    /// If `decompress` is true and the message is compressed,
+    /// the message is decompressed and verified.
+    fn verify_internal(&self, key: &impl PublicKeyTrait, decompress: bool) -> Result<()> {
         match self {
             Message::Signed {
                 signature, message, ..
@@ -412,8 +423,12 @@ impl Message {
                 }
             }
             Message::Compressed(data) => {
-                let msg = Message::from_bytes(data.decompress()?)?;
-                msg.verify(key)
+                if decompress {
+                    let msg = Message::from_bytes(data.decompress()?)?;
+                    msg.verify_internal(key, false)
+                } else {
+                    bail!("Recursive decompression not allowed");
+                }
             }
             // We don't know how to verify a signature for other Message types, and shouldn't return Ok
             _ => Err(Error::Unsupported(format!(
@@ -1074,7 +1089,15 @@ mod tests {
     /// See <https://mumble.net/~campbell/2013/10/08/compression> for details.
     #[test]
     fn test_compression_quine() {
+        // Public key does not matter as the message is not signed.
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+        let pkey = skey.public_key();
+
         let msg = Message::from_bytes(&include_bytes!("../../../tests/quine.out")[..]).unwrap();
         assert!(msg.get_content().is_err());
+        assert!(msg.verify(&pkey).is_err());
     }
 }
