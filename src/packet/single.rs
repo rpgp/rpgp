@@ -1,5 +1,5 @@
 // comes from inside somewhere of nom
-#![cfg_attr(feature = "cargo-clippy", allow(clippy::useless_let_if_seq))]
+#![allow(clippy::useless_let_if_seq)]
 
 use std::num::NonZeroUsize;
 

@@ -19,7 +19,7 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse an armor encoded list of compositions.
-    #[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+    #[allow(clippy::type_complexity)]
     fn from_string_many<'a>(
         input: &'a str,
     ) -> Result<(
@@ -36,7 +36,7 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    #[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+    #[allow(clippy::type_complexity)]
     fn from_armor_many<'a, R: Read + Seek + 'a>(
         input: R,
     ) -> Result<(
