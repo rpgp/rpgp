@@ -62,3 +62,6 @@ pub mod types;
 pub use self::composed::key::*;
 pub use self::composed::*;
 pub use self::packet::Signature;
+
+/// The version of this crate.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
