@@ -63,6 +63,7 @@ impl fmt::Debug for EdDSASecretKey {
 pub enum ECDSASecretKey {
     P256(p256::SecretKey),
     P384(p384::SecretKey),
+    P521(p521::SecretKey),
     Secp256k1(k256::SecretKey),
     Unsupported {
         /// The secret point.
@@ -77,6 +78,7 @@ impl fmt::Debug for ECDSASecretKey {
         match self {
             ECDSASecretKey::P256(_) => write!(f, "ECDSASecretKey::P256([..])"),
             ECDSASecretKey::P384(_) => write!(f, "ECDSASecretKey::P384([..])"),
+            ECDSASecretKey::P521(_) => write!(f, "ECDSASecretKey::P521([..])"),
             ECDSASecretKey::Secp256k1(_) => write!(f, "ECDSASecretKey::Secp256k1([..])"),
             ECDSASecretKey::Unsupported { curve, .. } => f
                 .debug_struct("ECDSASecretKey::Unsupported")

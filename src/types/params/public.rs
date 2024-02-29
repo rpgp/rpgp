@@ -53,6 +53,11 @@ pub enum EcdsaPublicParams {
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
+    P521 {
+        key: p521::PublicKey,
+        /// Stores the original Mpi, to ensure we keep the padding around.
+        p: Mpi,
+    },
     Secp256k1 {
         key: k256::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
@@ -89,6 +94,17 @@ impl EcdsaPublicParams {
                     p: p.to_owned(),
                 })
             }
+            ECCCurve::P521 => {
+                ensure!(p.len() <= 133, "invalid public key length");
+                let mut key = [0u8; 133];
+                key[..p.len()].copy_from_slice(p.as_bytes());
+
+                let public = p521::PublicKey::from_sec1_bytes(&key)?;
+                Ok(EcdsaPublicParams::P521 {
+                    key: public,
+                    p: p.to_owned(),
+                })
+            }
             ECCCurve::Secp256k1 => {
                 ensure!(p.len() <= 65, "invalid public key length");
                 let mut key = [0u8; 65];
@@ -111,6 +127,7 @@ impl EcdsaPublicParams {
         match self {
             EcdsaPublicParams::P256 { .. } => Some(32),
             EcdsaPublicParams::P384 { .. } => Some(48),
+            EcdsaPublicParams::P521 { .. } => Some(66),
             EcdsaPublicParams::Secp256k1 { .. } => Some(32),
             EcdsaPublicParams::Unsupported { .. } => None,
         }
@@ -122,6 +139,7 @@ impl Serialize for EcdsaPublicParams {
         let oid = match self {
             EcdsaPublicParams::P256 { .. } => ECCCurve::P256.oid(),
             EcdsaPublicParams::P384 { .. } => ECCCurve::P384.oid(),
+            EcdsaPublicParams::P521 { .. } => ECCCurve::P521.oid(),
             EcdsaPublicParams::Secp256k1 { .. } => ECCCurve::Secp256k1.oid(),
             EcdsaPublicParams::Unsupported { curve, .. } => curve.oid(),
         };
@@ -134,6 +152,9 @@ impl Serialize for EcdsaPublicParams {
                 p.as_ref().to_writer(writer)?;
             }
             EcdsaPublicParams::P384 { p, .. } => {
+                p.as_ref().to_writer(writer)?;
+            }
+            EcdsaPublicParams::P521 { p, .. } => {
                 p.as_ref().to_writer(writer)?;
             }
             EcdsaPublicParams::Secp256k1 { p, .. } => {

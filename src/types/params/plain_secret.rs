@@ -190,6 +190,11 @@ impl<'a> PlainSecretParamsRef<'a> {
 
                         Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P384(secret)))
                     }
+                    EcdsaPublicParams::P521 { .. } => {
+                        let secret = p521::SecretKey::from_slice(d.as_bytes())?;
+
+                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P521(secret)))
+                    }
                     EcdsaPublicParams::Secp256k1 { .. } => {
                         let secret = k256::SecretKey::from_slice(d.as_bytes())?;
 
