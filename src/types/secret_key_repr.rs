@@ -89,6 +89,18 @@ impl fmt::Debug for ECDSASecretKey {
     }
 }
 
+impl ECDSASecretKey {
+    pub(crate) fn secret_key_length(&self) -> Option<usize> {
+        match self {
+            ECDSASecretKey::P256 { .. } => Some(32),
+            ECDSASecretKey::P384 { .. } => Some(48),
+            ECDSASecretKey::P521 { .. } => Some(66),
+            ECDSASecretKey::Secp256k1 { .. } => Some(32),
+            ECDSASecretKey::Unsupported { .. } => None,
+        }
+    }
+}
+
 /// Secret key for DSA.
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct DSASecretKey {

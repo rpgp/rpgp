@@ -79,10 +79,20 @@ pub fn generate_key<R: Rng + CryptoRng>(
 /// Verify an ECDSA signature.
 pub fn verify(
     p: &EcdsaPublicParams,
-    _hash: HashAlgorithm,
+    hash: HashAlgorithm,
     hashed: &[u8],
     sig: &[Mpi],
 ) -> Result<()> {
+    if let Some(field_size) = p.secret_key_length() {
+        // Error out for size mismatches that would get rejected in ecdsa::hazmat::bits2field
+        ensure!(
+            hashed.len() >= field_size / 2,
+            "Hash algorithm {:?} cannot be combined with key {:?}",
+            hash,
+            p
+        );
+    }
+
     match p {
         EcdsaPublicParams::P256 { key, .. } => {
             const FLEN: usize = 32;
@@ -179,9 +189,19 @@ pub fn verify(
 /// Sign using ECDSA
 pub fn sign(
     secret_key: &ECDSASecretKey,
-    _hash: HashAlgorithm,
+    hash: HashAlgorithm,
     digest: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
+    if let Some(field_size) = secret_key.secret_key_length() {
+        // Error out for size mismatches that would get rejected in ecdsa::hazmat::bits2field
+        ensure!(
+            digest.len() >= field_size / 2,
+            "Hash algorithm {:?} cannot be combined with key {:?}",
+            hash,
+            secret_key
+        );
+    }
+
     let (r, s) = match secret_key {
         ECDSASecretKey::P256(secret_key) => {
             let secret = p256::ecdsa::SigningKey::from(secret_key);
