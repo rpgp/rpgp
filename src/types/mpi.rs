@@ -90,26 +90,6 @@ impl Mpi {
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
     }
-
-    /// Strip trailing zeroes.
-    pub fn strip_trailing_zeroes(&mut self) {
-        let mut end = self.0.len();
-        for byte in self.0.iter().rev() {
-            if *byte == 0 {
-                end -= 1;
-            } else {
-                break;
-            }
-        }
-        self.0.truncate(end);
-    }
-
-    pub fn pad_right(&mut self, new_len: usize) {
-        if new_len <= self.0.len() {
-            return;
-        }
-        self.0.resize(new_len, 0u8);
-    }
 }
 
 impl std::ops::Deref for Mpi {
