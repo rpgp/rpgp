@@ -245,6 +245,10 @@ macro_rules! impl_secret_key {
             fn public_key(&self) -> $details {
                 self.details.clone()
             }
+
+            fn public_params(&self) -> &$crate::types::PublicParams {
+                &self.details.public_params()
+            }
         }
 
         impl $crate::ser::Serialize for $name {
