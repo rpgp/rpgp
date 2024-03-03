@@ -193,10 +193,17 @@ pub fn sign(
     digest: &[u8],
 ) -> Result<Vec<Vec<u8>>> {
     if let Some(field_size) = secret_key.secret_key_length() {
-        // Error out for size mismatches that would get rejected in ecdsa::hazmat::bits2field
+        // We require that the signing key length is matched by the hash digest length, see
+        // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-d
+
+        let field_size = match field_size {
+            66 => 64, // nist p521 is treated as though it were 512 bit-sized
+            s => s,
+        };
+
         ensure!(
-            digest.len() >= field_size / 2,
-            "Hash algorithm {:?} cannot be combined with key {:?}",
+            digest.len() >= field_size,
+            "Hash digest size ({:?}) must at least match key size ({:?})",
             hash,
             secret_key
         );
