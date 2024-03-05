@@ -73,32 +73,6 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                     Err(err) => Some(Err(err)),
                 };
             }
-            //    Encrypted Data :- Symmetrically Encrypted Data Packet |
-            //          Symmetrically Encrypted Integrity Protected Data Packet
-            Tag::SymEncryptedData | Tag::SymEncryptedProtectedData => {
-                return match packet.try_into() {
-                    Ok(p) => {
-                        let esk = Vec::new();
-                        let mut edata = vec![p];
-
-                        // while edata take em (FIXME: the message grammar only allows one "Encrypted Data" packet)
-                        while let Some(res) = packets.next_if(|res| {
-                            res.as_ref().is_ok_and(|p| {
-                                p.tag() == Tag::SymEncryptedData
-                                    || p.tag() == Tag::SymEncryptedProtectedData
-                            })
-                        }) {
-                            match res {
-                                Ok(packet) => edata.push(packet.try_into().expect("peeked")),
-                                Err(e) => return Some(Err(e)),
-                            }
-                        }
-
-                        Some(Ok(Message::Encrypted { esk, edata }))
-                    }
-                    Err(err) => Some(Err(err)),
-                };
-            }
             Tag::Signature => {
                 return match packet.try_into() {
                     Ok(signature) => {
