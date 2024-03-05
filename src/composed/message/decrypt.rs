@@ -1,13 +1,8 @@
-use std::boxed::Box;
-use std::io::Cursor;
-
-use crate::composed::message::types::{Edata, Message};
-use crate::composed::shared::Deserializable;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{checksum, ecdh, rsa};
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait, Tag};
+use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
 pub fn decrypt_session_key<F>(
@@ -111,63 +106,4 @@ where
     );
 
     Ok((decrypted_key[1..].to_vec(), session_key_algorithm))
-}
-
-pub struct MessageDecrypter<'a> {
-    key: Vec<u8>,
-    alg: SymmetricKeyAlgorithm,
-    edata: &'a [Edata],
-    // position in the edata slice
-    pos: usize,
-    // the current msgs that are already decrypted
-    current_msgs: Option<Box<dyn Iterator<Item = Result<Message>>>>,
-}
-
-impl<'a> MessageDecrypter<'a> {
-    pub fn new(session_key: Vec<u8>, alg: SymmetricKeyAlgorithm, edata: &'a [Edata]) -> Self {
-        MessageDecrypter {
-            key: session_key,
-            alg,
-            edata,
-            pos: 0,
-            current_msgs: None,
-        }
-    }
-}
-
-impl<'a> Iterator for MessageDecrypter<'a> {
-    type Item = Result<Message>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.pos >= self.edata.len() && self.current_msgs.is_none() {
-            return None;
-        }
-
-        if self.current_msgs.is_none() {
-            // need to decrypt another packet
-            let packet = &self.edata[self.pos];
-            self.pos += 1;
-
-            let mut res = packet.data()[..].to_vec();
-            let protected = packet.tag() == Tag::SymEncryptedProtectedData;
-
-            debug!("decrypting protected = {:?}", protected);
-
-            let decrypted_packet: &[u8] = if protected {
-                err_opt!(self.alg.decrypt_protected(&self.key, &mut res))
-            } else {
-                err_opt!(self.alg.decrypt(&self.key, &mut res))
-            };
-
-            self.current_msgs = Some(Message::from_bytes_many(Cursor::new(
-                decrypted_packet.to_vec(),
-            )));
-        };
-
-        let mut msgs = self.current_msgs.take().expect("just checked");
-        let next = msgs.next();
-        self.current_msgs = Some(msgs);
-
-        next
-    }
 }

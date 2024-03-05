@@ -4,9 +4,10 @@ use std::iter::Peekable;
 
 use crate::composed::message::Message;
 use crate::composed::Deserializable;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::packet::Packet;
 use crate::types::Tag;
+use crate::Edata;
 
 pub struct MessageParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
@@ -40,7 +41,6 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                 return match packet.try_into() {
                     Ok(p) => {
                         let mut esk = vec![p];
-                        let mut edata = Vec::new();
 
                         // while ESK take em
                         while let Some(res) = packets.next_if(|res| {
@@ -55,18 +55,27 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                             }
                         }
 
-                        // while edata take em (FIXME: the message grammar only allows one "Encrypted Data" packet)
-                        while let Some(res) = packets.next_if(|res| {
-                            res.as_ref().is_ok_and(|p| {
-                                p.tag() == Tag::SymEncryptedData
-                                    || p.tag() == Tag::SymEncryptedProtectedData
-                            })
-                        }) {
-                            match res {
-                                Ok(packet) => edata.push(packet.try_into().expect("peeked")),
-                                Err(e) => return Some(Err(e)),
+                        // we expect exactly one edata after the ESKs
+                        let edata = match packets.next() {
+                            Some(Ok(p))
+                                if p.tag() == Tag::SymEncryptedData
+                                    || p.tag() == Tag::SymEncryptedProtectedData =>
+                            {
+                                Edata::try_from(p).expect("peeked")
                             }
-                        }
+                            Some(Ok(p)) => {
+                                return Some(Err(Error::Message(format!(
+                                    "Expected encrypted data packet, but found {:?}",
+                                    p
+                                ))));
+                            }
+                            None => {
+                                return Some(Err(Error::Message(
+                                    "Missing encrypted data packet".to_string(),
+                                )))
+                            }
+                            Some(Err(e)) => return Some(Err(e)),
+                        };
 
                         Some(Ok(Message::Encrypted { esk, edata }))
                     }
