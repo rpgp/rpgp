@@ -1,6 +1,6 @@
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
-use crate::types::{Mpi, PublicKeyTrait, SecretKeyRepr};
+use crate::types::{EcdsaPublicParams, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr};
 
 pub trait SecretKeyTrait: PublicKeyTrait {
     type PublicKey;
@@ -15,6 +15,18 @@ pub trait SecretKeyTrait: PublicKeyTrait {
         F: FnOnce() -> String;
 
     fn public_key(&self) -> Self::PublicKey;
+
+    fn public_params(&self) -> &PublicParams;
+
+    /// The suggested hash algorithm to calculate the signature hash digest with, when using this
+    /// key as a signer
+    fn hash_alg(&self) -> HashAlgorithm {
+        match self.public_params() {
+            PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::SHA2_384,
+            PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::SHA2_512,
+            _ => HashAlgorithm::default(),
+        }
+    }
 }
 
 impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
@@ -37,5 +49,9 @@ impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
 
     fn public_key(&self) -> Self::PublicKey {
         (*self).public_key()
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        (*self).public_params()
     }
 }

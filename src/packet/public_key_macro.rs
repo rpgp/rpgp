@@ -141,6 +141,7 @@ macro_rules! impl_public_key {
 
                 config
                     .pub_alg(key.algorithm())
+                    .hash_alg(key.hash_alg())
                     .hashed_subpackets(vec![$crate::packet::Subpacket::regular(
                         $crate::packet::SubpacketData::SignatureCreationTime(
                             chrono::Utc::now().trunc_subsecs(0),

@@ -138,6 +138,7 @@ macro_rules! impl_secret_key {
 
                 config
                     .pub_alg(key.algorithm())
+                    .hash_alg(key.hash_alg())
                     .hashed_subpackets(vec![$crate::packet::Subpacket::regular(
                         $crate::packet::SubpacketData::SignatureCreationTime(
                             chrono::Utc::now().trunc_subsecs(0),
@@ -244,6 +245,10 @@ macro_rules! impl_secret_key {
 
             fn public_key(&self) -> $details {
                 self.details.clone()
+            }
+
+            fn public_params(&self) -> &$crate::types::PublicParams {
+                &self.details.public_params()
             }
         }
 

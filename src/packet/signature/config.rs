@@ -18,8 +18,6 @@ pub struct SignatureConfig {
     pub version: SignatureVersion,
     pub typ: SignatureType,
     pub pub_alg: PublicKeyAlgorithm,
-
-    #[builder(default)]
     pub hash_alg: HashAlgorithm,
 
     pub unhashed_subpackets: Vec<Subpacket>,
