@@ -377,3 +377,39 @@ fn argon2() {
         ]
     );
 }
+
+#[test]
+#[ignore] // slow in debug mode
+fn argon2_skesk_msg() {
+    // Tests decrypting the messages from
+    // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-sample-messages-encrypted-u
+    //
+    // "These messages are the literal data "Hello, world!" encrypted using v1 SEIPD, with Argon2
+    // and the passphrase "password", using different session key sizes."
+
+    const MSGS: &[&str] = &[
+        "./tests/unit-tests/argon2/aes128.msg",
+        "./tests/unit-tests/argon2/aes192.msg",
+        "./tests/unit-tests/argon2/aes256.msg",
+    ];
+
+    use crate::{composed::Deserializable, Message};
+
+    for filename in MSGS {
+        let (msg, _header) =
+            Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
+                .expect("failed to load msg");
+
+        let mut md = msg
+            .decrypt_with_password(|| "password".to_string())
+            .expect("decrypt argon2 skesk");
+
+        let decrypted = md.next().expect("decrypted message").expect("not an error");
+
+        let Message::Literal(data) = decrypted else {
+            panic!("expected literal data")
+        };
+
+        assert_eq!(data.data(), b"Hello, world!");
+    }
+}
