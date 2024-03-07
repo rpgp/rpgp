@@ -387,8 +387,6 @@ impl<R: Read + Seek> Dearmor<R> {
             self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(LineReader::new(b))));
         }
 
-        // "allow" as workaround for https://github.com/rust-lang/rust-clippy/issues/12208
-        #[allow(clippy::unused_io_amount)]
         let size = if let Some(ref mut base_decoder) = self.base_decoder {
             base_decoder.read(into)?
         } else {
