@@ -1,5 +1,6 @@
+use byteorder::ReadBytesExt;
 use std::collections::BTreeMap;
-use std::io::{Cursor, Read, Seek};
+use std::io::{Cursor, Read, Seek, SeekFrom};
 
 use crate::armor::{self, BlockType};
 use crate::errors::{Error, Result};
@@ -86,6 +87,41 @@ pub trait Deserializable: Sized {
     fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a>;
+
+    /// Parses a single composition, from either ASCII-armored or binary OpenPGP data.
+    ///
+    /// Returns a composition and a BTreeMap containing armor headers
+    /// (None, if the data was unarmored)
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+    fn from_reader_single<'a, R: Read + Seek + 'a>(
+        mut input: R,
+    ) -> Result<(Self, Option<BTreeMap<String, String>>)> {
+        if !is_binary(&mut input)? {
+            let (keys, headers) = Self::from_armor_single(input)?;
+            Ok((keys, Some(headers)))
+        } else {
+            Ok((Self::from_bytes(input)?, None))
+        }
+    }
+
+    /// Parses a list of compositions, from either ASCII-armored or binary OpenPGP data.
+    ///
+    /// Returns an iterator of compositions and a BTreeMap containing armor headers
+    /// (None, if the data was unarmored)
+    #[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+    fn from_reader_many<'a, R: Read + Seek + 'a>(
+        mut input: R,
+    ) -> Result<(
+        Box<dyn Iterator<Item = Result<Self>> + 'a>,
+        Option<BTreeMap<String, String>>,
+    )> {
+        if !is_binary(&mut input)? {
+            let (keys, headers) = Self::from_armor_many(input)?;
+            Ok((keys, Some(headers)))
+        } else {
+            Ok((Self::from_bytes_many(input), None))
+        }
+    }
 }
 
 /// Process results from low level packet parser:
@@ -133,4 +169,18 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
             ))))
         }
     }
+}
+
+/// Check if the OpenPGP data in `input` seems to be ASCII-armored or binary (by looking at the
+/// highest bit of the first byte)
+pub(crate) fn is_binary<R: Read + Seek>(input: &mut R) -> Result<bool> {
+    // Peek at the first byte in the reader
+    let first = input.read_u8()?;
+    let _ = input.seek(SeekFrom::Current(-1))?;
+
+    // If the first bit of the first byte is set, we assume this is binary OpenPGP data, otherwise
+    // we assume it is ASCII-armored.
+    let binary = first & 0x80 != 0;
+
+    Ok(binary)
 }

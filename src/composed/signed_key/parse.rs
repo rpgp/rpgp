@@ -9,7 +9,24 @@ use crate::errors::{Error, Result};
 use crate::packet::{Packet, PacketParser};
 use crate::types::Tag;
 
-// TODO: can detect armored vs binary using a check if the first bit in the data is set. If it is cleared it is not a binary message, so can try to parse as armor ascii. (from gnupg source)
+/// Parses a list of secret and public keys, from either ASCII-armored or binary OpenPGP data.
+///
+/// Returns an iterator of public or secret keys and a BTreeMap containing armor headers
+/// (None, if the data was unarmored)
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+pub fn from_reader_many<'a, R: io::Read + io::Seek + 'a>(
+    mut input: R,
+) -> Result<(
+    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+    Option<BTreeMap<String, String>>,
+)> {
+    if !crate::composed::shared::is_binary(&mut input)? {
+        let (keys, headers) = from_armor_many(input)?;
+        Ok((keys, Some(headers)))
+    } else {
+        Ok((from_bytes_many(input), None))
+    }
+}
 
 /// Parses a list of secret and public keys from ascii armored text.
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
