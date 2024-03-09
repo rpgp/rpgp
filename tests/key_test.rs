@@ -34,7 +34,7 @@ use pgp::packet::{
 use pgp::ser::Serialize;
 use pgp::types::{
     CompressionAlgorithm, ECDSASecretKey, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams,
-    SecretKeyRepr, SecretKeyTrait, SecretParams, SignedUser, StringToKeyType, Version,
+    SecretKeyRepr, SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -533,16 +533,18 @@ fn encrypted_private_key() {
                 &hex::decode("2271f718af70d3bd9d60c2aed9469b67").unwrap()[..]
             );
 
-            assert_eq!(
-                pp.string_to_key().salt().unwrap(),
-                &hex::decode("CB18E77884F2F055").unwrap()[..]
-            );
-
-            assert_eq!(pp.string_to_key().typ(), StringToKeyType::IteratedAndSalted);
-
-            assert_eq!(pp.string_to_key().count(), Some(65536));
-
-            assert_eq!(pp.string_to_key().hash(), HashAlgorithm::SHA2_256);
+            match pp.string_to_key() {
+                StringToKey::IteratedAndSalted {
+                    hash_alg,
+                    salt,
+                    count,
+                } => {
+                    assert_eq!(*hash_alg, HashAlgorithm::SHA2_256);
+                    assert_eq!(salt, &hex::decode("CB18E77884F2F055").unwrap()[..]);
+                    assert_eq!(*count, 96u8); // This is an encoded iteration count
+                }
+                s => panic!("unexpected s2k type {:?}", s),
+            }
 
             assert_eq!(pp.encryption_algorithm(), SymmetricKeyAlgorithm::AES128);
             assert_eq!(pp.string_to_key_id(), 254);

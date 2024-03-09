@@ -55,8 +55,9 @@ impl SymKeyEncryptedSessionKey {
         F: FnOnce() -> String + Clone,
     {
         ensure!(
-            s2k.salt().is_some(),
-            "can not use an s2k algorithm without a salt"
+            s2k.uses_salt(),
+            "Can not use an s2k algorithm without a salt: {:?}",
+            s2k
         );
 
         let key = s2k.derive_key(&msg_pw(), alg.key_size())?;
