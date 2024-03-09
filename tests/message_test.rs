@@ -77,15 +77,10 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
 
     match &message {
         Message::Encrypted { .. } => {
-            let (mut decrypter, ids) = message
+            let (decrypted, ids) = message
                 .decrypt(|| details.passphrase.clone(), &[&decrypt_key])
                 .expect("failed to init decryption");
             assert_eq!(ids.len(), 1);
-
-            let decrypted = decrypter
-                .next()
-                .expect("no message")
-                .expect("message decryption failed");
 
             if let Some(verify_key) = verify_key {
                 decrypted
@@ -258,10 +253,7 @@ fn msg_large_indeterminate_len() {
     let decrypted = message
         .decrypt(|| "moon".to_string(), &[&decrypt_key])
         .expect("failed to decrypt message")
-        .0
-        .next()
-        .expect("no mesage")
-        .expect("message decryption failed");
+        .0;
 
     let raw = match decrypted {
         Message::Literal(data) => data,

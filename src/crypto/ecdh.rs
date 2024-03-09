@@ -368,11 +368,10 @@ mod tests {
             let (message, _headers) = Message::from_armor_single(fs::File::open(msg_file).unwrap())
                 .expect("failed to parse message");
 
-            let (mut decrypter, _ids) = message
+            let (msg, _ids) = message
                 .decrypt(String::default, &[&decrypt_key])
                 .expect("failed to init decryption");
 
-            let msg = decrypter.next().unwrap().unwrap();
             let data = msg.get_literal().unwrap().data();
 
             assert_eq!(data, "hello\n".as_bytes());
