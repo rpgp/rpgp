@@ -400,11 +400,9 @@ fn argon2_skesk_msg() {
             Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
                 .expect("failed to load msg");
 
-        let mut md = msg
+        let decrypted = msg
             .decrypt_with_password(|| "password".to_string())
             .expect("decrypt argon2 skesk");
-
-        let decrypted = md.next().expect("decrypted message").expect("not an error");
 
         let Message::Literal(data) = decrypted else {
             panic!("expected literal data")
