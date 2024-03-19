@@ -28,10 +28,10 @@ impl SecretKeyRepr {
         fingerprint: &[u8],
     ) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)> {
         let decrypted_key = match self {
-            SecretKeyRepr::RSA(ref priv_key) => priv_key.decrypt(mpis, &fingerprint)?,
+            SecretKeyRepr::RSA(ref priv_key) => priv_key.decrypt(mpis, fingerprint)?,
             SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
             SecretKeyRepr::ECDSA(_) => bail!("ECDSA is only used for signing"),
-            SecretKeyRepr::ECDH(ref priv_key) => priv_key.decrypt(mpis, &fingerprint)?,
+            SecretKeyRepr::ECDH(ref priv_key) => priv_key.decrypt(mpis, fingerprint)?,
             SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
         };
 

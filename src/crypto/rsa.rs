@@ -39,6 +39,7 @@ impl Deref for PrivateKey {
 impl KeyParams for PrivateKey {
     type KeyParams = ();
 
+    #[allow(clippy::unused_unit)]
     fn key_params(&self) -> Self::KeyParams {
         ()
     }
