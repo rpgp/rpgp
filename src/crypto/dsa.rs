@@ -1,41 +1,61 @@
+use std::fmt;
+
 use dsa::{Components, Signature, SigningKey, VerifyingKey};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::PrehashVerifier;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::Signer;
 use crate::errors::Result;
 use crate::types::{PlainSecretParams, PublicParams};
 
 pub use dsa::KeySize;
 
-/// Produce a DSA signature
-pub fn sign(
-    p: BigUint,
-    q: BigUint,
-    g: BigUint,
-    x: BigUint,
-    y: BigUint,
-    hash_algorithm: HashAlgorithm,
-    hashed: &[u8],
-) -> Result<(BigUint, BigUint)> {
-    let components = Components::from_components(p, q, g)?;
-    let verifying_key = VerifyingKey::from_components(components, y)?;
-    let signing_key = SigningKey::from_components(verifying_key, x)?;
+/// Secret key for DSA.
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+pub struct SecretKey {
+    pub x: BigUint,
+}
 
-    let signature = match hash_algorithm {
-        HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(hashed),
-        HashAlgorithm::SHA1 => signing_key.sign_prehashed_rfc6979::<sha1::Sha1>(hashed),
-        HashAlgorithm::RIPEMD160 => signing_key.sign_prehashed_rfc6979::<ripemd::Ripemd160>(hashed),
-        HashAlgorithm::SHA2_256 => signing_key.sign_prehashed_rfc6979::<sha2::Sha256>(hashed),
-        HashAlgorithm::SHA2_384 => signing_key.sign_prehashed_rfc6979::<sha2::Sha384>(hashed),
-        HashAlgorithm::SHA2_512 => signing_key.sign_prehashed_rfc6979::<sha2::Sha512>(hashed),
-        HashAlgorithm::SHA2_224 => signing_key.sign_prehashed_rfc6979::<sha2::Sha224>(hashed),
-        HashAlgorithm::SHA3_256 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_256>(hashed),
-        HashAlgorithm::SHA3_512 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_512>(hashed),
-        _ => unimplemented_err!("hasher {:?}", hash_algorithm),
-    }?;
-    Ok((signature.r().clone(), signature.s().clone()))
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DSASecretKey").field("x", &"[..]").finish()
+    }
+}
+
+impl Signer for SecretKey {
+    fn sign(
+        &self,
+        hash_algorithm: HashAlgorithm,
+        digest: &[u8],
+        pub_params: &PublicParams,
+    ) -> Result<Vec<Vec<u8>>> {
+        let PublicParams::DSA { p, q, g, y } = pub_params else {
+            bail!("invalid public params");
+        };
+        let components = Components::from_components(p.into(), q.into(), g.into())?;
+        let verifying_key = VerifyingKey::from_components(components, y.into())?;
+        let signing_key = SigningKey::from_components(verifying_key, self.x.clone().into())?;
+
+        let signature = match hash_algorithm {
+            HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
+            HashAlgorithm::SHA1 => signing_key.sign_prehashed_rfc6979::<sha1::Sha1>(digest),
+            HashAlgorithm::RIPEMD160 => {
+                signing_key.sign_prehashed_rfc6979::<ripemd::Ripemd160>(digest)
+            }
+            HashAlgorithm::SHA2_256 => signing_key.sign_prehashed_rfc6979::<sha2::Sha256>(digest),
+            HashAlgorithm::SHA2_384 => signing_key.sign_prehashed_rfc6979::<sha2::Sha384>(digest),
+            HashAlgorithm::SHA2_512 => signing_key.sign_prehashed_rfc6979::<sha2::Sha512>(digest),
+            HashAlgorithm::SHA2_224 => signing_key.sign_prehashed_rfc6979::<sha2::Sha224>(digest),
+            HashAlgorithm::SHA3_256 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_256>(digest),
+            HashAlgorithm::SHA3_512 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_512>(digest),
+            _ => unimplemented_err!("hasher {:?}", hash_algorithm),
+        }?;
+
+        Ok(vec![signature.r().to_bytes_be(), signature.s().to_bytes_be()])
+    }
 }
 
 /// Verify a DSA signature.
@@ -130,17 +150,22 @@ mod test {
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
-                let (new_r, new_s) = sign(
-                    p.clone(),
-                    q.clone(),
-                    g.clone(),
-                    x.clone(),
-                    y.clone(),
+                let key = SecretKey { x: x.clone() };
+                let params = PublicParams::DSA {
+                    p: p.clone().into(),
+                    q: q.clone().into(),
+                    g: g.clone().into(),
+                    y: y.clone().into(),
+                };
+                let res = key.sign(
                     hash_algorithm,
                     &hashed,
+                    &params,
                 )
-                .expect("failed to sign");
-                assert_eq!((&new_r, &new_s), (&r, &s));
+                    .expect("failed to sign");
+                let new_r = res[0].clone();
+                let new_s = res[1].clone();
+                assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
                 verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
                     .expect("failed to verify");
             };
@@ -262,17 +287,22 @@ mod test {
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
-                let (new_r, new_s) = sign(
-                    p.clone(),
-                    q.clone(),
-                    g.clone(),
-                    x.clone(),
-                    y.clone(),
+                let key = SecretKey { x: x.clone() };
+                let params = PublicParams::DSA {
+                    p: p.clone().into(),
+                    q: q.clone().into(),
+                    g: g.clone().into(),
+                    y: y.clone().into(),
+                };
+                let res = key.sign(
                     hash_algorithm,
                     &hashed,
+                    &params,
                 )
-                .expect("failed to sign");
-                assert_eq!((&new_r, &new_s), (&r, &s));
+                    .expect("failed to sign");
+                let new_r = res[0].clone();
+                let new_s = res[1].clone();
+                assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
                 verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
                     .expect("failed to verify");
             };

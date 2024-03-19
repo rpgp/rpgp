@@ -33,9 +33,10 @@ use pgp::packet::{
 };
 use pgp::ser::Serialize;
 use pgp::types::{
-    CompressionAlgorithm, ECDSASecretKey, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams,
     SecretKeyRepr, SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
+use pgp::crypto::ecdsa::SecretKey as ECDSASecretKey;
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
     // Open the path in read-only mode, returns `io::Result<File>`
@@ -205,7 +206,7 @@ fn test_parse_openpgp_sample_rsa_private() {
                         .expect("failed to encrypt")
                     };
 
-                    let k: &RsaPrivateKey = &*k;
+                    let k: &RsaPrivateKey = k;
                     let new_plaintext = k
                         .decrypt(rsa::pkcs1v15::Pkcs1v15Encrypt, ciphertext.as_slice())
                         .expect("failed to decrypt");

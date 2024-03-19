@@ -18,7 +18,7 @@ use signature::hazmat::{PrehashSigner, PrehashVerifier};
 use signature::SignatureEncoding;
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams};
+use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
 use crate::errors::Result;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
@@ -58,9 +58,19 @@ impl Decryptor for PrivateKey {
     }
 }
 
-impl PrivateKey {
+impl Signer for PrivateKey {
     /// Sign using RSA, with PKCS1v15 padding.
-    pub fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(
+        &self,
+        hash: HashAlgorithm,
+        digest: &[u8],
+        pub_params: &PublicParams,
+    ) -> Result<Vec<Vec<u8>>> {
+        ensure!(
+            matches!(pub_params, PublicParams::RSA { .. }),
+            "invalid public params"
+        );
+
         let sig = match hash {
             HashAlgorithm::None => return Err(format_err!("none")),
             HashAlgorithm::MD5 => sign_int::<Md5>(self.0.clone(), digest),

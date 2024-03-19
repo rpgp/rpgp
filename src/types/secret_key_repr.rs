@@ -1,11 +1,7 @@
-use std::fmt;
+use zeroize::ZeroizeOnDrop;
 
-use num_bigint::BigUint;
-use zeroize::{Zeroize, ZeroizeOnDrop};
-
-use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{checksum, ecdh, rsa, Decryptor};
+use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, rsa, Decryptor};
 use crate::errors::Result;
 
 use super::Mpi;
@@ -15,10 +11,10 @@ use super::Mpi;
 #[derive(Debug, ZeroizeOnDrop)]
 pub enum SecretKeyRepr {
     RSA(rsa::PrivateKey),
-    DSA(DSASecretKey),
-    ECDSA(ECDSASecretKey),
+    DSA(dsa::SecretKey),
+    ECDSA(ecdsa::SecretKey),
     ECDH(ecdh::SecretKey),
-    EdDSA(EdDSASecretKey),
+    EdDSA(eddsa::SecretKey),
 }
 
 impl SecretKeyRepr {
@@ -63,76 +59,5 @@ impl SecretKeyRepr {
         checksum::simple(checksum, k)?;
 
         Ok((k.to_vec(), alg))
-    }
-}
-
-/// Secret key for EdDSA with Curve25519, the only combination we currently support.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct EdDSASecretKey {
-    /// The secret point.
-    pub secret: [u8; 32],
-    pub oid: Vec<u8>,
-}
-
-impl fmt::Debug for EdDSASecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("EdDSASecretKey")
-            .field("secret", &"[..]")
-            .field("oid", &hex::encode(&self.oid))
-            .finish()
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop)]
-pub enum ECDSASecretKey {
-    P256(p256::SecretKey),
-    P384(p384::SecretKey),
-    P521(p521::SecretKey),
-    Secp256k1(k256::SecretKey),
-    Unsupported {
-        /// The secret point.
-        x: Mpi,
-        #[zeroize(skip)]
-        curve: ECCCurve,
-    },
-}
-
-impl fmt::Debug for ECDSASecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ECDSASecretKey::P256(_) => write!(f, "ECDSASecretKey::P256([..])"),
-            ECDSASecretKey::P384(_) => write!(f, "ECDSASecretKey::P384([..])"),
-            ECDSASecretKey::P521(_) => write!(f, "ECDSASecretKey::P521([..])"),
-            ECDSASecretKey::Secp256k1(_) => write!(f, "ECDSASecretKey::Secp256k1([..])"),
-            ECDSASecretKey::Unsupported { curve, .. } => f
-                .debug_struct("ECDSASecretKey::Unsupported")
-                .field("x", &"[..]")
-                .field("curve", &curve)
-                .finish(),
-        }
-    }
-}
-
-impl ECDSASecretKey {
-    pub(crate) fn secret_key_length(&self) -> Option<usize> {
-        match self {
-            ECDSASecretKey::P256 { .. } => Some(32),
-            ECDSASecretKey::P384 { .. } => Some(48),
-            ECDSASecretKey::P521 { .. } => Some(66),
-            ECDSASecretKey::Secp256k1 { .. } => Some(32),
-            ECDSASecretKey::Unsupported { .. } => None,
-        }
-    }
-}
-
-/// Secret key for DSA.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct DSASecretKey {
-    pub x: BigUint,
-}
-
-impl fmt::Debug for DSASecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DSASecretKey").field("x", &"[..]").finish()
     }
 }
