@@ -39,7 +39,7 @@ fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
 
 /// Convert a u32 to a `Duration`
 fn duration_from_timestamp(ts: u32) -> Option<Duration> {
-    Duration::try_seconds(i64::from(ts))
+    Some(Duration::seconds(i64::from(ts)))
 }
 
 /// Parse a signature creation time subpacket

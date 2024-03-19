@@ -12,7 +12,7 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait,
+    KeyId, KeyTrait, Mpi, PgpDecryptor, PublicKeyTrait, PublicParams, SecretKeyTrait,
 };
 use crate::{armor, SignedPublicKey};
 
@@ -167,7 +167,7 @@ impl SecretKeyTrait for SignedSecretKey {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+        G: FnOnce(&dyn PgpDecryptor) -> Result<()>,
     {
         self.primary_key.unlock(pw, work)
     }
@@ -285,7 +285,7 @@ impl SecretKeyTrait for SignedSecretSubKey {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+        G: FnOnce(&dyn PgpDecryptor) -> Result<()>,
     {
         self.key.unlock(pw, work)
     }

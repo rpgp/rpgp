@@ -1,6 +1,28 @@
 use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::types::{EcdsaPublicParams, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr};
+use crate::types::{EcdsaPublicParams, Mpi, PublicKeyTrait, PublicParams};
+
+pub trait PgpDecryptor: std::fmt::Debug {
+    fn decrypt(
+        &self,
+        value: &[Mpi],
+        fingerprint: &[u8],
+    ) -> crate::errors::Result<(Vec<u8>, SymmetricKeyAlgorithm)>;
+}
+
+pub trait RawDecryptor {
+    fn raw_decrypt(&self, value: &[u8]) -> crate::errors::Result<Vec<u8>>;
+}
+
+pub enum KeyParams {
+    Rsa,
+    Ecdh(Vec<u8>, SymmetricKeyAlgorithm, HashAlgorithm),
+}
+
+pub trait KeyParamsGet {
+    fn key_params(&self) -> KeyParams;
+}
 
 pub trait SecretKeyTrait: PublicKeyTrait {
     type PublicKey;
@@ -8,7 +30,7 @@ pub trait SecretKeyTrait: PublicKeyTrait {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>;
+        G: FnOnce(&dyn PgpDecryptor) -> Result<()>;
 
     fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
     where
@@ -35,7 +57,7 @@ impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+        G: FnOnce(&dyn PgpDecryptor) -> Result<()>,
     {
         (*self).unlock(pw, work)
     }

@@ -159,7 +159,7 @@ macro_rules! impl_secret_key {
             fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
             where
                 F: FnOnce() -> String,
-                G: FnOnce(&$crate::types::SecretKeyRepr) -> $crate::errors::Result<()>,
+                G: FnOnce(&dyn $crate::types::PgpDecryptor) -> $crate::errors::Result<()>,
             {
                 use $crate::types::SecretParams;
 
@@ -174,18 +174,20 @@ macro_rules! impl_secret_key {
             fn create_signature<F>(
                 &self,
                 key_pw: F,
-                hash: $crate::crypto::hash::HashAlgorithm,
-                data: &[u8],
+                _hash: $crate::crypto::hash::HashAlgorithm,
+                _data: &[u8],
             ) -> $crate::errors::Result<Vec<$crate::types::Mpi>>
             where
                 F: FnOnce() -> String,
             {
-                use $crate::crypto::ecc_curve::ECCCurve;
-                use $crate::types::{PublicParams, SecretKeyRepr};
+                
+                
 
-                let mut signature: Option<Vec<$crate::types::Mpi>> = None;
-                self.unlock(key_pw, |priv_key| {
+                let signature: Option<Vec<$crate::types::Mpi>> = None;
+                self.unlock(key_pw, |_priv_key| {
                     debug!("unlocked key");
+                    panic!("signing unimplemented yet");
+                    /*
                     let sig = match *priv_key {
                         SecretKeyRepr::RSA(ref priv_key) => {
                             $crate::crypto::rsa::sign(priv_key, hash, data)
@@ -237,7 +239,7 @@ macro_rules! impl_secret_key {
                             .map(|v| $crate::types::Mpi::from_raw_slice(&v[..]))
                             .collect::<Vec<_>>(),
                     );
-                    Ok(())
+                    Ok(())*/
                 })?;
 
                 signature.ok_or_else(|| unreachable!())

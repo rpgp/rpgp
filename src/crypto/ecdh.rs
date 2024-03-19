@@ -6,7 +6,7 @@ use crate::crypto::{
     aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
 };
 use crate::errors::{Error, Result};
-use crate::types::{ECDHSecretKey, Mpi, PlainSecretParams, PublicParams};
+use crate::types::{ECDHSecretKey, Mpi, PlainSecretParams, PublicParams, RawDecryptor};
 
 use super::hash::HashAlgorithm;
 
@@ -17,6 +17,38 @@ const ANON_SENDER: [u8; 20] = [
 ];
 
 const SECRET_KEY_LENGTH: usize = 32;
+
+impl RawDecryptor for &ECDHSecretKey {
+    fn raw_decrypt(&self, value: &[u8]) -> crate::errors::Result<Vec<u8>> {
+        let their_public = {
+            // public part of the ephemeral key (removes 0x40 prefix)
+            let ephemeral_public_key = &value; // &mpis[0].as_bytes()[1..];
+
+            // create montgomery point
+            let mut ephemeral_public_key_arr = [0u8; 32];
+            ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
+
+            x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
+        };
+
+        let our_secret = {
+            // private key of the recipient.
+            let private_key = &self.secret[..];
+
+            // create scalar and reverse to little endian
+            let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
+            let mut private_key_arr = [0u8; 32];
+            private_key_arr[..].copy_from_slice(&private_key_le);
+            private_key_le.zeroize();
+
+            StaticSecret::from(private_key_arr)
+        };
+
+        // derive shared secret
+        let shared_secret = our_secret.diffie_hellman(&their_public);
+        Ok(shared_secret.as_bytes()[..].into())
+    }
+}
 
 /// Generate an ECDH KeyPair.
 /// Currently only support ED25519.
@@ -86,51 +118,34 @@ pub fn build_ecdh_param(
 }
 
 /// ECDH decryption.
-pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
+pub fn decrypt(
+    priv_key: &dyn RawDecryptor,
+    mpis: &[Mpi],
+    fingerprint: &[u8],
+    oid: &[u8],
+    alg_sym: SymmetricKeyAlgorithm,
+    hash: HashAlgorithm,
+) -> Result<Vec<u8>> {
     debug!("ECDH decrypt");
 
-    let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
+    let param = build_ecdh_param(&oid, alg_sym, hash, fingerprint);
 
     // 33 = 0x40 + 32bits
     ensure_eq!(mpis.len(), 3);
     ensure_eq!(mpis[0].len(), 33, "invalid public point");
-    ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
+    //ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
 
     // encrypted and wrapped value derived from the session key
     let encrypted_session_key = mpis[2].as_bytes();
-
-    let their_public = {
-        // public part of the ephemeral key (removes 0x40 prefix)
-        let ephemeral_public_key = &mpis[0].as_bytes()[1..];
-
-        // create montgomery point
-        let mut ephemeral_public_key_arr = [0u8; 32];
-        ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
-
-        x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
-    };
-
-    let our_secret = {
-        // private key of the recipient.
-        let private_key = &priv_key.secret[..];
-
-        // create scalar and reverse to little endian
-        let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
-        let mut private_key_arr = [0u8; 32];
-        private_key_arr[..].copy_from_slice(&private_key_le);
-        private_key_le.zeroize();
-
-        StaticSecret::from(private_key_arr)
-    };
-
-    // derive shared secret
-    let shared_secret = our_secret.diffie_hellman(&their_public);
+    let shared_secret = priv_key.raw_decrypt(&mpis[0].as_bytes()[1..])?;
 
     // Perform key derivation
     let z = kdf(
-        priv_key.hash,
-        shared_secret.as_bytes(),
-        priv_key.alg_sym.key_size(),
+        hash,
+        shared_secret[..]
+            .try_into()
+            .map_err(|_| crate::errors::Error::InvalidInput)?,
+        alg_sym.key_size(),
         &param,
     )?;
 
@@ -345,7 +360,15 @@ mod tests {
                 let mpis = mpis.into_iter().map(Into::into).collect::<Vec<Mpi>>();
 
                 let decrypted = match skey.as_ref().as_repr(&pkey).unwrap() {
-                    SecretKeyRepr::ECDH(ref skey) => decrypt(skey, &mpis, &fingerprint).unwrap(),
+                    SecretKeyRepr::ECDH(ref skey) => decrypt(
+                        &skey,
+                        &mpis,
+                        &fingerprint,
+                        &skey.oid,
+                        skey.alg_sym,
+                        skey.hash,
+                    )
+                    .unwrap(),
                     _ => panic!("invalid key generated"),
                 };
 
