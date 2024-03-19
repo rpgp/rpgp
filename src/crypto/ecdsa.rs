@@ -51,7 +51,10 @@ impl Signer for SecretKey {
         digest: &[u8],
         pub_params: &PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        ensure!(matches!(pub_params, PublicParams::ECDSA(..)), "invalid public params");
+        ensure!(
+            matches!(pub_params, PublicParams::ECDSA(..)),
+            "invalid public params"
+        );
 
         if let Some(field_size) = self.secret_key_length() {
             // We require that the signing key length is matched by the hash digest length, see

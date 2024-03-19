@@ -1,6 +1,6 @@
 use std::io;
 
-use chrono::{self, SubsecRound};
+use chrono::SubsecRound;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 

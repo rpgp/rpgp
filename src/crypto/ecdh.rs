@@ -336,11 +336,11 @@ mod tests {
     use super::*;
     use std::fs;
 
-    use crate::{Deserializable, Message, SignedSecretKey};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
-    use crate::types::{PublicParams, SecretKeyRepr};
+    use crate::types::SecretKeyRepr;
+    use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
     fn test_encrypt_decrypt() {

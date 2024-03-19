@@ -1,5 +1,3 @@
-use std::boxed::Box;
-use std::convert::TryInto;
 use std::iter::Peekable;
 
 use crate::composed::message::Message;

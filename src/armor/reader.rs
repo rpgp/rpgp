@@ -518,8 +518,6 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    use crate::errors::Result;
-
     // helper function to parse all data at once
     pub fn parse<R: Read + Seek>(
         mut input: R,

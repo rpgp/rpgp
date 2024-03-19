@@ -187,13 +187,21 @@ macro_rules! impl_secret_key {
                 self.unlock(key_pw, |priv_key| {
                     debug!("unlocked key");
                     let sig = match *priv_key {
-                        SecretKeyRepr::RSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
-                        SecretKeyRepr::ECDSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
-                        SecretKeyRepr::DSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
+                        SecretKeyRepr::RSA(ref priv_key) => {
+                            priv_key.sign(hash, data, self.public_params())
+                        }
+                        SecretKeyRepr::ECDSA(ref priv_key) => {
+                            priv_key.sign(hash, data, self.public_params())
+                        }
+                        SecretKeyRepr::DSA(ref priv_key) => {
+                            priv_key.sign(hash, data, self.public_params())
+                        }
                         SecretKeyRepr::ECDH(_) => {
                             bail!("ECDH can not be used to for signing operations")
                         }
-                        SecretKeyRepr::EdDSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
+                        SecretKeyRepr::EdDSA(ref priv_key) => {
+                            priv_key.sign(hash, data, self.public_params())
+                        }
                     }?;
 
                     // strip leading zeros, to match parse results from MPIs

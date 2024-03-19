@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono::{self, SubsecRound};
+use chrono::SubsecRound;
 use rand::{thread_rng, CryptoRng, Rng};
 use smallvec::SmallVec;
 
@@ -333,7 +333,6 @@ mod tests {
     use super::*;
 
     use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-    use crate::crypto::hash::HashAlgorithm;
     use crate::types::SecretKeyTrait;
 
     use rand::SeedableRng;

@@ -54,7 +54,10 @@ impl Signer for SecretKey {
             _ => unimplemented_err!("hasher {:?}", hash_algorithm),
         }?;
 
-        Ok(vec![signature.r().to_bytes_be(), signature.s().to_bytes_be()])
+        Ok(vec![
+            signature.r().to_bytes_be(),
+            signature.s().to_bytes_be(),
+        ])
     }
 }
 
@@ -104,7 +107,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
 #[cfg(test)]
 mod test {
     use super::*;
-    use num_bigint::BigUint;
+
     use num_traits::Num;
 
     fn hex_num(s: &str) -> BigUint {
@@ -157,11 +160,8 @@ mod test {
                     g: g.clone().into(),
                     y: y.clone().into(),
                 };
-                let res = key.sign(
-                    hash_algorithm,
-                    &hashed,
-                    &params,
-                )
+                let res = key
+                    .sign(hash_algorithm, &hashed, &params)
                     .expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
@@ -294,11 +294,8 @@ mod test {
                     g: g.clone().into(),
                     y: y.clone().into(),
                 };
-                let res = key.sign(
-                    hash_algorithm,
-                    &hashed,
-                    &params,
-                )
+                let res = key
+                    .sign(hash_algorithm, &hashed, &params)
                     .expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();

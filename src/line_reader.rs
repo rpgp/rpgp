@@ -1,6 +1,5 @@
 //! # Line reader module
 
-use std::convert::TryFrom;
 use std::io;
 use std::io::prelude::*;
 
@@ -115,7 +114,6 @@ mod tests {
 
     use super::*;
     use std::io::Cursor;
-    use std::io::Read;
 
     fn read_exact(data: &[u8], size: usize) -> Vec<u8> {
         let c = Cursor::new(data);

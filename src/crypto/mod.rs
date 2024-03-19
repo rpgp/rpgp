@@ -23,7 +23,12 @@ pub trait Decryptor {
 
 pub trait Signer {
     // TODO: make pub_params type safe
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8], pub_params: &PublicParams) -> crate::errors::Result<Vec<Vec<u8>>>;
+    fn sign(
+        &self,
+        hash: HashAlgorithm,
+        digest: &[u8],
+        pub_params: &PublicParams,
+    ) -> crate::errors::Result<Vec<Vec<u8>>>;
 }
 
 pub trait KeyParams {

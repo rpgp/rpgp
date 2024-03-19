@@ -1,4 +1,4 @@
-use chrono::{self, SubsecRound};
+use chrono::SubsecRound;
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};

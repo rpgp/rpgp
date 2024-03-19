@@ -336,7 +336,6 @@ mod tests {
     use std::path::Path;
 
     use crate::packet::{Packet, PacketParser};
-    use crate::ser::Serialize;
 
     fn test_roundtrip(name: &str) {
         let f = File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap();

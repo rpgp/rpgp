@@ -176,7 +176,9 @@ impl<'a> PlainSecretParamsRef<'a> {
                 },
                 _ => unreachable!("inconsistent key state"),
             },
-            PlainSecretParamsRef::DSA(x) => Ok(SecretKeyRepr::DSA(crate::crypto::dsa::SecretKey { x: x.into() })),
+            PlainSecretParamsRef::DSA(x) => Ok(SecretKeyRepr::DSA(crate::crypto::dsa::SecretKey {
+                x: x.into(),
+            })),
             PlainSecretParamsRef::Elgamal(_) => {
                 unimplemented_err!("Elgamal");
             }
@@ -185,22 +187,30 @@ impl<'a> PlainSecretParamsRef<'a> {
                     EcdsaPublicParams::P256 { .. } => {
                         let secret = p256::SecretKey::from_slice(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P256(secret)))
+                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P256(
+                            secret,
+                        )))
                     }
                     EcdsaPublicParams::P384 { .. } => {
                         let secret = p384::SecretKey::from_slice(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P384(secret)))
+                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P384(
+                            secret,
+                        )))
                     }
                     EcdsaPublicParams::P521 { .. } => {
                         let secret = p521::SecretKey::from_slice(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P521(secret)))
+                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P521(
+                            secret,
+                        )))
                     }
                     EcdsaPublicParams::Secp256k1 { .. } => {
                         let secret = k256::SecretKey::from_slice(d.as_bytes())?;
 
-                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::Secp256k1(secret)))
+                        Ok(SecretKeyRepr::ECDSA(
+                            crate::crypto::ecdsa::SecretKey::Secp256k1(secret),
+                        ))
                     }
                     EcdsaPublicParams::Unsupported { curve, .. } => {
                         unsupported_err!("curve {:?} for ECDSA", curve.to_string())

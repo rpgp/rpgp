@@ -22,6 +22,7 @@ use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
+use pgp::crypto::ecdsa::SecretKey as ECDSASecretKey;
 use pgp::crypto::{
     ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
     sym::SymmetricKeyAlgorithm,
@@ -33,10 +34,9 @@ use pgp::packet::{
 };
 use pgp::ser::Serialize;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams,
-    SecretKeyRepr, SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, SecretKeyRepr,
+    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
-use pgp::crypto::ecdsa::SecretKey as ECDSASecretKey;
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
     // Open the path in read-only mode, returns `io::Result<File>`
