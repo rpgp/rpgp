@@ -1,62 +1,26 @@
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{checksum, ecdh, rsa};
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
 use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
-pub fn decrypt_session_key<F>(
-    locked_key: &(impl SecretKeyTrait + KeyTrait),
+pub fn decrypt_session_key<F, L>(
+    locked_key: &L,
     key_pw: F,
     mpis: &[Mpi],
 ) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
 where
     F: FnOnce() -> String,
+    L: SecretKeyTrait<Unlocked = SecretKeyRepr> + KeyTrait,
 {
     debug!("decrypting session key");
 
     let mut key: Vec<u8> = Vec::new();
     let mut alg: Option<SymmetricKeyAlgorithm> = None;
     locked_key.unlock(key_pw, |priv_key| {
-        let decrypted_key = match *priv_key {
-            SecretKeyRepr::RSA(ref priv_key) => {
-                rsa::decrypt(priv_key, mpis, &locked_key.fingerprint())?
-            }
-            SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
-            SecretKeyRepr::ECDSA(_) => bail!("ECDSA is only used for signing"),
-            SecretKeyRepr::ECDH(ref priv_key) => {
-                ecdh::decrypt(priv_key, mpis, &locked_key.fingerprint())?
-            }
-            SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
-        };
-
-        let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
-        ensure!(
-            session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
-            "session key algorithm cannot be plaintext"
-        );
-        alg = Some(session_key_algorithm);
-        debug!("alg: {:?}", alg);
-
-        let (k, checksum) = match *priv_key {
-            SecretKeyRepr::ECDH(_) => {
-                let dec_len = decrypted_key.len();
-                (
-                    &decrypted_key[1..dec_len - 2],
-                    &decrypted_key[dec_len - 2..],
-                )
-            }
-            _ => {
-                let key_size = session_key_algorithm.key_size();
-                (
-                    &decrypted_key[1..=key_size],
-                    &decrypted_key[key_size + 1..key_size + 3],
-                )
-            }
-        };
-
-        key = k.to_vec();
-        checksum::simple(checksum, k)?;
+        let (key_, alg_) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
+        key = key_;
+        alg = Some(alg_);
 
         Ok(())
     })?;

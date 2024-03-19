@@ -1,14 +1,18 @@
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
-use crate::types::{EcdsaPublicParams, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr};
+use crate::types::{EcdsaPublicParams, Mpi, PublicKeyTrait, PublicParams};
 
 pub trait SecretKeyTrait: PublicKeyTrait {
     type PublicKey;
 
+    /// The type representing the unlocked version of this.
+    type Unlocked;
+
+    /// Unlock the raw data in the secret parameters.
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>;
+        G: FnOnce(&Self::Unlocked) -> Result<()>;
 
     fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
     where
@@ -31,11 +35,12 @@ pub trait SecretKeyTrait: PublicKeyTrait {
 
 impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
     type PublicKey = T::PublicKey;
+    type Unlocked = T::Unlocked;
 
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+        G: FnOnce(&Self::Unlocked) -> Result<()>,
     {
         (*self).unlock(pw, work)
     }

@@ -1,12 +1,12 @@
 use std::fmt;
 
 use num_bigint::BigUint;
-use rsa::RsaPrivateKey;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::ecc_curve::ECCCurve;
-use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::{checksum, ecdh, rsa, Decryptor};
+use crate::errors::Result;
 
 use super::Mpi;
 
@@ -14,31 +14,55 @@ use super::Mpi;
 #[allow(clippy::large_enum_variant)] // FIXME
 #[derive(Debug, ZeroizeOnDrop)]
 pub enum SecretKeyRepr {
-    RSA(RsaPrivateKey),
+    RSA(rsa::PrivateKey),
     DSA(DSASecretKey),
     ECDSA(ECDSASecretKey),
-    ECDH(ECDHSecretKey),
+    ECDH(ecdh::SecretKey),
     EdDSA(EdDSASecretKey),
 }
 
-/// Secret key for ECDH with Curve25519, the only combination we currently support.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct ECDHSecretKey {
-    /// The secret point.
-    pub secret: [u8; 32],
-    pub hash: HashAlgorithm,
-    pub oid: Vec<u8>,
-    pub alg_sym: SymmetricKeyAlgorithm,
-}
+impl SecretKeyRepr {
+    pub fn decrypt(
+        &self,
+        mpis: &[Mpi],
+        fingerprint: &[u8],
+    ) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)> {
+        let decrypted_key = match self {
+            SecretKeyRepr::RSA(ref priv_key) => priv_key.decrypt(mpis, &fingerprint)?,
+            SecretKeyRepr::DSA(_) => bail!("DSA is only used for signing"),
+            SecretKeyRepr::ECDSA(_) => bail!("ECDSA is only used for signing"),
+            SecretKeyRepr::ECDH(ref priv_key) => priv_key.decrypt(mpis, &fingerprint)?,
+            SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
+        };
 
-impl fmt::Debug for ECDHSecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ECDHSecretKey")
-            .field("secret", &"[..]")
-            .field("hash", &self.hash)
-            .field("oid", &hex::encode(&self.oid))
-            .field("alg_sym", &self.alg_sym)
-            .finish()
+        let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
+        ensure!(
+            session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
+            "session key algorithm cannot be plaintext"
+        );
+        let alg = session_key_algorithm;
+        debug!("alg: {:?}", alg);
+
+        let (k, checksum) = match self {
+            SecretKeyRepr::ECDH(_) => {
+                let dec_len = decrypted_key.len();
+                (
+                    &decrypted_key[1..dec_len - 2],
+                    &decrypted_key[dec_len - 2..],
+                )
+            }
+            _ => {
+                let key_size = session_key_algorithm.key_size();
+                (
+                    &decrypted_key[1..=key_size],
+                    &decrypted_key[key_size + 1..key_size + 3],
+                )
+            }
+        };
+
+        checksum::simple(checksum, k)?;
+
+        Ok((k.to_vec(), alg))
     }
 }
 

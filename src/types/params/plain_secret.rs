@@ -129,7 +129,9 @@ impl<'a> PlainSecretParamsRef<'a> {
                         vec![p.into(), q.into()],
                     )?;
                     secret_key.validate()?;
-                    Ok(SecretKeyRepr::RSA(secret_key))
+                    Ok(SecretKeyRepr::RSA(crate::crypto::rsa::PrivateKey(
+                        secret_key,
+                    )))
                 }
                 _ => unreachable!("inconsistent key state"),
             },
@@ -146,7 +148,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                         let mut secret = [0u8; 32];
                         secret[32 - d.len()..].copy_from_slice(d.as_bytes());
 
-                        Ok(SecretKeyRepr::ECDH(ECDHSecretKey {
+                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey {
                             oid: curve.oid(),
                             hash: *hash,
                             alg_sym: *alg_sym,

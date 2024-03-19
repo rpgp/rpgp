@@ -154,12 +154,12 @@ macro_rules! impl_secret_key {
 
         impl $crate::types::SecretKeyTrait for $name {
             type PublicKey = $details;
+            type Unlocked = $crate::types::SecretKeyRepr;
 
-            /// Unlock the raw data in the secret parameters.
             fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
             where
                 F: FnOnce() -> String,
-                G: FnOnce(&$crate::types::SecretKeyRepr) -> $crate::errors::Result<()>,
+                G: FnOnce(&Self::Unlocked) -> $crate::errors::Result<()>,
             {
                 use $crate::types::SecretParams;
 
@@ -187,9 +187,7 @@ macro_rules! impl_secret_key {
                 self.unlock(key_pw, |priv_key| {
                     debug!("unlocked key");
                     let sig = match *priv_key {
-                        SecretKeyRepr::RSA(ref priv_key) => {
-                            $crate::crypto::rsa::sign(priv_key, hash, data)
-                        }
+                        SecretKeyRepr::RSA(ref priv_key) => priv_key.sign(hash, data),
                         SecretKeyRepr::ECDSA(ref priv_key) => match self.public_params() {
                             PublicParams::ECDSA(ref _params) => {
                                 $crate::crypto::ecdsa::sign(priv_key, hash, data)

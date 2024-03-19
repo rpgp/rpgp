@@ -163,11 +163,12 @@ impl Serialize for SignedSecretKey {
 
 impl SecretKeyTrait for SignedSecretKey {
     type PublicKey = PublicKey;
+    type Unlocked = SecretKeyRepr;
 
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+        G: FnOnce(&Self::Unlocked) -> Result<()>,
     {
         self.primary_key.unlock(pw, work)
     }
@@ -281,11 +282,12 @@ impl Serialize for SignedSecretSubKey {
 
 impl SecretKeyTrait for SignedSecretSubKey {
     type PublicKey = PublicSubkey;
+    type Unlocked = SecretKeyRepr;
 
     fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&SecretKeyRepr) -> Result<()>,
+        G: FnOnce(&Self::Unlocked) -> Result<()>,
     {
         self.key.unlock(pw, work)
     }
