@@ -15,17 +15,10 @@ where
 {
     debug!("decrypting session key");
 
-    let mut key: Vec<u8> = Vec::new();
-    let mut alg: Option<SymmetricKeyAlgorithm> = None;
     locked_key.unlock(key_pw, |priv_key| {
-        let (key_, alg_) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
-        key = key_;
-        alg = Some(alg_);
-
-        Ok(())
-    })?;
-
-    Ok((key, alg.expect("failed to unlock")))
+        let (key, alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
+        Ok((key, alg))
+    })
 }
 
 /// Decrypts session key from SKESK packet.

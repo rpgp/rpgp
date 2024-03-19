@@ -156,10 +156,10 @@ macro_rules! impl_secret_key {
             type PublicKey = $details;
             type Unlocked = $crate::types::SecretKeyRepr;
 
-            fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
+            fn unlock<F, G, T>(&self, pw: F, work: G) -> $crate::errors::Result<T>
             where
                 F: FnOnce() -> String,
-                G: FnOnce(&Self::Unlocked) -> $crate::errors::Result<()>,
+                G: FnOnce(&Self::Unlocked) -> $crate::errors::Result<T>,
             {
                 use $crate::types::SecretParams;
 

@@ -9,10 +9,10 @@ pub trait SecretKeyTrait: PublicKeyTrait {
     type Unlocked;
 
     /// Unlock the raw data in the secret parameters.
-    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
+    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<()>;
+        G: FnOnce(&Self::Unlocked) -> Result<T>;
 
     fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
     where
@@ -37,10 +37,10 @@ impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
     type PublicKey = T::PublicKey;
     type Unlocked = T::Unlocked;
 
-    fn unlock<F, G>(&self, pw: F, work: G) -> Result<()>
+    fn unlock<F, G, S>(&self, pw: F, work: G) -> Result<S>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<()>,
+        G: FnOnce(&Self::Unlocked) -> Result<S>,
     {
         (*self).unlock(pw, work)
     }
