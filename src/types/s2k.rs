@@ -6,11 +6,53 @@ use nom::number::streaming::be_u8;
 use rand::{CryptoRng, Rng};
 
 use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
 use crate::ser::Serialize;
 
 const EXPBIAS: u32 = 6;
 const DEFAULT_ITER_SALTED_COUNT: u8 = 224;
+
+/// The available s2k usages.
+///
+/// Ref 3.7.2.1. Secret-Key Encryption
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum S2kUsage {
+    /// 0
+    Unprotected,
+    /// 1..253
+    LegacyCfb(SymmetricKeyAlgorithm),
+    /// 253
+    Aead,
+    /// 254
+    Cfb,
+    /// 255
+    MaleableCfb,
+}
+
+impl Into<u8> for S2kUsage {
+    fn into(self) -> u8 {
+        match self {
+            Self::Unprotected => 0,
+            Self::LegacyCfb(sk) => sk.into(),
+            Self::Aead => 253,
+            Self::Cfb => 254,
+            Self::MaleableCfb => 255,
+        }
+    }
+}
+
+impl From<u8> for S2kUsage {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Unprotected,
+            v @ 1..=252 => Self::LegacyCfb(SymmetricKeyAlgorithm::from(v)),
+            253 => Self::Aead,
+            254 => Self::Cfb,
+            255 => Self::MaleableCfb,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StringToKey {

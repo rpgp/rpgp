@@ -83,29 +83,33 @@ fn parse_secret_fields(
 ) -> impl Fn(&[u8]) -> IResult<&[u8], (SecretParams, Option<&[u8]>)> + '_ {
     move |i: &[u8]| {
         let (i, s2k_typ) = be_u8(i)?;
-        let (i, enc_params) = match s2k_typ{
+        let (i, enc_params) = match s2k_typ {
             // 0 is no encryption
-            0       => (i,(None, None, None)) ,
+            0 => (i, (None, None, None)),
             // symmetric key algorithm
-            1..=253 => {
-
-                let (i, sym_alg) = map_res(success(s2k_typ), SymmetricKeyAlgorithm::try_from) (i)?;
-                let (i, iv)= take(sym_alg.block_size())(i)?;
+            1..=252 => {
+                let (i, sym_alg) = map_res(success(s2k_typ), SymmetricKeyAlgorithm::try_from)(i)?;
+                let (i, iv) = take(sym_alg.block_size())(i)?;
                 (i, (Some(sym_alg), Some(iv), None))
             }
-             ,
+            253 => {
+                let (i, sym_alg) = map_res(success(s2k_typ), SymmetricKeyAlgorithm::try_from)(i)?;
+                let (i, iv) = take(sym_alg.block_size())(i)?;
+                (i, (Some(sym_alg), Some(iv), None))
+            }
             // symmetric key + string-to-key
-            254..=255 => {
-                    let (i, sym_alg) = map_res(
-                                be_u8,
-                                SymmetricKeyAlgorithm::try_from
-                            )(i)?;
-
+            254 => {
+                let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
                 let (i, s2k) = s2k_parser(i)?;
-                let (i, iv)= take(sym_alg.block_size())(i)?;
+                let (i, iv) = take(sym_alg.block_size())(i)?;
                 (i, (Some(sym_alg), Some(iv), Some(s2k)))
             }
-
+            255 => {
+                let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+                let (i, s2k) = s2k_parser(i)?;
+                let (i, iv) = take(sym_alg.block_size())(i)?;
+                (i, (Some(sym_alg), Some(iv), Some(s2k)))
+            }
         };
         let checksum_len = match s2k_typ {
             // 20 octect hash at the end, but part of the encrypted part
@@ -119,6 +123,7 @@ fn parse_secret_fields(
             let encryption_algorithm = enc_params.0;
             let iv = enc_params.1.map(|iv| iv.to_vec());
             let string_to_key = enc_params.2;
+            let s2k_usage = S2kUsage::from(s2k_typ);
 
             let res = match s2k_typ {
                 0 => {
@@ -130,7 +135,7 @@ fn parse_secret_fields(
                     iv.expect("encrypted"),
                     encryption_algorithm.expect("encrypted"),
                     string_to_key.expect("encrypted"),
-                    s2k_typ,
+                    s2k_usage,
                 )),
             };
             (res, checksum)

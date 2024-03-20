@@ -305,7 +305,7 @@ impl KeyType {
                 let s2k = types::StringToKey::new_default(rng);
                 let alg = SymmetricKeyAlgorithm::AES256;
                 // encrypted, sha1 checksum
-                let id = 254;
+                let s2k_usage = types::S2kUsage::Cfb;
 
                 // TODO: derive from key itself
                 let version = types::KeyVersion::default();
@@ -315,8 +315,8 @@ impl KeyType {
                     &passphrase,
                     alg,
                     s2k,
+                    s2k_usage,
                     version,
-                    id,
                 )?)
             }
             None => types::SecretParams::Plain(plain),

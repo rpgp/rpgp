@@ -266,8 +266,8 @@ impl PlainSecretParams {
         passphrase: &str,
         alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
+        s2k_usage: S2kUsage,
         version: KeyVersion,
-        id: u8,
     ) -> Result<EncryptedSecretParams> {
         let key = s2k.derive_key(passphrase, alg.key_size())?;
         let mut iv = vec![0u8; alg.block_size()];
@@ -281,11 +281,11 @@ impl PlainSecretParams {
                 self.as_ref()
                     .to_writer_raw(&mut data)
                     .expect("preallocated vector");
-                match id {
-                    254 => {
+                match s2k_usage {
+                    S2kUsage::Cfb => {
                         data.extend_from_slice(&self.checksum_sha1()[..]);
                     }
-                    _ => unimplemented_err!("id: {} not implemented yet", id),
+                    _ => unimplemented_err!("id: {:?} not implemented yet", s2k_usage),
                 }
 
                 alg.encrypt_with_iv_regular(&key, &iv, &mut data)?;
@@ -296,7 +296,9 @@ impl PlainSecretParams {
             KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
         };
 
-        Ok(EncryptedSecretParams::new(enc_data, iv, alg, s2k, id))
+        Ok(EncryptedSecretParams::new(
+            enc_data, iv, alg, s2k, s2k_usage,
+        ))
     }
 }
 

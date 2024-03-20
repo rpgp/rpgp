@@ -19,8 +19,8 @@ pub struct EncryptedSecretParams {
     encryption_algorithm: SymmetricKeyAlgorithm,
     /// The string-to-key method and its parameters.
     string_to_key: StringToKey,
-    /// The identifier for how this data is stored.
-    string_to_key_id: u8,
+    /// S2k usage.
+    s2k_usage: S2kUsage,
 }
 
 impl EncryptedSecretParams {
@@ -29,15 +29,15 @@ impl EncryptedSecretParams {
         iv: Vec<u8>,
         alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
-        id: u8,
+        s2k_usage: S2kUsage,
     ) -> Self {
-        assert_ne!(id, 0, "invalid string to key id");
+        assert_ne!(s2k_usage, S2kUsage::Unprotected, "invalid string to key id");
         EncryptedSecretParams {
             data,
             iv,
             encryption_algorithm: alg,
             string_to_key: s2k,
-            string_to_key_id: id,
+            s2k_usage,
         }
     }
 
@@ -58,11 +58,15 @@ impl EncryptedSecretParams {
     }
 
     pub fn string_to_key_id(&self) -> u8 {
-        self.string_to_key_id
+        self.s2k_usage.into()
+    }
+
+    pub fn string_to_key_usage(&self) -> &S2kUsage {
+        &self.s2k_usage
     }
 
     pub fn compare_checksum(&self, other: Option<&[u8]>) -> Result<()> {
-        if self.string_to_key_id < 254 {
+        if self.string_to_key_id() < 254 {
             if let Some(other) = other {
                 ensure_eq!(
                     BigEndian::read_u16(other),
@@ -80,7 +84,7 @@ impl EncryptedSecretParams {
     }
 
     pub fn checksum(&self) -> Option<Vec<u8>> {
-        if self.string_to_key_id < 254 {
+        if self.string_to_key_id() < 254 {
             Some(
                 checksum::calculate_simple(self.data())
                     .to_be_bytes()
@@ -111,7 +115,7 @@ impl EncryptedSecretParams {
 
         // Check SHA-1 hash if it is present.
         // See RFC 4880, "5.5.3 Secret-Key Packet Formats" for details.
-        if self.string_to_key_id == 254 {
+        if self.s2k_usage == S2kUsage::Cfb {
             if plaintext.len() < 20 {
                 return Err(Error::InvalidInput);
             }
@@ -130,14 +134,16 @@ impl EncryptedSecretParams {
 
 impl Serialize for EncryptedSecretParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[self.string_to_key_id])?;
+        writer.write_all(&[self.s2k_usage.into()])?;
 
-        match self.string_to_key_id {
-            0 => panic!("encrypted secret params should not have an unecrypted identifier"),
-            1..=253 => {
+        match self.s2k_usage {
+            S2kUsage::Unprotected => {
+                panic!("encrypted secret params should not have an unecrypted identifier")
+            }
+            S2kUsage::LegacyCfb(_) | S2kUsage::Aead => {
                 writer.write_all(&self.iv)?;
             }
-            254..=255 => {
+            S2kUsage::Cfb | S2kUsage::MaleableCfb => {
                 let s2k = &self.string_to_key;
 
                 writer.write_all(&[u8::from(self.encryption_algorithm)])?;
@@ -163,7 +169,7 @@ impl fmt::Debug for EncryptedSecretParams {
             .field("iv", &hex::encode(&self.iv))
             .field("encryption_algorithm", &self.encryption_algorithm)
             .field("string_to_key", &self.string_to_key)
-            .field("string_to_key_id", &self.string_to_key_id)
+            .field("string_to_key_usage", &self.s2k_usage)
             .finish()
     }
 }
