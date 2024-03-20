@@ -163,14 +163,15 @@ impl SymEncryptedProtectedData {
                         hex::encode(&auth_tag)
                     );
 
-                    // Update nonce to include the current chunk index
-                    let l = nonce.len() - 8;
-                    nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
                     let res =
                         aead.decrypt(&sym_alg, message_key, &nonce, &info, &auth_tag, chunk)?;
                     debug!("decrypted {}", hex::encode(&res));
                     out.extend(res);
+
+                    // Update nonce to include the next chunk index
                     chunk_index += 1;
+                    let l = nonce.len() - 8;
+                    nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
                 }
 
                 // verify final auth tag
@@ -182,8 +183,6 @@ impl SymEncryptedProtectedData {
                 final_info.extend_from_slice(&size.to_be_bytes());
 
                 // Update final nonce
-                let l = nonce.len() - 8;
-                nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
                 debug!("final nonce {}", hex::encode(&nonce));
                 debug!("final auth {}", hex::encode(&final_info));
 
@@ -191,7 +190,7 @@ impl SymEncryptedProtectedData {
                     &sym_alg,
                     message_key,
                     &nonce,
-                    &info,
+                    &final_info,
                     &final_auth_tag,
                     &mut [][..], // encrypts empty string
                 )?;

@@ -180,4 +180,52 @@ impl AeadAlgorithm {
 
         Ok(out)
     }
+
+    /// Encrypt the provided data in place.
+    pub fn encrypt_in_place(
+        &self,
+        sym_algorithm: &SymmetricKeyAlgorithm,
+        key: &[u8],
+        nonce: &[u8],
+        associated_data: &[u8],
+        buffer: &mut [u8],
+    ) -> Result<Vec<u8>> {
+        let tag = match (sym_algorithm, self) {
+            (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
+                let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
+                let cipher = Aes128Gcm::new(&key);
+                let nonce = GcmNonce::from_slice(nonce);
+                cipher
+                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .map_err(|_| Error::Gcm)?
+            }
+            (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
+                let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
+                let cipher = Aes256Gcm::new(&key);
+                let nonce = GcmNonce::from_slice(nonce);
+                cipher
+                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .map_err(|_| Error::Gcm)?
+            }
+            (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
+                let key = EaxKey::<Aes128>::from_slice(&key[..16]);
+                let cipher = Eax::<Aes128>::new(&key);
+                let nonce = EaxNonce::from_slice(nonce);
+                cipher
+                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .map_err(|_| Error::Eax)?
+            }
+            (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
+                let key = EaxKey::<Aes256>::from_slice(&key[..32]);
+                let cipher = Eax::<Aes256>::new(&key);
+                let nonce = EaxNonce::from_slice(nonce);
+                cipher
+                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .map_err(|_| Error::Eax)?
+            }
+            _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),
+        };
+
+        Ok(tag.to_vec())
+    }
 }
