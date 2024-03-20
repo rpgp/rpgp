@@ -111,7 +111,7 @@ impl SymKeyEncryptedSessionKey {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(&info), hex::encode(&okm));
+                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
                 debug!("nonce: {}", hex::encode(iv));
 
                 // AEAD decrypt
@@ -148,7 +148,7 @@ impl SymKeyEncryptedSessionKey {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(&info), hex::encode(&okm));
+                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
                 debug!("nonce: {}", hex::encode(iv));
 
                 // AEAD decrypt
@@ -173,10 +173,10 @@ impl SymKeyEncryptedSessionKey {
             } => encrypted_key.as_ref().map(|s| &s[..]),
             Self::V5 {
                 ref encrypted_key, ..
-            } => Some(&encrypted_key),
+            } => Some(encrypted_key),
             Self::V6 {
                 ref encrypted_key, ..
-            } => Some(&encrypted_key),
+            } => Some(encrypted_key),
         }
     }
 
@@ -337,7 +337,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 s2k.to_writer(&mut buf)?;
                 first_buf.push(buf.len() as u8);
                 first_buf.extend(buf);
-                first_buf.extend_from_slice(&iv);
+                first_buf.extend_from_slice(iv);
 
                 writer.write_all(&[first_buf.len() as u8])?;
                 writer.write_all(&first_buf)?;
@@ -361,7 +361,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 s2k.to_writer(&mut buf)?;
                 first_buf.push(buf.len() as u8);
                 first_buf.extend(buf);
-                first_buf.extend_from_slice(&iv);
+                first_buf.extend_from_slice(iv);
 
                 writer.write_all(&[first_buf.len() as u8])?;
                 writer.write_all(&first_buf)?;

@@ -56,9 +56,9 @@ pub enum S2kParams {
     },
 }
 
-impl Into<u8> for &S2kParams {
-    fn into(self) -> u8 {
-        match self {
+impl From<&S2kParams> for u8 {
+    fn from(value: &S2kParams) -> Self {
+        match value {
             S2kParams::Unprotected => 0,
             S2kParams::LegacyCfb { sym_alg, .. } => (*sym_alg).into(),
             S2kParams::Aead { .. } => 253,

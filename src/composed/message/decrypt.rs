@@ -50,7 +50,7 @@ pub fn decrypt_session_key_with_password<F>(
 where
     F: FnOnce() -> String,
 {
-    debug!("decrypting session key: {:#?}", packet);
+    debug!("decrypting session key");
 
     let packet_algorithm = packet.sym_algorithm();
     ensure!(

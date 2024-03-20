@@ -63,11 +63,11 @@ impl EncryptedSecretParams {
         match &self.s2k_params {
             S2kParams::Unprotected => unreachable!(),
             S2kParams::LegacyCfb { sym_alg, iv } => {
-                let key = md5::Md5::digest(&pw());
+                let key = md5::Md5::digest(pw());
 
                 // Decryption
                 let mut plaintext = self.data.clone();
-                sym_alg.decrypt_with_iv_regular(&key, &iv, &mut plaintext)?;
+                sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
 
                 // Checksum
                 if plaintext.len() < 2 {
@@ -80,16 +80,16 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::from_slice(&plaintext, alg, params)
+                PlainSecretParams::from_slice(plaintext, alg, params)
             }
             S2kParams::Aead {
                 sym_alg,
-                aead_mode,
+                aead_mode: _,
                 s2k,
-                nonce,
+                nonce: _,
             } => {
-                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
-                let mut plaintext = self.data.clone();
+                let _key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+                let mut _plaintext = self.data.clone();
                 todo!()
             }
             S2kParams::Cfb { sym_alg, s2k, iv } => {
@@ -97,7 +97,7 @@ impl EncryptedSecretParams {
 
                 // Decryption
                 let mut plaintext = self.data.clone();
-                sym_alg.decrypt_with_iv_regular(&key, &iv, &mut plaintext)?;
+                sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
 
                 // Checksum
 
@@ -112,14 +112,14 @@ impl EncryptedSecretParams {
                 if expected_sha1 != calculated_sha1 {
                     return Err(Error::InvalidInput);
                 }
-                PlainSecretParams::from_slice(&plaintext, alg, params)
+                PlainSecretParams::from_slice(plaintext, alg, params)
             }
             S2kParams::MaleableCfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
 
                 // Decryption
                 let mut plaintext = self.data.clone();
-                sym_alg.decrypt_with_iv_regular(&key, &iv, &mut plaintext)?;
+                sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
                 if plaintext.len() < 2 {
                     return Err(Error::InvalidInput);
                 }
@@ -131,7 +131,7 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::from_slice(&plaintext, alg, params)
+                PlainSecretParams::from_slice(plaintext, alg, params)
             }
         }
     }

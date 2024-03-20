@@ -72,8 +72,8 @@ impl SymEncryptedProtectedData {
 
     pub fn data(&self) -> &[u8] {
         match &self.data {
-            Data::V1 { data } => &data,
-            Data::V2 { data, .. } => &data,
+            Data::V1 { data } => data,
+            Data::V2 { data, .. } => data,
         }
     }
 
@@ -123,7 +123,7 @@ impl SymEncryptedProtectedData {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(&info), hex::encode(&okm));
+                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
                 let message_key = &okm[..sym_alg.key_size()];
                 let raw_iv_len = aead.nonce_size() - 8;
                 let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
@@ -160,10 +160,9 @@ impl SymEncryptedProtectedData {
                         hex::encode(&auth_tag)
                     );
 
-                    let res =
-                        aead.decrypt(&sym_alg, message_key, &nonce, &info, &auth_tag, chunk)?;
-                    debug!("decrypted {}", hex::encode(&res));
-                    out.extend(res);
+                    aead.decrypt_in_place(sym_alg, message_key, &nonce, &info, auth_tag, chunk)?;
+                    debug!("decrypted {}", hex::encode(&chunk));
+                    out.extend_from_slice(chunk);
 
                     // Update nonce to include the next chunk index
                     chunk_index += 1;
@@ -184,11 +183,11 @@ impl SymEncryptedProtectedData {
                 debug!("final auth {}", hex::encode(&final_info));
 
                 aead.decrypt_in_place(
-                    &sym_alg,
+                    sym_alg,
                     message_key,
                     &nonce,
                     &final_info,
-                    &final_auth_tag,
+                    final_auth_tag,
                     &mut [][..], // encrypts empty string
                 )?;
 
@@ -204,7 +203,7 @@ impl Serialize for SymEncryptedProtectedData {
 
         match &self.data {
             Data::V1 { data } => {
-                writer.write_all(&data)?;
+                writer.write_all(data)?;
             }
             Data::V2 { .. } => {
                 todo!()
@@ -252,17 +251,15 @@ fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
                         sym_alg,
                         aead,
                         chunk_size,
-                        salt: salt.try_into().unwrap(),
+                        salt: salt.try_into().expect("size checked"),
                         data: i.to_vec(),
                     },
                 ))
             }
-            _ => {
-                return Err(nom::Err::Error(Error::Unsupported(format!(
-                    "unknown SymEncryptedProtecedData version {}",
-                    version
-                ))))
-            }
+            _ => Err(nom::Err::Error(Error::Unsupported(format!(
+                "unknown SymEncryptedProtecedData version {}",
+                version
+            )))),
         }
     }
 }

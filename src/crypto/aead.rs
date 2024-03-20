@@ -5,14 +5,14 @@ use aes_gcm::{
 };
 use eax::{Eax, Key as EaxKey, Nonce as EaxNonce, Tag as EaxTag};
 
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::errors::{Error, Result};
 
 use super::sym::SymmetricKeyAlgorithm;
 
 /// Available AEAD algorithms.
-#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive, IntoPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum AeadAlgorithm {
     /// None
@@ -35,12 +35,6 @@ pub enum AeadAlgorithm {
 
     #[num_enum(catch_all)]
     Other(u8),
-}
-
-impl Default for AeadAlgorithm {
-    fn default() -> Self {
-        AeadAlgorithm::None
-    }
 }
 
 impl AeadAlgorithm {
@@ -87,98 +81,44 @@ impl AeadAlgorithm {
         match (sym_algorithm, self) {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
-                let cipher = Aes128Gcm::new(&key);
+                let cipher = Aes128Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 let tag = GcmTag::from_slice(auth_tag);
                 cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
                     .map_err(|_| Error::Gcm)?;
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
-                let cipher = Aes256Gcm::new(&key);
+                let cipher = Aes256Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 let tag = GcmTag::from_slice(auth_tag);
                 cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
                     .map_err(|_| Error::Gcm)?;
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes128>::from_slice(&key[..16]);
-                let cipher = Eax::<Aes128>::new(&key);
+                let cipher = Eax::<Aes128>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 let tag = EaxTag::from_slice(auth_tag);
                 cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
                     .map_err(|_| Error::Eax)?;
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes256>::from_slice(&key[..32]);
-                let cipher = Eax::<Aes256>::new(&key);
+                let cipher = Eax::<Aes256>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 let tag = EaxTag::from_slice(auth_tag);
                 cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
                     .map_err(|_| Error::Eax)?;
             }
             _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),
         }
 
         Ok(())
-    }
-
-    /// Decrypt the provided data.
-    pub fn decrypt(
-        &self,
-        sym_algorithm: &SymmetricKeyAlgorithm,
-        key: &[u8],
-        nonce: &[u8],
-        associated_data: &[u8],
-        auth_tag: &[u8],
-        buffer: &[u8],
-    ) -> Result<Vec<u8>> {
-        let mut out = buffer.to_vec();
-        match (sym_algorithm, self) {
-            (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
-                let cipher = Aes128Gcm::new(&key);
-                let nonce = GcmNonce::from_slice(nonce);
-                let tag = GcmTag::from_slice(auth_tag);
-                cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
-                    .map_err(|_| Error::Gcm)?;
-            }
-            (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
-                let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
-                let cipher = Aes256Gcm::new(&key);
-                let nonce = GcmNonce::from_slice(nonce);
-                let tag = GcmTag::from_slice(auth_tag);
-                cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
-                    .map_err(|_| Error::Gcm)?;
-            }
-            (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes128>::from_slice(&key[..16]);
-                let cipher = Eax::<Aes128>::new(&key);
-                let nonce = EaxNonce::from_slice(nonce);
-                let tag = EaxTag::from_slice(auth_tag);
-                cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
-                    .map_err(|_| Error::Eax)?;
-            }
-            (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
-                let key = EaxKey::<Aes256>::from_slice(&key[..32]);
-                let cipher = Eax::<Aes256>::new(&key);
-                let nonce = EaxNonce::from_slice(nonce);
-                let tag = EaxTag::from_slice(auth_tag);
-                cipher
-                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
-                    .map_err(|_| Error::Eax)?;
-            }
-            _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),
-        }
-
-        Ok(out)
     }
 
     /// Encrypt the provided data in place.
@@ -193,34 +133,34 @@ impl AeadAlgorithm {
         let tag = match (sym_algorithm, self) {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes128Gcm>::from_slice(&key[..16]);
-                let cipher = Aes128Gcm::new(&key);
+                let cipher = Aes128Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher
-                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
                     .map_err(|_| Error::Gcm)?
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
-                let cipher = Aes256Gcm::new(&key);
+                let cipher = Aes256Gcm::new(key);
                 let nonce = GcmNonce::from_slice(nonce);
                 cipher
-                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
                     .map_err(|_| Error::Gcm)?
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes128>::from_slice(&key[..16]);
-                let cipher = Eax::<Aes128>::new(&key);
+                let cipher = Eax::<Aes128>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher
-                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
                     .map_err(|_| Error::Eax)?
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes256>::from_slice(&key[..32]);
-                let cipher = Eax::<Aes256>::new(&key);
+                let cipher = Eax::<Aes256>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher
-                    .encrypt_in_place_detached(&nonce, associated_data, buffer)
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
                     .map_err(|_| Error::Eax)?
             }
             _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),

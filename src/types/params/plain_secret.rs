@@ -287,7 +287,7 @@ impl PlainSecretParams {
                             .expect("preallocated vector");
 
                         data.extend_from_slice(&self.checksum_sha1()[..]);
-                        sym_alg.encrypt_with_iv_regular(&key, &iv, &mut data)?;
+                        sym_alg.encrypt_with_iv_regular(&key, iv, &mut data)?;
 
                         data
                     }
