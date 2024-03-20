@@ -162,19 +162,33 @@ impl Edata {
         }
     }
 
-    pub fn decrypt(&self, key: Vec<u8>, alg: SymmetricKeyAlgorithm) -> Result<Message> {
+    pub fn decrypt(&self, key: PlainSessionKey) -> Result<Message> {
         let mut res = self.data()[..].to_vec();
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
 
         debug!("decrypting protected = {:?}", protected);
 
-        let decrypted_packet: &[u8] = if protected {
-            alg.decrypt_protected(&key, &mut res)
-        } else {
-            alg.decrypt(&key, &mut res)
-        }?;
+        match key {
+            PlainSessionKey::V4 { sym_alg, key } => {
+                ensure!(
+                    sym_alg != SymmetricKeyAlgorithm::Plaintext,
+                    "session key algorithm cannot be plaintext"
+                );
 
-        Message::from_bytes(Cursor::new(decrypted_packet.to_vec()))
+                let decrypted_packet: &[u8] = if protected {
+                    sym_alg.decrypt_protected(&key, &mut res)
+                } else {
+                    sym_alg.decrypt(&key, &mut res)
+                }?;
+                Message::from_bytes(Cursor::new(decrypted_packet.to_vec()))
+            }
+            PlainSessionKey::V5 { key } => {
+                unimplemented_err!("V5 decryption");
+            }
+            PlainSessionKey::V6 { key } => {
+                unimplemented_err!("V6 decryption");
+            }
+        }
     }
 }
 
@@ -559,23 +573,18 @@ impl Message {
                 ensure!(!session_keys.is_empty(), "failed to decrypt session key");
 
                 // make sure all the keys are the same, otherwise we are in a bad place
-                let (session_key, session_key_algorithm) = {
+                let session_key = {
                     let (_key_id, k0) = &session_keys[0];
                     if !session_keys.iter().skip(1).all(|(_, k)| k0 == k) {
                         bail!("found inconsistent session keys, possible message corruption");
                     }
 
                     // TODO: avoid cloning
-                    (k0.0.clone(), k0.1)
+                    k0.clone()
                 };
 
                 let ids = session_keys.into_iter().map(|(k, _)| k).collect();
-                ensure!(
-                    session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
-                    "session key algorithm cannot be plaintext"
-                );
-
-                let msg = edata.decrypt(session_key, session_key_algorithm)?;
+                let msg = edata.decrypt(session_key)?;
 
                 Ok((msg, ids))
             }
@@ -605,14 +614,9 @@ impl Message {
 
                 ensure!(skesk.is_some(), "message is not password protected");
 
-                let (session_key, session_key_algorithm) =
+                let session_key =
                     decrypt_session_key_with_password(skesk.expect("checked above"), msg_pw)?;
-                ensure!(
-                    session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
-                    "session key algorithm cannot be plaintext"
-                );
-
-                edata.decrypt(session_key, session_key_algorithm)
+                edata.decrypt(session_key)
             }
         }
     }

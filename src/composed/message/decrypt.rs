@@ -8,7 +8,7 @@ pub fn decrypt_session_key<F, L>(
     locked_key: &L,
     key_pw: F,
     mpis: &[Mpi],
-) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
+) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
     L: SecretKeyTrait<Unlocked = SecretKeyRepr> + KeyTrait,
@@ -16,9 +16,27 @@ where
     debug!("decrypting session key");
 
     locked_key.unlock(key_pw, |priv_key| {
-        let (key, alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
-        Ok((key, alg))
+        let (key, sym_alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
+        // TODO: what about other versions
+        Ok(PlainSessionKey::V4 {
+            key,
+            sym_alg,
+        })
     })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlainSessionKey {
+    V4 {
+        sym_alg: SymmetricKeyAlgorithm,
+        key: Vec<u8>,
+    },
+    V5 {
+        key: Vec<u8>,
+    },
+    V6 {
+        key: Vec<u8>,
+    },
 }
 
 /// Decrypts session key from SKESK packet.
@@ -28,7 +46,7 @@ where
 pub fn decrypt_session_key_with_password<F>(
     packet: &SymKeyEncryptedSessionKey,
     msg_pw: F,
-) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
+) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
 {
@@ -49,16 +67,13 @@ where
         // There is no encrypted session key.
         //
         // S2K-derived key is the session key.
-        return Ok((key, packet_algorithm));
+        return Ok(PlainSessionKey::V4 {
+            key,
+            sym_alg: packet_algorithm,
+        });
     }
 
     let decrypted_key = packet.decrypt(&key)?;
 
-    let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
-    ensure!(
-        session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
-        "session key algorithm cannot be plaintext"
-    );
-
-    Ok((decrypted_key[1..].to_vec(), session_key_algorithm))
+    Ok(decrypted_key)
 }

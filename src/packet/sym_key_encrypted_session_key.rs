@@ -12,6 +12,7 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{s2k_parser, StringToKey, Tag, Version};
 use crate::util::rest_len;
+use crate::PlainSessionKey;
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3
@@ -73,14 +74,18 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
-    pub fn decrypt(&self, key: &[u8]) -> Result<Vec<u8>> {
+    pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
         let mut decrypted_key = self.encrypted_key().map(|v| v.to_vec()).unwrap_or_default();
 
         match self {
             Self::V4 { sym_algorithm, .. } => {
                 let iv = vec![0u8; sym_algorithm.block_size()];
                 self.sym_algorithm()
-                    .decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?
+                    .decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
+                Ok(PlainSessionKey::V4 {
+                    key: decrypted_key[1..].to_vec(),
+                    sym_alg: SymmetricKeyAlgorithm::from(decrypted_key[0]),
+                })
             }
             Self::V5 {
                 iv,
@@ -116,14 +121,13 @@ impl SymKeyEncryptedSessionKey {
                     auth_tag,
                     &mut decrypted_key,
                 )?;
+                debug!("decrypted_key: {}", hex::encode(&decrypted_key));
+                Ok(PlainSessionKey::V5 { key: decrypted_key })
             }
             Self::V6 { iv, .. } => {
                 todo!()
             }
         }
-
-        debug!("decrypted_key: {}", hex::encode(&decrypted_key));
-        Ok(decrypted_key)
     }
 
     pub fn encrypted_key(&self) -> Option<&[u8]> {

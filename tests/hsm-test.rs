@@ -360,7 +360,10 @@ fn card_decrypt() {
             .unlock(String::new, |priv_key| priv_key.decrypt(mpis))
             .unwrap();
 
-        let decrypted = edata.decrypt(session_key, session_key_algorithm).unwrap();
+        let decrypted = edata.decrypt(pgp::PlainSessionKey::V4 {
+            key: session_key,
+            sym_alg: session_key_algorithm
+        }).unwrap();
 
         if let Message::Literal(data) = decrypted {
             assert_eq!(data.data(), b"foo bar")
