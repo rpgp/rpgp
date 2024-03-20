@@ -145,13 +145,6 @@ impl StringToKey {
         }
     }
 
-    pub fn new_argon2<R: CryptoRng + Rng>(rng: &mut R, t: u8, p: u8, m_enc: u8) -> Self {
-        let mut salt = [0u8; 16];
-        rng.fill(&mut salt[..]);
-
-        StringToKey::Argon2 { salt, t, p, m_enc }
-    }
-
     pub fn id(&self) -> u8 {
         match self {
             Self::Simple { .. } => 0,
@@ -240,7 +233,7 @@ impl StringToKey {
 
                     let start = round * digest_size;
                     let end = if round == rounds - 1 {
-                        key_size
+                        key_size - start
                     } else {
                         (round + 1) * digest_size
                     };
@@ -392,11 +385,10 @@ impl Serialize for StringToKey {
 
 #[cfg(test)]
 mod tests {
-    use rand::distributions::{Alphanumeric, DistString};
-
-    use crate::crypto::sym::SymmetricKeyAlgorithm;
-
     use super::*;
+
+    use rand::distributions::{Alphanumeric, DistString};
+    use crate::crypto::sym::SymmetricKeyAlgorithm;
 
     #[test]
     #[ignore]
@@ -523,6 +515,38 @@ mod tests {
             let decrypted = msg
                 .decrypt_with_password(|| "password".to_string())
                 .expect("decrypt argon2 skesk");
+
+            let Message::Literal(data) = decrypted else {
+                panic!("expected literal data")
+            };
+
+            assert_eq!(data.data(), b"Hello, world!");
+        }
+    }
+
+    #[test]
+    fn aead_gcm_skesk_msg() {
+        // Tests decrypting messages
+        //
+        // "These messages are the literal data "Hello, world!" encrypted using AES-128 with various AEADs
+
+        const MSGS: &[&str] = &[
+            "./tests/unit-tests/aead/gcm.msg",
+            "./tests/unit-tests/aead/eax.msg",
+            "./tests/unit-tests/aead/ocb.msg",
+        ];
+
+        use crate::{composed::Deserializable, Message};
+
+        for filename in MSGS {
+            println!("reading {}", filename);
+            let (msg, _header) =
+                Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
+                    .expect("failed to load msg");
+
+            let decrypted = msg
+                .decrypt_with_password(|| "password".to_string())
+                .expect("decrypt aead");
 
             let Message::Literal(data) = decrypted else {
                 panic!("expected literal data")
