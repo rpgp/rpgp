@@ -152,6 +152,7 @@ impl SymEncryptedProtectedData {
                 let offset = data.len() - aead.tag_size();
                 let (main_chunks, final_auth_tag) = data.split_at_mut(offset);
 
+                let mut chunk_index: u64 = 0;
                 for chunk in main_chunks.chunks_mut(chunk_size + aead.tag_size()) {
                     let offset = chunk.len() - aead.tag_size();
                     let (chunk, auth_tag) = chunk.split_at_mut(offset);
@@ -161,14 +162,39 @@ impl SymEncryptedProtectedData {
                         hex::encode(&chunk),
                         hex::encode(&auth_tag)
                     );
+
+                    // Update nonce to include the current chunk index
+                    let l = nonce.len() - 8;
+                    nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
                     let res =
                         aead.decrypt(&sym_alg, message_key, &nonce, &info, &auth_tag, chunk)?;
                     debug!("decrypted {}", hex::encode(&res));
                     out.extend(res);
+                    chunk_index += 1;
                 }
 
-                // TODO: verify final auth tag
+                // verify final auth tag
                 debug!("final auth tag: {}", hex::encode(&final_auth_tag));
+
+                // Associated data is extended with number of plaintext octets.
+                let size = out.len() as u64;
+                let mut final_info = info.to_vec();
+                final_info.extend_from_slice(&size.to_be_bytes());
+
+                // Update final nonce
+                let l = nonce.len() - 8;
+                nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
+                debug!("final nonce {}", hex::encode(&nonce));
+                debug!("final auth {}", hex::encode(&final_info));
+
+                aead.decrypt_in_place(
+                    &sym_alg,
+                    message_key,
+                    &nonce,
+                    &info,
+                    &final_auth_tag,
+                    &mut [][..], // encrypts empty string
+                )?;
 
                 Ok(out)
             }

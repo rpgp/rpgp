@@ -7,7 +7,7 @@ use eax::{Eax, Key as EaxKey, Nonce as EaxNonce, Tag as EaxTag};
 
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 
 use super::sym::SymmetricKeyAlgorithm;
 
@@ -90,28 +90,36 @@ impl AeadAlgorithm {
                 let cipher = Aes128Gcm::new(&key);
                 let nonce = GcmNonce::from_slice(nonce);
                 let tag = GcmTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .map_err(|_| Error::Gcm)?;
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
                 let cipher = Aes256Gcm::new(&key);
                 let nonce = GcmNonce::from_slice(nonce);
                 let tag = GcmTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .map_err(|_| Error::Gcm)?;
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes128>::from_slice(&key[..16]);
                 let cipher = Eax::<Aes128>::new(&key);
                 let nonce = EaxNonce::from_slice(nonce);
                 let tag = EaxTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .map_err(|_| Error::Eax)?;
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes256>::from_slice(&key[..32]);
                 let cipher = Eax::<Aes256>::new(&key);
                 let nonce = EaxNonce::from_slice(nonce);
                 let tag = EaxTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, buffer, &tag)
+                    .map_err(|_| Error::Eax)?;
             }
             _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),
         }
@@ -136,28 +144,36 @@ impl AeadAlgorithm {
                 let cipher = Aes128Gcm::new(&key);
                 let nonce = GcmNonce::from_slice(nonce);
                 let tag = GcmTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
+                    .map_err(|_| Error::Gcm)?;
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
                 let cipher = Aes256Gcm::new(&key);
                 let nonce = GcmNonce::from_slice(nonce);
                 let tag = GcmTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
+                    .map_err(|_| Error::Gcm)?;
             }
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes128>::from_slice(&key[..16]);
                 let cipher = Eax::<Aes128>::new(&key);
                 let nonce = EaxNonce::from_slice(nonce);
                 let tag = EaxTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
+                    .map_err(|_| Error::Eax)?;
             }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes256>::from_slice(&key[..32]);
                 let cipher = Eax::<Aes256>::new(&key);
                 let nonce = EaxNonce::from_slice(nonce);
                 let tag = EaxTag::from_slice(auth_tag);
-                cipher.decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)?;
+                cipher
+                    .decrypt_in_place_detached(&nonce, associated_data, &mut out, &tag)
+                    .map_err(|_| Error::Eax)?;
             }
             _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),
         }

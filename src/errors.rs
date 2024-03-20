@@ -74,8 +74,10 @@ pub enum Error {
     MdcError,
     #[error("Invalid size conversion {0}")]
     TryFromInt(#[from] TryFromIntError),
-    #[error("Gcm {0}")]
-    Gcm(aes_gcm::Error),
+    #[error("GCM")]
+    Gcm,
+    #[error("EAX")]
+    Eax,
 }
 
 impl Error {
@@ -111,7 +113,8 @@ impl Error {
             Error::MdcError => 27,
             Error::TryFromInt(_) => 28,
             Error::EllipticCurve(_) => 29,
-            Error::Gcm(_) => 30,
+            Error::Gcm => 30,
+            Error::Eax => 31,
         }
     }
 }
@@ -197,12 +200,6 @@ impl From<String> for Error {
 impl From<derive_builder::UninitializedFieldError> for Error {
     fn from(err: derive_builder::UninitializedFieldError) -> Error {
         Error::Message(err.to_string())
-    }
-}
-
-impl From<aes_gcm::Error> for Error {
-    fn from(err: aes_gcm::Error) -> Self {
-        Self::Gcm(err)
     }
 }
 
