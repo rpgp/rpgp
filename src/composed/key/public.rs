@@ -112,6 +112,7 @@ impl PublicSubkey {
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::SubkeyBinding)
             .pub_alg(sec_key.algorithm())
+            .hash_alg(sec_key.hash_alg())
             .hashed_subpackets(hashed_subpackets)
             .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                 sec_key.key_id(),

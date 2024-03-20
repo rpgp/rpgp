@@ -1,5 +1,3 @@
-use block_padding::{Padding, Pkcs7};
-use generic_array::{typenum::U8, GenericArray};
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, Zeroizing};
@@ -252,25 +250,41 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // Perform key derivation
     let z = kdf(hash, shared_secret.as_bytes(), alg_sym.key_size(), &param)?;
 
-    // PKCS5 padding (PKCS5 is PKCS7 with a blocksize of 8)
+    // PKCS5-style padding, with a blocksize of 8.
+    // However, the padding may exceed the length one block, to obfuscate key size.
     let len = plain.len();
-    let mut plain_padded = plain.to_vec();
-    plain_padded.resize(len + 8, 0);
 
-    let plain_padded_ref = {
-        let pos = len;
-        let block_size = 8;
-        let bs = block_size * (pos / block_size);
-        if plain_padded.len() < bs || plain_padded.len() - bs < block_size {
-            bail!("unable to pad");
-        }
-        let buf = GenericArray::<u8, U8>::from_mut_slice(&mut plain_padded[bs..bs + block_size]);
-        Pkcs7::pad(buf, pos - bs);
-        &plain_padded[..bs + block_size]
+    /// Our default target padded length (based on the size of a padded AES256 key).
+    /// This value should be increased if we support symmetric keys that are longer than AES256.
+    const PAD_DEFAULT_TARGET: usize = 40;
+
+    // The padded message length (must be a multiple of the block size)
+    let padded_len = if len < PAD_DEFAULT_TARGET {
+        // Normally, we just pad to the default target size ...
+        PAD_DEFAULT_TARGET
+    } else {
+        // ... but if `plain` isn't shorter than our target size, we pad to the next full block
+        let remainder = len % 8; // e.g. 3 for len==19
+
+        len + 8 - remainder // (e.g. "8 + 8 - 0 => 16", or "19 + 8 - 3 => 24")
     };
+    debug_assert!(padded_len % 8 == 0, "Unexpected padded_len {}", padded_len);
 
-    // Peform AES Key Wrap
-    let encrypted_key = aes_kw::wrap(&z, plain_padded_ref)?;
+    // The value we'll use for padding (must not be zero, and fit into a u8)
+    let padding = padded_len - len;
+    debug_assert!(
+        padding > 0 && u8::try_from(padding).is_ok(),
+        "Unexpected padding value {}",
+        padding
+    );
+    let padding = padding as u8;
+
+    // Extend length of plain_padded, fill with `padding` value
+    let mut plain_padded = plain.to_vec();
+    plain_padded.resize(padded_len, padding);
+
+    // Perform AES Key Wrap
+    let encrypted_key = aes_kw::wrap(&z, &plain_padded)?;
 
     // Encode public point: prefix with 0x40
     let mut encoded_public = Vec::with_capacity(33);
@@ -354,11 +368,10 @@ mod tests {
             let (message, _headers) = Message::from_armor_single(fs::File::open(msg_file).unwrap())
                 .expect("failed to parse message");
 
-            let (mut decrypter, _ids) = message
+            let (msg, _ids) = message
                 .decrypt(String::default, &[&decrypt_key])
                 .expect("failed to init decryption");
 
-            let msg = decrypter.next().unwrap().unwrap();
             let data = msg.get_literal().unwrap().data();
 
             assert_eq!(data, "hello\n".as_bytes());

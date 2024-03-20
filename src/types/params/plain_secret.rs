@@ -75,7 +75,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                 (*x).to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDSA(x) => {
-                (*x).strip_trailing_zeroes().to_writer(writer)?;
+                (*x).to_writer(writer)?;
             }
             PlainSecretParamsRef::ECDH(x) => {
                 (*x).to_writer(writer)?;
@@ -190,6 +190,11 @@ impl<'a> PlainSecretParamsRef<'a> {
 
                         Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P384(secret)))
                     }
+                    EcdsaPublicParams::P521 { .. } => {
+                        let secret = p521::SecretKey::from_slice(d.as_bytes())?;
+
+                        Ok(SecretKeyRepr::ECDSA(ECDSASecretKey::P521(secret)))
+                    }
                     EcdsaPublicParams::Secp256k1 { .. } => {
                         let secret = k256::SecretKey::from_slice(d.as_bytes())?;
 
@@ -206,25 +211,13 @@ impl<'a> PlainSecretParamsRef<'a> {
 }
 
 impl PlainSecretParams {
-    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
-        let (_, mut repr) = parse_secret_params(alg)(data)?;
-        repr.normalize(params);
+    pub fn from_slice(
+        data: &[u8],
+        alg: PublicKeyAlgorithm,
+        _params: &PublicParams,
+    ) -> Result<Self> {
+        let (_, repr) = parse_secret_params(alg)(data)?;
         Ok(repr)
-    }
-
-    /// Normalize internal storage.
-    #[allow(clippy::single_match)]
-    fn normalize(&mut self, params: &PublicParams) {
-        match (self, params) {
-            (PlainSecretParams::ECDSA(secret_mpi), PublicParams::ECDSA(pub_params)) => {
-                // ECDSA varies in its storage of padded vs unpadded.
-                // This normalizes it to store the padded version in memory.
-                if let Some(len) = pub_params.secret_key_length() {
-                    secret_mpi.pad_right(len);
-                }
-            }
-            _ => {}
-        }
     }
 
     pub fn string_to_key_id(&self) -> u8 {

@@ -2,7 +2,7 @@ use std::boxed::Box;
 use std::str;
 
 use bstr::BString;
-use chrono::{DateTime, Duration, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::{complete, map, map_opt, map_parser, map_res, rest};
 use nom::multi::{fold_many_m_n, length_data, many0};
@@ -34,13 +34,12 @@ impl Deserialize for Signature {
 
 /// Convert an epoch timestamp to a `DateTime`
 fn dt_from_timestamp(ts: u32) -> Option<DateTime<Utc>> {
-    NaiveDateTime::from_timestamp_opt(i64::from(ts), 0)
-        .map(|ts| DateTime::<Utc>::from_naive_utc_and_offset(ts, Utc))
+    DateTime::from_timestamp(i64::from(ts), 0)
 }
 
 /// Convert a u32 to a `Duration`
 fn duration_from_timestamp(ts: u32) -> Option<Duration> {
-    Some(Duration::seconds(i64::from(ts)))
+    Duration::try_seconds(i64::from(ts))
 }
 
 /// Parse a signature creation time subpacket

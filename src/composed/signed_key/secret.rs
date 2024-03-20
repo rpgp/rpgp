@@ -11,7 +11,9 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, write_packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyRepr, SecretKeyTrait};
+use crate::types::{
+    KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait,
+};
 use crate::{armor, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
@@ -193,6 +195,10 @@ impl SecretKeyTrait for SignedSecretKey {
             subkeys,
         )
     }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
+    }
 }
 
 impl PublicKeyTrait for SignedSecretKey {
@@ -299,6 +305,10 @@ impl SecretKeyTrait for SignedSecretSubKey {
             .key_flags();
 
         PublicSubkey::new(self.key.public_key(), keyflags)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
     }
 }
 

@@ -68,6 +68,7 @@ impl UserAttribute {
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::CertGeneric)
             .pub_alg(key.algorithm())
+            .hash_alg(key.hash_alg())
             .hashed_subpackets(vec![Subpacket::regular(
                 SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
             )])

@@ -2,7 +2,37 @@
 
 All notable changes to rpgp will be documented in this file.
 
-## [0.11.0](https://github.com/rpgp/rpgp/compare/v0.10.2..0.11.0) - 2024-02-21
+## [0.12.0-alpha.1](https://github.com/rpgp/rpgp/compare/v0.11.0..0.12.0-alpha.1) - 2024-03-17
+
+### ⛰️  Features
+
+- Export a crate VERSION string - ([1808c99](https://github.com/rpgp/rpgp/commit/1808c994746b3e54d76ed16d5512dee2ff031ba1))
+- Obfuscate symmetric key length with ecdh padding - ([2fc374a](https://github.com/rpgp/rpgp/commit/2fc374aeb4eccee16238109159e62e8e58187b7b))
+- Implement hash_alg() and public_params() for SecretKeyTrait - ([bb7782d](https://github.com/rpgp/rpgp/commit/bb7782dbcbf839ddefb05664c574ecc2ed653ba0))
+- Implement support for ECDSA over NIST P-521 - ([14d0f6a](https://github.com/rpgp/rpgp/commit/14d0f6a185a597a317a39437397a0a929b0a600d))
+- Eadd reader functions that autodetect armored vs. binary - ([efd27c0](https://github.com/rpgp/rpgp/commit/efd27c0bf0d22499f9739c46f9539859fde26874))
+
+### 🐛 Bug Fixes
+
+- *(ecdsa)* Never pad ecdsa secret MPIs - ([87cb242](https://github.com/rpgp/rpgp/commit/87cb2421fc2cc9d604ca74c691f0878e3fc3436d))
+- *(parser)* There should be no edata except after ESKs - ([cadccd5](https://github.com/rpgp/rpgp/commit/cadccd5c66c46a2b86cb7ae39e34ef4da45dcc4f))
+- *(test)* Adjust to changed message decryption interface - ([e57c49a](https://github.com/rpgp/rpgp/commit/e57c49af90a2657887dce980d69a48971865f808))
+- Avoid stack overflow when verifying recursively compressed message - ([bfa34bb](https://github.com/rpgp/rpgp/commit/bfa34bbe3ced26b28c411ebbdd4e9a96800949d9))
+- Configure hash_alg based on signing key type - ([6cda288](https://github.com/rpgp/rpgp/commit/6cda28834af077889fbfd60adfaab5feafbaf1d3))
+
+### 🧪 Testing
+
+- Increase key_gen_ecdsa_p256 rounds - ([f7fd18d](https://github.com/rpgp/rpgp/commit/f7fd18d2986f00e7536881bab1416ababdeda8bf))
+
+### ⚙️ Miscellaneous Tasks
+
+- Adjust to chrono deprecations - ([d0bf0fd](https://github.com/rpgp/rpgp/commit/d0bf0fdb6e61dfeb8a7c4adabc10696d522465b1))
+
+### S2k
+
+- Restructure, implement argon2 - ([6298c15](https://github.com/rpgp/rpgp/commit/6298c1580b7e631f5bdec1a96f56ba6e9cf85217))
+
+## [0.11.0](https://github.com/rpgp/rpgp/compare/v0.10.2..v0.11.0) - 2024-02-21
 
 ### ⛰️  Features
 
@@ -53,6 +83,7 @@ All notable changes to rpgp will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(pgp)* Release 0.11.0 - ([20335b3](https://github.com/rpgp/rpgp/commit/20335b387037bfedd1b3cdb4a48fb7466f721b56))
 - Fix deprecation warning reported by clippy - ([a9a7a0b](https://github.com/rpgp/rpgp/commit/a9a7a0b02cab4a6892ae0158b23757f3ad41371e))
 - Fix vec performance lint - ([7aa80c9](https://github.com/rpgp/rpgp/commit/7aa80c9dd94b5fda0d2d9c9f9798e9379a5ea6d0))
 - Use 1.72 stabley toolchain instead of stable for mips - ([334c0b8](https://github.com/rpgp/rpgp/commit/334c0b83e6339c774b6ed05e7ff9d8b0aed54894))

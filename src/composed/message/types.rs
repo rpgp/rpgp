@@ -2,6 +2,7 @@ use std::boxed::Box;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::io;
+use std::io::Cursor;
 
 use bstr::BStr;
 use chrono::{self, SubsecRound};
@@ -44,7 +45,7 @@ pub enum Message {
     },
     Encrypted {
         esk: Vec<Esk>,
-        edata: Vec<Edata>,
+        edata: Edata,
     },
 }
 
@@ -162,6 +163,21 @@ impl Edata {
             Edata::SymEncryptedProtectedData(_) => Tag::SymEncryptedProtectedData,
         }
     }
+
+    pub fn decrypt(&self, key: Vec<u8>, alg: SymmetricKeyAlgorithm) -> Result<Message> {
+        let mut res = self.data()[..].to_vec();
+        let protected = self.tag() == Tag::SymEncryptedProtectedData;
+
+        debug!("decrypting protected = {:?}", protected);
+
+        let decrypted_packet: &[u8] = if protected {
+            alg.decrypt_protected(&key, &mut res)
+        } else {
+            alg.decrypt(&key, &mut res)
+        }?;
+
+        Message::from_bytes(Cursor::new(decrypted_packet.to_vec()))
+    }
 }
 
 impl Serialize for Message {
@@ -190,9 +206,7 @@ impl Serialize for Message {
                 for e in esk {
                     e.to_writer(writer)?;
                 }
-                for e in edata {
-                    e.to_writer(writer)?;
-                }
+                edata.to_writer(writer)?;
 
                 Ok(())
             }
@@ -307,9 +321,12 @@ impl Message {
     ) -> Result<Self> {
         let data = self.to_bytes()?;
 
-        let edata = vec![Edata::SymEncryptedProtectedData(
-            SymEncryptedProtectedData::encrypt_with_rng(rng, alg, &session_key, &data)?,
-        )];
+        let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_with_rng(
+            rng,
+            alg,
+            &session_key,
+            &data,
+        )?);
 
         Ok(Message::Encrypted { esk, edata })
     }
@@ -453,11 +470,7 @@ impl Message {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt<'a, G>(
-        &'a self,
-        key_pw: G,
-        keys: &[&SignedSecretKey],
-    ) -> Result<(MessageDecrypter<'a>, Vec<KeyId>)>
+    pub fn decrypt<G>(&self, key_pw: G, keys: &[&SignedSecretKey]) -> Result<(Message, Vec<KeyId>)>
     where
         G: FnOnce() -> String + Clone,
     {
@@ -564,17 +577,16 @@ impl Message {
                     "session key algorithm cannot be plaintext"
                 );
 
-                Ok((
-                    MessageDecrypter::new(session_key, session_key_algorithm, edata),
-                    ids,
-                ))
+                let msg = edata.decrypt(session_key, session_key_algorithm)?;
+
+                Ok((msg, ids))
             }
         }
     }
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt_with_password<F>(&self, msg_pw: F) -> Result<MessageDecrypter<'_>>
+    pub fn decrypt_with_password<F>(&self, msg_pw: F) -> Result<Message>
     where
         F: FnOnce() -> String + Clone,
     {
@@ -602,11 +614,7 @@ impl Message {
                     "session key algorithm cannot be plaintext"
                 );
 
-                Ok(MessageDecrypter::new(
-                    session_key,
-                    session_key_algorithm,
-                    edata,
-                ))
+                edata.decrypt(session_key, session_key_algorithm)
             }
         }
     }
@@ -768,13 +776,7 @@ mod tests {
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
-        let decrypted = parsed
-            .decrypt(|| "test".into(), &[&skey])
-            .unwrap()
-            .0
-            .next()
-            .unwrap()
-            .unwrap();
+        let decrypted = parsed.decrypt(|| "test".into(), &[&skey]).unwrap().0;
 
         assert_eq!(compressed_msg, decrypted);
     }
@@ -802,13 +804,7 @@ mod tests {
 
             let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
-            let decrypted = parsed
-                .decrypt(|| "".into(), &[&skey])
-                .unwrap()
-                .0
-                .next()
-                .unwrap()
-                .unwrap();
+            let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
 
             assert_eq!(compressed_msg, decrypted);
         }
@@ -836,12 +832,7 @@ mod tests {
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
 
-        let decrypted = parsed
-            .decrypt_with_password(|| "secret".into())
-            .unwrap()
-            .next()
-            .unwrap()
-            .unwrap();
+        let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
 
         assert_eq!(compressed_msg, decrypted);
     }

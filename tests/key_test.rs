@@ -34,7 +34,7 @@ use pgp::packet::{
 use pgp::ser::Serialize;
 use pgp::types::{
     CompressionAlgorithm, ECDSASecretKey, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams,
-    SecretKeyRepr, SecretKeyTrait, SecretParams, SignedUser, StringToKeyType, Version,
+    SecretKeyRepr, SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -114,15 +114,15 @@ macro_rules! parse_dumps {
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 17_701, 20_999),
+    (test_parse_dumps_0, 0, 17_704, 20_999),
     (test_parse_dumps_1, 1, 17_542, 21_000),
     (test_parse_dumps_2, 2, 17_583, 20_999),
-    (test_parse_dumps_3, 3, 17_649, 20_998),
-    (test_parse_dumps_4, 4, 17_581, 20_999),
+    (test_parse_dumps_3, 3, 17_651, 20_998),
+    (test_parse_dumps_4, 4, 17_583, 20_999),
     (test_parse_dumps_5, 5, 17_609, 20_999),
-    (test_parse_dumps_6, 6, 17_674, 21_000),
-    (test_parse_dumps_7, 7, 17_687, 21_000),
-    (test_parse_dumps_8, 8, 17_692, 21_000),
+    (test_parse_dumps_6, 6, 17_677, 21_000),
+    (test_parse_dumps_7, 7, 17_688, 21_000),
+    (test_parse_dumps_8, 8, 17_693, 21_000),
     (test_parse_dumps_9, 9, 17_546, 21_000),
 );
 
@@ -533,16 +533,18 @@ fn encrypted_private_key() {
                 &hex::decode("2271f718af70d3bd9d60c2aed9469b67").unwrap()[..]
             );
 
-            assert_eq!(
-                pp.string_to_key().salt().unwrap(),
-                &hex::decode("CB18E77884F2F055").unwrap()[..]
-            );
-
-            assert_eq!(pp.string_to_key().typ(), StringToKeyType::IteratedAndSalted);
-
-            assert_eq!(pp.string_to_key().count(), Some(65536));
-
-            assert_eq!(pp.string_to_key().hash(), HashAlgorithm::SHA2_256);
+            match pp.string_to_key() {
+                StringToKey::IteratedAndSalted {
+                    hash_alg,
+                    salt,
+                    count,
+                } => {
+                    assert_eq!(*hash_alg, HashAlgorithm::SHA2_256);
+                    assert_eq!(salt, &hex::decode("CB18E77884F2F055").unwrap()[..]);
+                    assert_eq!(*count, 96u8); // This is an encoded iteration count
+                }
+                s => panic!("unexpected s2k type {:?}", s),
+            }
 
             assert_eq!(pp.encryption_algorithm(), SymmetricKeyAlgorithm::AES128);
             assert_eq!(pp.string_to_key_id(), 254);

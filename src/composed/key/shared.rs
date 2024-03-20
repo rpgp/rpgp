@@ -89,6 +89,7 @@ impl KeyDetails {
             let config = SignatureConfigBuilder::default()
                 .typ(SignatureType::CertGeneric)
                 .pub_alg(key.algorithm())
+                .hash_alg(key.hash_alg())
                 .hashed_subpackets(hashed_subpackets)
                 .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                     key.key_id(),
@@ -109,6 +110,7 @@ impl KeyDetails {
                     let config = SignatureConfigBuilder::default()
                         .typ(SignatureType::CertGeneric)
                         .pub_alg(key.algorithm())
+                        .hash_alg(key.hash_alg())
                         .hashed_subpackets(vec![
                             Subpacket::regular(SubpacketData::SignatureCreationTime(
                                 chrono::Utc::now().trunc_subsecs(0),
