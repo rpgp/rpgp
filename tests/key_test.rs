@@ -35,7 +35,7 @@ use pgp::packet::{
 use pgp::ser::Serialize;
 use pgp::types::{
     CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, SecretKeyRepr,
-    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
+    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version, S2kParams,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -177,7 +177,7 @@ fn test_parse_openpgp_sample_rsa_private() {
     assert_eq!(pkey.algorithm(), PublicKeyAlgorithm::RSA);
 
     assert_eq!(
-        pkey.secret_params().checksum().unwrap(),
+        pkey.secret_params().checksum(),
         hex::decode("2c46").expect("failed hex encoding")
     );
 
@@ -530,12 +530,15 @@ fn encrypted_private_key() {
     match pp {
         SecretParams::Plain(_) => panic!("should be encrypted"),
         SecretParams::Encrypted(pp) => {
+            let S2kParams::Cfb { sym_alg, s2k, iv } = pp.string_to_key_params() else {
+                panic!("unexpected s2k param: {:?}", pp);
+            };
             assert_eq!(
-                pp.iv(),
+                iv,
                 &hex::decode("2271f718af70d3bd9d60c2aed9469b67").unwrap()[..]
             );
 
-            match pp.string_to_key() {
+            match s2k {
                 StringToKey::IteratedAndSalted {
                     hash_alg,
                     salt,
@@ -548,8 +551,7 @@ fn encrypted_private_key() {
                 s => panic!("unexpected s2k type {:?}", s),
             }
 
-            assert_eq!(pp.encryption_algorithm(), SymmetricKeyAlgorithm::AES128);
-            assert_eq!(pp.string_to_key_id(), 254);
+            assert_eq!(sym_alg, &SymmetricKeyAlgorithm::AES128);
         }
     }
 

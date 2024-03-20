@@ -11,7 +11,6 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::crypto::checksum;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
 use crate::types::*;
@@ -264,41 +263,42 @@ impl PlainSecretParams {
         self,
         rng: &mut R,
         passphrase: &str,
-        alg: SymmetricKeyAlgorithm,
-        s2k: StringToKey,
-        s2k_usage: S2kUsage,
+        mut s2k_params: S2kParams,
         version: KeyVersion,
     ) -> Result<EncryptedSecretParams> {
-        let key = s2k.derive_key(passphrase, alg.key_size())?;
-        let mut iv = vec![0u8; alg.block_size()];
-        rng.fill(&mut iv[..]);
+        match &mut s2k_params {
+            S2kParams::Unprotected => bail!("cannot encrypt to uprotected"),
+            S2kParams::Cfb {
+                sym_alg,
+                s2k,
+                ref mut iv,
+            } => {
+                let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
+                *iv = vec![0u8; sym_alg.block_size()];
+                rng.fill(&mut iv[..]);
 
-        let enc_data = match version {
-            KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
-            KeyVersion::V3 => unimplemented_err!("v3 encryption"),
-            KeyVersion::V4 => {
-                let mut data = Vec::new();
-                self.as_ref()
-                    .to_writer_raw(&mut data)
-                    .expect("preallocated vector");
-                match s2k_usage {
-                    S2kUsage::Cfb => {
+                let enc_data = match version {
+                    KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
+                    KeyVersion::V3 => unimplemented_err!("v3 encryption"),
+                    KeyVersion::V4 => {
+                        let mut data = Vec::new();
+                        self.as_ref()
+                            .to_writer_raw(&mut data)
+                            .expect("preallocated vector");
+
                         data.extend_from_slice(&self.checksum_sha1()[..]);
+                        sym_alg.encrypt_with_iv_regular(&key, &iv, &mut data)?;
+
+                        data
                     }
-                    _ => unimplemented_err!("id: {:?} not implemented yet", s2k_usage),
-                }
+                    KeyVersion::V5 => unimplemented_err!("v5 encryption"),
+                    KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
+                };
 
-                alg.encrypt_with_iv_regular(&key, &iv, &mut data)?;
-
-                data
+                Ok(EncryptedSecretParams::new(enc_data, s2k_params))
             }
-            KeyVersion::V5 => unimplemented_err!("v5 encryption"),
-            KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
-        };
-
-        Ok(EncryptedSecretParams::new(
-            enc_data, iv, alg, s2k, s2k_usage,
-        ))
+            _ => unimplemented_err!("{:?} not implemented yet", s2k_params),
+        }
     }
 }
 

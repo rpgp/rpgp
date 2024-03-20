@@ -301,21 +301,20 @@ impl KeyType {
 
         let secret = match passphrase {
             Some(passphrase) => {
-                // TODO: make configurable
-                let s2k = types::StringToKey::new_default(rng);
-                let alg = SymmetricKeyAlgorithm::AES256;
-                // encrypted, sha1 checksum
-                let s2k_usage = types::S2kUsage::Cfb;
-
                 // TODO: derive from key itself
                 let version = types::KeyVersion::default();
+
+                // TODO: make configurable
+                let s2k_params = types::S2kParams::Cfb {
+                    sym_alg: SymmetricKeyAlgorithm::AES256,
+                    s2k: types::StringToKey::new_default(rng),
+                    iv: Default::default(),
+                };
 
                 types::SecretParams::Encrypted(plain.encrypt(
                     rng,
                     &passphrase,
-                    alg,
-                    s2k,
-                    s2k_usage,
+                    s2k_params,
                     version,
                 )?)
             }

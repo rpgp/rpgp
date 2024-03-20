@@ -5,6 +5,7 @@ use nom::combinator::{map, rest};
 use nom::number::streaming::be_u8;
 use rand::{CryptoRng, Rng};
 
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
@@ -30,14 +31,39 @@ pub enum S2kUsage {
     MaleableCfb,
 }
 
-impl Into<u8> for S2kUsage {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum S2kParams {
+    Unprotected,
+    LegacyCfb {
+        sym_alg: SymmetricKeyAlgorithm,
+        iv: Vec<u8>,
+    },
+    Aead {
+        sym_alg: SymmetricKeyAlgorithm,
+        aead_mode: AeadAlgorithm,
+        s2k: StringToKey,
+        nonce: Vec<u8>,
+    },
+    Cfb {
+        sym_alg: SymmetricKeyAlgorithm,
+        s2k: StringToKey,
+        iv: Vec<u8>,
+    },
+    MaleableCfb {
+        sym_alg: SymmetricKeyAlgorithm,
+        s2k: StringToKey,
+        iv: Vec<u8>,
+    },
+}
+
+impl Into<u8> for &S2kParams {
     fn into(self) -> u8 {
         match self {
-            Self::Unprotected => 0,
-            Self::LegacyCfb(sk) => sk.into(),
-            Self::Aead => 253,
-            Self::Cfb => 254,
-            Self::MaleableCfb => 255,
+            S2kParams::Unprotected => 0,
+            S2kParams::LegacyCfb { sym_alg, .. } => (*sym_alg).into(),
+            S2kParams::Aead { .. } => 253,
+            S2kParams::Cfb { .. } => 254,
+            S2kParams::MaleableCfb { .. } => 255,
         }
     }
 }

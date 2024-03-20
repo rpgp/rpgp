@@ -31,3 +31,11 @@ impl Default for AeadAlgorithm {
         AeadAlgorithm::None
     }
 }
+
+impl AeadAlgorithm {
+    /// Nonce size used for this AEAD algorithm.
+    pub fn nonce_size(&self) -> usize {
+        // TODO: verify this is correct
+        16
+    }
+}

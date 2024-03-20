@@ -1,11 +1,11 @@
 use std::io;
 
 use nom::bytes::streaming::take;
-use nom::combinator::{cond, map, map_res, rest_len, success};
-use nom::multi::length_data;
+use nom::combinator::{map_res, rest_len};
 use nom::number::streaming::be_u8;
 use zeroize::Zeroize;
 
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
@@ -38,10 +38,7 @@ impl SecretParams {
     }
 
     pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
-        let (_, (params, cs)) = parse_secret_fields(alg, params)(data)?;
-
-        params.compare_checksum(cs)?;
-
+        let (_, params) = parse_secret_fields(alg, params)(data)?;
         Ok(params)
     }
 
@@ -52,16 +49,9 @@ impl SecretParams {
         }
     }
 
-    pub fn compare_checksum(&self, other: Option<&[u8]>) -> Result<()> {
+    pub fn checksum(&self) -> Vec<u8> {
         match self {
-            SecretParams::Plain(k) => k.as_ref().compare_checksum_simple(other),
-            SecretParams::Encrypted(k) => k.compare_checksum(other),
-        }
-    }
-
-    pub fn checksum(&self) -> Option<Vec<u8>> {
-        match self {
-            SecretParams::Plain(k) => Some(k.checksum_simple()),
+            SecretParams::Plain(k) => k.checksum_simple(),
             SecretParams::Encrypted(k) => k.checksum(),
         }
     }
@@ -80,65 +70,78 @@ impl Serialize for SecretParams {
 fn parse_secret_fields(
     alg: PublicKeyAlgorithm,
     public_params: &PublicParams,
-) -> impl Fn(&[u8]) -> IResult<&[u8], (SecretParams, Option<&[u8]>)> + '_ {
+) -> impl Fn(&[u8]) -> IResult<&[u8], SecretParams> + '_ {
     move |i: &[u8]| {
-        let (i, s2k_typ) = be_u8(i)?;
-        let (i, enc_params) = match s2k_typ {
+        let (i, s2k_usage) = map_res(be_u8, S2kUsage::try_from)(i)?;
+        let (i, enc_params) = match s2k_usage {
             // 0 is no encryption
-            0 => (i, (None, None, None)),
+            S2kUsage::Unprotected => (i, S2kParams::Unprotected),
             // symmetric key algorithm
-            1..=252 => {
-                let (i, sym_alg) = map_res(success(s2k_typ), SymmetricKeyAlgorithm::try_from)(i)?;
+            S2kUsage::LegacyCfb(sym_alg) => {
                 let (i, iv) = take(sym_alg.block_size())(i)?;
-                (i, (Some(sym_alg), Some(iv), None))
+                (
+                    i,
+                    S2kParams::LegacyCfb {
+                        sym_alg,
+                        iv: iv.to_vec(),
+                    },
+                )
             }
-            253 => {
-                let (i, sym_alg) = map_res(success(s2k_typ), SymmetricKeyAlgorithm::try_from)(i)?;
-                let (i, iv) = take(sym_alg.block_size())(i)?;
-                (i, (Some(sym_alg), Some(iv), None))
+            S2kUsage::Aead => {
+                let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+                let (i, aead_mode) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
+                let (i, s2k) = s2k_parser(i)?;
+                let (i, nonce) = take(aead_mode.nonce_size())(i)?;
+                (
+                    i,
+                    S2kParams::Aead {
+                        sym_alg,
+                        aead_mode,
+                        s2k,
+                        nonce: nonce.to_vec(),
+                    },
+                )
             }
             // symmetric key + string-to-key
-            254 => {
+            S2kUsage::Cfb => {
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
                 let (i, s2k) = s2k_parser(i)?;
                 let (i, iv) = take(sym_alg.block_size())(i)?;
-                (i, (Some(sym_alg), Some(iv), Some(s2k)))
+                (
+                    i,
+                    S2kParams::Cfb {
+                        sym_alg,
+                        s2k,
+                        iv: iv.to_vec(),
+                    },
+                )
             }
-            255 => {
+            S2kUsage::MaleableCfb => {
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
                 let (i, s2k) = s2k_parser(i)?;
                 let (i, iv) = take(sym_alg.block_size())(i)?;
-                (i, (Some(sym_alg), Some(iv), Some(s2k)))
+                (
+                    i,
+                    S2kParams::Cfb {
+                        sym_alg,
+                        s2k,
+                        iv: iv.to_vec(),
+                    },
+                )
             }
         };
-        let checksum_len = match s2k_typ {
-            // 20 octect hash at the end, but part of the encrypted part
-            254 => 0,
-            // 2 octet checksum at the end
-            _ => 2,
-        };
-        let (i, data) = length_data(map(rest_len, |r| r - checksum_len))(i)?;
-        let (i, checksum) = cond(checksum_len > 0, take(checksum_len))(i)?;
-        Ok((i, {
-            let encryption_algorithm = enc_params.0;
-            let iv = enc_params.1.map(|iv| iv.to_vec());
-            let string_to_key = enc_params.2;
-            let s2k_usage = S2kUsage::from(s2k_typ);
 
-            let res = match s2k_typ {
-                0 => {
-                    let repr = PlainSecretParams::from_slice(data, alg, public_params)?;
-                    SecretParams::Plain(repr)
-                }
-                _ => SecretParams::Encrypted(EncryptedSecretParams::new(
-                    data.to_vec(),
-                    iv.expect("encrypted"),
-                    encryption_algorithm.expect("encrypted"),
-                    string_to_key.expect("encrypted"),
-                    s2k_usage,
-                )),
-            };
-            (res, checksum)
-        }))
+        let (i, len) = rest_len(i)?;
+        let (i, data) = take(len)(i)?;
+
+        let res = match s2k_usage {
+            S2kUsage::Unprotected => {
+                let repr = PlainSecretParams::from_slice(data, alg, public_params)?;
+                SecretParams::Plain(repr)
+            }
+            _ => SecretParams::Encrypted(EncryptedSecretParams::new(data.to_vec(), enc_params)),
+        };
+
+        Ok((i, res))
     }
 }

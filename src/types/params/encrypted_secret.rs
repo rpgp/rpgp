@@ -1,97 +1,53 @@
 use std::{fmt, io};
 
 use byteorder::{BigEndian, ByteOrder};
+use digest::Digest;
 
 use crate::crypto::checksum;
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct EncryptedSecretParams {
-    /// The encrypted data.
+    /// The encrypted data, including the checksum.
     data: Vec<u8>,
-    /// IV.
-    iv: Vec<u8>,
-    /// The encryption algorithm used.
-    encryption_algorithm: SymmetricKeyAlgorithm,
-    /// The string-to-key method and its parameters.
-    string_to_key: StringToKey,
-    /// S2k usage.
-    s2k_usage: S2kUsage,
+    /// S2k Params
+    s2k_params: S2kParams,
 }
 
 impl EncryptedSecretParams {
-    pub fn new(
-        data: Vec<u8>,
-        iv: Vec<u8>,
-        alg: SymmetricKeyAlgorithm,
-        s2k: StringToKey,
-        s2k_usage: S2kUsage,
-    ) -> Self {
-        assert_ne!(s2k_usage, S2kUsage::Unprotected, "invalid string to key id");
-        EncryptedSecretParams {
-            data,
-            iv,
-            encryption_algorithm: alg,
-            string_to_key: s2k,
-            s2k_usage,
-        }
+    pub fn new(data: Vec<u8>, s2k_params: S2kParams) -> Self {
+        assert_ne!(s2k_params, S2kParams::Unprotected, "invalid string to key");
+        EncryptedSecretParams { data, s2k_params }
     }
 
     pub fn data(&self) -> &[u8] {
         &self.data
     }
 
-    pub fn iv(&self) -> &[u8] {
-        &self.iv
-    }
-
-    pub fn encryption_algorithm(&self) -> SymmetricKeyAlgorithm {
-        self.encryption_algorithm
-    }
-
-    pub fn string_to_key(&self) -> &StringToKey {
-        &self.string_to_key
-    }
-
     pub fn string_to_key_id(&self) -> u8 {
-        self.s2k_usage.into()
+        (&self.s2k_params).into()
     }
 
-    pub fn string_to_key_usage(&self) -> &S2kUsage {
-        &self.s2k_usage
+    pub fn string_to_key_params(&self) -> &S2kParams {
+        &self.s2k_params
     }
 
-    pub fn compare_checksum(&self, other: Option<&[u8]>) -> Result<()> {
-        if self.string_to_key_id() < 254 {
-            if let Some(other) = other {
-                ensure_eq!(
-                    BigEndian::read_u16(other),
-                    checksum::calculate_simple(self.data()),
-                    "Invalid checksum"
-                );
-            } else {
-                bail!("Missing checksum");
+    pub fn checksum(&self) -> Vec<u8> {
+        match self.s2k_params {
+            S2kParams::Unprotected => unreachable!(),
+            S2kParams::LegacyCfb { .. }
+            | S2kParams::Aead { .. }
+            | S2kParams::MaleableCfb { .. } => {
+                // 2 octets
+                self.data[self.data.len() - 2..].to_vec()
             }
-        } else {
-            ensure!(other.is_none(), "Expected no checksum, but found one");
-        }
-
-        Ok(())
-    }
-
-    pub fn checksum(&self) -> Option<Vec<u8>> {
-        if self.string_to_key_id() < 254 {
-            Some(
-                checksum::calculate_simple(self.data())
-                    .to_be_bytes()
-                    .to_vec(),
-            )
-        } else {
-            None
+            S2kParams::Cfb { .. } => {
+                // 20 octets SHA1
+                self.data[self.data.len() - 20..].to_vec()
+            }
         }
     }
 
@@ -104,58 +60,122 @@ impl EncryptedSecretParams {
     where
         F: FnOnce() -> String,
     {
-        let key = self
-            .string_to_key
-            .derive_key(&pw(), self.encryption_algorithm.key_size())?;
+        match &self.s2k_params {
+            S2kParams::Unprotected => unreachable!(),
+            S2kParams::LegacyCfb { sym_alg, iv } => {
+                let key = md5::Md5::digest(&pw());
 
-        // Actual decryption
-        let mut plaintext = self.data.clone();
-        self.encryption_algorithm
-            .decrypt_with_iv_regular(&key, &self.iv, &mut plaintext)?;
+                // Decryption
+                let mut plaintext = self.data.clone();
+                sym_alg.decrypt_with_iv_regular(&key, &iv, &mut plaintext)?;
 
-        // Check SHA-1 hash if it is present.
-        // See RFC 4880, "5.5.3 Secret-Key Packet Formats" for details.
-        if self.s2k_usage == S2kUsage::Cfb {
-            if plaintext.len() < 20 {
-                return Err(Error::InvalidInput);
+                // Checksum
+                if plaintext.len() < 2 {
+                    return Err(Error::InvalidInput);
+                }
+                let (plaintext, checksum) = plaintext.split_at(self.data.len() - 2);
+
+                let calculated_checksum = checksum::calculate_simple(plaintext);
+                if calculated_checksum != BigEndian::read_u16(checksum) {
+                    return Err(Error::InvalidInput);
+                }
+
+                PlainSecretParams::from_slice(&plaintext, alg, params)
             }
-            let expected_sha1 = &plaintext[plaintext.len() - 20..];
-            let calculated_sha1 = checksum::calculate_sha1([&plaintext[..plaintext.len() - 20]]);
-            let checksum_correct = expected_sha1 == calculated_sha1;
-            if !checksum_correct {
-                return Err(Error::InvalidInput);
+            S2kParams::Aead {
+                sym_alg,
+                aead_mode,
+                s2k,
+                nonce,
+            } => {
+                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+                let mut plaintext = self.data.clone();
+                todo!()
+            }
+            S2kParams::Cfb { sym_alg, s2k, iv } => {
+                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+
+                // Decryption
+                let mut plaintext = self.data.clone();
+                sym_alg.decrypt_with_iv_regular(&key, &iv, &mut plaintext)?;
+
+                // Checksum
+
+                // Check SHA-1 hash if it is present.
+                // See RFC 4880, "5.5.3 Secret-Key Packet Formats" for details.
+                if plaintext.len() < 20 {
+                    return Err(Error::InvalidInput);
+                }
+
+                let (plaintext, expected_sha1) = plaintext.split_at(self.data.len() - 20);
+                let calculated_sha1 = checksum::calculate_sha1([plaintext]);
+                if expected_sha1 != calculated_sha1 {
+                    return Err(Error::InvalidInput);
+                }
+                PlainSecretParams::from_slice(&plaintext, alg, params)
+            }
+            S2kParams::MaleableCfb { sym_alg, s2k, iv } => {
+                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+
+                // Decryption
+                let mut plaintext = self.data.clone();
+                sym_alg.decrypt_with_iv_regular(&key, &iv, &mut plaintext)?;
+                if plaintext.len() < 2 {
+                    return Err(Error::InvalidInput);
+                }
+
+                // Checksum
+                let (plaintext, checksum) = plaintext.split_at(self.data.len() - 2);
+                let calculated_checksum = checksum::calculate_simple(plaintext);
+                if calculated_checksum != BigEndian::read_u16(checksum) {
+                    return Err(Error::InvalidInput);
+                }
+
+                PlainSecretParams::from_slice(&plaintext, alg, params)
             }
         }
-
-        let res = PlainSecretParams::from_slice(&plaintext, alg, params)?;
-        Ok(res)
     }
 }
 
 impl Serialize for EncryptedSecretParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[self.s2k_usage.into()])?;
+        writer.write_all(&[(&self.s2k_params).into()])?;
 
-        match self.s2k_usage {
-            S2kUsage::Unprotected => {
+        match &self.s2k_params {
+            S2kParams::Unprotected => {
                 panic!("encrypted secret params should not have an unecrypted identifier")
             }
-            S2kUsage::LegacyCfb(_) | S2kUsage::Aead => {
-                writer.write_all(&self.iv)?;
+            S2kParams::LegacyCfb { ref iv, .. } => {
+                writer.write_all(iv)?;
             }
-            S2kUsage::Cfb | S2kUsage::MaleableCfb => {
-                let s2k = &self.string_to_key;
-
-                writer.write_all(&[u8::from(self.encryption_algorithm)])?;
+            S2kParams::Aead {
+                sym_alg,
+                aead_mode,
+                s2k,
+                ref nonce,
+            } => {
+                writer.write_all(&[u8::from(*sym_alg)])?;
+                writer.write_all(&[u8::from(*aead_mode)])?;
                 s2k.to_writer(writer)?;
-                writer.write_all(&self.iv)?;
+                writer.write_all(nonce)?;
+            }
+            S2kParams::Cfb {
+                sym_alg,
+                s2k,
+                ref iv,
+            }
+            | S2kParams::MaleableCfb {
+                sym_alg,
+                s2k,
+                ref iv,
+            } => {
+                writer.write_all(&[u8::from(*sym_alg)])?;
+                s2k.to_writer(writer)?;
+                writer.write_all(iv)?;
             }
         }
 
         writer.write_all(&self.data)?;
-        if let Some(cs) = self.checksum() {
-            writer.write_all(&cs)?;
-        }
 
         Ok(())
     }
@@ -165,11 +185,7 @@ impl fmt::Debug for EncryptedSecretParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("EncryptedSecretParams")
             .field("data", &hex::encode(&self.data))
-            .field("checksum", &self.checksum().map(hex::encode))
-            .field("iv", &hex::encode(&self.iv))
-            .field("encryption_algorithm", &self.encryption_algorithm)
-            .field("string_to_key", &self.string_to_key)
-            .field("string_to_key_usage", &self.s2k_usage)
+            .field("string_to_key_params", &self.s2k_params)
             .finish()
     }
 }
