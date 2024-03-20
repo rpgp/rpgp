@@ -88,7 +88,7 @@ Symbols:
   - [ ] GCM
 - S2K
   - [x] Iterated and Salted
-  - [ ] Argon2
+  - [x] Argon2
 
 ## High Level API
 
