@@ -71,6 +71,13 @@ pub enum Tag {
     ModDetectionCode = 19,
 }
 
+impl Tag {
+    pub fn encode(self) -> u8 {
+        let t = self as u8;
+        0b1100_0000 | t
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]

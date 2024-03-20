@@ -525,7 +525,9 @@ mod tests {
     }
 
     #[test]
-    fn aead_gcm_skesk_msg() {
+    fn aead_skesk_msg() {
+        let _ = pretty_env_logger::try_init();
+
         // Tests decrypting messages
         //
         // "These messages are the literal data "Hello, world!" encrypted using AES-128 with various AEADs

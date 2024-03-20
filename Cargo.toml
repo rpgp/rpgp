@@ -64,6 +64,8 @@ twofish = "^0.7"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 getrandom = { version = "0.2.6", optional = true }
 bstr = { version = "1.4.0", default-features = false, features = ["std"] }
+hkdf = "0.12.4"
+aes-gcm = "0.10.3"
 
 [dependencies.buffer-redux]
 version = "1.0.0"

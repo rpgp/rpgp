@@ -1,5 +1,7 @@
 use std::{fmt, io};
 
+use nom::bytes::streaming::take;
+use nom::combinator::map_res;
 use nom::number::streaming::be_u8;
 use rand::{thread_rng, CryptoRng, Rng};
 
@@ -26,10 +28,9 @@ enum Data {
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: u32,
         salt: [u8; 32],
         data: Vec<u8>,
-        auth_tag: Vec<u8>,
     },
 }
 
@@ -117,7 +118,23 @@ fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
         match version {
             0x01 => Ok((&[][..], Data::V1 { data: i.to_vec() })),
             0x02 => {
-                todo!()
+                let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+                let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
+                let (i, chunk_size) = be_u8(i)?;
+                let (i, salt) = take(32usize)(i)?;
+
+                let chunk_size = 1u32 << (chunk_size as u32 + 6);
+
+                Ok((
+                    &[][..],
+                    Data::V2 {
+                        sym_alg,
+                        aead,
+                        chunk_size,
+                        salt: salt.try_into().unwrap(),
+                        data: i.to_vec(),
+                    },
+                ))
             }
             _ => {
                 return Err(nom::Err::Error(Error::Unsupported(format!(

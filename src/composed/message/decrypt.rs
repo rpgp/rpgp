@@ -32,7 +32,7 @@ pub fn decrypt_session_key_with_password<F>(
 where
     F: FnOnce() -> String,
 {
-    debug!("decrypting session key");
+    debug!("decrypting session key: {:#?}", packet);
 
     let packet_algorithm = packet.sym_algorithm();
     ensure!(
@@ -44,17 +44,15 @@ where
         .s2k()
         .derive_key(&msg_pw(), packet_algorithm.key_size())?;
 
-    let Some(ref encrypted_key) = packet.encrypted_key() else {
+    debug!("derived key: {}", hex::encode(&key));
+    if packet.encrypted_key().is_none() {
         // There is no encrypted session key.
         //
         // S2K-derived key is the session key.
         return Ok((key, packet_algorithm));
-    };
+    }
 
-    let mut decrypted_key = encrypted_key.to_vec();
-    // packet.sym_algorithm().decrypt(&key, &mut decrypted_key)?;
-    let iv = vec![0u8; packet.sym_algorithm().block_size()];
-    packet_algorithm.decrypt_with_iv_regular(&key, &iv, &mut decrypted_key)?;
+    let decrypted_key = packet.decrypt(&key)?;
 
     let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
     ensure!(
