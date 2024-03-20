@@ -124,8 +124,42 @@ impl SymKeyEncryptedSessionKey {
                 debug!("decrypted_key: {}", hex::encode(&decrypted_key));
                 Ok(PlainSessionKey::V5 { key: decrypted_key })
             }
-            Self::V6 { iv, .. } => {
-                todo!()
+            Self::V6 {
+                iv,
+                sym_algorithm,
+                aead,
+                auth_tag,
+                ..
+            } => {
+                // Initial key material is the s2k derived key.
+                let ikm = key;
+                // No salt is used
+                let salt = None;
+
+                let info = [
+                    Tag::SymKeyEncryptedSessionKey.encode(), // packet type
+                    0x06,                                    // version
+                    (*sym_algorithm).into(),
+                    (*aead).into(),
+                ];
+
+                let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
+                let mut okm = [0u8; 42];
+                hk.expand(&info, &mut okm).expect("42");
+                debug!("info: {} - hkdf: {}", hex::encode(&info), hex::encode(&okm));
+                debug!("nonce: {}", hex::encode(iv));
+
+                // AEAD decrypt
+                aead.decrypt_in_place(
+                    sym_algorithm,
+                    &okm,
+                    iv,
+                    &info,
+                    auth_tag,
+                    &mut decrypted_key,
+                )?;
+                debug!("decrypted_key: {}", hex::encode(&decrypted_key));
+                Ok(PlainSessionKey::V6 { key: decrypted_key })
             }
         }
     }

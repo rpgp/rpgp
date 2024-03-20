@@ -32,7 +32,7 @@ impl From<usize> for PacketLength {
 }
 
 /// Packet tag as defined in RFC 4880, Section 4.3 "Packet Tags"
-#[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum Tag {
     /// Public-Key Encrypted Session Key Packet
@@ -69,11 +69,16 @@ pub enum Tag {
     SymEncryptedProtectedData = 18,
     /// Modification Detection Code Packet
     ModDetectionCode = 19,
+    /// Padding Packet
+    Padding = 21,
+
+    #[num_enum(catch_all)]
+    Other(u8),
 }
 
 impl Tag {
     pub fn encode(self) -> u8 {
-        let t = self as u8;
+        let t: u8 = self.into();
         0b1100_0000 | t
     }
 }
@@ -157,21 +162,21 @@ mod tests {
     fn test_write_header() {
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::UserAttribute as u8, 12875)
+            .write_header(&mut buf, Tag::UserAttribute.into(), 12875)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "d1ff0000324b");
 
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::Signature as u8, 302)
+            .write_header(&mut buf, Tag::Signature.into(), 302)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06e");
 
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::Signature as u8, 303)
+            .write_header(&mut buf, Tag::Signature.into(), 303)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06f");

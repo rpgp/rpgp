@@ -4,6 +4,7 @@ use nom::bytes::streaming::take;
 use nom::combinator::map_res;
 use nom::number::streaming::be_u8;
 use rand::{thread_rng, CryptoRng, Rng};
+use sha2::Sha256;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -73,6 +74,104 @@ impl SymEncryptedProtectedData {
         match &self.data {
             Data::V1 { data } => &data,
             Data::V2 { data, .. } => &data,
+        }
+    }
+
+    pub fn version(&self) -> usize {
+        match self.data {
+            Data::V1 { .. } => 1,
+            Data::V2 { .. } => 2,
+        }
+    }
+
+    /// Decryptes the inner data, returning the result.
+    pub fn decrypt(
+        &self,
+        session_key: &[u8],
+        sym_alg: Option<SymmetricKeyAlgorithm>,
+    ) -> Result<Vec<u8>> {
+        match &self.data {
+            Data::V1 { data } => {
+                let mut data = data.clone();
+                let res = sym_alg
+                    .expect("v1")
+                    .decrypt_protected(session_key, &mut data)?;
+                let l = res.len();
+                drop(res);
+                data.truncate(l);
+                Ok(data)
+            }
+            Data::V2 {
+                sym_alg,
+                aead,
+                chunk_size,
+                salt,
+                data,
+            } => {
+                // Initial key material is the session key.
+                let ikm = session_key;
+
+                // Salt is used.
+                let salt = Some(&salt[..]);
+
+                let chunk_size_octet = (chunk_size.ilog2() - 6) as u8;
+                let info = [
+                    Tag::SymEncryptedProtectedData.encode(), // packet type
+                    0x02,                                    // version
+                    (*sym_alg).into(),
+                    (*aead).into(),
+                    chunk_size_octet,
+                ];
+
+                let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
+                let mut okm = [0u8; 42];
+                hk.expand(&info, &mut okm).expect("42");
+                debug!("info: {} - hkdf: {}", hex::encode(&info), hex::encode(&okm));
+                let message_key = &okm[..sym_alg.key_size()];
+                let raw_iv_len = aead.nonce_size() - 8;
+                let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
+                let mut nonce = vec![0u8; aead.nonce_size()];
+                nonce[..raw_iv_len].copy_from_slice(iv);
+
+                debug!("message_key: {}", hex::encode(message_key));
+                debug!("iv: {}", hex::encode(iv));
+                debug!("nonce: {}", hex::encode(&nonce));
+
+                let mut data = data.clone();
+
+                debug!(
+                    "data {}, chunk_size {} - {}",
+                    hex::encode(&data),
+                    chunk_size,
+                    data.len()
+                );
+                let mut out = Vec::new();
+                let chunk_size = *chunk_size as usize;
+
+                // There are n chunks, n auth tags + 1 final auth tag
+                let offset = data.len() - aead.tag_size();
+                let (main_chunks, final_auth_tag) = data.split_at_mut(offset);
+
+                for chunk in main_chunks.chunks_mut(chunk_size + aead.tag_size()) {
+                    let offset = chunk.len() - aead.tag_size();
+                    let (chunk, auth_tag) = chunk.split_at_mut(offset);
+
+                    debug!(
+                        "chunk {} - tag {}",
+                        hex::encode(&chunk),
+                        hex::encode(&auth_tag)
+                    );
+                    let res =
+                        aead.decrypt(&sym_alg, message_key, &nonce, &info, &auth_tag, chunk)?;
+                    debug!("decrypted {}", hex::encode(&res));
+                    out.extend(res);
+                }
+
+                // TODO: verify final auth tag
+                debug!("final auth tag: {}", hex::encode(&final_auth_tag));
+
+                Ok(out)
+            }
         }
     }
 }

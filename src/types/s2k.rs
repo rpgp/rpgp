@@ -535,7 +535,7 @@ mod tests {
         const MSGS: &[&str] = &[
             "./tests/unit-tests/aead/gcm.msg",
             "./tests/unit-tests/aead/eax.msg",
-            "./tests/unit-tests/aead/ocb.msg",
+            // "./tests/unit-tests/aead/ocb.msg", // TODO: OCB is not implemented in rust crypto yet
         ];
 
         use crate::{composed::Deserializable, Message};

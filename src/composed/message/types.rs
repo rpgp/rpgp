@@ -162,10 +162,15 @@ impl Edata {
         }
     }
 
-    pub fn decrypt(&self, key: PlainSessionKey) -> Result<Message> {
-        let mut res = self.data()[..].to_vec();
-        let protected = self.tag() == Tag::SymEncryptedProtectedData;
+    fn version(&self) -> Option<usize> {
+        match self {
+            Edata::SymEncryptedData(_) => None,
+            Edata::SymEncryptedProtectedData(d) => Some(d.version()),
+        }
+    }
 
+    pub fn decrypt(&self, key: PlainSessionKey) -> Result<Message> {
+        let protected = self.tag() == Tag::SymEncryptedProtectedData;
         debug!("decrypting protected = {:?}", protected);
 
         match key {
@@ -175,18 +180,68 @@ impl Edata {
                     "session key algorithm cannot be plaintext"
                 );
 
-                let decrypted_packet: &[u8] = if protected {
-                    sym_alg.decrypt_protected(&key, &mut res)
-                } else {
-                    sym_alg.decrypt(&key, &mut res)
-                }?;
-                Message::from_bytes(Cursor::new(decrypted_packet.to_vec()))
+                match self {
+                    Self::SymEncryptedProtectedData(p) => {
+                        ensure_eq!(
+                            self.version(),
+                            Some(1),
+                            "Version missmatch between key and integrity packet"
+                        );
+                        let data = p.decrypt(&key, Some(sym_alg))?;
+                        Message::from_bytes(Cursor::new(data))
+                    }
+                    Self::SymEncryptedData(p) => {
+                        ensure_eq!(
+                            self.version(),
+                            None,
+                            "Version missmatch between key and integrity packet"
+                        );
+                        let mut data = self.data()[..].to_vec();
+                        let res = sym_alg.decrypt(&key, &mut data)?;
+                        let l = res.len();
+                        drop(res);
+                        data.truncate(l);
+                        Message::from_bytes(Cursor::new(data))
+                    }
+                }
             }
             PlainSessionKey::V5 { key } => {
-                unimplemented_err!("V5 decryption");
+                if protected {
+                    ensure_eq!(
+                        self.version(),
+                        Some(2),
+                        "Version missmatch between key and integrity packet"
+                    );
+                    unimplemented_err!("V5 decryption");
+                } else {
+                    // TODO: is this a valid case?
+                    ensure_eq!(
+                        self.version(),
+                        None,
+                        "Version missmatch between key and integrity packet"
+                    );
+                    unimplemented_err!("V5 decryption not protected");
+                }
             }
             PlainSessionKey::V6 { key } => {
-                unimplemented_err!("V6 decryption");
+                match self {
+                    Self::SymEncryptedProtectedData(p) => {
+                        let decrypted_packet = p.decrypt(&key, None)?;
+
+                        // TODO: handle multiple messages (padding packets can appear here)
+
+                        Message::from_bytes(Cursor::new(decrypted_packet))
+                    }
+                    Self::SymEncryptedData(_) => {
+                        // TODO: is this a valid case?
+                        ensure_eq!(
+                            self.version(),
+                            None,
+                            "Version missmatch between key and integrity packet"
+                        );
+                        unimplemented_err!("V6 decryption not protected");
+                    }
+                }
             }
         }
     }
