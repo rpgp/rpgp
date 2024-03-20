@@ -116,7 +116,7 @@ fn parse_secret_fields(
                     },
                 )
             }
-            S2kUsage::MaleableCfb => {
+            S2kUsage::MalleableCfb => {
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
                 let (i, s2k) = s2k_parser(i)?;
                 let (i, iv) = take(sym_alg.block_size())(i)?;

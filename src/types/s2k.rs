@@ -28,7 +28,7 @@ pub enum S2kUsage {
     /// 254
     Cfb,
     /// 255
-    MaleableCfb,
+    MalleableCfb,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -75,7 +75,7 @@ impl From<u8> for S2kUsage {
             v @ 1..=252 => Self::LegacyCfb(SymmetricKeyAlgorithm::from(v)),
             253 => Self::Aead,
             254 => Self::Cfb,
-            255 => Self::MaleableCfb,
+            255 => Self::MalleableCfb,
         }
     }
 }

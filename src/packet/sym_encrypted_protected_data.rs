@@ -96,10 +96,7 @@ impl SymEncryptedProtectedData {
                 let res = sym_alg
                     .expect("v1")
                     .decrypt_protected(session_key, &mut data)?;
-                let l = res.len();
-                drop(res);
-                data.truncate(l);
-                Ok(data)
+                Ok(res.to_vec())
             }
             Data::V2 {
                 sym_alg,

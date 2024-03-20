@@ -82,9 +82,11 @@ impl SymKeyEncryptedSessionKey {
                 let iv = vec![0u8; sym_algorithm.block_size()];
                 self.sym_algorithm()
                     .decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
+
+                let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
                 Ok(PlainSessionKey::V4 {
                     key: decrypted_key[1..].to_vec(),
-                    sym_alg: SymmetricKeyAlgorithm::from(decrypted_key[0]),
+                    sym_alg,
                 })
             }
             Self::V5 {
