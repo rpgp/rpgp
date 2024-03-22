@@ -22,6 +22,7 @@ use smallvec::SmallVec;
 
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
+use pgp::crypto::ecdsa::SecretKey as ECDSASecretKey;
 use pgp::crypto::{
     ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
     sym::SymmetricKeyAlgorithm,
@@ -33,8 +34,8 @@ use pgp::packet::{
 };
 use pgp::ser::Serialize;
 use pgp::types::{
-    CompressionAlgorithm, ECDSASecretKey, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams,
-    SecretKeyRepr, SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, SecretKeyRepr,
+    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
@@ -195,7 +196,7 @@ fn test_parse_openpgp_sample_rsa_private() {
 
                     let ciphertext = {
                         // TODO: fix this in rust-rsa
-                        let k: RsaPrivateKey = k.clone();
+                        let k: RsaPrivateKey = (*k).clone();
                         let pk: RsaPublicKey = k.into();
                         pk.encrypt(
                             &mut rng,
@@ -205,6 +206,7 @@ fn test_parse_openpgp_sample_rsa_private() {
                         .expect("failed to encrypt")
                     };
 
+                    let k: &RsaPrivateKey = k;
                     let new_plaintext = k
                         .decrypt(rsa::pkcs1v15::Pkcs1v15Encrypt, ciphertext.as_slice())
                         .expect("failed to decrypt");

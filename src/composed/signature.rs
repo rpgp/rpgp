@@ -1,5 +1,4 @@
 use std::collections::BTreeMap;
-use std::convert::TryInto;
 use std::iter::Peekable;
 
 use crate::armor;

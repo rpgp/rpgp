@@ -2,7 +2,7 @@ use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::number::streaming::be_u16;
-use nom::{self, Err, InputIter, InputTake};
+use nom::{Err, InputIter, InputTake};
 use num_bigint::BigUint;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 

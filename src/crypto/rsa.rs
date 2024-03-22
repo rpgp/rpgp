@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
 use num_bigint::traits::ModInverse;
@@ -14,22 +16,78 @@ use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
 use signature::SignatureEncoding;
+use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
 use crate::errors::Result;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
 const MAX_KEY_SIZE: usize = 16384;
 
-/// RSA decryption using PKCS1v15 padding.
-pub fn decrypt(priv_key: &RsaPrivateKey, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
-    // rsa consist of exactly one mpi
-    ensure_eq!(mpis.len(), 1, "invalid input");
+/// Private Key for RSA.
+#[derive(Debug, ZeroizeOnDrop)]
+pub struct PrivateKey(pub(crate) RsaPrivateKey);
 
-    let mpi = &mpis[0];
-    let m = priv_key.decrypt(Pkcs1v15Encrypt, mpi.as_bytes())?;
+impl Deref for PrivateKey {
+    type Target = RsaPrivateKey;
 
-    Ok(m)
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl KeyParams for PrivateKey {
+    type KeyParams = ();
+
+    #[allow(clippy::unused_unit)]
+    fn key_params(&self) -> Self::KeyParams {
+        ()
+    }
+}
+
+impl Decryptor for PrivateKey {
+    /// RSA decryption using PKCS1v15 padding.
+    fn decrypt(&self, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
+        // rsa consist of exactly one mpi
+        ensure_eq!(mpis.len(), 1, "invalid input");
+
+        let mpi = &mpis[0];
+        let m = self.0.decrypt(Pkcs1v15Encrypt, mpi.as_bytes())?;
+
+        Ok(m)
+    }
+}
+
+impl Signer for PrivateKey {
+    /// Sign using RSA, with PKCS1v15 padding.
+    fn sign(
+        &self,
+        hash: HashAlgorithm,
+        digest: &[u8],
+        pub_params: &PublicParams,
+    ) -> Result<Vec<Vec<u8>>> {
+        ensure!(
+            matches!(pub_params, PublicParams::RSA { .. }),
+            "invalid public params"
+        );
+
+        let sig = match hash {
+            HashAlgorithm::None => return Err(format_err!("none")),
+            HashAlgorithm::MD5 => sign_int::<Md5>(self.0.clone(), digest),
+            HashAlgorithm::RIPEMD160 => sign_int::<Ripemd160>(self.0.clone(), digest),
+            HashAlgorithm::SHA1 => sign_int::<Sha1>(self.0.clone(), digest),
+            HashAlgorithm::SHA2_224 => sign_int::<Sha224>(self.0.clone(), digest),
+            HashAlgorithm::SHA2_256 => sign_int::<Sha256>(self.0.clone(), digest),
+            HashAlgorithm::SHA2_384 => sign_int::<Sha384>(self.0.clone(), digest),
+            HashAlgorithm::SHA2_512 => sign_int::<Sha512>(self.0.clone(), digest),
+            HashAlgorithm::SHA3_256 => sign_int::<Sha3_256>(self.0.clone(), digest),
+            HashAlgorithm::SHA3_512 => sign_int::<Sha3_512>(self.0.clone(), digest),
+            HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
+            HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
+        }?;
+
+        Ok(vec![sig.to_vec()])
+    }
 }
 
 /// RSA encryption using PKCS1v15 padding.
@@ -137,24 +195,4 @@ pub fn verify(
         HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
     }
     .map_err(Into::into)
-}
-
-/// Sign using RSA, with PKCS1v15 padding.
-pub fn sign(key: &RsaPrivateKey, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
-    let sig = match hash {
-        HashAlgorithm::None => return Err(format_err!("none")),
-        HashAlgorithm::MD5 => sign_int::<Md5>(key.clone(), digest),
-        HashAlgorithm::RIPEMD160 => sign_int::<Ripemd160>(key.clone(), digest),
-        HashAlgorithm::SHA1 => sign_int::<Sha1>(key.clone(), digest),
-        HashAlgorithm::SHA2_224 => sign_int::<Sha224>(key.clone(), digest),
-        HashAlgorithm::SHA2_256 => sign_int::<Sha256>(key.clone(), digest),
-        HashAlgorithm::SHA2_384 => sign_int::<Sha384>(key.clone(), digest),
-        HashAlgorithm::SHA2_512 => sign_int::<Sha512>(key.clone(), digest),
-        HashAlgorithm::SHA3_256 => sign_int::<Sha3_256>(key.clone(), digest),
-        HashAlgorithm::SHA3_512 => sign_int::<Sha3_512>(key.clone(), digest),
-        HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
-        HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
-    }?;
-
-    Ok(vec![sig.to_vec()])
 }

@@ -1,11 +1,60 @@
+use std::fmt;
+
 use rand::{CryptoRng, Rng};
-use signature::{Signer, Verifier};
-use zeroize::{Zeroize, Zeroizing};
+use signature::{Signer as _, Verifier};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{EdDSASecretKey, Mpi, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PlainSecretParams, PublicParams};
+
+/// Secret key for EdDSA with Curve25519, the only combination we currently support.
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+pub struct SecretKey {
+    /// The secret point.
+    pub secret: [u8; 32],
+    pub oid: Vec<u8>,
+}
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EdDSASecretKey")
+            .field("secret", &"[..]")
+            .field("oid", &hex::encode(&self.oid))
+            .finish()
+    }
+}
+
+impl Signer for SecretKey {
+    fn sign(
+        &self,
+        _hash: HashAlgorithm,
+        digest: &[u8],
+        pub_params: &PublicParams,
+    ) -> Result<Vec<Vec<u8>>> {
+        let PublicParams::EdDSA { curve, q } = pub_params else {
+            bail!("invalid public params");
+        };
+        if curve != &ECCCurve::Ed25519 {
+            unsupported_err!("curve {:?} for EdDSA", curve.to_string());
+        }
+
+        ensure_eq!(q.len(), 33, "invalid Q (len)");
+        ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
+
+        let key = ed25519_dalek::SigningKey::from_bytes(&self.secret);
+
+        let signature = key.sign(digest);
+        let bytes = signature.to_bytes();
+
+        let r = bytes[..32].to_vec();
+        let s = bytes[32..].to_vec();
+
+        Ok(vec![r, s])
+    }
+}
 
 /// Generate an EdDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {
@@ -67,25 +116,4 @@ pub fn verify(
         }
         _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
     }
-}
-
-/// Sign using RSA, with PKCS1v15 padding.
-pub fn sign(
-    q: &[u8],
-    secret_key: &EdDSASecretKey,
-    _hash: HashAlgorithm,
-    digest: &[u8],
-) -> Result<Vec<Vec<u8>>> {
-    ensure_eq!(q.len(), 33, "invalid Q (len)");
-    ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
-
-    let key = ed25519_dalek::SigningKey::from_bytes(&secret_key.secret);
-
-    let signature = key.sign(digest);
-    let bytes = signature.to_bytes();
-
-    let r = bytes[..32].to_vec();
-    let s = bytes[32..].to_vec();
-
-    Ok(vec![r, s])
 }

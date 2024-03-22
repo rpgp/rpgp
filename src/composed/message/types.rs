@@ -1,11 +1,9 @@
-use std::boxed::Box;
 use std::collections::BTreeMap;
-use std::convert::TryFrom;
 use std::io;
 use std::io::Cursor;
 
 use bstr::BStr;
-use chrono::{self, SubsecRound};
+use chrono::SubsecRound;
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use rand::{CryptoRng, Rng};
@@ -705,12 +703,6 @@ mod tests {
     use super::*;
     use rand::thread_rng;
     use std::fs;
-    use std::io::Cursor;
-
-    use crate::composed::{Deserializable, Message, SignedSecretKey};
-    use crate::crypto::hash::HashAlgorithm;
-    use crate::crypto::sym::SymmetricKeyAlgorithm;
-    use crate::types::{CompressionAlgorithm, SecretKeyTrait};
 
     #[test]
     fn test_compression_zlib() {

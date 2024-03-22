@@ -1,15 +1,124 @@
+use std::fmt;
+
 use ecdsa::SigningKey;
 use elliptic_curve::sec1::ToEncodedPoint;
 use p521::NistP521;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
+use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::Signer;
 use crate::errors::Result;
 use crate::types::EcdsaPublicParams;
-use crate::types::{ECDSASecretKey, Mpi, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop)]
+pub enum SecretKey {
+    P256(p256::SecretKey),
+    P384(p384::SecretKey),
+    P521(p521::SecretKey),
+    Secp256k1(k256::SecretKey),
+    Unsupported {
+        /// The secret point.
+        x: Mpi,
+        #[zeroize(skip)]
+        curve: ECCCurve,
+    },
+}
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::P256(_) => write!(f, "ECDSASecretKey::P256([..])"),
+            Self::P384(_) => write!(f, "ECDSASecretKey::P384([..])"),
+            Self::P521(_) => write!(f, "ECDSASecretKey::P521([..])"),
+            Self::Secp256k1(_) => write!(f, "ECDSASecretKey::Secp256k1([..])"),
+            Self::Unsupported { curve, .. } => f
+                .debug_struct("ECDSASecretKey::Unsupported")
+                .field("x", &"[..]")
+                .field("curve", &curve)
+                .finish(),
+        }
+    }
+}
+
+impl Signer for SecretKey {
+    fn sign(
+        &self,
+        hash: HashAlgorithm,
+        digest: &[u8],
+        pub_params: &PublicParams,
+    ) -> Result<Vec<Vec<u8>>> {
+        ensure!(
+            matches!(pub_params, PublicParams::ECDSA(..)),
+            "invalid public params"
+        );
+
+        if let Some(field_size) = self.secret_key_length() {
+            // We require that the signing key length is matched by the hash digest length, see
+            // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-d
+
+            let field_size = match field_size {
+                66 => 64, // nist p521 is treated as though it were 512 bit-sized
+                s => s,
+            };
+
+            ensure!(
+                digest.len() >= field_size,
+                "Hash digest size ({:?}) must at least match key size ({:?})",
+                hash,
+                self
+            );
+        }
+
+        let (r, s) = match self {
+            Self::P256(secret_key) => {
+                let secret = p256::ecdsa::SigningKey::from(secret_key);
+                let signature: p256::ecdsa::Signature = secret.sign_prehash(digest)?;
+                let (r, s) = signature.split_bytes();
+                (r.to_vec(), s.to_vec())
+            }
+            Self::P384(secret_key) => {
+                let secret = p384::ecdsa::SigningKey::from(secret_key);
+                let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
+                let (r, s) = signature.split_bytes();
+                (r.to_vec(), s.to_vec())
+            }
+            Self::P521(secret_key) => {
+                let secret: SigningKey<NistP521> = secret_key.into();
+                let signing_key = p521::ecdsa::SigningKey::from(secret);
+                let signature: p521::ecdsa::Signature = signing_key.sign_prehash(digest)?;
+                let (r, s) = signature.split_bytes();
+                (r.to_vec(), s.to_vec())
+            }
+            Self::Secp256k1(secret_key) => {
+                let secret = k256::ecdsa::SigningKey::from(secret_key);
+                let signature: k256::ecdsa::Signature = secret.sign_prehash(digest)?;
+                let (r, s) = signature.split_bytes();
+                (r.to_vec(), s.to_vec())
+            }
+            Self::Unsupported { curve, .. } => {
+                unsupported_err!("curve {:?} for ECDSA", curve)
+            }
+        };
+
+        Ok(vec![r, s])
+    }
+}
+
+impl SecretKey {
+    pub(crate) fn secret_key_length(&self) -> Option<usize> {
+        match self {
+            Self::P256 { .. } => Some(32),
+            Self::P384 { .. } => Some(48),
+            Self::P521 { .. } => Some(66),
+            Self::Secp256k1 { .. } => Some(32),
+            Self::Unsupported { .. } => None,
+        }
+    }
+}
 /// Generate an ECDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(
     rng: &mut R,
@@ -184,61 +293,4 @@ pub fn verify(
             unsupported_err!("curve {:?} for ECDSA", curve.to_string())
         }
     }
-}
-
-/// Sign using ECDSA
-pub fn sign(
-    secret_key: &ECDSASecretKey,
-    hash: HashAlgorithm,
-    digest: &[u8],
-) -> Result<Vec<Vec<u8>>> {
-    if let Some(field_size) = secret_key.secret_key_length() {
-        // We require that the signing key length is matched by the hash digest length, see
-        // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-d
-
-        let field_size = match field_size {
-            66 => 64, // nist p521 is treated as though it were 512 bit-sized
-            s => s,
-        };
-
-        ensure!(
-            digest.len() >= field_size,
-            "Hash digest size ({:?}) must at least match key size ({:?})",
-            hash,
-            secret_key
-        );
-    }
-
-    let (r, s) = match secret_key {
-        ECDSASecretKey::P256(secret_key) => {
-            let secret = p256::ecdsa::SigningKey::from(secret_key);
-            let signature: p256::ecdsa::Signature = secret.sign_prehash(digest)?;
-            let (r, s) = signature.split_bytes();
-            (r.to_vec(), s.to_vec())
-        }
-        ECDSASecretKey::P384(secret_key) => {
-            let secret = p384::ecdsa::SigningKey::from(secret_key);
-            let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
-            let (r, s) = signature.split_bytes();
-            (r.to_vec(), s.to_vec())
-        }
-        ECDSASecretKey::P521(secret_key) => {
-            let secret: SigningKey<NistP521> = secret_key.into();
-            let signing_key = p521::ecdsa::SigningKey::from(secret);
-            let signature: p521::ecdsa::Signature = signing_key.sign_prehash(digest)?;
-            let (r, s) = signature.split_bytes();
-            (r.to_vec(), s.to_vec())
-        }
-        ECDSASecretKey::Secp256k1(secret_key) => {
-            let secret = k256::ecdsa::SigningKey::from(secret_key);
-            let signature: k256::ecdsa::Signature = secret.sign_prehash(digest)?;
-            let (r, s) = signature.split_bytes();
-            (r.to_vec(), s.to_vec())
-        }
-        ECDSASecretKey::Unsupported { curve, .. } => {
-            unsupported_err!("curve {:?} for ECDSA", curve)
-        }
-    };
-
-    Ok(vec![r, s])
 }

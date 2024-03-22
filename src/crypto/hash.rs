@@ -1,5 +1,3 @@
-use std::boxed::Box;
-
 use digest::Digest;
 use md5::Md5;
 use num_enum::{FromPrimitive, IntoPrimitive};

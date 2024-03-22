@@ -166,7 +166,6 @@ mod tests {
     use std::path::Path;
 
     use crate::ser::Serialize;
-    use crate::types::Tag;
 
     #[test]
     #[ignore]

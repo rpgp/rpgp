@@ -572,7 +572,7 @@ impl SymmetricKeyAlgorithm {
 mod tests {
     use super::*;
 
-    use rand::{Rng, SeedableRng};
+    use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
 
     macro_rules! roundtrip {

@@ -1,4 +1,3 @@
-use std::boxed::Box;
 use std::str;
 
 use bstr::BString;

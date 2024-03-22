@@ -154,12 +154,12 @@ macro_rules! impl_secret_key {
 
         impl $crate::types::SecretKeyTrait for $name {
             type PublicKey = $details;
+            type Unlocked = $crate::types::SecretKeyRepr;
 
-            /// Unlock the raw data in the secret parameters.
-            fn unlock<F, G>(&self, pw: F, work: G) -> $crate::errors::Result<()>
+            fn unlock<F, G, T>(&self, pw: F, work: G) -> $crate::errors::Result<T>
             where
                 F: FnOnce() -> String,
-                G: FnOnce(&$crate::types::SecretKeyRepr) -> $crate::errors::Result<()>,
+                G: FnOnce(&Self::Unlocked) -> $crate::errors::Result<T>,
             {
                 use $crate::types::SecretParams;
 
@@ -180,55 +180,28 @@ macro_rules! impl_secret_key {
             where
                 F: FnOnce() -> String,
             {
-                use $crate::crypto::ecc_curve::ECCCurve;
-                use $crate::types::{PublicParams, SecretKeyRepr};
+                use $crate::crypto::Signer;
+                use $crate::types::SecretKeyRepr;
 
                 let mut signature: Option<Vec<$crate::types::Mpi>> = None;
                 self.unlock(key_pw, |priv_key| {
                     debug!("unlocked key");
                     let sig = match *priv_key {
                         SecretKeyRepr::RSA(ref priv_key) => {
-                            $crate::crypto::rsa::sign(priv_key, hash, data)
+                            priv_key.sign(hash, data, self.public_params())
                         }
-                        SecretKeyRepr::ECDSA(ref priv_key) => match self.public_params() {
-                            PublicParams::ECDSA(ref _params) => {
-                                $crate::crypto::ecdsa::sign(priv_key, hash, data)
-                            }
-                            _ => unreachable!("inconsistent key state"),
-                        },
+                        SecretKeyRepr::ECDSA(ref priv_key) => {
+                            priv_key.sign(hash, data, self.public_params())
+                        }
                         SecretKeyRepr::DSA(ref priv_key) => {
-                            let (p, q, g, y) = match self.public_params() {
-                                PublicParams::DSA {
-                                    ref p,
-                                    ref q,
-                                    ref g,
-                                    ref y,
-                                } => (p, q, g, y),
-                                _ => unreachable!("inconsistent key state"),
-                            };
-                            $crate::crypto::dsa::sign(
-                                p.into(),
-                                q.into(),
-                                g.into(),
-                                priv_key.x.clone(),
-                                y.into(),
-                                hash,
-                                data,
-                            )
-                            .map(|(r, s)| vec![r.to_bytes_be(), s.to_bytes_be()])
+                            priv_key.sign(hash, data, self.public_params())
                         }
                         SecretKeyRepr::ECDH(_) => {
                             bail!("ECDH can not be used to for signing operations")
                         }
-                        SecretKeyRepr::EdDSA(ref priv_key) => match self.public_params() {
-                            PublicParams::EdDSA { ref curve, ref q } => match *curve {
-                                ECCCurve::Ed25519 => {
-                                    $crate::crypto::eddsa::sign(q.as_bytes(), priv_key, hash, data)
-                                }
-                                _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-                            },
-                            _ => unreachable!("inconsistent key state"),
-                        },
+                        SecretKeyRepr::EdDSA(ref priv_key) => {
+                            priv_key.sign(hash, data, self.public_params())
+                        }
                     }?;
 
                     // strip leading zeros, to match parse results from MPIs

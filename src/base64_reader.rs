@@ -60,7 +60,6 @@ mod tests {
 
     use super::*;
     use std::io::Cursor;
-    use std::io::Read;
 
     use crate::line_reader::LineReader;
 

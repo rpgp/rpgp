@@ -1,12 +1,15 @@
+use std::fmt;
+
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{
     aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
+    Decryptor, KeyParams,
 };
 use crate::errors::{Error, Result};
-use crate::types::{ECDHSecretKey, Mpi, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
 use super::hash::HashAlgorithm;
 
@@ -17,6 +20,142 @@ const ANON_SENDER: [u8; 20] = [
 ];
 
 const SECRET_KEY_LENGTH: usize = 32;
+
+/// Secret key for ECDH with Curve25519, the only combination we currently support.
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+pub struct SecretKey {
+    /// The secret point.
+    pub secret: [u8; 32],
+    pub hash: HashAlgorithm,
+    pub oid: Vec<u8>,
+    pub alg_sym: SymmetricKeyAlgorithm,
+}
+
+impl fmt::Debug for SecretKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EcdhSecretKey")
+            .field("secret", &"[..]")
+            .field("hash", &self.hash)
+            .field("oid", &hex::encode(&self.oid))
+            .field("alg_sym", &self.alg_sym)
+            .finish()
+    }
+}
+
+impl KeyParams for SecretKey {
+    type KeyParams = (Vec<u8>, SymmetricKeyAlgorithm, HashAlgorithm);
+
+    fn key_params(&self) -> Self::KeyParams {
+        (self.oid.clone(), self.alg_sym, self.hash)
+    }
+}
+
+impl Decryptor for SecretKey {
+    fn decrypt(&self, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
+        debug!("ECDH decrypt");
+
+        let param = build_ecdh_param(&self.oid, self.alg_sym, self.hash, fingerprint);
+
+        // 33 = 0x40 + 32bits
+        ensure_eq!(mpis.len(), 3);
+        ensure_eq!(mpis[0].len(), 33, "invalid public point");
+        ensure_eq!(self.secret.len(), 32, "invalid secret point");
+
+        // encrypted and wrapped value derived from the session key
+        let encrypted_session_key = mpis[2].as_bytes();
+
+        let their_public = {
+            // public part of the ephemeral key (removes 0x40 prefix)
+            let ephemeral_public_key = &mpis[0].as_bytes()[1..];
+
+            // create montgomery point
+            let mut ephemeral_public_key_arr = [0u8; 32];
+            ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
+
+            x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
+        };
+
+        let our_secret = {
+            // private key of the recipient.
+            let private_key = &self.secret[..];
+
+            // create scalar and reverse to little endian
+            let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
+            let mut private_key_arr = [0u8; 32];
+            private_key_arr[..].copy_from_slice(&private_key_le);
+            private_key_le.zeroize();
+
+            StaticSecret::from(private_key_arr)
+        };
+
+        // derive shared secret
+        let shared_secret = our_secret.diffie_hellman(&their_public);
+
+        // Perform key derivation
+        let z = kdf(
+            self.hash,
+            shared_secret.as_bytes(),
+            self.alg_sym.key_size(),
+            &param,
+        )?;
+
+        // Peform AES Key Unwrap
+        let encrypted_key_len: usize = match mpis[1].first() {
+            Some(l) => *l as usize,
+            None => 0,
+        };
+
+        let mut encrypted_session_key_vec = vec![0; encrypted_key_len];
+        encrypted_session_key_vec[(encrypted_key_len - encrypted_session_key.len())..]
+            .copy_from_slice(encrypted_session_key);
+
+        let mut decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
+        // PKCS5-style unpadding (PKCS5 is PKCS7 with a blocksize of 8).
+        //
+        // RFC 6637 describes the padding:
+        // a) "The result is padded using the method described in [PKCS5] to the 8-byte granularity."
+        // b) "For example, assuming that an AES algorithm is used for the session key, the sender MAY
+        // use 21, 13, and 5 bytes of padding for AES-128, AES-192, and AES-256, respectively, to
+        // provide the same number of octets, 40 total, as an input to the key wrapping method."
+        //
+        // So while the padding ensures that the length of the padded message is a multiple of 8, the
+        // padding may exceed 8 bytes in size.
+        {
+            let len = decrypted_key_padded.len();
+            let block_size = 8;
+            ensure!(len % block_size == 0, "invalid key length {}", len);
+            ensure!(!decrypted_key_padded.is_empty(), "empty key is not valid");
+
+            // The last byte should contain the padding symbol, which is also the padding length
+            let pad = decrypted_key_padded.last().expect("is not empty");
+
+            // Padding length seems to exceed size of the padded message
+            if *pad as usize > len {
+                return Err(Error::UnpadError);
+            }
+
+            // Expected length of the unpadded message
+            let unpadded_len = len - *pad as usize;
+
+            // All bytes that constitute the padding must have the value of `pad`
+            if decrypted_key_padded[unpadded_len..]
+                .iter()
+                .any(|byte| byte != pad)
+            {
+                return Err(Error::UnpadError);
+            }
+
+            decrypted_key_padded.truncate(unpadded_len);
+        }
+
+        ensure!(
+            !decrypted_key_padded.is_empty(),
+            "empty unpadded key is not valid"
+        );
+
+        Ok(decrypted_key_padded)
+    }
+}
 
 /// Generate an ECDH KeyPair.
 /// Currently only support ED25519.
@@ -85,115 +224,9 @@ pub fn build_ecdh_param(
     values.concat()
 }
 
-/// ECDH decryption.
-pub fn decrypt(priv_key: &ECDHSecretKey, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
-    debug!("ECDH decrypt");
-
-    let param = build_ecdh_param(&priv_key.oid, priv_key.alg_sym, priv_key.hash, fingerprint);
-
-    // 33 = 0x40 + 32bits
-    ensure_eq!(mpis.len(), 3);
-    ensure_eq!(mpis[0].len(), 33, "invalid public point");
-    ensure_eq!(priv_key.secret.len(), 32, "invalid secret point");
-
-    // encrypted and wrapped value derived from the session key
-    let encrypted_session_key = mpis[2].as_bytes();
-
-    let their_public = {
-        // public part of the ephemeral key (removes 0x40 prefix)
-        let ephemeral_public_key = &mpis[0].as_bytes()[1..];
-
-        // create montgomery point
-        let mut ephemeral_public_key_arr = [0u8; 32];
-        ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
-
-        x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
-    };
-
-    let our_secret = {
-        // private key of the recipient.
-        let private_key = &priv_key.secret[..];
-
-        // create scalar and reverse to little endian
-        let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
-        let mut private_key_arr = [0u8; 32];
-        private_key_arr[..].copy_from_slice(&private_key_le);
-        private_key_le.zeroize();
-
-        StaticSecret::from(private_key_arr)
-    };
-
-    // derive shared secret
-    let shared_secret = our_secret.diffie_hellman(&their_public);
-
-    // Perform key derivation
-    let z = kdf(
-        priv_key.hash,
-        shared_secret.as_bytes(),
-        priv_key.alg_sym.key_size(),
-        &param,
-    )?;
-
-    // Peform AES Key Unwrap
-    let encrypted_key_len: usize = match mpis[1].first() {
-        Some(l) => *l as usize,
-        None => 0,
-    };
-
-    let mut encrypted_session_key_vec = vec![0; encrypted_key_len];
-    encrypted_session_key_vec[(encrypted_key_len - encrypted_session_key.len())..]
-        .copy_from_slice(encrypted_session_key);
-
-    let mut decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
-    // PKCS5-style unpadding (PKCS5 is PKCS7 with a blocksize of 8).
-    //
-    // RFC 6637 describes the padding:
-    // a) "The result is padded using the method described in [PKCS5] to the 8-byte granularity."
-    // b) "For example, assuming that an AES algorithm is used for the session key, the sender MAY
-    // use 21, 13, and 5 bytes of padding for AES-128, AES-192, and AES-256, respectively, to
-    // provide the same number of octets, 40 total, as an input to the key wrapping method."
-    //
-    // So while the padding ensures that the length of the padded message is a multiple of 8, the
-    // padding may exceed 8 bytes in size.
-    {
-        let len = decrypted_key_padded.len();
-        let block_size = 8;
-        ensure!(len % block_size == 0, "invalid key length {}", len);
-        ensure!(!decrypted_key_padded.is_empty(), "empty key is not valid");
-
-        // The last byte should contain the padding symbol, which is also the padding length
-        let pad = decrypted_key_padded.last().expect("is not empty");
-
-        // Padding length seems to exceed size of the padded message
-        if *pad as usize > len {
-            return Err(Error::UnpadError);
-        }
-
-        // Expected length of the unpadded message
-        let unpadded_len = len - *pad as usize;
-
-        // All bytes that constitute the padding must have the value of `pad`
-        if decrypted_key_padded[unpadded_len..]
-            .iter()
-            .any(|byte| byte != pad)
-        {
-            return Err(Error::UnpadError);
-        }
-
-        decrypted_key_padded.truncate(unpadded_len);
-    }
-
-    ensure!(
-        !decrypted_key_padded.is_empty(),
-        "empty unpadded key is not valid"
-    );
-
-    Ok(decrypted_key_padded)
-}
-
 /// Key Derivation Function for ECDH (as defined in RFC 6637).
 /// https://tools.ietf.org/html/rfc6637#section-7
-fn kdf(hash: HashAlgorithm, x: &[u8; 32], length: usize, param: &[u8]) -> Result<Vec<u8>> {
+pub fn kdf(hash: HashAlgorithm, x: &[u8; 32], length: usize, param: &[u8]) -> Result<Vec<u8>> {
     let prefix = vec![0, 0, 0, 1];
 
     let values: Vec<&[u8]> = vec![&prefix, x, param];
@@ -303,11 +336,11 @@ mod tests {
     use super::*;
     use std::fs;
 
-    use crate::{Deserializable, Message, SignedSecretKey};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
-    use crate::types::{PublicParams, SecretKeyRepr};
+    use crate::types::SecretKeyRepr;
+    use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
     fn test_encrypt_decrypt() {
@@ -345,7 +378,7 @@ mod tests {
                 let mpis = mpis.into_iter().map(Into::into).collect::<Vec<Mpi>>();
 
                 let decrypted = match skey.as_ref().as_repr(&pkey).unwrap() {
-                    SecretKeyRepr::ECDH(ref skey) => decrypt(skey, &mpis, &fingerprint).unwrap(),
+                    SecretKeyRepr::ECDH(ref skey) => skey.decrypt(&mpis, &fingerprint).unwrap(),
                     _ => panic!("invalid key generated"),
                 };
 

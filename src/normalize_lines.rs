@@ -122,10 +122,7 @@ impl<I: Iterator<Item = u8>> Iterator for Normalized<I> {
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
-
     use super::*;
-
-    use crate::line_writer::LineBreak;
 
     #[test]
     fn normalized_lf() {
