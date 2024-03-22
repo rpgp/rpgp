@@ -197,7 +197,7 @@ fn test_parse_openpgp_sample_rsa_private() {
                     let ciphertext = {
                         // TODO: fix this in rust-rsa
                         let k: RsaPrivateKey = (*k).clone();
-                        let pk: RsaPublicKey = k.clone().into();
+                        let pk: RsaPublicKey = k.into();
                         pk.encrypt(
                             &mut rng,
                             rsa::pkcs1v15::Pkcs1v15Encrypt,
