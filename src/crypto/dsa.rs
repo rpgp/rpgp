@@ -37,7 +37,7 @@ impl Signer for SecretKey {
         };
         let components = Components::from_components(p.into(), q.into(), g.into())?;
         let verifying_key = VerifyingKey::from_components(components, y.into())?;
-        let signing_key = SigningKey::from_components(verifying_key, self.x.clone().into())?;
+        let signing_key = SigningKey::from_components(verifying_key, self.x.clone())?;
 
         let signature = match hash_algorithm {
             HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
