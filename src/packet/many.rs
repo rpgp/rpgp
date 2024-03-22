@@ -143,12 +143,16 @@ impl<R: Read> Iterator for PacketParser<R> {
             }
 
             // if the parser returned `Incomplete`, and it needs more data than the buffer can hold, we grow the buffer.
-            if let Some(Needed::Size(sz)) = needed {
-                if b.usable_space() < sz.into() && self.capacity * 2 < MAX_CAPACITY {
-                    self.capacity *= 2;
-                    let capacity = self.capacity;
+            if let Some(needed) = needed {
+                let requested_size: usize = match needed {
+                    Needed::Size(sz) => sz.into(),
+                    Needed::Unknown => 1024,
+                };
+
+                if b.usable_space() < requested_size {
+                    self.capacity = std::cmp::min(self.capacity * 2, MAX_CAPACITY);
                     b.make_room();
-                    b.reserve(capacity);
+                    b.reserve(self.capacity);
                 }
             }
         }
