@@ -121,9 +121,8 @@ wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 debug = true
 
 [[bench]]
-name = "key"
+name = "benches_main"
 harness = false
 
-# [[bench]]
-# name = "message"
-# harness = false
+[lib]
+bench = false

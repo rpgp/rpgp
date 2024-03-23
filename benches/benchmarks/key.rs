@@ -1,7 +1,7 @@
 use std::fs::{self, File};
 use std::io::Cursor;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{black_box, criterion_group, Criterion, Throughput};
 
 use pgp::composed::{
     Deserializable, KeyType, SecretKey, SecretKeyParamsBuilder, SignedSecretKey,
@@ -12,34 +12,6 @@ use pgp::ser::Serialize;
 use pgp::types::CompressionAlgorithm;
 use smallvec::smallvec;
 
-#[cfg(feature = "profile")]
-mod profiler {
-    use std::path::Path;
-
-    use criterion::profiler::Profiler;
-    use gperftools::profiler::PROFILER;
-
-    #[derive(Default)]
-    pub struct GProfiler;
-
-    impl Profiler for GProfiler {
-        fn start_profiling(&mut self, benchmark_id: &str, benchmark_dir: &Path) {
-            PROFILER
-                .lock()
-                .unwrap()
-                .start(format!(
-                    "{}/{}.profile",
-                    benchmark_dir.display(),
-                    benchmark_id
-                ))
-                .unwrap();
-        }
-
-        fn stop_profiling(&mut self, _benchmark_id: &str, _benchmark_dir: &Path) {
-            PROFILER.lock().unwrap().stop().unwrap();
-        }
-    }
-}
 
 fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
     let key_params = SecretKeyParamsBuilder::default()
@@ -159,7 +131,7 @@ fn bench_key(c: &mut Criterion) {
 
 #[cfg(feature = "profile")]
 fn profiled() -> Criterion {
-    Criterion::default().with_profiler(MyCustomProfiler)
+    Criterion::default().with_profiler(super::profiler::GProfiler)
 }
 
 #[cfg(not(feature = "profile"))]
@@ -172,4 +144,3 @@ criterion_group!(
     config = profiled();
     targets = bench_key
 );
-criterion_main!(benches);
