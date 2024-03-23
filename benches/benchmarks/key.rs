@@ -1,7 +1,7 @@
-use std::fs::{self, File};
+use std::fs::File;
 use std::io::Cursor;
 
-use criterion::{black_box, criterion_group, Criterion, Throughput};
+use criterion::{black_box, criterion_group, Criterion};
 
 use pgp::composed::{
     Deserializable, KeyType, SecretKey, SecretKeyParamsBuilder, SignedSecretKey,
@@ -11,7 +11,6 @@ use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 use pgp::ser::Serialize;
 use pgp::types::CompressionAlgorithm;
 use smallvec::smallvec;
-
 
 fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
     let key_params = SecretKeyParamsBuilder::default()
@@ -53,78 +52,57 @@ fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
 
 fn bench_key(c: &mut Criterion) {
     let mut g = c.benchmark_group("secret_key");
-    {
+
+    g.bench_function("rsa_parse", |b| {
         let p = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc";
-        g.throughput(Throughput::Bytes(fs::metadata(p).unwrap().len()));
-        g.bench_function("rsa_parse", |b| {
-            b.iter(|| {
-                let mut decrypt_key_file = File::open(p).unwrap();
-                black_box(SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap())
-            });
+        b.iter(|| {
+            let mut decrypt_key_file = File::open(p).unwrap();
+            black_box(SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap())
         });
-    }
-    {
+    });
+
+    g.bench_function("rsa_parse_raw", |b| {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
             .sign(|| "".into())
             .unwrap();
         let bytes = key.to_bytes().unwrap();
 
-        g.throughput(Throughput::Bytes(bytes.len() as u64));
-        g.bench_function("rsa_parse_raw", |b| {
-            b.iter(|| black_box(SignedSecretKey::from_bytes(Cursor::new(&bytes)).unwrap()))
-        });
-    }
+        b.iter(|| black_box(SignedSecretKey::from_bytes(Cursor::new(&bytes)).unwrap()))
+    });
 
-    {
+    g.bench_function("parse_armored_rsa", |b| {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
             .sign(|| "".into())
             .unwrap();
         let bytes = key.to_armored_bytes(None).unwrap();
 
-        g.throughput(Throughput::Bytes(bytes.len() as u64));
+        b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
+    });
 
-        g.bench_function("parse_armored_rsa", |b| {
-            b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
-        });
-    }
-
-    {
+    g.bench_function("x25519_parse_armored", |b| {
         let key = build_key(KeyType::EdDSA, KeyType::ECDH)
             .sign(|| "".into())
             .unwrap();
         let bytes = key.to_armored_bytes(None).unwrap();
 
-        g.throughput(Throughput::Bytes(bytes.len() as u64));
+        b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
+    });
 
-        g.bench_function("x25519_parse_armored", |b| {
-            b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
-        });
-    }
+    g.bench_function("x25519_generate", |b| {
+        b.iter(|| black_box(build_key(KeyType::EdDSA, KeyType::ECDH)))
+    });
 
-    {
-        g.throughput(Throughput::Elements(1));
-        g.bench_function("x25519_generate", |b| {
-            b.iter(|| black_box(build_key(KeyType::EdDSA, KeyType::ECDH)))
-        });
-    }
-
-    {
+    g.bench_function("x25519_self_sign", |b| {
         let key = build_key(KeyType::EdDSA, KeyType::ECDH);
 
-        g.throughput(Throughput::Elements(1));
-        g.bench_function("x25519_self_sign", |b| {
-            b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()))
-        });
-    }
+        b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()))
+    });
 
-    {
+    g.bench_function("rsa_2048_self_sign", |b| {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048));
 
-        g.throughput(Throughput::Elements(1));
-        g.bench_function("rsa_2048_self_sign", |b| {
-            b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()))
-        });
-    }
+        b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()))
+    });
 
     g.finish();
 }

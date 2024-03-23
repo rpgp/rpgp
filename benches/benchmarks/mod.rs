@@ -16,11 +16,19 @@ pub mod profiler {
             let p = benchmark_dir.join(format!("{}.profile", benchmark_id));
             std::fs::create_dir_all(benchmark_dir).unwrap();
             eprintln!("writing to {}", p.display());
-            PROFILER.lock().unwrap().start(p.display().to_string()).expect("failed to start profiler");
+            PROFILER
+                .lock()
+                .unwrap()
+                .start(p.display().to_string())
+                .expect("failed to start profiler");
         }
 
         fn stop_profiling(&mut self, _benchmark_id: &str, _benchmark_dir: &Path) {
-            PROFILER.lock().unwrap().stop().expect("failed to stop profiler");
+            PROFILER
+                .lock()
+                .unwrap()
+                .stop()
+                .expect("failed to stop profiler");
         }
     }
 }
