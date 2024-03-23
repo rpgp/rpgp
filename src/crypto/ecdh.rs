@@ -54,8 +54,6 @@ impl Decryptor for SecretKey {
     fn decrypt(&self, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
         debug!("ECDH decrypt");
 
-        let param = build_ecdh_param(&self.oid, self.alg_sym, self.hash, fingerprint);
-
         // 33 = 0x40 + 32bits
         ensure_eq!(mpis.len(), 3);
         ensure_eq!(mpis[0].len(), 33, "invalid public point");
@@ -91,70 +89,89 @@ impl Decryptor for SecretKey {
         // derive shared secret
         let shared_secret = our_secret.diffie_hellman(&their_public);
 
-        // Perform key derivation
-        let z = kdf(
-            self.hash,
-            shared_secret.as_bytes(),
-            self.alg_sym.key_size(),
-            &param,
-        )?;
-
-        // Peform AES Key Unwrap
+        // obtain the session key from the shared secret
         let encrypted_key_len: usize = match mpis[1].first() {
             Some(l) => *l as usize,
             None => 0,
         };
 
-        let mut encrypted_session_key_vec = vec![0; encrypted_key_len];
-        encrypted_session_key_vec[(encrypted_key_len - encrypted_session_key.len())..]
-            .copy_from_slice(encrypted_session_key);
+        derive_session_key(
+            *shared_secret.as_bytes(),
+            encrypted_session_key,
+            encrypted_key_len,
+            &(self.oid.clone(), self.alg_sym, self.hash),
+            fingerprint,
+        )
+    }
+}
 
-        let mut decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
-        // PKCS5-style unpadding (PKCS5 is PKCS7 with a blocksize of 8).
-        //
-        // RFC 6637 describes the padding:
-        // a) "The result is padded using the method described in [PKCS5] to the 8-byte granularity."
-        // b) "For example, assuming that an AES algorithm is used for the session key, the sender MAY
-        // use 21, 13, and 5 bytes of padding for AES-128, AES-192, and AES-256, respectively, to
-        // provide the same number of octets, 40 total, as an input to the key wrapping method."
-        //
-        // So while the padding ensures that the length of the padded message is a multiple of 8, the
-        // padding may exceed 8 bytes in size.
-        {
-            let len = decrypted_key_padded.len();
-            let block_size = 8;
-            ensure!(len % block_size == 0, "invalid key length {}", len);
-            ensure!(!decrypted_key_padded.is_empty(), "empty key is not valid");
+/// Obtain the OpenPGP session key for a DH shared secret.
+///
+/// This helper function performs the key derivation and unwrapping steps
+/// described in https://www.rfc-editor.org/rfc/rfc6637.html#section-8
+pub fn derive_session_key(
+    shared_secret: [u8; 32],
+    encrypted_session_key: &[u8],
+    encrypted_key_len: usize,
+    key_params: &<SecretKey as KeyParams>::KeyParams,
+    fingerprint: &[u8],
+) -> Result<Vec<u8>> {
+    let (oid, alg_sym, hash) = key_params;
 
-            // The last byte should contain the padding symbol, which is also the padding length
-            let pad = decrypted_key_padded.last().expect("is not empty");
+    let param = build_ecdh_param(oid, *alg_sym, *hash, fingerprint);
 
-            // Padding length seems to exceed size of the padded message
-            if *pad as usize > len {
-                return Err(Error::UnpadError);
-            }
+    // Perform key derivation
+    let z = kdf(*hash, &shared_secret, alg_sym.key_size(), &param)?;
 
-            // Expected length of the unpadded message
-            let unpadded_len = len - *pad as usize;
+    // Perform AES Key Unwrap
+    let mut encrypted_session_key_vec = vec![0; encrypted_key_len];
+    encrypted_session_key_vec[(encrypted_key_len - encrypted_session_key.len())..]
+        .copy_from_slice(encrypted_session_key);
 
-            // All bytes that constitute the padding must have the value of `pad`
-            if decrypted_key_padded[unpadded_len..]
-                .iter()
-                .any(|byte| byte != pad)
-            {
-                return Err(Error::UnpadError);
-            }
+    let mut decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
+    // PKCS5-style unpadding (PKCS5 is PKCS7 with a blocksize of 8).
+    //
+    // RFC 6637 describes the padding:
+    // a) "The result is padded using the method described in [PKCS5] to the 8-byte granularity."
+    // b) "For example, assuming that an AES algorithm is used for the session key, the sender MAY
+    // use 21, 13, and 5 bytes of padding for AES-128, AES-192, and AES-256, respectively, to
+    // provide the same number of octets, 40 total, as an input to the key wrapping method."
+    //
+    // So while the padding ensures that the length of the padded message is a multiple of 8, the
+    // padding may exceed 8 bytes in size.
+    {
+        let len = decrypted_key_padded.len();
+        let block_size = 8;
+        ensure!(len % block_size == 0, "invalid key length {}", len);
+        ensure!(!decrypted_key_padded.is_empty(), "empty key is not valid");
 
-            decrypted_key_padded.truncate(unpadded_len);
+        // The last byte should contain the padding symbol, which is also the padding length
+        let pad = decrypted_key_padded.last().expect("is not empty");
+
+        // Padding length seems to exceed size of the padded message
+        if *pad as usize > len {
+            return Err(Error::UnpadError);
         }
 
-        ensure!(
-            !decrypted_key_padded.is_empty(),
-            "empty unpadded key is not valid"
-        );
+        // Expected length of the unpadded message
+        let unpadded_len = len - *pad as usize;
 
-        Ok(decrypted_key_padded)
+        // All bytes that constitute the padding must have the value of `pad`
+        if decrypted_key_padded[unpadded_len..]
+            .iter()
+            .any(|byte| byte != pad)
+        {
+            return Err(Error::UnpadError);
+        }
+
+        decrypted_key_padded.truncate(unpadded_len);
     }
+
+    // the key is now unpadded
+    let decrypted_key = decrypted_key_padded;
+    ensure!(!decrypted_key.is_empty(), "empty unpadded key is not valid");
+
+    Ok(decrypted_key)
 }
 
 /// Generate an ECDH KeyPair.
