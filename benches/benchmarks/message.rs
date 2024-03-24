@@ -5,7 +5,9 @@ use std::io::Read;
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 
 use pgp::composed::{Deserializable, Message, SignedSecretKey};
+use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
+use pgp::ser::Serialize;
 use pgp::types::{SecretKeyTrait, StringToKey};
 use pgp::KeyType;
 use rand::RngCore;
@@ -179,6 +181,75 @@ fn bench_message(c: &mut Criterion) {
                 b.iter(|| {
                     let res = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
                     black_box(res);
+                });
+            },
+        );
+    }
+
+    for size in &sizes {
+        g.throughput(Throughput::BytesDecimal(*size as u64));
+        g.bench_with_input(
+            BenchmarkId::new("x25519_sign_sha2_256", size),
+            size,
+            |b, &size| {
+                let mut bytes = vec![0u8; size];
+                let mut rng = rand::thread_rng();
+                rng.fill_bytes(&mut bytes);
+
+                let key = build_key(KeyType::EdDSA, KeyType::ECDH);
+                let signed_key = key.sign(|| "".into()).unwrap();
+
+                let message = Message::new_literal_bytes("test", &bytes)
+                    .encrypt_to_keys(
+                        &mut rng,
+                        SymmetricKeyAlgorithm::AES128,
+                        &[&signed_key.secret_subkeys[0].public_key()],
+                    )
+                    .unwrap();
+
+                b.iter(|| {
+                    let res = message
+                        .clone()
+                        .sign(&signed_key, || "".into(), HashAlgorithm::SHA2_256)
+                        .unwrap()
+                        .into_signature();
+                    black_box(res);
+                });
+            },
+        );
+    }
+
+    for size in &sizes {
+        g.throughput(Throughput::BytesDecimal(*size as u64));
+        g.bench_with_input(
+            BenchmarkId::new("x25519_verify_sha2_256", size),
+            size,
+            |b, &size| {
+                let mut bytes = vec![0u8; size];
+                let mut rng = rand::thread_rng();
+                rng.fill_bytes(&mut bytes);
+
+                let key = build_key(KeyType::EdDSA, KeyType::ECDH);
+                let signed_key = key.sign(|| "".into()).unwrap();
+
+                let message = Message::new_literal_bytes("test", &bytes)
+                    .encrypt_to_keys(
+                        &mut rng,
+                        SymmetricKeyAlgorithm::AES128,
+                        &[&signed_key.secret_subkeys[0].public_key()],
+                    )
+                    .unwrap();
+
+                let message_bytes = message.to_bytes().unwrap();
+                let res = message
+                    .sign(&signed_key, || "".into(), HashAlgorithm::SHA2_256)
+                    .unwrap()
+                    .into_signature();
+                let pub_key = signed_key.public_key();
+
+                b.iter(|| {
+                    let r = res.verify(&pub_key, &message_bytes).unwrap();
+                    black_box(r);
                 });
             },
         );
