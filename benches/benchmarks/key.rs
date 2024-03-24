@@ -2,53 +2,10 @@ use std::fs::File;
 use std::io::Cursor;
 
 use criterion::{black_box, criterion_group, Criterion};
-
-use pgp::composed::{
-    Deserializable, KeyType, SecretKey, SecretKeyParamsBuilder, SignedSecretKey,
-    SubkeyParamsBuilder,
-};
-use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 use pgp::ser::Serialize;
-use pgp::types::CompressionAlgorithm;
-use smallvec::smallvec;
+use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
 
-fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
-    let key_params = SecretKeyParamsBuilder::default()
-        .key_type(kt)
-        .can_certify(true)
-        .can_sign(true)
-        .primary_user_id("Me <me@mail.com>".into())
-        .preferred_symmetric_algorithms(smallvec![
-            SymmetricKeyAlgorithm::AES256,
-            SymmetricKeyAlgorithm::AES192,
-            SymmetricKeyAlgorithm::AES128,
-        ])
-        .preferred_hash_algorithms(smallvec![
-            HashAlgorithm::SHA2_256,
-            HashAlgorithm::SHA2_384,
-            HashAlgorithm::SHA2_512,
-            HashAlgorithm::SHA2_224,
-            HashAlgorithm::SHA1,
-        ])
-        .preferred_compression_algorithms(smallvec![
-            CompressionAlgorithm::ZLIB,
-            CompressionAlgorithm::ZIP,
-        ])
-        .passphrase(None)
-        .subkey(
-            SubkeyParamsBuilder::default()
-                .key_type(kt_sub)
-                .passphrase(None)
-                .can_encrypt(true)
-                .build()
-                .unwrap(),
-        )
-        .build()
-        .unwrap();
-    key_params
-        .generate()
-        .expect("failed to generate secret key, encrypted")
-}
+use super::build_key;
 
 fn bench_key(c: &mut Criterion) {
     let mut g = c.benchmark_group("secret_key");
