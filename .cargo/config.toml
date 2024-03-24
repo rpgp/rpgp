@@ -1,0 +1,2 @@
+[build]
+rustflags = ["--cfg", "aes_armv8"]

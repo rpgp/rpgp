@@ -67,6 +67,14 @@ Some key differences:
   whereas Sequoia by default uses Nettle, which is implemented in C.
 
 
+## Benchmarking
+
+For maximum speed enable the `asm` feature and enable features for full CPU support.
+
+```
+> RUSTFLAGS="-C target-cpu=native --cfg aes_armv8" cargo bench --features asm
+```
+
 ## Minimum Supported Rust Version (MSRV)
 
 All crates in this repository support Rust 1.70 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
