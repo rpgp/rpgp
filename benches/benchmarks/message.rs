@@ -61,7 +61,7 @@ fn bench_message(c: &mut Criterion) {
     });
 
     const KB: usize = 1000;
-    let sizes = [1 * KB, 10 * KB, 100 * KB, 1000 * KB];
+    let sizes = [KB, 10 * KB, 100 * KB, 1000 * KB];
 
     for size in &sizes {
         g.throughput(Throughput::BytesDecimal(*size as u64));
