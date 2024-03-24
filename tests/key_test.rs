@@ -34,8 +34,8 @@ use pgp::packet::{
 };
 use pgp::ser::Serialize;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, SecretKeyRepr,
-    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version, S2kParams,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
+    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {

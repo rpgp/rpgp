@@ -4,11 +4,7 @@ use crate::packet::SymKeyEncryptedSessionKey;
 use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
-pub fn decrypt_session_key<F, L>(
-    locked_key: &L,
-    key_pw: F,
-    mpis: &[Mpi],
-) -> Result<PlainSessionKey>
+pub fn decrypt_session_key<F, L>(locked_key: &L, key_pw: F, mpis: &[Mpi]) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
     L: SecretKeyTrait<Unlocked = SecretKeyRepr> + KeyTrait,
@@ -18,10 +14,7 @@ where
     locked_key.unlock(key_pw, |priv_key| {
         let (key, sym_alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
         // TODO: what about other versions
-        Ok(PlainSessionKey::V4 {
-            key,
-            sym_alg,
-        })
+        Ok(PlainSessionKey::V4 { key, sym_alg })
     })
 }
 
