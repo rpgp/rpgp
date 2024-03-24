@@ -1,6 +1,6 @@
 use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 use pgp::types::CompressionAlgorithm;
-use pgp::{SecretKeyParamsBuilder, SubkeyParamsBuilder, KeyType, SecretKey};
+use pgp::{KeyType, SecretKey, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use smallvec::smallvec;
 
 pub mod key;

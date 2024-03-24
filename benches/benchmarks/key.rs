@@ -2,8 +2,8 @@ use std::fs::File;
 use std::io::Cursor;
 
 use criterion::{black_box, criterion_group, Criterion};
-use pgp::ser::Serialize;
 use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
+use pgp::ser::Serialize;
 
 use super::build_key;
 
