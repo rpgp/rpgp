@@ -13,7 +13,7 @@ use crate::types::Tag;
 ///
 /// Returns an iterator of public or secret keys and a BTreeMap containing armor headers
 /// (None, if the data was unarmored)
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+#[allow(clippy::type_complexity)]
 pub fn from_reader_many<'a, R: io::Read + io::Seek + 'a>(
     mut input: R,
 ) -> Result<(
@@ -29,7 +29,7 @@ pub fn from_reader_many<'a, R: io::Read + io::Seek + 'a>(
 }
 
 /// Parses a list of secret and public keys from ascii armored text.
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::type_complexity))]
+#[allow(clippy::type_complexity)]
 pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
     input: R,
 ) -> Result<(

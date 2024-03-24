@@ -11,7 +11,7 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 #[derive(Debug)]
-#[cfg_attr(feature = "cargo-clippy", allow(clippy::large_enum_variant))] // TODO: fix me
+#[allow(clippy::large_enum_variant)] // TODO: fix me
 pub enum Packet {
     CompressedData(CompressedData),
     PublicKey(PublicKey),

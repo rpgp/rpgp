@@ -196,7 +196,7 @@ impl SymmetricKeyAlgorithm {
     /// (128 bits), the IV is 18 octets long, and octets 17 and 18 replicate
     /// octets 15 and 16.  Those extra two octets are an easy check for a
     /// correct key.
-    #[cfg_attr(feature = "cargo-clippy", allow(clippy::complexity))]
+    #[allow(clippy::complexity)]
     pub fn decrypt_with_iv<'a>(
         self,
         key: &[u8],
