@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - master
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   RUST_BACKTRACE: 1
@@ -58,7 +61,6 @@ jobs:
 
     - name: check bench
       uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       with:
         command:  check
         args: --benches

@@ -45,6 +45,8 @@ pub trait Hasher: std::io::Write {
     fn update(&mut self, _: &[u8]);
     /// Finalize the hash and return the result.
     fn finish(self: Box<Self>) -> Vec<u8>;
+    /// Finalize into the provided buffer. Truncates to the lenght of `out`.
+    fn finish_reset_into(&mut self, out: &mut [u8]);
 }
 
 macro_rules! derive_hasher {
@@ -61,6 +63,11 @@ macro_rules! derive_hasher {
 
             fn finish(self: Box<Self>) -> Vec<u8> {
                 self.inner.finalize().as_slice().to_vec()
+            }
+
+            fn finish_reset_into(&mut self, out: &mut [u8]) {
+                let res = self.inner.finalize_reset();
+                out.copy_from_slice(&res.as_slice()[..out.len()]);
             }
         }
 

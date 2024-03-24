@@ -110,15 +110,14 @@ impl StringToKey {
                 let digest_size = hash_alg.digest_size();
                 let rounds = (key_size as f32 / digest_size as f32).ceil() as usize;
 
-                let mut key = Vec::with_capacity(key_size);
+                let mut key = vec![0u8; key_size];
+                let zeros = vec![0u8; rounds];
 
                 for round in 0..rounds {
                     let mut hasher = hash_alg.new_hasher()?;
 
                     // add 0s prefix
-                    if round > 0 {
-                        hasher.update(&vec![0u8; round][..]);
-                    }
+                    hasher.update(&zeros[..round]);
 
                     match self {
                         StringToKey::Simple { .. } => {
@@ -164,12 +163,14 @@ impl StringToKey {
                         _ => unimplemented_err!("S2K {:?} is not available", self),
                     }
 
-                    if key_size - key.len() < digest_size {
-                        let end = key_size - key.len();
-                        key.extend_from_slice(&hasher.finish()[..end]);
+                    let start = round * digest_size;
+                    let end = if round == rounds - 1 {
+                        key_size - start
                     } else {
-                        key.extend_from_slice(&hasher.finish()[..]);
-                    }
+                        (round + 1) * digest_size
+                    };
+
+                    hasher.finish_reset_into(&mut key[start..end]);
                 }
 
                 key
