@@ -356,7 +356,9 @@ mod tests {
                         let s2k = StringToKey::new_iterated(&mut rng, alg, count);
                         let passphrase = Alphanumeric.sample_string(&mut rng, size);
 
-                        let res = s2k.derive_key(&passphrase, sym_alg.key_size()).unwrap();
+                        let res = s2k
+                            .derive_key(&passphrase, sym_alg.key_size())
+                            .expect("failed to derive key");
                         assert_eq!(res.len(), sym_alg.key_size());
                     }
                 }
