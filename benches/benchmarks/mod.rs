@@ -5,6 +5,7 @@ use smallvec::smallvec;
 
 pub mod key;
 pub mod message;
+pub mod s2k;
 
 #[cfg(feature = "profile")]
 pub mod profiler {

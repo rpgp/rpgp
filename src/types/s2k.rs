@@ -77,6 +77,13 @@ impl StringToKey {
         }
     }
 
+    pub fn new_argon2<R: CryptoRng + Rng>(rng: &mut R, t: u8, p: u8, m_enc: u8) -> Self {
+        let mut salt = [0u8; 16];
+        rng.fill(&mut salt[..]);
+
+        StringToKey::Argon2 { salt, t, p, m_enc }
+    }
+
     pub fn id(&self) -> u8 {
         match self {
             Self::Simple { .. } => 0,
