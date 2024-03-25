@@ -177,7 +177,6 @@ impl StringToKey {
                         (round + 1) * digest_size
                     };
 
-                    dbg!(start, end, key_size, round, rounds, digest_size);
                     hasher.finish_reset_into(&mut key[start..end]);
                 }
 
