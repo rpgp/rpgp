@@ -4,12 +4,19 @@ use aes_gcm::{
     Aes128Gcm, Aes256Gcm, Key as GcmKey, Nonce as GcmNonce, Tag as GcmTag,
 };
 use eax::{Eax, Key as EaxKey, Nonce as EaxNonce, Tag as EaxTag};
-
+use generic_array::{
+    typenum::{U15, U16},
+    GenericArray,
+};
 use num_enum::{FromPrimitive, IntoPrimitive};
+use ocb3::{AesOcb3, Nonce as Ocb3Nonce, Tag as OcbTag};
 
 use crate::errors::{Error, Result};
 
 use super::sym::SymmetricKeyAlgorithm;
+
+type Aes128Ocb3 = AesOcb3<Aes128, U15, U16>;
+type Aes256Ocb3 = AesOcb3<Aes256, U15, U16>;
 
 /// Available AEAD algorithms.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
@@ -115,6 +122,24 @@ impl AeadAlgorithm {
                     .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
                     .map_err(|_| Error::Eax)?;
             }
+            (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
+                let key = GenericArray::from_slice(&key[..16]);
+                let nonce = Ocb3Nonce::from_slice(nonce);
+                let cipher = Aes128Ocb3::new(key);
+                let tag = OcbTag::from_slice(auth_tag);
+                cipher
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
+                    .map_err(|_| Error::Ocb)?
+            }
+            (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
+                let key = GenericArray::from_slice(&key[..32]);
+                let nonce = Ocb3Nonce::from_slice(nonce);
+                let cipher = Aes256Ocb3::new(key);
+                let tag = OcbTag::from_slice(auth_tag);
+                cipher
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
+                    .map_err(|_| Error::Ocb)?
+            }
             _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),
         }
 
@@ -162,6 +187,22 @@ impl AeadAlgorithm {
                 cipher
                     .encrypt_in_place_detached(nonce, associated_data, buffer)
                     .map_err(|_| Error::Eax)?
+            }
+            (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Ocb) => {
+                let key = GenericArray::from_slice(&key[..16]);
+                let nonce = Ocb3Nonce::from_slice(nonce);
+                let cipher = Aes128Ocb3::new(key);
+                cipher
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
+                    .map_err(|_| Error::Ocb)?
+            }
+            (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Ocb) => {
+                let key = GenericArray::from_slice(&key[..32]);
+                let nonce = Ocb3Nonce::from_slice(nonce);
+                let cipher = Aes256Ocb3::new(key);
+                cipher
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
+                    .map_err(|_| Error::Ocb)?
             }
             _ => unimplemented_err!("AEAD not supported: {:?}, {:?}", sym_algorithm, self),
         };

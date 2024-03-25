@@ -78,6 +78,8 @@ pub enum Error {
     Gcm,
     #[error("EAX")]
     Eax,
+    #[error("OCB")]
+    Ocb,
 }
 
 impl Error {
@@ -115,6 +117,7 @@ impl Error {
             Error::EllipticCurve(_) => 29,
             Error::Gcm => 30,
             Error::Eax => 31,
+            Error::Ocb => 32,
         }
     }
 }
