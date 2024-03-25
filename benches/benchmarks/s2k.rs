@@ -6,7 +6,7 @@ use pgp::{
 use rand::distributions::{Alphanumeric, DistString};
 
 fn bench_s2k(c: &mut Criterion) {
-    let sizes = [10, 100, 100];
+    let sizes = [10, 100, 1000];
     let mut rng = rand::thread_rng();
 
     let mut group = c.benchmark_group("s2k");
@@ -31,7 +31,7 @@ fn bench_s2k(c: &mut Criterion) {
                         group.bench_with_input(
                             BenchmarkId::new(
                                 "iterated_and_salted",
-                                format!("({size}/{alg:?}/{count}/{sym_alg:?}"),
+                                format!("{size}/{alg:?}/{count}/{sym_alg:?}"),
                             ),
                             &(size, alg, count, sym_alg),
                             |b,
