@@ -9,14 +9,14 @@ use generic_array::{
     GenericArray,
 };
 use num_enum::{FromPrimitive, IntoPrimitive};
-use ocb3::{AesOcb3, Nonce as Ocb3Nonce, Tag as OcbTag};
+use ocb3::{Ocb3, Nonce as Ocb3Nonce, Tag as OcbTag};
 
 use crate::errors::{Error, Result};
 
 use super::sym::SymmetricKeyAlgorithm;
 
-type Aes128Ocb3 = AesOcb3<Aes128, U15, U16>;
-type Aes256Ocb3 = AesOcb3<Aes256, U15, U16>;
+type Aes128Ocb3 = Ocb3<Aes128, U15, U16>;
+type Aes256Ocb3 = Ocb3<Aes256, U15, U16>;
 
 /// Available AEAD algorithms.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
