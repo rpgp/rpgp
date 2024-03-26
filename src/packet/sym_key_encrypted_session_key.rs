@@ -74,7 +74,18 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
+    pub fn version(&self) -> u8 {
+        // TODO: use enum
+        match self {
+            Self::V4 { .. } => 4,
+            Self::V5 { .. } => 5,
+            Self::V6 { .. } => 6,
+        }
+    }
+
     pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
+        debug!("decrypt session key V{}", self.version());
+
         let mut decrypted_key = self.encrypted_key().map(|v| v.to_vec()).unwrap_or_default();
 
         match self {
@@ -235,14 +246,14 @@ fn parse_v4(
     move |i: &[u8]| {
         let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
         let (i, s2k) = s2k_parser(i)?;
-
+        let encrypted_key = if i.is_empty() { None } else { Some(i.to_vec()) };
         Ok((
             &[][..],
             SymKeyEncryptedSessionKey::V4 {
                 packet_version,
                 sym_algorithm: sym_alg,
                 s2k,
-                encrypted_key: i.is_empty().then(|| i.to_vec()),
+                encrypted_key,
             },
         ))
     }

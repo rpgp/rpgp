@@ -165,12 +165,13 @@ impl SymmetricKeyAlgorithm {
     /// Does not do resynchronization.
     pub fn decrypt_protected<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
         debug!("protected decrypt");
+
         let iv_vec = vec![0u8; self.block_size()];
         let (prefix, res) = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
 
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
-        let mdc_len = 22;
-        let (data, mdc) = res.split_at(res.len() - mdc_len);
+        const MDC_LEN: usize = 22;
+        let (data, mdc) = res.split_at(res.len() - MDC_LEN);
 
         let sha1 = checksum::calculate_sha1([prefix, data, &mdc[0..2]]);
         if mdc[0] != 0xD3 || // Invalid MDC tag

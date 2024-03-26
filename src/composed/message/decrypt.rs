@@ -9,7 +9,7 @@ where
     F: FnOnce() -> String,
     L: SecretKeyTrait<Unlocked = SecretKeyRepr> + KeyTrait,
 {
-    debug!("decrypting session key");
+    debug!("decrypt session key");
 
     locked_key.unlock(key_pw, |priv_key| {
         let (key, sym_alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
@@ -44,7 +44,7 @@ pub fn decrypt_session_key_with_password<F>(
 where
     F: FnOnce() -> String,
 {
-    debug!("decrypting session key");
+    debug!("decrypt session key with password");
 
     let packet_algorithm = packet.sym_algorithm();
     ensure!(

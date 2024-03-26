@@ -21,7 +21,7 @@ pub struct SymEncryptedProtectedData {
     data: Data,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum Data {
     V1 {
         data: Vec<u8>,
@@ -33,6 +33,31 @@ enum Data {
         salt: [u8; 32],
         data: Vec<u8>,
     },
+}
+
+impl fmt::Debug for Data {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Data::V1 { data } => f
+                .debug_struct("V1")
+                .field("data", &hex::encode(data))
+                .finish(),
+            Data::V2 {
+                sym_alg,
+                aead,
+                chunk_size,
+                salt,
+                data,
+            } => f
+                .debug_struct("V2")
+                .field("sym_alg", sym_alg)
+                .field("aead", aead)
+                .field("chunk_size", chunk_size)
+                .field("salt", &hex::encode(salt))
+                .field("data", &hex::encode(data))
+                .finish(),
+        }
+    }
 }
 
 impl SymEncryptedProtectedData {
@@ -199,13 +224,13 @@ impl SymEncryptedProtectedData {
 
 impl Serialize for SymEncryptedProtectedData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[0x01])?;
-
         match &self.data {
             Data::V1 { data } => {
+                writer.write_all(&[0x01])?;
                 writer.write_all(data)?;
             }
             Data::V2 { .. } => {
+                writer.write_all(&[0x02])?;
                 todo!()
             }
         }
