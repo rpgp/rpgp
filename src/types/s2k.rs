@@ -77,6 +77,13 @@ impl StringToKey {
         }
     }
 
+    pub fn new_argon2<R: CryptoRng + Rng>(rng: &mut R, t: u8, p: u8, m_enc: u8) -> Self {
+        let mut salt = [0u8; 16];
+        rng.fill(&mut salt[..]);
+
+        StringToKey::Argon2 { salt, t, p, m_enc }
+    }
+
     pub fn id(&self) -> u8 {
         match self {
             Self::Simple { .. } => 0,
@@ -165,7 +172,7 @@ impl StringToKey {
 
                     let start = round * digest_size;
                     let end = if round == rounds - 1 {
-                        key_size - start
+                        key_size
                     } else {
                         (round + 1) * digest_size
                     };
@@ -315,100 +322,145 @@ impl Serialize for StringToKey {
     }
 }
 
-#[test]
-#[ignore] // slow in debug mode
-fn argon2() {
-    // test vectors from draft-ietf-openpgp-crypto-refresh
+#[cfg(test)]
+mod tests {
+    use rand::distributions::{Alphanumeric, DistString};
 
-    // 16 byte key size
-    let s2k = StringToKey::Argon2 {
-        salt: [
-            0x9c, 0x52, 0xf8, 0x3c, 0x27, 0xf9, 0x5e, 0x50, 0xd5, 0x35, 0x44, 0x0e, 0xcd, 0xff,
-            0x31, 0x36,
-        ],
-        t: 1,
-        p: 4,
-        m_enc: 21,
-    };
-    let key = s2k.derive_key("password", 16).expect("argon derive");
-    assert_eq!(
-        key,
-        [
-            0x84, 0xa3, 0x64, 0x3c, 0x39, 0xd5, 0xf5, 0x50, 0x52, 0x6d, 0x19, 0x39, 0xe8, 0x57,
-            0xfa, 0x66
-        ]
-    );
+    use crate::crypto::sym::SymmetricKeyAlgorithm;
 
-    // 24 byte key size
-    let s2k = StringToKey::Argon2 {
-        salt: [
-            0xe1, 0x4c, 0xac, 0x47, 0x15, 0x34, 0x59, 0x18, 0xa9, 0x62, 0xdc, 0xa3, 0x47, 0xe1,
-            0x43, 0xf8,
-        ],
-        t: 1,
-        p: 4,
-        m_enc: 21,
-    };
-    let key = s2k.derive_key("password", 24).expect("argon derive");
-    assert_eq!(
-        key,
-        [
-            0xf5, 0x42, 0x47, 0x6d, 0x2b, 0x9f, 0xf4, 0x35, 0x15, 0x85, 0x18, 0x11, 0x21, 0x2d,
-            0xe9, 0x49, 0x7f, 0x1b, 0xfe, 0x1a, 0x3d, 0x08, 0xd7, 0x07
-        ]
-    );
+    use super::*;
 
-    // 32 byte key size
-    let s2k = StringToKey::Argon2 {
-        salt: [
-            0xb8, 0x78, 0x95, 0x20, 0x20, 0x6f, 0xf7, 0x99, 0xc6, 0x88, 0x2c, 0x42, 0x45, 0xa6,
-            0x62, 0x7c,
-        ],
-        t: 1,
-        p: 4,
-        m_enc: 21,
-    };
-    let key = s2k.derive_key("password", 32).expect("argon derive");
-    assert_eq!(
-        key,
-        [
-            0x4e, 0xd7, 0xeb, 0x27, 0x43, 0x4f, 0x6d, 0xf6, 0x23, 0xce, 0xe3, 0xac, 0x08, 0xb7,
-            0x63, 0xc4, 0xaf, 0x79, 0xdf, 0xde, 0x5f, 0xdc, 0x92, 0xdd, 0x1d, 0x88, 0x1c, 0x6c,
-            0x99, 0x93, 0x8b, 0x4f
-        ]
-    );
-}
+    #[test]
+    #[ignore]
+    fn iterated_and_salted() {
+        let sizes = [10, 100, 1000];
+        let mut rng = rand::thread_rng();
 
-#[test]
-#[ignore] // slow in debug mode
-fn argon2_skesk_msg() {
-    // Tests decrypting the messages from
-    // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-sample-messages-encrypted-u
-    //
-    // "These messages are the literal data "Hello, world!" encrypted using v1 SEIPD, with Argon2
-    // and the passphrase "password", using different session key sizes."
+        let algs = [
+            HashAlgorithm::SHA1,
+            HashAlgorithm::SHA2_256,
+            HashAlgorithm::SHA3_256,
+        ];
+        let counts = [
+            1u8,
+            224u8,   // default in rpgp
+            u8::MAX, // maximum possible
+        ];
+        let sym_algs = [SymmetricKeyAlgorithm::AES128, SymmetricKeyAlgorithm::AES256];
 
-    const MSGS: &[&str] = &[
-        "./tests/unit-tests/argon2/aes128.msg",
-        "./tests/unit-tests/argon2/aes192.msg",
-        "./tests/unit-tests/argon2/aes256.msg",
-    ];
+        for size in sizes {
+            for sym_alg in sym_algs {
+                for alg in algs {
+                    for count in counts {
+                        println!("{size}/{alg:?}/{count}/{sym_alg:?}");
+                        let s2k = StringToKey::new_iterated(&mut rng, alg, count);
+                        let passphrase = Alphanumeric.sample_string(&mut rng, size);
 
-    use crate::{composed::Deserializable, Message};
+                        let res = s2k
+                            .derive_key(&passphrase, sym_alg.key_size())
+                            .expect("failed to derive key");
+                        assert_eq!(res.len(), sym_alg.key_size());
+                    }
+                }
+            }
+        }
+    }
 
-    for filename in MSGS {
-        let (msg, _header) =
-            Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
-                .expect("failed to load msg");
+    #[test]
+    #[ignore] // slow in debug mode
+    fn argon2() {
+        // test vectors from draft-ietf-openpgp-crypto-refresh
 
-        let decrypted = msg
-            .decrypt_with_password(|| "password".to_string())
-            .expect("decrypt argon2 skesk");
-
-        let Message::Literal(data) = decrypted else {
-            panic!("expected literal data")
+        // 16 byte key size
+        let s2k = StringToKey::Argon2 {
+            salt: [
+                0x9c, 0x52, 0xf8, 0x3c, 0x27, 0xf9, 0x5e, 0x50, 0xd5, 0x35, 0x44, 0x0e, 0xcd, 0xff,
+                0x31, 0x36,
+            ],
+            t: 1,
+            p: 4,
+            m_enc: 21,
         };
+        let key = s2k.derive_key("password", 16).expect("argon derive");
+        assert_eq!(
+            key,
+            [
+                0x84, 0xa3, 0x64, 0x3c, 0x39, 0xd5, 0xf5, 0x50, 0x52, 0x6d, 0x19, 0x39, 0xe8, 0x57,
+                0xfa, 0x66
+            ]
+        );
 
-        assert_eq!(data.data(), b"Hello, world!");
+        // 24 byte key size
+        let s2k = StringToKey::Argon2 {
+            salt: [
+                0xe1, 0x4c, 0xac, 0x47, 0x15, 0x34, 0x59, 0x18, 0xa9, 0x62, 0xdc, 0xa3, 0x47, 0xe1,
+                0x43, 0xf8,
+            ],
+            t: 1,
+            p: 4,
+            m_enc: 21,
+        };
+        let key = s2k.derive_key("password", 24).expect("argon derive");
+        assert_eq!(
+            key,
+            [
+                0xf5, 0x42, 0x47, 0x6d, 0x2b, 0x9f, 0xf4, 0x35, 0x15, 0x85, 0x18, 0x11, 0x21, 0x2d,
+                0xe9, 0x49, 0x7f, 0x1b, 0xfe, 0x1a, 0x3d, 0x08, 0xd7, 0x07
+            ]
+        );
+
+        // 32 byte key size
+        let s2k = StringToKey::Argon2 {
+            salt: [
+                0xb8, 0x78, 0x95, 0x20, 0x20, 0x6f, 0xf7, 0x99, 0xc6, 0x88, 0x2c, 0x42, 0x45, 0xa6,
+                0x62, 0x7c,
+            ],
+            t: 1,
+            p: 4,
+            m_enc: 21,
+        };
+        let key = s2k.derive_key("password", 32).expect("argon derive");
+        assert_eq!(
+            key,
+            [
+                0x4e, 0xd7, 0xeb, 0x27, 0x43, 0x4f, 0x6d, 0xf6, 0x23, 0xce, 0xe3, 0xac, 0x08, 0xb7,
+                0x63, 0xc4, 0xaf, 0x79, 0xdf, 0xde, 0x5f, 0xdc, 0x92, 0xdd, 0x1d, 0x88, 0x1c, 0x6c,
+                0x99, 0x93, 0x8b, 0x4f
+            ]
+        );
+    }
+
+    #[test]
+    #[ignore] // slow in debug mode
+    fn argon2_skesk_msg() {
+        // Tests decrypting the messages from
+        // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-sample-messages-encrypted-u
+        //
+        // "These messages are the literal data "Hello, world!" encrypted using v1 SEIPD, with Argon2
+        // and the passphrase "password", using different session key sizes."
+
+        const MSGS: &[&str] = &[
+            "./tests/unit-tests/argon2/aes128.msg",
+            "./tests/unit-tests/argon2/aes192.msg",
+            "./tests/unit-tests/argon2/aes256.msg",
+        ];
+
+        use crate::{composed::Deserializable, Message};
+
+        for filename in MSGS {
+            let (msg, _header) =
+                Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
+                    .expect("failed to load msg");
+
+            let decrypted = msg
+                .decrypt_with_password(|| "password".to_string())
+                .expect("decrypt argon2 skesk");
+
+            let Message::Literal(data) = decrypted else {
+                panic!("expected literal data")
+            };
+
+            assert_eq!(data.data(), b"Hello, world!");
+        }
     }
 }
