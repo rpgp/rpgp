@@ -135,6 +135,10 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                 // Marker Packets are ignored
                 // see https://tools.ietf.org/html/rfc4880#section-5.8
             }
+            Tag::Padding => {
+                // Padding Packets are ignored
+                // Technically these shouldn't appear in any location, but this seems good enough.
+            }
             _ => {
                 return Some(Err(format_err!("unexpected packet {:?}", packet.tag())));
             }

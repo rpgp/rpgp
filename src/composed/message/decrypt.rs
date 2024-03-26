@@ -13,11 +13,12 @@ where
 
     locked_key.unlock(key_pw, |priv_key| {
         let (key, sym_alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
-        // TODO: what about other versions
+        // TODO: handle other versions
         Ok(PlainSessionKey::V4 { key, sym_alg })
     })
 }
 
+/// Decrypted session key.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlainSessionKey {
     V4 {

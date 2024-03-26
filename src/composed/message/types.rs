@@ -218,11 +218,22 @@ impl Edata {
             PlainSessionKey::V6 { key } => {
                 match self {
                     Self::SymEncryptedProtectedData(p) => {
-                        let decrypted_packet = p.decrypt(&key, None)?;
+                        let decrypted_packets = p.decrypt(&key, None)?;
 
-                        // TODO: handle multiple messages (padding packets can appear here)
+                        let mut messages = Message::from_bytes_many(Cursor::new(decrypted_packets));
+                        // First message is the one we want to return
+                        let Some(message) = messages.next() else {
+                            bail!("no valid message found");
+                        };
+                        let message = message?;
 
-                        Message::from_bytes(Cursor::new(decrypted_packet))
+                        // The only other message allowed is a padding packet, which will be skipped
+                        // by the parser, so check that we have only a single message.
+                        if let Some(msg) = messages.next() {
+                            bail!("unexpected message: {:?}", msg);
+                        }
+
+                        Ok(message)
                     }
                     Self::SymEncryptedData(_) => {
                         bail!("invalid packet combination");

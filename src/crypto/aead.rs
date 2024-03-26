@@ -9,7 +9,7 @@ use generic_array::{
     GenericArray,
 };
 use num_enum::{FromPrimitive, IntoPrimitive};
-use ocb3::{Ocb3, Nonce as Ocb3Nonce, Tag as OcbTag};
+use ocb3::{Nonce as Ocb3Nonce, Ocb3, Tag as OcbTag};
 
 use crate::errors::{Error, Result};
 
