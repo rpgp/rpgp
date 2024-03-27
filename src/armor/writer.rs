@@ -181,7 +181,7 @@ mod tests {
 
             assert_eq!(lines[0], "-----BEGIN PGP MESSAGE-----");
             assert!(
-                !lines[lines.len() - 3].is_empty(),
+                !lines[lines.len() - 2].is_empty(),
                 "last line must not be empty"
             );
             assert_eq!(lines[lines.len() - 1], "-----END PGP MESSAGE-----");
