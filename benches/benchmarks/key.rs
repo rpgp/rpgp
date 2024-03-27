@@ -31,7 +31,7 @@ fn bench_key(c: &mut Criterion) {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
             .sign(|| "".into())
             .unwrap();
-        let bytes = key.to_armored_bytes(None).unwrap();
+        let bytes = key.to_armored_bytes(None.into()).unwrap();
 
         b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
     });
@@ -40,7 +40,7 @@ fn bench_key(c: &mut Criterion) {
         let key = build_key(KeyType::EdDSA, KeyType::ECDH)
             .sign(|| "".into())
             .unwrap();
-        let bytes = key.to_armored_bytes(None).unwrap();
+        let bytes = key.to_armored_bytes(None.into()).unwrap();
 
         b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
     });

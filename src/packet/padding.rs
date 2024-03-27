@@ -72,25 +72,25 @@ mod tests {
 
     #[test]
     fn test_padding_roundtrip() {
-        let packet_raw = hex::decode("d50ec5a293072991628147d72c8f86b7").unwrap();
-        let (rest, (version, tag, plen, body)) = single::parser(&packet_raw).unwrap();
+        let packet_raw = hex::decode("d50ec5a293072991628147d72c8f86b7").expect("valid hex");
+        let (rest, (version, tag, _plen, body)) = single::parser(&packet_raw).expect("parse");
         assert!(rest.is_empty());
 
         let ParseResult::Fixed(body) = body else {
             panic!("invalid parse result");
         };
-        let full_packet = single::body_parser(version, tag, body).unwrap();
+        let full_packet = single::body_parser(version, tag, body).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
         };
         assert_eq!(
             packet.data,
-            hex::decode("c5a293072991628147d72c8f86b7").unwrap()
+            hex::decode("c5a293072991628147d72c8f86b7").expect("valid hex")
         );
 
         // encode
-        let encoded = full_packet.to_bytes().unwrap();
+        let encoded = full_packet.to_bytes().expect("encode");
         assert_eq!(encoded, packet_raw);
     }
 
@@ -100,7 +100,7 @@ mod tests {
         let packet = Padding::new(&mut rng, Version::New, 20);
         assert_eq!(packet.data.len(), 20);
 
-        let encoded = packet.to_bytes().unwrap();
+        let encoded = packet.to_bytes().expect("encode");
         assert_eq!(encoded, packet.data);
     }
 }

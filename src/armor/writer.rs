@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::hash::Hasher;
 use std::io::Write;
 
@@ -12,11 +11,13 @@ use crate::line_writer::{LineBreak, LineWriter};
 use crate::ser::Serialize;
 use crate::util::TeeWriter;
 
+use super::Headers;
+
 pub fn write(
     source: &impl Serialize,
     typ: BlockType,
     writer: &mut impl Write,
-    headers: Option<&BTreeMap<String, Vec<String>>>,
+    headers: Option<&Headers>,
     include_checksum: bool,
 ) -> Result<()> {
     // write armor header
@@ -40,7 +41,7 @@ pub fn write(
     writer.flush()?;
 
     // write body
-    let mut crc_hasher = include_checksum.then(|| Crc24Hasher::new());
+    let mut crc_hasher = include_checksum.then(Crc24Hasher::new);
     {
         let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
         let mut enc = ZeroWrapper(base64::write::EncoderWriter::new(

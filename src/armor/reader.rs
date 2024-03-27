@@ -101,6 +101,9 @@ impl fmt::Display for PKCS1Type {
     }
 }
 
+/// Armor Headers.
+pub type Headers = BTreeMap<String, Vec<String>>;
+
 /// Parses a single ascii armor header separator.
 fn armor_header_sep(i: &[u8]) -> IResult<&[u8], &[u8]> {
     tag(b"-----")(i)
@@ -227,7 +230,7 @@ fn key_value_pairs(i: &[u8]) -> IResult<&[u8], Vec<(&str, &str)>> {
 }
 
 /// Parses the full armor header.
-fn armor_headers(i: &[u8]) -> IResult<&[u8], BTreeMap<String, Vec<String>>> {
+fn armor_headers(i: &[u8]) -> IResult<&[u8], Headers> {
     map(key_value_pairs, |pairs| {
         // merge multiple values with the same name
         let mut out = BTreeMap::<String, Vec<String>>::new();
@@ -240,7 +243,7 @@ fn armor_headers(i: &[u8]) -> IResult<&[u8], BTreeMap<String, Vec<String>>> {
 }
 
 /// Armor Header
-fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, Vec<String>>)> {
+fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
     pair(armor_header_line, armor_headers)(i)
 }
 
@@ -260,7 +263,7 @@ fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
     Ok(u64::from(BigEndian::read_u32(&buf)))
 }
 
-fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, BTreeMap<String, Vec<String>>)> {
+fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
     delimited(
         take_until(b"-----".as_slice()),
         armor_header,
@@ -301,7 +304,7 @@ pub struct Dearmor<R> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
-    pub headers: BTreeMap<String, Vec<String>>,
+    pub headers: Headers,
     /// Optional crc checksum
     pub checksum: Option<u64>,
     /// track what we are currently parsing
@@ -522,9 +525,7 @@ mod tests {
     use std::io::Cursor;
 
     // helper function to parse all data at once
-    pub fn parse<R: Read + Seek>(
-        mut input: R,
-    ) -> Result<(BlockType, BTreeMap<String, Vec<String>>, Vec<u8>)> {
+    pub fn parse<R: Read + Seek>(mut input: R) -> Result<(BlockType, Headers, Vec<u8>)> {
         let mut dearmor = Dearmor::new(input.by_ref());
 
         // estimate size

@@ -678,7 +678,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
             PublicOrSecret::Public(_) => armor::BlockType::PublicKey,
             PublicOrSecret::Secret(_) => armor::BlockType::PrivateKey,
         };
-        armor::write(&pk, typ, &mut ser, Some(&headers).into(), true).unwrap();
+        armor::write(&pk, typ, &mut ser, Some(&headers), true).unwrap();
         let ser_str = std::str::from_utf8(&ser).unwrap();
 
         // normalize line endings

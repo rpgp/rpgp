@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::io;
 use std::io::Cursor;
 
@@ -202,8 +201,8 @@ impl Edata {
                     }
                 }
             }
-            PlainSessionKey::V5 { key } => match self {
-                Self::SymEncryptedProtectedData(p) => {
+            PlainSessionKey::V5 { .. } => match self {
+                Self::SymEncryptedProtectedData(_p) => {
                     ensure_eq!(
                         self.version(),
                         Some(2),
@@ -763,7 +762,7 @@ impl Message {
 #[derive(Debug)]
 pub struct ArmorOptions<'a> {
     /// Armor headers
-    pub headers: Option<&'a BTreeMap<String, Vec<String>>>,
+    pub headers: Option<&'a armor::Headers>,
     /// Should a checksum be included? Default to `true`.
     pub include_checksum: bool,
 }
@@ -777,8 +776,8 @@ impl Default for ArmorOptions<'_> {
     }
 }
 
-impl<'a> From<Option<&'a BTreeMap<String, Vec<String>>>> for ArmorOptions<'a> {
-    fn from(headers: Option<&'a BTreeMap<String, Vec<String>>>) -> Self {
+impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
+    fn from(headers: Option<&'a armor::Headers>) -> Self {
         Self {
             headers,
             include_checksum: true,
