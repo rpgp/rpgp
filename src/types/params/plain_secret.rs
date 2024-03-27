@@ -261,10 +261,10 @@ impl PlainSecretParams {
     pub fn encrypt(
         self,
         passphrase: &str,
-        mut s2k_params: S2kParams,
+        s2k_params: S2kParams,
         version: KeyVersion,
     ) -> Result<EncryptedSecretParams> {
-        match &mut s2k_params {
+        match &s2k_params {
             S2kParams::Unprotected => bail!("cannot encrypt to uprotected"),
             S2kParams::Cfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
