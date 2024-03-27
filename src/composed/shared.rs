@@ -1,5 +1,4 @@
 use byteorder::ReadBytesExt;
-use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
 use crate::armor::{self, BlockType};
@@ -14,7 +13,7 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a single armor encoded composition.
-    fn from_string(input: &str) -> Result<(Self, BTreeMap<String, String>)> {
+    fn from_string(input: &str) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_string_many(input)?;
         Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
     }
@@ -23,15 +22,12 @@ pub trait Deserializable: Sized {
     #[allow(clippy::type_complexity)]
     fn from_string_many<'a>(
         input: &'a str,
-    ) -> Result<(
-        Box<dyn Iterator<Item = Result<Self>> + 'a>,
-        BTreeMap<String, String>,
-    )> {
+    ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         Self::from_armor_many(Cursor::new(input))
     }
 
     /// Armored ascii data.
-    fn from_armor_single<R: Read + Seek>(input: R) -> Result<(Self, BTreeMap<String, String>)> {
+    fn from_armor_single<R: Read + Seek>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
         Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
     }
@@ -40,10 +36,7 @@ pub trait Deserializable: Sized {
     #[allow(clippy::type_complexity)]
     fn from_armor_many<'a, R: Read + Seek + 'a>(
         input: R,
-    ) -> Result<(
-        Box<dyn Iterator<Item = Result<Self>> + 'a>,
-        BTreeMap<String, String>,
-    )> {
+    ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         let mut dearmor = armor::Dearmor::new(input);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
@@ -95,7 +88,7 @@ pub trait Deserializable: Sized {
     #[allow(clippy::type_complexity)]
     fn from_reader_single<'a, R: Read + Seek + 'a>(
         mut input: R,
-    ) -> Result<(Self, Option<BTreeMap<String, String>>)> {
+    ) -> Result<(Self, Option<armor::Headers>)> {
         if !is_binary(&mut input)? {
             let (keys, headers) = Self::from_armor_single(input)?;
             Ok((keys, Some(headers)))
@@ -113,7 +106,7 @@ pub trait Deserializable: Sized {
         mut input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
-        Option<BTreeMap<String, String>>,
+        Option<armor::Headers>,
     )> {
         if !is_binary(&mut input)? {
             let (keys, headers) = Self::from_armor_many(input)?;

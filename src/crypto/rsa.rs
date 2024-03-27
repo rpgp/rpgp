@@ -109,10 +109,10 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
 /// Generate an RSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(
-    rng: &mut R,
+    mut rng: R,
     bit_size: usize,
 ) -> Result<(PublicParams, PlainSecretParams)> {
-    let key = RsaPrivateKey::new(rng, bit_size)?;
+    let key = RsaPrivateKey::new(&mut rng, bit_size)?;
 
     let p = &key.primes()[0];
     let q = &key.primes()[1];

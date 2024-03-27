@@ -82,13 +82,13 @@ Symbols:
   - [x] ZIP
   - [x] ZLIB
   - [ ] 🚫 BZip2
-- [ ] AEAD Algorithms
-  - [ ] OCB
-  - [ ] EAX
-  - [ ] GCM
+- [x] AEAD Algorithms
+  - [x] OCB
+  - [x] EAX
+  - [x] GCM
 - S2K
   - [x] Iterated and Salted
-  - [ ] Argon2
+  - [x] Argon2
 
 ## High Level API
 

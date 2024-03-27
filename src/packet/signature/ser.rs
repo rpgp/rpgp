@@ -114,7 +114,7 @@ impl Subpacket {
                 writer.write_all(fp)?;
             }
             SubpacketData::PreferredAeadAlgorithms(algs) => {
-                writer.write_all(&algs.iter().map(|&alg| alg as u8).collect::<Vec<_>>())?;
+                writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
             }
             SubpacketData::Experimental(_, body) => {
                 writer.write_all(body)?;

@@ -4,21 +4,33 @@ use crate::packet::SymKeyEncryptedSessionKey;
 use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
-pub fn decrypt_session_key<F, L>(
-    locked_key: &L,
-    key_pw: F,
-    mpis: &[Mpi],
-) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
+pub fn decrypt_session_key<F, L>(locked_key: &L, key_pw: F, mpis: &[Mpi]) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
     L: SecretKeyTrait<Unlocked = SecretKeyRepr> + KeyTrait,
 {
-    debug!("decrypting session key");
+    debug!("decrypt session key");
 
     locked_key.unlock(key_pw, |priv_key| {
-        let (key, alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
-        Ok((key, alg))
+        let (key, sym_alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
+        // TODO: handle other versions
+        Ok(PlainSessionKey::V4 { key, sym_alg })
     })
+}
+
+/// Decrypted session key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlainSessionKey {
+    V4 {
+        sym_alg: SymmetricKeyAlgorithm,
+        key: Vec<u8>,
+    },
+    V5 {
+        key: Vec<u8>,
+    },
+    V6 {
+        key: Vec<u8>,
+    },
 }
 
 /// Decrypts session key from SKESK packet.
@@ -28,11 +40,11 @@ where
 pub fn decrypt_session_key_with_password<F>(
     packet: &SymKeyEncryptedSessionKey,
     msg_pw: F,
-) -> Result<(Vec<u8>, SymmetricKeyAlgorithm)>
+) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
 {
-    debug!("decrypting session key");
+    debug!("decrypt session key with password");
 
     let packet_algorithm = packet.sym_algorithm();
     ensure!(
@@ -44,23 +56,18 @@ where
         .s2k()
         .derive_key(&msg_pw(), packet_algorithm.key_size())?;
 
-    let Some(ref encrypted_key) = packet.encrypted_key() else {
+    debug!("derived key: {}", hex::encode(&key));
+    if packet.encrypted_key().is_none() {
         // There is no encrypted session key.
         //
         // S2K-derived key is the session key.
-        return Ok((key, packet_algorithm));
-    };
+        return Ok(PlainSessionKey::V4 {
+            key,
+            sym_alg: packet_algorithm,
+        });
+    }
 
-    let mut decrypted_key = encrypted_key.to_vec();
-    // packet.sym_algorithm().decrypt(&key, &mut decrypted_key)?;
-    let iv = vec![0u8; packet.sym_algorithm().block_size()];
-    packet_algorithm.decrypt_with_iv_regular(&key, &iv, &mut decrypted_key)?;
+    let decrypted_key = packet.decrypt(&key)?;
 
-    let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
-    ensure!(
-        session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
-        "session key algorithm cannot be plaintext"
-    );
-
-    Ok((decrypted_key[1..].to_vec(), session_key_algorithm))
+    Ok(decrypted_key)
 }

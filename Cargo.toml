@@ -20,7 +20,7 @@ rust-version = "1.70"
 [dependencies]
 aes = "^0.8"
 argon2 = "0.5"
-base64 = "^0.21.0"
+base64 = "^0.22.0"
 bitfield = "0.14"
 block-padding = "^0.3.2"
 blowfish = "^0.9"
@@ -64,6 +64,10 @@ twofish = "^0.7"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 getrandom = { version = "0.2.6", optional = true }
 bstr = { version = "1.4.0", default-features = false, features = ["std"] }
+hkdf = "0.12.4"
+aes-gcm = "0.10.3"
+eax = "0.5.0"
+ocb3 = "0.1"
 
 [dependencies.buffer-redux]
 version = "1.0.0"
@@ -114,7 +118,7 @@ criterion = { version = "0.4", features = ["html_reports"] }
 default = []
 nightly = ["rsa/nightly", "rand/nightly", "num-bigint/nightly"]
 profile = ["gperftools"]
-asm = ["sha1/asm", "sha2/asm", "md-5/asm", "nightly"]
+asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 
 [profile.bench]

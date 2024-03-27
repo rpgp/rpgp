@@ -5,12 +5,101 @@ use nom::combinator::{map, rest};
 use nom::number::streaming::be_u8;
 use rand::{CryptoRng, Rng};
 
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
 use crate::ser::Serialize;
 
 const EXPBIAS: u32 = 6;
 const DEFAULT_ITER_SALTED_COUNT: u8 = 224;
+
+/// The available s2k usages.
+///
+/// Ref 3.7.2.1. Secret-Key Encryption
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum S2kUsage {
+    /// 0
+    Unprotected,
+    /// 1..253
+    LegacyCfb(SymmetricKeyAlgorithm),
+    /// 253
+    Aead,
+    /// 254
+    Cfb,
+    /// 255
+    MalleableCfb,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum S2kParams {
+    Unprotected,
+    LegacyCfb {
+        sym_alg: SymmetricKeyAlgorithm,
+        iv: Vec<u8>,
+    },
+    Aead {
+        sym_alg: SymmetricKeyAlgorithm,
+        aead_mode: AeadAlgorithm,
+        s2k: StringToKey,
+        nonce: Vec<u8>,
+    },
+    Cfb {
+        sym_alg: SymmetricKeyAlgorithm,
+        s2k: StringToKey,
+        iv: Vec<u8>,
+    },
+    MaleableCfb {
+        sym_alg: SymmetricKeyAlgorithm,
+        s2k: StringToKey,
+        iv: Vec<u8>,
+    },
+}
+
+impl From<&S2kParams> for u8 {
+    fn from(value: &S2kParams) -> Self {
+        match value {
+            S2kParams::Unprotected => 0,
+            S2kParams::LegacyCfb { sym_alg, .. } => (*sym_alg).into(),
+            S2kParams::Aead { .. } => 253,
+            S2kParams::Cfb { .. } => 254,
+            S2kParams::MaleableCfb { .. } => 255,
+        }
+    }
+}
+
+impl S2kParams {
+    /// Create a new default set of parameters
+    /// and initialises relevant randomized values.
+    ///
+    /// - AES256
+    /// - CFB
+    /// - Iterated and Salted with 224 rounds
+    pub fn new_default<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        let sym_alg = SymmetricKeyAlgorithm::AES256;
+
+        let mut iv = vec![0u8; sym_alg.block_size()];
+        rng.fill(&mut iv[..]);
+
+        Self::Cfb {
+            sym_alg,
+            s2k: StringToKey::new_default(rng),
+            iv,
+        }
+    }
+}
+
+impl From<u8> for S2kUsage {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::Unprotected,
+            v @ 1..=252 => Self::LegacyCfb(SymmetricKeyAlgorithm::from(v)),
+            253 => Self::Aead,
+            254 => Self::Cfb,
+            255 => Self::MalleableCfb,
+        }
+    }
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StringToKey {
@@ -58,12 +147,12 @@ pub enum StringToKey {
 }
 
 impl StringToKey {
-    pub fn new_default<R: CryptoRng + Rng>(rng: &mut R) -> Self {
+    pub fn new_default<R: CryptoRng + Rng>(rng: R) -> Self {
         StringToKey::new_iterated(rng, HashAlgorithm::default(), DEFAULT_ITER_SALTED_COUNT)
     }
 
     pub fn new_iterated<R: CryptoRng + Rng>(
-        rng: &mut R,
+        mut rng: R,
         hash_alg: HashAlgorithm,
         count: u8,
     ) -> Self {
@@ -326,9 +415,9 @@ impl Serialize for StringToKey {
 mod tests {
     use rand::distributions::{Alphanumeric, DistString};
 
-    use crate::crypto::sym::SymmetricKeyAlgorithm;
-
     use super::*;
+
+    use crate::ArmorOptions;
 
     #[test]
     #[ignore]
@@ -448,10 +537,13 @@ mod tests {
         use crate::{composed::Deserializable, Message};
 
         for filename in MSGS {
-            let (msg, _header) =
+            println!("reading {}", filename);
+
+            let (msg, header) =
                 Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
                     .expect("failed to load msg");
 
+            dbg!(&header);
             let decrypted = msg
                 .decrypt_with_password(|| "password".to_string())
                 .expect("decrypt argon2 skesk");
@@ -461,6 +553,75 @@ mod tests {
             };
 
             assert_eq!(data.data(), b"Hello, world!");
+
+            // roundtrip
+            let armored = msg
+                .to_armored_string(ArmorOptions {
+                    headers: Some(&header),
+                    include_checksum: false, // No checksum on v6
+                })
+                .expect("encode");
+
+            let orig_armored = std::fs::read_to_string(filename).expect("file read");
+
+            let orig_armored = orig_armored.replace("\r\n", "\n").replace('\r', "\n");
+            let armored = armored
+                .to_string()
+                .replace("\r\n", "\n")
+                .replace('\r', "\n");
+
+            assert_eq!(armored, orig_armored);
+        }
+    }
+
+    #[test]
+    fn aead_skesk_msg() {
+        let _ = pretty_env_logger::try_init();
+
+        // Tests decrypting messages
+        //
+        // "These messages are the literal data "Hello, world!" encrypted using AES-128 with various AEADs
+
+        const MSGS: &[&str] = &[
+            "./tests/unit-tests/aead/gcm.msg",
+            "./tests/unit-tests/aead/eax.msg",
+            "./tests/unit-tests/aead/ocb.msg",
+        ];
+
+        use crate::{composed::Deserializable, Message};
+
+        for filename in MSGS {
+            println!("reading {}", filename);
+            let raw_file = std::fs::File::open(filename).expect("file open");
+            let (msg, header) = Message::from_armor_single(raw_file).expect("parse");
+
+            let decrypted = msg
+                .decrypt_with_password(|| "password".to_string())
+                .expect("decrypt");
+
+            let Message::Literal(data) = decrypted else {
+                panic!("expected literal data")
+            };
+
+            assert_eq!(data.data(), b"Hello, world!");
+
+            // roundtrip
+            let armored = msg
+                .to_armored_string(ArmorOptions {
+                    headers: Some(&header),
+                    include_checksum: false, // No checksum on v6
+                })
+                .expect("encode");
+
+            let orig_armored = std::fs::read_to_string(filename).expect("file read");
+
+            let orig_armored = orig_armored.replace("\r\n", "\n").replace('\r', "\n");
+            let armored = armored
+                .to_string()
+                .replace("\r\n", "\n")
+                .replace('\r', "\n");
+
+            assert_eq!(armored, orig_armored);
         }
     }
 }

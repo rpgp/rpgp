@@ -15,7 +15,7 @@ use crate::de::Deserialize;
 use crate::errors::{Error, IResult, Result};
 use crate::packet::packet_sum::Packet;
 use crate::packet::{
-    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PublicKey,
+    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Padding, PublicKey,
     PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
     UserId,
@@ -121,7 +121,6 @@ fn read_partial_bodies(input: &[u8], len: usize) -> IResult<&[u8], ParseResult<'
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
 fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     use bits::streaming::*;
-
     #[allow(non_snake_case)]
     bits::bits(|I| {
         preceded(
@@ -131,7 +130,8 @@ fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
                 // Version: 1
                 map_res(tag(0b1, 1usize), Version::try_from),
                 // Packet Tag
-                map_res(take(6usize), u8::try_into),
+                map(take(6usize), u8::into),
+                // packet length
                 bits::bytes(read_packet_len),
             )),
         )(I)
@@ -149,6 +149,7 @@ pub enum ParseResult<'a> {
 /// https://tools.ietf.org/html/rfc4880.html#section-4.2
 pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength, ParseResult<'_>)> {
     let (i, head) = alt((new_packet_header, old_packet_header))(i)?;
+
     let (i, body) = match head.2 {
         PacketLength::Fixed(length) => map(take(length), ParseResult::Fixed)(i),
         PacketLength::Indeterminate => Ok((i, ParseResult::Indeterminate)),
@@ -182,6 +183,8 @@ pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
             SymEncryptedProtectedData::from_slice(ver, body).map(Into::into)
         }
         Tag::ModDetectionCode => ModDetectionCode::from_slice(ver, body).map(Into::into),
+        Tag::Padding => Padding::from_slice(ver, body).map(Into::into),
+        Tag::Other(other) => unimplemented_err!("Unknown packet typ: {}", other),
     };
 
     match res {

@@ -34,7 +34,7 @@ use pgp::packet::{
 };
 use pgp::ser::Serialize;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, SecretKeyRepr,
+    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
     SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
 
@@ -52,22 +52,32 @@ fn get_test_key(name: &str) -> File {
     read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name))
 }
 
-fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+struct DumpResult {
+    valid_count: usize,
+    err_count: usize,
+    unimpl_count: usize,
+    total_count: usize,
+}
+
+fn test_parse_dump(i: usize, expected: DumpResult) {
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")));
 
-    let mut valid_count = 0;
-    let mut total_count = 0;
-    for key in SignedPublicKey::from_bytes_many(f) {
-        // println!("key {}", i);
-        total_count += 1;
+    let mut actual = DumpResult::default();
+
+    for (j, key) in SignedPublicKey::from_bytes_many(f).enumerate() {
+        if j % 1000 == 0 {
+            println!("key {}: {}", i, j);
+        }
+        actual.total_count += 1;
         let key = key.as_ref().expect("failed to parse key");
 
         // roundtrip
         {
             // serialize and check we get the same thing
-            let serialized = key.to_armored_bytes(None).unwrap();
+            let serialized = key.to_armored_bytes(None.into()).unwrap();
 
             // and parse them again
             let (key2, _headers) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
@@ -75,56 +85,146 @@ fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
             assert_eq!(key, &key2);
         }
 
-        let is_ok = match key.verify() {
+        match key.verify() {
             // Skip these for now
             Err(Error::Unimplemented(err)) => {
-                warn!("unimplemented: {:?}", err);
-                false
+                warn!("unimplemented: {}:{} {:?}", i, j, err);
+                actual.unimpl_count += 1;
             }
             Err(err) => {
                 warn!(
-                    "verification failed: public key {}: {:?}",
+                    "verification failed: {}:{}: public key {}: {:?}",
+                    i,
+                    j,
                     hex::encode(&key.key_id()),
                     err
                 );
-                false
+                actual.err_count += 1;
             }
             // all good
-            Ok(_) => true,
-        };
-
-        if is_ok {
-            valid_count += 1;
+            Ok(_) => {
+                actual.valid_count += 1;
+            }
         }
     }
 
-    assert_eq!(expected_count, valid_count);
-    assert_eq!(total_count, actual_count);
+    assert_eq!(expected, actual);
 }
 
 macro_rules! parse_dumps {
-    ( $( ($name:ident, $num:expr, $count:expr, $total:expr), )* ) => {
+    ( $( ($name:ident, $num:expr, $count:expr, $unimpl:expr, $err:expr, $total:expr), )* ) => {
         $(
             #[test]
             #[ignore]
             fn $name() {
-                test_parse_dump($num, $count, $total);
+                test_parse_dump($num, DumpResult {
+                    valid_count: $count,
+                    unimpl_count: $unimpl,
+                    err_count: $err,
+                    total_count: $total,
+                });
             }
         )*
     };
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 17_704, 20_999),
-    (test_parse_dumps_1, 1, 17_542, 21_000),
-    (test_parse_dumps_2, 2, 17_583, 20_999),
-    (test_parse_dumps_3, 3, 17_651, 20_998),
-    (test_parse_dumps_4, 4, 17_583, 20_999),
-    (test_parse_dumps_5, 5, 17_609, 20_999),
-    (test_parse_dumps_6, 6, 17_677, 21_000),
-    (test_parse_dumps_7, 7, 17_688, 21_000),
-    (test_parse_dumps_8, 8, 17_693, 21_000),
-    (test_parse_dumps_9, 9, 17_546, 21_000),
+    (
+        test_parse_dumps_0,
+        0,
+        17_704,
+        1, // Hash::Other(4)
+        3294,
+        20_999
+    ),
+    (
+        test_parse_dumps_1,
+        1,
+        17_542,
+        // - Hash::Other(4)
+        // - Elgamal verify
+        8,
+        3450,
+        21_000
+    ),
+    (
+        test_parse_dumps_2,
+        2,
+        17_583,
+        // - Hash::Other(4)
+        // - Hash::Other(5)
+        // - Elgamal verify
+        5,
+        3411,
+        20_999
+    ),
+    (
+        test_parse_dumps_3,
+        3,
+        17_651,
+        // - Hash::Other(4)
+        // - Elgamal verify
+        6,
+        3341,
+        20_998
+    ),
+    (
+        test_parse_dumps_4,
+        4,
+        17_583,
+        // - Elgamal verify
+        2,
+        3414,
+        20_999
+    ),
+    (
+        test_parse_dumps_5,
+        5,
+        17_609,
+        // - Hash::Other(4)
+        // - Elgamal verify
+        8,
+        3382,
+        20_999
+    ),
+    (
+        test_parse_dumps_6,
+        6,
+        17_677,
+        // - Elgamal verify
+        1,
+        3322,
+        21_000
+    ),
+    (
+        test_parse_dumps_7,
+        7,
+        17_688,
+        // - Elgamal verify
+        3,
+        3309,
+        21_000
+    ),
+    (
+        test_parse_dumps_8,
+        8,
+        17_693,
+        // - Hash::Other(5)
+        // - Elgamal verify
+        6,
+        3301,
+        21_000
+    ),
+    (
+        test_parse_dumps_9,
+        9,
+        17_546,
+        // - Hash::Other(5)
+        // - Elgamal verify
+        3,
+        3451,
+        21_000
+    ),
 );
 
 #[test]
@@ -150,7 +250,7 @@ fn test_parse_gnupg_v1() {
         }
 
         // serialize and check we get the same thing
-        let serialized = pk.to_armored_bytes(Some(&headers)).unwrap();
+        let serialized = pk.to_armored_bytes(Some(&headers).into()).unwrap();
 
         // and parse them again
         let (pk2, headers2) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
@@ -177,7 +277,7 @@ fn test_parse_openpgp_sample_rsa_private() {
     assert_eq!(pkey.algorithm(), PublicKeyAlgorithm::RSA);
 
     assert_eq!(
-        pkey.secret_params().checksum().unwrap(),
+        pkey.secret_params().checksum(),
         hex::decode("2c46").expect("failed hex encoding")
     );
 
@@ -530,12 +630,15 @@ fn encrypted_private_key() {
     match pp {
         SecretParams::Plain(_) => panic!("should be encrypted"),
         SecretParams::Encrypted(pp) => {
+            let S2kParams::Cfb { sym_alg, s2k, iv } = pp.string_to_key_params() else {
+                panic!("unexpected s2k param: {:?}", pp);
+            };
             assert_eq!(
-                pp.iv(),
+                iv,
                 &hex::decode("2271f718af70d3bd9d60c2aed9469b67").unwrap()[..]
             );
 
-            match pp.string_to_key() {
+            match s2k {
                 StringToKey::IteratedAndSalted {
                     hash_alg,
                     salt,
@@ -548,8 +651,7 @@ fn encrypted_private_key() {
                 s => panic!("unexpected s2k type {:?}", s),
             }
 
-            assert_eq!(pp.encryption_algorithm(), SymmetricKeyAlgorithm::AES128);
-            assert_eq!(pp.string_to_key_id(), 254);
+            assert_eq!(sym_alg, &SymmetricKeyAlgorithm::AES128);
         }
     }
 
@@ -676,7 +778,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
             PublicOrSecret::Public(_) => armor::BlockType::PublicKey,
             PublicOrSecret::Secret(_) => armor::BlockType::PrivateKey,
         };
-        armor::write(&pk, typ, &mut ser, Some(&headers)).unwrap();
+        armor::write(&pk, typ, &mut ser, Some(&headers), true).unwrap();
         let ser_str = std::str::from_utf8(&ser).unwrap();
 
         // normalize line endings
@@ -691,7 +793,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
     for parsed in pk {
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes(Some(&headers)).unwrap();
+        let serialized = parsed.to_armored_bytes(Some(&headers).into()).unwrap();
 
         // println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
@@ -729,7 +831,7 @@ fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
         }
 
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes(None).unwrap();
+        let serialized = parsed.to_armored_bytes(None.into()).unwrap();
 
         // and parse them again
         let parsed2 = from_armor_many(Cursor::new(&serialized))
@@ -1093,7 +1195,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         }
 
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes(None).unwrap();
+        let serialized = parsed.to_armored_bytes(None.into()).unwrap();
 
         println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 

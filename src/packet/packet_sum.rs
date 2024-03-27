@@ -2,7 +2,7 @@ use std::io;
 
 use crate::errors::Result;
 use crate::packet::{
-    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PublicKey,
+    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Padding, PublicKey,
     PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
     SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
     UserId,
@@ -30,6 +30,7 @@ pub enum Packet {
     Trust(Trust),
     UserAttribute(UserAttribute),
     UserId(UserId),
+    Padding(Padding),
 }
 
 impl Packet {
@@ -53,6 +54,7 @@ impl Packet {
             Packet::Trust(_) => Tag::Trust,
             Packet::UserAttribute(_) => Tag::UserAttribute,
             Packet::UserId(_) => Tag::UserId,
+            Packet::Padding(_) => Tag::Padding,
         }
     }
 
@@ -75,6 +77,7 @@ impl Packet {
             Packet::Trust(p) => p.packet_version(),
             Packet::UserAttribute(p) => p.packet_version(),
             Packet::UserId(p) => p.packet_version(),
+            Packet::Padding(p) => p.packet_version(),
         }
     }
 }
@@ -97,7 +100,8 @@ impl_try_from_into!(
     SymKeyEncryptedSessionKey => SymKeyEncryptedSessionKey,
     Trust => Trust,
     UserAttribute => UserAttribute,
-    UserId => UserId
+    UserId => UserId,
+    Padding => Padding
 );
 
 // TODO: move to its own file
@@ -121,6 +125,7 @@ impl Serialize for Packet {
             Packet::Trust(p) => write_packet(writer, &p),
             Packet::UserAttribute(p) => write_packet(writer, &p),
             Packet::UserId(p) => write_packet(writer, &p),
+            Packet::Padding(p) => write_packet(writer, &p),
         }
     }
 }
@@ -152,7 +157,7 @@ pub fn write_packet(writer: &mut impl io::Write, packet: &impl PacketTrait) -> R
     );
 
     // header
-    packet_version.write_header(writer, packet.tag() as u8, buf.len())?;
+    packet_version.write_header(writer, packet.tag().into(), buf.len())?;
 
     // the actual packet body
     writer.write_all(&buf)?;

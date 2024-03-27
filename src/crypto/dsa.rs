@@ -82,11 +82,11 @@ pub fn verify(
 
 /// Generate a DSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(
-    rng: &mut R,
+    mut rng: R,
     key_size: KeySize,
 ) -> Result<(PublicParams, PlainSecretParams)> {
-    let components = Components::generate(rng, key_size);
-    let signing_key = SigningKey::generate(rng, components);
+    let components = Components::generate(&mut rng, key_size);
+    let signing_key = SigningKey::generate(&mut rng, components);
     let verifying_key = signing_key.verifying_key();
     let p = verifying_key.components().p();
     let q = verifying_key.components().q();

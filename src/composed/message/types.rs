@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::io;
 use std::io::Cursor;
 
@@ -162,19 +161,85 @@ impl Edata {
         }
     }
 
-    pub fn decrypt(&self, key: Vec<u8>, alg: SymmetricKeyAlgorithm) -> Result<Message> {
-        let mut res = self.data()[..].to_vec();
-        let protected = self.tag() == Tag::SymEncryptedProtectedData;
+    fn version(&self) -> Option<usize> {
+        match self {
+            Edata::SymEncryptedData(_) => None,
+            Edata::SymEncryptedProtectedData(d) => Some(d.version()),
+        }
+    }
 
+    pub fn decrypt(&self, key: PlainSessionKey) -> Result<Message> {
+        let protected = self.tag() == Tag::SymEncryptedProtectedData;
         debug!("decrypting protected = {:?}", protected);
 
-        let decrypted_packet: &[u8] = if protected {
-            alg.decrypt_protected(&key, &mut res)
-        } else {
-            alg.decrypt(&key, &mut res)
-        }?;
+        match key {
+            PlainSessionKey::V4 { sym_alg, key } => {
+                ensure!(
+                    sym_alg != SymmetricKeyAlgorithm::Plaintext,
+                    "session key algorithm cannot be plaintext"
+                );
 
-        Message::from_bytes(Cursor::new(decrypted_packet.to_vec()))
+                match self {
+                    Self::SymEncryptedProtectedData(p) => {
+                        ensure_eq!(
+                            self.version(),
+                            Some(1),
+                            "Version missmatch between key and integrity packet"
+                        );
+                        let data = p.decrypt(&key, Some(sym_alg))?;
+                        Message::from_bytes(Cursor::new(data))
+                    }
+                    Self::SymEncryptedData(p) => {
+                        ensure_eq!(
+                            self.version(),
+                            None,
+                            "Version missmatch between key and integrity packet"
+                        );
+                        let mut data = p.data().to_vec();
+                        let res = sym_alg.decrypt(&key, &mut data)?;
+                        Message::from_bytes(Cursor::new(res))
+                    }
+                }
+            }
+            PlainSessionKey::V5 { .. } => match self {
+                Self::SymEncryptedProtectedData(_p) => {
+                    ensure_eq!(
+                        self.version(),
+                        Some(2),
+                        "Version missmatch between key and integrity packet"
+                    );
+                    unimplemented_err!("V5 decryption");
+                }
+                Self::SymEncryptedData(_) => {
+                    bail!("invalid packet combination");
+                }
+            },
+            PlainSessionKey::V6 { key } => {
+                match self {
+                    Self::SymEncryptedProtectedData(p) => {
+                        let decrypted_packets = p.decrypt(&key, None)?;
+
+                        let mut messages = Message::from_bytes_many(Cursor::new(decrypted_packets));
+                        // First message is the one we want to return
+                        let Some(message) = messages.next() else {
+                            bail!("no valid message found");
+                        };
+                        let message = message?;
+
+                        // The only other message allowed is a padding packet, which will be skipped
+                        // by the parser, so check that we have only a single message.
+                        if let Some(msg) = messages.next() {
+                            bail!("unexpected message: {:?}", msg);
+                        }
+
+                        Ok(message)
+                    }
+                    Self::SymEncryptedData(_) => {
+                        bail!("invalid packet combination");
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -559,23 +624,18 @@ impl Message {
                 ensure!(!session_keys.is_empty(), "failed to decrypt session key");
 
                 // make sure all the keys are the same, otherwise we are in a bad place
-                let (session_key, session_key_algorithm) = {
+                let session_key = {
                     let (_key_id, k0) = &session_keys[0];
                     if !session_keys.iter().skip(1).all(|(_, k)| k0 == k) {
                         bail!("found inconsistent session keys, possible message corruption");
                     }
 
                     // TODO: avoid cloning
-                    (k0.0.clone(), k0.1)
+                    k0.clone()
                 };
 
                 let ids = session_keys.into_iter().map(|(k, _)| k).collect();
-                ensure!(
-                    session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
-                    "session key algorithm cannot be plaintext"
-                );
-
-                let msg = edata.decrypt(session_key, session_key_algorithm)?;
+                let msg = edata.decrypt(session_key)?;
 
                 Ok((msg, ids))
             }
@@ -605,14 +665,9 @@ impl Message {
 
                 ensure!(skesk.is_some(), "message is not password protected");
 
-                let (session_key, session_key_algorithm) =
+                let session_key =
                     decrypt_session_key_with_password(skesk.expect("checked above"), msg_pw)?;
-                ensure!(
-                    session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
-                    "session key algorithm cannot be plaintext"
-                );
-
-                edata.decrypt(session_key, session_key_algorithm)
+                edata.decrypt(session_key)
             }
         }
     }
@@ -678,21 +733,55 @@ impl Message {
     pub fn to_armored_writer(
         &self,
         writer: &mut impl io::Write,
-        headers: Option<&BTreeMap<String, String>>,
+        opts: ArmorOptions<'_>,
     ) -> Result<()> {
-        armor::write(self, armor::BlockType::Message, writer, headers)
+        armor::write(
+            self,
+            armor::BlockType::Message,
+            writer,
+            opts.headers,
+            opts.include_checksum,
+        )
     }
 
-    pub fn to_armored_bytes(&self, headers: Option<&BTreeMap<String, String>>) -> Result<Vec<u8>> {
+    pub fn to_armored_bytes(&self, opts: ArmorOptions<'_>) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
-        self.to_armored_writer(&mut buf, headers)?;
+        self.to_armored_writer(&mut buf, opts)?;
 
         Ok(buf)
     }
 
-    pub fn to_armored_string(&self, headers: Option<&BTreeMap<String, String>>) -> Result<String> {
-        Ok(::std::str::from_utf8(&self.to_armored_bytes(headers)?)?.to_string())
+    pub fn to_armored_string(&self, opts: ArmorOptions<'_>) -> Result<String> {
+        let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
+        Ok(res)
+    }
+}
+
+/// Options for generating armored content.
+#[derive(Debug)]
+pub struct ArmorOptions<'a> {
+    /// Armor headers
+    pub headers: Option<&'a armor::Headers>,
+    /// Should a checksum be included? Default to `true`.
+    pub include_checksum: bool,
+}
+
+impl Default for ArmorOptions<'_> {
+    fn default() -> Self {
+        Self {
+            headers: None,
+            include_checksum: true,
+        }
+    }
+}
+
+impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
+    fn from(headers: Option<&'a armor::Headers>) -> Self {
+        Self {
+            headers,
+            include_checksum: true,
+        }
     }
 }
 
@@ -763,7 +852,7 @@ mod tests {
             .unwrap();
         assert_eq!(encrypted, encrypted2);
 
-        let armored = encrypted.to_armored_bytes(None).unwrap();
+        let armored = encrypted.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-rsa.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
@@ -791,7 +880,7 @@ mod tests {
                 .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .unwrap();
 
-            let armored = encrypted.to_armored_bytes(None).unwrap();
+            let armored = encrypted.to_armored_bytes(None.into()).unwrap();
             fs::write("./message-x25519.asc", &armored).unwrap();
 
             let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
@@ -819,7 +908,7 @@ mod tests {
             })
             .unwrap();
 
-        let armored = encrypted.to_armored_bytes(None).unwrap();
+        let armored = encrypted.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-password.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
@@ -894,7 +983,7 @@ mod tests {
             .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
-        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -917,7 +1006,7 @@ mod tests {
             .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
-        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -941,7 +1030,7 @@ mod tests {
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
-        let armored = compressed_msg.to_armored_bytes(None).unwrap();
+        let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -968,7 +1057,7 @@ mod tests {
                 .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
                 .unwrap();
 
-            let armored = signed_msg.to_armored_bytes(None).unwrap();
+            let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
             fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
             signed_msg.verify(&pkey).unwrap();
@@ -993,7 +1082,7 @@ mod tests {
             .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
-        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-signed-rsa.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -1018,7 +1107,7 @@ mod tests {
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
-        let armored = compressed_msg.to_armored_bytes(None).unwrap();
+        let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-compressed-signed-rsa.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();

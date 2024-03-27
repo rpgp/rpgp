@@ -36,8 +36,13 @@ pub enum Error {
     RSAError(rsa::errors::Error),
     #[error("elliptic error: {0:?}")]
     EllipticCurve(#[from] elliptic_curve::Error),
-    #[error("io error: {0:?}")]
-    IOError(#[from] std::io::Error),
+    #[error("io error: {source:?}")]
+    IOError {
+        #[from]
+        source: std::io::Error,
+        #[cfg(feature = "nightly")]
+        backtrace: std::backtrace::Backtrace,
+    },
     #[error("missing packets")]
     MissingPackets,
     #[error("invalid key length")]
@@ -74,6 +79,12 @@ pub enum Error {
     MdcError,
     #[error("Invalid size conversion {0}")]
     TryFromInt(#[from] TryFromIntError),
+    #[error("GCM")]
+    Gcm,
+    #[error("EAX")]
+    Eax,
+    #[error("OCB")]
+    Ocb,
 }
 
 impl Error {
@@ -89,7 +100,7 @@ impl Error {
             Error::NoMatchingPacket => 7,
             Error::TooManyPackets => 8,
             Error::RSAError(_) => 9,
-            Error::IOError(_) => 10,
+            Error::IOError { .. } => 10,
             Error::MissingPackets => 11,
             Error::InvalidKeyLength => 12,
             Error::BlockMode => 13,
@@ -109,6 +120,9 @@ impl Error {
             Error::MdcError => 27,
             Error::TryFromInt(_) => 28,
             Error::EllipticCurve(_) => 29,
+            Error::Gcm => 30,
+            Error::Eax => 31,
+            Error::Ocb => 32,
         }
     }
 }

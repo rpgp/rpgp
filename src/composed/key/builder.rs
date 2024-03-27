@@ -12,7 +12,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, UserAttribute, UserId};
-use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey};
+use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey, S2kParams};
 
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
@@ -49,6 +49,8 @@ pub struct SecretKeyParams {
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
     passphrase: Option<String>,
+    #[builder(default)]
+    s2k: Option<S2kParams>,
     #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
@@ -81,6 +83,8 @@ pub struct SubkeyParams {
     user_attributes: Vec<UserAttribute>,
     #[builder(default)]
     passphrase: Option<String>,
+    #[builder(default)]
+    s2k: Option<S2kParams>,
     #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
@@ -158,13 +162,15 @@ impl SecretKeyParamsBuilder {
 
 impl SecretKeyParams {
     pub fn generate(self) -> Result<SecretKey> {
-        let mut rng = thread_rng();
-        self.generate_with_rng(&mut rng)
+        let rng = thread_rng();
+        self.generate_with_rng(rng)
     }
 
-    pub fn generate_with_rng<R: Rng + CryptoRng>(self, rng: &mut R) -> Result<SecretKey> {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
         let passphrase = self.passphrase;
-        let (public_params, secret_params) = self.key_type.generate_with_rng(rng, passphrase)?;
+        let s2k = self.s2k.unwrap_or_else(|| S2kParams::new_default(&mut rng));
+        let (public_params, secret_params) =
+            self.key_type.generate_with_rng(&mut rng, passphrase, s2k)?;
         let primary_key = packet::SecretKey {
             details: packet::PublicKey {
                 packet_version: self.packet_version,
@@ -203,7 +209,11 @@ impl SecretKeyParams {
                 .into_iter()
                 .map(|subkey| {
                     let passphrase = subkey.passphrase;
-                    let (public_params, secret_params) = subkey.key_type.generate(passphrase)?;
+                    let s2k = subkey
+                        .s2k
+                        .unwrap_or_else(|| S2kParams::new_default(&mut rng));
+                    let (public_params, secret_params) =
+                        subkey.key_type.generate(passphrase, s2k)?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_certify(subkey.can_certify);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
@@ -281,15 +291,17 @@ impl KeyType {
     pub fn generate(
         &self,
         passphrase: Option<String>,
+        s2k: types::S2kParams,
     ) -> Result<(PublicParams, types::SecretParams)> {
-        let mut rng = thread_rng();
-        self.generate_with_rng(&mut rng, passphrase)
+        let rng = thread_rng();
+        self.generate_with_rng(rng, passphrase, s2k)
     }
 
     pub fn generate_with_rng<R: Rng + CryptoRng>(
         &self,
-        rng: &mut R,
+        rng: R,
         passphrase: Option<String>,
+        s2k: types::S2kParams,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => rsa::generate_key(rng, *bit_size as usize)?,
@@ -301,23 +313,10 @@ impl KeyType {
 
         let secret = match passphrase {
             Some(passphrase) => {
-                // TODO: make configurable
-                let s2k = types::StringToKey::new_default(rng);
-                let alg = SymmetricKeyAlgorithm::AES256;
-                // encrypted, sha1 checksum
-                let id = 254;
-
                 // TODO: derive from key itself
                 let version = types::KeyVersion::default();
 
-                types::SecretParams::Encrypted(plain.encrypt(
-                    rng,
-                    &passphrase,
-                    alg,
-                    s2k,
-                    version,
-                    id,
-                )?)
+                types::SecretParams::Encrypted(plain.encrypt(&passphrase, s2k, version)?)
             }
             None => types::SecretParams::Plain(plain),
         };
@@ -342,15 +341,15 @@ mod tests {
     #[ignore] // slow in debug mode
     fn test_key_gen_rsa_2048() {
         let _ = pretty_env_logger::try_init();
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         for i in 0..50 {
             println!("round {i}");
-            gen_rsa_2048(rng);
+            gen_rsa_2048(&mut rng);
         }
     }
 
-    fn gen_rsa_2048<R: Rng + CryptoRng>(rng: &mut R) {
+    fn gen_rsa_2048<R: Rng + CryptoRng>(mut rng: R) {
         let mut key_params = SecretKeyParamsBuilder::default();
         key_params
             .key_type(KeyType::Rsa(2048))
@@ -388,7 +387,7 @@ mod tests {
             .build()
             .unwrap();
         let key_enc = key_params_enc
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key, encrypted");
 
         let key_params_plain = key_params
@@ -403,17 +402,17 @@ mod tests {
             .build()
             .unwrap();
         let key_plain = key_params_plain
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
         let signed_key_enc = key_enc.sign(|| "hello".into()).expect("failed to sign key");
         let signed_key_plain = key_plain.sign(|| "".into()).expect("failed to sign key");
 
         let armor_enc = signed_key_enc
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
         let armor_plain = signed_key_plain
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         std::fs::write("sample-rsa-enc.sec.asc", &armor_enc).unwrap();
@@ -445,7 +444,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write("sample-rsa.pub.asc", &armor).unwrap();
@@ -458,22 +457,22 @@ mod tests {
     #[ignore]
     #[test]
     fn key_gen_x25519_long() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
         for i in 0..10_000 {
             println!("round {i}");
-            gen_x25519(rng);
+            gen_x25519(&mut rng);
         }
     }
 
     #[test]
     fn key_gen_x25519_short() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
         for _ in 0..100 {
-            gen_x25519(rng);
+            gen_x25519(&mut rng);
         }
     }
 
-    fn gen_x25519<R: Rng + CryptoRng>(rng: &mut R) {
+    fn gen_x25519<R: Rng + CryptoRng>(rng: R) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -516,7 +515,7 @@ mod tests {
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         println!("armor: {armor:?}");
@@ -537,7 +536,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write("sample-x25519.pub.asc", &armor).unwrap();
@@ -590,7 +589,7 @@ mod tests {
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         std::fs::write("sample-ecdsa.sec.asc", &armor).unwrap();
@@ -610,7 +609,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write(format!("sample-ecdsa-{curve:?}.pub.asc"), &armor).unwrap();
@@ -695,7 +694,7 @@ mod tests {
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         std::fs::write("sample-dsa.sec.asc", &armor).unwrap();
@@ -715,7 +714,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write(format!("sample-dsa-{key_size:?}.pub.asc"), &armor).unwrap();

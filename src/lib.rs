@@ -20,6 +20,8 @@
     rust_2018_idioms
 )]
 #![allow(clippy::missing_const_for_fn, clippy::use_self)]
+// Enable backtraces for thiserror.
+#![cfg_attr(feature = "nightly", feature(error_generic_member_access))]
 
 #[macro_use]
 extern crate nom;

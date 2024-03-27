@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::{io, iter};
 
 use crate::armor::{self, BlockType};
@@ -18,7 +17,7 @@ pub fn from_reader_many<'a, R: io::Read + io::Seek + 'a>(
     mut input: R,
 ) -> Result<(
     Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
-    Option<BTreeMap<String, String>>,
+    Option<armor::Headers>,
 )> {
     if !crate::composed::shared::is_binary(&mut input)? {
         let (keys, headers) = from_armor_many(input)?;
@@ -34,7 +33,7 @@ pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
     input: R,
 ) -> Result<(
     Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
-    BTreeMap<String, String>,
+    armor::Headers,
 )> {
     let mut dearmor = armor::Dearmor::new(input);
     dearmor.read_header()?;

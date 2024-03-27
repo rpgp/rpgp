@@ -298,7 +298,7 @@ mod tests {
 
             // println!("\n-- checking: {:?} {}", packet.tag(), e);
 
-            let tag: Tag = u8::try_into(tag.parse().unwrap()).unwrap();
+            let tag: Tag = u8::into(tag.parse().unwrap());
             assert_eq!(tag, packet.tag(), "missmatch in packet {:?} ({})", p, e);
         }
     }
