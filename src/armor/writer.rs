@@ -16,7 +16,7 @@ pub fn write(
     source: &impl Serialize,
     typ: BlockType,
     writer: &mut impl Write,
-    headers: Option<&BTreeMap<String, String>>,
+    headers: Option<&BTreeMap<String, Vec<String>>>,
     include_checksum: bool,
 ) -> Result<()> {
     // write armor header
@@ -26,11 +26,13 @@ pub fn write(
 
     // write armor headers
     if let Some(headers) = headers {
-        for (key, value) in headers.iter() {
-            writer.write_all(key.as_bytes())?;
-            writer.write_all(&b": "[..])?;
-            writer.write_all(value.as_bytes())?;
-            writer.write_all(&b"\n"[..])?;
+        for (key, values) in headers.iter() {
+            for value in values {
+                writer.write_all(key.as_bytes())?;
+                writer.write_all(&b": "[..])?;
+                writer.write_all(value.as_bytes())?;
+                writer.write_all(&b"\n"[..])?;
+            }
         }
     }
 

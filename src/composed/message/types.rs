@@ -763,7 +763,7 @@ impl Message {
 #[derive(Debug)]
 pub struct ArmorOptions<'a> {
     /// Armor headers
-    pub headers: Option<&'a BTreeMap<String, String>>,
+    pub headers: Option<&'a BTreeMap<String, Vec<String>>>,
     /// Should a checksum be included? Default to `true`.
     pub include_checksum: bool,
 }
@@ -777,8 +777,8 @@ impl Default for ArmorOptions<'_> {
     }
 }
 
-impl<'a> From<Option<&'a BTreeMap<String, String>>> for ArmorOptions<'a> {
-    fn from(headers: Option<&'a BTreeMap<String, String>>) -> Self {
+impl<'a> From<Option<&'a BTreeMap<String, Vec<String>>>> for ArmorOptions<'a> {
+    fn from(headers: Option<&'a BTreeMap<String, Vec<String>>>) -> Self {
         Self {
             headers,
             include_checksum: true,

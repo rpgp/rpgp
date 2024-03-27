@@ -14,7 +14,7 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a single armor encoded composition.
-    fn from_string(input: &str) -> Result<(Self, BTreeMap<String, String>)> {
+    fn from_string(input: &str) -> Result<(Self, BTreeMap<String, Vec<String>>)> {
         let (mut el, headers) = Self::from_string_many(input)?;
         Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
     }
@@ -25,13 +25,15 @@ pub trait Deserializable: Sized {
         input: &'a str,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
-        BTreeMap<String, String>,
+        BTreeMap<String, Vec<String>>,
     )> {
         Self::from_armor_many(Cursor::new(input))
     }
 
     /// Armored ascii data.
-    fn from_armor_single<R: Read + Seek>(input: R) -> Result<(Self, BTreeMap<String, String>)> {
+    fn from_armor_single<R: Read + Seek>(
+        input: R,
+    ) -> Result<(Self, BTreeMap<String, Vec<String>>)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
         Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
     }
@@ -42,7 +44,7 @@ pub trait Deserializable: Sized {
         input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
-        BTreeMap<String, String>,
+        BTreeMap<String, Vec<String>>,
     )> {
         let mut dearmor = armor::Dearmor::new(input);
         dearmor.read_header()?;
@@ -95,7 +97,7 @@ pub trait Deserializable: Sized {
     #[allow(clippy::type_complexity)]
     fn from_reader_single<'a, R: Read + Seek + 'a>(
         mut input: R,
-    ) -> Result<(Self, Option<BTreeMap<String, String>>)> {
+    ) -> Result<(Self, Option<BTreeMap<String, Vec<String>>>)> {
         if !is_binary(&mut input)? {
             let (keys, headers) = Self::from_armor_single(input)?;
             Ok((keys, Some(headers)))
@@ -113,7 +115,7 @@ pub trait Deserializable: Sized {
         mut input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
-        Option<BTreeMap<String, String>>,
+        Option<BTreeMap<String, Vec<String>>>,
     )> {
         if !is_binary(&mut input)? {
             let (keys, headers) = Self::from_armor_many(input)?;
