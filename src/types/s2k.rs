@@ -563,6 +563,13 @@ mod tests {
                 .expect("encode");
 
             let orig_armored = std::fs::read_to_string(filename).expect("file read");
+
+            let orig_armored = orig_armored.replace("\r\n", "\n").replace('\r', "\n");
+            let armored = armored
+                .to_string()
+                .replace("\r\n", "\n")
+                .replace('\r', "\n");
+
             assert_eq!(armored, orig_armored);
         }
     }
@@ -607,6 +614,13 @@ mod tests {
                 .expect("encode");
 
             let orig_armored = std::fs::read_to_string(filename).expect("file read");
+
+            let orig_armored = orig_armored.replace("\r\n", "\n").replace('\r', "\n");
+            let armored = armored
+                .to_string()
+                .replace("\r\n", "\n")
+                .replace('\r', "\n");
+
             assert_eq!(armored, orig_armored);
         }
     }
