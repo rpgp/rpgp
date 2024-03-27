@@ -57,7 +57,7 @@ impl Signer for SecretKey {
 }
 
 /// Generate an EdDSA KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {
+pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecretParams) {
     let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
     rng.fill_bytes(&mut *bytes);
     let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);

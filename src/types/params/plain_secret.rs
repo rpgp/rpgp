@@ -4,7 +4,6 @@ use std::{fmt, io};
 use byteorder::{BigEndian, ByteOrder};
 use nom::combinator::map;
 use nom::sequence::tuple;
-use rand::{CryptoRng, Rng};
 use rsa::RsaPrivateKey;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -259,24 +258,16 @@ impl PlainSecretParams {
         }
     }
 
-    pub fn encrypt<R: CryptoRng + Rng>(
+    pub fn encrypt(
         self,
-        rng: &mut R,
         passphrase: &str,
         mut s2k_params: S2kParams,
         version: KeyVersion,
     ) -> Result<EncryptedSecretParams> {
         match &mut s2k_params {
             S2kParams::Unprotected => bail!("cannot encrypt to uprotected"),
-            S2kParams::Cfb {
-                sym_alg,
-                s2k,
-                ref mut iv,
-            } => {
+            S2kParams::Cfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
-                *iv = vec![0u8; sym_alg.block_size()];
-                rng.fill(&mut iv[..]);
-
                 let enc_data = match version {
                     KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
                     KeyVersion::V3 => unimplemented_err!("v3 encryption"),

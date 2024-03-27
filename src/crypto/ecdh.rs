@@ -176,7 +176,7 @@ pub fn derive_session_key(
 
 /// Generate an ECDH KeyPair.
 /// Currently only support ED25519.
-pub fn generate_key<R: Rng + CryptoRng>(rng: &mut R) -> (PublicParams, PlainSecretParams) {
+pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecretParams) {
     let mut secret_key_bytes = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
     rng.fill_bytes(&mut *secret_key_bytes);
 

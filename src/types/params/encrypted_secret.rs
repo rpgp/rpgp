@@ -82,15 +82,10 @@ impl EncryptedSecretParams {
 
                 PlainSecretParams::from_slice(plaintext, alg, params)
             }
-            S2kParams::Aead {
-                sym_alg,
-                aead_mode: _,
-                s2k,
-                nonce: _,
-            } => {
-                let _key = s2k.derive_key(&pw(), sym_alg.key_size())?;
-                let mut _plaintext = self.data.clone();
-                todo!()
+            S2kParams::Aead { .. } => {
+                // let _key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+                // let mut _plaintext = self.data.clone();
+                unimplemented_err!("s2k AEAD")
             }
             S2kParams::Cfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;

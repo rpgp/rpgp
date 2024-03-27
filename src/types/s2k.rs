@@ -68,6 +68,27 @@ impl From<&S2kParams> for u8 {
     }
 }
 
+impl S2kParams {
+    /// Create a new default set of parameters
+    /// and initialises relevant randomized values.
+    ///
+    /// - AES256
+    /// - CFB
+    /// - Iterated and Salted with 224 rounds
+    pub fn new_default<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        let sym_alg = SymmetricKeyAlgorithm::AES256;
+
+        let mut iv = vec![0u8; sym_alg.block_size()];
+        rng.fill(&mut iv[..]);
+
+        Self::Cfb {
+            sym_alg,
+            s2k: StringToKey::new_default(rng),
+            iv,
+        }
+    }
+}
+
 impl From<u8> for S2kUsage {
     fn from(value: u8) -> Self {
         match value {
@@ -126,12 +147,12 @@ pub enum StringToKey {
 }
 
 impl StringToKey {
-    pub fn new_default<R: CryptoRng + Rng>(rng: &mut R) -> Self {
+    pub fn new_default<R: CryptoRng + Rng>(rng: R) -> Self {
         StringToKey::new_iterated(rng, HashAlgorithm::default(), DEFAULT_ITER_SALTED_COUNT)
     }
 
     pub fn new_iterated<R: CryptoRng + Rng>(
-        rng: &mut R,
+        mut rng: R,
         hash_alg: HashAlgorithm,
         count: u8,
     ) -> Self {

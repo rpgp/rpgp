@@ -134,7 +134,7 @@ impl SymKeyEncryptedSessionKey {
                     auth_tag,
                     &mut decrypted_key,
                 )?;
-                debug!("decrypted_key: {}", hex::encode(&decrypted_key));
+
                 Ok(PlainSessionKey::V5 { key: decrypted_key })
             }
             Self::V6 {
@@ -171,7 +171,7 @@ impl SymKeyEncryptedSessionKey {
                     auth_tag,
                     &mut decrypted_key,
                 )?;
-                debug!("decrypted_key: {}", hex::encode(&decrypted_key));
+
                 Ok(PlainSessionKey::V6 { key: decrypted_key })
             }
         }

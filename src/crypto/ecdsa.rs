@@ -121,12 +121,12 @@ impl SecretKey {
 }
 /// Generate an ECDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(
-    rng: &mut R,
+    mut rng: R,
     curve: &ECCCurve,
 ) -> Result<(PublicParams, PlainSecretParams)> {
     match curve {
         ECCCurve::P256 => {
-            let secret = p256::SecretKey::random(rng);
+            let secret = p256::SecretKey::random(&mut rng);
             let public = secret.public_key();
             let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
@@ -140,7 +140,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
         }
 
         ECCCurve::P384 => {
-            let secret = p384::SecretKey::random(rng);
+            let secret = p384::SecretKey::random(&mut rng);
             let public = secret.public_key();
             let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
@@ -154,7 +154,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
         }
 
         ECCCurve::P521 => {
-            let secret = p521::SecretKey::random(rng);
+            let secret = p521::SecretKey::random(&mut rng);
             let public = secret.public_key();
             let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
@@ -168,7 +168,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
         }
 
         ECCCurve::Secp256k1 => {
-            let secret = k256::SecretKey::random(rng);
+            let secret = k256::SecretKey::random(&mut rng);
             let public = secret.public_key();
             let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
 
