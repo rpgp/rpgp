@@ -280,8 +280,8 @@ fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[AeadAlgorithm; 2]> = body
         .iter()
-        .map(|v| AeadAlgorithm::try_from(*v).map_err(|_| format_err!("Invalid AeadAlgorithm")))
-        .collect::<Result<_>>()?;
+        .map(|v| AeadAlgorithm::from(*v))
+        .collect();
 
     Ok((&b""[..], SubpacketData::PreferredAeadAlgorithms(list)))
 }
