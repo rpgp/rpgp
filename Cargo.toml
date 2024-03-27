@@ -118,7 +118,7 @@ criterion = { version = "0.4", features = ["html_reports"] }
 default = []
 nightly = ["rsa/nightly", "rand/nightly", "num-bigint/nightly"]
 profile = ["gperftools"]
-asm = ["sha1/asm", "sha2/asm", "md-5/asm", "nightly"]
+asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 
 [profile.bench]
