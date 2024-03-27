@@ -413,12 +413,11 @@ impl Serialize for StringToKey {
 
 #[cfg(test)]
 mod tests {
-    use crate::ArmorOptions;
+    use rand::distributions::{Alphanumeric, DistString};
 
     use super::*;
 
-    use crate::crypto::sym::SymmetricKeyAlgorithm;
-    use rand::distributions::{Alphanumeric, DistString};
+    use crate::ArmorOptions;
 
     #[test]
     #[ignore]
