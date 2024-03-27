@@ -52,16 +52,26 @@ fn get_test_key(name: &str) -> File {
     read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name))
 }
 
-fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
+struct DumpResult {
+    valid_count: usize,
+    err_count: usize,
+    unimpl_count: usize,
+    total_count: usize,
+}
+
+fn test_parse_dump(i: usize, expected: DumpResult) {
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")));
 
-    let mut valid_count = 0;
-    let mut total_count = 0;
-    for key in SignedPublicKey::from_bytes_many(f) {
-        // println!("key {}", i);
-        total_count += 1;
+    let mut actual = DumpResult::default();
+
+    for (j, key) in SignedPublicKey::from_bytes_many(f).enumerate() {
+        if j % 1000 == 0 {
+            println!("key {}: {}", i, j);
+        }
+        actual.total_count += 1;
         let key = key.as_ref().expect("failed to parse key");
 
         // roundtrip
@@ -75,56 +85,146 @@ fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
             assert_eq!(key, &key2);
         }
 
-        let is_ok = match key.verify() {
+        match key.verify() {
             // Skip these for now
             Err(Error::Unimplemented(err)) => {
-                warn!("unimplemented: {:?}", err);
-                false
+                warn!("unimplemented: {}:{} {:?}", i, j, err);
+                actual.unimpl_count += 1;
             }
             Err(err) => {
                 warn!(
-                    "verification failed: public key {}: {:?}",
+                    "verification failed: {}:{}: public key {}: {:?}",
+                    i,
+                    j,
                     hex::encode(&key.key_id()),
                     err
                 );
-                false
+                actual.err_count += 1;
             }
             // all good
-            Ok(_) => true,
-        };
-
-        if is_ok {
-            valid_count += 1;
+            Ok(_) => {
+                actual.valid_count += 1;
+            }
         }
     }
 
-    assert_eq!(expected_count, valid_count);
-    assert_eq!(total_count, actual_count);
+    assert_eq!(expected, actual);
 }
 
 macro_rules! parse_dumps {
-    ( $( ($name:ident, $num:expr, $count:expr, $total:expr), )* ) => {
+    ( $( ($name:ident, $num:expr, $count:expr, $unimpl:expr, $err:expr, $total:expr), )* ) => {
         $(
             #[test]
             #[ignore]
             fn $name() {
-                test_parse_dump($num, $count, $total);
+                test_parse_dump($num, DumpResult {
+                    valid_count: $count,
+                    unimpl_count: $unimpl,
+                    err_count: $err,
+                    total_count: $total,
+                });
             }
         )*
     };
 }
 
 parse_dumps!(
-    (test_parse_dumps_0, 0, 17_704, 20_999),
-    (test_parse_dumps_1, 1, 17_542, 21_000),
-    (test_parse_dumps_2, 2, 17_583, 20_999),
-    (test_parse_dumps_3, 3, 17_651, 20_998),
-    (test_parse_dumps_4, 4, 17_583, 20_999),
-    (test_parse_dumps_5, 5, 17_609, 20_999),
-    (test_parse_dumps_6, 6, 17_677, 21_000),
-    (test_parse_dumps_7, 7, 17_688, 21_000),
-    (test_parse_dumps_8, 8, 17_693, 21_000),
-    (test_parse_dumps_9, 9, 17_546, 21_000),
+    (
+        test_parse_dumps_0,
+        0,
+        17_704,
+        1, // Hash::Other(4)
+        3294,
+        20_999
+    ),
+    (
+        test_parse_dumps_1,
+        1,
+        17_542,
+        // - Hash::Other(4)
+        // - Elgamal verify
+        8,
+        3450,
+        21_000
+    ),
+    (
+        test_parse_dumps_2,
+        2,
+        17_583,
+        // - Hash::Other(4)
+        // - Hash::Other(5)
+        // - Elgamal verify
+        5,
+        3411,
+        20_999
+    ),
+    (
+        test_parse_dumps_3,
+        3,
+        17_651,
+        // - Hash::Other(4)
+        // - Elgamal verify
+        6,
+        3341,
+        20_998
+    ),
+    (
+        test_parse_dumps_4,
+        4,
+        17_583,
+        // - Elgamal verify
+        2,
+        3414,
+        20_999
+    ),
+    (
+        test_parse_dumps_5,
+        5,
+        17_609,
+        // - Hash::Other(4)
+        // - Elgamal verify
+        8,
+        3382,
+        20_999
+    ),
+    (
+        test_parse_dumps_6,
+        6,
+        17_677,
+        // - Elgamal verify
+        1,
+        3322,
+        21_000
+    ),
+    (
+        test_parse_dumps_7,
+        7,
+        17_688,
+        // - Elgamal verify
+        3,
+        3309,
+        21_000
+    ),
+    (
+        test_parse_dumps_8,
+        8,
+        17_693,
+        // - Hash::Other(5)
+        // - Elgamal verify
+        6,
+        3301,
+        21_000
+    ),
+    (
+        test_parse_dumps_9,
+        9,
+        17_546,
+        // - Hash::Other(5)
+        // - Elgamal verify
+        3,
+        3451,
+        21_000
+    ),
 );
 
 #[test]
