@@ -3,23 +3,21 @@
 use std::io;
 use std::io::prelude::*;
 
+use buffer_redux::Buffer;
+
 /// Reads arbitrary values from a given byte input, skipping any newlines.
 #[derive(Debug)]
 pub struct LineReader<R> {
     inner: R,
-    /// Positions into the `inner` reader at which line breaks where detected.
-    // FIXME: limit the size of this.
-    lines: Vec<u64>,
-    last_stored_pos: u64,
+    buffer: Buffer,
 }
 
-impl<R: Read + Seek> LineReader<R> {
+impl<R: BufRead> LineReader<R> {
     /// Creates a new `LineReader<R>`.
     pub fn new(input: R) -> Self {
         LineReader {
             inner: input,
-            lines: Vec::with_capacity(32),
-            last_stored_pos: 0,
+            buffer: Buffer::new(),
         }
     }
 
@@ -29,81 +27,46 @@ impl<R: Read + Seek> LineReader<R> {
     }
 }
 
-impl<R: Read + Seek> Seek for LineReader<R> {
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        match pos {
-            io::SeekFrom::Current(n) => {
-                let current_pos = self.inner.stream_position()?;
-                let mut target_pos = u64::try_from(
-                    i64::try_from(current_pos)
-                        .expect("Current position is too large to be converted to signed")
-                        + n,
-                )
-                .expect("New position is negative");
+impl<R: BufRead> BufRead for LineReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        while self.buffer.is_empty() {
+            // Need to fill the buffer
+            let buf = self.inner.fill_buf()?;
+            if buf.is_empty() {
+                return Ok(&[][..]);
+            }
 
-                if n < 0 {
-                    for &line_break_pos in self.lines.iter().rev() {
-                        if line_break_pos < target_pos {
-                            break;
-                        }
-
-                        if line_break_pos < current_pos {
-                            target_pos -= 1;
-                        }
-                    }
-                } else {
-                    for &line_break_pos in self.lines.iter() {
-                        if line_break_pos > target_pos {
-                            break;
-                        }
-
-                        if line_break_pos > current_pos {
-                            target_pos += 1;
-                        }
+            match memchr::memchr2(b'\r', b'\n', buf) {
+                Some(pos) => {
+                    let consumed = self.buffer.copy_from_slice(&buf[..pos]);
+                    if consumed == pos {
+                        self.inner.consume(pos + 1); // conume the line break
+                    } else {
+                        self.inner.consume(consumed);
                     }
                 }
-                self.inner.seek(io::SeekFrom::Start(target_pos))
+                None => {
+                    let consumed = self.buffer.copy_from_slice(buf);
+                    self.inner.consume(consumed);
+                }
             }
-            _ => unimplemented!(),
         }
+
+        Ok(self.buffer.buf())
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.buffer.consume(amt);
     }
 }
 
-impl<R: Read + Seek> Read for LineReader<R> {
-    fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        let mut n = self.inner.read(into)?;
+impl<R: BufRead> Read for LineReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        // TODO: maybe optimize large reads
 
-        while n > 0 {
-            let mut offset = 0;
-            for i in 0..n {
-                let b = into[i];
-                if b != b'\r' && b != b'\n' {
-                    // if we have an offset, we need to shift all values
-                    if i != offset {
-                        into[offset] = b;
-                    }
-                    offset += 1;
-                } else {
-                    // store the line break position
-                    let r_pos = self.inner.stream_position()?;
-                    let offset = (r_pos - n as u64) + i as u64;
-
-                    // As we might be going back and forth in the source, we need to make sure
-                    // to only store newly discovered line breaks.
-                    if offset > self.last_stored_pos {
-                        self.lines.push(offset);
-                        self.last_stored_pos = offset;
-                    }
-                }
-            }
-            if offset > 0 {
-                return Ok(offset);
-            }
-
-            // we only read whitespace, lets read some more
-            n = self.inner.read(into)?;
-        }
-
+        let mut rem = self.fill_buf()?;
+        let n = rem.read(buf)?;
+        self.consume(n);
         Ok(n)
     }
 }
@@ -221,98 +184,6 @@ mod tests {
             ]
             .concat()
         );
-    }
-
-    #[test]
-    fn test_line_reader_seek() {
-        let input = b"hellonworld-";
-        let c = Cursor::new(&input[..]);
-        let mut r = LineReader::new(c);
-
-        let mut buf = vec![0; input.len() + 2];
-        assert_eq!(r.read(&mut buf).unwrap(), input.len());
-        assert_eq!(&buf[..input.len()], &input[..]);
-
-        // seek
-        assert_eq!(r.seek(io::SeekFrom::Current(-8)).unwrap(), 4);
-
-        let mut buf = vec![0; input.len()];
-        assert_eq!(r.read(&mut buf).unwrap(), 8);
-        assert_eq!(&buf[..input.len() - 4], &input[4..]);
-    }
-
-    #[test]
-    fn test_line_reader_seek_forward() {
-        let input = b"hellonworld-";
-        let c = Cursor::new(&input[..]);
-        let mut r = LineReader::new(c);
-
-        let mut buf = vec![0; input.len() + 2];
-        assert_eq!(r.read(&mut buf).unwrap(), input.len());
-        assert_eq!(&buf[..input.len()], &input[..]);
-
-        // seek
-        assert_eq!(r.seek(io::SeekFrom::Current(-10)).unwrap(), 2);
-        assert_eq!(r.seek(io::SeekFrom::Current(4)).unwrap(), 6);
-        assert_eq!(r.seek(io::SeekFrom::Current(-2)).unwrap(), 4);
-
-        let mut buf = vec![0; input.len()];
-        assert_eq!(r.read(&mut buf).unwrap(), 8);
-        assert_eq!(&buf[..input.len() - 4], &input[4..]);
-    }
-
-    #[test]
-    fn test_line_reader_seek_mix_1() {
-        let input = b"ab\ncd\nef\ngh";
-        //           "ab cd ef gh"
-        let c = Cursor::new(&input[..]);
-        let mut r = LineReader::new(c);
-
-        let mut buf = vec![0; input.len()];
-        assert_eq!(r.read(&mut buf).unwrap(), input.len() - 3);
-        assert_eq!(
-            std::str::from_utf8(&buf[..input.len() - 3]).unwrap(),
-            "abcdefgh"
-        );
-        assert_eq!(r.read(&mut buf).unwrap(), 0);
-        assert_eq!(&r.lines, &vec![2, 5, 8]);
-
-        // seek
-        assert_eq!(r.seek(io::SeekFrom::Current(-5)).unwrap(), 4);
-
-        let mut buf = vec![0; input.len()];
-        let mut r_inner = r.into_inner();
-        let read = r_inner.read(&mut buf).unwrap();
-        assert_eq!(std::str::from_utf8(&buf[..read]).unwrap(), "d\nef\ngh");
-    }
-
-    #[test]
-    fn test_line_reader_seek_mix_2() {
-        let input = b"ab\ncd\nef\ngh";
-        //           "ab cd ef gh"
-        let c = Cursor::new(&input[..]);
-        let mut r = LineReader::new(c);
-
-        let mut buf = vec![0; input.len()];
-        assert_eq!(r.read(&mut buf).unwrap(), input.len() - 3);
-        assert_eq!(
-            std::str::from_utf8(&buf[..input.len() - 3]).unwrap(),
-            "abcdefgh"
-        );
-        assert_eq!(r.read(&mut buf).unwrap(), 0);
-        assert_eq!(&r.lines, &vec![2, 5, 8]);
-
-        // seek
-        assert_eq!(
-            r.seek(io::SeekFrom::Current(-(input.len() as i64 - 3)))
-                .unwrap(),
-            0
-        );
-
-        let mut buf = vec![0; input.len()];
-        let mut r_inner = r.into_inner();
-        let read = r_inner.read(&mut buf).unwrap();
-        assert_eq!(std::str::from_utf8(&buf[..read]).unwrap(), "ab\ncd\nef\ngh");
     }
 
     #[test]

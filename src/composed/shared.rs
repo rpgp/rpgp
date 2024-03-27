@@ -1,5 +1,4 @@
-use byteorder::ReadBytesExt;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{BufRead, Cursor, Read};
 
 use crate::armor::{self, BlockType};
 use crate::errors::{Error, Result};
@@ -27,14 +26,14 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    fn from_armor_single<R: Read + Seek>(input: R) -> Result<(Self, armor::Headers)> {
+    fn from_armor_single<R: Read>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
         Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
     }
 
     /// Armored ascii data.
     #[allow(clippy::type_complexity)]
-    fn from_armor_many<'a, R: Read + Seek + 'a>(
+    fn from_armor_many<'a, R: Read + 'a>(
         input: R,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         let mut dearmor = armor::Dearmor::new(input);
@@ -86,7 +85,7 @@ pub trait Deserializable: Sized {
     /// Returns a composition and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
     #[allow(clippy::type_complexity)]
-    fn from_reader_single<'a, R: Read + Seek + 'a>(
+    fn from_reader_single<'a, R: BufRead + 'a>(
         mut input: R,
     ) -> Result<(Self, Option<armor::Headers>)> {
         if !is_binary(&mut input)? {
@@ -102,7 +101,7 @@ pub trait Deserializable: Sized {
     /// Returns an iterator of compositions and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
     #[allow(clippy::type_complexity)]
-    fn from_reader_many<'a, R: Read + Seek + 'a>(
+    fn from_reader_many<'a, R: BufRead + 'a>(
         mut input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
@@ -166,10 +165,10 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
 
 /// Check if the OpenPGP data in `input` seems to be ASCII-armored or binary (by looking at the
 /// highest bit of the first byte)
-pub(crate) fn is_binary<R: Read + Seek>(input: &mut R) -> Result<bool> {
+pub(crate) fn is_binary<R: BufRead>(input: &mut R) -> Result<bool> {
     // Peek at the first byte in the reader
-    let first = input.read_u8()?;
-    let _ = input.seek(SeekFrom::Current(-1))?;
+    let buf = input.fill_buf()?;
+    let first = buf[0];
 
     // If the first bit of the first byte is set, we assume this is binary OpenPGP data, otherwise
     // we assume it is ASCII-armored.

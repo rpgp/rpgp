@@ -272,6 +272,8 @@ fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
 }
 
 fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
+    dbg!(std::str::from_utf8(i));
+
     pair(
         alt((
             delimited(
@@ -330,7 +332,7 @@ enum Part {
 
 const CAPACITY: usize = 1024 * 32;
 
-impl<R: Read + Seek> Dearmor<R> {
+impl<R: Read> Dearmor<R> {
     pub fn new(input: R) -> Self {
         Dearmor {
             typ: None,
@@ -338,6 +340,7 @@ impl<R: Read + Seek> Dearmor<R> {
             checksum: None,
             current_part: Part::Header,
             base_decoder: None,
+            // TODO: avoid double buffering
             inner: Some(BufReader::with_capacity(CAPACITY, input)),
             done: false,
             crc: Default::default(),
@@ -426,6 +429,8 @@ impl<R: Read + Seek> Dearmor<R> {
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
             let (base_reader, buffer_outer) = decoder.into_inner_with_buffer();
 
+            dbg!(std::str::from_utf8(buffer_outer.buf()));
+
             let line_reader: LineReader<_> = base_reader.into_inner();
             let mut b = BufReader::with_buffer(buffer_outer, line_reader.into_inner());
             b.make_room();
@@ -500,7 +505,7 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 }
 
-impl<R: Read + Seek> Read for Dearmor<R> {
+impl<R: Read> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         if self.done {
             return Ok(0);
@@ -525,7 +530,7 @@ mod tests {
     use std::io::Cursor;
 
     // helper function to parse all data at once
-    pub fn parse<R: Read + Seek>(mut input: R) -> Result<(BlockType, Headers, Vec<u8>)> {
+    pub fn parse<R: Read>(mut input: R) -> Result<(BlockType, Headers, Vec<u8>)> {
         let mut dearmor = Dearmor::new(input.by_ref());
 
         // estimate size

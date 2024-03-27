@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use std::fmt::Debug;
 use std::fs::File;
+use std::io::BufReader;
 
 use pgp::crypto::checksum;
 use pgp::crypto::ecc_curve::ECCCurve;
@@ -323,6 +324,7 @@ fn card_decrypt() {
         let (keyfile, msgfile, input, out) = case;
 
         let key_file = File::open(keyfile).unwrap();
+        let key_file = BufReader::new(key_file);
         let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
         let key = x.next().unwrap().unwrap().into_secret();
 
@@ -449,6 +451,7 @@ fn card_sign() {
         let (keyfile, sig_creation, input, out) = case;
 
         let key_file = File::open(keyfile).unwrap();
+        let key_file = BufReader::new(key_file);
         let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
         let key = x.next().unwrap().unwrap().into_secret();
 

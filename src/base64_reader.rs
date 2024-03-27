@@ -11,7 +11,7 @@ pub struct Base64Reader<R> {
     inner: R,
 }
 
-impl<R: Read + Seek> Base64Reader<R> {
+impl<R: Read> Base64Reader<R> {
     /// Creates a new `Base64Reader`.
     pub fn new(input: R) -> Self {
         Base64Reader { inner: input }
@@ -23,33 +23,33 @@ impl<R: Read + Seek> Base64Reader<R> {
     }
 }
 
-impl<R: Seek> Seek for Base64Reader<R> {
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        // Warning: this does not take into account invalid base64 characters, so those are counted with
-        // on the seek. Not sure how to fix yet.
-        self.inner.seek(pos)
+impl<R: BufRead> BufRead for Base64Reader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        let buf = self.inner.fill_buf()?;
+        if buf.is_empty() {
+            return Ok(&[][..]);
+        }
+
+        // Check for any non base64 tokens
+        let max_good = buf.iter().position(|token| !is_base64_token(*token));
+
+        if let Some(max_good) = max_good {
+            return Ok(&buf[..max_good]);
+        }
+
+        Ok(buf)
+    }
+
+    fn consume(&mut self, amt: usize) {
+        self.inner.consume(amt);
     }
 }
 
-impl<R: Read + Seek> Read for Base64Reader<R> {
-    fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        let n = self.inner.read(into)?;
-
-        for i in 0..n {
-            if !is_base64_token(into[i]) {
-                // the party is over
-                let back = (i as i64) - (n as i64);
-                self.inner.seek(io::SeekFrom::Current(back))?;
-
-                // zero out the rest of what we read
-                // TODO: do we actually need to do this?
-                let l = into.len() - i;
-                into[i..].copy_from_slice(&vec![0u8; l]);
-
-                return Ok(i);
-            }
-        }
-
+impl<R: BufRead> Read for Base64Reader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut rem = self.fill_buf()?;
+        let n = rem.read(buf)?;
+        self.consume(n);
         Ok(n)
     }
 }

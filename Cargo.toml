@@ -68,6 +68,7 @@ hkdf = "0.12.4"
 aes-gcm = "0.10.3"
 eax = "0.5.0"
 ocb3 = "0.1"
+memchr = "2.7.1"
 
 [dependencies.buffer-redux]
 version = "1.0.0"
