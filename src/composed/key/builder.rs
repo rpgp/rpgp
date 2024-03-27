@@ -409,10 +409,10 @@ mod tests {
         let signed_key_plain = key_plain.sign(|| "".into()).expect("failed to sign key");
 
         let armor_enc = signed_key_enc
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
         let armor_plain = signed_key_plain
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         std::fs::write("sample-rsa-enc.sec.asc", &armor_enc).unwrap();
@@ -444,7 +444,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write("sample-rsa.pub.asc", &armor).unwrap();
@@ -515,7 +515,7 @@ mod tests {
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         println!("armor: {armor:?}");
@@ -536,7 +536,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write("sample-x25519.pub.asc", &armor).unwrap();
@@ -589,7 +589,7 @@ mod tests {
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         std::fs::write("sample-ecdsa.sec.asc", &armor).unwrap();
@@ -609,7 +609,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write(format!("sample-ecdsa-{curve:?}.pub.asc"), &armor).unwrap();
@@ -694,7 +694,7 @@ mod tests {
         let signed_key = key.sign(|| "".into()).expect("failed to sign key");
 
         let armor = signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize key");
 
         std::fs::write("sample-dsa.sec.asc", &armor).unwrap();
@@ -714,7 +714,7 @@ mod tests {
         public_signed_key.verify().expect("invalid public key");
 
         let armor = public_signed_key
-            .to_armored_string(None)
+            .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
         std::fs::write(format!("sample-dsa-{key_size:?}.pub.asc"), &armor).unwrap();

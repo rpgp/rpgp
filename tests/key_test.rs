@@ -67,7 +67,7 @@ fn test_parse_dump(i: usize, expected_count: usize, actual_count: usize) {
         // roundtrip
         {
             // serialize and check we get the same thing
-            let serialized = key.to_armored_bytes(None).unwrap();
+            let serialized = key.to_armored_bytes(None.into()).unwrap();
 
             // and parse them again
             let (key2, _headers) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
@@ -150,7 +150,7 @@ fn test_parse_gnupg_v1() {
         }
 
         // serialize and check we get the same thing
-        let serialized = pk.to_armored_bytes(Some(&headers)).unwrap();
+        let serialized = pk.to_armored_bytes(Some(&headers).into()).unwrap();
 
         // and parse them again
         let (pk2, headers2) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
@@ -678,7 +678,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
             PublicOrSecret::Public(_) => armor::BlockType::PublicKey,
             PublicOrSecret::Secret(_) => armor::BlockType::PrivateKey,
         };
-        armor::write(&pk, typ, &mut ser, Some(&headers)).unwrap();
+        armor::write(&pk, typ, &mut ser, Some(&headers).into(), true).unwrap();
         let ser_str = std::str::from_utf8(&ser).unwrap();
 
         // normalize line endings
@@ -693,7 +693,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
     for parsed in pk {
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes(Some(&headers)).unwrap();
+        let serialized = parsed.to_armored_bytes(Some(&headers).into()).unwrap();
 
         // println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
@@ -731,7 +731,7 @@ fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
         }
 
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes(None).unwrap();
+        let serialized = parsed.to_armored_bytes(None.into()).unwrap();
 
         // and parse them again
         let parsed2 = from_armor_many(Cursor::new(&serialized))
@@ -1095,7 +1095,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         }
 
         // serialize and check we get the same thing
-        let serialized = parsed.to_armored_bytes(None).unwrap();
+        let serialized = parsed.to_armored_bytes(None.into()).unwrap();
 
         println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 

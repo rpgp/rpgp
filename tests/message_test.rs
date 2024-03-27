@@ -89,7 +89,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
             }
 
             // serialize and check we get the same thing
-            let serialized = decrypted.to_armored_bytes(None).unwrap();
+            let serialized = decrypted.to_armored_bytes(None.into()).unwrap();
 
             // and parse them again
             let (decrypted2, _headers) = Message::from_armor_single(Cursor::new(&serialized))
@@ -102,7 +102,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
                     let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
 
                     // serialize and check we get the same thing
-                    let serialized = m.to_armored_bytes(None).unwrap();
+                    let serialized = m.to_armored_bytes(None.into()).unwrap();
 
                     // and parse them again
                     let (m2, _headers) = Message::from_armor_single(Cursor::new(&serialized))
@@ -129,7 +129,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
     }
 
     // serialize and check we get the same thing
-    let serialized = message.to_armored_string(Some(&headers)).unwrap();
+    let serialized = message.to_armored_string(Some(&headers).into()).unwrap();
 
     if is_normalized {
         let mut cipher_file = File::open(&cipher_file_path).unwrap();

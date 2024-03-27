@@ -734,21 +734,55 @@ impl Message {
     pub fn to_armored_writer(
         &self,
         writer: &mut impl io::Write,
-        headers: Option<&BTreeMap<String, String>>,
+        opts: ArmorOptions<'_>,
     ) -> Result<()> {
-        armor::write(self, armor::BlockType::Message, writer, headers)
+        armor::write(
+            self,
+            armor::BlockType::Message,
+            writer,
+            opts.headers,
+            opts.include_checksum,
+        )
     }
 
-    pub fn to_armored_bytes(&self, headers: Option<&BTreeMap<String, String>>) -> Result<Vec<u8>> {
+    pub fn to_armored_bytes(&self, opts: ArmorOptions<'_>) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
-        self.to_armored_writer(&mut buf, headers)?;
+        self.to_armored_writer(&mut buf, opts)?;
 
         Ok(buf)
     }
 
-    pub fn to_armored_string(&self, headers: Option<&BTreeMap<String, String>>) -> Result<String> {
-        Ok(::std::str::from_utf8(&self.to_armored_bytes(headers)?)?.to_string())
+    pub fn to_armored_string(&self, opts: ArmorOptions<'_>) -> Result<String> {
+        let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
+        Ok(res)
+    }
+}
+
+/// Options for generating armored content.
+#[derive(Debug)]
+pub struct ArmorOptions<'a> {
+    /// Armor headers
+    pub headers: Option<&'a BTreeMap<String, String>>,
+    /// Should a checksum be included? Default to `true`.
+    pub include_checksum: bool,
+}
+
+impl Default for ArmorOptions<'_> {
+    fn default() -> Self {
+        Self {
+            headers: None,
+            include_checksum: true,
+        }
+    }
+}
+
+impl<'a> From<Option<&'a BTreeMap<String, String>>> for ArmorOptions<'a> {
+    fn from(headers: Option<&'a BTreeMap<String, String>>) -> Self {
+        Self {
+            headers,
+            include_checksum: true,
+        }
     }
 }
 
@@ -819,7 +853,7 @@ mod tests {
             .unwrap();
         assert_eq!(encrypted, encrypted2);
 
-        let armored = encrypted.to_armored_bytes(None).unwrap();
+        let armored = encrypted.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-rsa.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
@@ -847,7 +881,7 @@ mod tests {
                 .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .unwrap();
 
-            let armored = encrypted.to_armored_bytes(None).unwrap();
+            let armored = encrypted.to_armored_bytes(None.into()).unwrap();
             fs::write("./message-x25519.asc", &armored).unwrap();
 
             let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
@@ -875,7 +909,7 @@ mod tests {
             })
             .unwrap();
 
-        let armored = encrypted.to_armored_bytes(None).unwrap();
+        let armored = encrypted.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-password.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
@@ -950,7 +984,7 @@ mod tests {
             .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
-        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -973,7 +1007,7 @@ mod tests {
             .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
-        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -997,7 +1031,7 @@ mod tests {
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
-        let armored = compressed_msg.to_armored_bytes(None).unwrap();
+        let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -1024,7 +1058,7 @@ mod tests {
                 .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
                 .unwrap();
 
-            let armored = signed_msg.to_armored_bytes(None).unwrap();
+            let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
             fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
             signed_msg.verify(&pkey).unwrap();
@@ -1049,7 +1083,7 @@ mod tests {
             .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
-        let armored = signed_msg.to_armored_bytes(None).unwrap();
+        let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-signed-rsa.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();
@@ -1074,7 +1108,7 @@ mod tests {
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
-        let armored = compressed_msg.to_armored_bytes(None).unwrap();
+        let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-bytes-compressed-signed-rsa.asc", &armored).unwrap();
 
         signed_msg.verify(&pkey).unwrap();

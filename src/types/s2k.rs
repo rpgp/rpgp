@@ -385,6 +385,8 @@ impl Serialize for StringToKey {
 
 #[cfg(test)]
 mod tests {
+    use crate::ArmorOptions;
+
     use super::*;
 
     use rand::distributions::{Alphanumeric, DistString};
@@ -542,19 +544,29 @@ mod tests {
 
         for filename in MSGS {
             println!("reading {}", filename);
-            let (msg, _header) =
-                Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
-                    .expect("failed to load msg");
+            let raw_file = std::fs::File::open(filename).expect("file open");
+            let (msg, header) = Message::from_armor_single(raw_file).expect("parse");
 
             let decrypted = msg
                 .decrypt_with_password(|| "password".to_string())
-                .expect("decrypt aead");
+                .expect("decrypt");
 
             let Message::Literal(data) = decrypted else {
                 panic!("expected literal data")
             };
 
             assert_eq!(data.data(), b"Hello, world!");
+
+            // roundtrip
+            let armored = msg
+                .to_armored_string(ArmorOptions {
+                    headers: Some(&header),
+                    include_checksum: false, // No checksum on v6
+                })
+                .expect("encode");
+
+            let orig_armored = std::fs::read_to_string(filename).expect("file read");
+            assert_eq!(armored, orig_armored);
         }
     }
 }

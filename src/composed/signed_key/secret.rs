@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::io;
 
 use chrono::{DateTime, Utc};
@@ -14,7 +13,7 @@ use crate::ser::Serialize;
 use crate::types::{
     KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait,
 };
-use crate::{armor, SignedPublicKey};
+use crate::{armor, ArmorOptions, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -111,21 +110,28 @@ impl SignedSecretKey {
     pub fn to_armored_writer(
         &self,
         writer: &mut impl io::Write,
-        headers: Option<&BTreeMap<String, String>>,
+        opts: ArmorOptions<'_>,
     ) -> Result<()> {
-        armor::write(self, armor::BlockType::PrivateKey, writer, headers)
+        armor::write(
+            self,
+            armor::BlockType::PrivateKey,
+            writer,
+            opts.headers,
+            opts.include_checksum,
+        )
     }
 
-    pub fn to_armored_bytes(&self, headers: Option<&BTreeMap<String, String>>) -> Result<Vec<u8>> {
+    pub fn to_armored_bytes(&self, opts: ArmorOptions<'_>) -> Result<Vec<u8>> {
         let mut buf = Vec::new();
 
-        self.to_armored_writer(&mut buf, headers)?;
+        self.to_armored_writer(&mut buf, opts)?;
 
         Ok(buf)
     }
 
-    pub fn to_armored_string(&self, headers: Option<&BTreeMap<String, String>>) -> Result<String> {
-        Ok(::std::str::from_utf8(&self.to_armored_bytes(headers)?)?.to_string())
+    pub fn to_armored_string(&self, opts: ArmorOptions<'_>) -> Result<String> {
+        let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
+        Ok(res)
     }
 }
 

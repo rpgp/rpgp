@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::io;
 
 use chrono::Duration;
@@ -8,9 +7,9 @@ use crate::composed::key::KeyDetails;
 use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet;
 use crate::ser::Serialize;
 use crate::types::{KeyId, KeyTrait, PublicKeyTrait, SignedUser, SignedUserAttribute};
+use crate::{packet, ArmorOptions};
 
 /// Shared details between secret and public keys.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -192,25 +191,25 @@ impl PublicOrSecret {
     pub fn to_armored_writer(
         &self,
         writer: &mut impl io::Write,
-        headers: Option<&BTreeMap<String, String>>,
+        opts: ArmorOptions<'_>,
     ) -> Result<()> {
         match self {
-            PublicOrSecret::Public(k) => k.to_armored_writer(writer, headers),
-            PublicOrSecret::Secret(k) => k.to_armored_writer(writer, headers),
+            PublicOrSecret::Public(k) => k.to_armored_writer(writer, opts),
+            PublicOrSecret::Secret(k) => k.to_armored_writer(writer, opts),
         }
     }
 
-    pub fn to_armored_bytes(&self, headers: Option<&BTreeMap<String, String>>) -> Result<Vec<u8>> {
+    pub fn to_armored_bytes(&self, opts: ArmorOptions<'_>) -> Result<Vec<u8>> {
         match self {
-            PublicOrSecret::Public(k) => k.to_armored_bytes(headers),
-            PublicOrSecret::Secret(k) => k.to_armored_bytes(headers),
+            PublicOrSecret::Public(k) => k.to_armored_bytes(opts),
+            PublicOrSecret::Secret(k) => k.to_armored_bytes(opts),
         }
     }
 
-    pub fn to_armored_string(&self, headers: Option<&BTreeMap<String, String>>) -> Result<String> {
+    pub fn to_armored_string(&self, opts: ArmorOptions<'_>) -> Result<String> {
         match self {
-            PublicOrSecret::Public(k) => k.to_armored_string(headers),
-            PublicOrSecret::Secret(k) => k.to_armored_string(headers),
+            PublicOrSecret::Public(k) => k.to_armored_string(opts),
+            PublicOrSecret::Secret(k) => k.to_armored_string(opts),
         }
     }
 

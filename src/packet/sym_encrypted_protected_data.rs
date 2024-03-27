@@ -29,7 +29,7 @@ enum Data {
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u32,
+        chunk_size: u8,
         salt: [u8; 32],
         data: Vec<u8>,
     },
@@ -136,15 +136,15 @@ impl SymEncryptedProtectedData {
                 // Salt is used.
                 let salt = Some(&salt[..]);
 
-                let chunk_size_octet = (chunk_size.ilog2() - 6) as u8;
                 let info = [
                     Tag::SymEncryptedProtectedData.encode(), // packet type
                     0x02,                                    // version
                     (*sym_alg).into(),
                     (*aead).into(),
-                    chunk_size_octet,
+                    *chunk_size,
                 ];
 
+                let chunk_size = expand_chunk_size(*chunk_size);
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
@@ -168,7 +168,7 @@ impl SymEncryptedProtectedData {
                     data.len()
                 );
                 let mut out = Vec::new();
-                let chunk_size = *chunk_size as usize;
+                let chunk_size = usize::try_from(chunk_size)?;
 
                 // There are n chunks, n auth tags + 1 final auth tag
                 let offset = data.len() - aead.tag_size();
@@ -229,9 +229,17 @@ impl Serialize for SymEncryptedProtectedData {
                 writer.write_all(&[0x01])?;
                 writer.write_all(data)?;
             }
-            Data::V2 { .. } => {
+            Data::V2 {
+                sym_alg,
+                aead,
+                chunk_size,
+                salt,
+                data,
+            } => {
                 writer.write_all(&[0x02])?;
-                todo!()
+                writer.write_all(&[(*sym_alg).into(), (*aead).into(), *chunk_size])?;
+                writer.write_all(salt)?;
+                writer.write_all(data)?;
             }
         }
         Ok(())
@@ -257,6 +265,10 @@ impl fmt::Debug for SymEncryptedProtectedData {
     }
 }
 
+fn expand_chunk_size(s: u8) -> u32 {
+    1u32 << (s as u32 + 6)
+}
+
 fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
     move |i: &[u8]| {
         let (i, version) = be_u8(i)?;
@@ -267,8 +279,6 @@ fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
                 let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
                 let (i, chunk_size) = be_u8(i)?;
                 let (i, salt) = take(32usize)(i)?;
-
-                let chunk_size = 1u32 << (chunk_size as u32 + 6);
 
                 Ok((
                     &[][..],

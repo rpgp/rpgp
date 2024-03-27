@@ -20,7 +20,7 @@ rust-version = "1.70"
 [dependencies]
 aes = "^0.8"
 argon2 = "0.5"
-base64 = "^0.21.0"
+base64 = "^0.22.0"
 bitfield = "0.14"
 block-padding = "^0.3.2"
 blowfish = "^0.9"
