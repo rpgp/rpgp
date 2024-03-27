@@ -510,10 +510,13 @@ mod tests {
         use crate::{composed::Deserializable, Message};
 
         for filename in MSGS {
-            let (msg, _header) =
+            println!("reading {}", filename);
+
+            let (msg, header) =
                 Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
                     .expect("failed to load msg");
 
+            dbg!(&header);
             let decrypted = msg
                 .decrypt_with_password(|| "password".to_string())
                 .expect("decrypt argon2 skesk");
@@ -523,6 +526,17 @@ mod tests {
             };
 
             assert_eq!(data.data(), b"Hello, world!");
+
+            // roundtrip
+            let armored = msg
+                .to_armored_string(ArmorOptions {
+                    headers: Some(&header),
+                    include_checksum: false, // No checksum on v6
+                })
+                .expect("encode");
+
+            let orig_armored = std::fs::read_to_string(filename).expect("file read");
+            assert_eq!(armored, orig_armored);
         }
     }
 
