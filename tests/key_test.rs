@@ -6,7 +6,7 @@ extern crate pretty_assertions;
 extern crate smallvec;
 
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
@@ -328,7 +328,8 @@ fn test_parse_details() {
     let _ = pretty_env_logger::try_init();
 
     let file = File::open("./tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
-    let (key, _headers) = SignedPublicKey::from_armor_single(file).expect("failed to parse key");
+    let (key, _headers) =
+        SignedPublicKey::from_armor_single(BufReader::new(file)).expect("failed to parse key");
     key.verify().expect("invalid key");
 
     assert_eq!(
@@ -750,7 +751,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let (pk, headers) = from_armor_many(f).unwrap();
+    let (pk, headers) = from_armor_many(BufReader::new(f)).unwrap();
     let pk: Vec<PublicOrSecret> = pk.collect::<Result<_, _>>().unwrap();
     assert!(!pk.is_empty(), "no keys found");
 
@@ -1051,7 +1052,8 @@ openpgp_key!(
 #[test]
 fn private_ecc1_verify() {
     let f = read_file("./tests/openpgp/samplekeys/ecc-sample-1-sec.asc");
-    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    let (sk, _headers) =
+        SignedSecretKey::from_armor_single(BufReader::new(f)).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
@@ -1076,7 +1078,8 @@ fn private_ecc1_verify() {
 #[test]
 fn private_ecc2_verify() {
     let f = read_file("./tests/openpgp/samplekeys/ecc-sample-2-sec.asc");
-    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    let (sk, _headers) =
+        SignedSecretKey::from_armor_single(BufReader::new(f)).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 0);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "098033880F54719F",);
@@ -1104,7 +1107,8 @@ fn private_ecc2_verify() {
 #[test]
 fn private_ecc3_verify() {
     let f = read_file("./tests/openpgp/samplekeys/ecc-sample-4-sec.asc");
-    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    let (sk, _headers) =
+        SignedSecretKey::from_armor_single(BufReader::new(f)).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "E15A9BB15A23A43F",);
@@ -1129,7 +1133,8 @@ fn private_ecc3_verify() {
 #[test]
 fn private_x25519_verify() {
     let f = read_file("./tests/openpgpjs/x25519.sec.asc");
-    let (sk, _headers) = SignedSecretKey::from_armor_single(f).expect("failed to parse key");
+    let (sk, _headers) =
+        SignedSecretKey::from_armor_single(BufReader::new(f)).expect("failed to parse key");
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
@@ -1154,7 +1159,8 @@ fn private_x25519_verify() {
 #[test]
 fn pub_x25519_little_verify() {
     let f = read_file("./tests/openpgpjs/x25519-little.pub.asc");
-    let (pk, _headers) = SignedPublicKey::from_armor_single(f).expect("failed to parse key");
+    let (pk, _headers) =
+        SignedPublicKey::from_armor_single(BufReader::new(f)).expect("failed to parse key");
     pk.verify().expect("invalid key");
     assert_eq!(pk.public_subkeys.len(), 1);
     assert_eq!(hex::encode(pk.key_id()).to_uppercase(), "C062C165CA61C215",);
@@ -1180,7 +1186,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/autocrypt/").join(key));
-    let (pk, _headers) = from_armor_many(f).unwrap();
+    let (pk, _headers) = from_armor_many(BufReader::new(f)).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         parsed.verify().expect("invalid key");

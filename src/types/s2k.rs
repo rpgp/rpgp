@@ -413,6 +413,8 @@ impl Serialize for StringToKey {
 
 #[cfg(test)]
 mod tests {
+    use std::io::BufReader;
+
     use rand::distributions::{Alphanumeric, DistString};
 
     use super::*;
@@ -539,9 +541,9 @@ mod tests {
         for filename in MSGS {
             println!("reading {}", filename);
 
+            let file = std::fs::File::open(filename).expect("failed to open");
             let (msg, header) =
-                Message::from_armor_single(std::fs::File::open(filename).expect("failed to open"))
-                    .expect("failed to load msg");
+                Message::from_armor_single(BufReader::new(file)).expect("failed to load msg");
 
             dbg!(&header);
             let decrypted = msg
@@ -593,7 +595,8 @@ mod tests {
         for filename in MSGS {
             println!("reading {}", filename);
             let raw_file = std::fs::File::open(filename).expect("file open");
-            let (msg, header) = Message::from_armor_single(raw_file).expect("parse");
+            let (msg, header) =
+                Message::from_armor_single(BufReader::new(raw_file)).expect("parse");
 
             let decrypted = msg
                 .decrypt_with_password(|| "password".to_string())

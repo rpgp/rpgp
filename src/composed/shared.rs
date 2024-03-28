@@ -26,14 +26,14 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
-    fn from_armor_single<R: Read>(input: R) -> Result<(Self, armor::Headers)> {
+    fn from_armor_single<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
         Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
     }
 
     /// Armored ascii data.
     #[allow(clippy::type_complexity)]
-    fn from_armor_many<'a, R: Read + 'a>(
+    fn from_armor_many<'a, R: BufRead + 'a>(
         input: R,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         let mut dearmor = armor::Dearmor::new(input);

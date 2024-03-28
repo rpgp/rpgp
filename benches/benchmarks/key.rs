@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::Cursor;
+use std::io::{BufReader, Cursor};
 
 use criterion::{black_box, criterion_group, Criterion};
 use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
@@ -13,8 +13,8 @@ fn bench_key(c: &mut Criterion) {
     g.bench_function("rsa_parse", |b| {
         let p = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc";
         b.iter(|| {
-            let mut decrypt_key_file = File::open(p).unwrap();
-            black_box(SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap())
+            let decrypt_key_file = File::open(p).unwrap();
+            black_box(SignedSecretKey::from_armor_single(BufReader::new(decrypt_key_file)).unwrap())
         });
     });
 

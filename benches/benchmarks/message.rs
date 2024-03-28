@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::Cursor;
+use std::io::{Cursor, BufReader};
 use std::io::Read;
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
@@ -40,11 +40,11 @@ fn bench_message(c: &mut Criterion) {
     });
 
     g.bench_function("rsa_decrypt", |b| {
-        let mut decrypt_key_file =
+        let decrypt_key_file =
             File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap();
         let (decrypt_key, _headers) =
-            SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap();
+            SignedSecretKey::from_armor_single(BufReader::new(decrypt_key_file)).unwrap();
         let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
         let message_file = fs::read(message_file_path).unwrap();
 

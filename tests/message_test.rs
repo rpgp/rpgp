@@ -10,7 +10,7 @@ extern crate pretty_env_logger;
 extern crate log;
 
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::{BufReader, Cursor, Read};
 
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
 use pgp::types::KeyTrait;
@@ -41,10 +41,10 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
         serde_json::to_string_pretty(&details).unwrap()
     );
 
-    let mut decrypt_key_file =
-        File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
-    let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(&mut decrypt_key_file)
-        .expect("failed to read decryption key");
+    let decrypt_key_file = File::open(format!("{}/{}", base_path, details.decrypt_key)).unwrap();
+    let (decrypt_key, _headers) =
+        SignedSecretKey::from_armor_single(BufReader::new(decrypt_key_file))
+            .expect("failed to read decryption key");
     decrypt_key.verify().expect("invalid decryption key");
 
     let decrypt_id = hex::encode(decrypt_key.key_id());
@@ -55,9 +55,10 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
     }
 
     let verify_key = if let Some(verify_key_str) = details.verify_key.clone() {
-        let mut verify_key_file = File::open(format!("{base_path}/{verify_key_str}")).unwrap();
-        let (verify_key, _headers) = SignedPublicKey::from_armor_single(&mut verify_key_file)
-            .expect("failed to read verification key");
+        let verify_key_file = File::open(format!("{base_path}/{verify_key_str}")).unwrap();
+        let (verify_key, _headers) =
+            SignedPublicKey::from_armor_single(BufReader::new(verify_key_file))
+                .expect("failed to read verification key");
         verify_key.verify().expect("invalid verification key");
 
         let verify_id = hex::encode(verify_key.key_id());
@@ -69,10 +70,10 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
 
     let file_name = entry.replace(".json", ".asc");
     let cipher_file_path = format!("{base_path}/{file_name}");
-    let mut cipher_file = File::open(&cipher_file_path).unwrap();
+    let cipher_file = File::open(&cipher_file_path).unwrap();
 
     let (message, headers) =
-        Message::from_armor_single(&mut cipher_file).expect("failed to parse message");
+        Message::from_armor_single(BufReader::new(cipher_file)).expect("failed to parse message");
     info!("message: {:?}", &message);
 
     match &message {
@@ -228,27 +229,27 @@ msg_test_js!(msg_openpgpjs_x25519, "x25519", true);
 
 #[test]
 fn msg_partial_body_len() {
-    let mut msg_file = File::open("./tests/partial.asc").unwrap();
-    Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+    let msg_file = File::open("./tests/partial.asc").unwrap();
+    Message::from_armor_single(BufReader::new(msg_file)).expect("failed to parse message");
 }
 
 #[test]
 fn msg_regression_01() {
-    let mut msg_file = File::open("./tests/regression-01.asc").unwrap();
-    Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+    let msg_file = File::open("./tests/regression-01.asc").unwrap();
+    Message::from_armor_single(BufReader::new(msg_file)).expect("failed to parse message");
 }
 
 #[test]
 fn msg_large_indeterminate_len() {
     let _ = pretty_env_logger::try_init();
 
-    let mut msg_file = File::open("./tests/indeterminate.asc").unwrap();
+    let msg_file = File::open("./tests/indeterminate.asc").unwrap();
     let (message, _headers) =
-        Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+        Message::from_armor_single(BufReader::new(msg_file)).expect("failed to parse message");
 
-    let mut key_file = File::open("./tests/openpgpjs/x25519.sec.asc").unwrap();
+    let key_file = File::open("./tests/openpgpjs/x25519.sec.asc").unwrap();
     let (decrypt_key, _headers) =
-        SignedSecretKey::from_armor_single(&mut key_file).expect("failed to parse key");
+        SignedSecretKey::from_armor_single(BufReader::new(key_file)).expect("failed to parse key");
 
     let decrypted = message
         .decrypt(|| "moon".to_string(), &[&decrypt_key])
@@ -335,12 +336,11 @@ test1
 
 #[test]
 fn msg_literal_signature() {
-    let (pkey, _) = SignedPublicKey::from_armor_single(
-        File::open("./tests/autocrypt/alice@autocrypt.example.pub.asc").unwrap(),
-    )
-    .unwrap();
-    let mut msg_file = File::open("./tests/literal-text-signed.asc").unwrap();
-    let (msg, _) = Message::from_armor_single(&mut msg_file).expect("failed to parse message");
+    let file = File::open("./tests/autocrypt/alice@autocrypt.example.pub.asc").unwrap();
+    let (pkey, _) = SignedPublicKey::from_armor_single(BufReader::new(file)).unwrap();
+    let msg_file = File::open("./tests/literal-text-signed.asc").unwrap();
+    let (msg, _) =
+        Message::from_armor_single(BufReader::new(msg_file)).expect("failed to parse message");
 
     msg.verify(&pkey).unwrap();
 }

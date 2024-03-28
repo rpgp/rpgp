@@ -791,7 +791,7 @@ mod tests {
 
     use super::*;
     use rand::thread_rng;
-    use std::fs;
+    use std::{fs, io::BufReader};
 
     #[test]
     fn test_compression_zlib() {
@@ -829,11 +829,10 @@ mod tests {
     fn test_rsa_encryption() {
         use rand::SeedableRng;
 
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
+        let file =
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-                .unwrap(),
-        )
-        .unwrap();
+                .unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         // subkey[0] is the encryption key
         let pkey = skey.secret_subkeys[0].public_key();
@@ -864,10 +863,8 @@ mod tests {
 
     #[test]
     fn test_x25519_encryption() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-        )
-        .unwrap();
+        let file = fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         // subkey[0] is the encryption key
         let pkey = skey.secret_subkeys[0].public_key();
@@ -969,10 +966,8 @@ mod tests {
 
     #[test]
     fn test_x25519_signing_string() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-        )
-        .unwrap();
+        let file = fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         let pkey = skey.public_key();
 
@@ -994,10 +989,8 @@ mod tests {
 
     #[test]
     fn test_x25519_signing_bytes() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-        )
-        .unwrap();
+        let file = fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         let pkey = skey.public_key();
 
@@ -1017,10 +1010,8 @@ mod tests {
 
     #[test]
     fn test_x25519_signing_bytes_compressed() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-        )
-        .unwrap();
+        let file = fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         let pkey = skey.public_key();
 
@@ -1042,13 +1033,12 @@ mod tests {
     #[test]
     fn test_rsa_signing_string() {
         for _ in 0..100 {
-            let (skey, _headers) = SignedSecretKey::from_armor_single(
-                fs::File::open(
-                    "./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc",
-                )
-                .unwrap(),
+            let file = fs::File::open(
+                "./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc",
             )
             .unwrap();
+            let (skey, _headers) =
+                SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
             let pkey = skey.public_key();
 
@@ -1069,11 +1059,10 @@ mod tests {
 
     #[test]
     fn test_rsa_signing_bytes() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
+        let file =
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-                .unwrap(),
-        )
-        .unwrap();
+                .unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         let pkey = skey.public_key();
 
@@ -1093,11 +1082,10 @@ mod tests {
 
     #[test]
     fn test_rsa_signing_bytes_compressed() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
+        let file =
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-                .unwrap(),
-        )
-        .unwrap();
+                .unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         let pkey = skey.public_key();
 
@@ -1129,15 +1117,12 @@ mod tests {
         // so the hash for this message is calculated over "foo\r\nbar\r\nbaz".
         //
         // So it must also be verified against a hash digest over this normalized format.
-        let (signed_msg, _header) = Message::from_armor_single(
-            fs::File::open("./tests/unit-tests/text_signature_normalization.msg").unwrap(),
-        )
-        .unwrap();
+        let file = fs::File::open("./tests/unit-tests/text_signature_normalization.msg").unwrap();
+        let (signed_msg, _header) = Message::from_armor_single(BufReader::new(file)).unwrap();
 
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/unit-tests/text_signature_normalization_alice.key").unwrap(),
-        )
-        .unwrap();
+        let file =
+            fs::File::open("./tests/unit-tests/text_signature_normalization_alice.key").unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
 
         // Manually find the signing subkey
         let signing = skey
@@ -1162,10 +1147,8 @@ mod tests {
     #[test]
     fn test_compression_quine() {
         // Public key does not matter as the message is not signed.
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-        )
-        .unwrap();
+        let file = fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file)).unwrap();
         let pkey = skey.public_key();
 
         let msg = Message::from_bytes(&include_bytes!("../../../tests/quine.out")[..]).unwrap();

@@ -17,9 +17,7 @@ use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{IResult, InputIter, InputLength, Slice};
 
 use crate::base64_decoder::Base64Decoder;
-use crate::base64_reader::Base64Reader;
 use crate::errors::Result;
-use crate::line_reader::LineReader;
 use crate::ser::Serialize;
 
 /// Armor block types.
@@ -272,8 +270,6 @@ fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
 }
 
 fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
-    dbg!(std::str::from_utf8(i));
-
     pair(
         alt((
             delimited(
@@ -302,7 +298,7 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
 }
 
 /// Streaming based ascii armor parsing.
-pub struct Dearmor<R> {
+pub struct Dearmor<R: BufRead> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
@@ -314,9 +310,7 @@ pub struct Dearmor<R> {
     /// the underlying data source, wrapped in a BufferedReader
     inner: Option<BufReader<R>>,
     /// base64 decoder
-    base_decoder: Option<
-        Base64Decoder<base64::engine::GeneralPurpose, Base64Reader<LineReader<BufReader<R>>>>,
-    >,
+    base_decoder: Option<Base64Decoder<base64::engine::GeneralPurpose, BufReader<R>>>,
     /// Are we done?
     done: bool,
     crc: crc24::Crc24Hasher,
@@ -332,7 +326,7 @@ enum Part {
 
 const CAPACITY: usize = 1024 * 32;
 
-impl<R: Read> Dearmor<R> {
+impl<R: BufRead> Dearmor<R> {
     pub fn new(input: R) -> Self {
         Dearmor {
             typ: None,
@@ -393,7 +387,7 @@ impl<R: Read> Dearmor<R> {
                 self.done = true;
                 io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state")
             })?;
-            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(LineReader::new(b))));
+            self.base_decoder = Some(Base64Decoder::new(b));
         }
 
         // "allow" as workaround for https://github.com/rust-lang/rust-clippy/issues/12208
@@ -429,10 +423,7 @@ impl<R: Read> Dearmor<R> {
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
             let (base_reader, buffer_outer) = decoder.into_inner_with_buffer();
 
-            dbg!(std::str::from_utf8(buffer_outer.buf()));
-
-            let line_reader: LineReader<_> = base_reader.into_inner();
-            let mut b = BufReader::with_buffer(buffer_outer, line_reader.into_inner());
+            let mut b = BufReader::with_buffer(buffer_outer, base_reader);
             b.make_room();
 
             b.read_into_buf()?;
@@ -505,7 +496,7 @@ impl<R: Read> Dearmor<R> {
     }
 }
 
-impl<R: Read> Read for Dearmor<R> {
+impl<R: BufRead> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         if self.done {
             return Ok(0);
@@ -530,7 +521,7 @@ mod tests {
     use std::io::Cursor;
 
     // helper function to parse all data at once
-    pub fn parse<R: Read>(mut input: R) -> Result<(BlockType, Headers, Vec<u8>)> {
+    pub fn parse<R: BufRead>(mut input: R) -> Result<(BlockType, Headers, Vec<u8>)> {
         let mut dearmor = Dearmor::new(input.by_ref());
 
         // estimate size

@@ -352,6 +352,7 @@ mod tests {
 
     use super::*;
     use std::fs;
+    use std::io::BufReader;
 
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
@@ -406,17 +407,17 @@ mod tests {
 
     #[test]
     fn test_decrypt_padding() {
-        let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/unit-tests/padding/alice.key").unwrap(),
-        )
-        .expect("failed to read decryption key");
+        let file = fs::File::open("./tests/unit-tests/padding/alice.key").unwrap();
+        let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(BufReader::new(file))
+            .expect("failed to read decryption key");
 
         for msg_file in [
             "./tests/unit-tests/padding/msg-short-padding.pgp",
             "./tests/unit-tests/padding/msg-long-padding.pgp",
         ] {
-            let (message, _headers) = Message::from_armor_single(fs::File::open(msg_file).unwrap())
-                .expect("failed to parse message");
+            let file = fs::File::open(msg_file).unwrap();
+            let (message, _headers) =
+                Message::from_armor_single(BufReader::new(file)).expect("failed to parse message");
 
             let (msg, _ids) = message
                 .decrypt(String::default, &[&decrypt_key])

@@ -335,8 +335,9 @@ mod tests {
             // Literal Data Packet with first partial length of 512 bytes, followed by a part with five octet length encoding
             "./tests/unit-tests/partial-body-length/literal.packet-partial.512.asc",
         ] {
-            let (message, _headers) = Message::from_armor_single(File::open(msg_file).unwrap())
-                .expect("failed to parse message");
+            let file = File::open(msg_file).unwrap();
+            let (message, _headers) =
+                Message::from_armor_single(BufReader::new(file)).expect("failed to parse message");
 
             let Message::Literal(data) = &message else {
                 panic!("expected Literal")
@@ -346,10 +347,10 @@ mod tests {
         }
 
         // Literal Data Packet with illegal first partial length of 256 bytes
-        let res = Message::from_armor_single(
+        let file =
             File::open("./tests/unit-tests/partial-body-length/literal.packet-partial.256.asc")
-                .unwrap(),
-        );
+                .unwrap();
+        let res = Message::from_armor_single(BufReader::new(file));
         assert!(res.is_err());
     }
 }
