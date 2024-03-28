@@ -310,7 +310,7 @@ pub struct Dearmor<R: BufRead> {
     /// the underlying data source, wrapped in a BufferedReader
     inner: Option<BufReader<R>>,
     /// base64 decoder
-    base_decoder: Option<Base64Decoder<base64::engine::GeneralPurpose, BufReader<R>>>,
+    base_decoder: Option<Base64Decoder<BufReader<R>>>,
     /// Are we done?
     done: bool,
     crc: crc24::Crc24Hasher,

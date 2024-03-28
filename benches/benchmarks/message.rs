@@ -1,6 +1,6 @@
 use std::fs::{self, File};
-use std::io::{Cursor, BufReader};
 use std::io::Read;
+use std::io::{BufReader, Cursor};
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 

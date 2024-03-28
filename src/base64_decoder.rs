@@ -3,72 +3,53 @@
 use std::fmt;
 use std::io::{self, BufRead, Read};
 
-use base64::engine::Config;
-use base64::{
-    alphabet::Alphabet,
-    engine::{
-        general_purpose::{GeneralPurpose, PAD},
-        Engine,
-    },
+use base64::engine::{
+    general_purpose::{GeneralPurpose, PAD},
+    Engine,
 };
 use buffer_redux::Buffer;
 
+use crate::util::is_base64_token;
+
 const BUF_SIZE: usize = 1024;
+const ENGINE: GeneralPurpose = GeneralPurpose::new(&base64::alphabet::STANDARD, PAD);
+const MAX_INPUT: Option<usize> = base64::encoded_len(BUF_SIZE, true);
 
 /// Decodes Base64 from the supplied reader.
 ///
 /// - skipping any new lines
 /// - stops at the first non base64 encoded character.
-pub struct Base64Decoder<E: Engine, R: BufRead> {
-    /// What base64 engine to use.
-    engine: E,
+pub struct Base64Decoder<R: BufRead> {
     /// The inner Read instance we are reading bytes from.
     inner: R,
     /// Out buffer, contains decoded base64.
     buffer: Buffer,
     /// Fixed buffer for base64 decoding
     fixed_buffer: [u8; BUF_SIZE],
-    /// Maximum buffer input for `BUF_SIZE`.
-    max_buffer_input: usize,
-    alphabet: Alphabet,
 }
 
-impl<E: Engine, R: BufRead> fmt::Debug for Base64Decoder<E, R> {
+impl<R: BufRead> fmt::Debug for Base64Decoder<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Base64Decoder")
-            .field("engine", &"..")
             .field("inner", &"BufRead")
             .field("buffer", &hex::encode(self.buffer.buf()))
             .field("fixed_buffer", &hex::encode(&self.fixed_buffer))
-            .field("max_buffer_input", &self.max_buffer_input)
-            .field("alphabet", &self.alphabet)
             .finish()
     }
 }
 
-impl<R: BufRead> Base64Decoder<GeneralPurpose, R> {
+impl<R: BufRead> Base64Decoder<R> {
     /// Creates a new `Base64Decoder`.
-    pub fn new(input: R) -> Self {
-        Self::new_with_character_set(input, base64::alphabet::STANDARD)
-    }
-
-    pub fn new_with_character_set(inner: R, cs: Alphabet) -> Self {
-        let engine = GeneralPurpose::new(&cs, PAD);
-        let max_buffer_input =
-            base64::encoded_len(BUF_SIZE, engine.config().encode_padding()).expect("small");
-
+    pub fn new(inner: R) -> Self {
         Base64Decoder {
-            engine,
             inner,
             buffer: Buffer::with_capacity(BUF_SIZE),
             fixed_buffer: [0u8; BUF_SIZE],
-            max_buffer_input,
-            alphabet: cs,
         }
     }
 }
 
-impl<E: Engine, R: BufRead> Base64Decoder<E, R> {
+impl<R: BufRead> Base64Decoder<R> {
     #[cfg(test)]
     pub fn into_inner(self) -> R {
         self.inner
@@ -79,36 +60,19 @@ impl<E: Engine, R: BufRead> Base64Decoder<E, R> {
     }
 }
 
-fn is_base64_token(alphabet: &Alphabet, c: u8) -> bool {
-    // Current alphabet
-    if memchr::memchr(c, alphabet.as_str().as_bytes()).is_some() {
-        return true;
-    }
-
-    // Newlines & padding
-    if c == b'\n' || c == b'\r' || c == b'=' {
-        return true;
-    }
-
-    false
-}
-
 #[inline]
 fn is_line_break(t: u8) -> bool {
     t == b'\r' || t == b'\n'
 }
 
-impl<E: Engine, R: BufRead> BufRead for Base64Decoder<E, R> {
+impl<R: BufRead> BufRead for Base64Decoder<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         let mut mini_buffer = [0u8; 4];
 
         let Self {
             inner,
-            alphabet,
-            engine,
             buffer,
             fixed_buffer,
-            max_buffer_input,
         } = self;
 
         while buffer.is_empty() {
@@ -118,9 +82,7 @@ impl<E: Engine, R: BufRead> BufRead for Base64Decoder<E, R> {
             }
 
             // Check for any non base64 tokens
-            let max_good = buf
-                .iter()
-                .position(|token| !is_base64_token(&*alphabet, *token));
+            let max_good = buf.iter().position(|token| !is_base64_token(*token));
             let buf = match max_good {
                 Some(max_good) => &buf[..max_good],
                 None => buf,
@@ -188,8 +150,7 @@ impl<E: Engine, R: BufRead> BufRead for Base64Decoder<E, R> {
                 ));
             }
 
-            let mut consumed =
-                try_decode_engine_slice(buf, engine, *max_buffer_input, fixed_buffer, buffer);
+            let mut consumed = try_decode_engine_slice(buf, fixed_buffer, buffer);
 
             if consumed == 0 {
                 // No valid data available anymore
@@ -213,7 +174,7 @@ impl<E: Engine, R: BufRead> BufRead for Base64Decoder<E, R> {
     }
 }
 
-impl<E: Engine, R: BufRead> Read for Base64Decoder<E, R> {
+impl<R: BufRead> Read for Base64Decoder<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut rem = self.fill_buf()?;
         let n = rem.read(buf)?;
@@ -224,18 +185,16 @@ impl<E: Engine, R: BufRead> Read for Base64Decoder<E, R> {
 
 /// Tries to decode as much of the given slice as possible.
 /// Returns the amount consumed.
-fn try_decode_engine_slice<E: Engine, T: ?Sized + AsRef<[u8]>>(
+fn try_decode_engine_slice<T: ?Sized + AsRef<[u8]>>(
     input: &T,
-    engine: &E,
-    max_input: usize,
     buffer: &mut [u8; BUF_SIZE],
     output: &mut Buffer,
 ) -> usize {
     let input_bytes = input.as_ref();
-    let mut n = std::cmp::min(input_bytes.len(), max_input);
+    let mut n = std::cmp::min(input_bytes.len(), MAX_INPUT.expect("checked"));
 
     while n > 0 {
-        match engine.decode_slice(&input_bytes[..n], &mut buffer[..]) {
+        match ENGINE.decode_slice(&input_bytes[..n], &mut buffer[..]) {
             Ok(size) => {
                 output.copy_from_slice(&buffer[..size]);
                 return n;
@@ -264,18 +223,17 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    fn test_roundtrip(cs: Alphabet, cap: usize, n: usize) {
+    fn test_roundtrip(cap: usize, n: usize) {
         let rng = &mut XorShiftRng::from_seed([
             0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe,
         ]);
 
         for i in 0..n {
             let data: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
-            let engine = GeneralPurpose::new(&cs, PAD);
-            let encoded_data = engine.encode(&data);
+            let encoded_data = ENGINE.encode(&data);
 
             let inner = BufReader::with_capacity(cap, Cursor::new(encoded_data));
-            let mut r = Base64Decoder::new_with_character_set(inner, cs.clone());
+            let mut r = Base64Decoder::new(inner);
             let mut out = Vec::new();
 
             r.read_to_end(&mut out).unwrap();
@@ -284,22 +242,12 @@ mod tests {
     }
 
     #[test]
-    fn test_base64_decoder_roundtrip_standard_1000() {
-        test_roundtrip(base64::alphabet::STANDARD, 8, 1000);
-        test_roundtrip(base64::alphabet::STANDARD, 64, 1000);
-        test_roundtrip(base64::alphabet::STANDARD, 128, 1000);
-        test_roundtrip(base64::alphabet::STANDARD, 1000, 1000);
-        test_roundtrip(base64::alphabet::STANDARD, 8 * 1024, 1000);
-    }
-
-    #[test]
-    fn test_base64_decoder_roundtrip_crypt_1000() {
-        test_roundtrip(base64::alphabet::CRYPT, 512, 1000);
-    }
-
-    #[test]
-    fn test_base64_decoder_roundtrip_url_safe_1000() {
-        test_roundtrip(base64::alphabet::URL_SAFE, 512, 1000);
+    fn test_base64_decoder_roundtrip_1000() {
+        test_roundtrip(8, 1000);
+        test_roundtrip(64, 1000);
+        test_roundtrip(128, 1000);
+        test_roundtrip(1000, 1000);
+        test_roundtrip(8 * 1024, 1000);
     }
 
     #[test]
