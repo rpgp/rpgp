@@ -25,8 +25,8 @@ pub fn from_reader_many<'a, R: io::Read + 'a>(
 }
 
 #[allow(clippy::type_complexity)]
-pub fn from_reader_many_buf<'a, R: io::Read + 'a>(
-    mut input: BufReader<R>,
+pub fn from_reader_many_buf<'a, R: io::BufRead + 'a>(
+    mut input: R,
 ) -> Result<(
     Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
     Option<armor::Headers>,
@@ -52,8 +52,8 @@ pub fn from_armor_many<'a, R: io::Read + 'a>(
 
 /// Parses a list of secret and public keys from ascii armored text.
 #[allow(clippy::type_complexity)]
-pub fn from_armor_many_buf<'a, R: io::Read + 'a>(
-    input: BufReader<R>,
+pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
+    input: R,
 ) -> Result<(
     Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
     armor::Headers,

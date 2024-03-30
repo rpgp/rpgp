@@ -299,7 +299,7 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
 }
 
 /// Streaming based ascii armor parsing.
-pub struct Dearmor<R: Read> {
+pub struct Dearmor<R: BufRead> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
@@ -309,9 +309,9 @@ pub struct Dearmor<R: Read> {
     /// track what we are currently parsing
     current_part: Part,
     /// the underlying data source, wrapped in a BufferedReader
-    inner: Option<BufReader<R>>,
+    inner: Option<R>,
     /// base64 decoder
-    base_decoder: Option<Base64Decoder<Base64Reader<BufReader<R>>>>,
+    base_decoder: Option<Base64Decoder<Base64Reader<R>>>,
     /// Are we done?
     done: bool,
     crc: crc24::Crc24Hasher,
@@ -325,8 +325,8 @@ enum Part {
     Footer,
 }
 
-impl<R: Read> Dearmor<R> {
-    pub fn new(input: BufReader<R>) -> Self {
+impl<R: BufRead> Dearmor<R> {
+    pub fn new(input: R) -> Self {
         Dearmor {
             typ: None,
             headers: BTreeMap::new(),
@@ -341,20 +341,20 @@ impl<R: Read> Dearmor<R> {
 
     pub fn read_header(&mut self) -> io::Result<()> {
         if let Some(ref mut b) = self.inner {
-            b.read_into_buf()?;
+            let buf = b.fill_buf()?;
 
             // no data available currently
-            if b.buf_len() == 0 {
+            if buf.is_empty() {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "empty buffer"));
             }
 
-            let consumed = match header_parser(b.buffer()) {
+            let consumed = match header_parser(buf) {
                 Ok((remaining, (typ, header))) => {
                     self.typ = Some(typ);
                     self.headers = header;
                     self.current_part = Part::Body;
 
-                    b.buf_len() - remaining.len()
+                    buf.len() - remaining.len()
                 }
                 Err(nom::Err::Incomplete(_)) => {
                     return Err(io::Error::new(
@@ -494,7 +494,7 @@ impl<R: Read> Dearmor<R> {
     }
 }
 
-impl<R: Read> Read for Dearmor<R> {
+impl<R: BufRead> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         if self.done {
             return Ok(0);

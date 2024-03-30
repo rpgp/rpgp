@@ -23,7 +23,7 @@ pub trait Deserializable: Sized {
     fn from_string_many<'a>(
         input: &'a str,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
-        Self::from_armor_many(input.as_bytes())
+        Self::from_armor_many_buf(input.as_bytes())
     }
 
     /// Armored ascii data.
@@ -41,8 +41,8 @@ pub trait Deserializable: Sized {
     }
 
     #[allow(clippy::type_complexity)]
-    fn from_armor_many_buf<'a, R: Read + 'a>(
-        input: BufReader<R>,
+    fn from_armor_many_buf<'a, R: BufRead + 'a>(
+        input: R,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         let mut dearmor = armor::Dearmor::new(input);
         dearmor.read_header()?;
@@ -98,8 +98,8 @@ pub trait Deserializable: Sized {
     }
 
     #[allow(clippy::type_complexity)]
-    fn from_reader_single_buf<'a, R: Read + 'a>(
-        mut input: BufReader<R>,
+    fn from_reader_single_buf<'a, R: BufRead + 'a>(
+        mut input: R,
     ) -> Result<(Self, Option<armor::Headers>)> {
         if !is_binary(&mut input)? {
             let (keys, headers) = Self::from_armor_single(input)?;
@@ -128,14 +128,14 @@ pub trait Deserializable: Sized {
     /// Returns an iterator of compositions and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
     #[allow(clippy::type_complexity)]
-    fn from_reader_many_buf<'a, R: Read + 'a>(
-        mut input: BufReader<R>,
+    fn from_reader_many_buf<'a, R: BufRead + 'a>(
+        mut input: R,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
         Option<armor::Headers>,
     )> {
         if !is_binary(&mut input)? {
-            let (keys, headers) = Self::from_armor_many(input)?;
+            let (keys, headers) = Self::from_armor_many_buf(input)?;
             Ok((keys, Some(headers)))
         } else {
             Ok((Self::from_bytes_many(input), None))
