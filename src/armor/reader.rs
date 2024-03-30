@@ -19,7 +19,6 @@ use nom::{IResult, InputIter, InputLength, Slice};
 use crate::base64_decoder::Base64Decoder;
 use crate::base64_reader::Base64Reader;
 use crate::errors::Result;
-use crate::line_reader::LineReader;
 use crate::ser::Serialize;
 
 /// Armor block types.
@@ -300,7 +299,7 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
 }
 
 /// Streaming based ascii armor parsing.
-pub struct Dearmor<R> {
+pub struct Dearmor<R: Read> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
@@ -312,9 +311,7 @@ pub struct Dearmor<R> {
     /// the underlying data source, wrapped in a BufferedReader
     inner: Option<BufReader<R>>,
     /// base64 decoder
-    base_decoder: Option<
-        Base64Decoder<base64::engine::GeneralPurpose, Base64Reader<LineReader<BufReader<R>>>>,
-    >,
+    base_decoder: Option<Base64Decoder<Base64Reader<BufReader<R>>>>,
     /// Are we done?
     done: bool,
     crc: crc24::Crc24Hasher,
@@ -390,7 +387,7 @@ impl<R: Read + Seek> Dearmor<R> {
                 self.done = true;
                 io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state")
             })?;
-            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(LineReader::new(b))));
+            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(b)));
         }
 
         // "allow" as workaround for https://github.com/rust-lang/rust-clippy/issues/12208
@@ -424,10 +421,9 @@ impl<R: Read + Seek> Dearmor<R> {
                 .base_decoder
                 .take()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
-            let (base_reader, buffer_outer) = decoder.into_inner_with_buffer();
+            let (b, buf) = decoder.into_inner_with_buffer();
 
-            let line_reader: LineReader<_> = base_reader.into_inner();
-            let mut b = BufReader::with_buffer(buffer_outer, line_reader.into_inner());
+            let mut b = BufReader::with_buffer(buf, b.into_inner());
             b.make_room();
 
             b.read_into_buf()?;

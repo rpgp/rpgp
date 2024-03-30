@@ -1,24 +1,17 @@
 //! # base64 decoder module
 
 use std::fmt;
-use std::io::{self, BufRead, Read, Seek};
+use std::io::{self, BufRead, Read};
 
-use base64::{
-    alphabet::Alphabet,
-    engine::{
-        general_purpose::{GeneralPurpose, PAD},
-        Engine,
-    },
-};
+use base64::engine::{general_purpose::GeneralPurpose, Engine};
 use buffer_redux::{BufReader, Buffer};
 
 const BUF_SIZE: usize = 1024;
 const BUF_CAPACITY: usize = BUF_SIZE / 4 * 3;
+const ENGINE: GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
 /// Decodes Base64 from the supplied reader.
-pub struct Base64Decoder<E: Engine, R> {
-    /// What base64 engine to use.
-    engine: E,
+pub struct Base64Decoder<R> {
     /// The inner Read instance we are reading bytes from.
     inner: BufReader<R>,
     /// leftover decoded output
@@ -29,11 +22,10 @@ pub struct Base64Decoder<E: Engine, R> {
     err: Option<io::Error>,
 }
 
-impl<E: Engine, R> fmt::Debug for Base64Decoder<E, R> {
+impl<R> fmt::Debug for Base64Decoder<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let out_buf = format!("{:?}", &self.out_buffer[..]);
         f.debug_struct("Base64Decoder")
-            .field("engine", &"..")
             .field("inner", &"BufReader")
             .field("out", &self.out)
             .field("out_buffer", &out_buf)
@@ -42,30 +34,23 @@ impl<E: Engine, R> fmt::Debug for Base64Decoder<E, R> {
     }
 }
 
-impl<R: Read + Seek> Base64Decoder<GeneralPurpose, R> {
+impl<R: Read> Base64Decoder<R> {
     /// Creates a new `Base64Decoder`.
     pub fn new(input: R) -> Self {
-        Self::new_with_character_set(input, &base64::alphabet::STANDARD)
-    }
-
-    pub fn new_with_character_set(input: R, cs: &Alphabet) -> Self {
         Base64Decoder {
-            engine: GeneralPurpose::new(cs, PAD),
             inner: BufReader::with_capacity(BUF_SIZE, input),
             out: Buffer::with_capacity(BUF_CAPACITY),
             out_buffer: [0u8; BUF_CAPACITY],
             err: None,
         }
     }
-}
 
-impl<E: Engine, R: Read + Seek> Base64Decoder<E, R> {
     pub fn into_inner_with_buffer(self) -> (R, Buffer) {
         self.inner.into_inner_with_buffer()
     }
 }
 
-impl<E: Engine, R: Read + Seek> Read for Base64Decoder<E, R> {
+impl<R: Read> Read for Base64Decoder<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         // take care of leftovers
         if !self.out.is_empty() {
@@ -98,11 +83,8 @@ impl<E: Engine, R: Read + Seek> Read for Base64Decoder<E, R> {
         let nw = self.inner.buf_len() / 4 * 3;
 
         let (consumed, written) = if nw > into.len() {
-            let (consumed, nw) = try_decode_engine_slice(
-                &self.inner.buffer()[..nr],
-                &self.engine,
-                &mut self.out_buffer[..],
-            );
+            let (consumed, nw) =
+                try_decode_engine_slice(&self.inner.buffer()[..nr], &mut self.out_buffer[..]);
 
             let n = std::cmp::min(nw, into.len());
             let t = &self.out_buffer[0..nw];
@@ -115,7 +97,7 @@ impl<E: Engine, R: Read + Seek> Read for Base64Decoder<E, R> {
 
             (consumed, n)
         } else {
-            try_decode_engine_slice(&self.inner.buffer()[..nr], &self.engine, into)
+            try_decode_engine_slice(&self.inner.buffer()[..nr], into)
         };
 
         self.inner.consume(consumed);
@@ -126,15 +108,14 @@ impl<E: Engine, R: Read + Seek> Read for Base64Decoder<E, R> {
 
 /// Tries to decode as much of the given slice as possible.
 /// Returns the amount written and consumed.
-fn try_decode_engine_slice<E: Engine, T: ?Sized + AsRef<[u8]>>(
+fn try_decode_engine_slice<T: ?Sized + AsRef<[u8]>>(
     input: &T,
-    engine: &E,
     output: &mut [u8],
 ) -> (usize, usize) {
     let input_bytes = input.as_ref();
     let mut n = input_bytes.len();
     while n > 0 {
-        match engine.decode_slice(&input_bytes[..n], output) {
+        match ENGINE.decode_slice(&input_bytes[..n], output) {
             Ok(size) => {
                 return (n, size);
             }
@@ -168,19 +149,17 @@ mod tests {
     use rand_xorshift::XorShiftRng;
 
     use crate::base64_reader::Base64Reader;
-    use crate::line_reader::LineReader;
 
-    fn test_roundtrip(cs: Alphabet, n: usize) {
+    fn test_roundtrip(n: usize) {
         let rng = &mut XorShiftRng::from_seed([
             0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe,
         ]);
 
         for i in 0..n {
             let data: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
-            let engine = GeneralPurpose::new(&cs, PAD);
-            let encoded_data = engine.encode(&data);
+            let encoded_data = ENGINE.encode(&data);
 
-            let mut r = Base64Decoder::new_with_character_set(Cursor::new(encoded_data), &cs);
+            let mut r = Base64Decoder::new(Cursor::new(encoded_data));
             let mut out = Vec::new();
 
             r.read_to_end(&mut out).unwrap();
@@ -190,21 +169,11 @@ mod tests {
 
     #[test]
     fn test_base64_decoder_roundtrip_standard_1000() {
-        test_roundtrip(base64::alphabet::STANDARD, 1000);
+        test_roundtrip(1000);
     }
 
     #[test]
-    fn test_base64_decoder_roundtrip_crypt_1000() {
-        test_roundtrip(base64::alphabet::CRYPT, 1000);
-    }
-
-    #[test]
-    fn test_base64_decoder_roundtrip_url_safe_1000() {
-        test_roundtrip(base64::alphabet::URL_SAFE, 1000);
-    }
-
-    #[test]
-    fn test_base64_decoder_with_line_reader() {
+    fn test_base64_decoder_with_base64_reader() {
         let source = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
         let data = b"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwgc2VkIGRvIGVpdXNtb2Qgd\n\
@@ -217,8 +186,8 @@ mod tests {
                      ZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVtLg==";
 
         let c = Cursor::new(&data[..]);
-        let lr = LineReader::new(c);
-        let mut reader = Base64Decoder::new(lr);
+        let reader = Base64Reader::new(c);
+        let mut reader = Base64Decoder::new(reader);
         let mut res = String::new();
 
         reader.read_to_string(&mut res).unwrap();
@@ -226,19 +195,18 @@ mod tests {
     }
 
     #[test]
-    fn test_base64_decoder_with_end() {
+    fn test_base64_decoder_with_end_base() {
         let data = b"TG9yZW0g\n=TG9y\n-----hello";
 
         let c = Cursor::new(&data[..]);
-        let lr = LineReader::new(c);
-        let br = Base64Reader::new(lr);
+        let br = Base64Reader::new(c);
         let mut reader = Base64Decoder::new(br);
         let mut res = vec![0u8; 32];
 
         assert_eq!(reader.read(&mut res).unwrap(), 6);
         assert_eq!(&res[0..6], b"Lorem ");
         let (r, buffer) = reader.into_inner_with_buffer();
-        let mut r = r.into_inner().into_inner();
+        let mut r = r.into_inner();
 
         assert_eq!(buffer.buf(), b"=TG9y");
         let mut rest = Vec::new();
@@ -251,15 +219,14 @@ mod tests {
         let data = b"TG9yZW0g\n=TG9y-----hello";
 
         let c = Cursor::new(&data[..]);
-        let lr = LineReader::new(c);
-        let br = Base64Reader::new(lr);
+        let br = Base64Reader::new(c);
         let mut reader = Base64Decoder::new(br);
         let mut res = vec![0u8; 32];
 
         assert_eq!(reader.read(&mut res).unwrap(), 6);
         assert_eq!(&res[0..6], b"Lorem ");
         let (r, buffer) = reader.into_inner_with_buffer();
-        let mut r = r.into_inner().into_inner();
+        let mut r = r.into_inner();
 
         assert_eq!(buffer.buf(), b"=TG9y");
         let mut rest = Vec::new();
@@ -272,15 +239,14 @@ mod tests {
         let data = b"TG9yZW0g=TG9y-----hello";
 
         let c = Cursor::new(&data[..]);
-        let lr = LineReader::new(c);
-        let br = Base64Reader::new(lr);
+        let br = Base64Reader::new(c);
         let mut reader = Base64Decoder::new(br);
         let mut res = vec![0u8; 32];
 
         assert_eq!(reader.read(&mut res).unwrap(), 6);
         assert_eq!(&res[0..6], b"Lorem ");
         let (r, buffer) = reader.into_inner_with_buffer();
-        let mut r = r.into_inner().into_inner();
+        let mut r = r.into_inner();
 
         assert_eq!(buffer.buf(), b"=TG9y");
         let mut rest = Vec::new();

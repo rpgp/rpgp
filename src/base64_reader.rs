@@ -7,11 +7,11 @@ use crate::util::is_base64_token;
 
 /// Reads base64 values from a given byte input, stops once it detects the first non base64 char.
 #[derive(Debug)]
-pub struct Base64Reader<R> {
+pub struct Base64Reader<R: BufRead> {
     inner: R,
 }
 
-impl<R: Read + Seek> Base64Reader<R> {
+impl<R: BufRead> Base64Reader<R> {
     /// Creates a new `Base64Reader`.
     pub fn new(input: R) -> Self {
         Base64Reader { inner: input }
@@ -23,33 +23,45 @@ impl<R: Read + Seek> Base64Reader<R> {
     }
 }
 
-impl<R: Seek> Seek for Base64Reader<R> {
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
-        // Warning: this does not take into account invalid base64 characters, so those are counted with
-        // on the seek. Not sure how to fix yet.
-        self.inner.seek(pos)
-    }
-}
-
-impl<R: Read + Seek> Read for Base64Reader<R> {
+impl<R: BufRead> Read for Base64Reader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        let n = self.inner.read(into)?;
+        let mut buf = self.inner.fill_buf()?;
+        dbg!(std::str::from_utf8(buf));
+        if buf.is_empty() {
+            return Ok(0);
+        }
 
-        for i in 0..n {
-            if !is_base64_token(into[i]) {
-                // the party is over
-                let back = (i as i64) - (n as i64);
-                self.inner.seek(io::SeekFrom::Current(back))?;
+        let mut buf_i = 0;
+        let mut n = 0;
+        for el in into {
+            // skip new lines
+            while buf[buf_i] == b'\r' || buf[buf_i] == b'\n' {
+                buf_i += 1;
+            }
 
-                // zero out the rest of what we read
-                // TODO: do we actually need to do this?
-                let l = into.len() - i;
-                into[i..].copy_from_slice(&vec![0u8; l]);
+            if !is_base64_token(buf[buf_i]) {
+                break;
+            }
 
-                return Ok(i);
+            *el = buf[buf_i];
+            n += 1;
+            buf_i += 1;
+            if buf_i == buf.len() {
+                dbg!(buf_i);
+                self.inner.consume(buf_i);
+                buf = self.inner.fill_buf()?;
+                dbg!(std::str::from_utf8(buf));
+                buf_i = 0;
+                if buf.is_empty() {
+                    break;
+                }
             }
         }
 
+        dbg!(buf_i);
+        self.inner.consume(buf_i);
+
+        dbg!(n);
         Ok(n)
     }
 }
@@ -61,12 +73,9 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    use crate::line_reader::LineReader;
-
     fn read_exact(data: &[u8], size: usize) -> Vec<u8> {
         let c = Cursor::new(data);
-        let lr = LineReader::new(c);
-        let mut r = Base64Reader::new(lr);
+        let mut r = Base64Reader::new(c);
         let mut buf = vec![0; size];
         r.read_exact(&mut buf).unwrap();
         buf
@@ -120,8 +129,7 @@ mod tests {
 
         {
             let c = Cursor::new(&data_with_garbage[..]);
-            let lr = LineReader::new(c);
-            let mut r = Base64Reader::new(lr);
+            let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 35];
             assert_eq!(r.read(&mut buf).unwrap(), 33);
 
@@ -142,8 +150,8 @@ mod tests {
             let c = Cursor::new(&b"Kwjk\n=Kwjk"[..]);
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 10];
-            assert_eq!(r.read(&mut buf).unwrap(), 10);
-            assert_eq!(&buf[..], b"Kwjk\n=Kwjk");
+            assert_eq!(r.read(&mut buf).unwrap(), 9);
+            assert_eq!(&buf[..9], b"Kwjk=Kwjk");
             assert_eq!(r.into_inner().position(), 10);
         }
 
@@ -152,10 +160,10 @@ mod tests {
             let c = Cursor::new(&b"Kwjk\n-----BEGIN"[..]);
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 100];
-            assert_eq!(r.read(&mut buf).unwrap(), 5);
+            assert_eq!(r.read(&mut buf).unwrap(), 4);
             assert_eq!(r.into_inner().position(), 5);
-            assert_eq!(&buf[..5], b"Kwjk\n");
-            assert_eq!(&buf[5..], &vec![0u8; 95][..]);
+            assert_eq!(&buf[..4], b"Kwjk");
+            assert_eq!(&buf[4..], &vec![0u8; 96][..]);
         }
 
         {
@@ -163,9 +171,9 @@ mod tests {
             let c = Cursor::new(&b"Kwjk\n-----BEGIN-----\nKwjk\n"[..]);
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 100];
-            assert_eq!(r.read(&mut buf).unwrap(), 5);
-            assert_eq!(&buf[..5], b"Kwjk\n");
-            assert_eq!(&buf[5..], &vec![0u8; 95][..]);
+            assert_eq!(r.read(&mut buf).unwrap(), 4);
+            assert_eq!(&buf[..4], b"Kwjk");
+            assert_eq!(&buf[4..], &vec![0u8; 96][..]);
         }
     }
 }
