@@ -26,25 +26,37 @@ impl<R: BufRead> Base64Reader<R> {
 impl<R: BufRead> Read for Base64Reader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let mut buf = self.inner.fill_buf()?;
+        dbg!(std::str::from_utf8(buf), buf.len());
         if buf.is_empty() {
             return Ok(0);
         }
 
         let mut buf_i = 0;
         let mut n = 0;
-        for el in into {
+        loop {
             // skip new lines
             while buf[buf_i] == b'\r' || buf[buf_i] == b'\n' {
                 buf_i += 1;
+                if buf_i == buf.len() {
+                    break;
+                }
             }
 
-            if !is_base64_token(buf[buf_i]) {
-                break;
+            if buf_i < buf.len() {
+                if !is_base64_token(buf[buf_i]) {
+                    dbg!(buf[buf_i] as char);
+                    break;
+                }
+
+                dbg!(buf[buf_i] as char, buf_i, buf.len());
+                into[n] = buf[buf_i];
+                n += 1;
+                buf_i += 1;
+                if n == into.len() {
+                    break;
+                }
             }
 
-            *el = buf[buf_i];
-            n += 1;
-            buf_i += 1;
             if buf_i == buf.len() {
                 self.inner.consume(buf_i);
                 buf = self.inner.fill_buf()?;
@@ -165,5 +177,24 @@ mod tests {
             assert_eq!(&buf[..4], b"Kwjk");
             assert_eq!(&buf[4..], &vec![0u8; 96][..]);
         }
+    }
+
+    #[test]
+    fn test_regression_long_key() {
+        // skip first line ---BEGIN
+        let input: String = std::fs::read_to_string("./tests/unit-tests/long-key.asc")
+            .unwrap()
+            .lines()
+            .skip(1)
+            .collect();
+
+        let mut r = Base64Reader::new(input.as_bytes());
+        let mut out = Vec::new();
+        r.read_to_end(&mut out).unwrap();
+
+        let input_expected =
+            std::fs::read_to_string("./tests/unit-tests/long-key.asc.expected").unwrap();
+        let expected: String = input_expected.lines().collect();
+        assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
     }
 }

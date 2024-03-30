@@ -395,7 +395,6 @@ impl<R: BufRead> Dearmor<R> {
         } else {
             unreachable!();
         };
-
         if size == 0 && !into.is_empty() {
             // we are done with the body
             self.current_part = Part::Footer;
@@ -422,6 +421,7 @@ impl<R: BufRead> Dearmor<R> {
             let (b, buf) = decoder.into_inner_with_buffer();
 
             let mut b = BufReader::with_buffer(buf, b.into_inner());
+
             b.make_room();
 
             b.read_into_buf()?;
@@ -477,7 +477,6 @@ impl<R: BufRead> Dearmor<R> {
             // check checksum if there is one
             if let Some(expected) = self.checksum {
                 let actual = self.crc.finish();
-
                 if expected != actual {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -520,6 +519,17 @@ mod tests {
     // helper function to parse all data at once
     pub fn parse(input: &str) -> Result<(BlockType, Headers, Vec<u8>)> {
         let mut dearmor = Dearmor::new(BufReader::new(input.as_bytes()));
+
+        // estimate size
+        let mut bytes = Vec::new();
+        dearmor.read_to_end(&mut bytes)?;
+
+        Ok((dearmor.typ.unwrap(), dearmor.headers, bytes))
+    }
+
+    // helper function to parse all data at once
+    pub fn parse_raw(input: &str) -> Result<(BlockType, Headers, Vec<u8>)> {
+        let mut dearmor = Dearmor::new(input.as_bytes());
 
         // estimate size
         let mut bytes = Vec::new();
@@ -882,5 +892,62 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
                 (None, BlockType::Message)
             )),
         );
+    }
+
+    #[test]
+    fn test_regression_long_key_1() {
+        let _ = pretty_env_logger::try_init();
+        let input = std::fs::read_to_string("./tests/unit-tests/long-key.asc").unwrap();
+        let (typ, headers, decoded) = parse(&input).unwrap();
+
+        assert_eq!(typ, BlockType::PublicKey);
+        assert!(headers.is_empty());
+        let expected_binary_s: String =
+            std::fs::read_to_string("./tests/unit-tests/long-key.asc.line")
+                .unwrap()
+                .lines()
+                .collect();
+        let expected_binary = base64::engine::general_purpose::STANDARD
+            .decode(&expected_binary_s)
+            .unwrap();
+        assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
+    }
+
+    #[test]
+    fn test_regression_long_key_2_1() {
+        let _ = pretty_env_logger::try_init();
+        let input = std::fs::read_to_string("./tests/unit-tests/long-key-2.asc").unwrap();
+        let (typ, headers, decoded) = parse(&input).unwrap();
+
+        assert_eq!(typ, BlockType::PublicKey);
+        assert!(headers.is_empty());
+        let expected_binary_s: String =
+            std::fs::read_to_string("./tests/unit-tests/long-key-2.asc.line")
+                .unwrap()
+                .lines()
+                .collect();
+        let expected_binary = base64::engine::general_purpose::STANDARD
+            .decode(&expected_binary_s)
+            .unwrap();
+        assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
+    }
+
+    #[test]
+    fn test_regression_long_key_2_2() {
+        let _ = pretty_env_logger::try_init();
+        let input = std::fs::read_to_string("./tests/unit-tests/long-key-2.asc").unwrap();
+        let (typ, headers, decoded) = parse_raw(&input).unwrap();
+
+        assert_eq!(typ, BlockType::PublicKey);
+        assert!(headers.is_empty());
+        let expected_binary_s: String =
+            std::fs::read_to_string("./tests/unit-tests/long-key-2.asc.line")
+                .unwrap()
+                .lines()
+                .collect();
+        let expected_binary = base64::engine::general_purpose::STANDARD
+            .decode(&expected_binary_s)
+            .unwrap();
+        assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
     }
 }

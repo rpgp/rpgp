@@ -55,7 +55,6 @@ impl<R: Read> Read for Base64Decoder<R> {
         // take care of leftovers
         if !self.out.is_empty() {
             let len = self.out.copy_to_slice(into);
-
             return Ok(len);
         }
 
@@ -65,6 +64,7 @@ impl<R: Read> Read for Base64Decoder<R> {
         }
 
         // fill our buffer
+        dbg!(self.inner.buf_len());
         if self.inner.buf_len() < 4 {
             let b = &mut self.inner;
 
@@ -81,7 +81,7 @@ impl<R: Read> Read for Base64Decoder<R> {
 
         let nr = self.inner.buf_len() / 4 * 4;
         let nw = self.inner.buf_len() / 4 * 3;
-
+        dbg!(into.len(), nw, nr);
         let (consumed, written) = if nw > into.len() {
             let (consumed, nw) =
                 try_decode_engine_slice(&self.inner.buffer()[..nr], &mut self.out_buffer[..]);
@@ -99,7 +99,11 @@ impl<R: Read> Read for Base64Decoder<R> {
         } else {
             try_decode_engine_slice(&self.inner.buffer()[..nr], into)
         };
-
+        dbg!(
+            written,
+            consumed,
+            std::str::from_utf8(&self.inner.buffer()[..nr])
+        );
         self.inner.consume(consumed);
 
         Ok(written)
@@ -148,26 +152,64 @@ mod tests {
 
     use crate::base64_reader::Base64Reader;
 
-    fn test_roundtrip(n: usize) {
+    fn test_roundtrip(cap: usize, n: usize, insert_lines: bool) {
         let rng = &mut XorShiftRng::from_seed([
             0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe,
         ]);
 
         for i in 0..n {
             let data: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
-            let encoded_data = ENGINE.encode(&data);
+            let mut encoded_data = ENGINE.encode(&data);
 
-            let mut r = Base64Decoder::new(encoded_data.as_bytes());
-            let mut out = Vec::new();
-
-            r.read_to_end(&mut out).unwrap();
-            assert_eq!(data, out);
+            if insert_lines {
+                for j in 0..i {
+                    // insert line break with a 1/10 chance
+                    if rng.gen_ratio(1, 10) {
+                        if j >= encoded_data.len() {
+                            encoded_data.push('\n');
+                        } else {
+                            encoded_data.insert(j, '\n');
+                        }
+                    }
+                }
+                println!("testing: \n{}", encoded_data);
+                let mut r = Base64Decoder::new(Base64Reader::new(
+                    std::io::BufReader::with_capacity(cap, encoded_data.as_bytes()),
+                ));
+                let mut out = Vec::new();
+                r.read_to_end(&mut out).unwrap();
+                assert_eq!(data, out);
+            } else {
+                println!("testing: \n{}", encoded_data);
+                let mut r = Base64Decoder::new(std::io::BufReader::with_capacity(
+                    cap,
+                    encoded_data.as_bytes(),
+                ));
+                let mut out = Vec::new();
+                r.read_to_end(&mut out).unwrap();
+                assert_eq!(data, out);
+            }
         }
     }
 
     #[test]
-    fn test_base64_decoder_roundtrip_standard_1000() {
-        test_roundtrip(1000);
+    fn test_base64_decoder_roundtrip_standard_1000_no_newlines() {
+        test_roundtrip(1, 1000, false);
+        test_roundtrip(2, 1000, false);
+        test_roundtrip(8, 1000, false);
+        test_roundtrip(256, 1000, false);
+        test_roundtrip(1024, 1000, false);
+        test_roundtrip(8 * 1024, 1000, false);
+    }
+
+    #[test]
+    fn test_base64_decoder_roundtrip_standard_1000_newlines() {
+        test_roundtrip(1, 1000, true);
+        test_roundtrip(2, 1000, true);
+        test_roundtrip(8, 1000, true);
+        test_roundtrip(256, 1000, true);
+        test_roundtrip(1024, 1000, true);
+        test_roundtrip(8 * 1024, 1000, true);
     }
 
     #[test]
