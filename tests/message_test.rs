@@ -10,7 +10,7 @@ extern crate pretty_env_logger;
 extern crate log;
 
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::Read;
 
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
 use pgp::types::KeyTrait;
@@ -92,8 +92,8 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
             let serialized = decrypted.to_armored_bytes(None.into()).unwrap();
 
             // and parse them again
-            let (decrypted2, _headers) = Message::from_armor_single(Cursor::new(&serialized))
-                .expect("failed to parse round2");
+            let (decrypted2, _headers) =
+                Message::from_armor_single(&serialized[..]).expect("failed to parse round2");
             assert_eq!(decrypted, decrypted2);
 
             let raw = match decrypted {
@@ -105,7 +105,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
                     let serialized = m.to_armored_bytes(None.into()).unwrap();
 
                     // and parse them again
-                    let (m2, _headers) = Message::from_armor_single(Cursor::new(&serialized))
+                    let (m2, _headers) = Message::from_armor_single(&serialized[..])
                         .expect("failed to parse round3");
                     assert_eq!(m, m2);
 
@@ -141,7 +141,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
 
     // and parse them again
     let (message2, headers2) =
-        Message::from_armor_single(Cursor::new(&serialized)).expect("failed to parse round2");
+        Message::from_armor_single(serialized.as_bytes()).expect("failed to parse round2");
     assert_eq!(headers, headers2);
     assert_eq!(message, message2);
 }

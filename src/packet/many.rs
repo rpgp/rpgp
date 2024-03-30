@@ -306,10 +306,9 @@ mod tests {
     #[test]
     fn incomplete_packet_parser() {
         let _ = pretty_env_logger::try_init();
-        use std::io::Cursor;
 
         let bytes: [u8; 1] = [0x97];
-        let parser = PacketParser::new(Cursor::new(bytes));
+        let parser = PacketParser::new(&bytes[..]);
         let mut packets = parser.filter_map(|p| {
             // for now we are skipping any packets that we failed to parse
             match p {

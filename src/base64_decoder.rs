@@ -143,8 +143,6 @@ mod tests {
 
     use super::*;
 
-    use std::io::Cursor;
-
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
@@ -159,7 +157,7 @@ mod tests {
             let data: Vec<u8> = (0..i).map(|_| rng.gen()).collect();
             let encoded_data = ENGINE.encode(&data);
 
-            let mut r = Base64Decoder::new(Cursor::new(encoded_data));
+            let mut r = Base64Decoder::new(encoded_data.as_bytes());
             let mut out = Vec::new();
 
             r.read_to_end(&mut out).unwrap();
@@ -176,7 +174,7 @@ mod tests {
     fn test_base64_decoder_with_base64_reader() {
         let source = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
-        let data = b"TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwgc2VkIGRvIGVpdXNtb2Qgd\n\
+        let data = "TG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdCwgc2VkIGRvIGVpdXNtb2Qgd\n\
                      GVtcG9yIGluY2lkaWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdWEuIFV0IGVuaW0gYWQgbWluaW0\n\
                      gdmVuaWFtLCBxdWlz\n\
                      IG5vc3RydWQgZXhlcmNpdGF0aW9uIHVsbGFtY28gbGFib3JpcyBuaXNpIHV0IGFsaXF1aXAgZXggZW\n\
@@ -185,8 +183,7 @@ mod tests {
                      0IG51bGxhIHBhcmlhdHVyLiBFeGNlcHRldXIgc2ludCBvY2NhZWNhdCBjdXBpZGF0YXQgbm9uIHByb2lkZW50LCBzdW50IGluIGN1bHBhIHF1aSBvZm\n\
                      ZpY2lhIGRlc2VydW50IG1vbGxpdCBhbmltIGlkIGVzdCBsYWJvcnVtLg==";
 
-        let c = Cursor::new(&data[..]);
-        let reader = Base64Reader::new(c);
+        let reader = Base64Reader::new(data.as_bytes());
         let mut reader = Base64Decoder::new(reader);
         let mut res = String::new();
 
@@ -196,10 +193,9 @@ mod tests {
 
     #[test]
     fn test_base64_decoder_with_end_base() {
-        let data = b"TG9yZW0g\n=TG9y\n-----hello";
+        let data = "TG9yZW0g\n=TG9y\n-----hello";
 
-        let c = Cursor::new(&data[..]);
-        let br = Base64Reader::new(c);
+        let br = Base64Reader::new(data.as_bytes());
         let mut reader = Base64Decoder::new(br);
         let mut res = vec![0u8; 32];
 
@@ -216,10 +212,9 @@ mod tests {
 
     #[test]
     fn test_base64_decoder_with_end_one_linebreak() {
-        let data = b"TG9yZW0g\n=TG9y-----hello";
+        let data = "TG9yZW0g\n=TG9y-----hello";
 
-        let c = Cursor::new(&data[..]);
-        let br = Base64Reader::new(c);
+        let br = Base64Reader::new(data.as_bytes());
         let mut reader = Base64Decoder::new(br);
         let mut res = vec![0u8; 32];
 
@@ -236,10 +231,9 @@ mod tests {
 
     #[test]
     fn test_base64_decoder_with_end_no_linebreak() {
-        let data = b"TG9yZW0g=TG9y-----hello";
+        let data = "TG9yZW0g=TG9y-----hello";
 
-        let c = Cursor::new(&data[..]);
-        let br = Base64Reader::new(c);
+        let br = Base64Reader::new(data.as_bytes());
         let mut reader = Base64Decoder::new(br);
         let mut res = vec![0u8; 32];
 

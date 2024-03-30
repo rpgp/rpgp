@@ -1,5 +1,4 @@
 use std::io;
-use std::io::Cursor;
 
 use bstr::BStr;
 use chrono::SubsecRound;
@@ -187,7 +186,7 @@ impl Edata {
                             "Version missmatch between key and integrity packet"
                         );
                         let data = p.decrypt(&key, Some(sym_alg))?;
-                        Message::from_bytes(Cursor::new(data))
+                        Message::from_bytes(&data[..])
                     }
                     Self::SymEncryptedData(p) => {
                         ensure_eq!(
@@ -197,7 +196,7 @@ impl Edata {
                         );
                         let mut data = p.data().to_vec();
                         let res = sym_alg.decrypt(&key, &mut data)?;
-                        Message::from_bytes(Cursor::new(res))
+                        Message::from_bytes(res)
                     }
                 }
             }
@@ -219,7 +218,7 @@ impl Edata {
                     Self::SymEncryptedProtectedData(p) => {
                         let decrypted_packets = p.decrypt(&key, None)?;
 
-                        let mut messages = Message::from_bytes_many(Cursor::new(decrypted_packets));
+                        let mut messages = Message::from_bytes_many(&decrypted_packets[..]);
                         // First message is the one we want to return
                         let Some(message) = messages.next() else {
                             bail!("no valid message found");
@@ -447,8 +446,7 @@ impl Message {
                 );
 
                 let data = self.to_bytes()?;
-                let cursor = io::Cursor::new(data);
-                let signature = signature_config.sign(key, key_pw, cursor)?;
+                let signature = signature_config.sign(key, key_pw, &data[..])?;
 
                 (typ, signature)
             }
@@ -493,9 +491,8 @@ impl Message {
                     match **message {
                         Message::Literal(ref data) => signature.verify(key, data.data()),
                         _ => {
-                            let data = &message.to_bytes()?;
-                            let cursor = io::Cursor::new(data);
-                            signature.verify(key, cursor)
+                            let data = message.to_bytes()?;
+                            signature.verify(key, &data[..])
                         }
                     }
                 } else {
@@ -855,7 +852,7 @@ mod tests {
         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-rsa.asc", &armored).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
         let decrypted = parsed.decrypt(|| "test".into(), &[&skey]).unwrap().0;
 
@@ -883,7 +880,7 @@ mod tests {
             let armored = encrypted.to_armored_bytes(None.into()).unwrap();
             fs::write("./message-x25519.asc", &armored).unwrap();
 
-            let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+            let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
             let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
 
@@ -911,7 +908,7 @@ mod tests {
         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
         fs::write("./message-password.asc", &armored).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
         let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
 
@@ -988,7 +985,7 @@ mod tests {
 
         signed_msg.verify(&pkey).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
         parsed.verify(&pkey).unwrap();
     }
 
@@ -1011,7 +1008,7 @@ mod tests {
 
         signed_msg.verify(&pkey).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
         parsed.verify(&pkey).unwrap();
     }
 
@@ -1035,7 +1032,7 @@ mod tests {
 
         signed_msg.verify(&pkey).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
         parsed.verify(&pkey).unwrap();
     }
 
@@ -1062,7 +1059,7 @@ mod tests {
 
             signed_msg.verify(&pkey).unwrap();
 
-            let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+            let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
             parsed.verify(&pkey).unwrap();
         }
     }
@@ -1087,7 +1084,7 @@ mod tests {
 
         signed_msg.verify(&pkey).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
         parsed.verify(&pkey).unwrap();
     }
 
@@ -1112,7 +1109,7 @@ mod tests {
 
         signed_msg.verify(&pkey).unwrap();
 
-        let parsed = Message::from_armor_single(Cursor::new(&armored)).unwrap().0;
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
         parsed.verify(&pkey).unwrap();
     }
 

@@ -325,17 +325,15 @@ enum Part {
     Footer,
 }
 
-const CAPACITY: usize = 1024 * 32;
-
-impl<R: Read + Seek> Dearmor<R> {
-    pub fn new(input: R) -> Self {
+impl<R: Read> Dearmor<R> {
+    pub fn new(input: BufReader<R>) -> Self {
         Dearmor {
             typ: None,
             headers: BTreeMap::new(),
             checksum: None,
             current_part: Part::Header,
             base_decoder: None,
-            inner: Some(BufReader::with_capacity(CAPACITY, input)),
+            inner: Some(input),
             done: false,
             crc: Default::default(),
         }
@@ -496,7 +494,7 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 }
 
-impl<R: Read + Seek> Read for Dearmor<R> {
+impl<R: Read> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         if self.done {
             return Ok(0);
@@ -518,11 +516,10 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use std::io::Cursor;
 
     // helper function to parse all data at once
-    pub fn parse<R: Read + Seek>(mut input: R) -> Result<(BlockType, Headers, Vec<u8>)> {
-        let mut dearmor = Dearmor::new(input.by_ref());
+    pub fn parse(input: &str) -> Result<(BlockType, Headers, Vec<u8>)> {
+        let mut dearmor = Dearmor::new(BufReader::new(input.as_bytes()));
 
         // estimate size
         let mut bytes = Vec::new();
@@ -591,13 +588,12 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), vec!["GnuPG v1".to_string()]);
 
-        let c = Cursor::new(
-            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
              Version: GnuPG v1\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP PUBLIC KEY BLOCK-----\n",
-        );
+             -----END PGP PUBLIC KEY BLOCK-----\n";
+
         let (typ, headers, res) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
@@ -610,15 +606,13 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("NoVal".to_string(), vec!["".to_string()]);
 
-        let c = Cursor::new(
-            "\
+        let c = "\
              -----BEGIN PGP MESSAGE-----\n\
              NoVal:\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
              -----END PGP MESSAGE----\
-             ",
-        );
+             ";
 
         let (typ, headers, res) = parse(c).unwrap();
 
@@ -629,14 +623,12 @@ mod tests {
 
     #[test]
     fn test_parse_armor_whitespace() {
-        let c = Cursor::new(
-            "\
+        let c = "\
              -----BEGIN PGP MESSAGE-----\n\
              \t \n\
              aGVsbG8gd29ybGQ=\n\
              -----END PGP MESSAGE----\
-             ",
-        );
+             ";
 
         let (typ, headers, res) = parse(c).unwrap();
 
@@ -650,8 +642,7 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("hello".to_string(), vec!["world".to_string()]);
 
-        let c = Cursor::new(
-            "\
+        let c = "\
              -----BEGIN PGP MESSAGE-----\n\
              hello: world\n\
              \n\
@@ -661,8 +652,7 @@ mod tests {
              \n\
              aGVsbG8gd29ybGQ=\n\
              -----END PGP MESSAGE-----\
-             ",
-        );
+             ";
 
         let (typ, headers, res) = parse(c).unwrap();
 
@@ -676,8 +666,7 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), vec!["GnuPG v1".to_string()]);
 
-        let c = Cursor::new(
-            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
              Version: GnuPG v1\n\
              \n\
              mQGiBEigu7MRBAD7gZJzevtYLB3c1pE7uMwu+zHzGGJDrEyEaz0lYTAaJ2YXmJ1+\n\
@@ -716,8 +705,7 @@ mod tests {
              nxd3tMIEGO83iEmozvJfB4hJBBgRAgAJBQJIoLvYAhsMAAoJEHMea58AVA/D6ewA\n\
              ninKQSW+oL4z28F3T0GHag38WeWyAJ45d7dx4z0GxhTm2b9DclLombY+nw==\n\
              =XyBX\n\
-             -----END PGP PUBLIC KEY BLOCK-----\n",
-        );
+             -----END PGP PUBLIC KEY BLOCK-----\n";
         let (typ, headers, decoded) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
@@ -728,8 +716,7 @@ mod tests {
 
     #[test]
     fn test_parse_armor_full_no_header() {
-        let c = Cursor::new(
-            "-----BEGIN RSA PRIVATE KEY-----
+        let c = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpgIBAAKCAQEAxp4sIUtrNBl4Vbd4075CmtHmwxTc0FhQIGw36kptbrWReLb9
 Np0RQylKyc6qUruxZlCdPVFo7iX3vs272/0GEakPv0DAsKGbe1nTsMyxxz0o3dP4
 JQOlOGEnpETa0ybfPLMX1+qNiBdm7HLjqcP5+S0Exb0Z0deFNIhEP6XckUEgHmwA
@@ -755,8 +742,7 @@ zTawVsNsL7/JqbWXAEy8az+VrguTbTIkYL2sQStEWoM75WRPu6El09p5e+0YCnEC
 C0CJINUpAoGBAPF1fpPINHlUW+Bvo4Nj3935QgZI47yTplDusptyfYgFYXw6ZYel
 y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 9+9V06HJDIsSrC0D/ajIkP+iT9Hd6eEZMkJ6y6XtTbkJGYt2zOtnrpb6
------END RSA PRIVATE KEY-----\n",
-        );
+-----END RSA PRIVATE KEY-----\n";
         let (typ, _, _) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PrivateKeyPKCS1(PKCS1Type::RSA)));
@@ -767,15 +753,13 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), vec!["GnuPG v1".to_string()]);
 
-        let c = Cursor::new(
-            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
              Version: GnuPG v1\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP PUBLIC KEY BLOCK-----\n",
-        );
+             -----END PGP PUBLIC KEY BLOCK-----\n";
 
-        let mut dec = Dearmor::new(c);
+        let mut dec = Dearmor::new(BufReader::new(c.as_bytes()));
 
         let mut res = vec![0u8; 5];
         let read = dec.read(&mut res).unwrap();

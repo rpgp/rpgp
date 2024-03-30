@@ -26,7 +26,6 @@ impl<R: BufRead> Base64Reader<R> {
 impl<R: BufRead> Read for Base64Reader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let mut buf = self.inner.fill_buf()?;
-        dbg!(std::str::from_utf8(buf));
         if buf.is_empty() {
             return Ok(0);
         }
@@ -47,10 +46,8 @@ impl<R: BufRead> Read for Base64Reader<R> {
             n += 1;
             buf_i += 1;
             if buf_i == buf.len() {
-                dbg!(buf_i);
                 self.inner.consume(buf_i);
                 buf = self.inner.fill_buf()?;
-                dbg!(std::str::from_utf8(buf));
                 buf_i = 0;
                 if buf.is_empty() {
                     break;
@@ -58,10 +55,8 @@ impl<R: BufRead> Read for Base64Reader<R> {
             }
         }
 
-        dbg!(buf_i);
         self.inner.consume(buf_i);
 
-        dbg!(n);
         Ok(n)
     }
 }
@@ -71,11 +66,9 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use std::io::Cursor;
 
     fn read_exact(data: &[u8], size: usize) -> Vec<u8> {
-        let c = Cursor::new(data);
-        let mut r = Base64Reader::new(c);
+        let mut r = Base64Reader::new(data);
         let mut buf = vec![0; size];
         r.read_exact(&mut buf).unwrap();
         buf
@@ -128,8 +121,7 @@ mod tests {
         );
 
         {
-            let c = Cursor::new(&data_with_garbage[..]);
-            let mut r = Base64Reader::new(c);
+            let mut r = Base64Reader::new(&data_with_garbage[..]);
             let mut buf = vec![0; 35];
             assert_eq!(r.read(&mut buf).unwrap(), 33);
 
@@ -137,38 +129,36 @@ mod tests {
         }
 
         {
-            let c = Cursor::new(&b"Kw--"[..]);
+            let c = &b"Kw--"[..];
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 5];
             assert_eq!(r.read(&mut buf).unwrap(), 2);
             assert_eq!(buf, vec![b'K', b'w', 0, 0, 0]);
-            assert_eq!(r.into_inner().position(), 2);
         }
 
         {
             // Checksum at the end of ascii armor
-            let c = Cursor::new(&b"Kwjk\n=Kwjk"[..]);
+            let c = &b"Kwjk\n=Kwjk"[..];
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 10];
             assert_eq!(r.read(&mut buf).unwrap(), 9);
             assert_eq!(&buf[..9], b"Kwjk=Kwjk");
-            assert_eq!(r.into_inner().position(), 10);
         }
 
         {
             // Leave things alone that are not us
-            let c = Cursor::new(&b"Kwjk\n-----BEGIN"[..]);
+            let c = &b"Kwjk\n-----BEGIN"[..];
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 100];
             assert_eq!(r.read(&mut buf).unwrap(), 4);
-            assert_eq!(r.into_inner().position(), 5);
+
             assert_eq!(&buf[..4], b"Kwjk");
             assert_eq!(&buf[4..], &vec![0u8; 96][..]);
         }
 
         {
             // Leave things alone that are not us
-            let c = Cursor::new(&b"Kwjk\n-----BEGIN-----\nKwjk\n"[..]);
+            let c = &b"Kwjk\n-----BEGIN-----\nKwjk\n"[..];
             let mut r = Base64Reader::new(c);
             let mut buf = vec![0; 100];
             assert_eq!(r.read(&mut buf).unwrap(), 4);

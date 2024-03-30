@@ -69,8 +69,7 @@
 //!      .expect("Should sign");
 //!
 //! let mut signature_bytes = Vec::with_capacity(1024);
-//!     let mut buff = std::io::Cursor::new(&mut signature_bytes);
-//!     packet::write_packet(&mut buff, &signature_packet).expect("Write must succeed");
+//! packet::write_packet(&mut signature_bytes, &signature_packet).expect("Write must succeed");
 //!
 //! signature_packet
 //!      .verify(&verification_key, DATA)

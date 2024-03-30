@@ -485,7 +485,6 @@ mod tests {
 
     use super::*;
     use crate::{Deserializable, StandaloneSignature};
-    use std::io::Cursor;
 
     #[test]
     fn test_subpacket_pref_sym_alg() {
@@ -514,7 +513,7 @@ SW+kj0jFDKC2xb/o8hbkTpwPtsoI
 =0ajX
 -----END PGP SIGNATURE-----";
 
-        let (sig, _) = StandaloneSignature::from_armor_single(Cursor::new(revocation)).unwrap();
+        let (sig, _) = StandaloneSignature::from_armor_single(revocation.as_bytes()).unwrap();
 
         let rc = sig.signature.revocation_reason_code();
 

@@ -1,5 +1,5 @@
-use byteorder::ReadBytesExt;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use buffer_redux::BufReader;
+use std::io::{BufRead, Read};
 
 use crate::armor::{self, BlockType};
 use crate::errors::{Error, Result};
@@ -23,19 +23,26 @@ pub trait Deserializable: Sized {
     fn from_string_many<'a>(
         input: &'a str,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
-        Self::from_armor_many(Cursor::new(input))
+        Self::from_armor_many(input.as_bytes())
     }
 
     /// Armored ascii data.
-    fn from_armor_single<R: Read + Seek>(input: R) -> Result<(Self, armor::Headers)> {
+    fn from_armor_single<R: Read>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
         Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
     }
 
     /// Armored ascii data.
     #[allow(clippy::type_complexity)]
-    fn from_armor_many<'a, R: Read + Seek + 'a>(
+    fn from_armor_many<'a, R: Read + 'a>(
         input: R,
+    ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
+        Self::from_armor_many_buf(BufReader::new(input))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn from_armor_many_buf<'a, R: Read + 'a>(
+        input: BufReader<R>,
     ) -> Result<(Box<dyn Iterator<Item = Result<Self>> + 'a>, armor::Headers)> {
         let mut dearmor = armor::Dearmor::new(input);
         dearmor.read_header()?;
@@ -86,8 +93,13 @@ pub trait Deserializable: Sized {
     /// Returns a composition and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
     #[allow(clippy::type_complexity)]
-    fn from_reader_single<'a, R: Read + Seek + 'a>(
-        mut input: R,
+    fn from_reader_single<'a, R: Read + 'a>(input: R) -> Result<(Self, Option<armor::Headers>)> {
+        Self::from_reader_single_buf(BufReader::new(input))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn from_reader_single_buf<'a, R: Read + 'a>(
+        mut input: BufReader<R>,
     ) -> Result<(Self, Option<armor::Headers>)> {
         if !is_binary(&mut input)? {
             let (keys, headers) = Self::from_armor_single(input)?;
@@ -102,8 +114,22 @@ pub trait Deserializable: Sized {
     /// Returns an iterator of compositions and a BTreeMap containing armor headers
     /// (None, if the data was unarmored)
     #[allow(clippy::type_complexity)]
-    fn from_reader_many<'a, R: Read + Seek + 'a>(
-        mut input: R,
+    fn from_reader_many<'a, R: Read + 'a>(
+        input: R,
+    ) -> Result<(
+        Box<dyn Iterator<Item = Result<Self>> + 'a>,
+        Option<armor::Headers>,
+    )> {
+        Self::from_reader_many_buf(BufReader::new(input))
+    }
+
+    /// Parses a list of compositions, from either ASCII-armored or binary OpenPGP data.
+    ///
+    /// Returns an iterator of compositions and a BTreeMap containing armor headers
+    /// (None, if the data was unarmored)
+    #[allow(clippy::type_complexity)]
+    fn from_reader_many_buf<'a, R: Read + 'a>(
+        mut input: BufReader<R>,
     ) -> Result<(
         Box<dyn Iterator<Item = Result<Self>> + 'a>,
         Option<armor::Headers>,
@@ -166,14 +192,16 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
 
 /// Check if the OpenPGP data in `input` seems to be ASCII-armored or binary (by looking at the
 /// highest bit of the first byte)
-pub(crate) fn is_binary<R: Read + Seek>(input: &mut R) -> Result<bool> {
+pub(crate) fn is_binary<R: BufRead>(input: &mut R) -> Result<bool> {
     // Peek at the first byte in the reader
-    let first = input.read_u8()?;
-    let _ = input.seek(SeekFrom::Current(-1))?;
+    let buf = input.fill_buf()?;
+    if buf.is_empty() {
+        bail!("empty input");
+    }
 
     // If the first bit of the first byte is set, we assume this is binary OpenPGP data, otherwise
     // we assume it is ASCII-armored.
-    let binary = first & 0x80 != 0;
+    let binary = buf[0] & 0x80 != 0;
 
     Ok(binary)
 }

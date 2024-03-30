@@ -1,5 +1,7 @@
 use std::{io, iter};
 
+use buffer_redux::BufReader;
+
 use crate::armor::{self, BlockType};
 use crate::composed::signed_key::{
     PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey, SignedSecretKeyParser,
@@ -13,14 +15,24 @@ use crate::types::Tag;
 /// Returns an iterator of public or secret keys and a BTreeMap containing armor headers
 /// (None, if the data was unarmored)
 #[allow(clippy::type_complexity)]
-pub fn from_reader_many<'a, R: io::Read + io::Seek + 'a>(
-    mut input: R,
+pub fn from_reader_many<'a, R: io::Read + 'a>(
+    input: R,
+) -> Result<(
+    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+    Option<armor::Headers>,
+)> {
+    from_reader_many_buf(BufReader::new(input))
+}
+
+#[allow(clippy::type_complexity)]
+pub fn from_reader_many_buf<'a, R: io::Read + 'a>(
+    mut input: BufReader<R>,
 ) -> Result<(
     Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
     Option<armor::Headers>,
 )> {
     if !crate::composed::shared::is_binary(&mut input)? {
-        let (keys, headers) = from_armor_many(input)?;
+        let (keys, headers) = from_armor_many_buf(input)?;
         Ok((keys, Some(headers)))
     } else {
         Ok((from_bytes_many(input), None))
@@ -29,8 +41,19 @@ pub fn from_reader_many<'a, R: io::Read + io::Seek + 'a>(
 
 /// Parses a list of secret and public keys from ascii armored text.
 #[allow(clippy::type_complexity)]
-pub fn from_armor_many<'a, R: io::Read + io::Seek + 'a>(
+pub fn from_armor_many<'a, R: io::Read + 'a>(
     input: R,
+) -> Result<(
+    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+    armor::Headers,
+)> {
+    from_armor_many_buf(BufReader::new(input))
+}
+
+/// Parses a list of secret and public keys from ascii armored text.
+#[allow(clippy::type_complexity)]
+pub fn from_armor_many_buf<'a, R: io::Read + 'a>(
+    input: BufReader<R>,
 ) -> Result<(
     Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
     armor::Headers,
