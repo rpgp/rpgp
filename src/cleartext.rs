@@ -182,7 +182,7 @@ fn dash_escape<R: BufRead>(text: R) -> Result<String> {
     let mut out = String::new();
     for line in text.lines() {
         let line = line?;
-        if line.starts_with("-") {
+        if line.starts_with('-') {
             out += "- ";
         }
         out.push_str(&line);
