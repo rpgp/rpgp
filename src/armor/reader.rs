@@ -359,7 +359,7 @@ impl<R: BufRead> Dearmor<R> {
                 Err(nom::Err::Incomplete(_)) => {
                     return Err(io::Error::new(
                         io::ErrorKind::Interrupted,
-                        "incomplete parse",
+                        "incomplete parse header",
                     ));
                 }
                 Err(err) => {
@@ -395,6 +395,7 @@ impl<R: BufRead> Dearmor<R> {
         } else {
             unreachable!();
         };
+
         if size == 0 && !into.is_empty() {
             // we are done with the body
             self.current_part = Part::Footer;
@@ -424,10 +425,12 @@ impl<R: BufRead> Dearmor<R> {
 
             b.make_room();
 
-            b.read_into_buf()?;
-            if b.buf_len() == 0 {
-                // we are done here
-                return Ok(0);
+            // read the rest of the buffer, up to 128 bytes
+            while b.read_into_buf()? > 0 && b.buf_len() < 128 {
+                if b.buf_len() == 0 {
+                    // we are done here
+                    return Ok(0);
+                }
             }
 
             let consumed = match footer_parser(b.buffer()) {
@@ -455,7 +458,7 @@ impl<R: BufRead> Dearmor<R> {
                     self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::Interrupted,
-                        "incomplete parse",
+                        "incomplete parse footer",
                     ));
                 }
                 Err(err) => {
@@ -908,7 +911,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
                 .lines()
                 .collect();
         let expected_binary = base64::engine::general_purpose::STANDARD
-            .decode(&expected_binary_s)
+            .decode(expected_binary_s)
             .unwrap();
         assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
     }
@@ -927,7 +930,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
                 .lines()
                 .collect();
         let expected_binary = base64::engine::general_purpose::STANDARD
-            .decode(&expected_binary_s)
+            .decode(expected_binary_s)
             .unwrap();
         assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
     }
@@ -946,7 +949,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
                 .lines()
                 .collect();
         let expected_binary = base64::engine::general_purpose::STANDARD
-            .decode(&expected_binary_s)
+            .decode(expected_binary_s)
             .unwrap();
         assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
     }
