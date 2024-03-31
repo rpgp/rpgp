@@ -295,8 +295,7 @@ mod tests {
 
         assert_eq!(
             msg.text(),
-            "\"The geeks shall inherit the earth.\"
-		-- Karl Lehenbauer"
+            "\"The geeks shall inherit the earth.\"\n		-- Karl Lehenbauer"
         );
         assert_eq!(headers.len(), 1);
         assert_eq!(
@@ -320,8 +319,7 @@ mod tests {
 
         assert_eq!(
             msg.text(),
-            "The very remembrance of my former misfortune proves a new one to me.
-		-- Miguel de Cervantes"
+            "The very remembrance of my former misfortune proves a new one to me.\n		-- Miguel de Cervantes"
         );
         assert_eq!(headers.len(), 1);
         assert_eq!(
@@ -342,13 +340,7 @@ mod tests {
 
         assert_eq!(
             msg.text(),
-            "- From the grocery store we need:
-
-- - tofu
-- - vegetables
-- - noodles
-
-"
+            "- From the grocery store we need:\n\n- - tofu\n- - vegetables\n- - noodles\n\n"
         );
         assert!(headers.is_empty());
 
