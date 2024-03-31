@@ -281,8 +281,7 @@ mod tests {
 
         assert_eq!(msg.signatures().len(), 1);
 
-        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
-        assert_eq!(data, out);
+        roundtrip(&data, &msg, &headers);
     }
 
     #[test]
@@ -307,8 +306,7 @@ mod tests {
 
         assert_eq!(msg.signatures().len(), 2);
 
-        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
-        assert_eq!(data, out);
+        roundtrip(&data, &msg, &headers);
     }
 
     #[test]
@@ -331,9 +329,7 @@ mod tests {
             &vec!["GnuPG v2".to_string()]
         );
 
-        assert_eq!(msg.signatures().len(), 2);
-        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
-        assert_eq!(data, out);
+        roundtrip(&data, &msg, &headers);
     }
 
     #[test]
@@ -365,9 +361,17 @@ mod tests {
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
 
         msg.verify(&key.public_key()).unwrap();
+        assert_eq!(msg.signatures().len(), 1);
 
-        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
-        assert_eq!(data, out);
+        roundtrip(&data, &msg, &headers);
+    }
+
+    fn roundtrip(expected: &str, msg: &CleartextSignedMessage, headers: &Headers) {
+        let expected = expected.replace("\r\n", "\n").replace('\r', "\n");
+        let out = msg.to_armored_string(Some(headers).into()).unwrap();
+        let out = out.replace("\r\n", "\n").replace('\r', "\n");
+
+        assert_eq!(expected, out);
     }
 
     #[test]
