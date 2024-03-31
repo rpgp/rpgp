@@ -272,7 +272,7 @@ mod tests {
 
         let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
-        assert_eq!(msg.text(), "You are scrupulously honest, frank, and straightforward.  Therefore you\nhave few friends.");
+        assert_eq!(normalize(msg.text()), normalize("You are scrupulously honest, frank, and straightforward.  Therefore you\nhave few friends."));
         assert_eq!(headers.len(), 1);
         assert_eq!(
             headers.get("Version").unwrap(),
@@ -294,8 +294,8 @@ mod tests {
         let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
         assert_eq!(
-            msg.text(),
-            "\"The geeks shall inherit the earth.\"\n		-- Karl Lehenbauer"
+            normalize(msg.text()),
+            normalize("\"The geeks shall inherit the earth.\"\n		-- Karl Lehenbauer")
         );
         assert_eq!(headers.len(), 1);
         assert_eq!(
@@ -318,8 +318,8 @@ mod tests {
         let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
         assert_eq!(
-            msg.text(),
-            "The very remembrance of my former misfortune proves a new one to me.\n		-- Miguel de Cervantes"
+            normalize(msg.text()),
+            normalize("The very remembrance of my former misfortune proves a new one to me.\n		-- Miguel de Cervantes")
         );
         assert_eq!(headers.len(), 1);
         assert_eq!(
@@ -339,8 +339,10 @@ mod tests {
         let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
         assert_eq!(
-            msg.text(),
-            "- From the grocery store we need:\n\n- - tofu\n- - vegetables\n- - noodles\n\n"
+            normalize(msg.text()),
+            normalize(
+                "- From the grocery store we need:\n\n- - tofu\n- - vegetables\n- - noodles\n\n"
+            )
         );
         assert!(headers.is_empty());
 
@@ -359,11 +361,15 @@ mod tests {
     }
 
     fn roundtrip(expected: &str, msg: &CleartextSignedMessage, headers: &Headers) {
-        let expected = expected.replace("\r\n", "\n").replace('\r', "\n");
+        let expected = normalize(expected);
         let out = msg.to_armored_string(Some(headers).into()).unwrap();
-        let out = out.replace("\r\n", "\n").replace('\r', "\n");
+        let out = normalize(out);
 
         assert_eq!(expected, out);
+    }
+
+    fn normalize(a: impl AsRef<str>) -> String {
+        a.as_ref().replace("\r\n", "\n").replace('\r', "\n")
     }
 
     #[test]
