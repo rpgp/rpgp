@@ -4,6 +4,7 @@ use std::io::{BufRead, Read};
 
 use buffer_redux::BufReader;
 
+use nom::branch::alt;
 use nom::bytes::streaming::{tag, take_until1};
 use nom::character::streaming::{alphanumeric1, line_ending, space0};
 use nom::combinator::{complete, map_res};
@@ -249,7 +250,13 @@ fn to_string(b: &[u8]) -> std::result::Result<String, std::str::Utf8Error> {
 }
 
 fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
-    let (i, lines) = map_res(take_until1("\n-----"), to_string)(i)?;
+    let (i, lines) = map_res(
+        alt((
+            complete(take_until1("\r\n-----")),
+            complete(take_until1("\n-----")),
+        )),
+        to_string,
+    )(i)?;
     let (i, _) = line_ending(i)?;
 
     Ok((i, lines))
@@ -377,6 +384,11 @@ mod tests {
         assert_eq!(
             cleartext_body(b"-- hello\n--world\n-----bla").unwrap(),
             (&b"-----bla"[..], "-- hello\n--world".to_string())
+        );
+
+        assert_eq!(
+            cleartext_body(b"-- hello\r\n--world\r\n-----bla").unwrap(),
+            (&b"-----bla"[..], "-- hello\r\n--world".to_string())
         );
     }
 
