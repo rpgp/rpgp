@@ -17,7 +17,7 @@ Symbols:
 - [x] ASCII Armor
   - [x] Reading
   - [x] Writing
-- [ ] Cleartext Signature Framework
+- [x] Cleartext Signature Framework
 - [x] Signatures (v4)
   - [x] Validation
   - [x] Generation
