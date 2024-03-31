@@ -14,7 +14,8 @@ use nom::IResult;
 use crate::armor::{self, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
-use crate::types::PublicKeyTrait;
+use crate::packet::SignatureConfig;
+use crate::types::{PublicKeyTrait, SecretKeyTrait};
 use crate::{ArmorOptions, Deserializable, StandaloneSignature};
 
 /// Implementation of a Cleartext Signed Message.
@@ -31,6 +32,28 @@ pub struct CleartextSignedMessage {
 }
 
 impl CleartextSignedMessage {
+    /// Construct a new cleartext message and signs it using the given key.
+    pub fn new<F>(
+        text: &str,
+        config: SignatureConfig,
+        key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<Self>
+    where
+        F: FnOnce() -> String,
+    {
+        let hash = config.hash_alg;
+        let escaped_text = dash_escape(text.as_bytes())?;
+        let signature = config.sign(key, key_pw, text.as_bytes())?;
+        let signature = StandaloneSignature::new(signature);
+
+        Ok(Self {
+            text: escaped_text,
+            hashes: vec![hash],
+            signatures: vec![signature],
+        })
+    }
+
     /// The signature on the message.
     pub fn signatures(&self) -> &[StandaloneSignature] {
         &self.signatures
@@ -150,6 +173,22 @@ impl CleartextSignedMessage {
         let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
         Ok(res)
     }
+}
+
+/// Dash escape the given text.
+///
+/// Ref https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-dash-escaped-text
+fn dash_escape<R: BufRead>(text: R) -> Result<String> {
+    let mut out = String::new();
+    for line in text.lines() {
+        let line = line?;
+        if line.starts_with("-") {
+            out += "- ";
+        }
+        out.push_str(&line);
+        out += "\n";
+    }
+    Ok(out)
 }
 
 fn read_from_buf<B: BufRead, T, P: Fn(&[u8]) -> IResult<&[u8], T>>(
@@ -370,5 +409,25 @@ mod tests {
             hash_header_line(b"Hash: hello\n\n").unwrap(),
             (&b"\n"[..], vec!["hello".to_string()]),
         );
+    }
+
+    #[test]
+    fn test_dash_escape() {
+        let input = "From the grocery store we need:
+
+- tofu
+- vegetables
+- noodles
+
+";
+        let expected = "From the grocery store we need:
+
+- - tofu
+- - vegetables
+- - noodles
+
+";
+
+        assert_eq!(dash_escape(input.as_bytes()).unwrap(), expected);
     }
 }

@@ -32,11 +32,7 @@ pub fn write(
     Ok(())
 }
 
-fn write_header(
-    writer: &mut impl Write,
-    typ: BlockType,
-    headers: Option<&Headers>,
-) -> Result<()> {
+fn write_header(writer: &mut impl Write, typ: BlockType, headers: Option<&Headers>) -> Result<()> {
     // write armor header
     writer.write_all(&b"-----BEGIN "[..])?;
     typ.to_writer(writer)?;
