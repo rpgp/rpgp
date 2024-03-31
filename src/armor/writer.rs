@@ -32,7 +32,7 @@ pub fn write(
     Ok(())
 }
 
-pub(crate) fn write_header(
+fn write_header(
     writer: &mut impl Write,
     typ: BlockType,
     headers: Option<&Headers>,
@@ -60,7 +60,7 @@ pub(crate) fn write_header(
     Ok(())
 }
 
-pub(crate) fn write_body(
+fn write_body(
     writer: &mut impl Write,
     source: &impl Serialize,
     crc_hasher: Option<&mut Crc24Hasher>,
@@ -83,7 +83,7 @@ pub(crate) fn write_body(
     Ok(())
 }
 
-pub(crate) fn write_footer(
+fn write_footer(
     writer: &mut impl Write,
     typ: BlockType,
     crc_hasher: Option<Crc24Hasher>,
