@@ -11,10 +11,11 @@ use nom::multi::many0;
 use nom::sequence::{pair, terminated};
 use nom::IResult;
 
-use crate::armor::Headers;
+use crate::armor::{self, Headers};
+use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::types::PublicKeyTrait;
-use crate::{Deserializable, StandaloneSignature};
+use crate::{ArmorOptions, Deserializable, StandaloneSignature};
 
 /// Implementation of a Cleartext Signed Message.
 ///
@@ -23,22 +24,25 @@ use crate::{Deserializable, StandaloneSignature};
 pub struct CleartextSignedMessage {
     /// The original text.
     text: String,
+    /// Preferred hashes
+    hashes: Vec<HashAlgorithm>,
     /// The actual signature.
-    signature: StandaloneSignature,
-    /// Headers for the signature part.
-    headers: Headers,
+    signatures: Vec<StandaloneSignature>,
 }
 
 impl CleartextSignedMessage {
     /// The signature on the message.
-    pub fn signature(&self) -> &StandaloneSignature {
-        &self.signature
+    pub fn signatures(&self) -> &[StandaloneSignature] {
+        &self.signatures
     }
 
     /// Verify the signature against the normalized cleartext.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
-        self.signature
-            .verify(key, self.normalized_text().as_bytes())
+        let nt = self.normalized_text();
+        for signature in &self.signatures {
+            signature.verify(key, nt.as_bytes())?;
+        }
+        Ok(())
     }
 
     /// Normalizes the text to the format it is used as signature.
@@ -62,43 +66,89 @@ impl CleartextSignedMessage {
         &self.text
     }
 
-    /// Headers on the signature.
-    pub fn headers(&self) -> &Headers {
-        &self.headers
-    }
-
     /// Parse from an arbitrary reader, containing the text of the message.
-    pub fn from_bytes<R: Read>(bytes: R) -> Result<Self> {
+    pub fn from_bytes<R: Read>(bytes: R) -> Result<(Self, Headers)> {
         Self::from_bytes_buf(BufReader::new(bytes))
     }
 
     /// Parse from string, containing the text of the message.
-    pub fn from_string(input: &str) -> Result<Self> {
+    pub fn from_string(input: &str) -> Result<(Self, Headers)> {
         Self::from_bytes_buf(input.as_bytes())
     }
 
     /// Parse from a buffered reader, containing the text of the message.
-    pub fn from_bytes_buf<R: BufRead>(mut b: R) -> Result<Self> {
+    pub fn from_bytes_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
         // Header line
         read_from_buf(&mut b, armor_header_line)?;
 
         // Headers (only Hash is allowed)
-        let headers_cleartext = read_from_buf(&mut b, armor_headers_lines)?;
+        let hash_headers = read_from_buf(&mut b, armor_headers_lines)?;
+        let hashes = hash_headers
+            .iter()
+            .map(|s| s.parse())
+            .collect::<Result<_>>()?;
 
-        debug!("Found Hash headers: {:?}", headers_cleartext);
+        debug!("Found Hash headers: {:?}", hashes);
 
         // Cleartext Body
         let text = read_from_buf(&mut b, cleartext_body)?;
 
         // Signature
-        let (signature, headers) = StandaloneSignature::from_armor_single_buf(b)?;
+        let (signatures, headers) = StandaloneSignature::from_armor_many_buf(b)?;
+        let signatures = signatures.collect::<Result<_>>()?;
 
-        Ok(Self {
-            text,
-            signature,
+        Ok((
+            Self {
+                text,
+                hashes,
+                signatures,
+            },
             headers,
-        })
+        ))
+    }
+
+    pub fn to_armored_writer(
+        &self,
+        writer: &mut impl std::io::Write,
+        opts: ArmorOptions<'_>,
+    ) -> Result<()> {
+        // Header
+        writer.write_all(HEADER_LINE.as_bytes())?;
+        writer.write_all(&[b'\n'])?;
+
+        // Hashes
+        for hash in &self.hashes {
+            writer.write_all(b"Hash: ")?;
+            writer.write_all(hash.to_string().as_bytes())?;
+            writer.write_all(&[b'\n'])?;
+        }
+        writer.write_all(&[b'\n'])?;
+
+        // Cleartext body
+        writer.write_all(self.text.as_bytes())?;
+        writer.write_all(&[b'\n'])?;
+
+        armor::write(
+            &self.signatures,
+            armor::BlockType::Signature,
+            writer,
+            opts.headers,
+            opts.include_checksum,
+        )?;
+
+        Ok(())
+    }
+
+    pub fn to_armored_bytes(&self, opts: ArmorOptions<'_>) -> Result<Vec<u8>> {
+        let mut buf = Vec::new();
+        self.to_armored_writer(&mut buf, opts)?;
+        Ok(buf)
+    }
+
+    pub fn to_armored_string(&self, opts: ArmorOptions<'_>) -> Result<String> {
+        let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
+        Ok(res)
     }
 }
 
@@ -128,9 +178,11 @@ fn read_from_buf<B: BufRead, T, P: Fn(&[u8]) -> IResult<&[u8], T>>(
     }
 }
 
+const HEADER_LINE: &str = "-----BEGIN PGP SIGNED MESSAGE-----";
+
 /// Parses a single armor header line.
 fn armor_header_line(i: &[u8]) -> IResult<&[u8], ()> {
-    let (i, _) = tag("-----BEGIN PGP SIGNED MESSAGE-----")(i)?;
+    let (i, _) = tag(HEADER_LINE)(i)?;
     let (i, _) = line_ending(i)?;
 
     Ok((i, ()))
@@ -179,14 +231,19 @@ mod tests {
         let data =
             std::fs::read_to_string("./tests/openpgp/samplemsgs/clearsig-1-key-1.asc").unwrap();
 
-        let msg = CleartextSignedMessage::from_string(&data).unwrap();
+        let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
         assert_eq!(msg.text(), "You are scrupulously honest, frank, and straightforward.  Therefore you\nhave few friends.");
-        assert_eq!(msg.headers.len(), 1);
+        assert_eq!(headers.len(), 1);
         assert_eq!(
-            msg.headers.get("Version").unwrap(),
+            headers.get("Version").unwrap(),
             &vec!["GnuPG v2".to_string()]
         );
+
+        assert_eq!(msg.signatures().len(), 1);
+
+        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
+        assert_eq!(data, out);
     }
 
     #[test]
@@ -196,18 +253,23 @@ mod tests {
         let data =
             std::fs::read_to_string("./tests/openpgp/samplemsgs/clearsig-2-keys-1.asc").unwrap();
 
-        let msg = CleartextSignedMessage::from_string(&data).unwrap();
+        let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
         assert_eq!(
             msg.text(),
             "\"The geeks shall inherit the earth.\"
 		-- Karl Lehenbauer"
         );
-        assert_eq!(msg.headers.len(), 1);
+        assert_eq!(headers.len(), 1);
         assert_eq!(
-            msg.headers.get("Version").unwrap(),
+            headers.get("Version").unwrap(),
             &vec!["GnuPG v2".to_string()]
         );
+
+        assert_eq!(msg.signatures().len(), 2);
+
+        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
+        assert_eq!(data, out);
     }
 
     #[test]
@@ -217,18 +279,22 @@ mod tests {
         let data =
             std::fs::read_to_string("./tests/openpgp/samplemsgs/clearsig-2-keys-2.asc").unwrap();
 
-        let msg = CleartextSignedMessage::from_string(&data).unwrap();
+        let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
         assert_eq!(
             msg.text(),
             "The very remembrance of my former misfortune proves a new one to me.
 		-- Miguel de Cervantes"
         );
-        assert_eq!(msg.headers.len(), 1);
+        assert_eq!(headers.len(), 1);
         assert_eq!(
-            msg.headers.get("Version").unwrap(),
+            headers.get("Version").unwrap(),
             &vec!["GnuPG v2".to_string()]
         );
+
+        assert_eq!(msg.signatures().len(), 2);
+        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
+        assert_eq!(data, out);
     }
 
     #[test]
@@ -237,7 +303,7 @@ mod tests {
 
         let data = std::fs::read_to_string("./tests/unit-tests/cleartext-msg-01.asc").unwrap();
 
-        let msg = CleartextSignedMessage::from_string(&data).unwrap();
+        let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
 
         assert_eq!(
             msg.text(),
@@ -249,7 +315,7 @@ mod tests {
 
 "
         );
-        assert!(msg.headers.is_empty());
+        assert!(headers.is_empty());
 
         assert_eq!(
             msg.normalized_text(),
@@ -260,6 +326,9 @@ mod tests {
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
 
         msg.verify(&key.public_key()).unwrap();
+
+        let out = msg.to_armored_string(Some(&headers).into()).unwrap();
+        assert_eq!(data, out);
     }
 
     #[test]

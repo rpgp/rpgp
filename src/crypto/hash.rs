@@ -1,10 +1,12 @@
+use std::{fmt::Display, str::FromStr};
+
 use digest::Digest;
 use md5::Md5;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use ripemd::Ripemd160;
 use sha1::Sha1;
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
@@ -33,6 +35,47 @@ pub enum HashAlgorithm {
 impl Default for HashAlgorithm {
     fn default() -> Self {
         Self::SHA2_256
+    }
+}
+
+impl FromStr for HashAlgorithm {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s {
+            "None" => Ok(Self::None),
+            "MD5" => Ok(Self::MD5),
+            "SHA1" => Ok(Self::SHA1),
+            "RIPEMD160" => Ok(Self::RIPEMD160),
+            "SHA256" => Ok(Self::SHA2_256),
+            "SHA384" => Ok(Self::SHA2_384),
+            "SHA512" => Ok(Self::SHA2_512),
+            "SHA224" => Ok(Self::SHA2_224),
+            "SHA3-256" => Ok(Self::SHA3_256),
+            "SHA3-512" => Ok(Self::SHA3_512),
+            "Private10" => Ok(Self::Private10),
+            _ => bail!("unknown hash"),
+        }
+    }
+}
+
+impl Display for HashAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::MD5 => "MD5",
+            Self::SHA1 => "SHA1",
+            Self::RIPEMD160 => "RIPEMD160",
+            Self::SHA2_256 => "SHA256",
+            Self::SHA2_384 => "SHA384",
+            Self::SHA2_512 => "SHA512",
+            Self::SHA2_224 => "SHA224",
+            Self::SHA3_256 => "SHA3-256",
+            Self::SHA3_512 => "SHA3-512",
+            Self::Private10 => "Private10",
+            Self::Other(v) => return write!(f, "Other({})", v),
+            Self::None => "None",
+        };
+        write!(f, "{}", s)
     }
 }
 
