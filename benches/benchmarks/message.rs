@@ -1,5 +1,4 @@
 use std::fs::{self, File};
-use std::io::Cursor;
 use std::io::Read;
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
@@ -21,10 +20,7 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| {
-            let c = Cursor::new(bytes.clone());
-            black_box(Message::from_armor_single(c).unwrap())
-        });
+        b.iter(|| black_box(Message::from_armor_single(&bytes[..]).unwrap()));
     });
 
     g.bench_function("parse_armored_x25519", |b| {
@@ -33,10 +29,7 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| {
-            let c = Cursor::new(bytes.clone());
-            black_box(Message::from_armor_single(c).unwrap())
-        });
+        b.iter(|| black_box(Message::from_armor_single(&bytes[..]).unwrap()));
     });
 
     g.bench_function("rsa_decrypt", |b| {
@@ -49,8 +42,7 @@ fn bench_message(c: &mut Criterion) {
         let message_file = fs::read(message_file_path).unwrap();
 
         b.iter(|| {
-            let (message, _headers) =
-                Message::from_armor_single(Cursor::new(message_file.clone())).unwrap();
+            let (message, _headers) = Message::from_armor_single(&message_file[..]).unwrap();
 
             black_box(
                 message

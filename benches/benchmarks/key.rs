@@ -1,5 +1,4 @@
 use std::fs::File;
-use std::io::Cursor;
 
 use criterion::{black_box, criterion_group, Criterion};
 use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
@@ -24,7 +23,7 @@ fn bench_key(c: &mut Criterion) {
             .unwrap();
         let bytes = key.to_bytes().unwrap();
 
-        b.iter(|| black_box(SignedSecretKey::from_bytes(Cursor::new(&bytes)).unwrap()))
+        b.iter(|| black_box(SignedSecretKey::from_bytes(&bytes[..]).unwrap()))
     });
 
     g.bench_function("parse_armored_rsa", |b| {
@@ -33,7 +32,7 @@ fn bench_key(c: &mut Criterion) {
             .unwrap();
         let bytes = key.to_armored_bytes(None.into()).unwrap();
 
-        b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
+        b.iter(|| black_box(SignedSecretKey::from_armor_single(&bytes[..]).unwrap()));
     });
 
     g.bench_function("x25519_parse_armored", |b| {
@@ -42,7 +41,7 @@ fn bench_key(c: &mut Criterion) {
             .unwrap();
         let bytes = key.to_armored_bytes(None.into()).unwrap();
 
-        b.iter(|| black_box(SignedSecretKey::from_armor_single(Cursor::new(&bytes)).unwrap()));
+        b.iter(|| black_box(SignedSecretKey::from_armor_single(&bytes[..]).unwrap()));
     });
 
     g.bench_function("x25519_generate", |b| {

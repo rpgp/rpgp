@@ -1,5 +1,5 @@
 use std::fmt;
-use std::io::{self, Cursor, Read};
+use std::io::{self, Read};
 
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 
@@ -16,7 +16,7 @@ pub struct CompressedData {
 }
 
 pub enum Decompressor<R> {
-    Uncompressed(Cursor<R>),
+    Uncompressed(R),
     Zip(DeflateDecoder<R>),
     Zlib(ZlibDecoder<R>),
     Bzip2,
@@ -56,9 +56,9 @@ impl CompressedData {
 
     pub fn decompress(&self) -> Result<Decompressor<&[u8]>> {
         match self.compression_algorithm {
-            CompressionAlgorithm::Uncompressed => Ok(Decompressor::Uncompressed(Cursor::new(
-                &self.compressed_data[..],
-            ))),
+            CompressionAlgorithm::Uncompressed => {
+                Ok(Decompressor::Uncompressed(&self.compressed_data[..]))
+            }
             CompressionAlgorithm::ZIP => Ok(Decompressor::Zip(DeflateDecoder::new(
                 &self.compressed_data[..],
             ))),

@@ -48,7 +48,6 @@
 //! use pgp::types::KeyTrait;
 //! use pgp::Signature;
 //! use chrono;
-//! use std::io::Cursor;
 //!
 //! let now = chrono::Utc::now();
 //!
@@ -94,8 +93,7 @@
 //! // sign and and write the package (the package written here is NOT rfc4880 compliant)
 //! let mut signature_bytes = Vec::with_capacity(1024);
 //!
-//! let mut buff = Cursor::new(&mut signature_bytes);
-//! packet::write_packet(&mut buff, &signature)
+//! packet::write_packet(&mut signature_bytes, &signature)
 //!     .expect("Write must succeed");
 //!
 //!

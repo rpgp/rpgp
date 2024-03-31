@@ -19,7 +19,6 @@ use nom::{IResult, InputIter, InputLength, Slice};
 use crate::base64_decoder::Base64Decoder;
 use crate::base64_reader::Base64Reader;
 use crate::errors::Result;
-use crate::line_reader::LineReader;
 use crate::ser::Serialize;
 
 /// Armor block types.
@@ -300,7 +299,7 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
 }
 
 /// Streaming based ascii armor parsing.
-pub struct Dearmor<R> {
+pub struct Dearmor<R: BufRead> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
     /// The headers found in the armored file.
@@ -310,11 +309,9 @@ pub struct Dearmor<R> {
     /// track what we are currently parsing
     current_part: Part,
     /// the underlying data source, wrapped in a BufferedReader
-    inner: Option<BufReader<R>>,
+    inner: Option<R>,
     /// base64 decoder
-    base_decoder: Option<
-        Base64Decoder<base64::engine::GeneralPurpose, Base64Reader<LineReader<BufReader<R>>>>,
-    >,
+    base_decoder: Option<Base64Decoder<Base64Reader<R>>>,
     /// Are we done?
     done: bool,
     crc: crc24::Crc24Hasher,
@@ -328,9 +325,7 @@ enum Part {
     Footer,
 }
 
-const CAPACITY: usize = 1024 * 32;
-
-impl<R: Read + Seek> Dearmor<R> {
+impl<R: BufRead> Dearmor<R> {
     pub fn new(input: R) -> Self {
         Dearmor {
             typ: None,
@@ -338,7 +333,7 @@ impl<R: Read + Seek> Dearmor<R> {
             checksum: None,
             current_part: Part::Header,
             base_decoder: None,
-            inner: Some(BufReader::with_capacity(CAPACITY, input)),
+            inner: Some(input),
             done: false,
             crc: Default::default(),
         }
@@ -346,25 +341,25 @@ impl<R: Read + Seek> Dearmor<R> {
 
     pub fn read_header(&mut self) -> io::Result<()> {
         if let Some(ref mut b) = self.inner {
-            b.read_into_buf()?;
+            let buf = b.fill_buf()?;
 
             // no data available currently
-            if b.buf_len() == 0 {
+            if buf.is_empty() {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "empty buffer"));
             }
 
-            let consumed = match header_parser(b.buffer()) {
+            let consumed = match header_parser(buf) {
                 Ok((remaining, (typ, header))) => {
                     self.typ = Some(typ);
                     self.headers = header;
                     self.current_part = Part::Body;
 
-                    b.buf_len() - remaining.len()
+                    buf.len() - remaining.len()
                 }
                 Err(nom::Err::Incomplete(_)) => {
                     return Err(io::Error::new(
                         io::ErrorKind::Interrupted,
-                        "incomplete parse",
+                        "incomplete parse header",
                     ));
                 }
                 Err(err) => {
@@ -390,7 +385,7 @@ impl<R: Read + Seek> Dearmor<R> {
                 self.done = true;
                 io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state")
             })?;
-            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(LineReader::new(b))));
+            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(b)));
         }
 
         // "allow" as workaround for https://github.com/rust-lang/rust-clippy/issues/12208
@@ -424,16 +419,18 @@ impl<R: Read + Seek> Dearmor<R> {
                 .base_decoder
                 .take()
                 .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
-            let (base_reader, buffer_outer) = decoder.into_inner_with_buffer();
+            let (b, buf) = decoder.into_inner_with_buffer();
 
-            let line_reader: LineReader<_> = base_reader.into_inner();
-            let mut b = BufReader::with_buffer(buffer_outer, line_reader.into_inner());
+            let mut b = BufReader::with_buffer(buf, b.into_inner());
+
             b.make_room();
 
-            b.read_into_buf()?;
-            if b.buf_len() == 0 {
-                // we are done here
-                return Ok(0);
+            // read the rest of the buffer, up to 128 bytes
+            while b.read_into_buf()? > 0 && b.buf_len() < 128 {
+                if b.buf_len() == 0 {
+                    // we are done here
+                    return Ok(0);
+                }
             }
 
             let consumed = match footer_parser(b.buffer()) {
@@ -461,7 +458,7 @@ impl<R: Read + Seek> Dearmor<R> {
                     self.done = true;
                     return Err(io::Error::new(
                         io::ErrorKind::Interrupted,
-                        "incomplete parse",
+                        "incomplete parse footer",
                     ));
                 }
                 Err(err) => {
@@ -483,7 +480,6 @@ impl<R: Read + Seek> Dearmor<R> {
             // check checksum if there is one
             if let Some(expected) = self.checksum {
                 let actual = self.crc.finish();
-
                 if expected != actual {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
@@ -500,7 +496,7 @@ impl<R: Read + Seek> Dearmor<R> {
     }
 }
 
-impl<R: Read + Seek> Read for Dearmor<R> {
+impl<R: BufRead> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         if self.done {
             return Ok(0);
@@ -522,11 +518,21 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use std::io::Cursor;
 
     // helper function to parse all data at once
-    pub fn parse<R: Read + Seek>(mut input: R) -> Result<(BlockType, Headers, Vec<u8>)> {
-        let mut dearmor = Dearmor::new(input.by_ref());
+    pub fn parse(input: &str) -> Result<(BlockType, Headers, Vec<u8>)> {
+        let mut dearmor = Dearmor::new(BufReader::new(input.as_bytes()));
+
+        // estimate size
+        let mut bytes = Vec::new();
+        dearmor.read_to_end(&mut bytes)?;
+
+        Ok((dearmor.typ.unwrap(), dearmor.headers, bytes))
+    }
+
+    // helper function to parse all data at once
+    pub fn parse_raw(input: &str) -> Result<(BlockType, Headers, Vec<u8>)> {
+        let mut dearmor = Dearmor::new(input.as_bytes());
 
         // estimate size
         let mut bytes = Vec::new();
@@ -595,13 +601,12 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), vec!["GnuPG v1".to_string()]);
 
-        let c = Cursor::new(
-            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
              Version: GnuPG v1\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP PUBLIC KEY BLOCK-----\n",
-        );
+             -----END PGP PUBLIC KEY BLOCK-----\n";
+
         let (typ, headers, res) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
@@ -614,15 +619,13 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("NoVal".to_string(), vec!["".to_string()]);
 
-        let c = Cursor::new(
-            "\
+        let c = "\
              -----BEGIN PGP MESSAGE-----\n\
              NoVal:\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
              -----END PGP MESSAGE----\
-             ",
-        );
+             ";
 
         let (typ, headers, res) = parse(c).unwrap();
 
@@ -633,14 +636,12 @@ mod tests {
 
     #[test]
     fn test_parse_armor_whitespace() {
-        let c = Cursor::new(
-            "\
+        let c = "\
              -----BEGIN PGP MESSAGE-----\n\
              \t \n\
              aGVsbG8gd29ybGQ=\n\
              -----END PGP MESSAGE----\
-             ",
-        );
+             ";
 
         let (typ, headers, res) = parse(c).unwrap();
 
@@ -654,8 +655,7 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("hello".to_string(), vec!["world".to_string()]);
 
-        let c = Cursor::new(
-            "\
+        let c = "\
              -----BEGIN PGP MESSAGE-----\n\
              hello: world\n\
              \n\
@@ -665,8 +665,7 @@ mod tests {
              \n\
              aGVsbG8gd29ybGQ=\n\
              -----END PGP MESSAGE-----\
-             ",
-        );
+             ";
 
         let (typ, headers, res) = parse(c).unwrap();
 
@@ -680,8 +679,7 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), vec!["GnuPG v1".to_string()]);
 
-        let c = Cursor::new(
-            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
              Version: GnuPG v1\n\
              \n\
              mQGiBEigu7MRBAD7gZJzevtYLB3c1pE7uMwu+zHzGGJDrEyEaz0lYTAaJ2YXmJ1+\n\
@@ -720,8 +718,7 @@ mod tests {
              nxd3tMIEGO83iEmozvJfB4hJBBgRAgAJBQJIoLvYAhsMAAoJEHMea58AVA/D6ewA\n\
              ninKQSW+oL4z28F3T0GHag38WeWyAJ45d7dx4z0GxhTm2b9DclLombY+nw==\n\
              =XyBX\n\
-             -----END PGP PUBLIC KEY BLOCK-----\n",
-        );
+             -----END PGP PUBLIC KEY BLOCK-----\n";
         let (typ, headers, decoded) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PublicKey));
@@ -732,8 +729,7 @@ mod tests {
 
     #[test]
     fn test_parse_armor_full_no_header() {
-        let c = Cursor::new(
-            "-----BEGIN RSA PRIVATE KEY-----
+        let c = "-----BEGIN RSA PRIVATE KEY-----
 MIIEpgIBAAKCAQEAxp4sIUtrNBl4Vbd4075CmtHmwxTc0FhQIGw36kptbrWReLb9
 Np0RQylKyc6qUruxZlCdPVFo7iX3vs272/0GEakPv0DAsKGbe1nTsMyxxz0o3dP4
 JQOlOGEnpETa0ybfPLMX1+qNiBdm7HLjqcP5+S0Exb0Z0deFNIhEP6XckUEgHmwA
@@ -759,8 +755,7 @@ zTawVsNsL7/JqbWXAEy8az+VrguTbTIkYL2sQStEWoM75WRPu6El09p5e+0YCnEC
 C0CJINUpAoGBAPF1fpPINHlUW+Bvo4Nj3935QgZI47yTplDusptyfYgFYXw6ZYel
 y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 9+9V06HJDIsSrC0D/ajIkP+iT9Hd6eEZMkJ6y6XtTbkJGYt2zOtnrpb6
------END RSA PRIVATE KEY-----\n",
-        );
+-----END RSA PRIVATE KEY-----\n";
         let (typ, _, _) = parse(c).unwrap();
 
         assert_eq!(typ, (BlockType::PrivateKeyPKCS1(PKCS1Type::RSA)));
@@ -771,15 +766,13 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         let mut map = BTreeMap::new();
         map.insert("Version".to_string(), vec!["GnuPG v1".to_string()]);
 
-        let c = Cursor::new(
-            "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----\n\
              Version: GnuPG v1\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP PUBLIC KEY BLOCK-----\n",
-        );
+             -----END PGP PUBLIC KEY BLOCK-----\n";
 
-        let mut dec = Dearmor::new(c);
+        let mut dec = Dearmor::new(BufReader::new(c.as_bytes()));
 
         let mut res = vec![0u8; 5];
         let read = dec.read(&mut res).unwrap();
@@ -902,5 +895,62 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
                 (None, BlockType::Message)
             )),
         );
+    }
+
+    #[test]
+    fn test_regression_long_key_1() {
+        let _ = pretty_env_logger::try_init();
+        let input = std::fs::read_to_string("./tests/unit-tests/long-key.asc").unwrap();
+        let (typ, headers, decoded) = parse(&input).unwrap();
+
+        assert_eq!(typ, BlockType::PublicKey);
+        assert!(headers.is_empty());
+        let expected_binary_s: String =
+            std::fs::read_to_string("./tests/unit-tests/long-key.asc.line")
+                .unwrap()
+                .lines()
+                .collect();
+        let expected_binary = base64::engine::general_purpose::STANDARD
+            .decode(expected_binary_s)
+            .unwrap();
+        assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
+    }
+
+    #[test]
+    fn test_regression_long_key_2_1() {
+        let _ = pretty_env_logger::try_init();
+        let input = std::fs::read_to_string("./tests/unit-tests/long-key-2.asc").unwrap();
+        let (typ, headers, decoded) = parse(&input).unwrap();
+
+        assert_eq!(typ, BlockType::PublicKey);
+        assert!(headers.is_empty());
+        let expected_binary_s: String =
+            std::fs::read_to_string("./tests/unit-tests/long-key-2.asc.line")
+                .unwrap()
+                .lines()
+                .collect();
+        let expected_binary = base64::engine::general_purpose::STANDARD
+            .decode(expected_binary_s)
+            .unwrap();
+        assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
+    }
+
+    #[test]
+    fn test_regression_long_key_2_2() {
+        let _ = pretty_env_logger::try_init();
+        let input = std::fs::read_to_string("./tests/unit-tests/long-key-2.asc").unwrap();
+        let (typ, headers, decoded) = parse_raw(&input).unwrap();
+
+        assert_eq!(typ, BlockType::PublicKey);
+        assert!(headers.is_empty());
+        let expected_binary_s: String =
+            std::fs::read_to_string("./tests/unit-tests/long-key-2.asc.line")
+                .unwrap()
+                .lines()
+                .collect();
+        let expected_binary = base64::engine::general_purpose::STANDARD
+            .decode(expected_binary_s)
+            .unwrap();
+        assert_eq!(hex::encode(expected_binary), hex::encode(decoded));
     }
 }

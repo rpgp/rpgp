@@ -6,9 +6,10 @@ extern crate pretty_assertions;
 extern crate smallvec;
 
 use std::fs::File;
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::Path;
 
+use buffer_redux::BufReader;
 use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
@@ -80,9 +81,15 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
             let serialized = key.to_armored_bytes(None.into()).unwrap();
 
             // and parse them again
-            let (key2, _headers) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
-                .expect("failed to parse round2");
-            assert_eq!(key, &key2);
+            let (key2, _headers) =
+                SignedPublicKey::from_string(std::str::from_utf8(&serialized[..]).unwrap())
+                    .expect("failed to parse round2 - string");
+            assert_eq!(key, &key2, "string");
+
+            // and parse them again (buffered)
+            let (key2, _headers) = SignedPublicKey::from_armor_single(&serialized[..])
+                .expect("failed to parse round2 - bytes");
+            assert_eq!(key, &key2, "bytes");
         }
 
         match key.verify() {
@@ -253,8 +260,8 @@ fn test_parse_gnupg_v1() {
         let serialized = pk.to_armored_bytes(Some(&headers).into()).unwrap();
 
         // and parse them again
-        let (pk2, headers2) = SignedPublicKey::from_armor_single(Cursor::new(&serialized))
-            .expect("failed to parse round2");
+        let (pk2, headers2) =
+            SignedPublicKey::from_armor_single(&serialized[..]).expect("failed to parse round2");
         assert_eq!(headers, headers2);
         assert_eq!(pk, pk2);
     }
@@ -765,7 +772,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
         }
 
         {
-            let mut dearmor = armor::Dearmor::new(std::io::Cursor::new(orig.as_bytes()));
+            let mut dearmor = armor::Dearmor::new(BufReader::new(orig.as_bytes()));
             let mut orig = Vec::new();
             dearmor.read_to_end(&mut orig).unwrap();
 
@@ -798,8 +805,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
         // println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
         // and parse them again
-        let (iter2, headers2) =
-            from_armor_many(Cursor::new(&serialized)).expect("failed to parse round2");
+        let (iter2, headers2) = from_armor_many(&serialized[..]).expect("failed to parse round2");
 
         assert_eq!(headers, headers2);
         assert_eq!(iter2.count(), 1);
@@ -834,7 +840,7 @@ fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
         let serialized = parsed.to_armored_bytes(None.into()).unwrap();
 
         // and parse them again
-        let parsed2 = from_armor_many(Cursor::new(&serialized))
+        let parsed2 = from_armor_many(&serialized[..])
             .expect("failed to parse round2")
             .0
             .collect::<Vec<_>>();
@@ -1200,7 +1206,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
         // and parse them again
-        let parsed2 = from_armor_many(Cursor::new(&serialized))
+        let parsed2 = from_armor_many(&serialized[..])
             .expect("failed to parse round2")
             .0
             .collect::<Vec<_>>();
@@ -1241,8 +1247,7 @@ autocrypt_key!(
 #[test]
 fn test_invalid() {
     let v = (0..64).collect::<Vec<u8>>();
-    let c = std::io::Cursor::new(&v);
-    let k = SignedSecretKey::from_bytes(c);
+    let k = SignedSecretKey::from_bytes(&v[..]);
 
     assert!(k.is_err());
 }
@@ -1262,7 +1267,7 @@ fn test_handle_incomplete_packets_end() {
 
     // add overflow of "b60ed7"
     let raw = hex::decode(hex::encode(key.to_bytes().unwrap()) + "b60ed7").unwrap();
-    let key = SignedSecretKey::from_bytes(Cursor::new(raw)).expect("failed");
+    let key = SignedSecretKey::from_bytes(&raw[..]).expect("failed");
     key.verify().expect("invalid key");
 }
 

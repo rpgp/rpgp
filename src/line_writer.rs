@@ -242,7 +242,6 @@ mod tests {
             fn $name() {
                 use rand::{Rng, SeedableRng};
                 use rand_xorshift::XorShiftRng;
-                use std::io::Cursor;
 
                 let rng = &mut XorShiftRng::from_seed([
                     0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe,
@@ -251,8 +250,7 @@ mod tests {
 
                 let mut list = Vec::new();
                 {
-                    let mut c = Cursor::new(&mut buf);
-                    let mut w = LineWriter::<_, $len>::new(&mut c, LineBreak::Crlf);
+                    let mut w = LineWriter::<_, $len>::new(&mut buf, LineBreak::Crlf);
                     for i in 0..100 {
                         let data = (0..i).map(|_| rng.gen()).collect::<Vec<_>>();
                         w.write_all(&data).unwrap();
