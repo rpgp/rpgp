@@ -259,7 +259,7 @@ fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::{types::SecretKeyTrait, SignedSecretKey};
+    use crate::SignedSecretKey;
 
     use super::*;
 
