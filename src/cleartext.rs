@@ -13,6 +13,7 @@ use nom::IResult;
 
 use crate::armor::Headers;
 use crate::errors::Result;
+use crate::types::PublicKeyTrait;
 use crate::{Deserializable, StandaloneSignature};
 
 /// Implementation of a Cleartext Signed Message.
@@ -32,6 +33,28 @@ impl CleartextSignedMessage {
     /// The signature on the message.
     pub fn signature(&self) -> &StandaloneSignature {
         &self.signature
+    }
+
+    /// Verify the signature against the normalized cleartext.
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+        self.signature
+            .verify(key, self.normalized_text().as_bytes())
+    }
+
+    /// Normalizes the text to the format it is used as signature.
+    pub fn normalized_text(&self) -> String {
+        let mut out = String::new();
+        for line in self.text.lines() {
+            // drop dash escapes if they exist
+            if let Some(line) = line.strip_prefix("- ") {
+                out += line;
+            } else {
+                out += line;
+            }
+            out += "\r\n";
+        }
+
+        out
     }
 
     /// The clear text of the message.
@@ -145,10 +168,12 @@ fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use crate::{types::SecretKeyTrait, SignedSecretKey};
+
     use super::*;
 
     #[test]
-    fn test_cleartext_1() {
+    fn test_cleartext_openpgp_1() {
         let _ = pretty_env_logger::try_init();
 
         let data =
@@ -165,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cleartext_2() {
+    fn test_cleartext_openpgp_2() {
         let _ = pretty_env_logger::try_init();
 
         let data =
@@ -186,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cleartext_3() {
+    fn test_cleartext_openpgp_3() {
         let _ = pretty_env_logger::try_init();
 
         let data =
@@ -204,6 +229,37 @@ mod tests {
             msg.headers.get("Version").unwrap(),
             &vec!["GnuPG v2".to_string()]
         );
+    }
+
+    #[test]
+    fn test_cleartext_interop_testsuite_1() {
+        let _ = pretty_env_logger::try_init();
+
+        let data = std::fs::read_to_string("./tests/unit-tests/cleartext-msg-01.asc").unwrap();
+
+        let msg = CleartextSignedMessage::from_string(&data).unwrap();
+
+        assert_eq!(
+            msg.text(),
+            "- From the grocery store we need:
+
+- - tofu
+- - vegetables
+- - noodles
+
+"
+        );
+        assert!(msg.headers.is_empty());
+
+        assert_eq!(
+            msg.normalized_text(),
+            "From the grocery store we need:\r\n\r\n- tofu\r\n- vegetables\r\n- noodles\r\n\r\n"
+        );
+
+        let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
+        let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
+
+        msg.verify(&key.public_key()).unwrap();
     }
 
     #[test]
