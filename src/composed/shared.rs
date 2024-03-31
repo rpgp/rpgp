@@ -33,6 +33,12 @@ pub trait Deserializable: Sized {
     }
 
     /// Armored ascii data.
+    fn from_armor_single_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
+        let (mut el, headers) = Self::from_armor_many_buf(input)?;
+        Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
+    }
+
+    /// Armored ascii data.
     #[allow(clippy::type_complexity)]
     fn from_armor_many<'a, R: Read + 'a>(
         input: R,
