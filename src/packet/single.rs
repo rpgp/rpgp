@@ -138,11 +138,23 @@ fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     })(i)
 }
 
-#[derive(Debug)]
 pub enum ParseResult<'a> {
     Fixed(&'a [u8]),
     Indeterminate,
     Partial(Vec<&'a [u8]>),
+}
+
+impl std::fmt::Debug for ParseResult<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Fixed(d) => f.debug_tuple("Fixed").field(&hex::encode(d)).finish(),
+            Self::Indeterminate => f.debug_tuple("Indeterminate").finish(),
+            Self::Partial(d) => {
+                let parts: Vec<_> = d.iter().map(hex::encode).collect();
+                f.debug_tuple("Partial").field(&parts).finish()
+            }
+        }
+    }
 }
 
 /// Parse a single Packet

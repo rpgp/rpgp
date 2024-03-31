@@ -64,7 +64,6 @@ impl<R: Read> Read for Base64Decoder<R> {
         }
 
         // fill our buffer
-        dbg!(self.inner.buf_len());
         if self.inner.buf_len() < 4 {
             let b = &mut self.inner;
 
@@ -81,7 +80,7 @@ impl<R: Read> Read for Base64Decoder<R> {
 
         let nr = self.inner.buf_len() / 4 * 4;
         let nw = self.inner.buf_len() / 4 * 3;
-        dbg!(into.len(), nw, nr);
+
         let (consumed, written) = if nw > into.len() {
             let (consumed, nw) =
                 try_decode_engine_slice(&self.inner.buffer()[..nr], &mut self.out_buffer[..]);
@@ -99,11 +98,7 @@ impl<R: Read> Read for Base64Decoder<R> {
         } else {
             try_decode_engine_slice(&self.inner.buffer()[..nr], into)
         };
-        dbg!(
-            written,
-            consumed,
-            std::str::from_utf8(&self.inner.buffer()[..nr])
-        );
+
         self.inner.consume(consumed);
 
         Ok(written)

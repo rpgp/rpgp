@@ -26,7 +26,6 @@ impl<R: BufRead> Base64Reader<R> {
 impl<R: BufRead> Read for Base64Reader<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         let mut buf = self.inner.fill_buf()?;
-        dbg!(std::str::from_utf8(buf), buf.len());
         if buf.is_empty() {
             return Ok(0);
         }
@@ -44,11 +43,9 @@ impl<R: BufRead> Read for Base64Reader<R> {
 
             if buf_i < buf.len() {
                 if !is_base64_token(buf[buf_i]) {
-                    dbg!(buf[buf_i] as char);
                     break;
                 }
 
-                dbg!(buf[buf_i] as char, buf_i, buf.len());
                 into[n] = buf[buf_i];
                 n += 1;
                 buf_i += 1;

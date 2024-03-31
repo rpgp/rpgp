@@ -69,12 +69,9 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
     let mut actual = DumpResult::default();
 
     for (j, key) in SignedPublicKey::from_bytes_many(f).enumerate() {
-        if j != 7552 {
-            continue;
+        if j % 1000 == 0 {
+            println!("key {}: {}", i, j);
         }
-        // if j % 1000 == 0 {
-        println!("key {}: {}", i, j);
-        // }
         actual.total_count += 1;
         let key = key.as_ref().expect("failed to parse key");
 
@@ -89,9 +86,9 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
                     .expect("failed to parse round2 - string");
             assert_eq!(key, &key2, "string");
 
-            // and parse them again
-            let (key2, _headers) =
-                SignedPublicKey::from_armor_single(&serialized[..]).expect("failed to parse round2 - bytes");
+            // and parse them again (buffered)
+            let (key2, _headers) = SignedPublicKey::from_armor_single(&serialized[..])
+                .expect("failed to parse round2 - bytes");
             assert_eq!(key, &key2, "bytes");
         }
 
