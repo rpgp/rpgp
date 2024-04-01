@@ -15,7 +15,7 @@ use nom::sequence::{pair, terminated};
 use nom::IResult;
 use smallvec::SmallVec;
 
-use crate::armor::{self, Headers};
+use crate::armor::{self, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
@@ -180,10 +180,10 @@ impl CleartextSignedMessage {
     pub fn from_bytes_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
         // Header line
-        read_from_buf(&mut b, armor_header_line)?;
+        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
 
         // Headers (only Hash is allowed)
-        let hash_headers = read_from_buf(&mut b, armor_headers_lines)?;
+        let hash_headers = read_from_buf(&mut b, "cleartext headers", armor_headers_lines)?;
         let hashes = hash_headers
             .iter()
             .map(|s| s.parse())
@@ -192,11 +192,26 @@ impl CleartextSignedMessage {
         debug!("Found Hash headers: {:?}", hashes);
 
         // Cleartext Body
-        let text = read_from_buf(&mut b, cleartext_body)?;
+        let text = read_from_buf(&mut b, "cleartext body", cleartext_body)?;
 
-        // Signature
-        let (signatures, headers) = StandaloneSignature::from_armor_many_buf(b)?;
+        // Signatures
+        let mut dearmor = armor::Dearmor::new(b);
+        dearmor.read_header()?;
+        // Safe to unwrap, as read_header succeeded.
+        let typ = dearmor
+            .typ
+            .ok_or_else(|| format_err!("dearmor failed to retrieve armor type"))?;
+
+        ensure_eq!(typ, BlockType::Signature, "invalid block type");
+
+        let signatures = StandaloneSignature::from_bytes_many(&mut dearmor);
         let signatures = signatures.collect::<Result<_>>()?;
+
+        let (_, headers, _, b) = dearmor.into_parts();
+
+        if has_rest(b)? {
+            bail!("unexpected trailing data");
+        }
 
         Ok((
             Self {
@@ -268,30 +283,17 @@ fn dash_escape<R: BufRead>(text: R) -> Result<String> {
     Ok(out)
 }
 
-fn read_from_buf<B: BufRead, T, P: Fn(&[u8]) -> IResult<&[u8], T>>(
-    b: &mut B,
-    parser: P,
-) -> Result<T> {
-    loop {
-        let buf = b.fill_buf()?;
-        if buf.is_empty() {
-            bail!("not enough bytes in buffer");
+fn has_rest<R: BufRead>(mut b: R) -> Result<bool> {
+    let mut buf = [0u8; 64];
+    while b.read(&mut buf)? > 0 {
+        if let Ok((i, _rest)) = line_ending::<_, nom::error::Error<_>>(&buf[..]) {
+            if !i.is_empty() {
+                return Ok(true);
+            }
         }
-
-        match parser(buf) {
-            Ok((remaining, res)) => {
-                let consumed = buf.len() - remaining.len();
-                b.consume(consumed);
-                return Ok(res);
-            }
-            Err(nom::Err::Incomplete(_)) => {
-                continue;
-            }
-            Err(err) => {
-                bail!("failed reading: {:?}", err);
-            }
-        };
     }
+
+    Ok(false)
 }
 
 const HEADER_LINE: &str = "-----BEGIN PGP SIGNED MESSAGE-----";
@@ -414,7 +416,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cleartext_interop_testsuite_1() {
+    fn test_cleartext_interop_testsuite_1_good() {
         let _ = pretty_env_logger::try_init();
 
         let data = std::fs::read_to_string("./tests/unit-tests/cleartext-msg-01.asc").unwrap();
@@ -441,6 +443,16 @@ mod tests {
         assert_eq!(msg.signatures().len(), 1);
 
         roundtrip(&data, &msg, &headers);
+    }
+
+    #[test]
+    fn test_cleartext_interop_testsuite_1_fail() {
+        let _ = pretty_env_logger::try_init();
+
+        let data = std::fs::read_to_string("./tests/unit-tests/cleartext-msg-01-fail.asc").unwrap();
+
+        let err = CleartextSignedMessage::from_string(&data).unwrap_err();
+        dbg!(err);
     }
 
     fn roundtrip(expected: &str, msg: &CleartextSignedMessage, headers: &Headers) {

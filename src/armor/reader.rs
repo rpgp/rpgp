@@ -247,7 +247,7 @@ fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
 }
 
 /// Read the checksum from an base64 encoded buffer.
-fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
+fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
     let checksum = STANDARD
         .decode(input)
         .map_err(|_| io::ErrorKind::InvalidData)?;
@@ -270,8 +270,8 @@ fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
     )(i)
 }
 
-fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
-    pair(
+fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<u64>, BlockType)> {
+    let (i, checksum) = map_res(
         alt((
             delimited(
                 tag(b"="),
@@ -284,8 +284,11 @@ fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
                 pair(many0(line_ending), tag(b"--")),
             ),
         )),
-        armor_footer_line,
-    )(i)
+        |c| c.map(read_checksum).transpose(),
+    )(i)?;
+    let (i, typ) = armor_footer_line(i)?;
+
+    Ok((i, (checksum, typ)))
 }
 
 /// Parses a single armor footer line
@@ -306,23 +309,20 @@ pub struct Dearmor<R: BufRead> {
     pub headers: Headers,
     /// Optional crc checksum
     pub checksum: Option<u64>,
-    /// track what we are currently parsing
-    current_part: Part,
-    /// the underlying data source, wrapped in a BufferedReader
-    inner: Option<R>,
-    /// base64 decoder
-    base_decoder: Option<Base64Decoder<Base64Reader<R>>>,
-    /// Are we done?
-    done: bool,
+    /// current state
+    current_part: Part<R>,
     crc: crc24::Crc24Hasher,
 }
 
 /// Internal indicator, where in the parsing phase we are
-#[derive(Debug, PartialEq, Eq)]
-enum Part {
-    Header,
-    Body,
-    Footer,
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+enum Part<R: BufRead> {
+    Header(R),
+    Body(Base64Decoder<Base64Reader<R>>),
+    Footer(BufReader<R>),
+    Done(BufReader<R>),
+    Temp,
 }
 
 impl<R: BufRead> Dearmor<R> {
@@ -331,185 +331,163 @@ impl<R: BufRead> Dearmor<R> {
             typ: None,
             headers: BTreeMap::new(),
             checksum: None,
-            current_part: Part::Header,
-            base_decoder: None,
-            inner: Some(input),
-            done: false,
+            current_part: Part::Header(input),
             crc: Default::default(),
         }
     }
 
-    pub fn read_header(&mut self) -> io::Result<()> {
-        if let Some(ref mut b) = self.inner {
-            let buf = b.fill_buf()?;
+    pub fn into_parts(self) -> (Option<BlockType>, Headers, Option<u64>, BufReader<R>) {
+        let Self {
+            typ,
+            headers,
+            checksum,
+            current_part,
+            ..
+        } = self;
+        let Part::Done(b) = current_part else {
+            panic!("can only be called when done");
+        };
 
-            // no data available currently
-            if buf.is_empty() {
-                return Err(io::Error::new(io::ErrorKind::Interrupted, "empty buffer"));
+        (typ, headers, checksum, b)
+    }
+
+    pub fn read_header(&mut self) -> Result<()> {
+        let header = std::mem::replace(&mut self.current_part, Part::Temp);
+        if let Part::Header(mut b) = header {
+            let (typ, headers) = Self::read_header_internal(&mut b)?;
+            self.typ = Some(typ);
+            self.headers = headers;
+            self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
+            return Ok(());
+        }
+
+        bail!("invalid state, cannot read header");
+    }
+
+    fn read_header_internal(b: &mut R) -> Result<(BlockType, Headers)> {
+        let (typ, headers) = read_from_buf(b, "armor header", header_parser)?;
+        Ok((typ, headers))
+    }
+
+    fn read_body(
+        &mut self,
+        into: &mut [u8],
+        base_decoder: &mut Base64Decoder<Base64Reader<R>>,
+    ) -> io::Result<usize> {
+        let size = base_decoder.read(into)?;
+        if size > 0 {
+            // update the hash
+            self.crc.write(&into[0..size]);
+        }
+
+        Ok(size)
+    }
+
+    fn read_footer(&mut self, mut b: BufReader<R>) -> Result<()> {
+        let (checksum, footer_typ) = read_from_buf(&mut b, "armor footer", footer_parser)?;
+        if let Some(ref header_typ) = self.typ {
+            if header_typ != &footer_typ {
+                self.current_part = Part::Done(b);
+                bail!(
+                    "armor ascii footer does not match header: {:?} != {:?}",
+                    self.typ,
+                    footer_typ
+                );
             }
+        }
+        self.checksum = checksum;
+        self.current_part = Part::Done(b);
 
-            let consumed = match header_parser(buf) {
-                Ok((remaining, (typ, header))) => {
-                    self.typ = Some(typ);
-                    self.headers = header;
-                    self.current_part = Part::Body;
-
-                    buf.len() - remaining.len()
-                }
-                Err(nom::Err::Incomplete(_)) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Interrupted,
-                        "incomplete parse header",
-                    ));
-                }
-                Err(err) => {
-                    self.done = true;
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor header: {err:?}"),
-                    ));
-                }
-            };
-
-            b.consume(consumed);
-        } else {
-            panic!("invalid state");
+        // check checksum if there is one
+        if let Some(expected) = self.checksum {
+            let actual = self.crc.finish();
+            if expected != actual {
+                bail!("invalid crc24 checksum");
+            }
         }
 
         Ok(())
-    }
-
-    fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        if self.base_decoder.is_none() {
-            let b = self.inner.take().ok_or_else(|| {
-                self.done = true;
-                io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state")
-            })?;
-            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(b)));
-        }
-
-        // "allow" as workaround for https://github.com/rust-lang/rust-clippy/issues/12208
-        #[allow(clippy::unused_io_amount)]
-        let size = if let Some(ref mut base_decoder) = self.base_decoder {
-            base_decoder.read(into)?
-        } else {
-            unreachable!();
-        };
-
-        if size == 0 && !into.is_empty() {
-            // we are done with the body
-            self.current_part = Part::Footer;
-            self.read_footer()
-        } else if size == 0 {
-            Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "missing footer",
-            ))
-        } else {
-            // update the hash
-            self.crc.write(&into[0..size]);
-
-            Ok(size)
-        }
-    }
-
-    fn read_footer(&mut self) -> io::Result<usize> {
-        if self.base_decoder.is_some() {
-            let decoder = self
-                .base_decoder
-                .take()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
-            let (b, buf) = decoder.into_inner_with_buffer();
-
-            let mut b = BufReader::with_buffer(buf, b.into_inner());
-
-            b.make_room();
-
-            // read the rest of the buffer, up to 128 bytes
-            while b.read_into_buf()? > 0 && b.buf_len() < 128 {
-                if b.buf_len() == 0 {
-                    // we are done here
-                    return Ok(0);
-                }
-            }
-
-            let consumed = match footer_parser(b.buffer()) {
-                Ok((remaining, (checksum, footer_typ))) => {
-                    if let Some(ref header_typ) = self.typ {
-                        if header_typ != &footer_typ {
-                            self.done = true;
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                format!(
-                                    "armor ascii footer does not match header: {:?} != {:?}",
-                                    self.typ, footer_typ
-                                ),
-                            ));
-                        }
-                    }
-
-                    if let Some(raw) = checksum {
-                        self.checksum = Some(read_checksum(raw)?);
-                    }
-
-                    b.buf_len() - remaining.len()
-                }
-                Err(nom::Err::Incomplete(_)) => {
-                    self.done = true;
-                    return Err(io::Error::new(
-                        io::ErrorKind::Interrupted,
-                        "incomplete parse footer",
-                    ));
-                }
-                Err(err) => {
-                    warn!(
-                        "invalid ascii armor footer: `{:?}`",
-                        ::std::str::from_utf8(b.buffer())
-                    );
-                    self.done = true;
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor footer: {err:?}"),
-                    ));
-                }
-            };
-
-            b.consume(consumed);
-            self.done = true;
-
-            // check checksum if there is one
-            if let Some(expected) = self.checksum {
-                let actual = self.crc.finish();
-                if expected != actual {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "invalid crc24 checksum",
-                    ));
-                }
-            }
-        } else {
-            panic!("invalid state");
-        }
-
-        // We always return zero, as we do not write to the `into` buffer.
-        Ok(0)
     }
 }
 
 impl<R: BufRead> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        if self.done {
-            return Ok(0);
-        }
+        let mut read = 0;
+        loop {
+            let current_part = std::mem::replace(&mut self.current_part, Part::Temp);
+            match current_part {
+                Part::Header(mut b) => {
+                    let (typ, headers) = Self::read_header_internal(&mut b)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    self.typ = Some(typ);
+                    self.headers = headers;
+                    self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
+                }
+                Part::Body(mut b) => {
+                    let last_read = self.read_body(&mut into[read..], &mut b)?;
+                    if last_read == 0 && read < into.len() {
+                        // we are done with the body
+                        let (b, buf) = b.into_inner_with_buffer();
+                        let b = BufReader::with_buffer(buf, b.into_inner());
+                        self.current_part = Part::Footer(b);
+                    } else {
+                        self.current_part = Part::Body(b);
+                    }
+                    read += last_read;
+                    if read == into.len() {
+                        return Ok(read);
+                    }
+                }
+                Part::Footer(mut b) => {
+                    b.make_room();
+                    while b.buf_len() < 128 {
+                        let read = b.read_into_buf()?;
+                        if read == 0 {
+                            break;
+                        }
+                    }
 
-        match self.current_part {
-            Part::Header => {
-                self.read_header()?;
-                self.read_body(into)
+                    self.read_footer(b)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                }
+                Part::Done(b) => {
+                    self.current_part = Part::Done(b);
+                    return Ok(read);
+                }
+                Part::Temp => panic!("invalid state"),
             }
-            Part::Body => self.read_body(into),
-            Part::Footer => self.read_footer(),
         }
+    }
+}
+
+pub(crate) fn read_from_buf<B: BufRead, T, P: Fn(&[u8]) -> IResult<&[u8], T>>(
+    b: &mut B,
+    ctx: &str,
+    parser: P,
+) -> Result<T> {
+    let mut last_was_incomplete = false;
+    loop {
+        let buf = b.fill_buf()?;
+        if buf.is_empty() {
+            bail!("not enough bytes in buffer: {}", ctx);
+        }
+        match parser(buf) {
+            Ok((remaining, res)) => {
+                let consumed = buf.len() - remaining.len();
+                b.consume(consumed);
+                return Ok(res);
+            }
+            Err(nom::Err::Incomplete(_)) => {
+                if last_was_incomplete {
+                    bail!("failed reading: {}: not enough bytes", ctx);
+                }
+                last_was_incomplete = true;
+                continue;
+            }
+            Err(err) => {
+                bail!("failed reading: {} {:?}", ctx, err);
+            }
+        };
     }
 }
 
@@ -624,7 +602,7 @@ mod tests {
              NoVal:\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP MESSAGE----\
+             -----END PGP MESSAGE-----\
              ";
 
         let (typ, headers, res) = parse(c).unwrap();
@@ -640,7 +618,7 @@ mod tests {
              -----BEGIN PGP MESSAGE-----\n\
              \t \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP MESSAGE----\
+             -----END PGP MESSAGE-----\
              ";
 
         let (typ, headers, res) = parse(c).unwrap();
@@ -853,6 +831,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
     #[test]
     fn test_footer_parser() {
+        assert!(footer_parser(b"-----END PGP MESSAGE----").is_err());
         assert_eq!(
             footer_parser(b"-----END PGP PUBLIC KEY BLOCK-----"),
             Ok((&b""[..], (None, BlockType::PublicKey)))
@@ -870,12 +849,12 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
         assert_eq!(
             footer_parser(b"=4JBj-----END PGP PUBLIC KEY BLOCK-----\r\n"),
-            Ok((&b""[..], (Some(&b"4JBj"[..]), BlockType::PublicKey)))
+            Ok((&b""[..], (Some(14717027), BlockType::PublicKey)))
         );
 
         assert_eq!(
             footer_parser(b"=4JBj\r\n-----END PGP PUBLIC KEY BLOCK-----\r\n"),
-            Ok((&b""[..], (Some(&b"4JBj"[..]), BlockType::PublicKey)))
+            Ok((&b""[..], (Some(14717027), BlockType::PublicKey)))
         );
 
         assert_eq!(
@@ -885,7 +864,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
         assert_eq!(
             footer_parser(&b"=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n"[..]),
-            Ok((&b""[..], (Some(&b"XyBX"[..]), BlockType::PublicKey)))
+            Ok((&b""[..], (Some(6234199), BlockType::PublicKey)))
         );
 
         assert_eq!(
