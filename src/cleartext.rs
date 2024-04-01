@@ -1,9 +1,11 @@
 //! Implements Cleartext Signature Framework
 
+use std::collections::HashSet;
 use std::io::{BufRead, Read};
 
 use buffer_redux::BufReader;
 
+use chrono::SubsecRound;
 use nom::branch::alt;
 use nom::bytes::streaming::{tag, take_until1};
 use nom::character::streaming::{alphanumeric1, line_ending, space0};
@@ -11,13 +13,14 @@ use nom::combinator::{complete, map_res};
 use nom::multi::many0;
 use nom::sequence::{pair, terminated};
 use nom::IResult;
+use smallvec::SmallVec;
 
 use crate::armor::{self, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
-use crate::packet::SignatureConfig;
-use crate::types::{PublicKeyTrait, SecretKeyTrait};
-use crate::{ArmorOptions, Deserializable, StandaloneSignature};
+use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
+use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
+use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
 
 /// Implementation of a Cleartext Signed Message.
 ///
@@ -55,6 +58,63 @@ impl CleartextSignedMessage {
         })
     }
 
+    /// Sign the given text.
+    pub fn sign<F>(text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
+    where
+        F: FnOnce() -> String,
+    {
+        let key_id = key.key_id();
+        let algorithm = key.algorithm();
+        let hash_algorithm = key.hash_alg();
+        let hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::IssuerFingerprint(
+                KeyVersion::V4,
+                SmallVec::from_slice(&key.fingerprint()),
+            )),
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            )),
+        ];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))];
+
+        let config = SignatureConfig::new_v4(
+            Default::default(),
+            SignatureType::Text,
+            algorithm,
+            hash_algorithm,
+            hashed_subpackets,
+            unhashed_subpackets,
+        );
+
+        Self::new(text, config, key, key_pw)
+    }
+
+    /// Sign the same message with multiple keys.
+    ///
+    /// The signer function gets invoked with the original text to be signed,
+    /// and needs to produce the individual signatures.
+    pub fn new_many<F>(text: &str, signer: F) -> Result<Self>
+    where
+        F: FnOnce(&str) -> Result<Vec<Signature>>,
+    {
+        let escaped_text = dash_escape(text.as_bytes())?;
+        let raw_signatures = signer(text)?;
+        let mut hashes = HashSet::new();
+        let mut signatures = Vec::new();
+
+        for signature in raw_signatures {
+            hashes.insert(signature.hash_alg());
+            let signature = StandaloneSignature::new(signature);
+            signatures.push(signature);
+        }
+
+        Ok(Self {
+            text: escaped_text,
+            hashes: hashes.into_iter().collect(),
+            signatures,
+        })
+    }
+
     /// The signature on the message.
     pub fn signatures(&self) -> &[StandaloneSignature] {
         &self.signatures
@@ -65,6 +125,18 @@ impl CleartextSignedMessage {
         let nt = self.normalized_text();
         for signature in &self.signatures {
             signature.verify(key, nt.as_bytes())?;
+        }
+        Ok(())
+    }
+
+    /// Verify each signature, potentially agains a different key.
+    pub fn verify_many<F>(&self, verifier: F) -> Result<()>
+    where
+        F: Fn(usize, &StandaloneSignature, &[u8]) -> Result<()>,
+    {
+        let nt = self.normalized_text();
+        for (i, signature) in self.signatures.iter().enumerate() {
+            verifier(i, signature, nt.as_bytes())?;
         }
         Ok(())
     }
