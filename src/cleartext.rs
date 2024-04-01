@@ -121,12 +121,16 @@ impl CleartextSignedMessage {
     }
 
     /// Verify the signature against the normalized cleartext.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    ///
+    /// On success returns the first signature that verified against this key.
+    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&StandaloneSignature> {
         let nt = self.normalized_text();
         for signature in &self.signatures {
-            signature.verify(key, nt.as_bytes())?;
+            if signature.verify(key, nt.as_bytes()).is_ok() {
+                return Ok(signature);
+            }
         }
-        Ok(())
+        bail!("No matching signature found")
     }
 
     /// Verify each signature, potentially agains a different key.
