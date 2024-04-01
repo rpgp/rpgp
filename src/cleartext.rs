@@ -18,6 +18,8 @@ use smallvec::SmallVec;
 use crate::armor::{self, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
+use crate::line_writer::LineBreak;
+use crate::normalize_lines::Normalized;
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
 use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
@@ -46,9 +48,10 @@ impl CleartextSignedMessage {
     where
         F: FnOnce() -> String,
     {
+        let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
         let hash = config.hash_alg;
         let escaped_text = dash_escape(text.as_bytes())?;
-        let signature = config.sign(key, key_pw, text.as_bytes())?;
+        let signature = config.sign(key, key_pw, &signature_text[..])?;
         let signature = StandaloneSignature::new(signature);
 
         Ok(Self {
@@ -91,14 +94,15 @@ impl CleartextSignedMessage {
 
     /// Sign the same message with multiple keys.
     ///
-    /// The signer function gets invoked with the original text to be signed,
+    /// The signer function gets invoked with the normalized original text to be signed,
     /// and needs to produce the individual signatures.
     pub fn new_many<F>(text: &str, signer: F) -> Result<Self>
     where
-        F: FnOnce(&str) -> Result<Vec<Signature>>,
+        F: FnOnce(&[u8]) -> Result<Vec<Signature>>,
     {
+        let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
         let escaped_text = dash_escape(text.as_bytes())?;
-        let raw_signatures = signer(text)?;
+        let raw_signatures = signer(&signature_text[..])?;
         let mut hashes = HashSet::new();
         let mut signatures = Vec::new();
 
@@ -531,5 +535,15 @@ mod tests {
 ";
 
         assert_eq!(dash_escape(input.as_bytes()).unwrap(), expected);
+    }
+
+    #[test]
+    fn test_sign() {
+        let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
+        let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
+        let msg =
+            CleartextSignedMessage::sign("hello\n-world-what-\nis up\n", &key, String::new)
+                .unwrap();
+        msg.verify(&key.public_key()).unwrap();
     }
 }
