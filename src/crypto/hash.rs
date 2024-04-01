@@ -10,7 +10,7 @@ use crate::errors::{Error, Result};
 
 /// Available hash algorithms.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive, Hash)]
 #[repr(u8)]
 pub enum HashAlgorithm {
     None = 0,
