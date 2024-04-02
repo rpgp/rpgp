@@ -541,9 +541,21 @@ mod tests {
     fn test_sign() {
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg =
-            CleartextSignedMessage::sign("hello\n-world-what-\nis up\n", &key, String::new)
-                .unwrap();
+        let msg = CleartextSignedMessage::sign("hello\n-world-what-\nis up\n", &key, String::new)
+            .unwrap();
+        msg.verify(&key.public_key()).unwrap();
+    }
+
+    #[test]
+    fn test_sign_no_newline() {
+        const MSG: &str = "message without newline at the end";
+
+        let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
+        let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
+        let msg = CleartextSignedMessage::sign(MSG, &key, String::new).unwrap();
+
+        assert_eq!(msg.normalized_text(), MSG);
+
         msg.verify(&key.public_key()).unwrap();
     }
 }
