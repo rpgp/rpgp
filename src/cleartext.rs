@@ -29,16 +29,21 @@ use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
 /// Ref https://datatracker.ietf.org/doc/html/rfc4880.html#section-7
 #[derive(Debug)]
 pub struct CleartextSignedMessage {
-    /// The original text.
-    text: String,
-    /// Preferred hashes
+    /// Normalized and dash-escaped representation of the signed text.
+    /// This is exactly the format that gets serialized in cleartext format.
+    ///
+    /// This representation retains the line-ending encoding of the input material.
+    csf_encoded_text: String,
+
+    /// Hash algorithms that are used in the signature(s) in this message
     hashes: Vec<HashAlgorithm>,
-    /// The actual signature.
+
+    /// The actual signature(s).
     signatures: Vec<StandaloneSignature>,
 }
 
 impl CleartextSignedMessage {
-    /// Construct a new cleartext message and signs it using the given key.
+    /// Construct a new cleartext message and sign it using the given key.
     pub fn new<F>(
         text: &str,
         config: SignatureConfig,
@@ -50,12 +55,11 @@ impl CleartextSignedMessage {
     {
         let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
         let hash = config.hash_alg;
-        let escaped_text = dash_escape(text.as_bytes())?;
         let signature = config.sign(key, key_pw, &signature_text[..])?;
         let signature = StandaloneSignature::new(signature);
 
         Ok(Self {
-            text: escaped_text,
+            csf_encoded_text: dash_escape(text),
             hashes: vec![hash],
             signatures: vec![signature],
         })
@@ -101,7 +105,7 @@ impl CleartextSignedMessage {
         F: FnOnce(&[u8]) -> Result<Vec<Signature>>,
     {
         let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
-        let escaped_text = dash_escape(text.as_bytes())?;
+
         let raw_signatures = signer(&signature_text[..])?;
         let mut hashes = HashSet::new();
         let mut signatures = Vec::new();
@@ -113,7 +117,7 @@ impl CleartextSignedMessage {
         }
 
         Ok(Self {
-            text: escaped_text,
+            csf_encoded_text: dash_escape(text),
             hashes: hashes.into_iter().collect(),
             signatures,
         })
@@ -128,46 +132,46 @@ impl CleartextSignedMessage {
     ///
     /// On success returns the first signature that verified against this key.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&StandaloneSignature> {
-        let nt = self.normalized_text();
-        for signature in &self.signatures {
-            if signature.verify(key, nt.as_bytes()).is_ok() {
-                return Ok(signature);
+        if let Some(nt) = self.signed_text() {
+            for signature in &self.signatures {
+                if signature.verify(key, nt.as_bytes()).is_ok() {
+                    return Ok(signature);
+                }
             }
         }
         bail!("No matching signature found")
     }
 
-    /// Verify each signature, potentially agains a different key.
+    /// Verify each signature, potentially against a different key.
     pub fn verify_many<F>(&self, verifier: F) -> Result<()>
     where
         F: Fn(usize, &StandaloneSignature, &[u8]) -> Result<()>,
     {
-        let nt = self.normalized_text();
-        for (i, signature) in self.signatures.iter().enumerate() {
-            verifier(i, signature, nt.as_bytes())?;
-        }
-        Ok(())
-    }
-
-    /// Normalizes the text to the format it is used as signature.
-    pub fn normalized_text(&self) -> String {
-        let mut out = String::new();
-        for line in self.text.lines() {
-            // drop dash escapes if they exist
-            if let Some(line) = line.strip_prefix("- ") {
-                out += line;
-            } else {
-                out += line;
+        if let Some(nt) = self.signed_text() {
+            for (i, signature) in self.signatures.iter().enumerate() {
+                verifier(i, signature, nt.as_bytes())?;
             }
-            out += "\r\n";
+            Ok(())
+        } else {
+            bail!("Signature can't be verified, message text isn't valid UTF8")
         }
-
-        out
     }
 
-    /// The clear text of the message.
+    /// Normalizes the text to the format that was hashed for the signature.
+    /// The output is normalized to "\r\n" line endings.
+    ///
+    /// Returns `None` if the text isn't valid UTF8
+    pub fn signed_text(&self) -> Option<String> {
+        let unescaped = dash_unescape(&self.csf_encoded_text);
+
+        let normalized: Vec<u8> = Normalized::new(unescaped.bytes(), LineBreak::Crlf).collect();
+
+        std::str::from_utf8(&normalized).map(str::to_owned).ok()
+    }
+
+    /// The "cleartext framework"-encoded (i.e. dash-escaped) form of the message.
     pub fn text(&self) -> &str {
-        &self.text
+        &self.csf_encoded_text
     }
 
     /// Parse from an arbitrary reader, containing the text of the message.
@@ -196,7 +200,7 @@ impl CleartextSignedMessage {
         debug!("Found Hash headers: {:?}", hashes);
 
         // Cleartext Body
-        let text = read_from_buf(&mut b, "cleartext body", cleartext_body)?;
+        let csf_encoded_text = read_from_buf(&mut b, "cleartext body", cleartext_body)?;
 
         // Signatures
         let mut dearmor = armor::Dearmor::new(b);
@@ -219,7 +223,7 @@ impl CleartextSignedMessage {
 
         Ok((
             Self {
-                text,
+                csf_encoded_text,
                 hashes,
                 signatures,
             },
@@ -245,7 +249,7 @@ impl CleartextSignedMessage {
         writer.write_all(&[b'\n'])?;
 
         // Cleartext body
-        writer.write_all(self.text.as_bytes())?;
+        writer.write_all(self.csf_encoded_text.as_bytes())?;
         writer.write_all(&[b'\n'])?;
 
         armor::write(
@@ -273,18 +277,36 @@ impl CleartextSignedMessage {
 
 /// Dash escape the given text.
 ///
+/// This implementation is implicitly agnostic between "\n" and "\r\n" line endings.
+///
 /// Ref https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-dash-escaped-text
-fn dash_escape<R: BufRead>(text: R) -> Result<String> {
+fn dash_escape(text: &str) -> String {
     let mut out = String::new();
-    for line in text.lines() {
-        let line = line?;
+    for line in text.split_inclusive('\n') {
         if line.starts_with('-') {
             out += "- ";
         }
-        out.push_str(&line);
-        out += "\n";
+        out.push_str(line);
     }
-    Ok(out)
+
+    out
+}
+
+/// Undo dash escaping of `text`.
+///
+/// This implementation is implicitly agnostic between "\n" and "\r\n" line endings.
+fn dash_unescape(text: &str) -> String {
+    let mut out = String::new();
+    for line in text.split_inclusive('\n') {
+        // drop dash escapes if they exist
+        if let Some(stripped) = line.strip_prefix("- ") {
+            out += stripped;
+        } else {
+            out += line;
+        }
+    }
+
+    out
 }
 
 fn has_rest<R: BufRead>(mut b: R) -> Result<bool> {
@@ -436,7 +458,7 @@ mod tests {
         assert!(headers.is_empty());
 
         assert_eq!(
-            msg.normalized_text(),
+            msg.signed_text().expect("should be utf8"),
             "From the grocery store we need:\r\n\r\n- tofu\r\n- vegetables\r\n- noodles\r\n\r\n"
         );
 
@@ -534,7 +556,7 @@ mod tests {
 
 ";
 
-        assert_eq!(dash_escape(input.as_bytes()).unwrap(), expected);
+        assert_eq!(dash_escape(input), expected);
     }
 
     #[test]
@@ -554,7 +576,7 @@ mod tests {
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
         let msg = CleartextSignedMessage::sign(MSG, &key, String::new).unwrap();
 
-        assert_eq!(msg.normalized_text(), MSG);
+        assert_eq!(msg.signed_text().expect("should be utf8"), MSG);
 
         msg.verify(&key.public_key()).unwrap();
     }
