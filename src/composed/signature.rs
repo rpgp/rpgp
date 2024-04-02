@@ -9,7 +9,7 @@ use crate::types::Tag;
 use crate::{armor, ArmorOptions};
 
 /// Standalone signature as defined by the cleartext framework.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StandaloneSignature {
     pub signature: Signature,
 }
@@ -64,6 +64,10 @@ impl Deserializable for StandaloneSignature {
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
         Box::new(SignatureParser { source: packets })
+    }
+
+    fn matches_block_type(typ: armor::BlockType) -> bool {
+        matches!(typ, armor::BlockType::Signature)
     }
 }
 

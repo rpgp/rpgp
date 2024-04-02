@@ -47,6 +47,8 @@ pub enum BlockType {
     Signature,
     // gnupgp extension
     File,
+    /// Cleartext Framework message
+    CleartextMessage,
 }
 
 impl fmt::Display for BlockType {
@@ -78,6 +80,7 @@ impl BlockType {
             BlockType::PrivateKeyPKCS1(typ) => format!("{typ} PRIVATE KEY"),
             BlockType::PrivateKeyPKCS8 => "PRIVATE KEY".into(),
             BlockType::PrivateKeyOpenssh => "OPENSSH PRIVATE KEY".into(),
+            BlockType::CleartextMessage => "PGP SIGNED MESSAGE".into(),
         }
     }
 }
@@ -349,6 +352,26 @@ impl<R: BufRead> Dearmor<R> {
         };
 
         (typ, headers, checksum, b)
+    }
+
+    pub fn read_only_header(mut self) -> Result<(BlockType, Headers, R)> {
+        let header = std::mem::replace(&mut self.current_part, Part::Temp);
+        if let Part::Header(mut b) = header {
+            let (typ, headers) = Self::read_header_internal(&mut b)?;
+            return Ok((typ, headers, b));
+        }
+
+        bail!("invalid state, cannot read header");
+    }
+
+    pub fn after_header(typ: BlockType, headers: Headers, input: R) -> Self {
+        Self {
+            typ: Some(typ),
+            headers,
+            checksum: None,
+            current_part: Part::Body(Base64Decoder::new(Base64Reader::new(input))),
+            crc: Default::default(),
+        }
     }
 
     pub fn read_header(&mut self) -> Result<()> {
