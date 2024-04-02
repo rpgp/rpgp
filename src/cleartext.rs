@@ -132,13 +132,13 @@ impl CleartextSignedMessage {
     ///
     /// On success returns the first signature that verified against this key.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<&StandaloneSignature> {
-        if let Some(nt) = self.signed_text() {
-            for signature in &self.signatures {
-                if signature.verify(key, nt.as_bytes()).is_ok() {
-                    return Ok(signature);
-                }
+        let nt = self.signed_text();
+        for signature in &self.signatures {
+            if signature.verify(key, nt.as_bytes()).is_ok() {
+                return Ok(signature);
             }
         }
+
         bail!("No matching signature found")
     }
 
@@ -147,26 +147,23 @@ impl CleartextSignedMessage {
     where
         F: Fn(usize, &StandaloneSignature, &[u8]) -> Result<()>,
     {
-        if let Some(nt) = self.signed_text() {
-            for (i, signature) in self.signatures.iter().enumerate() {
-                verifier(i, signature, nt.as_bytes())?;
-            }
-            Ok(())
-        } else {
-            bail!("Signature can't be verified, message text isn't valid UTF8")
+        let nt = self.signed_text();
+        for (i, signature) in self.signatures.iter().enumerate() {
+            verifier(i, signature, nt.as_bytes())?;
         }
+        Ok(())
     }
 
     /// Normalizes the text to the format that was hashed for the signature.
     /// The output is normalized to "\r\n" line endings.
-    ///
-    /// Returns `None` if the text isn't valid UTF8
-    pub fn signed_text(&self) -> Option<String> {
+    pub fn signed_text(&self) -> String {
         let unescaped = dash_unescape(&self.csf_encoded_text);
 
         let normalized: Vec<u8> = Normalized::new(unescaped.bytes(), LineBreak::Crlf).collect();
 
-        std::str::from_utf8(&normalized).map(str::to_owned).ok()
+        std::str::from_utf8(&normalized)
+            .map(str::to_owned)
+            .expect("csf_encoded_text is UTF8")
     }
 
     /// The "cleartext framework"-encoded (i.e. dash-escaped) form of the message.
@@ -457,7 +454,7 @@ mod tests {
         assert!(headers.is_empty());
 
         assert_eq!(
-            msg.signed_text().expect("should be utf8"),
+            msg.signed_text(),
             "From the grocery store we need:\r\n\r\n- tofu\r\n- vegetables\r\n- noodles\r\n\r\n"
         );
 
@@ -575,7 +572,7 @@ mod tests {
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
         let msg = CleartextSignedMessage::sign(MSG, &key, String::new).unwrap();
 
-        assert_eq!(msg.signed_text().expect("should be utf8"), MSG);
+        assert_eq!(msg.signed_text(), MSG);
 
         msg.verify(&key.public_key()).unwrap();
     }
