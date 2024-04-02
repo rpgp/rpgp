@@ -27,6 +27,7 @@ pub struct SignedSecretKey {
 key_parser!(
     SignedSecretKey,
     SignedSecretKeyParser,
+    armor::BlockType::PrivateKey,
     Tag::SecretKey,
     packet::SecretKey,
     // secret keys, can contain both public and secret subkeys

@@ -1,6 +1,6 @@
 //! Implements Cleartext Signature Framework
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::io::{BufRead, Read};
 
 use buffer_redux::BufReader;
@@ -27,7 +27,7 @@ use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
 /// Implementation of a Cleartext Signed Message.
 ///
 /// Ref https://datatracker.ietf.org/doc/html/rfc4880.html#section-7
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleartextSignedMessage {
     /// Normalized and dash-escaped representation of the signed text.
     /// This is exactly the format that gets serialized in cleartext format.
@@ -172,27 +172,33 @@ impl CleartextSignedMessage {
     }
 
     /// Parse from an arbitrary reader, containing the text of the message.
-    pub fn from_bytes<R: Read>(bytes: R) -> Result<(Self, Headers)> {
-        Self::from_bytes_buf(BufReader::new(bytes))
+    pub fn from_armor<R: Read>(bytes: R) -> Result<(Self, Headers)> {
+        Self::from_armor_buf(BufReader::new(bytes))
     }
 
     /// Parse from string, containing the text of the message.
     pub fn from_string(input: &str) -> Result<(Self, Headers)> {
-        Self::from_bytes_buf(input.as_bytes())
+        Self::from_armor_buf(input.as_bytes())
     }
 
     /// Parse from a buffered reader, containing the text of the message.
-    pub fn from_bytes_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
+    pub fn from_armor_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
-        // Header line
-        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
-
         // Headers (only Hash is allowed)
         let hash_headers = read_from_buf(&mut b, "cleartext headers", armor_headers_lines)?;
-        let hashes = hash_headers
-            .iter()
-            .map(|s| s.parse())
-            .collect::<Result<_>>()?;
+        let mut hashes = BTreeMap::default();
+        hashes.insert("Hash".into(), hash_headers);
+
+        // Header line
+        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
+        Self::from_armor_after_header(b, hashes)
+    }
+
+    pub fn from_armor_after_header<R: BufRead>(
+        mut b: R,
+        headers: Headers,
+    ) -> Result<(Self, Headers)> {
+        let hashes = validate_headers(headers)?;
 
         debug!("Found Hash headers: {:?}", hashes);
 
@@ -270,6 +276,18 @@ impl CleartextSignedMessage {
         let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
         Ok(res)
     }
+}
+
+fn validate_headers(headers: Headers) -> Result<Vec<HashAlgorithm>> {
+    let mut hashes = Vec::new();
+    for (name, values) in headers {
+        ensure_eq!(name, "Hash", "unexpected header");
+        for value in values {
+            let h: HashAlgorithm = value.parse()?;
+            hashes.push(h);
+        }
+    }
+    Ok(hashes)
 }
 
 /// Dash escape the given text.

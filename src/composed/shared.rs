@@ -65,10 +65,13 @@ pub trait Deserializable: Sized {
             | BlockType::Message
             | BlockType::MultiPartMessage(_, _)
             | BlockType::Signature
+            | BlockType::CleartextMessage
             | BlockType::File => {
                 let headers = dearmor.headers.clone(); // FIXME: avoid clone
 
-                // TODO: check that the result is what it actually said.
+                if !Self::matches_block_type(typ) {
+                    bail!("unexpected block type: {}", typ);
+                }
                 Ok((Self::from_bytes_many(dearmor), headers))
             }
             BlockType::PublicKeyPKCS1(_)
@@ -93,6 +96,9 @@ pub trait Deserializable: Sized {
     fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a>;
+
+    /// Check if the given typ is a valid block type for this type.
+    fn matches_block_type(typ: BlockType) -> bool;
 
     /// Parses a single composition, from either ASCII-armored or binary OpenPGP data.
     ///
