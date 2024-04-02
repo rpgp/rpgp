@@ -309,13 +309,12 @@ fn dash_unescape(text: &str) -> String {
     out
 }
 
+/// Does the remaining buffer contain any non-whitespace characters?
 fn has_rest<R: BufRead>(mut b: R) -> Result<bool> {
     let mut buf = [0u8; 64];
     while b.read(&mut buf)? > 0 {
-        if let Ok((i, _rest)) = line_ending::<_, nom::error::Error<_>>(&buf[..]) {
-            if !i.is_empty() {
-                return Ok(true);
-            }
+        if buf.iter().any(|&c| !char::from(c).is_ascii_whitespace()) {
+            return Ok(true);
         }
     }
 
