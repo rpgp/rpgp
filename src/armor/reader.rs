@@ -136,6 +136,7 @@ fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
         value(BlockType::Message, tag("PGP MESSAGE")),
         value(BlockType::Signature, tag("PGP SIGNATURE")),
         value(BlockType::File, tag("PGP ARMORED FILE")),
+        value(BlockType::CleartextMessage, tag("PGP SIGNED MESSAGE")),
         // OpenSSL formats
 
         // Public Key File PKCS#1
