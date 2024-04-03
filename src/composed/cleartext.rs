@@ -184,13 +184,13 @@ impl CleartextSignedMessage {
     /// Parse from a buffered reader, containing the text of the message.
     pub fn from_armor_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
+        // Header line
+        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
         // Headers (only Hash is allowed)
         let hash_headers = read_from_buf(&mut b, "cleartext headers", armor_headers_lines)?;
         let mut hashes = BTreeMap::default();
         hashes.insert("Hash".into(), hash_headers);
 
-        // Header line
-        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
         Self::from_armor_after_header(b, hashes)
     }
 
