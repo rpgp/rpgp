@@ -384,7 +384,7 @@ fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::SignedSecretKey;
+    use crate::{Any, SignedSecretKey};
 
     use super::*;
 
@@ -483,6 +483,24 @@ mod tests {
         assert_eq!(msg.signatures().len(), 1);
 
         roundtrip(&data, &msg, &headers);
+    }
+
+    #[test]
+    fn test_cleartext_interop_testsuite_1_any() {
+        let _ = pretty_env_logger::try_init();
+
+        let data = std::fs::read_to_string("./tests/unit-tests/cleartext-msg-01.asc").unwrap();
+
+        let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
+
+        let (any, headers2) = Any::from_string(&data).unwrap();
+        assert_eq!(headers, headers2);
+
+        if let Any::Cleartext(msg2) = any {
+            assert_eq!(msg, msg2);
+        } else {
+            panic!("got unexpected type of any: {:?}", any);
+        }
     }
 
     #[test]
