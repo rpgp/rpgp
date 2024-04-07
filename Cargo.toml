@@ -122,7 +122,7 @@ asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 
 [profile.bench]
-debug = true
+debug = 2
 
 [[bench]]
 name = "benches_main"
