@@ -33,7 +33,7 @@ impl Any {
     /// Parse armored ascii data.
     pub fn from_armor_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
         let dearmor = armor::Dearmor::new(input);
-        let (typ, headers, rest) = dearmor.read_only_header()?;
+        let (typ, headers, has_leading_data, rest) = dearmor.read_only_header()?;
 
         match typ {
             // Standard PGP types
@@ -58,6 +58,10 @@ impl Any {
                 Ok((Self::Signature(sig), headers))
             }
             BlockType::CleartextMessage => {
+                ensure!(
+                    !has_leading_data,
+                    "must not have leading data for a cleartext message"
+                );
                 let (sig, headers) =
                     CleartextSignedMessage::from_armor_after_header(rest, headers)?;
                 Ok((Self::Cleartext(sig), headers))

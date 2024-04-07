@@ -13,7 +13,7 @@ use nom::combinator::{complete, map_res};
 use nom::IResult;
 use smallvec::SmallVec;
 
-use crate::armor::{self, armor_header, read_from_buf, BlockType, Headers};
+use crate::armor::{self, header_parser, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
@@ -183,9 +183,13 @@ impl CleartextSignedMessage {
     pub fn from_armor_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
         // Headers
-        let (typ, headers) = read_from_buf(&mut b, "cleartext header", armor_header)?;
-        // Headers (only Hash is allowed)
+        let (typ, headers, has_leading_data) =
+            read_from_buf(&mut b, "cleartext header", header_parser)?;
         ensure_eq!(typ, BlockType::CleartextMessage, "unexpected block type");
+        ensure!(
+            !has_leading_data,
+            "must not have leading data for a cleartext message"
+        );
 
         Self::from_armor_after_header(b, headers)
     }

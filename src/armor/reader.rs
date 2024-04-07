@@ -235,7 +235,7 @@ fn armor_headers(i: &[u8]) -> IResult<&[u8], Headers> {
 }
 
 /// Armor Header
-pub fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
+fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
     let (i, typ) = armor_header_line(i)?;
     let (i, headers) = match typ {
         BlockType::CleartextMessage => armor_headers_hash(i)?,
@@ -287,12 +287,13 @@ fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
     Ok(u64::from(BigEndian::read_u32(&buf)))
 }
 
-pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
-    delimited(
-        take_until(b"-----".as_slice()),
-        armor_header,
-        many0(pair(space0, line_ending)),
-    )(i)
+pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers, bool)> {
+    let (i, prefix) = take_until("-----")(i)?;
+    let has_leading_data = !prefix.is_empty();
+    let (i, (typ, headers)) = armor_header(i)?;
+    let (i, _) = many0(pair(space0, line_ending))(i)?;
+
+    Ok((i, (typ, headers, has_leading_data)))
 }
 
 fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<u64>, BlockType)> {
@@ -376,11 +377,11 @@ impl<R: BufRead> Dearmor<R> {
         (typ, headers, checksum, b)
     }
 
-    pub fn read_only_header(mut self) -> Result<(BlockType, Headers, R)> {
+    pub fn read_only_header(mut self) -> Result<(BlockType, Headers, bool, R)> {
         let header = std::mem::replace(&mut self.current_part, Part::Temp);
         if let Part::Header(mut b) = header {
-            let (typ, headers) = Self::read_header_internal(&mut b)?;
-            return Ok((typ, headers, b));
+            let (typ, headers, leading) = Self::read_header_internal(&mut b)?;
+            return Ok((typ, headers, leading, b));
         }
 
         bail!("invalid state, cannot read header");
@@ -399,7 +400,7 @@ impl<R: BufRead> Dearmor<R> {
     pub fn read_header(&mut self) -> Result<()> {
         let header = std::mem::replace(&mut self.current_part, Part::Temp);
         if let Part::Header(mut b) = header {
-            let (typ, headers) = Self::read_header_internal(&mut b)?;
+            let (typ, headers, _has_leading_data) = Self::read_header_internal(&mut b)?;
             self.typ = Some(typ);
             self.headers = headers;
             self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
@@ -409,9 +410,9 @@ impl<R: BufRead> Dearmor<R> {
         bail!("invalid state, cannot read header");
     }
 
-    fn read_header_internal(b: &mut R) -> Result<(BlockType, Headers)> {
-        let (typ, headers) = read_from_buf(b, "armor header", header_parser)?;
-        Ok((typ, headers))
+    fn read_header_internal(b: &mut R) -> Result<(BlockType, Headers, bool)> {
+        let (typ, headers, leading) = read_from_buf(b, "armor header", header_parser)?;
+        Ok((typ, headers, leading))
     }
 
     fn read_body(
@@ -462,7 +463,7 @@ impl<R: BufRead> Read for Dearmor<R> {
             let current_part = std::mem::replace(&mut self.current_part, Part::Temp);
             match current_part {
                 Part::Header(mut b) => {
-                    let (typ, headers) = Self::read_header_internal(&mut b)
+                    let (typ, headers, _leading) = Self::read_header_internal(&mut b)
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
                     self.typ = Some(typ);
                     self.headers = headers;
