@@ -1,21 +1,19 @@
 //! Implements Cleartext Signature Framework
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::io::{BufRead, Read};
 
 use buffer_redux::BufReader;
 
 use chrono::SubsecRound;
 use nom::branch::alt;
-use nom::bytes::streaming::{tag, take_until1};
-use nom::character::streaming::{alphanumeric1, line_ending, space0};
+use nom::bytes::streaming::take_until1;
+use nom::character::streaming::line_ending;
 use nom::combinator::{complete, map_res};
-use nom::multi::many0;
-use nom::sequence::{pair, terminated};
 use nom::IResult;
 use smallvec::SmallVec;
 
-use crate::armor::{self, read_from_buf, BlockType, Headers};
+use crate::armor::{self, armor_header, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
@@ -184,14 +182,12 @@ impl CleartextSignedMessage {
     /// Parse from a buffered reader, containing the text of the message.
     pub fn from_armor_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
-        // Header line
-        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
+        // Headers
+        let (typ, headers) = read_from_buf(&mut b, "cleartext header", armor_header)?;
         // Headers (only Hash is allowed)
-        let hash_headers = read_from_buf(&mut b, "cleartext headers", armor_headers_lines)?;
-        let mut hashes = BTreeMap::default();
-        hashes.insert("Hash".into(), hash_headers);
+        ensure_eq!(typ, BlockType::CleartextMessage, "unexpected block type");
 
-        Self::from_armor_after_header(b, hashes)
+        Self::from_armor_after_header(b, headers)
     }
 
     pub fn from_armor_after_header<R: BufRead>(
@@ -337,31 +333,6 @@ fn has_rest<R: BufRead>(mut b: R) -> Result<bool> {
 }
 
 const HEADER_LINE: &str = "-----BEGIN PGP SIGNED MESSAGE-----";
-
-/// Parses a single armor header line.
-fn armor_header_line(i: &[u8]) -> IResult<&[u8], ()> {
-    let (i, _) = tag(HEADER_LINE)(i)?;
-    let (i, _) = line_ending(i)?;
-
-    Ok((i, ()))
-}
-
-fn armor_headers_lines(i: &[u8]) -> IResult<&[u8], Vec<String>> {
-    let (i, headers) = many0(complete(hash_header_line))(i)?;
-    let (i, _) = pair(space0, line_ending)(i)?;
-
-    Ok((i, headers.into_iter().flatten().collect()))
-}
-
-fn hash_header_line(i: &[u8]) -> IResult<&[u8], Vec<String>> {
-    let (i, _) = tag("Hash: ")(i)?;
-    let (i, mut values) = many0(map_res(terminated(alphanumeric1, tag(",")), to_string))(i)?;
-
-    let (i, last_value) = terminated(map_res(alphanumeric1, to_string), line_ending)(i)?;
-    values.push(last_value);
-
-    Ok((i, values))
-}
 
 fn to_string(b: &[u8]) -> std::result::Result<String, std::str::Utf8Error> {
     std::str::from_utf8(b).map(|s| s.to_string())
@@ -535,39 +506,6 @@ mod tests {
         assert_eq!(
             cleartext_body(b"-- hello\r\n--world\r\n-----bla").unwrap(),
             (&b"-----bla"[..], "-- hello\r\n--world".to_string())
-        );
-    }
-
-    #[test]
-    fn test_armor_headers_lines() {
-        assert_eq!(
-            armor_headers_lines(b"Hash: hello,world\n\n").unwrap(),
-            (&[][..], vec!["hello".to_string(), "world".to_string()]),
-        );
-        assert_eq!(
-            armor_headers_lines(b"Hash: hello,world\nHash: cool\n\n").unwrap(),
-            (
-                &[][..],
-                vec!["hello".to_string(), "world".to_string(), "cool".to_string()]
-            ),
-        );
-    }
-
-    #[test]
-    fn test_hash_header_line() {
-        assert_eq!(
-            hash_header_line(b"Hash: hello,world\n").unwrap(),
-            (&[][..], vec!["hello".to_string(), "world".to_string()]),
-        );
-
-        assert_eq!(
-            hash_header_line(b"Hash: hello\n").unwrap(),
-            (&[][..], vec!["hello".to_string()]),
-        );
-
-        assert_eq!(
-            hash_header_line(b"Hash: hello\n\n").unwrap(),
-            (&b"\n"[..], vec!["hello".to_string()]),
         );
     }
 

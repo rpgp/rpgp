@@ -227,7 +227,7 @@ macro_rules! key_parser {
             }
 
             fn matches_block_type(typ: $crate::armor::BlockType) -> bool {
-                matches!(typ, $block_type)
+                matches!(typ, $block_type | $crate::armor::BlockType::File)
             }
         }
     };
