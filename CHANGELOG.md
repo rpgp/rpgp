@@ -2,7 +2,38 @@
 
 All notable changes to rpgp will be documented in this file.
 
-## [0.12.0-alpha.1](https://github.com/rpgp/rpgp/compare/v0.11.0..0.12.0-alpha.1) - 2024-03-17
+## [0.12.0-alpha.2](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.1..0.12.0-alpha.2) - 2024-04-07
+
+### ⛰️  Features
+
+- Basic support for AEAD ([#316](https://github.com/rpgp/rpgp/issues/316)) - ([93ca7d8](https://github.com/rpgp/rpgp/commit/93ca7d8f5d002677c51be0438564522e636b014d))
+- Avoid Seek  - ([fa82b12](https://github.com/rpgp/rpgp/commit/fa82b12fcd69ea7dbfba83914a972c0cabbe1b5f))
+- Cleartext framework support  - ([66b005c](https://github.com/rpgp/rpgp/commit/66b005c11467068bac9599c27c9d90bc405095d6))
+
+### 🐛 Bug Fixes
+
+- *(packet-parser)* Increase buffer size for unknown size - ([1013c13](https://github.com/rpgp/rpgp/commit/1013c134c90b7e38c02de9d74fc61780e06bfa05))
+
+### 🚜 Refactor
+
+- Improve internal crypto abstractions to allow for more flexibility - ([a3dd485](https://github.com/rpgp/rpgp/commit/a3dd485f9be48024b7756358e0e6d13d54101790))
+- Break out ecdh unwrap - ([bde459c](https://github.com/rpgp/rpgp/commit/bde459ccb759903e63e90f201a1526353a33c6d5))
+- Move benches to criterion and expand benchmarks - ([8e87774](https://github.com/rpgp/rpgp/commit/8e87774cc08b9549e5a374d75b41b585768c053d))
+
+### 🧪 Testing
+
+- Approximate decryption and signing operations with an OpenPGP card - ([42cfa11](https://github.com/rpgp/rpgp/commit/42cfa11b5c3661166f561b613439d0ac6d40a9b8))
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix feature = "cargo-clippy" deprecation - ([a75db54](https://github.com/rpgp/rpgp/commit/a75db5470ea75f5c392f0b5688da76762a42ca0b))
+- Set debug in Cargo.toml to the normalized value - ([29adca7](https://github.com/rpgp/rpgp/commit/29adca744539955ccc16895afb8e7f8504936aa3))
+
+### Bench
+
+- Add benchmarks for s2k ([#325](https://github.com/rpgp/rpgp/issues/325)) - ([ff2a3fc](https://github.com/rpgp/rpgp/commit/ff2a3fcd26ce951a6f45e90fbb87d42e8d13fab7))
+
+## [0.12.0-alpha.1](https://github.com/rpgp/rpgp/compare/v0.11.0..v0.12.0-alpha.1) - 2024-03-17
 
 ### ⛰️  Features
 
@@ -26,6 +57,7 @@ All notable changes to rpgp will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(pgp)* Release 0.12.0-alpha.1 - ([2d255ed](https://github.com/rpgp/rpgp/commit/2d255ed462374e19ac6c8a9b60a274cd0b794c9c))
 - Adjust to chrono deprecations - ([d0bf0fd](https://github.com/rpgp/rpgp/commit/d0bf0fdb6e61dfeb8a7c4adabc10696d522465b1))
 
 ### S2k
