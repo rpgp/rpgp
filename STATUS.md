@@ -48,7 +48,7 @@ Symbols:
 - [ ] Supported Elliptic Curves
   - [X] NIST P256
   - [X] NIST P384
-  - [ ] NIST P521
+  - [X] NIST P521
   - [ ] brainpoolP256r1
   - [ ] brainpoolP384r1
   - [ ] brainpoolP512r1
