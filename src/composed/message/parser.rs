@@ -169,6 +169,9 @@ impl Deserializable for Message {
     }
 
     fn matches_block_type(typ: BlockType) -> bool {
-        matches!(typ, BlockType::Message | BlockType::MultiPartMessage(_, _))
+        matches!(
+            typ,
+            BlockType::Message | BlockType::MultiPartMessage(_, _) | BlockType::File
+        )
     }
 }

@@ -8,13 +8,13 @@ use buffer_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 
 use nom::branch::alt;
-use nom::bytes::streaming::tag;
+use nom::bytes::streaming::{tag, take_until1};
 use nom::bytes::streaming::{take, take_until};
-use nom::character::streaming::{digit1, line_ending, not_line_ending, space0};
+use nom::character::streaming::{alphanumeric1, digit1, line_ending, not_line_ending, space0};
 use nom::combinator::{complete, map, map_res, opt, success, value};
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, preceded, terminated};
-use nom::{IResult, InputIter, InputLength, Slice};
+use nom::IResult;
 
 use crate::base64_decoder::Base64Decoder;
 use crate::base64_reader::Base64Reader;
@@ -189,42 +189,31 @@ fn armor_header_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     )(i)
 }
 
-/// Recognizes one or more key tokens.
-fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
-    let input_length = input.input_len();
-
-    for (idx, item) in input.iter_indices() {
-        // are we done? ": " is reached
-        let is_colon_space =
-            item == b':' && idx + 1 < input_length && input.slice(idx + 1..idx + 2)[0] == b' ';
-        if is_colon_space {
-            return Ok((input.slice(idx + 2..), input.slice(0..idx)));
-        }
-
-        // ":\n" reached
-        let is_colon_line_ending = item == b':'
-            && idx + 1 < input_length
-            && (input.slice(idx + 1..idx + 2)[0] == b'\n'
-                || input.slice(idx + 1..idx + 2)[0] == b'\r');
-        if is_colon_line_ending {
-            return Ok((input.slice(idx + 1..), input.slice(0..idx)));
-        }
-    }
-
-    Ok((input.slice(input_length..), input))
-}
-
 /// Parses a single key value pair, for the header.
 fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
-    terminated(
-        pair(
-            map_res(key_token, str::from_utf8),
-            map_res(opt(not_line_ending), |r| {
-                str::from_utf8(r.unwrap_or(b"".as_slice()))
-            }),
-        ),
-        line_ending,
-    )(i)
+    let (i, key) = map_res(
+        alt((
+            complete(take_until1(":\r\n")),
+            complete(take_until1(":\n")),
+            complete(take_until1(": ")),
+        )),
+        str::from_utf8,
+    )(i)?;
+
+    // consume the ":"
+    let (i, _) = tag(":")(i)?;
+    let (i, t) = alt((tag(" "), line_ending))(i)?;
+
+    let (i, value) = if t == b" " {
+        let (i, value) = map_res(not_line_ending, str::from_utf8)(i)?;
+        let (i, _) = line_ending(i)?;
+        (i, value)
+    } else {
+        // empty value
+        (i, "")
+    };
+
+    Ok((i, (key, value)))
 }
 
 /// Parses a list of key value pairs.
@@ -246,8 +235,40 @@ fn armor_headers(i: &[u8]) -> IResult<&[u8], Headers> {
 }
 
 /// Armor Header
-fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
-    pair(armor_header_line, armor_headers)(i)
+pub fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
+    let (i, typ) = armor_header_line(i)?;
+    let (i, headers) = match typ {
+        BlockType::CleartextMessage => armor_headers_hash(i)?,
+        _ => armor_headers(i)?,
+    };
+
+    Ok((i, (typ, headers)))
+}
+
+fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
+    let (i, headers) = many0(complete(hash_header_line))(i)?;
+    let (i, _) = pair(space0, line_ending)(i)?;
+
+    let mut res = BTreeMap::new();
+    let headers = headers.into_iter().flatten().collect();
+    res.insert("Hash".to_string(), headers);
+
+    Ok((i, res))
+}
+
+fn hash_header_line(i: &[u8]) -> IResult<&[u8], Vec<String>> {
+    let (i, _) = tag("Hash: ")(i)?;
+    let (i, mut values) = many0(map_res(terminated(alphanumeric1, tag(",")), |s| {
+        str::from_utf8(s).map(|s| s.to_string())
+    }))(i)?;
+
+    let (i, last_value) = terminated(
+        map_res(alphanumeric1, |s| str::from_utf8(s).map(|s| s.to_string())),
+        line_ending,
+    )(i)?;
+    values.push(last_value);
+
+    Ok((i, values))
 }
 
 /// Read the checksum from an base64 encoded buffer.
@@ -266,7 +287,7 @@ fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
     Ok(u64::from(BigEndian::read_u32(&buf)))
 }
 
-fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
+pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
     delimited(
         take_until(b"-----".as_slice()),
         armor_header,
@@ -800,7 +821,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
     }
 
     #[test]
-    fn test_key_value_pair() {
+    fn test_key_value_pair_single() {
         assert_eq!(
             key_value_pair(&b"hello: world\n"[..]).unwrap(),
             (&b""[..], ("hello", "world")),
@@ -814,6 +835,12 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
+            key_value_pair(&b"hello:\r\n"[..]).unwrap(),
+            (&b""[..], ("hello", "")),
+            "empty"
+        );
+
+        assert_eq!(
             key_value_pair(&b"hello: world\nother content"[..]).unwrap(),
             (&b"other content"[..], ("hello", "world")),
             "with rest"
@@ -821,7 +848,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
     }
 
     #[test]
-    fn test_key_value_pairs() {
+    fn test_key_value_pairs_single() {
         assert_eq!(
             key_value_pairs(&b"hello: world\ncool: stuff\n"[..]).unwrap(),
             (&b""[..], vec![("hello", "world"), ("cool", "stuff")]),
@@ -897,6 +924,49 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
                 &b"-----BEGIN PGP MESSAGE-----\n\naGVsbG8gd29ybGQ=\n-----END PGP MESSAGE-----\n"[..],
                 (None, BlockType::Message)
             )),
+        );
+    }
+
+    #[test]
+    fn test_hash_header_line() {
+        assert_eq!(
+            hash_header_line(b"Hash: hello,world\n").unwrap(),
+            (&[][..], vec!["hello".to_string(), "world".to_string()]),
+        );
+
+        assert_eq!(
+            hash_header_line(b"Hash: hello\n").unwrap(),
+            (&[][..], vec!["hello".to_string()]),
+        );
+
+        assert_eq!(
+            hash_header_line(b"Hash: hello\n\n").unwrap(),
+            (&b"\n"[..], vec!["hello".to_string()]),
+        );
+    }
+
+    #[test]
+    fn test_armor_headers_lines() {
+        let mut headers = BTreeMap::new();
+        headers.insert(
+            "Hash".to_string(),
+            vec!["hello".to_string(), "world".to_string()],
+        );
+
+        assert_eq!(
+            armor_headers_hash(b"Hash: hello,world\n\n").unwrap(),
+            (&[][..], headers),
+        );
+
+        let mut headers = BTreeMap::new();
+        headers.insert(
+            "Hash".to_string(),
+            vec!["hello".to_string(), "world".to_string(), "cool".to_string()],
+        );
+
+        assert_eq!(
+            armor_headers_hash(b"Hash: hello,world\nHash: cool\n\n").unwrap(),
+            (&[][..], headers,),
         );
     }
 
