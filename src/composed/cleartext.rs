@@ -184,13 +184,13 @@ impl CleartextSignedMessage {
     /// Parse from a buffered reader, containing the text of the message.
     pub fn from_armor_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
+        // Header line
+        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
         // Headers (only Hash is allowed)
         let hash_headers = read_from_buf(&mut b, "cleartext headers", armor_headers_lines)?;
         let mut hashes = BTreeMap::default();
         hashes.insert("Hash".into(), hash_headers);
 
-        // Header line
-        read_from_buf(&mut b, "cleartext header line", armor_header_line)?;
         Self::from_armor_after_header(b, hashes)
     }
 
@@ -384,7 +384,7 @@ fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::SignedSecretKey;
+    use crate::{Any, SignedSecretKey};
 
     use super::*;
 
@@ -483,6 +483,24 @@ mod tests {
         assert_eq!(msg.signatures().len(), 1);
 
         roundtrip(&data, &msg, &headers);
+    }
+
+    #[test]
+    fn test_cleartext_interop_testsuite_1_any() {
+        let _ = pretty_env_logger::try_init();
+
+        let data = std::fs::read_to_string("./tests/unit-tests/cleartext-msg-01.asc").unwrap();
+
+        let (msg, headers) = CleartextSignedMessage::from_string(&data).unwrap();
+
+        let (any, headers2) = Any::from_string(&data).unwrap();
+        assert_eq!(headers, headers2);
+
+        if let Any::Cleartext(msg2) = any {
+            assert_eq!(msg, msg2);
+        } else {
+            panic!("got unexpected type of any: {:?}", any);
+        }
     }
 
     #[test]
