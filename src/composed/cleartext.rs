@@ -482,6 +482,22 @@ mod tests {
 
         let err = CleartextSignedMessage::from_string(&data).unwrap_err();
         dbg!(err);
+
+        let err = Any::from_string(&data).unwrap_err();
+        dbg!(err);
+    }
+
+    #[test]
+    fn test_cleartext_interop_testsuite_2_fail() {
+        let _ = pretty_env_logger::try_init();
+
+        let data = std::fs::read_to_string("./tests/unit-tests/cleartext-msg-02-fail.asc").unwrap();
+
+        let err = CleartextSignedMessage::from_string(&data).unwrap_err();
+        dbg!(err);
+
+        let err = Any::from_string(&data).unwrap_err();
+        dbg!(err);
     }
 
     fn roundtrip(expected: &str, msg: &CleartextSignedMessage, headers: &Headers) {
