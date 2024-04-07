@@ -1,5 +1,6 @@
 use std::iter::Peekable;
 
+use crate::armor::BlockType;
 use crate::composed::message::Message;
 use crate::composed::Deserializable;
 use crate::errors::{Error, Result};
@@ -165,5 +166,12 @@ impl Deserializable for Message {
         Box::new(MessageParser {
             source: packets.peekable(),
         })
+    }
+
+    fn matches_block_type(typ: BlockType) -> bool {
+        matches!(
+            typ,
+            BlockType::Message | BlockType::MultiPartMessage(_, _) | BlockType::File
+        )
     }
 }

@@ -68,15 +68,16 @@ pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
     // TODO: add typ information to the key possibly?
     match typ {
         // Standard PGP types
-        BlockType::PublicKey
-        | BlockType::PrivateKey
-        | BlockType::Message
-        | BlockType::MultiPartMessage(_, _)
-        | BlockType::Signature
-        | BlockType::File => {
+        BlockType::PublicKey | BlockType::PrivateKey | BlockType::File => {
             let headers = dearmor.headers.clone(); // FIXME: avoid clone
                                                    // TODO: check that the result is what it actually said.
             Ok((from_bytes_many(dearmor), headers))
+        }
+        BlockType::Message
+        | BlockType::MultiPartMessage(_, _)
+        | BlockType::Signature
+        | BlockType::CleartextMessage => {
+            bail!("unexpected block type: {}", typ)
         }
         BlockType::PublicKeyPKCS1(_)
         | BlockType::PublicKeyPKCS8
@@ -84,7 +85,7 @@ pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
         | BlockType::PrivateKeyPKCS1(_)
         | BlockType::PrivateKeyPKCS8
         | BlockType::PrivateKeyOpenssh => {
-            unimplemented_err!("key format {:?}", typ);
+            unimplemented_err!("key format {}", typ);
         }
     }
 }

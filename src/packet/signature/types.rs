@@ -80,6 +80,11 @@ impl Signature {
         self.config.typ()
     }
 
+    /// The used `HashAlgorithm`.
+    pub fn hash_alg(&self) -> HashAlgorithm {
+        self.config.hash_alg
+    }
+
     /// Does `key` match any issuer or issuer_fingerprint subpacket in `sig`?
     /// If yes, we consider `key` a candidate to verify `sig` against.
     ///

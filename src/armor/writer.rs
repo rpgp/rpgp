@@ -20,6 +20,19 @@ pub fn write(
     headers: Option<&Headers>,
     include_checksum: bool,
 ) -> Result<()> {
+    write_header(writer, typ, headers)?;
+
+    // write body
+    let mut crc_hasher = include_checksum.then(Crc24Hasher::new);
+
+    write_body(writer, source, crc_hasher.as_mut())?;
+
+    write_footer(writer, typ, crc_hasher)?;
+
+    Ok(())
+}
+
+fn write_header(writer: &mut impl Write, typ: BlockType, headers: Option<&Headers>) -> Result<()> {
     // write armor header
     writer.write_all(&b"-----BEGIN "[..])?;
     typ.to_writer(writer)?;
@@ -40,8 +53,14 @@ pub fn write(
     writer.write_all(&b"\n"[..])?;
     writer.flush()?;
 
-    // write body
-    let mut crc_hasher = include_checksum.then(Crc24Hasher::new);
+    Ok(())
+}
+
+fn write_body(
+    writer: &mut impl Write,
+    source: &impl Serialize,
+    crc_hasher: Option<&mut Crc24Hasher>,
+) -> Result<()> {
     {
         let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
         let mut enc = ZeroWrapper(base64::write::EncoderWriter::new(
@@ -49,7 +68,7 @@ pub fn write(
             &general_purpose::STANDARD,
         ));
 
-        if let Some(ref mut crc_hasher) = crc_hasher {
+        if let Some(crc_hasher) = crc_hasher {
             let mut tee = TeeWriter::new(crc_hasher, &mut enc);
             source.to_writer(&mut tee)?;
         } else {
@@ -57,6 +76,14 @@ pub fn write(
         }
     }
 
+    Ok(())
+}
+
+fn write_footer(
+    writer: &mut impl Write,
+    typ: BlockType,
+    crc_hasher: Option<Crc24Hasher>,
+) -> Result<()> {
     // write crc
     if let Some(crc_hasher) = crc_hasher {
         writer.write_all(b"=")?;
@@ -78,7 +105,6 @@ pub fn write(
     writer.write_all(&b"-----END "[..])?;
     typ.to_writer(writer)?;
     writer.write_all(&b"-----\n"[..])?;
-
     Ok(())
 }
 

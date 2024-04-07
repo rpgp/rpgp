@@ -2,7 +2,7 @@
 /// public and secret.
 #[macro_export]
 macro_rules! key_parser {
-    ( $key_type:ty, $key_type_parser: ident, $key_tag:expr, $inner_key_type:ty, $( ($subkey_tag:ident, $inner_subkey_type:ty, $subkey_type:ty, $subkey_container:ident) ),* ) => {
+    ( $key_type:ty, $key_type_parser: ident, $block_type:pat, $key_tag:expr, $inner_key_type:ty, $( ($subkey_tag:ident, $inner_subkey_type:ty, $subkey_type:ty, $subkey_container:ident) ),* ) => {
         /// Parse a transferable keys from the given packets.
         /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
         pub struct $key_type_parser<I: Sized + Iterator<Item = $crate::errors::Result<$crate::packet::Packet>>> {
@@ -224,6 +224,10 @@ macro_rules! key_parser {
                 packets: std::iter::Peekable<I>,
             ) -> Box<dyn Iterator<Item = $crate::errors::Result<Self>> + 'a> {
                 Box::new($key_type_parser::from_packets(packets))
+            }
+
+            fn matches_block_type(typ: $crate::armor::BlockType) -> bool {
+                matches!(typ, $block_type | $crate::armor::BlockType::File)
             }
         }
     };

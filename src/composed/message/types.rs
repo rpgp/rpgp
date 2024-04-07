@@ -756,7 +756,7 @@ impl Message {
 }
 
 /// Options for generating armored content.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ArmorOptions<'a> {
     /// Armor headers
     pub headers: Option<&'a armor::Headers>,

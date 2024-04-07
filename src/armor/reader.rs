@@ -8,13 +8,13 @@ use buffer_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
 
 use nom::branch::alt;
-use nom::bytes::streaming::tag;
+use nom::bytes::streaming::{tag, take_until1};
 use nom::bytes::streaming::{take, take_until};
-use nom::character::streaming::{digit1, line_ending, not_line_ending, space0};
+use nom::character::streaming::{alphanumeric1, digit1, line_ending, not_line_ending, space0};
 use nom::combinator::{complete, map, map_res, opt, success, value};
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, preceded, terminated};
-use nom::{IResult, InputIter, InputLength, Slice};
+use nom::IResult;
 
 use crate::base64_decoder::Base64Decoder;
 use crate::base64_reader::Base64Reader;
@@ -47,6 +47,8 @@ pub enum BlockType {
     Signature,
     // gnupgp extension
     File,
+    /// Cleartext Framework message
+    CleartextMessage,
 }
 
 impl fmt::Display for BlockType {
@@ -78,6 +80,7 @@ impl BlockType {
             BlockType::PrivateKeyPKCS1(typ) => format!("{typ} PRIVATE KEY"),
             BlockType::PrivateKeyPKCS8 => "PRIVATE KEY".into(),
             BlockType::PrivateKeyOpenssh => "OPENSSH PRIVATE KEY".into(),
+            BlockType::CleartextMessage => "PGP SIGNED MESSAGE".into(),
         }
     }
 }
@@ -133,6 +136,7 @@ fn armor_header_type(i: &[u8]) -> IResult<&[u8], BlockType> {
         value(BlockType::Message, tag("PGP MESSAGE")),
         value(BlockType::Signature, tag("PGP SIGNATURE")),
         value(BlockType::File, tag("PGP ARMORED FILE")),
+        value(BlockType::CleartextMessage, tag("PGP SIGNED MESSAGE")),
         // OpenSSL formats
 
         // Public Key File PKCS#1
@@ -185,42 +189,31 @@ fn armor_header_line(i: &[u8]) -> IResult<&[u8], BlockType> {
     )(i)
 }
 
-/// Recognizes one or more key tokens.
-fn key_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
-    let input_length = input.input_len();
-
-    for (idx, item) in input.iter_indices() {
-        // are we done? ": " is reached
-        let is_colon_space =
-            item == b':' && idx + 1 < input_length && input.slice(idx + 1..idx + 2)[0] == b' ';
-        if is_colon_space {
-            return Ok((input.slice(idx + 2..), input.slice(0..idx)));
-        }
-
-        // ":\n" reached
-        let is_colon_line_ending = item == b':'
-            && idx + 1 < input_length
-            && (input.slice(idx + 1..idx + 2)[0] == b'\n'
-                || input.slice(idx + 1..idx + 2)[0] == b'\r');
-        if is_colon_line_ending {
-            return Ok((input.slice(idx + 1..), input.slice(0..idx)));
-        }
-    }
-
-    Ok((input.slice(input_length..), input))
-}
-
 /// Parses a single key value pair, for the header.
 fn key_value_pair(i: &[u8]) -> IResult<&[u8], (&str, &str)> {
-    terminated(
-        pair(
-            map_res(key_token, str::from_utf8),
-            map_res(opt(not_line_ending), |r| {
-                str::from_utf8(r.unwrap_or(b"".as_slice()))
-            }),
-        ),
-        line_ending,
-    )(i)
+    let (i, key) = map_res(
+        alt((
+            complete(take_until1(":\r\n")),
+            complete(take_until1(":\n")),
+            complete(take_until1(": ")),
+        )),
+        str::from_utf8,
+    )(i)?;
+
+    // consume the ":"
+    let (i, _) = tag(":")(i)?;
+    let (i, t) = alt((tag(" "), line_ending))(i)?;
+
+    let (i, value) = if t == b" " {
+        let (i, value) = map_res(not_line_ending, str::from_utf8)(i)?;
+        let (i, _) = line_ending(i)?;
+        (i, value)
+    } else {
+        // empty value
+        (i, "")
+    };
+
+    Ok((i, (key, value)))
 }
 
 /// Parses a list of key value pairs.
@@ -243,11 +236,43 @@ fn armor_headers(i: &[u8]) -> IResult<&[u8], Headers> {
 
 /// Armor Header
 fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
-    pair(armor_header_line, armor_headers)(i)
+    let (i, typ) = armor_header_line(i)?;
+    let (i, headers) = match typ {
+        BlockType::CleartextMessage => armor_headers_hash(i)?,
+        _ => armor_headers(i)?,
+    };
+
+    Ok((i, (typ, headers)))
+}
+
+fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
+    let (i, headers) = many0(complete(hash_header_line))(i)?;
+    let (i, _) = pair(space0, line_ending)(i)?;
+
+    let mut res = BTreeMap::new();
+    let headers = headers.into_iter().flatten().collect();
+    res.insert("Hash".to_string(), headers);
+
+    Ok((i, res))
+}
+
+fn hash_header_line(i: &[u8]) -> IResult<&[u8], Vec<String>> {
+    let (i, _) = tag("Hash: ")(i)?;
+    let (i, mut values) = many0(map_res(terminated(alphanumeric1, tag(",")), |s| {
+        str::from_utf8(s).map(|s| s.to_string())
+    }))(i)?;
+
+    let (i, last_value) = terminated(
+        map_res(alphanumeric1, |s| str::from_utf8(s).map(|s| s.to_string())),
+        line_ending,
+    )(i)?;
+    values.push(last_value);
+
+    Ok((i, values))
 }
 
 /// Read the checksum from an base64 encoded buffer.
-fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
+fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
     let checksum = STANDARD
         .decode(input)
         .map_err(|_| io::ErrorKind::InvalidData)?;
@@ -262,16 +287,17 @@ fn read_checksum(input: &[u8]) -> ::std::io::Result<u64> {
     Ok(u64::from(BigEndian::read_u32(&buf)))
 }
 
-fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
-    delimited(
-        take_until(b"-----".as_slice()),
-        armor_header,
-        many0(pair(space0, line_ending)),
-    )(i)
+pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers, bool)> {
+    let (i, prefix) = take_until("-----")(i)?;
+    let has_leading_data = !prefix.is_empty();
+    let (i, (typ, headers)) = armor_header(i)?;
+    let (i, _) = many0(pair(space0, line_ending))(i)?;
+
+    Ok((i, (typ, headers, has_leading_data)))
 }
 
-fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
-    pair(
+fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<u64>, BlockType)> {
+    let (i, checksum) = map_res(
         alt((
             delimited(
                 tag(b"="),
@@ -284,8 +310,11 @@ fn footer_parser(i: &[u8]) -> IResult<&[u8], (Option<&[u8]>, BlockType)> {
                 pair(many0(line_ending), tag(b"--")),
             ),
         )),
-        armor_footer_line,
-    )(i)
+        |c| c.map(read_checksum).transpose(),
+    )(i)?;
+    let (i, typ) = armor_footer_line(i)?;
+
+    Ok((i, (checksum, typ)))
 }
 
 /// Parses a single armor footer line
@@ -306,23 +335,20 @@ pub struct Dearmor<R: BufRead> {
     pub headers: Headers,
     /// Optional crc checksum
     pub checksum: Option<u64>,
-    /// track what we are currently parsing
-    current_part: Part,
-    /// the underlying data source, wrapped in a BufferedReader
-    inner: Option<R>,
-    /// base64 decoder
-    base_decoder: Option<Base64Decoder<Base64Reader<R>>>,
-    /// Are we done?
-    done: bool,
+    /// current state
+    current_part: Part<R>,
     crc: crc24::Crc24Hasher,
 }
 
 /// Internal indicator, where in the parsing phase we are
-#[derive(Debug, PartialEq, Eq)]
-enum Part {
-    Header,
-    Body,
-    Footer,
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+enum Part<R: BufRead> {
+    Header(R),
+    Body(Base64Decoder<Base64Reader<R>>),
+    Footer(BufReader<R>),
+    Done(BufReader<R>),
+    Temp,
 }
 
 impl<R: BufRead> Dearmor<R> {
@@ -331,185 +357,183 @@ impl<R: BufRead> Dearmor<R> {
             typ: None,
             headers: BTreeMap::new(),
             checksum: None,
-            current_part: Part::Header,
-            base_decoder: None,
-            inner: Some(input),
-            done: false,
+            current_part: Part::Header(input),
             crc: Default::default(),
         }
     }
 
-    pub fn read_header(&mut self) -> io::Result<()> {
-        if let Some(ref mut b) = self.inner {
-            let buf = b.fill_buf()?;
+    pub fn into_parts(self) -> (Option<BlockType>, Headers, Option<u64>, BufReader<R>) {
+        let Self {
+            typ,
+            headers,
+            checksum,
+            current_part,
+            ..
+        } = self;
+        let Part::Done(b) = current_part else {
+            panic!("can only be called when done");
+        };
 
-            // no data available currently
-            if buf.is_empty() {
-                return Err(io::Error::new(io::ErrorKind::Interrupted, "empty buffer"));
+        (typ, headers, checksum, b)
+    }
+
+    pub fn read_only_header(mut self) -> Result<(BlockType, Headers, bool, R)> {
+        let header = std::mem::replace(&mut self.current_part, Part::Temp);
+        if let Part::Header(mut b) = header {
+            let (typ, headers, leading) = Self::read_header_internal(&mut b)?;
+            return Ok((typ, headers, leading, b));
+        }
+
+        bail!("invalid state, cannot read header");
+    }
+
+    pub fn after_header(typ: BlockType, headers: Headers, input: R) -> Self {
+        Self {
+            typ: Some(typ),
+            headers,
+            checksum: None,
+            current_part: Part::Body(Base64Decoder::new(Base64Reader::new(input))),
+            crc: Default::default(),
+        }
+    }
+
+    pub fn read_header(&mut self) -> Result<()> {
+        let header = std::mem::replace(&mut self.current_part, Part::Temp);
+        if let Part::Header(mut b) = header {
+            let (typ, headers, _has_leading_data) = Self::read_header_internal(&mut b)?;
+            self.typ = Some(typ);
+            self.headers = headers;
+            self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
+            return Ok(());
+        }
+
+        bail!("invalid state, cannot read header");
+    }
+
+    fn read_header_internal(b: &mut R) -> Result<(BlockType, Headers, bool)> {
+        let (typ, headers, leading) = read_from_buf(b, "armor header", header_parser)?;
+        Ok((typ, headers, leading))
+    }
+
+    fn read_body(
+        &mut self,
+        into: &mut [u8],
+        base_decoder: &mut Base64Decoder<Base64Reader<R>>,
+    ) -> io::Result<usize> {
+        let size = base_decoder.read(into)?;
+        if size > 0 {
+            // update the hash
+            self.crc.write(&into[0..size]);
+        }
+
+        Ok(size)
+    }
+
+    fn read_footer(&mut self, mut b: BufReader<R>) -> Result<()> {
+        let (checksum, footer_typ) = read_from_buf(&mut b, "armor footer", footer_parser)?;
+        if let Some(ref header_typ) = self.typ {
+            if header_typ != &footer_typ {
+                self.current_part = Part::Done(b);
+                bail!(
+                    "armor ascii footer does not match header: {:?} != {:?}",
+                    self.typ,
+                    footer_typ
+                );
             }
+        }
+        self.checksum = checksum;
+        self.current_part = Part::Done(b);
 
-            let consumed = match header_parser(buf) {
-                Ok((remaining, (typ, header))) => {
-                    self.typ = Some(typ);
-                    self.headers = header;
-                    self.current_part = Part::Body;
-
-                    buf.len() - remaining.len()
-                }
-                Err(nom::Err::Incomplete(_)) => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Interrupted,
-                        "incomplete parse header",
-                    ));
-                }
-                Err(err) => {
-                    self.done = true;
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor header: {err:?}"),
-                    ));
-                }
-            };
-
-            b.consume(consumed);
-        } else {
-            panic!("invalid state");
+        // check checksum if there is one
+        if let Some(expected) = self.checksum {
+            let actual = self.crc.finish();
+            if expected != actual {
+                bail!("invalid crc24 checksum");
+            }
         }
 
         Ok(())
-    }
-
-    fn read_body(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        if self.base_decoder.is_none() {
-            let b = self.inner.take().ok_or_else(|| {
-                self.done = true;
-                io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state")
-            })?;
-            self.base_decoder = Some(Base64Decoder::new(Base64Reader::new(b)));
-        }
-
-        // "allow" as workaround for https://github.com/rust-lang/rust-clippy/issues/12208
-        #[allow(clippy::unused_io_amount)]
-        let size = if let Some(ref mut base_decoder) = self.base_decoder {
-            base_decoder.read(into)?
-        } else {
-            unreachable!();
-        };
-
-        if size == 0 && !into.is_empty() {
-            // we are done with the body
-            self.current_part = Part::Footer;
-            self.read_footer()
-        } else if size == 0 {
-            Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "missing footer",
-            ))
-        } else {
-            // update the hash
-            self.crc.write(&into[0..size]);
-
-            Ok(size)
-        }
-    }
-
-    fn read_footer(&mut self) -> io::Result<usize> {
-        if self.base_decoder.is_some() {
-            let decoder = self
-                .base_decoder
-                .take()
-                .ok_or_else(|| io::Error::new(io::ErrorKind::UnexpectedEof, "bad parser state"))?;
-            let (b, buf) = decoder.into_inner_with_buffer();
-
-            let mut b = BufReader::with_buffer(buf, b.into_inner());
-
-            b.make_room();
-
-            // read the rest of the buffer, up to 128 bytes
-            while b.read_into_buf()? > 0 && b.buf_len() < 128 {
-                if b.buf_len() == 0 {
-                    // we are done here
-                    return Ok(0);
-                }
-            }
-
-            let consumed = match footer_parser(b.buffer()) {
-                Ok((remaining, (checksum, footer_typ))) => {
-                    if let Some(ref header_typ) = self.typ {
-                        if header_typ != &footer_typ {
-                            self.done = true;
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidData,
-                                format!(
-                                    "armor ascii footer does not match header: {:?} != {:?}",
-                                    self.typ, footer_typ
-                                ),
-                            ));
-                        }
-                    }
-
-                    if let Some(raw) = checksum {
-                        self.checksum = Some(read_checksum(raw)?);
-                    }
-
-                    b.buf_len() - remaining.len()
-                }
-                Err(nom::Err::Incomplete(_)) => {
-                    self.done = true;
-                    return Err(io::Error::new(
-                        io::ErrorKind::Interrupted,
-                        "incomplete parse footer",
-                    ));
-                }
-                Err(err) => {
-                    warn!(
-                        "invalid ascii armor footer: `{:?}`",
-                        ::std::str::from_utf8(b.buffer())
-                    );
-                    self.done = true;
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("invalid ascii armor footer: {err:?}"),
-                    ));
-                }
-            };
-
-            b.consume(consumed);
-            self.done = true;
-
-            // check checksum if there is one
-            if let Some(expected) = self.checksum {
-                let actual = self.crc.finish();
-                if expected != actual {
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        "invalid crc24 checksum",
-                    ));
-                }
-            }
-        } else {
-            panic!("invalid state");
-        }
-
-        // We always return zero, as we do not write to the `into` buffer.
-        Ok(0)
     }
 }
 
 impl<R: BufRead> Read for Dearmor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-        if self.done {
-            return Ok(0);
-        }
+        let mut read = 0;
+        loop {
+            let current_part = std::mem::replace(&mut self.current_part, Part::Temp);
+            match current_part {
+                Part::Header(mut b) => {
+                    let (typ, headers, _leading) = Self::read_header_internal(&mut b)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    self.typ = Some(typ);
+                    self.headers = headers;
+                    self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
+                }
+                Part::Body(mut b) => {
+                    let last_read = self.read_body(&mut into[read..], &mut b)?;
+                    if last_read == 0 && read < into.len() {
+                        // we are done with the body
+                        let (b, buf) = b.into_inner_with_buffer();
+                        let b = BufReader::with_buffer(buf, b.into_inner());
+                        self.current_part = Part::Footer(b);
+                    } else {
+                        self.current_part = Part::Body(b);
+                    }
+                    read += last_read;
+                    if read == into.len() {
+                        return Ok(read);
+                    }
+                }
+                Part::Footer(mut b) => {
+                    b.make_room();
+                    while b.buf_len() < 128 {
+                        let read = b.read_into_buf()?;
+                        if read == 0 {
+                            break;
+                        }
+                    }
 
-        match self.current_part {
-            Part::Header => {
-                self.read_header()?;
-                self.read_body(into)
+                    self.read_footer(b)
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                }
+                Part::Done(b) => {
+                    self.current_part = Part::Done(b);
+                    return Ok(read);
+                }
+                Part::Temp => panic!("invalid state"),
             }
-            Part::Body => self.read_body(into),
-            Part::Footer => self.read_footer(),
         }
+    }
+}
+
+pub(crate) fn read_from_buf<B: BufRead, T, P: Fn(&[u8]) -> IResult<&[u8], T>>(
+    b: &mut B,
+    ctx: &str,
+    parser: P,
+) -> Result<T> {
+    let mut last_was_incomplete = false;
+    loop {
+        let buf = b.fill_buf()?;
+        if buf.is_empty() {
+            bail!("not enough bytes in buffer: {}", ctx);
+        }
+        match parser(buf) {
+            Ok((remaining, res)) => {
+                let consumed = buf.len() - remaining.len();
+                b.consume(consumed);
+                return Ok(res);
+            }
+            Err(nom::Err::Incomplete(_)) => {
+                if last_was_incomplete {
+                    bail!("failed reading: {}: not enough bytes", ctx);
+                }
+                last_was_incomplete = true;
+                continue;
+            }
+            Err(err) => {
+                bail!("failed reading: {} {:?}", ctx, err);
+            }
+        };
     }
 }
 
@@ -624,7 +648,7 @@ mod tests {
              NoVal:\n\
              \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP MESSAGE----\
+             -----END PGP MESSAGE-----\
              ";
 
         let (typ, headers, res) = parse(c).unwrap();
@@ -640,7 +664,7 @@ mod tests {
              -----BEGIN PGP MESSAGE-----\n\
              \t \n\
              aGVsbG8gd29ybGQ=\n\
-             -----END PGP MESSAGE----\
+             -----END PGP MESSAGE-----\
              ";
 
         let (typ, headers, res) = parse(c).unwrap();
@@ -798,7 +822,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
     }
 
     #[test]
-    fn test_key_value_pair() {
+    fn test_key_value_pair_single() {
         assert_eq!(
             key_value_pair(&b"hello: world\n"[..]).unwrap(),
             (&b""[..], ("hello", "world")),
@@ -812,6 +836,12 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
+            key_value_pair(&b"hello:\r\n"[..]).unwrap(),
+            (&b""[..], ("hello", "")),
+            "empty"
+        );
+
+        assert_eq!(
             key_value_pair(&b"hello: world\nother content"[..]).unwrap(),
             (&b"other content"[..], ("hello", "world")),
             "with rest"
@@ -819,7 +849,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
     }
 
     #[test]
-    fn test_key_value_pairs() {
+    fn test_key_value_pairs_single() {
         assert_eq!(
             key_value_pairs(&b"hello: world\ncool: stuff\n"[..]).unwrap(),
             (&b""[..], vec![("hello", "world"), ("cool", "stuff")]),
@@ -853,6 +883,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
     #[test]
     fn test_footer_parser() {
+        assert!(footer_parser(b"-----END PGP MESSAGE----").is_err());
         assert_eq!(
             footer_parser(b"-----END PGP PUBLIC KEY BLOCK-----"),
             Ok((&b""[..], (None, BlockType::PublicKey)))
@@ -870,12 +901,12 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
         assert_eq!(
             footer_parser(b"=4JBj-----END PGP PUBLIC KEY BLOCK-----\r\n"),
-            Ok((&b""[..], (Some(&b"4JBj"[..]), BlockType::PublicKey)))
+            Ok((&b""[..], (Some(14717027), BlockType::PublicKey)))
         );
 
         assert_eq!(
             footer_parser(b"=4JBj\r\n-----END PGP PUBLIC KEY BLOCK-----\r\n"),
-            Ok((&b""[..], (Some(&b"4JBj"[..]), BlockType::PublicKey)))
+            Ok((&b""[..], (Some(14717027), BlockType::PublicKey)))
         );
 
         assert_eq!(
@@ -885,7 +916,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
         assert_eq!(
             footer_parser(&b"=XyBX\n-----END PGP PUBLIC KEY BLOCK-----\n"[..]),
-            Ok((&b""[..], (Some(&b"XyBX"[..]), BlockType::PublicKey)))
+            Ok((&b""[..], (Some(6234199), BlockType::PublicKey)))
         );
 
         assert_eq!(
@@ -894,6 +925,49 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
                 &b"-----BEGIN PGP MESSAGE-----\n\naGVsbG8gd29ybGQ=\n-----END PGP MESSAGE-----\n"[..],
                 (None, BlockType::Message)
             )),
+        );
+    }
+
+    #[test]
+    fn test_hash_header_line() {
+        assert_eq!(
+            hash_header_line(b"Hash: hello,world\n").unwrap(),
+            (&[][..], vec!["hello".to_string(), "world".to_string()]),
+        );
+
+        assert_eq!(
+            hash_header_line(b"Hash: hello\n").unwrap(),
+            (&[][..], vec!["hello".to_string()]),
+        );
+
+        assert_eq!(
+            hash_header_line(b"Hash: hello\n\n").unwrap(),
+            (&b"\n"[..], vec!["hello".to_string()]),
+        );
+    }
+
+    #[test]
+    fn test_armor_headers_lines() {
+        let mut headers = BTreeMap::new();
+        headers.insert(
+            "Hash".to_string(),
+            vec!["hello".to_string(), "world".to_string()],
+        );
+
+        assert_eq!(
+            armor_headers_hash(b"Hash: hello,world\n\n").unwrap(),
+            (&[][..], headers),
+        );
+
+        let mut headers = BTreeMap::new();
+        headers.insert(
+            "Hash".to_string(),
+            vec!["hello".to_string(), "world".to_string(), "cool".to_string()],
+        );
+
+        assert_eq!(
+            armor_headers_hash(b"Hash: hello,world\nHash: cool\n\n").unwrap(),
+            (&[][..], headers,),
         );
     }
 
