@@ -3,7 +3,7 @@
 //! Signed secret keys shall be used to sign and decrypt, where as public keys
 //! can verify and encrypt.
 //! Note that technically secret keys also can by definition derive a public key
-//! and hence themself perform verify and encrypt as a secret key can.
+//! and hence themself perform verify and encrypt as a public key can.
 //!
 //! [Key generation] is handled seperately.
 //! For signing directly with an RFC4880 compliant internal hashing, see [signing and verifying based on packets].
