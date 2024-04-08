@@ -1,6 +1,6 @@
-# Status
+# Implementation Status
 
-Symbols:
+**Symbols:**
 
 - 🚧 Work in Progress
 - 🚫 Not planned
