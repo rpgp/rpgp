@@ -1,94 +1,135 @@
 # rPGP
 
-[![crates.io][crate-image]][crate-link]
-[![Documentation][doc-image]][doc-link]
-[![Build Status][build-image]][build-link]
-![minimum rustc 1.70][msrv-image]
-[![dependency status][deps-image]][deps-link]
-[![License][license-image]][license-link]
+<div align="center">
+  <!-- Crates version -->
+  <a href="https://crates.io/crates/pgp">
+    <img src="https://img.shields.io/crates/v/pgp.svg?style=flat-square"
+    alt="Crates.io version" />
+  </a>
+  <!-- Downloads -->
+  <a href="https://crates.io/crates/pgp">
+    <img src="https://img.shields.io/crates/d/pgp.svg?style=flat-square"
+      alt="Download" />
+  </a>
+  <!-- docs.rs docs -->
+  <a href="https://docs.rs/pgp">
+    <img src="https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square"
+      alt="docs.rs docs" />
+  </a>
+  <!-- msrv -->
+  <a href="https://img.shields.io/badge/rustc-1.70+-blue.svg?style=flat-square">
+    <img src="https://img.shields.io/badge/rustc-1.70+-blue.svg?style=flat-square"
+      alt="MSRV 1.70" />
+  </a>
+</div>
+
+<div align="center">
+  <h3>
+    <a href="https://docs.rs/pgp">
+      Rust Docs
+    </a>
+    <span> | </span>
+    <a href="https://github.com/rpgp/rpgp/releases">
+      Releases
+    </a>
+  </h3>
+</div>
+<br/>
 
 > OpenPGP implemented in pure Rust, permissively licensed
 
-rPGP is the only pure Rust implementation of OpenPGP, following [RFC4880](https://tools.ietf.org/html/rfc4880.html) and [RFC2440](https://tools.ietf.org/html/rfc2440). It offers a minimal low-level API and does not prescribe trust schemes or key management policies. It fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification](https://autocrypt.org/level1.html).
+rPGP is the only pure Rust implementation of OpenPGP, following the main RFCs
 
-rPGP is regularly published as [the `pgp` Crate](https://crates.io/crates/pgp/) and its [RSA](https://crates.io/crates/rsa) implementation
-lives under the collective [RustCrypto umbrella](https://github.com/RustCrypto/RSA).
-For ECC crypto support we are using [Curve25519-dalek](https://crates.io/crates/curve25519-dalek).
+- [RFC4880]
+- [RFC2440],
+- [RFC6637] and
+- [draft-ietf-openpgp-crypto-refresh]
 
-> Please note that the API is not well documented yet. You may check out
-> the tests which exercise the API. Please open issues here if if you are
-> attempting to use rPGP and need help.
+See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented PGP features.
 
-## Status (Last updated: October 2019)
+It offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
+Additionally it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
 
-rPGP and its RSA dependency got an independent security audit mid 2019,
-see here for the [full report from IncludeSecurity](https://delta.chat/assets/blog/2019-first-security-review.pdf).
-No critical flaws were found and we have fixed most high, medium and low risk ones.
-
-rPGP is used in production by [Delta Chat, the e-mail based messenger app suite](https://delta.chat), successfully running on Windows, Linux, macOS, Android and iOS in 32bit (only Windows and Android) and 64 bit builds (for the other platforms).
-
-More details on platform and OpenPGP implementation status:
-
-- [OpenPGP Status document](STATUS.md) which describes what of OpenPGP is supported
-- [Platform status document](PLATFORMS.md) which describes current platform support.
-
-### Experimental WASM Support
-
-When enabeling the `wasm` feature, rpgp can be compiled to run using WASM in Node.js and the supported Browsers. Experimental bindings for this can be found in [rpgp/rpgp-js](https://github.com/rpgp/rpgp-js).
-
-## Developement
-
-To run the stress tests,
+## Usage
 
 ```sh
-> git submodule update --init --recursive
-> cargo test --release -- --ignored
+> cargo add pgp
 ```
 
-To enable debugging, add
+### Load a key and verify a message
 
 ```rust
-use pretty_env_logger;
-let _ = pretty_env_logger::try_init();
+use std::fs;
+use pgp::{SignedSecretKey, Message, Deserializable};
+
+let key_file = "key.sec.asc";
+let msg_file = "msg.asc";
+
+let key_string = fs::read_to_string("key.sec.asc").unwrap(),
+let (secret_key, _headers) = SignedSecretKey::from_string(&key_string).unwrap();
+let public_key = skey.public_key();
+
+let msg_string = fs::read_to_string("msg.asc").unwrap();
+let (msg, _headres) = Message::from_string(msg_string).unwrap();
+
+// Verify this message
+msg.verify(&pkey).unwrap();
+
+let msg_content = msg.get_content().unwrap(); // actual message content
 ```
 
-And then run tests with `RUST_LOG=pgp=info`.
+## Current Status
 
-## How is rPGP different from Sequoia?
+> Last updated *April 2024*
 
-Some key differences:
+- Implementation Status: [IMPL_STATUS.md](docs/IMPL_STATUS.md)
+- Security Staus: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
+- Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
-- rPGP has a more permissive license than Sequoia, which allows a broader usage
 
-- rPGP is a library with a well-defined, relatively small feature-set
-  where Sequoia also tries to be a replacement for the GPG command line tool
+## Users & Libraries built using rPGP
 
-- All crypto used in rPGP is implemented in pure Rust,
-  whereas Sequoia by default uses Nettle, which is implemented in C.
+- [Delta Chat]: Messaging app that works over e-mail
+- [`rpgpie`]: An experimental high level OpenPGP API
+- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
+
+Don't see your project here? Please send a PR :)
+
+### FAQs
+
+Checkout [FAQ.md](docs/FAQ.md).
 
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.70 or higher. In future minimally supported version of Rust can be changed, but it will be done with a minor version bump.
+All crates in this repository support Rust 1.70 or higher. In future minimally supported
+version of Rust can be changed, but it will be done with a minor version bump.
 
-## LICENSE
+## License
 
-MIT or Apache 2.0
+Copyright 2024 N0, INC.
 
-## Contribution
+This project is licensed under either of
 
-Unless you explicitly state otherwise, any contribution submitted
-for inclusion in rPGP by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+   http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+   http://opensource.org/licenses/MIT)
 
-[crate-image]: https://img.shields.io/crates/v/pgp.svg?style=flat-square
-[crate-link]: https://crates.io/crates/pgp
-[doc-image]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
-[doc-link]: https://docs.rs/crate/pgp/
-[license-image]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
-[license-link]: https://github.com/rpgp/rpgp/blob/master/LICENSE.md
-[build-image]: https://github.com/rpgp/rpgp/actions/workflows/ci.yml/badge.svg
-[build-link]: https://github.com/rpgp/rpgp/actions?query=workflow%3ACI+branch%3Amaster
-[msrv-image]: https://img.shields.io/badge/rustc-1.70+-blue.svg
-[deps-image]: https://deps.rs/repo/github/rpgp/rpgp/status.svg
-[deps-link]: https://deps.rs/repo/github/rpgp/rpgp
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license,
+shall be dual licensed as above, without any additional terms or conditions.
+
+[RFC2440]: https://tools.ietf.org/html/rfc2440
+[RFC4880]: https://tools.ietf.org/html/rfc4880.html
+[Autocrypt 1.1 e-mail encryption specification]: https://autocrypt.org/level1.html
+[the `pgp` Crate]: https://crates.io/crates/pgp/
+[Delta Chat]: https://delta.chat
+[`rsop`]: https://crates.io/crates/rsop/
+[`rpgpie`]: https://crates.io/crates/rpgpie
+[RFC6637]: https://www.rfc-editor.org/rfc/rfc6637
+[draft-ietf-openpgp-crypto-refresh]: https://datatracker.ietf.org/doc/draft-ietf-openpgp-crypto-refresh/13/
