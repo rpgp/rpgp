@@ -17,9 +17,9 @@
       alt="docs.rs docs" />
   </a>
   <!-- msrv -->
-  <a href="https://img.shields.io/badge/rustc-1.70+-blue.svg?style=flat-square">
-    <img src="https://img.shields.io/badge/rustc-1.70+-blue.svg?style=flat-square"
-      alt="MSRV 1.70" />
+  <a href="https://img.shields.io/badge/rustc-1.74+-blue.svg?style=flat-square">
+    <img src="https://img.shields.io/badge/rustc-1.74+-blue.svg?style=flat-square"
+      alt="MSRV 1.74" />
   </a>
 </div>
 
@@ -102,7 +102,7 @@ Checkout [FAQ.md](docs/FAQ.md).
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.70 or higher. In future minimally supported
+All crates in this repository support Rust 1.74 or higher. In future minimally supported
 version of Rust can be changed, but it will be done with a minor version bump.
 
 ## License
