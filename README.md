@@ -1,11 +1,40 @@
 # rPGP
 
-[![crates.io][crate-image]][crate-link]
-[![Documentation][doc-image]][doc-link]
-[![Build Status][build-image]][build-link]
-![minimum rustc 1.70][msrv-image]
-[![dependency status][deps-image]][deps-link]
-[![License][license-image]][license-link]
+<div align="center">
+  <!-- Crates version -->
+  <a href="https://crates.io/crates/pgp">
+    <img src="https://img.shields.io/crates/v/pgp.svg?style=flat-square"
+    alt="Crates.io version" />
+  </a>
+  <!-- Downloads -->
+  <a href="https://crates.io/crates/pgp">
+    <img src="https://img.shields.io/crates/d/pgp.svg?style=flat-square"
+      alt="Download" />
+  </a>
+  <!-- docs.rs docs -->
+  <a href="https://docs.rs/pgp">
+    <img src="https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square"
+      alt="docs.rs docs" />
+  </a>
+  <!-- msrv -->
+  <a href="https://img.shields.io/badge/rustc-1.70+-blue.svg?style=flat-square">
+    <img src="https://img.shields.io/badge/rustc-1.70+-blue.svg?style=flat-square"
+      alt="MSRV 1.70" />
+  </a>
+</div>
+
+<div align="center">
+  <h3>
+    <a href="https://docs.rs/pgp">
+      Rust Docs
+    </a>
+    <span> | </span>
+    <a href="https://github.com/rpgp/rpgp/releases">
+      Releases
+    </a>
+  </h3>
+</div>
+<br/>
 
 > OpenPGP implemented in pure Rust, permissively licensed
 
@@ -76,27 +105,25 @@ Checkout [FAQ.md](FAQ.md).
 All crates in this repository support Rust 1.70 or higher. In future minimally supported
 version of Rust can be changed, but it will be done with a minor version bump.
 
-## LICENSE
+## License
 
-MIT or Apache 2.0
+Copyright 2024 N0, INC.
 
-## Contribution
+This project is licensed under either of
 
-Unless you explicitly state otherwise, any contribution submitted
-for inclusion in rPGP by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
+   http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or
+   http://opensource.org/licenses/MIT)
 
-[crate-image]: https://img.shields.io/crates/v/pgp.svg?style=flat-square
-[crate-link]: https://crates.io/crates/pgp
-[doc-image]: https://img.shields.io/badge/docs-online-blue.svg?style=flat-square
-[doc-link]: https://docs.rs/crate/pgp/
-[license-image]: https://img.shields.io/badge/License-MIT%2FApache2.0-green.svg?style=flat-square
-[license-link]: https://github.com/rpgp/rpgp/blob/master/LICENSE.md
-[build-image]: https://github.com/rpgp/rpgp/actions/workflows/ci.yml/badge.svg
-[build-link]: https://github.com/rpgp/rpgp/actions?query=workflow%3ACI+branch%3Amaster
-[msrv-image]: https://img.shields.io/badge/rustc-1.70+-blue.svg
-[deps-image]: https://deps.rs/repo/github/rpgp/rpgp/status.svg
-[deps-link]: https://deps.rs/repo/github/rpgp/rpgp
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license,
+shall be dual licensed as above, without any additional terms or conditions.
+
 [RFC2440]: https://tools.ietf.org/html/rfc2440
 [RFC4880]: https://tools.ietf.org/html/rfc4880.html
 [Autocrypt 1.1 e-mail encryption specification]: https://autocrypt.org/level1.html
