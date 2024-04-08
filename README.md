@@ -45,7 +45,7 @@ rPGP is the only pure Rust implementation of OpenPGP, following the main RFCs
 - [RFC6637] and
 - [draft-ietf-openpgp-crypto-refresh]
 
-See [`STATUS.md`](docs/STATUS.md) for more details on the implemented PGP features.
+See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented PGP features.
 
 It offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
 Additionally it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
@@ -82,7 +82,7 @@ let msg_content = msg.get_content().unwrap(); // actual message content
 
 > Last updated *April 2024*
 
-- Implementation Status: [STATUS.md](docs/STATUS.md)
+- Implementation Status: [IMPL_STATUS.md](docs/IMPL_STATUS.md)
 - Security Staus: [STATUS_SECURITY.md](docs/STATUS_SECURITY.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
