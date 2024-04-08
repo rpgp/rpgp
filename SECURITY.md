@@ -1,26 +1,26 @@
-# Security Status
+# Security policy
 
-## Known Issues
+If you have discovered a security vulnerability in this project, please report it privately.
+Do not disclose it as a public issue.
+This gives us time to work with you to fix the issue before public exposure, reducing the chance that the exploit will be used before a patch is released.
 
-The used [`rsa`](https://crates.io/crates/rsa) crate is vulnerable to the Marvin attack and potentitally other side channel attacks. This is being tracked and worked on actively:
+This project is maintained by a team of volunteers on a reasonable-effort basis.
+As such, please give us at least 90 days to work on a fix before public exposure.
+We will contact you back within 2 business days after reporting the issue.
 
-- https://github.com/RustCrypto/RSA/issues/19
-- https://github.com/RustCrypto/RSA/pull/394
+Thanks for helping make the project safe for everyone!
 
-## Security Audits
+## Reporting a vulnerability
 
-rPGP and its RSA dependency have gotten multiple independent security audits in the past
+Please, report the vulnerability either through [new security advisory form][ADV] or by directly contacting our security contacts.
 
-### 2019
+[ADV]: https://github.com/rpgp/rpgp/security/advisories/new
 
-[Security Assessment of DeltaChat's RPGP and
-RustCrypto RSA Libraries for the Open Tech
-Fund](https://delta.chat/assets/blog/2019-first-security-review.pdf).
+Security contacts:
+  - [dignifiedquire][dig]
 
-No critical flaws were found and we have fixed most high, medium and low risk ones.
+[dig]: https://github.com/dignifiedquire
 
-### 2024
+## Supported Versions
 
-[Hardening Guaranteed End-to-End encryption based on a security analysis from ETH researchers](https://delta.chat/en/2024-03-25-crypto-analysis-securejoin)
-
-All discovered issues have been fixed.
+Security updates are applied only to the most recent release.

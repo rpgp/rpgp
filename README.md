@@ -83,7 +83,7 @@ let msg_content = msg.get_content().unwrap(); // actual message content
 > Last updated *April 2024*
 
 - Implementation Status: [STATUS.md](STATUS.md)
-- Security Staus: [SECURITY.md](SECURITY.md)
+- Security Staus: [STATUS_SECURITY.md](STATUS_SECURITY.md)
 - Supported Platforms: [PLATFORMS.md](PLATFORMS.md)
 
 
