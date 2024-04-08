@@ -83,15 +83,15 @@ let msg_content = msg.get_content().unwrap(); // actual message content
 > Last updated *April 2024*
 
 - Implementation Status: [IMPL_STATUS.md](docs/IMPL_STATUS.md)
-- Security Staus: [STATUS_SECURITY.md](docs/STATUS_SECURITY.md)
+- Security Staus: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
 
 ## Users & Libraries built using rPGP
 
 - [Delta Chat]: Messaging app that works over e-mail
-- [`rpgpie`]: An experimental high level OpenPGP
-- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie.
+- [`rpgpie`]: An experimental high level OpenPGP API
+- [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
 
 Don't see your project here? Please send a PR :)
 
