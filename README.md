@@ -19,7 +19,7 @@ For ECC crypto support we are using [Curve25519-dalek](https://crates.io/crates/
 > the tests which exercise the API. Please open issues here if if you are
 > attempting to use rPGP and need help.
 
-## Status (Last updated: October 2019)
+## Status (Last updated: February 2024)
 
 rPGP and its RSA dependency got an independent security audit mid 2019,
 see here for the [full report from IncludeSecurity](https://delta.chat/assets/blog/2019-first-security-review.pdf).
