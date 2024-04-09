@@ -279,10 +279,10 @@ mod tests {
             vec![
                 (82, 199),    // invalid hash alg 06
                 (85, 196),    // invalid hash alg 06
-                (836, 3136),  // non canoncial length encoding
-                (1200, 2772), // non canoncial length encoding
-                (1268, 1223), // non canoncial length encoding
-                (1670, 3419), // non canoncial length encoding
+                (836, 3136),  // non canonical length encoding
+                (1200, 2772), // non canonical length encoding
+                (1268, 1223), // non canonical length encoding
+                (1670, 3419), // non canonical length encoding
             ],
         )
     }
@@ -293,13 +293,13 @@ mod tests {
         packet_roundtrip(
             "0009",
             vec![
-                (37, 3960),   // non canoncial length encoding
-                (39, 3960),   // non canoncial length encoding
-                (258, 75),    // non canoncial length encoding
-                (260, 78),    // non canoncial length encoding
-                (1053, 3181), // non canoncial length encoding
-                (1473, 5196), // non canoncial length encoding
-                (1895, 4243), // non canoncial length encoding
+                (37, 3960),   // non canonical length encoding
+                (39, 3960),   // non canonical length encoding
+                (258, 75),    // non canonical length encoding
+                (260, 78),    // non canonical length encoding
+                (1053, 3181), // non canonical length encoding
+                (1473, 5196), // non canonical length encoding
+                (1895, 4243), // non canonical length encoding
             ],
         )
     }
@@ -380,7 +380,7 @@ mod tests {
             // println!("\n-- checking: {:?} {}", packet.tag(), e);
 
             let tag: Tag = u8::into(tag.parse().unwrap());
-            assert_eq!(tag, packet.tag(), "missmatch in packet {:?} ({})", p, e);
+            assert_eq!(tag, packet.tag(), "mismatch in packet {:?} ({})", p, e);
         }
     }
 

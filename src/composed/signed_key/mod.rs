@@ -5,7 +5,7 @@
 //! Note that technically secret keys also can by definition derive a public key
 //! and hence themself perform verify and encrypt as a public key can.
 //!
-//! [Key generation] is handled seperately.
+//! [Key generation] is handled separately.
 //! For signing directly with an RFC4880 compliant internal hashing, see [signing and verifying based on packets].
 //!
 //! [Key generation]: super::key
@@ -74,7 +74,7 @@
 //!     .verify_signature(HashAlgorithm::SHA2_256, digest, &signature)
 //!     .expect("Failed to validate signature");
 //!
-//! // wraps the signature in the apropriate package fmt ready to be serialized
+//! // wraps the signature in the appropriate package fmt ready to be serialized
 //! let signature = Signature::new(
 //!     types::Version::Old,
 //!     packet::SignatureVersion::V4,

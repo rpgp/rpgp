@@ -7,7 +7,7 @@ use crate::errors::Result;
 use crate::ser::Serialize;
 use crate::types::{Mpi, MpiRef};
 
-/// Represent the public paramaters for the different algorithms.
+/// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone)]
 pub enum PublicParams {
     RSA {

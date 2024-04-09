@@ -10,7 +10,7 @@ use crate::types::{Tag, Version};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModDetectionCode {
     packet_version: Version,
-    /// 20 byte SHA1 hash of the preceeding plaintext data.
+    /// 20 byte SHA1 hash of the preceding plaintext data.
     hash: [u8; 20],
 }
 
