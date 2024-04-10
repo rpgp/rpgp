@@ -107,8 +107,6 @@ version of Rust can be changed, but it will be done with a minor version bump.
 
 ## License
 
-Copyright 2024 N0, INC.
-
 This project is licensed under either of
 
  * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
