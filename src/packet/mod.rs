@@ -123,3 +123,5 @@ pub use self::user_id::*;
 
 pub use self::many::*;
 pub use self::packet_sum::*;
+
+pub use self::sym_encrypted_protected_data::Data;
