@@ -83,15 +83,17 @@ let msg_content = msg.get_content().unwrap(); // actual message content
 > Last updated *April 2024*
 
 - Implementation Status: [IMPL_STATUS.md](docs/IMPL_STATUS.md)
-- Security Staus: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
+- Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
 
 ## Users & Libraries built using rPGP
 
-- [Delta Chat]: Messaging app that works over e-mail
+- [Delta Chat]: Cross-platform messaging app that works over e-mail
+- [`rpm`]: A pure rust library for parsing and creating RPM files
 - [`rpgpie`]: An experimental high level OpenPGP API
 - [`rsop`]: A SOP CLI tool based on rPGP and rpgpie
+- [`debian-packaging`]: a library crate for dealing with Debian packages
 
 Don't see your project here? Please send a PR :)
 
@@ -129,5 +131,7 @@ shall be dual licensed as above, without any additional terms or conditions.
 [Delta Chat]: https://delta.chat
 [`rsop`]: https://crates.io/crates/rsop/
 [`rpgpie`]: https://crates.io/crates/rpgpie
+[`rpm`]: https://crates.io/crates/rpm
+[`debian-packaging`]: https://crates.io/crates/debian-packaging 
 [RFC6637]: https://www.rfc-editor.org/rfc/rfc6637
 [draft-ietf-openpgp-crypto-refresh]: https://datatracker.ietf.org/doc/draft-ietf-openpgp-crypto-refresh/13/

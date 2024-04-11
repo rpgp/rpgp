@@ -9,7 +9,7 @@ The used [`rsa`](https://crates.io/crates/rsa) crate is vulnerable to the Marvin
 
 ## Security Audits
 
-rPGP and its RSA dependency have gotten multiple independent security audits in the past.
+rPGP and its RSA dependency received an independent security audit and a security analysis.
 
 ### 2024
 
