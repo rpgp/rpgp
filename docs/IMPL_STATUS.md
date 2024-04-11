@@ -1,5 +1,9 @@
 # Implementation Status
 
+For an overall comparison with other implementations 
+see the "rpgpie" results in the [OpenPGP interoperability test suite](https://tests.sequoia-pgp.org/)
+
+
 **Symbols:**
 
 - 🚧 Work in Progress
