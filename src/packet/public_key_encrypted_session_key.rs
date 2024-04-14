@@ -2,7 +2,7 @@ use std::io;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use nom::bytes::streaming::take;
-use nom::combinator::{map, map_res};
+use nom::combinator::map;
 use nom::number::streaming::be_u8;
 use nom::sequence::pair;
 use rand::{CryptoRng, Rng};
@@ -15,6 +15,8 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{mpi, KeyId, Mpi, PublicKeyTrait, Tag, Version};
 
+use super::single::Span;
+
 /// Public Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.1
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,11 +26,19 @@ pub struct PublicKeyEncryptedSessionKey {
     id: KeyId,
     algorithm: PublicKeyAlgorithm,
     mpis: Vec<Mpi>,
+    offsets: Option<Offsets>,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Offsets {
+    version: usize,
+    id: usize,
+    alg: usize,
+    mpis: usize,
 }
 
 impl PublicKeyEncryptedSessionKey {
     /// Parses a `PublicKeyEncryptedSessionKey` packet from the given slice.
-    pub fn from_slice(version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(version: Version, input: Span<'_>) -> Result<Self> {
         let (_, pk) = parse(version)(input)?;
 
         if pk.version != 3 {
@@ -65,6 +75,7 @@ impl PublicKeyEncryptedSessionKey {
             id: pkey.key_id(),
             algorithm: pkey.algorithm(),
             mpis,
+            offsets: None,
         })
     }
 
@@ -111,17 +122,22 @@ fn parse_mpis<'i>(alg: &PublicKeyAlgorithm, i: &'i [u8]) -> IResult<&'i [u8], Ve
 /// Parses a Public-Key Encrypted Session Key Packets.
 fn parse(
     packet_version: Version,
-) -> impl Fn(&[u8]) -> IResult<&[u8], PublicKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
+) -> impl Fn(Span<'_>) -> IResult<&[u8], PublicKeyEncryptedSessionKey> {
+    move |i: Span<'_>| {
+        let version_offset = i.location_offset();
         // version, only 3 is allowed
         let (i, version) = be_u8(i)?;
+        let id_offset = i.location_offset();
         // the key id this maps to
-        let (i, id) = map_res(take(8u8), KeyId::from_slice)(i)?;
+        let (i, raw_id) = take(8u8)(i)?;
+        let id = KeyId::from_slice(&raw_id)?;
+        let alg_offset = i.location_offset();
         // the symmetric key algorithm
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
 
+        let mpis_offset = i.location_offset();
         // key algorithm specific data
-        let (i, mpis) = parse_mpis(&alg, i)?;
+        let (i, mpis) = parse_mpis(&alg, &i)?;
 
         Ok((
             i,
@@ -131,6 +147,12 @@ fn parse(
                 id,
                 algorithm: alg,
                 mpis,
+                offsets: Some(Offsets {
+                    version: version_offset,
+                    id: id_offset,
+                    alg: alg_offset,
+                    mpis: mpis_offset,
+                })
             },
         ))
     }

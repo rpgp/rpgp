@@ -101,10 +101,12 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     Ok((i, head))
 }
 
+pub type Span<'a> = netgauze_locate::BinarySpan<&'a [u8]>;
+
 pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
-            PublicKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
+            PublicKeyEncryptedSessionKey::from_slice(ver, Span::new(body)).map(Into::into)
         }
         Tag::Signature => Signature::from_slice(ver, body).map(Into::into),
         Tag::SymKeyEncryptedSessionKey => {
