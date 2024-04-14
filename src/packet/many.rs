@@ -1,32 +1,29 @@
-use std::io::Read;
+use std::io::{BufRead, Read};
 
-use buffer_redux::Buffer;
-use nom::{Needed, Offset};
+use buffer_redux::policy::MinBuffered;
+use buffer_redux::BufReader;
 
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
-use crate::packet::single::{self, ParseResult};
-use crate::types::Tag;
+use crate::packet::single;
+use crate::types::{PacketLength, Tag};
 
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
+const DEFAULT_CAPACITY: usize = 1024 * 16;
+const READER_POLICY: MinBuffered = MinBuffered(1024);
+
 pub struct PacketParser<R> {
-    inner: R,
-    capacity: usize,
-    buffer: Buffer,
-    failed: bool,
+    reader: BufReader<R, MinBuffered>,
+    /// Remember if we are done.
+    done: bool,
 }
 
 impl<R: Read> PacketParser<R> {
     pub fn new(inner: R) -> Self {
         PacketParser {
-            inner,
-            // the inital capacity of our buffer
-            // TODO: use a better value than a random guess
-            capacity: 1024,
-            // TODO: only use when available
-            buffer: Buffer::with_capacity(1024),
-            failed: false,
+            reader: BufReader::with_capacity(DEFAULT_CAPACITY, inner).set_policy(READER_POLICY),
+            done: false,
         }
     }
 }
@@ -35,128 +32,234 @@ impl<R: Read> Iterator for PacketParser<R> {
     type Item = Result<Packet>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.failed {
+        if self.done {
             return None;
         }
 
-        let b = &mut self.buffer;
-        let mut needed: Option<Needed> = None;
-        let mut second_round = false;
-        let inner = &mut self.inner;
-
         loop {
-            // read some data
-            let sz = match b.read_from(inner) {
-                Ok(sz) => sz,
+            let buf = match self.reader.fill_buf() {
+                Ok(buf) => buf,
                 Err(err) => {
                     warn!("failed to read {:?}", err);
+                    self.done = true;
                     return None;
                 }
             };
 
-            // If there's no more available data in the buffer after a write, that means we reached
-            // the end of the input.
-            if b.is_empty() {
+            // No more data to read
+            if buf.is_empty() {
+                self.done = true;
+                debug!("EOF");
                 return None;
             }
 
-            if needed.is_some() && sz == 0 {
-                if second_round {
-                    // Cancel if we didn't receive enough bytes from our source, the second time around.
-                    // TODO: b.reset();
-                    self.failed = true;
+            let buf_len = buf.len();
+
+            let (version, tag, packet_length) = match single::parser(buf) {
+                Ok((rest, v)) => {
+                    let rest_len = rest.len();
+                    let read = buf_len - rest_len;
+                    self.reader.consume(read);
+                    v
+                }
+                Err(nom::Err::Incomplete(_)) => {
+                    // If incomplete, we are not getting a full header,
+                    // minimum input size is checked above.
+                    self.done = true;
                     return Some(Err(Error::PacketIncomplete));
                 }
-                second_round = true;
-            }
-
-            let res_header = match single::parser(b.buf()) {
-                Ok(v) => Ok(v),
-                Err(err) => Err(err.into()),
-            }
-            .and_then(|(rest, (ver, tag, _packet_length, body))| match body {
-                ParseResult::Indeterminate => {
-                    let mut body = rest.to_vec();
-                    inner.read_to_end(&mut body)?;
-                    match single::body_parser(ver, tag, &body) {
-                        Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
-                        p => Ok((rest.len() + body.len(), p)),
-                    }
+                Err(err) => {
+                    self.done = true;
+                    return Some(Err(err.into()));
                 }
-                ParseResult::Fixed(body) => {
-                    let p = single::body_parser(ver, tag, body);
-                    Ok((b.buf().offset(rest), p))
-                }
-                ParseResult::Partial(body) => {
-                    ensure!(
-                        // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
-                        // "An implementation MAY use Partial Body Lengths for data packets, be
-                        // they literal, compressed, or encrypted [...]
-                        // Partial Body Lengths MUST NOT be used for any other packet types"
-                        matches!(
-                            tag,
-                            Tag::LiteralData
-                                | Tag::CompressedData
-                                | Tag::SymEncryptedData
-                                | Tag::SymEncryptedProtectedData
-                        ),
-                        "Partial body length is not allowed for packet type {:?}",
-                        tag
-                    );
-
-                    if let Some(first) = body.first() {
-                        // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
-                        // "The first partial length MUST be at least 512 octets long."
-                        ensure!(
-                            first.len() >= 512,
-                            "Illegal first partial body length {} (shorter than 512 bytes)",
-                            first.len()
-                        );
-                    }
-
-                    let p = single::body_parser(ver, tag, &body.concat());
-                    Ok((b.buf().offset(rest), p))
-                }
-            });
-
-            let res_body = match res_header {
-                Ok(val) => Some(val),
-                Err(err) => match err {
-                    Error::Incomplete(n) => {
-                        debug!("incomplete {:?}", n);
-                        needed = Some(n);
-                        None
-                    }
-                    _ => {
-                        warn!("parsing error {:?}", err);
-                        self.failed = true;
-                        return Some(Err(err));
-                    }
-                },
             };
 
-            if let Some((length, p)) = res_body {
-                debug!("got packet: {:#?} {}", p, length);
-                assert!(length > 0);
-                b.consume(length);
-                return Some(p);
-            }
+            match packet_length {
+                PacketLength::Indeterminate => {
+                    debug!("indi");
 
-            // if the parser returned `Incomplete`, and it needs more data than the buffer can hold, we grow the buffer.
-            if let Some(needed) = needed {
-                let requested_size: usize = match needed {
-                    Needed::Size(sz) => sz.into(),
-                    Needed::Unknown => 1024,
-                };
+                    let mut body = Vec::new();
+                    let mut buf = [0u8; 1024];
 
-                if b.usable_space() < requested_size {
-                    self.capacity = std::cmp::min(self.capacity * 2, MAX_CAPACITY);
-                    b.make_room();
-                    b.reserve(self.capacity);
+                    loop {
+                        // limited read_to_end
+                        match self.reader.read(&mut buf) {
+                            Ok(0) => {
+                                break;
+                            }
+                            Ok(r) => {
+                                body.extend_from_slice(&buf[..r]);
+                                if body.len() >= MAX_CAPACITY {
+                                    self.done = true;
+                                    debug!("read error, indeterminate packet too large");
+                                    return Some(Err(format_err!(
+                                        "Indeterminate packet too large"
+                                    )));
+                                }
+                            }
+                            Err(err) => {
+                                debug!("read error: {:?}", err);
+                                self.done = true;
+                                return Some(Err(err.into()));
+                            }
+                        }
+                    }
+
+                    match single::body_parser(version, tag, &body) {
+                        Ok(packet) => return Some(Ok(packet)),
+                        Err(err) => {
+                            self.done = true;
+                            return Some(Err(err));
+                        }
+                    }
+                }
+                PacketLength::Fixed(len) => {
+                    debug!("fixed {}", len);
+
+                    let res = if len <= self.reader.policy().0.into() {
+                        // small enough to reuse our internal buffer
+                        self.reader.make_room();
+                        let body = match self.reader.fill_buf() {
+                            Ok(body) => body,
+                            Err(err) => {
+                                self.done = true;
+                                return Some(Err(err.into()));
+                            }
+                        };
+                        let res = single::body_parser(version, tag, &body[..len]);
+                        self.reader.consume(len);
+                        res
+                    } else {
+                        let mut buffer = vec![0u8; len];
+                        if let Err(err) = self.reader.read_exact(&mut buffer) {
+                            self.done = true;
+                            return Some(Err(err.into()));
+                        };
+                        single::body_parser(version, tag, &buffer)
+                    };
+
+                    match res {
+                        Ok(p) => {
+                            return Some(Ok(p));
+                        }
+                        Err(Error::Incomplete(_)) => {
+                            // not bailing, we are just skipping incomplete bodies
+                            return Some(Err(Error::PacketIncomplete));
+                        }
+                        Err(err) => {
+                            return Some(Err(err.into()));
+                        }
+                    }
+                }
+                PacketLength::Partial(len) => {
+                    debug!("partial {}", len);
+                    // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                    // "An implementation MAY use Partial Body Lengths for data packets, be
+                    // they literal, compressed, or encrypted [...]
+                    // Partial Body Lengths MUST NOT be used for any other packet types"
+                    if !matches!(
+                        tag,
+                        Tag::LiteralData
+                            | Tag::CompressedData
+                            | Tag::SymEncryptedData
+                            | Tag::SymEncryptedProtectedData
+                    ) {
+                        self.done = true;
+                        return Some(Err(format_err!(
+                            "Partial body length is not allowed for packet type {:?}",
+                            tag
+                        )));
+                    }
+
+                    // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                    // "The first partial length MUST be at least 512 octets long."
+                    if len < 512 {
+                        self.done = true;
+                        return Some(Err(format_err!(
+                            "Illegal first partial body length {} (shorter than 512 bytes)",
+                            len,
+                        )));
+                    }
+
+                    let mut body = vec![0u8; len];
+                    if let Err(err) = self.reader.read_exact(&mut body) {
+                        self.done = true;
+                        return Some(Err(err.into()));
+                    };
+
+                    debug!("partial: read {}", body.len());
+                    // Read n partials + 1 final fixed
+                    loop {
+                        self.reader.make_room();
+                        let buf = match self.reader.fill_buf() {
+                            Ok(buf) => buf,
+                            Err(err) => {
+                                self.done = true;
+                                return Some(Err(err.into()));
+                            }
+                        };
+                        match single::read_packet_len(buf) {
+                            Ok((rest, PacketLength::Partial(len))) => {
+                                let read = buf.len() - rest.len();
+                                self.reader.consume(read);
+                                debug!("partial: partial {}", len);
+                                if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
+                                    self.done = true;
+                                    return Some(Err(err));
+                                }
+                            }
+                            Ok((rest, PacketLength::Fixed(len))) => {
+                                let read = buf.len() - rest.len();
+                                self.reader.consume(read);
+                                debug!("partial: fixed {}", len);
+                                if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
+                                    self.done = true;
+                                    return Some(Err(err));
+                                }
+                                break;
+                            }
+                            Ok((_, PacketLength::Indeterminate)) => {
+                                self.done = true;
+                                return Some(Err(Error::InvalidInput));
+                            }
+                            Err(err) => {
+                                debug!("partial: {:?}", err);
+                                self.done = true;
+                                return Some(Err(err.into()));
+                            }
+                        }
+                    }
+
+                    debug!("partial: read {}", body.len());
+                    match single::body_parser(version, tag, &body) {
+                        Ok(res) => {
+                            return Some(Ok(res));
+                        }
+                        Err(Error::Incomplete(_)) => {
+                            // not bailing, we are just skipping incomplete bodies
+                            return Some(Err(Error::PacketIncomplete));
+                        }
+                        Err(err) => {
+                            self.done = true;
+                            return Some(Err(err.into()));
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+fn read_fixed<R: Read>(
+    reader: &mut BufReader<R, MinBuffered>,
+    len: usize,
+    out: &mut Vec<u8>,
+) -> Result<()> {
+    let out_len = out.len();
+    out.resize(out_len + len, 0u8);
+    reader.read_exact(&mut out[out_len..])?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -258,8 +361,7 @@ mod tests {
 
     #[test]
     fn test_many_parser() {
-        // use pretty_env_logger;
-        // let _ = pretty_env_logger::try_init();
+        let _ = pretty_env_logger::try_init();
 
         let p = Path::new("./tests/tests/sks-dump/0000.pgp");
         let file = File::open(p).unwrap();
@@ -324,6 +426,8 @@ mod tests {
 
     #[test]
     fn test_partial_length_encoding() {
+        let _ = pretty_env_logger::try_init();
+
         use crate::{Deserializable, Message};
 
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n";

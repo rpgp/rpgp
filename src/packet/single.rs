@@ -1,15 +1,11 @@
 // comes from inside somewhere of nom
 #![allow(clippy::useless_let_if_seq)]
 
-use std::num::NonZeroUsize;
-
 use nom::bits;
 use nom::branch::alt;
-use nom::bytes::streaming::take;
 use nom::combinator::{map, map_res};
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::{preceded, tuple};
-use nom::Err;
 
 use crate::de::Deserialize;
 use crate::errors::{Error, IResult, Result};
@@ -57,7 +53,7 @@ fn old_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     })(i)
 }
 
-fn read_packet_len(i: &[u8]) -> IResult<&[u8], PacketLength> {
+pub(crate) fn read_packet_len(i: &[u8]) -> IResult<&[u8], PacketLength> {
     let (i, olen) = be_u8(i)?;
     match olen {
         // One-Octet Lengths
@@ -69,52 +65,11 @@ fn read_packet_len(i: &[u8]) -> IResult<&[u8], PacketLength> {
         // Partial Body Lengths
         224..=254 => Ok((i, PacketLength::Partial(1 << (olen as usize & 0x1F)))),
         // Five-Octet Lengths
-        255 => map(be_u32, |v| u32_as_usize(v).into())(i),
-    }
-}
-
-fn read_partial_bodies(input: &[u8], len: usize) -> IResult<&[u8], ParseResult<'_>> {
-    if let Some(size) = NonZeroUsize::new(len.saturating_sub(input.len())) {
-        return Err(Err::Incomplete(nom::Needed::Size(size)));
-    }
-
-    let mut out = vec![&input[0..len]];
-
-    let mut rest = &input[len..];
-
-    loop {
-        let res = read_packet_len(rest)?;
-        match res.1 {
-            PacketLength::Partial(len) => {
-                if let Some(size) = NonZeroUsize::new(len.saturating_sub(res.0.len())) {
-                    return Err(Err::Incomplete(nom::Needed::Size(size)));
-                }
-                out.push(&res.0[0..len]);
-                rest = &res.0[len..];
-            }
-            PacketLength::Fixed(len) => {
-                if let Some(size) = NonZeroUsize::new(len.saturating_sub(res.0.len())) {
-                    return Err(Err::Incomplete(nom::Needed::Size(size)));
-                }
-
-                out.push(&res.0[0..len]);
-                rest = &res.0[len..];
-                // this is the last one
-                break;
-            }
-            PacketLength::Indeterminate => {
-                // this should not happen, as this is a new style
-                // packet, but lets handle it anyway
-                out.push(res.0);
-                rest = &[];
-
-                // we read everything
-                break;
-            }
+        255 => {
+            let (i, len) = be_u32(i)?;
+            Ok((i, (len as usize).into()))
         }
     }
-
-    Ok((rest, ParseResult::Partial(out)))
 }
 
 /// Parses a new format packet header
@@ -138,36 +93,12 @@ fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     })(i)
 }
 
-pub enum ParseResult<'a> {
-    Fixed(&'a [u8]),
-    Indeterminate,
-    Partial(Vec<&'a [u8]>),
-}
-
-impl std::fmt::Debug for ParseResult<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Fixed(d) => f.debug_tuple("Fixed").field(&hex::encode(d)).finish(),
-            Self::Indeterminate => f.debug_tuple("Indeterminate").finish(),
-            Self::Partial(d) => {
-                let parts: Vec<_> = d.iter().map(hex::encode).collect();
-                f.debug_tuple("Partial").field(&parts).finish()
-            }
-        }
-    }
-}
-
 /// Parse a single Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-4.2
-pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength, ParseResult<'_>)> {
+pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     let (i, head) = alt((new_packet_header, old_packet_header))(i)?;
 
-    let (i, body) = match head.2 {
-        PacketLength::Fixed(length) => map(take(length), ParseResult::Fixed)(i),
-        PacketLength::Indeterminate => Ok((i, ParseResult::Indeterminate)),
-        PacketLength::Partial(length) => read_partial_bodies(i, length),
-    }?;
-    Ok((i, (head.0, head.1, head.2, body)))
+    Ok((i, head))
 }
 
 pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {

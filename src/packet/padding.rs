@@ -67,19 +67,20 @@ mod tests {
     use super::*;
 
     use super::super::single;
-    use crate::packet::single::ParseResult;
     use crate::packet::Packet;
+    use crate::types::PacketLength;
 
     #[test]
     fn test_padding_roundtrip() {
         let packet_raw = hex::decode("d50ec5a293072991628147d72c8f86b7").expect("valid hex");
-        let (rest, (version, tag, _plen, body)) = single::parser(&packet_raw).expect("parse");
-        assert!(rest.is_empty());
+        let (rest, (version, tag, plen)) = single::parser(&packet_raw).expect("parse");
 
-        let ParseResult::Fixed(body) = body else {
+        let PacketLength::Fixed(len) = plen else {
             panic!("invalid parse result");
         };
-        let full_packet = single::body_parser(version, tag, body).expect("body parse");
+        assert_eq!(rest.len(), len);
+
+        let full_packet = single::body_parser(version, tag, &rest[..len]).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
