@@ -248,7 +248,7 @@ mod tests {
     use super::*;
     use regex::Regex;
     use std::fs::File;
-    use std::io::{BufRead, BufReader, Seek, SeekFrom};
+    use std::io::{BufReader, Seek, SeekFrom};
     use std::path::Path;
 
     use crate::ser::Serialize;
