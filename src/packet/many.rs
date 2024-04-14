@@ -36,213 +36,192 @@ impl<R: Read> Iterator for PacketParser<R> {
             return None;
         }
 
-        loop {
-            let buf = match self.reader.fill_buf() {
-                Ok(buf) => buf,
-                Err(err) => {
-                    warn!("failed to read {:?}", err);
-                    self.done = true;
-                    return None;
-                }
-            };
-
-            // No more data to read
-            if buf.is_empty() {
+        let buf = match self.reader.fill_buf() {
+            Ok(buf) => buf,
+            Err(err) => {
+                warn!("failed to read {:?}", err);
                 self.done = true;
-                debug!("EOF");
                 return None;
             }
+        };
 
-            let buf_len = buf.len();
+        // No more data to read
+        if buf.is_empty() {
+            self.done = true;
+            return None;
+        }
 
-            let (version, tag, packet_length) = match single::parser(buf) {
-                Ok((rest, v)) => {
-                    let rest_len = rest.len();
-                    let read = buf_len - rest_len;
-                    self.reader.consume(read);
-                    v
-                }
-                Err(nom::Err::Incomplete(_)) => {
-                    // If incomplete, we are not getting a full header,
-                    // minimum input size is checked above.
-                    self.done = true;
-                    return Some(Err(Error::PacketIncomplete));
-                }
-                Err(err) => {
-                    self.done = true;
-                    return Some(Err(err.into()));
-                }
-            };
+        let buf_len = buf.len();
 
-            match packet_length {
-                PacketLength::Indeterminate => {
-                    debug!("indi");
+        let (version, tag, packet_length) = match single::parser(buf) {
+            Ok((rest, v)) => {
+                let rest_len = rest.len();
+                let read = buf_len - rest_len;
+                self.reader.consume(read);
+                v
+            }
+            Err(nom::Err::Incomplete(_)) => {
+                // If incomplete, we are not getting a full header,
+                // minimum input size is checked above.
+                self.done = true;
+                return Some(Err(Error::PacketIncomplete));
+            }
+            Err(err) => {
+                self.done = true;
+                return Some(Err(err.into()));
+            }
+        };
 
-                    let mut body = Vec::new();
-                    let mut buf = [0u8; 1024];
+        match packet_length {
+            PacketLength::Indeterminate => {
+                let mut body = Vec::new();
+                let mut buf = [0u8; 1024];
 
-                    loop {
-                        // limited read_to_end
-                        match self.reader.read(&mut buf) {
-                            Ok(0) => {
-                                break;
-                            }
-                            Ok(r) => {
-                                body.extend_from_slice(&buf[..r]);
-                                if body.len() >= MAX_CAPACITY {
-                                    self.done = true;
-                                    debug!("read error, indeterminate packet too large");
-                                    return Some(Err(format_err!(
-                                        "Indeterminate packet too large"
-                                    )));
-                                }
-                            }
-                            Err(err) => {
-                                debug!("read error: {:?}", err);
+                loop {
+                    // limited read_to_end
+                    match self.reader.read(&mut buf) {
+                        Ok(0) => {
+                            break;
+                        }
+                        Ok(r) => {
+                            body.extend_from_slice(&buf[..r]);
+                            if body.len() >= MAX_CAPACITY {
                                 self.done = true;
-                                return Some(Err(err.into()));
+                                return Some(Err(format_err!("Indeterminate packet too large")));
                             }
                         }
-                    }
-
-                    match single::body_parser(version, tag, &body) {
-                        Ok(packet) => return Some(Ok(packet)),
                         Err(err) => {
                             self.done = true;
-                            return Some(Err(err));
+                            return Some(Err(err.into()));
                         }
                     }
                 }
-                PacketLength::Fixed(len) => {
-                    debug!("fixed {}", len);
 
-                    let res = if len <= self.reader.policy().0.into() {
-                        // small enough to reuse our internal buffer
-                        self.reader.make_room();
-                        let body = match self.reader.fill_buf() {
-                            Ok(body) => body,
-                            Err(err) => {
-                                self.done = true;
-                                return Some(Err(err.into()));
-                            }
-                        };
-                        let res = single::body_parser(version, tag, &body[..len]);
-                        self.reader.consume(len);
-                        res
-                    } else {
-                        let mut buffer = vec![0u8; len];
-                        if let Err(err) = self.reader.read_exact(&mut buffer) {
+                match single::body_parser(version, tag, &body) {
+                    Ok(packet) => Some(Ok(packet)),
+                    Err(err) => {
+                        self.done = true;
+                        Some(Err(err))
+                    }
+                }
+            }
+            PacketLength::Fixed(len) => {
+                let res = if len <= self.reader.policy().0 {
+                    // small enough to reuse our internal buffer
+                    self.reader.make_room();
+                    let body = match self.reader.fill_buf() {
+                        Ok(body) => body,
+                        Err(err) => {
                             self.done = true;
                             return Some(Err(err.into()));
-                        };
-                        single::body_parser(version, tag, &buffer)
+                        }
                     };
-
-                    match res {
-                        Ok(p) => {
-                            return Some(Ok(p));
-                        }
-                        Err(Error::Incomplete(_)) => {
-                            // not bailing, we are just skipping incomplete bodies
-                            return Some(Err(Error::PacketIncomplete));
-                        }
-                        Err(err) => {
-                            return Some(Err(err.into()));
-                        }
-                    }
-                }
-                PacketLength::Partial(len) => {
-                    debug!("partial {}", len);
-                    // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
-                    // "An implementation MAY use Partial Body Lengths for data packets, be
-                    // they literal, compressed, or encrypted [...]
-                    // Partial Body Lengths MUST NOT be used for any other packet types"
-                    if !matches!(
-                        tag,
-                        Tag::LiteralData
-                            | Tag::CompressedData
-                            | Tag::SymEncryptedData
-                            | Tag::SymEncryptedProtectedData
-                    ) {
-                        self.done = true;
-                        return Some(Err(format_err!(
-                            "Partial body length is not allowed for packet type {:?}",
-                            tag
-                        )));
-                    }
-
-                    // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
-                    // "The first partial length MUST be at least 512 octets long."
-                    if len < 512 {
-                        self.done = true;
-                        return Some(Err(format_err!(
-                            "Illegal first partial body length {} (shorter than 512 bytes)",
-                            len,
-                        )));
-                    }
-
-                    let mut body = vec![0u8; len];
-                    if let Err(err) = self.reader.read_exact(&mut body) {
+                    let res = single::body_parser(version, tag, &body[..len]);
+                    self.reader.consume(len);
+                    res
+                } else {
+                    let mut buffer = vec![0u8; len];
+                    if let Err(err) = self.reader.read_exact(&mut buffer) {
                         self.done = true;
                         return Some(Err(err.into()));
                     };
+                    single::body_parser(version, tag, &buffer)
+                };
 
-                    debug!("partial: read {}", body.len());
-                    // Read n partials + 1 final fixed
-                    loop {
-                        self.reader.make_room();
-                        let buf = match self.reader.fill_buf() {
-                            Ok(buf) => buf,
-                            Err(err) => {
-                                self.done = true;
-                                return Some(Err(err.into()));
-                            }
-                        };
-                        match single::read_packet_len(buf) {
-                            Ok((rest, PacketLength::Partial(len))) => {
-                                let read = buf.len() - rest.len();
-                                self.reader.consume(read);
-                                debug!("partial: partial {}", len);
-                                if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
-                                    self.done = true;
-                                    return Some(Err(err));
-                                }
-                            }
-                            Ok((rest, PacketLength::Fixed(len))) => {
-                                let read = buf.len() - rest.len();
-                                self.reader.consume(read);
-                                debug!("partial: fixed {}", len);
-                                if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
-                                    self.done = true;
-                                    return Some(Err(err));
-                                }
-                                break;
-                            }
-                            Ok((_, PacketLength::Indeterminate)) => {
-                                self.done = true;
-                                return Some(Err(Error::InvalidInput));
-                            }
-                            Err(err) => {
-                                debug!("partial: {:?}", err);
-                                self.done = true;
-                                return Some(Err(err.into()));
-                            }
-                        }
+                match res {
+                    Ok(p) => Some(Ok(p)),
+                    Err(Error::Incomplete(_)) => {
+                        // not bailing, we are just skipping incomplete bodies
+                        Some(Err(Error::PacketIncomplete))
                     }
+                    Err(err) => Some(Err(err)),
+                }
+            }
+            PacketLength::Partial(len) => {
+                // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                // "An implementation MAY use Partial Body Lengths for data packets, be
+                // they literal, compressed, or encrypted [...]
+                // Partial Body Lengths MUST NOT be used for any other packet types"
+                if !matches!(
+                    tag,
+                    Tag::LiteralData
+                        | Tag::CompressedData
+                        | Tag::SymEncryptedData
+                        | Tag::SymEncryptedProtectedData
+                ) {
+                    self.done = true;
+                    return Some(Err(format_err!(
+                        "Partial body length is not allowed for packet type {:?}",
+                        tag
+                    )));
+                }
 
-                    debug!("partial: read {}", body.len());
-                    match single::body_parser(version, tag, &body) {
-                        Ok(res) => {
-                            return Some(Ok(res));
+                // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                // "The first partial length MUST be at least 512 octets long."
+                if len < 512 {
+                    self.done = true;
+                    return Some(Err(format_err!(
+                        "Illegal first partial body length {} (shorter than 512 bytes)",
+                        len,
+                    )));
+                }
+
+                let mut body = vec![0u8; len];
+                if let Err(err) = self.reader.read_exact(&mut body) {
+                    self.done = true;
+                    return Some(Err(err.into()));
+                };
+
+                // Read n partials + 1 final fixed
+                loop {
+                    self.reader.make_room();
+                    let buf = match self.reader.fill_buf() {
+                        Ok(buf) => buf,
+                        Err(err) => {
+                            self.done = true;
+                            return Some(Err(err.into()));
                         }
-                        Err(Error::Incomplete(_)) => {
-                            // not bailing, we are just skipping incomplete bodies
-                            return Some(Err(Error::PacketIncomplete));
+                    };
+                    match single::read_packet_len(buf) {
+                        Ok((rest, PacketLength::Partial(len))) => {
+                            let read = buf.len() - rest.len();
+                            self.reader.consume(read);
+
+                            if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
+                                self.done = true;
+                                return Some(Err(err));
+                            }
+                        }
+                        Ok((rest, PacketLength::Fixed(len))) => {
+                            let read = buf.len() - rest.len();
+                            self.reader.consume(read);
+
+                            if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
+                                self.done = true;
+                                return Some(Err(err));
+                            }
+                            break;
+                        }
+                        Ok((_, PacketLength::Indeterminate)) => {
+                            self.done = true;
+                            return Some(Err(Error::InvalidInput));
                         }
                         Err(err) => {
                             self.done = true;
                             return Some(Err(err.into()));
                         }
+                    }
+                }
+
+                match single::body_parser(version, tag, &body) {
+                    Ok(res) => Some(Ok(res)),
+                    Err(Error::Incomplete(_)) => {
+                        // not bailing, we are just skipping incomplete bodies
+                        Some(Err(Error::PacketIncomplete))
+                    }
+                    Err(err) => {
+                        self.done = true;
+                        Some(Err(err))
                     }
                 }
             }
