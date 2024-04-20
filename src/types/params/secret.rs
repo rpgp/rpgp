@@ -9,6 +9,7 @@ use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
+use crate::packet::Span;
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -37,7 +38,11 @@ impl SecretParams {
         }
     }
 
-    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
+    pub fn from_slice(
+        data: Span<'_>,
+        alg: PublicKeyAlgorithm,
+        params: &PublicParams,
+    ) -> Result<Self> {
         let (_, params) = parse_secret_fields(alg, params)(data)?;
         Ok(params)
     }
@@ -70,8 +75,8 @@ impl Serialize for SecretParams {
 fn parse_secret_fields(
     alg: PublicKeyAlgorithm,
     public_params: &PublicParams,
-) -> impl Fn(&[u8]) -> IResult<&[u8], SecretParams> + '_ {
-    move |i: &[u8]| {
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, SecretParams> + '_ {
+    move |i: Span<'_>| {
         let (i, s2k_usage) = map_res(be_u8, S2kUsage::try_from)(i)?;
         let (i, enc_params) = match s2k_usage {
             // 0 is no encryption

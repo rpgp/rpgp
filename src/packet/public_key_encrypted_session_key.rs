@@ -92,7 +92,7 @@ impl PublicKeyEncryptedSessionKey {
     }
 }
 
-fn parse_mpis<'i>(alg: &PublicKeyAlgorithm, i: &'i [u8]) -> IResult<&'i [u8], Vec<Mpi>> {
+fn parse_mpis<'i>(alg: &PublicKeyAlgorithm, i: Span<'i>) -> IResult<Span<'i>, Vec<Mpi>> {
     match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSASign | PublicKeyAlgorithm::RSAEncrypt => {
             map(mpi, |v| vec![v.to_owned()])(i)
@@ -122,7 +122,7 @@ fn parse_mpis<'i>(alg: &PublicKeyAlgorithm, i: &'i [u8]) -> IResult<&'i [u8], Ve
 /// Parses a Public-Key Encrypted Session Key Packets.
 fn parse(
     packet_version: Version,
-) -> impl Fn(Span<'_>) -> IResult<&[u8], PublicKeyEncryptedSessionKey> {
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, PublicKeyEncryptedSessionKey> {
     move |i: Span<'_>| {
         let version_offset = i.location_offset();
         // version, only 3 is allowed
@@ -130,14 +130,14 @@ fn parse(
         let id_offset = i.location_offset();
         // the key id this maps to
         let (i, raw_id) = take(8u8)(i)?;
-        let id = KeyId::from_slice(&raw_id)?;
+        let id = KeyId::from_slice(raw_id)?;
         let alg_offset = i.location_offset();
         // the symmetric key algorithm
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
 
         let mpis_offset = i.location_offset();
         // key algorithm specific data
-        let (i, mpis) = parse_mpis(&alg, &i)?;
+        let (i, mpis) = parse_mpis(&alg, i)?;
 
         Ok((
             i,
@@ -152,7 +152,7 @@ fn parse(
                     id: id_offset,
                     alg: alg_offset,
                     mpis: mpis_offset,
-                })
+                }),
             },
         ))
     }

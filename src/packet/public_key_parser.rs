@@ -10,6 +10,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::IResult;
+use crate::packet::Span;
 use crate::types::{mpi, EcdsaPublicParams, KeyVersion, Mpi, MpiRef, PublicParams};
 
 #[inline]
@@ -18,13 +19,12 @@ fn to_owned(mref: MpiRef<'_>) -> Mpi {
 }
 
 /// Ref: https://tools.ietf.org/html/rfc6637#section-9
-fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    let (i, curve) = map_opt(
-        // a one-octet size of the following field
-        length_data(be_u8),
-        // octets representing a curve OID
-        ecc_curve_from_oid,
-    )(i)?;
+fn ecdsa(i: Span<'_>) -> IResult<Span<'_>, PublicParams> {
+    // a one-octet size of the following field
+    // octets representing a curve OID
+    let (i, curve) = map_opt(length_data(be_u8), |curve_raw: Span<'_>| {
+        ecc_curve_from_oid(*curve_raw.fragment())
+    })(i)?;
 
     // MPI of an EC point representing a public key
     let (i, p) = mpi(i)?;
@@ -35,12 +35,12 @@ fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
 }
 
 /// https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
-fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
+fn eddsa(i: Span<'_>) -> IResult<Span<'_>, PublicParams> {
     let (i, curve) = map_opt(
         // a one-octet size of the following field
         length_data(be_u8),
         // octets representing a curve OID
-        ecc_curve_from_oid,
+        |c: Span<'_>| ecc_curve_from_oid(*c.fragment()),
     )(i)?;
     // MPI of an EC point representing a public key
     let (i, q) = mpi(i)?;
@@ -54,34 +54,36 @@ fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
 }
 
 /// Ref: https://tools.ietf.org/html/rfc6637#section-9
-fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    map(
-        tuple((
-            // a one-octet size of the following field
-            // octets representing a curve OID
-            map_opt(length_data(be_u8), ecc_curve_from_oid),
-            // MPI of an EC point representing a public key
-            mpi,
-            // a one-octet size of the following fields
-            be_u8,
-            // a one-octet value 01, reserved for future extensions
-            tag(&[1][..]),
-            // a one-octet hash function ID used with a KDF
-            map(be_u8, HashAlgorithm::from),
-            // a one-octet algorithm ID for the symmetric algorithm used to wrap
-            // the symmetric key used for the message encryption
-            map_res(be_u8, SymmetricKeyAlgorithm::try_from),
-        )),
-        |(curve, p, _len2, _tag, hash, alg_sym)| PublicParams::ECDH {
+fn ecdh(i: Span<'_>) -> IResult<Span<'_>, PublicParams> {
+    // a one-octet size of the following field
+    // octets representing a curve OID
+    let (i, curve) = map_opt(length_data(be_u8), |s: Span<'_>| {
+        ecc_curve_from_oid(*s.fragment())
+    })(i)?;
+    // MPI of an EC point representing a public key
+    let (i, p) = mpi(i)?;
+    // a one-octet size of the following fields
+    let (i, _len2) = be_u8(i)?;
+    // a one-octet value 01, reserved for future extensions
+    let (i, _tag) = tag(&[1][..])(i)?;
+    // a one-octet hash function ID used with a KDF
+    let (i, hash) = map(be_u8, HashAlgorithm::from)(i)?;
+    // a one-octet algorithm ID for the symmetric algorithm used to wrap
+    // the symmetric key used for the message encryption
+    let (i, alg_sym) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+
+    Ok((
+        i,
+        PublicParams::ECDH {
             curve,
             p: p.to_owned(),
             hash,
             alg_sym,
         },
-    )(i)
+    ))
 }
 
-fn elgamal(i: &[u8]) -> IResult<&[u8], PublicParams> {
+fn elgamal(i: Span<'_>) -> IResult<Span<'_>, PublicParams> {
     map(
         tuple((
             // MPI of Elgamal prime p
@@ -95,7 +97,7 @@ fn elgamal(i: &[u8]) -> IResult<&[u8], PublicParams> {
     )(i)
 }
 
-fn dsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
+fn dsa(i: Span<'_>) -> IResult<Span<'_>, PublicParams> {
     map(
         tuple((
             map(mpi, to_owned),
@@ -107,19 +109,21 @@ fn dsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     )(i)
 }
 
-fn rsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
+fn rsa(i: Span<'_>) -> IResult<Span<'_>, PublicParams> {
     map(pair(map(mpi, to_owned), map(mpi, to_owned)), |(n, e)| {
         PublicParams::RSA { n, e }
     })(i)
 }
 
-fn unknown(i: &[u8]) -> IResult<&[u8], PublicParams> {
+fn unknown(i: Span<'_>) -> IResult<Span<'_>, PublicParams> {
     Ok((i, PublicParams::Unknown { data: vec![] })) // FIXME
 }
 
 /// Parse the fields of a public key.
-pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
-    move |i: &[u8]| match typ {
+pub fn parse_pub_fields(
+    typ: PublicKeyAlgorithm,
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, PublicParams> {
+    move |i: Span<'_>| match typ {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
             rsa(i)
         }
@@ -148,9 +152,9 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
 fn new_public_key_parser(
     key_ver: &KeyVersion,
 ) -> impl Fn(
-    &[u8],
+    Span<'_>,
 ) -> IResult<
-    &[u8],
+    Span<'_>,
     (
         KeyVersion,
         PublicKeyAlgorithm,
@@ -159,7 +163,7 @@ fn new_public_key_parser(
         PublicParams,
     ),
 > + '_ {
-    |i: &[u8]| {
+    |i: Span<'_>| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
         let (i, params) = parse_pub_fields(alg)(i)?;
@@ -170,9 +174,9 @@ fn new_public_key_parser(
 fn old_public_key_parser(
     key_ver: &KeyVersion,
 ) -> impl Fn(
-    &[u8],
+    Span<'_>,
 ) -> IResult<
-    &[u8],
+    Span<'_>,
     (
         KeyVersion,
         PublicKeyAlgorithm,
@@ -181,7 +185,7 @@ fn old_public_key_parser(
         PublicParams,
     ),
 > + '_ {
-    |i: &[u8]| {
+    |i: Span<'_>| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, exp) = be_u16(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
@@ -195,9 +199,9 @@ fn old_public_key_parser(
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
 #[allow(clippy::type_complexity)]
 pub(crate) fn parse(
-    i: &[u8],
+    i: Span<'_>,
 ) -> IResult<
-    &[u8],
+    Span<'_>,
     (
         KeyVersion,
         PublicKeyAlgorithm,

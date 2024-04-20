@@ -338,6 +338,7 @@ mod tests {
     use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {
+        pretty_env_logger::try_init().ok();
         let f = File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap();
 
         let packets: Vec<Packet> = PacketParser::new(f).collect::<Result<_>>().unwrap();

@@ -5,6 +5,8 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
+use super::Span;
+
 /// Symmetrically Encrypted Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.7
 #[derive(Clone, PartialEq, Eq)]
@@ -15,7 +17,7 @@ pub struct SymEncryptedData {
 
 impl SymEncryptedData {
     /// Parses a `SymEncryptedData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         Ok(SymEncryptedData {
             packet_version,
             data: input.to_vec(),

@@ -7,6 +7,8 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
+use super::Span;
+
 /// Padding Packet
 ///
 /// https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-padding-packet-type-id-21
@@ -19,7 +21,7 @@ pub struct Padding {
 
 impl Padding {
     /// Parses a `Padding` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         Ok(Padding {
             packet_version,
             data: input.to_vec(),

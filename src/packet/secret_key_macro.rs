@@ -26,7 +26,7 @@ macro_rules! impl_secret_key {
             /// Parses a `SecretKey` packet from the given slice.
             pub fn from_slice(
                 packet_version: $crate::types::Version,
-                input: &[u8],
+                input: $crate::packet::Span<'_>,
             ) -> $crate::errors::Result<Self> {
                 let (_, details) = $crate::packet::secret_key_parser::parse(input)?;
                 let (version, algorithm, created_at, expiration, public_params, secret_params) =

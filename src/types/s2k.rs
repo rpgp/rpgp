@@ -3,12 +3,14 @@ use std::io;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, rest};
 use nom::number::streaming::be_u8;
+use nom::AsBytes;
 use rand::{CryptoRng, Rng};
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
+use crate::packet::Span;
 use crate::ser::Serialize;
 
 const EXPBIAS: u32 = 6;
@@ -313,7 +315,7 @@ impl StringToKey {
     }
 }
 
-pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {
+pub fn s2k_parser(i: Span<'_>) -> IResult<Span<'_>, StringToKey> {
     let (i, typ) = be_u8(i)?;
 
     match typ {
@@ -324,21 +326,21 @@ pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {
         }
         1 => {
             let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
-            let (i, salt) = map(take(8usize), |v: &[u8]| {
-                v.try_into().expect("should never fail")
+            let (i, salt) = map(take(8usize), |v: Span<'_>| {
+                v.as_bytes().try_into().expect("should never fail")
             })(i)?;
 
             Ok((i, StringToKey::Salted { hash_alg, salt }))
         }
         2 => {
-            let (i, unknown) = map(rest, Into::into)(i)?;
+            let (i, unknown) = map(rest, |v: Span<'_>| v.as_bytes().to_vec())(i)?;
 
             Ok((i, StringToKey::Reserved { unknown }))
         }
         3 => {
             let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
-            let (i, salt) = map(take(8usize), |v: &[u8]| {
-                v.try_into().expect("should never fail")
+            let (i, salt) = map(take(8usize), |v: Span<'_>| {
+                v.as_bytes().try_into().expect("should never fail")
             })(i)?;
             let (i, count) = be_u8(i)?;
 
@@ -352,8 +354,8 @@ pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {
             ))
         }
         4 => {
-            let (i, salt) = map(take(16usize), |v: &[u8]| {
-                v.try_into().expect("should never fail")
+            let (i, salt) = map(take(16usize), |v: Span<'_>| {
+                v.as_bytes().try_into().expect("should never fail")
             })(i)?;
             let (i, t) = be_u8(i)?;
             let (i, p) = be_u8(i)?;
@@ -363,12 +365,12 @@ pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {
         }
 
         100..=110 => {
-            let (i, unknown) = map(rest, Into::into)(i)?;
+            let (i, unknown) = map(rest, |v: Span<'_>| v.as_bytes().into())(i)?;
             Ok((i, StringToKey::Private { typ, unknown }))
         }
 
         _ => {
-            let (i, unknown) = map(rest, Into::into)(i)?;
+            let (i, unknown) = map(rest, |v: Span<'_>| v.as_bytes().into())(i)?;
             Ok((i, StringToKey::Other { typ, unknown }))
         }
     }

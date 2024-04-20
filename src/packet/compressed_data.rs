@@ -8,6 +8,8 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, Tag, Version};
 
+use super::Span;
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct CompressedData {
     packet_version: Version,
@@ -35,7 +37,7 @@ impl<'a> Read for Decompressor<&'a [u8]> {
 
 impl CompressedData {
     /// Parses a `CompressedData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         ensure!(input.len() > 1, "input too short");
 
         let alg = CompressionAlgorithm::from(input[0]);

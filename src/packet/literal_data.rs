@@ -3,10 +3,9 @@ use std::{fmt, io};
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use nom::combinator::{map, map_opt, map_res, rest};
+use nom::combinator::{map_opt, rest};
 use nom::multi::length_data;
 use nom::number::streaming::{be_u32, be_u8};
-use nom::sequence::tuple;
 use nom::IResult;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
@@ -16,6 +15,8 @@ use crate::normalize_lines::Normalized;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
+
+use super::Span;
 
 /// Literal Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.9
@@ -69,7 +70,7 @@ impl LiteralData {
     }
 
     /// Parses a `LiteralData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
 
         Ok(pk)
@@ -108,23 +109,25 @@ impl Serialize for LiteralData {
     }
 }
 
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], LiteralData> {
-    move |i: &[u8]| {
-        map(
-            tuple((
-                map_res(be_u8, DataMode::try_from),
-                map(length_data(be_u8), BStr::new::<[u8]>),
-                map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
-                rest,
-            )),
-            |(mode, name, created, data)| LiteralData {
+fn parse(packet_version: Version) -> impl Fn(Span<'_>) -> IResult<Span<'_>, LiteralData> {
+    move |i: Span<'_>| {
+        let (i, mode) = be_u8(i)?;
+        let mode = DataMode::from(mode);
+        let (i, name) = length_data(be_u8)(i)?;
+        let name = BStr::new::<[u8]>(name.as_ref());
+        let (i, created) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
+        let (i, data) = rest(i)?;
+
+        Ok((
+            i,
+            LiteralData {
                 packet_version,
                 mode,
                 created,
                 file_name: name.to_owned(),
                 data: data.to_vec(),
             },
-        )(i)
+        ))
     }
 }
 

@@ -15,7 +15,7 @@ use crate::ser::Serialize;
 use crate::types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
 use crate::util::{packet_length, write_packet_length};
 
-use super::SubpacketData;
+use super::{Span, SubpacketData};
 
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
@@ -35,7 +35,7 @@ pub enum UserAttribute {
 
 impl UserAttribute {
     /// Parses a `UserAttribute` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
 
         Ok(pk)
@@ -100,8 +100,8 @@ impl fmt::Display for UserAttribute {
     }
 }
 
-fn image(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
-    move |i: &[u8]| {
+fn image(packet_version: Version) -> impl Fn(Span<'_>) -> IResult<Span<'_>, UserAttribute> {
+    move |i| {
         map(
             pair(
                 // little endian, for historical reasons..
@@ -109,7 +109,7 @@ fn image(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttrib
                 // the actual image is the rest
                 rest,
             ),
-            |(header, img): (&[u8], &[u8])| UserAttribute::Image {
+            |(header, img): (Span<'_>, Span<'_>)| UserAttribute::Image {
                 packet_version,
                 header: header.to_vec(),
                 data: img.to_vec(),
@@ -118,18 +118,25 @@ fn image(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttrib
     }
 }
 
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
-    move |i: &[u8]| {
+fn parse(packet_version: Version) -> impl Fn(Span<'_>) -> IResult<Span<'_>, UserAttribute> {
+    move |i| {
         let (i, len) = packet_length(i)?;
         let (i, typ) = be_u8(i)?;
         let (i, attr) = map_parser(take(len - 1), |i| match typ {
             1 => image(packet_version)(i),
-            _ => map(rest, |data: &[u8]| UserAttribute::Unknown {
-                packet_version,
-                typ,
-                data: data.to_vec(),
-            })(i),
+            _ => {
+                let (i, data) = rest(i)?;
+                Ok((
+                    i,
+                    UserAttribute::Unknown {
+                        packet_version,
+                        typ,
+                        data: data.to_vec(),
+                    },
+                ))
+            }
         })(i)?;
+
         Ok((i, {
             debug!("attr with len {}", len);
             attr

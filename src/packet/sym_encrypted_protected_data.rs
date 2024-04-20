@@ -13,6 +13,8 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
+use super::Span;
+
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
 #[derive(Clone, PartialEq, Eq)]
@@ -62,7 +64,7 @@ impl fmt::Debug for Data {
 
 impl SymEncryptedProtectedData {
     /// Parses a `SymEncryptedData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         ensure!(input.len() > 1, "invalid input length");
         let (_, data) = parse()(input)?;
 
@@ -269,8 +271,8 @@ fn expand_chunk_size(s: u8) -> u32 {
     1u32 << (s as u32 + 6)
 }
 
-fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
-    move |i: &[u8]| {
+fn parse() -> impl Fn(Span<'_>) -> IResult<&[u8], Data> {
+    move |i| {
         let (i, version) = be_u8(i)?;
         match version {
             0x01 => Ok((&[][..], Data::V1 { data: i.to_vec() })),
@@ -279,6 +281,8 @@ fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
                 let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
                 let (i, chunk_size) = be_u8(i)?;
                 let (i, salt) = take(32usize)(i)?;
+                let salt: &[u8] = salt.as_ref();
+                let salt = salt.try_into().expect("size checked");
 
                 Ok((
                     &[][..],
@@ -286,7 +290,7 @@ fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
                         sym_alg,
                         aead,
                         chunk_size,
-                        salt: salt.try_into().expect("size checked"),
+                        salt,
                         data: i.to_vec(),
                     },
                 ))

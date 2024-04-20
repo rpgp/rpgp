@@ -1,5 +1,7 @@
 use std::fmt;
 
+use nom::{AsBytes, InputLength};
+
 use crate::errors::Result;
 
 /// Represents a Key ID.
@@ -13,10 +15,13 @@ impl AsRef<[u8]> for KeyId {
 }
 
 impl KeyId {
-    pub fn from_slice(input: &[u8]) -> Result<KeyId> {
-        ensure_eq!(input.len(), 8, "invalid input length");
+    pub fn from_slice<I>(input: I) -> Result<KeyId>
+    where
+        I: AsBytes + InputLength,
+    {
+        ensure_eq!(input.input_len(), 8, "invalid input length");
         let mut r = [0u8; 8];
-        r.copy_from_slice(input);
+        r.copy_from_slice(input.as_bytes());
 
         Ok(KeyId(r))
     }

@@ -2,11 +2,12 @@ use std::{fmt, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::number::streaming::be_u16;
-use nom::{Err, InputIter, InputTake};
+use nom::{AsBytes, Err, InputIter, InputTake, Slice};
 use num_bigint::BigUint;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::errors::{self, Error, IResult};
+use crate::packet::Span;
 use crate::ser::Serialize;
 use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
@@ -29,7 +30,7 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 /// );
 /// ```
 ///
-pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
+pub fn mpi<'a>(input: Span<'a>) -> IResult<Span<'a>, MpiRef<'a>> {
     let (number, len) = be_u16(input)?;
 
     let bits = u32::from(len);
@@ -44,7 +45,8 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
             Err(needed) => Err(nom::Err::Incomplete(needed)),
             Ok(index) => {
                 let (rest, n) = number.take_split(index);
-                let n_stripped: MpiRef<'_> = strip_leading_zeros(n).into();
+                let stripped = strip_leading_zeros(n);
+                let n_stripped: MpiRef<'_> = stripped.into();
 
                 Ok((rest, n_stripped))
             }
@@ -60,11 +62,11 @@ pub struct Mpi(Vec<u8>);
 /// Represents a borrowed MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
 #[derive(Clone, PartialEq, Eq)]
-pub struct MpiRef<'a>(&'a [u8]);
+pub struct MpiRef<'a>(Span<'a>);
 
 impl AsRef<[u8]> for Mpi {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+        self.0.as_bytes()
     }
 }
 
@@ -84,7 +86,7 @@ impl Mpi {
     }
 
     pub fn as_ref(&self) -> MpiRef<'_> {
-        MpiRef(&self.0)
+        MpiRef(Span::new(&self.0))
     }
 
     pub fn as_bytes(&self) -> &[u8] {
@@ -104,25 +106,25 @@ impl<'a> std::ops::Deref for MpiRef<'a> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
-        self.0
+        self.0.as_bytes()
     }
 }
 
 impl<'a> MpiRef<'a> {
-    pub fn from_slice(slice: &'a [u8]) -> Self {
+    pub fn from_slice(slice: Span<'a>) -> Self {
         MpiRef(slice)
     }
 
     pub fn to_owned(&self) -> Mpi {
-        Mpi(self.0.to_owned())
+        Mpi(self.0.to_vec())
     }
 
-    pub fn parse(slice: &'a [u8]) -> IResult<&'a [u8], MpiRef<'a>> {
+    pub fn parse(slice: Span<'a>) -> IResult<Span<'a>, Self> {
         mpi(slice)
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.0
+        self.0.as_bytes()
     }
 
     /// Strip trailing zeroes.
@@ -135,13 +137,13 @@ impl<'a> MpiRef<'a> {
                 break;
             }
         }
-        MpiRef::from_slice(&self.0[..end])
+        MpiRef::from_slice(self.0.slice(..end))
     }
 }
 
 impl Serialize for Mpi {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
-        MpiRef(&self.0).to_writer(w)
+        MpiRef(Span::new(&self.0)).to_writer(w)
     }
 }
 
@@ -162,8 +164,14 @@ impl From<&[u8]> for Mpi {
     }
 }
 
-impl<'a> From<&'a [u8]> for MpiRef<'a> {
-    fn from(other: &'a [u8]) -> MpiRef<'a> {
+impl From<Span<'_>> for Mpi {
+    fn from(other: Span<'_>) -> Mpi {
+        Mpi::from_slice(other.as_bytes())
+    }
+}
+
+impl<'a> From<Span<'a>> for MpiRef<'a> {
+    fn from(other: Span<'a>) -> MpiRef<'a> {
         MpiRef::from_slice(other)
     }
 }
@@ -212,7 +220,7 @@ impl<'a> From<&'a BigUint> for Mpi {
 
 impl<'a> fmt::Debug for MpiRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Mpi({})", hex::encode(self.0))
+        write!(f, "Mpi({})", hex::encode(self.0.as_bytes()))
     }
 }
 
@@ -231,27 +239,31 @@ mod tests {
     #[test]
     fn test_mpi() {
         // Decode the number `511` (`0x1FF` in hex).
-        assert_eq!(
-            mpi(&[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
-            (&b""[..], (&[0x01, 0xFF][..]).into())
-        );
+        let (rest, m) = mpi(Span::new(&[0x00, 0x09, 0x01, 0xFF][..])).unwrap();
+        assert_eq!(unsafe { Span::new_from_raw_offset(4, &b""[..]) }, rest);
+        assert_eq!(m.0, unsafe {
+            Span::new_from_raw_offset(2, &[0x01, 0xFF][..])
+        });
 
         // Decode the number `2^255 + 7`.
-        assert_eq!(
-            mpi(&[
-                0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0x07
-            ][..])
-            .unwrap(),
-            (
-                &b""[..],
-                (&[
+        let source = [
+            0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0x07,
+        ];
+
+        let (rest, m) = mpi(Span::new(&source[..])).unwrap();
+        assert_eq!(rest, unsafe {
+            Span::new_from_raw_offset(source.len(), &b""[..])
+        });
+        assert_eq!(m.0, unsafe {
+            Span::new_from_raw_offset(
+                2,
+                &[
                     0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0x07
-                ][..])
-                    .into()
+                    0, 0, 0, 0, 0, 0, 0x07,
+                ][..],
             )
-        );
+        });
     }
 
     #[test]
@@ -272,7 +284,7 @@ mod tests {
 
             assert_eq!(&n_encoded, &hex::decode(encoded).unwrap());
 
-            let (rest, n_big2) = mpi(&n_encoded).unwrap();
+            let (rest, n_big2) = mpi(Span::new(&n_encoded[..])).unwrap();
             assert_eq!(rest.len(), 0);
             assert_eq!(n_big, n_big2.into());
         }
@@ -282,7 +294,7 @@ mod tests {
     fn test_strip_trailing_zeroes() {
         let bytes = [1, 2, 3, 4, 0];
         assert_eq!(
-            MpiRef::from_slice(&bytes)
+            MpiRef::from_slice(Span::new(&bytes))
                 .strip_trailing_zeroes()
                 .as_bytes(),
             &[1, 2, 3, 4],
@@ -290,7 +302,7 @@ mod tests {
 
         let bytes = [0, 1, 2, 3, 4];
         assert_eq!(
-            MpiRef::from_slice(&bytes)
+            MpiRef::from_slice(Span::new(&bytes))
                 .strip_trailing_zeroes()
                 .as_bytes(),
             &[0, 1, 2, 3, 4],
@@ -298,7 +310,7 @@ mod tests {
 
         let bytes = [1, 2, 0, 3, 4];
         assert_eq!(
-            MpiRef::from_slice(&bytes)
+            MpiRef::from_slice(Span::new(&bytes))
                 .strip_trailing_zeroes()
                 .as_bytes(),
             &[1, 2, 0, 3, 4],

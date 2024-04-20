@@ -10,6 +10,8 @@ use crate::packet::{
 use crate::ser::Serialize;
 use crate::types::{SecretKeyTrait, SignedUser, Tag, Version};
 
+use super::Span;
+
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,10 +22,10 @@ pub struct UserId {
 
 impl UserId {
     /// Parses a `UserId` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         Ok(UserId {
             packet_version,
-            id: BString::from(input),
+            id: BString::from(*input.fragment()),
         })
     }
 

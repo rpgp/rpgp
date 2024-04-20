@@ -104,9 +104,10 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
 pub type Span<'a> = netgauze_locate::BinarySpan<&'a [u8]>;
 
 pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
+    let body = Span::new(body);
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
-            PublicKeyEncryptedSessionKey::from_slice(ver, Span::new(body)).map(Into::into)
+            PublicKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
         }
         Tag::Signature => Signature::from_slice(ver, body).map(Into::into),
         Tag::SymKeyEncryptedSessionKey => {
@@ -136,7 +137,12 @@ pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
         Ok(res) => Ok(res),
         Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
         Err(err) => {
-            warn!("invalid packet: {:?} {:?}\n{}", err, tag, hex::encode(body));
+            warn!(
+                "invalid packet: {:?} {:?}\n{}",
+                err,
+                tag,
+                hex::encode::<&[u8]>(body.as_ref())
+            );
             Err(Error::InvalidPacketContent(Box::new(err)))
         }
     }

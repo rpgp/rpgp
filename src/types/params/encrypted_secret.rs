@@ -6,6 +6,7 @@ use digest::Digest;
 use crate::crypto::checksum;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, Result};
+use crate::packet::Span;
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -80,7 +81,7 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::from_slice(Span::new(plaintext), alg, params)
             }
             S2kParams::Aead { .. } => {
                 // let _key = s2k.derive_key(&pw(), sym_alg.key_size())?;
@@ -107,7 +108,7 @@ impl EncryptedSecretParams {
                 if expected_sha1 != calculated_sha1 {
                     return Err(Error::InvalidInput);
                 }
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::from_slice(Span::new(plaintext), alg, params)
             }
             S2kParams::MaleableCfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
@@ -126,7 +127,7 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::from_slice(Span::new(plaintext), alg, params)
             }
         }
     }

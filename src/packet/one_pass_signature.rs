@@ -3,7 +3,6 @@ use std::io;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_res};
 use nom::number::streaming::be_u8;
-use nom::sequence::tuple;
 use nom::IResult;
 
 use crate::crypto::hash::HashAlgorithm;
@@ -13,6 +12,8 @@ use crate::packet::signature::SignatureType;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{KeyId, Tag, Version};
+
+use super::Span;
 
 /// One-Pass Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.4
@@ -29,7 +30,7 @@ pub struct OnePassSignature {
 
 impl OnePassSignature {
     /// Parses a `OnePassSignature` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
 
         if pk.version != 2 && pk.version != 3 && pk.version != 4 && pk.version != 5 {
@@ -61,18 +62,18 @@ impl OnePassSignature {
     }
 }
 
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSignature> {
-    move |i: &[u8]| {
-        map(
-            tuple((
-                be_u8,
-                map_res(be_u8, SignatureType::try_from),
-                map(be_u8, HashAlgorithm::from),
-                map(be_u8, PublicKeyAlgorithm::from),
-                map_res(take(8usize), KeyId::from_slice),
-                be_u8,
-            )),
-            |(version, typ, hash, pub_alg, key_id, last)| OnePassSignature {
+fn parse(packet_version: Version) -> impl Fn(Span<'_>) -> IResult<Span<'_>, OnePassSignature> {
+    move |i| {
+        let (i, version) = be_u8(i)?;
+        let (i, typ) = map_res(be_u8, SignatureType::try_from)(i)?;
+        let (i, hash) = map(be_u8, HashAlgorithm::from)(i)?;
+        let (i, pub_alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
+        let (i, key_id) = map_res(take(8usize), KeyId::from_slice)(i)?;
+        let (i, last) = be_u8(i)?;
+
+        Ok((
+            i,
+            OnePassSignature {
                 packet_version,
                 version,
                 typ,
@@ -81,7 +82,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
                 key_id,
                 last,
             },
-        )(i)
+        ))
     }
 }
 

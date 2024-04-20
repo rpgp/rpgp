@@ -11,6 +11,7 @@ use crate::crypto::checksum;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{IResult, Result};
+use crate::packet::Span;
 use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
@@ -222,7 +223,7 @@ impl<'a> PlainSecretParamsRef<'a> {
 
 impl PlainSecretParams {
     pub fn from_slice(
-        data: &[u8],
+        data: Span<'_>,
         alg: PublicKeyAlgorithm,
         _params: &PublicParams,
     ) -> Result<Self> {
@@ -336,8 +337,8 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
 
 fn parse_secret_params(
     alg: PublicKeyAlgorithm,
-) -> impl Fn(&[u8]) -> IResult<&[u8], PlainSecretParams> {
-    move |i: &[u8]| match alg {
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, PlainSecretParams> {
+    move |i: Span<'_>| match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
             rsa_secret_params(i)
         }
@@ -353,7 +354,7 @@ fn parse_secret_params(
 }
 
 // Parse the decrpyted private params of an RSA private key.
-fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParams> {
+fn rsa_secret_params(i: Span<'_>) -> IResult<Span<'_>, PlainSecretParams> {
     map(tuple((mpi, mpi, mpi, mpi)), |(d, p, q, u)| {
         PlainSecretParams::RSA {
             d: d.to_owned(),

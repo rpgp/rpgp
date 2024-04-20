@@ -5,6 +5,8 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
+use super::Span;
+
 /// Trust Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.10
 /// Trust packets SHOULD NOT be emitted to output streams that are
@@ -17,7 +19,7 @@ pub struct Trust {
 
 impl Trust {
     /// Parses a `Trust` packet from the given slice.
-    pub fn from_slice(packet_version: Version, _: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, _: Span<'_>) -> Result<Self> {
         warn!("Trust packet detected, ignoring");
 
         Ok(Trust { packet_version })

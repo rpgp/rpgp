@@ -1,7 +1,7 @@
 use std::io;
 
 use nom::bytes::streaming::take;
-use nom::combinator::map_res;
+use nom::combinator::{map_res, rest};
 use nom::number::streaming::be_u8;
 use sha2::Sha256;
 
@@ -13,6 +13,8 @@ use crate::ser::Serialize;
 use crate::types::{s2k_parser, StringToKey, Tag, Version};
 use crate::util::rest_len;
 use crate::PlainSessionKey;
+
+use super::Span;
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3
@@ -46,7 +48,7 @@ pub enum SymKeyEncryptedSessionKey {
 
 impl SymKeyEncryptedSessionKey {
     /// Parses a `SymKeyEncryptedSessionKey` packet from the given slice.
-    pub fn from_slice(version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(version: Version, input: Span<'_>) -> Result<Self> {
         let (_, pk) = parse(version)(input)?;
 
         Ok(pk)
@@ -225,8 +227,10 @@ impl SymKeyEncryptedSessionKey {
     }
 }
 
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
+fn parse(
+    packet_version: Version,
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, SymKeyEncryptedSessionKey> {
+    move |i| {
         let (i, version) = be_u8(i)?;
         match version {
             4 => parse_v4(packet_version)(i),
@@ -242,13 +246,18 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncr
 
 fn parse_v4(
     packet_version: Version,
-) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, SymKeyEncryptedSessionKey> {
+    move |i: Span<'_>| {
         let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
         let (i, s2k) = s2k_parser(i)?;
-        let encrypted_key = if i.is_empty() { None } else { Some(i.to_vec()) };
+        let (i, key) = rest(i)?;
+        let encrypted_key = if key.is_empty() {
+            None
+        } else {
+            Some(key.to_vec())
+        };
         Ok((
-            &[][..],
+            i,
             SymKeyEncryptedSessionKey::V4 {
                 packet_version,
                 sym_algorithm: sym_alg,
@@ -261,8 +270,8 @@ fn parse_v4(
 
 fn parse_v5(
     packet_version: Version,
-) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, SymKeyEncryptedSessionKey> {
+    move |i: Span<'_>| {
         let (i, _count) = be_u8(i)?;
         let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
         let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
@@ -290,8 +299,8 @@ fn parse_v5(
 
 fn parse_v6(
     packet_version: Version,
-) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, SymKeyEncryptedSessionKey> {
+    move |i: Span<'_>| {
         let (i, _count) = be_u8(i)?;
         let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
         let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;

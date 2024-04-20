@@ -6,12 +6,13 @@ use nom::sequence::tuple;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, IResult};
 use crate::packet::public_key_parser::parse_pub_fields;
+use crate::packet::Span;
 use crate::types::{KeyVersion, PublicParams, SecretParams};
 
 /// Parse the whole private key, both public and private fields.
 fn parse_pub_priv_fields(
     typ: PublicKeyAlgorithm,
-) -> impl Fn(&[u8]) -> IResult<&[u8], (PublicParams, SecretParams)> {
+) -> impl Fn(Span<'_>) -> IResult<Span<'_>, (PublicParams, SecretParams)> {
     move |i| {
         map_res(tuple((parse_pub_fields(typ), rest)), |(pub_params, v)| {
             let secret_params = SecretParams::from_slice(v, typ, &pub_params)?;
@@ -23,9 +24,9 @@ fn parse_pub_priv_fields(
 fn new_private_key_parser(
     key_ver: &KeyVersion,
 ) -> impl Fn(
-    &[u8],
+    Span<'_>,
 ) -> IResult<
-    &[u8],
+    Span<'_>,
     (
         KeyVersion,
         PublicKeyAlgorithm,
@@ -35,7 +36,7 @@ fn new_private_key_parser(
         SecretParams,
     ),
 > + '_ {
-    |i: &[u8]| {
+    |i: Span<'_>| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
         let (i, params) = parse_pub_priv_fields(alg)(i)?;
@@ -46,9 +47,9 @@ fn new_private_key_parser(
 fn old_private_key_parser(
     key_ver: &KeyVersion,
 ) -> impl Fn(
-    &[u8],
+    Span<'_>,
 ) -> IResult<
-    &[u8],
+    Span<'_>,
     (
         KeyVersion,
         PublicKeyAlgorithm,
@@ -58,7 +59,7 @@ fn old_private_key_parser(
         SecretParams,
     ),
 > + '_ {
-    |i: &[u8]| {
+    |i: Span<'_>| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, exp) = be_u16(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
@@ -74,9 +75,9 @@ fn old_private_key_parser(
 /// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
 #[allow(clippy::type_complexity)]
 pub(crate) fn parse(
-    i: &[u8],
+    i: Span<'_>,
 ) -> IResult<
-    &[u8],
+    Span<'_>,
     (
         KeyVersion,
         PublicKeyAlgorithm,

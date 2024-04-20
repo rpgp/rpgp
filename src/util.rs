@@ -9,6 +9,7 @@ use nom::bytes::streaming::take_while1;
 use nom::character::is_alphanumeric;
 use nom::character::streaming::line_ending;
 use nom::combinator::{eof, map};
+use nom::error::ParseError;
 use nom::multi::many0;
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::preceded;
@@ -73,11 +74,14 @@ pub fn bit_size(val: &[u8]) -> usize {
 }
 
 #[inline]
-pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
-    bytes
-        .iter()
-        .position(|b| b != &0)
-        .map_or(bytes, |offset| &bytes[offset..])
+pub fn strip_leading_zeros<I>(bytes: I) -> I
+where
+    I: InputIter<Item = u8> + Slice<RangeFrom<usize>>,
+{
+    match bytes.position(|b| b != 0) {
+        Some(pos) => bytes.slice(pos..),
+        None => bytes,
+    }
 }
 
 #[inline]
@@ -101,7 +105,10 @@ where
 }
 
 // Parse a packet length.
-pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
+pub(crate) fn packet_length<I, E: ParseError<I>>(i: I) -> IResult<I, usize, E>
+where
+    I: Slice<RangeFrom<usize>> + InputIter<Item = u8> + InputLength,
+{
     let (i, olen) = be_u8(i)?;
     match olen {
         // One-Octet Lengths

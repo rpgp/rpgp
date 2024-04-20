@@ -5,6 +5,8 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
+use super::Span;
+
 /// PGP as UTF-8 octets.
 const PGP: [u8; 3] = [0x50, 0x47, 0x50];
 
@@ -17,8 +19,8 @@ pub struct Marker {
 
 impl Marker {
     /// Parses a `Marker` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        ensure_eq!(input, &PGP[..], "invalid input");
+    pub fn from_slice(packet_version: Version, input: Span<'_>) -> Result<Self> {
+        ensure_eq!(*input.fragment(), &PGP[..], "invalid input");
 
         Ok(Marker { packet_version })
     }
