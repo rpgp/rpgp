@@ -75,14 +75,15 @@ mod tests {
     #[test]
     fn test_padding_roundtrip() {
         let packet_raw = hex::decode("d50ec5a293072991628147d72c8f86b7").expect("valid hex");
-        let (rest, (version, tag, plen)) = single::parser(&packet_raw).expect("parse");
+        let (rest, (version, tag, plen)) = single::parser(Span::new(&packet_raw)).expect("parse");
 
         let PacketLength::Fixed(len) = plen else {
             panic!("invalid parse result");
         };
         assert_eq!(rest.len(), len);
 
-        let full_packet = single::body_parser(version, tag, &rest[..len]).expect("body parse");
+        let full_packet =
+            single::body_parser(version, tag, Span::new(&rest[..len])).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);

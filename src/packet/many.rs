@@ -8,6 +8,8 @@ use crate::packet::packet_sum::Packet;
 use crate::packet::single;
 use crate::types::{PacketLength, Tag};
 
+use super::Span;
+
 const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
 
 const DEFAULT_CAPACITY: usize = 1024 * 16;
@@ -53,7 +55,7 @@ impl<R: Read> Iterator for PacketParser<R> {
 
         let buf_len = buf.len();
 
-        let (version, tag, packet_length) = match single::parser(buf) {
+        let (version, tag, packet_length) = match single::parser(Span::new(buf)) {
             Ok((rest, v)) => {
                 let rest_len = rest.len();
                 let read = buf_len - rest_len;
@@ -97,7 +99,8 @@ impl<R: Read> Iterator for PacketParser<R> {
                     }
                 }
 
-                match single::body_parser(version, tag, &body) {
+                let body_span = Span::new(&body); // TODO: add offset from header
+                match single::body_parser(version, tag, body_span) {
                     Ok(packet) => Some(Ok(packet)),
                     Err(err) => {
                         self.done = true;
@@ -116,7 +119,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                             return Some(Err(err.into()));
                         }
                     };
-                    let res = single::body_parser(version, tag, &body[..len]);
+                    let res = single::body_parser(version, tag, Span::new(&body[..len]));
                     self.reader.consume(len);
                     res
                 } else {
@@ -125,7 +128,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                         self.done = true;
                         return Some(Err(err.into()));
                     };
-                    single::body_parser(version, tag, &buffer)
+                    single::body_parser(version, tag, Span::new(&buffer))
                 };
 
                 match res {
@@ -182,7 +185,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                             return Some(Err(err.into()));
                         }
                     };
-                    match single::read_packet_len(buf) {
+                    match single::read_packet_len(Span::new(buf)) {
                         Ok((rest, PacketLength::Partial(len))) => {
                             let read = buf.len() - rest.len();
                             self.reader.consume(read);
@@ -213,7 +216,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                     }
                 }
 
-                match single::body_parser(version, tag, &body) {
+                match single::body_parser(version, tag, Span::new(&body)) {
                     Ok(res) => Some(Ok(res)),
                     Err(Error::Incomplete(_)) => {
                         // not bailing, we are just skipping incomplete bodies

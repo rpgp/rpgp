@@ -21,7 +21,7 @@ use crate::util::{u16_as_usize, u32_as_usize, u8_as_usize};
 
 /// Parses an old format packet header
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.1
-fn old_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
+fn old_packet_header(i: Span<'_>) -> IResult<Span<'_>, (Version, Tag, PacketLength)> {
     #[allow(non_snake_case)]
     bits::bits::<_, _, crate::errors::Error, _, _>(|I| {
         use bits::streaming::{tag, take};
@@ -53,7 +53,7 @@ fn old_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     })(i)
 }
 
-pub(crate) fn read_packet_len(i: &[u8]) -> IResult<&[u8], PacketLength> {
+pub(crate) fn read_packet_len(i: Span<'_>) -> IResult<Span<'_>, PacketLength> {
     let (i, olen) = be_u8(i)?;
     match olen {
         // One-Octet Lengths
@@ -74,7 +74,7 @@ pub(crate) fn read_packet_len(i: &[u8]) -> IResult<&[u8], PacketLength> {
 
 /// Parses a new format packet header
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4.2.2
-fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
+fn new_packet_header(i: Span<'_>) -> IResult<Span<'_>, (Version, Tag, PacketLength)> {
     use bits::streaming::*;
     #[allow(non_snake_case)]
     bits::bits(|I| {
@@ -95,7 +95,7 @@ fn new_packet_header(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
 
 /// Parse a single Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-4.2
-pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
+pub fn parser(i: Span<'_>) -> IResult<Span<'_>, (Version, Tag, PacketLength)> {
     let (i, head) = alt((new_packet_header, old_packet_header))(i)?;
 
     Ok((i, head))
@@ -103,8 +103,7 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
 
 pub type Span<'a> = netgauze_locate::BinarySpan<&'a [u8]>;
 
-pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
-    let body = Span::new(body);
+pub fn body_parser(ver: Version, tag: Tag, body: Span<'_>) -> Result<Packet> {
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
             PublicKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
