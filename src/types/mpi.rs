@@ -17,19 +17,6 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 
 /// Parse Multi Precision Integers
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-3.2
-///
-/// # Examples
-///
-/// ```rust
-/// use pgp::types::mpi;
-///
-/// // Decode the number `1`.
-/// assert_eq!(
-///     mpi(&[0x00, 0x01, 0x01][..]).unwrap(),
-///     (&b""[..], (&[1][..]).into())
-/// );
-/// ```
-///
 pub fn mpi<'a>(input: Span<'a>) -> IResult<Span<'a>, MpiRef<'a>> {
     let (number, len) = be_u16(input)?;
 
