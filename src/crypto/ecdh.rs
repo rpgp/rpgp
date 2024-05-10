@@ -19,26 +19,29 @@ const ANON_SENDER: [u8; 20] = [
     0x20, 0x20, 0x20, 0x20,
 ];
 
-const SECRET_KEY_LENGTH: usize = 32;
-
-/// Secret key for ECDH with Curve25519, the only combination we currently support.
+/// Secret key for ECDH
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct SecretKey {
-    /// The secret point.
-    pub secret: [u8; 32],
-    pub hash: HashAlgorithm,
-    pub oid: Vec<u8>,
-    pub alg_sym: SymmetricKeyAlgorithm,
+pub enum SecretKey {
+    // ECDH with Curve25519
+    Curve25519 {
+        /// The secret point.
+        secret: [u8; 32],
+        hash: HashAlgorithm,
+        alg_sym: SymmetricKeyAlgorithm,
+    },
 }
 
 impl fmt::Debug for SecretKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("EcdhSecretKey")
-            .field("secret", &"[..]")
-            .field("hash", &self.hash)
-            .field("oid", &hex::encode(&self.oid))
-            .field("alg_sym", &self.alg_sym)
-            .finish()
+        match self {
+            SecretKey::Curve25519 { hash, alg_sym, .. } => f
+                .debug_struct("EcdhSecretKey")
+                .field("secret", &"[..]")
+                .field("hash", hash)
+                .field("oid", &hex::encode(ECCCurve::Curve25519.oid()))
+                .field("alg_sym", alg_sym)
+                .finish(),
+        }
     }
 }
 
@@ -46,7 +49,11 @@ impl KeyParams for SecretKey {
     type KeyParams = (Vec<u8>, SymmetricKeyAlgorithm, HashAlgorithm);
 
     fn key_params(&self) -> Self::KeyParams {
-        (self.oid.clone(), self.alg_sym, self.hash)
+        match self {
+            SecretKey::Curve25519 { hash, alg_sym, .. } => {
+                (ECCCurve::Curve25519.oid(), *alg_sym, *hash)
+            }
+        }
     }
 }
 
@@ -54,52 +61,63 @@ impl Decryptor for SecretKey {
     fn decrypt(&self, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
         debug!("ECDH decrypt");
 
-        // 33 = 0x40 + 32bits
         ensure_eq!(mpis.len(), 3);
-        ensure_eq!(mpis[0].len(), 33, "invalid public point");
-        ensure_eq!(self.secret.len(), 32, "invalid secret point");
 
         // encrypted and wrapped value derived from the session key
         let encrypted_session_key = mpis[2].as_bytes();
 
-        let their_public = {
-            // public part of the ephemeral key (removes 0x40 prefix)
-            let ephemeral_public_key = &mpis[0].as_bytes()[1..];
+        let (shared_secret, oid, alg_sym, hash) = match self {
+            SecretKey::Curve25519 {
+                secret,
+                hash,
+                alg_sym,
+            } => {
+                ensure_eq!(secret.len(), 32, "invalid secret point");
 
-            // create montgomery point
-            let mut ephemeral_public_key_arr = [0u8; 32];
-            ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
+                let public_point = &mpis[0];
+                ensure_eq!(public_point.len(), 33, "invalid public point"); // prefix "0x40" + 32 bytes = 33 bytes
 
-            x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
+                let their_public = {
+                    // public part of the ephemeral key (removes 0x40 prefix)
+                    let ephemeral_public_key = &public_point.as_bytes()[1..];
+
+                    // create montgomery point
+                    let mut ephemeral_public_key_arr = [0u8; 32];
+                    ephemeral_public_key_arr[..].copy_from_slice(ephemeral_public_key);
+
+                    x25519_dalek::PublicKey::from(ephemeral_public_key_arr)
+                };
+
+                let our_secret = {
+                    // private key of the recipient.
+                    let private_key = &secret[..];
+
+                    // create scalar and reverse to little endian
+                    // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-curve25519legacy-ecdh-secre
+                    let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
+                    let mut private_key_arr = [0u8; 32];
+                    private_key_arr[..].copy_from_slice(&private_key_le);
+                    private_key_le.zeroize();
+
+                    StaticSecret::from(private_key_arr)
+                };
+
+                // derive shared secret
+                let shared_secret = our_secret.diffie_hellman(&their_public);
+                let shared_secret = shared_secret.to_bytes().to_vec();
+
+                (shared_secret, ECCCurve::Curve25519.oid(), alg_sym, hash)
+            }
         };
-
-        let our_secret = {
-            // private key of the recipient.
-            let private_key = &self.secret[..];
-
-            // create scalar and reverse to little endian
-            let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
-            let mut private_key_arr = [0u8; 32];
-            private_key_arr[..].copy_from_slice(&private_key_le);
-            private_key_le.zeroize();
-
-            StaticSecret::from(private_key_arr)
-        };
-
-        // derive shared secret
-        let shared_secret = our_secret.diffie_hellman(&their_public);
 
         // obtain the session key from the shared secret
-        let encrypted_key_len: usize = match mpis[1].first() {
-            Some(l) => *l as usize,
-            None => 0,
-        };
+        let encrypted_key_len: usize = mpis[1].first().map(|l| *l as usize).unwrap_or(0);
 
         derive_session_key(
-            *shared_secret.as_bytes(),
+            &shared_secret,
             encrypted_session_key,
             encrypted_key_len,
-            &(self.oid.clone(), self.alg_sym, self.hash),
+            &(oid, *alg_sym, *hash),
             fingerprint,
         )
     }
@@ -110,7 +128,7 @@ impl Decryptor for SecretKey {
 /// This helper function performs the key derivation and unwrapping steps
 /// described in https://www.rfc-editor.org/rfc/rfc6637.html#section-8
 pub fn derive_session_key(
-    shared_secret: [u8; 32],
+    shared_secret: &[u8],
     encrypted_session_key: &[u8],
     encrypted_key_len: usize,
     key_params: &<SecretKey as KeyParams>::KeyParams,
@@ -121,7 +139,7 @@ pub fn derive_session_key(
     let param = build_ecdh_param(oid, *alg_sym, *hash, fingerprint);
 
     // Perform key derivation
-    let z = kdf(*hash, &shared_secret, alg_sym.key_size(), &param)?;
+    let z = kdf(*hash, shared_secret, alg_sym.key_size(), &param)?;
 
     // Perform AES Key Unwrap
     let mut encrypted_session_key_vec = vec![0; encrypted_key_len];
@@ -176,38 +194,47 @@ pub fn derive_session_key(
 
 /// Generate an ECDH KeyPair.
 /// Currently only support ED25519.
-pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecretParams) {
-    let mut secret_key_bytes = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
-    rng.fill_bytes(&mut *secret_key_bytes);
+pub fn generate_key<R: Rng + CryptoRng>(
+    mut rng: R,
+    curve: &ECCCurve,
+) -> Result<(PublicParams, PlainSecretParams)> {
+    match curve {
+        ECCCurve::Curve25519 => {
+            let mut secret_key_bytes =
+                Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
+            rng.fill_bytes(&mut *secret_key_bytes);
 
-    let secret = StaticSecret::from(*secret_key_bytes);
-    let public = PublicKey::from(&secret);
+            let secret = StaticSecret::from(*secret_key_bytes);
+            let public = PublicKey::from(&secret);
 
-    // public key
-    let p_raw = public.to_bytes();
+            // public key
+            let p_raw = public.to_bytes();
 
-    let mut p = Vec::with_capacity(33);
-    p.push(0x40);
-    p.extend_from_slice(&p_raw);
+            let mut p = Vec::with_capacity(33);
+            p.push(0x40);
+            p.extend_from_slice(&p_raw);
 
-    // secret key
-    // Clamp, as `to_bytes` does not clamp.
-    let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
-    // Big Endian
-    let q = q_raw.into_iter().rev().collect::<Vec<u8>>();
+            // secret key
+            // Clamp, as `to_bytes` does not clamp.
+            let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
+            // Big Endian
+            let q = q_raw.into_iter().rev().collect::<Vec<u8>>();
 
-    // TODO: make these configurable and/or check for good defaults
-    let hash = HashAlgorithm::default();
-    let alg_sym = SymmetricKeyAlgorithm::AES128;
-    (
-        PublicParams::ECDH {
-            curve: ECCCurve::Curve25519,
-            p: p.into(),
-            hash,
-            alg_sym,
-        },
-        PlainSecretParams::ECDH(Mpi::from_raw(q)),
-    )
+            // TODO: make these configurable and/or check for good defaults
+            let hash = HashAlgorithm::default();
+            let alg_sym = SymmetricKeyAlgorithm::AES128;
+            Ok((
+                PublicParams::ECDH {
+                    curve: ECCCurve::Curve25519,
+                    p: p.into(),
+                    hash,
+                    alg_sym,
+                },
+                PlainSecretParams::ECDH(Mpi::from_raw(q)),
+            ))
+        }
+        _ => unsupported_err!("curve {:?} for ECDH", curve),
+    }
 }
 
 /// Build param for ECDH algorithm (as defined in RFC 6637)
@@ -243,7 +270,7 @@ pub fn build_ecdh_param(
 
 /// Key Derivation Function for ECDH (as defined in RFC 6637).
 /// https://tools.ietf.org/html/rfc6637#section-7
-pub fn kdf(hash: HashAlgorithm, x: &[u8; 32], length: usize, param: &[u8]) -> Result<Vec<u8>> {
+pub fn kdf(hash: HashAlgorithm, x: &[u8], length: usize, param: &[u8]) -> Result<Vec<u8>> {
     let prefix = vec![0, 0, 0, 1];
 
     let values: Vec<&[u8]> = vec![&prefix, x, param];
@@ -290,7 +317,8 @@ pub fn encrypt<R: CryptoRng + Rng>(
         x25519_dalek::PublicKey::from(public_key_arr)
     };
 
-    let mut our_secret_key_bytes = Zeroizing::new([0u8; SECRET_KEY_LENGTH]);
+    let mut our_secret_key_bytes =
+                Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
     rng.fill_bytes(&mut *our_secret_key_bytes);
     let our_secret = StaticSecret::from(*our_secret_key_bytes);
 
@@ -363,7 +391,7 @@ mod tests {
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let (pkey, skey) = generate_key(&mut rng);
+        let (pkey, skey) = generate_key(&mut rng, &ECCCurve::Curve25519).unwrap();
 
         for text_size in 1..239 {
             for _i in 0..10 {

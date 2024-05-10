@@ -147,12 +147,13 @@ impl<'a> PlainSecretParamsRef<'a> {
                         let mut secret = [0u8; 32];
                         secret[32 - d.len()..].copy_from_slice(d.as_bytes());
 
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey {
-                            oid: curve.oid(),
-                            hash: *hash,
-                            alg_sym: *alg_sym,
-                            secret,
-                        }))
+                        Ok(SecretKeyRepr::ECDH(
+                            crate::crypto::ecdh::SecretKey::Curve25519 {
+                                secret,
+                                hash: *hash,
+                                alg_sym: *alg_sym,
+                            },
+                        ))
                     }
                     _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
                 },

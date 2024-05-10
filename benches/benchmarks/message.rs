@@ -4,6 +4,7 @@ use std::io::Read;
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 
 use pgp::composed::{Deserializable, Message, SignedSecretKey};
+use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::types::{SecretKeyTrait, StringToKey};
 use pgp::KeyType;
@@ -123,7 +124,7 @@ fn bench_message(c: &mut Criterion) {
                 let mut rng = rand::thread_rng();
                 rng.fill_bytes(&mut bytes);
 
-                let key = build_key(KeyType::EdDSA, KeyType::ECDH);
+                let key = build_key(KeyType::EdDSA, KeyType::ECDH(ECCCurve::Curve25519));
                 let signed_key = key.sign(|| "".into()).unwrap();
 
                 let message = Message::new_literal_bytes("test", &bytes);
@@ -153,7 +154,7 @@ fn bench_message(c: &mut Criterion) {
                 let mut rng = rand::thread_rng();
                 rng.fill_bytes(&mut bytes);
 
-                let key = build_key(KeyType::EdDSA, KeyType::ECDH);
+                let key = build_key(KeyType::EdDSA, KeyType::ECDH(ECCCurve::Curve25519));
                 let signed_key = key.sign(|| "".into()).unwrap();
 
                 let message = Message::new_literal_bytes("test", &bytes)

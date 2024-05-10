@@ -121,7 +121,7 @@ impl SecretKeyParamsBuilder {
                     _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
                 }
             }
-            Some(KeyType::ECDH) => {
+            Some(KeyType::ECDH(_)) => {
                 if let Some(can_sign) = self.can_sign {
                     if can_sign {
                         return Err("ECDH can only be used for encryption keys".into());
@@ -245,8 +245,8 @@ impl SecretKeyParams {
 pub enum KeyType {
     /// Encryption & Signing with RSA and the given bitsize.
     Rsa(u32),
-    /// Encrypting with Curve25519
-    ECDH,
+    /// Encrypting with ECDH
+    ECDH(ECCCurve),
     /// Signing with Curve25519
     EdDSA,
     /// Signing with ECDSA
@@ -281,7 +281,7 @@ impl KeyType {
     pub fn to_alg(&self) -> PublicKeyAlgorithm {
         match self {
             KeyType::Rsa(_) => PublicKeyAlgorithm::RSA,
-            KeyType::ECDH => PublicKeyAlgorithm::ECDH,
+            KeyType::ECDH(_) => PublicKeyAlgorithm::ECDH,
             KeyType::EdDSA => PublicKeyAlgorithm::EdDSA,
             KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
@@ -305,7 +305,7 @@ impl KeyType {
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => rsa::generate_key(rng, *bit_size as usize)?,
-            KeyType::ECDH => ecdh::generate_key(rng),
+            KeyType::ECDH(curve) => ecdh::generate_key(rng, curve)?,
             KeyType::EdDSA => eddsa::generate_key(rng),
             KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
             KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
@@ -499,7 +499,7 @@ mod tests {
             ])
             .subkey(
                 SubkeyParamsBuilder::default()
-                    .key_type(KeyType::ECDH)
+                    .key_type(KeyType::ECDH(ECCCurve::Curve25519))
                     .can_encrypt(true)
                     .passphrase(None)
                     .build()
@@ -573,7 +573,7 @@ mod tests {
             ])
             .subkey(
                 SubkeyParamsBuilder::default()
-                    .key_type(KeyType::ECDH)
+                    .key_type(KeyType::ECDH(ECCCurve::Curve25519))
                     .can_encrypt(true)
                     .passphrase(None)
                     .build()
@@ -678,7 +678,7 @@ mod tests {
             ])
             .subkey(
                 SubkeyParamsBuilder::default()
-                    .key_type(KeyType::ECDH)
+                    .key_type(KeyType::ECDH(ECCCurve::Curve25519))
                     .can_encrypt(true)
                     .passphrase(None)
                     .build()

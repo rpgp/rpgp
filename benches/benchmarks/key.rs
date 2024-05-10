@@ -2,6 +2,7 @@ use std::fs::File;
 
 use criterion::{black_box, criterion_group, Criterion};
 use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
+use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::ser::Serialize;
 
 use super::build_key;
@@ -36,7 +37,7 @@ fn bench_key(c: &mut Criterion) {
     });
 
     g.bench_function("x25519_parse_armored", |b| {
-        let key = build_key(KeyType::EdDSA, KeyType::ECDH)
+        let key = build_key(KeyType::EdDSA, KeyType::ECDH(ECCCurve::Curve25519))
             .sign(|| "".into())
             .unwrap();
         let bytes = key.to_armored_bytes(None.into()).unwrap();
@@ -45,11 +46,16 @@ fn bench_key(c: &mut Criterion) {
     });
 
     g.bench_function("x25519_generate", |b| {
-        b.iter(|| black_box(build_key(KeyType::EdDSA, KeyType::ECDH)))
+        b.iter(|| {
+            black_box(build_key(
+                KeyType::EdDSA,
+                KeyType::ECDH(ECCCurve::Curve25519),
+            ))
+        })
     });
 
     g.bench_function("x25519_self_sign", |b| {
-        let key = build_key(KeyType::EdDSA, KeyType::ECDH);
+        let key = build_key(KeyType::EdDSA, KeyType::ECDH(ECCCurve::Curve25519));
 
         b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()))
     });
