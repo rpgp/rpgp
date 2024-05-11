@@ -183,14 +183,6 @@ jobs:
         command: test
         args: --all  --features nightly --target ${{ matrix.target }}
 
-    # FIXME
-    # - name: asm
-    #   uses: actions-rs/cargo@v1
-    #   if: ${{ matrix.rust == env.RUST_NIGHTLY }} && matrix.target == 'x86_64-pc-windows-gnu'
-    #   with:
-    #     command: test
-    #     args: --all  --features asm --target ${{ matrix.target }}
-
     - name: tests ignored
       uses: actions-rs/cargo@v1
       with:
@@ -203,15 +195,6 @@ jobs:
       with:
         command: test
         args: --all  --features nightly --target ${{ matrix.target }} --release -- --ignored
-
-    # FIXME
-    # - name: asm ignored
-    #   uses: actions-rs/cargo@v1
-    #   if: ${{ matrix.rust == env.RUST_NIGHTLY }} && matrix.target == 'x86_64-pc-windows-gnu'
-    #   with:
-    #     command: test
-    #     args: --all  --features asm --target ${{ matrix.target }} --release -- --ignored
-
 
   cross:
     name: Cross compile
