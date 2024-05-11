@@ -2,7 +2,7 @@
 //!
 //! Handles everything in relationship to packets.
 //!
-//! [Key generation] is handled seperately as well as
+//! [Key generation] is handled separately as well as
 //! [signing and verifying with external hashing] applied.
 //!
 //! [Key generation]: super::composed::key

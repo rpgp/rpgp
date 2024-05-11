@@ -907,13 +907,13 @@ openpgp_key!(
 openpgp_key!(
     key_openpgp_samplekeys_e2e_p256_1_clr,
     "samplekeys/e2e-p256-1-clr.asc",
-    false, // signature missmatch
+    false, // signature mismatch
     false  // packet lengths are not minimally encoded
 );
 openpgp_key!(
     key_openpgp_samplekeys_e2e_p256_1_prt,
     "samplekeys/e2e-p256-1-prt.asc",
-    false, // signature missmatch
+    false, // signature mismatch
     false, // packet lengths are not minimally encoded
     "a"
 );

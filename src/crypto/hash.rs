@@ -25,7 +25,7 @@ pub enum HashAlgorithm {
     SHA3_256 = 12,
     SHA3_512 = 14,
 
-    /// Do not use, just for compatability with GnuPG.
+    /// Do not use, just for compatibility with GnuPG.
     Private10 = 110,
 
     #[num_enum(catch_all)]
@@ -88,7 +88,7 @@ pub trait Hasher: std::io::Write {
     fn update(&mut self, _: &[u8]);
     /// Finalize the hash and return the result.
     fn finish(self: Box<Self>) -> Vec<u8>;
-    /// Finalize into the provided buffer. Truncates to the lenght of `out`.
+    /// Finalize into the provided buffer. Truncates to the length of `out`.
     fn finish_reset_into(&mut self, out: &mut [u8]);
 }
 

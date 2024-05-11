@@ -810,7 +810,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
 
         let read = dec.read(&mut res).unwrap();
         assert_eq!(read, 5);
-        assert_eq!(res.as_slice(), &b" worl"[..]);
+        assert_eq!(res.as_slice(), &b" worl"[..]); // codespell:ignore worl
 
         let read = dec.read(&mut res).unwrap();
         assert_eq!(read, 1);

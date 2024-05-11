@@ -183,7 +183,7 @@ impl Edata {
                         ensure_eq!(
                             self.version(),
                             Some(1),
-                            "Version missmatch between key and integrity packet"
+                            "Version mismatch between key and integrity packet"
                         );
                         let data = p.decrypt(&key, Some(sym_alg))?;
                         Message::from_bytes(&data[..])
@@ -192,7 +192,7 @@ impl Edata {
                         ensure_eq!(
                             self.version(),
                             None,
-                            "Version missmatch between key and integrity packet"
+                            "Version mismatch between key and integrity packet"
                         );
                         let mut data = p.data().to_vec();
                         let res = sym_alg.decrypt(&key, &mut data)?;
@@ -205,7 +205,7 @@ impl Edata {
                     ensure_eq!(
                         self.version(),
                         Some(2),
-                        "Version missmatch between key and integrity packet"
+                        "Version mismatch between key and integrity packet"
                     );
                     unimplemented_err!("V5 decryption");
                 }

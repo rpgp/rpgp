@@ -138,7 +138,7 @@ impl Serialize for EncryptedSecretParams {
 
         match &self.s2k_params {
             S2kParams::Unprotected => {
-                panic!("encrypted secret params should not have an unecrypted identifier")
+                panic!("encrypted secret params should not have an unencrypted identifier")
             }
             S2kParams::LegacyCfb { ref iv, .. } => {
                 writer.write_all(iv)?;

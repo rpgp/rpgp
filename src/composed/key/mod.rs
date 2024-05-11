@@ -37,7 +37,7 @@
 //! ```
 //!
 //! [Packet based signing and verifying] as well as
-//! [signing and verifying with external hashing] are demoed seperately.
+//! [signing and verifying with external hashing] are demoed separately.
 //!
 //! [Packet based signing and verifying]: super::super::packet
 //! [signing and verifying with external hashing]: super::signed_key

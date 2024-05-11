@@ -71,7 +71,7 @@ impl SignatureConfig {
         Ok(Signature::from_config(self, signed_hash_value, signature))
     }
 
-    /// Create a certification siganture.
+    /// Create a certification signature.
     pub fn sign_certification<F>(
         self,
         key: &impl SecretKeyTrait,
@@ -187,6 +187,7 @@ impl SignatureConfig {
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
 
+        eprintln!("sig: {:02x?}", signature);
         Ok(Signature::from_config(self, signed_hash_value, signature))
     }
 
@@ -195,7 +196,7 @@ impl SignatureConfig {
         self.typ
     }
 
-    /// Calcluate the serialized version of this packet, but only the part relevant for hashing.
+    /// Calculate the serialized version of this packet, but only the part relevant for hashing.
     pub fn hash_signature_data(&self, hasher: &mut dyn Hasher) -> Result<usize> {
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
