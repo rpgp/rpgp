@@ -22,7 +22,7 @@ pub struct SymEncryptedProtectedData {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-enum Data {
+pub enum Data {
     V1 {
         data: Vec<u8>,
     },
@@ -95,7 +95,11 @@ impl SymEncryptedProtectedData {
         Self::encrypt_with_rng(&mut thread_rng(), alg, key, plaintext)
     }
 
-    pub fn data(&self) -> &[u8] {
+    pub fn data(&self) -> &Data {
+        &self.data
+    }
+
+    pub fn data_as_slice(&self) -> &[u8] {
         match &self.data {
             Data::V1 { data } => data,
             Data::V2 { data, .. } => data,
@@ -109,7 +113,7 @@ impl SymEncryptedProtectedData {
         }
     }
 
-    /// Decryptes the inner data, returning the result.
+    /// Decrypts the inner data, returning the result.
     pub fn decrypt(
         &self,
         session_key: &[u8],

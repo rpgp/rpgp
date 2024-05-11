@@ -149,7 +149,7 @@ impl Edata {
     pub fn data(&self) -> &[u8] {
         match self {
             Edata::SymEncryptedData(d) => d.data(),
-            Edata::SymEncryptedProtectedData(d) => d.data(),
+            Edata::SymEncryptedProtectedData(d) => d.data_as_slice(),
         }
     }
 
