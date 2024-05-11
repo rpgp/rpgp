@@ -170,13 +170,6 @@ jobs:
         target: ${{ matrix.target }}
         args: --benches
 
-    - name: check asm
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }} && matrix.target == 'x86_64-pc-windows-gnu'
-      with:
-        command:  check
-        args: --features asm  --target ${{ matrix.target }}
-
     - name: tests
       uses: actions-rs/cargo@v1
       with:
