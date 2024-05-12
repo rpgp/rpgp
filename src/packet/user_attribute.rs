@@ -12,7 +12,7 @@ use nom::sequence::pair;
 use crate::errors::{IResult, Result};
 use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use crate::ser::Serialize;
-use crate::types::{SecretKeyTrait, SignedUserAttribute, Tag, Version};
+use crate::types::{PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Version};
 use crate::util::{packet_length, write_packet_length};
 
 use super::SubpacketData;
@@ -61,23 +61,38 @@ impl UserAttribute {
         }
     }
 
+    /// Create a self-signature
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUserAttribute>
+    where
+        F: FnOnce() -> String,
+    {
+        self.sign_third_party(key, key_pw, key)
+    }
+
+    /// Create a third-party signature
+    pub fn sign_third_party<F>(
+        &self,
+        signer: &impl SecretKeyTrait,
+        signer_pw: F,
+        signee: &impl PublicKeyTrait,
+    ) -> Result<SignedUserAttribute>
     where
         F: FnOnce() -> String,
     {
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::CertGeneric)
-            .pub_alg(key.algorithm())
-            .hash_alg(key.hash_alg())
+            .pub_alg(signer.algorithm())
+            .hash_alg(signer.hash_alg())
             .hashed_subpackets(vec![Subpacket::regular(
                 SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
             )])
             .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                key.key_id(),
+                signer.key_id(),
             ))])
             .build()?;
 
-        let sig = config.sign_certification(key, key_pw, self.tag(), &self)?;
+        let sig =
+            config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;
 
         Ok(SignedUserAttribute::new(self.clone(), vec![sig]))
     }

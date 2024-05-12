@@ -139,29 +139,40 @@ impl Signature {
         key.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
-    /// Verifies a certification signature type.
+    /// Verifies a certification signature type (for self-signatures).
     pub fn verify_certification(
         &self,
         key: &impl PublicKeyTrait,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<()> {
-        let key_id = key.key_id();
+        self.verify_third_party_certification(&key, &key, tag, id)
+    }
+
+    /// Verifies a certification signature type (for third-party signatures).
+    pub fn verify_third_party_certification(
+        &self,
+        signee: &impl PublicKeyTrait,
+        signer: &impl PublicKeyTrait,
+        tag: Tag,
+        id: &impl Serialize,
+    ) -> Result<()> {
+        let key_id = signee.key_id();
         debug!("verifying certification {:?} {:#?}", key_id, self);
 
         ensure!(
-            Self::match_identity(self, key),
+            Self::match_identity(self, signer),
             "verify_certification: No matching issuer or issuer_fingerprint for Key ID: {:?}",
             key_id,
         );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        // the key
+        // the key of the signee
         {
             let mut key_buf = Vec::new();
             // TODO: this is different for V5
-            key.to_writer_old(&mut key_buf)?;
+            signee.to_writer_old(&mut key_buf)?;
             hasher.update(&key_buf);
         }
 
@@ -205,7 +216,7 @@ impl Signature {
             "certification: invalid signed hash value"
         );
 
-        key.verify_signature(self.config.hash_alg, hash, &self.signature)
+        signer.verify_signature(self.config.hash_alg, hash, &self.signature)
     }
 
     /// Verifies a key binding (which binds a subkey to the primary key).
