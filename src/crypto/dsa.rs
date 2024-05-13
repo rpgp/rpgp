@@ -41,7 +41,11 @@ impl Signer for SecretKey {
 
         let signature = match hash_algorithm {
             HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
+
+            // FIXME: Use sha1_checked once it implements BlockSizeUser
+            // (See https://github.com/RustCrypto/hashes/pull/582)
             HashAlgorithm::SHA1 => signing_key.sign_prehashed_rfc6979::<sha1::Sha1>(digest),
+
             HashAlgorithm::RIPEMD160 => {
                 signing_key.sign_prehashed_rfc6979::<ripemd::Ripemd160>(digest)
             }

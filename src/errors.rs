@@ -85,6 +85,8 @@ pub enum Error {
     Eax,
     #[error("OCB")]
     Ocb,
+    #[error("SHA1 hash collision detected")]
+    Sha1HashCollision,
 }
 
 impl Error {
@@ -123,6 +125,7 @@ impl Error {
             Error::Gcm => 30,
             Error::Eax => 31,
             Error::Ocb => 32,
+            Error::Sha1HashCollision => 33,
         }
     }
 }

@@ -110,7 +110,8 @@ impl<'a> PlainSecretParamsRef<'a> {
         hasher.finalize().to_vec()
     }
 
-    pub fn checksum_sha1(&self) -> Vec<u8> {
+    /// Uses sha1_checked
+    pub fn checksum_sha1(&self) -> Result<[u8; 20]> {
         let mut buf = Vec::new();
         self.to_writer_raw(&mut buf).expect("known write target");
         checksum::calculate_sha1([&buf])
@@ -238,7 +239,8 @@ impl PlainSecretParams {
         self.as_ref().checksum_simple()
     }
 
-    pub fn checksum_sha1(&self) -> Vec<u8> {
+    /// Uses sha1_checked
+    pub fn checksum_sha1(&self) -> Result<[u8; 20]> {
         self.as_ref().checksum_sha1()
     }
 
@@ -277,7 +279,7 @@ impl PlainSecretParams {
                             .to_writer_raw(&mut data)
                             .expect("preallocated vector");
 
-                        data.extend_from_slice(&self.checksum_sha1()[..]);
+                        data.extend_from_slice(&self.checksum_sha1()?[..]);
                         sym_alg.encrypt_with_iv_regular(&key, iv, &mut data)?;
 
                         data

@@ -8,10 +8,8 @@ use des::TdesEde3;
 use idea::Idea;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{thread_rng, CryptoRng, Rng};
-use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
-use crate::crypto::checksum;
 use crate::errors::{Error, Result};
 
 macro_rules! decrypt {
@@ -164,6 +162,21 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     /// Does not do resynchronization.
     pub fn decrypt_protected<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
+        #[inline]
+        fn calculate_sha1_unchecked<I, T>(data: I) -> [u8; 20]
+        where
+            T: AsRef<[u8]>,
+            I: IntoIterator<Item = T>,
+        {
+            use sha1::{Digest, Sha1};
+
+            let mut digest = Sha1::new();
+            for chunk in data {
+                digest.update(chunk.as_ref());
+            }
+            digest.finalize().into()
+        }
+
         debug!("protected decrypt");
 
         let iv_vec = vec![0u8; self.block_size()];
@@ -173,7 +186,8 @@ impl SymmetricKeyAlgorithm {
         const MDC_LEN: usize = 22;
         let (data, mdc) = res.split_at(res.len() - MDC_LEN);
 
-        let sha1 = checksum::calculate_sha1([prefix, data, &mdc[0..2]]);
+        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
+        let sha1 = calculate_sha1_unchecked([prefix, data, &mdc[0..2]]);
         if mdc[0] != 0xD3 || // Invalid MDC tag
            mdc[1] != 0x14 || // Invalid MDC length
            mdc[2..] != sha1[..]
@@ -420,6 +434,9 @@ impl SymmetricKeyAlgorithm {
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Vec<u8>> {
+        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
+        use sha1::{Digest, Sha1};
+
         debug!("protected encrypt");
 
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.

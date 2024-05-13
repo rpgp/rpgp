@@ -2,7 +2,6 @@ use std::hash::Hasher;
 use std::io;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use sha1::{Digest, Sha1};
 
 use crate::errors::Result;
 
@@ -80,16 +79,26 @@ impl Hasher for SimpleChecksum {
     }
 }
 
-/// SHA1 checksum, first 20 octets.
+/// SHA1 checksum, using sha1_checked, first 20 octets.
+///
+/// Fails with `Error::HashCollision` if a SHA1 collision was detected.
 #[inline]
-pub fn calculate_sha1<I, T>(data: I) -> Vec<u8>
+pub fn calculate_sha1<I, T>(data: I) -> Result<[u8; 20]>
 where
     T: AsRef<[u8]>,
     I: IntoIterator<Item = T>,
 {
+    use sha1_checked::{CollisionResult, Digest, Sha1};
+
     let mut digest = Sha1::new();
     for chunk in data {
         digest.update(chunk.as_ref());
     }
-    digest.finalize()[..20].to_vec()
+
+    match digest.try_finalize() {
+        CollisionResult::Ok(sha1) => Ok(sha1.into()),
+        CollisionResult::Collision(_) | CollisionResult::Mitigated(_) => {
+            Err(crate::errors::Error::Sha1HashCollision)
+        }
+    }
 }

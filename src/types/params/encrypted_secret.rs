@@ -103,7 +103,7 @@ impl EncryptedSecretParams {
                 }
 
                 let (plaintext, expected_sha1) = plaintext.split_at(self.data.len() - 20);
-                let calculated_sha1 = checksum::calculate_sha1([plaintext]);
+                let calculated_sha1 = checksum::calculate_sha1([plaintext])?;
                 if expected_sha1 != calculated_sha1 {
                     return Err(Error::InvalidInput);
                 }
