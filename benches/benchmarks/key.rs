@@ -66,6 +66,32 @@ fn bench_key(c: &mut Criterion) {
         b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()))
     });
 
+    for curve in [ECCCurve::P256, ECCCurve::P384, ECCCurve::P521] {
+        g.bench_function(format!("nistp{}_parse_armored", curve.nbits()), |b| {
+            let key = build_key(KeyType::ECDSA(curve.clone()), KeyType::ECDH(curve.clone()))
+                .sign(|| "".into())
+                .unwrap();
+            let bytes = key.to_armored_bytes(None.into()).unwrap();
+
+            b.iter(|| black_box(SignedSecretKey::from_armor_single(&bytes[..]).unwrap()));
+        });
+
+        g.bench_function(format!("nistp{}_generate", curve.nbits()), |b| {
+            b.iter(|| {
+                black_box(build_key(
+                    KeyType::ECDSA(curve.clone()),
+                    KeyType::ECDH(curve.clone()),
+                ))
+            })
+        });
+
+        g.bench_function(format!("nistp{}_self_sign", curve.nbits()), |b| {
+            let key = build_key(KeyType::ECDSA(curve.clone()), KeyType::ECDH(curve.clone()));
+
+            b.iter(|| black_box(key.clone().sign(|| "".into()).unwrap()))
+        });
+    }
+
     g.finish();
 }
 

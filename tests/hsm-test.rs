@@ -209,7 +209,7 @@ impl FakeHsm {
                     &shared_secret,
                     encrypted_session_key,
                     encrypted_key_len,
-                    &(curve.oid(), *alg_sym, *hash),
+                    &(curve.clone(), *alg_sym, *hash),
                     &self.public_key.fingerprint(),
                 )?;
 

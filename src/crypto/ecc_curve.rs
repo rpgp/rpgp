@@ -1,4 +1,6 @@
+use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use const_oid::ObjectIdentifier;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -109,6 +111,44 @@ impl ECCCurve {
             ECCCurve::BrainpoolP512r1 => None,
             ECCCurve::Secp256k1 => None,
             ECCCurve::Unknown(_oid) => None,
+        }
+    }
+
+    /// Default hash algorithm for this curve
+    pub fn hash_algo(&self) -> crate::errors::Result<HashAlgorithm> {
+        match self {
+            ECCCurve::Curve25519
+            | ECCCurve::Ed25519
+            | ECCCurve::P256
+            | ECCCurve::BrainpoolP256r1
+            | ECCCurve::Secp256k1 => Ok(HashAlgorithm::SHA2_256),
+
+            ECCCurve::P384 | ECCCurve::BrainpoolP384r1 => Ok(HashAlgorithm::SHA2_384),
+
+            ECCCurve::P521 | ECCCurve::BrainpoolP512r1 => Ok(HashAlgorithm::SHA2_512),
+
+            ECCCurve::Unknown(_oid) => {
+                unsupported_err!("no default hash_algo for curve {:?}", self.to_string())
+            }
+        }
+    }
+
+    /// Default symmetric encryption algorithm for this curve
+    pub fn sym_algo(&self) -> crate::errors::Result<SymmetricKeyAlgorithm> {
+        match self {
+            ECCCurve::Curve25519
+            | ECCCurve::Ed25519
+            | ECCCurve::P256
+            | ECCCurve::BrainpoolP256r1
+            | ECCCurve::Secp256k1 => Ok(SymmetricKeyAlgorithm::AES128),
+
+            ECCCurve::P384 | ECCCurve::BrainpoolP384r1 => Ok(SymmetricKeyAlgorithm::AES192),
+
+            ECCCurve::P521 | ECCCurve::BrainpoolP512r1 => Ok(SymmetricKeyAlgorithm::AES256),
+
+            ECCCurve::Unknown(_oid) => {
+                unsupported_err!("no default sym_algo for curve {:?}", self.to_string())
+            }
         }
     }
 
