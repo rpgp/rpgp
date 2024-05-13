@@ -31,13 +31,29 @@ impl SignedUser {
         SignedUser { id, signatures }
     }
 
-    /// Verify all signatures. If signatures is empty, this fails.
+    /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
         debug!("verify signed user {:#?}", self);
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
             signature.verify_certification(key, Tag::UserId, &self.id)?;
+        }
+
+        Ok(())
+    }
+
+    /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
+    pub fn verify_third_party(
+        &self,
+        signee: &impl PublicKeyTrait,
+        signer: &impl PublicKeyTrait,
+    ) -> Result<()> {
+        debug!("verify signed user {:#?} with signer {:#?}", self, signer);
+        ensure!(!self.signatures.is_empty(), "no signatures found");
+
+        for signature in &self.signatures {
+            signature.verify_third_party_certification(signee, signer, Tag::UserId, &self.id)?;
         }
 
         Ok(())
@@ -85,13 +101,37 @@ impl SignedUserAttribute {
         SignedUserAttribute { attr, signatures }
     }
 
-    /// Verify all signatures. If signatures is empty, this fails.
+    /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
     pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
         debug!("verify signed attribute {:?}", self);
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
             signature.verify_certification(key, Tag::UserAttribute, &self.attr)?;
+        }
+
+        Ok(())
+    }
+
+    /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
+    pub fn verify_third_party(
+        &self,
+        signee: &impl PublicKeyTrait,
+        signer: &impl PublicKeyTrait,
+    ) -> Result<()> {
+        debug!(
+            "verify signed attribute {:#?} with signer {:#?}",
+            self, signer
+        );
+        ensure!(!self.signatures.is_empty(), "no signatures found");
+
+        for signature in &self.signatures {
+            signature.verify_third_party_certification(
+                signee,
+                signer,
+                Tag::UserAttribute,
+                &self.attr,
+            )?;
         }
 
         Ok(())

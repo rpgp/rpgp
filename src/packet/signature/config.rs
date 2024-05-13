@@ -71,11 +71,26 @@ impl SignatureConfig {
         Ok(Signature::from_config(self, signed_hash_value, signature))
     }
 
-    /// Create a certification signature.
+    /// Create a certification self-signature.
     pub fn sign_certification<F>(
         self,
         key: &impl SecretKeyTrait,
         key_pw: F,
+        tag: Tag,
+        id: &impl Serialize,
+    ) -> Result<Signature>
+    where
+        F: FnOnce() -> String,
+    {
+        self.sign_certification_third_party(key, key_pw, key, tag, id)
+    }
+
+    /// Create a certification third-party signature.
+    pub fn sign_certification_third_party<F>(
+        self,
+        signer: &impl SecretKeyTrait,
+        signer_pw: F,
+        signee: &impl PublicKeyTrait,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
@@ -90,7 +105,7 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        key.to_writer_old(&mut hasher)?;
+        signee.to_writer_old(&mut hasher)?;
 
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
@@ -126,7 +141,7 @@ impl SignatureConfig {
         let hash = &hasher.finish()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.create_signature(key_pw, self.hash_alg, hash)?;
+        let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
 
         Ok(Signature::from_config(self, signed_hash_value, signature))
     }

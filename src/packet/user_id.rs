@@ -8,7 +8,7 @@ use crate::packet::{
     PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
 use crate::ser::Serialize;
-use crate::types::{SecretKeyTrait, SignedUser, Tag, Version};
+use crate::types::{PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, Version};
 
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
@@ -38,23 +38,38 @@ impl UserId {
         self.id.as_ref()
     }
 
+    /// Create a self-signature
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUser>
+    where
+        F: FnOnce() -> String,
+    {
+        self.sign_third_party(key, key_pw, key)
+    }
+
+    /// Create a third-party signature
+    pub fn sign_third_party<F>(
+        &self,
+        signer: &impl SecretKeyTrait,
+        signer_pw: F,
+        signee: &impl PublicKeyTrait,
+    ) -> Result<SignedUser>
     where
         F: FnOnce() -> String,
     {
         let config = SignatureConfigBuilder::default()
             .typ(SignatureType::CertGeneric)
-            .pub_alg(key.algorithm())
-            .hash_alg(key.hash_alg())
+            .pub_alg(signer.algorithm())
+            .hash_alg(signer.hash_alg())
             .hashed_subpackets(vec![Subpacket::regular(
                 SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
             )])
             .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                key.key_id(),
+                signer.key_id(),
             ))])
             .build()?;
 
-        let sig = config.sign_certification(key, key_pw, self.tag(), &self)?;
+        let sig =
+            config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;
 
         Ok(SignedUser::new(self.clone(), vec![sig]))
     }
@@ -85,5 +100,72 @@ impl PacketTrait for UserId {
 
     fn tag(&self) -> Tag {
         Tag::UserId
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use crate::types::{KeyVersion, S2kParams};
+    use crate::{packet, KeyType};
+    use rand::thread_rng;
+
+    #[test]
+    fn test_user_id_certification() {
+        let key_type = KeyType::EdDSA;
+
+        let (public_params, secret_params) = key_type
+            .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)
+            .unwrap();
+
+        let alice_sec = packet::SecretKey {
+            details: packet::PublicKey {
+                packet_version: Version::New,
+                version: KeyVersion::V4,
+                algorithm: key_type.to_alg(),
+                created_at: Utc::now().trunc_subsecs(0),
+                expiration: None,
+                public_params,
+            },
+            secret_params,
+        };
+
+        let alice_pub = alice_sec.public_key();
+
+        let alice_uid = UserId::from_str(Version::New, "<alice@example.org>");
+
+        // test self-signature
+        let self_signed = alice_uid.sign(&alice_sec, String::default).unwrap();
+        self_signed
+            .verify(&alice_pub)
+            .expect("self signature verification failed");
+
+        // test third-party signature
+        let (public_params, secret_params) = key_type
+            .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)
+            .unwrap();
+
+        let signer_sec = packet::SecretKey {
+            details: packet::PublicKey {
+                packet_version: Version::New,
+                version: KeyVersion::V4,
+                algorithm: key_type.to_alg(),
+                created_at: Utc::now().trunc_subsecs(0),
+                expiration: None,
+                public_params,
+            },
+            secret_params,
+        };
+
+        let signer_pub = signer_sec.public_key();
+
+        let third_signed = alice_uid
+            .sign_third_party(&signer_sec, String::default, &alice_pub)
+            .unwrap();
+        third_signed
+            .verify_third_party(&alice_pub, &signer_pub)
+            .expect("self signature verification failed");
     }
 }
