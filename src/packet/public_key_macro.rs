@@ -184,10 +184,12 @@ macro_rules! impl_public_key {
 
         impl $crate::types::KeyTrait for $name {
             /// Returns the fingerprint of this key.
+            ///
+            /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
             fn fingerprint(&self) -> Vec<u8> {
                 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
                 use md5::Md5;
-                use sha1::{Digest, Sha1};
+                use sha1_checked::{Digest, Sha1};
 
                 use $crate::ser::Serialize;
                 use $crate::types::KeyVersion;

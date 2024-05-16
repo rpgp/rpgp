@@ -4,7 +4,7 @@ use digest::Digest;
 use md5::Md5;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use ripemd::Ripemd160;
-use sha1::Sha1;
+use sha1_checked::{CollisionResult, Sha1};
 
 use crate::errors::{Error, Result};
 
@@ -158,7 +158,12 @@ impl HashAlgorithm {
     pub fn digest(self, data: &[u8]) -> Result<Vec<u8>> {
         Ok(match self {
             HashAlgorithm::MD5 => Md5::digest(data).to_vec(),
-            HashAlgorithm::SHA1 => Sha1::digest(data).to_vec(),
+            HashAlgorithm::SHA1 => match Sha1::try_digest(data) {
+                CollisionResult::Ok(output) => output.to_vec(),
+                CollisionResult::Collision(_) | CollisionResult::Mitigated(_) => {
+                    return Err(Error::Sha1HashCollision)
+                }
+            },
             HashAlgorithm::RIPEMD160 => Ripemd160::digest(data).to_vec(),
             HashAlgorithm::SHA2_256 => sha2::Sha256::digest(data).to_vec(),
             HashAlgorithm::SHA2_384 => sha2::Sha384::digest(data).to_vec(),

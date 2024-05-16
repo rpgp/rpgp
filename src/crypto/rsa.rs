@@ -11,7 +11,7 @@ use rsa::{
     traits::{PrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
 };
-use sha1::Sha1;
+use sha1_checked::Sha1; // not used for hashing, just as a source of the OID
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
@@ -170,8 +170,8 @@ pub fn verify(
     )?;
 
     let signature = if signature.len() < key.size() {
-        // RSA short signatures are allowed by PGP, but not by the by the
-        // RSA crate. So we pad out the signature if we encounter a short one.
+        // RSA short signatures are allowed by PGP, but not by the RSA crate.
+        // So we pad out the signature if we encounter a short one.
         let mut signature_padded = vec![0u8; key.size()];
         let diff = key.size() - signature.len();
         signature_padded[diff..].copy_from_slice(signature);
