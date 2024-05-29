@@ -1,0 +1,7 @@
+{
+  "type" : "decrypt",
+  "decryptKey" : "../../../draft-bre-openpgp-samples-00/bob.sec.asc",
+  "passphrase": "",
+  "filename": "camellia256-001.asc",
+  "textcontent": "Hello World :)"
+}

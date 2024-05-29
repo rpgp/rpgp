@@ -210,6 +210,10 @@ msg_test!(msg_pgp_10_0_005, "pgp-10-0-005", false);
 msg_test!(msg_pgp_10_0_006, "pgp-10-0-006", false);
 msg_test!(msg_pgp_10_0_007, "pgp-10-0-007", false);
 
+msg_test!(msg_camellia128_001, "camellia128-001", false);
+msg_test!(msg_camellia192_001, "camellia192-001", false);
+msg_test!(msg_camellia256_001, "camellia256-001", false);
+
 // ECDH
 // msg_test!(msg_openkeychain_001, "openkeychain-001", true);
 
