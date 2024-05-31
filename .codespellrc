@@ -3,4 +3,4 @@ skip = ./tests,./Cargo.lock,./CHANGELOG.md
 check-filenames = true
 
 # FIXME: drop "worl" once https://github.com/codespell-project/codespell/pull/2400 is in a release
-ignore-words-list = crate,ser,worl
+ignore-words-list = crate,ser,worl,ThirdParty

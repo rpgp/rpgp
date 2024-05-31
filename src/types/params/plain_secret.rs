@@ -117,6 +117,14 @@ impl<'a> PlainSecretParamsRef<'a> {
         checksum::calculate_sha1([&buf])
     }
 
+    fn pad_key<const SIZE: usize>(val: &[u8]) -> Result<[u8; SIZE]> {
+        ensure!(val.len() <= SIZE, "invalid secret key size");
+
+        let mut key = [0u8; SIZE];
+        key[SIZE - val.len()..].copy_from_slice(val);
+        Ok(key)
+    }
+
     pub fn as_repr(&self, public_params: &PublicParams) -> Result<SecretKeyRepr> {
         match self {
             PlainSecretParamsRef::RSA { d, p, q, .. } => match public_params {
@@ -140,18 +148,43 @@ impl<'a> PlainSecretParamsRef<'a> {
                     ref hash,
                     ref alg_sym,
                     ..
-                } => match *curve {
+                } => match curve {
                     ECCCurve::Curve25519 => {
-                        ensure!(d.len() <= 32, "invalid secret");
+                        const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
 
-                        let mut secret = [0u8; 32];
-                        secret[32 - d.len()..].copy_from_slice(d.as_bytes());
+                        Ok(SecretKeyRepr::ECDH(
+                            crate::crypto::ecdh::SecretKey::Curve25519 {
+                                secret: Self::pad_key::<SIZE>(d)?,
+                                hash: *hash,
+                                alg_sym: *alg_sym,
+                            },
+                        ))
+                    }
+                    ECCCurve::P256 => {
+                        const SIZE: usize = ECCCurve::P256.secret_key_length();
 
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey {
-                            oid: curve.oid(),
+                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P256 {
+                            secret: Self::pad_key::<SIZE>(d)?,
                             hash: *hash,
                             alg_sym: *alg_sym,
-                            secret,
+                        }))
+                    }
+                    ECCCurve::P384 => {
+                        const SIZE: usize = ECCCurve::P384.secret_key_length();
+
+                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P384 {
+                            secret: Self::pad_key::<SIZE>(d)?,
+                            hash: *hash,
+                            alg_sym: *alg_sym,
+                        }))
+                    }
+                    ECCCurve::P521 => {
+                        const SIZE: usize = ECCCurve::P521.secret_key_length();
+
+                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P521 {
+                            secret: Self::pad_key::<SIZE>(d)?,
+                            hash: *hash,
+                            alg_sym: *alg_sym,
                         }))
                     }
                     _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
@@ -161,14 +194,11 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::EdDSA(d) => match public_params {
                 PublicParams::EdDSA { ref curve, .. } => match *curve {
                     ECCCurve::Ed25519 => {
-                        ensure!(d.len() <= 32, "invalid secret");
-
-                        let mut secret = [0u8; 32];
-                        secret[32 - d.len()..].copy_from_slice(d.as_bytes());
+                        const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
 
                         Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
                             oid: curve.oid(),
-                            secret,
+                            secret: Self::pad_key::<SIZE>(d)?,
                         }))
                     }
                     _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),

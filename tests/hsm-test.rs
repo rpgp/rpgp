@@ -206,10 +206,10 @@ impl FakeHsm {
                     mpis[1].first().copied().map(Into::into).unwrap_or(0);
 
                 let decrypted_key: Vec<u8> = pgp::crypto::ecdh::derive_session_key(
-                    shared_secret,
+                    &shared_secret,
                     encrypted_session_key,
                     encrypted_key_len,
-                    &(curve.oid(), *alg_sym, *hash),
+                    &(curve.clone(), *alg_sym, *hash),
                     &self.public_key.fingerprint(),
                 )?;
 

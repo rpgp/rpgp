@@ -4,6 +4,7 @@ use std::io::Read;
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 
 use pgp::composed::{Deserializable, Message, SignedSecretKey};
+use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::types::{SecretKeyTrait, StringToKey};
 use pgp::KeyType;
@@ -113,67 +114,98 @@ fn bench_message(c: &mut Criterion) {
         );
     }
 
-    for size in &sizes {
-        g.throughput(Throughput::BytesDecimal(*size as u64));
-        g.bench_with_input(
-            BenchmarkId::new("x25519_encrypt_key_aes128", size),
-            size,
-            |b, &size| {
-                let mut bytes = vec![0u8; size];
-                let mut rng = rand::thread_rng();
-                rng.fill_bytes(&mut bytes);
+    for (kt1, kt2, sym, asym_name, sym_name) in [
+        (
+            KeyType::EdDSA,
+            KeyType::ECDH(ECCCurve::Curve25519),
+            SymmetricKeyAlgorithm::AES128,
+            "x25519",
+            "aes128",
+        ),
+        (
+            KeyType::ECDSA(ECCCurve::P256),
+            KeyType::ECDH(ECCCurve::P256),
+            SymmetricKeyAlgorithm::AES128,
+            "nistp256",
+            "aes128",
+        ),
+        (
+            KeyType::ECDSA(ECCCurve::P384),
+            KeyType::ECDH(ECCCurve::P384),
+            SymmetricKeyAlgorithm::AES192,
+            "nistp384",
+            "aes192",
+        ),
+        (
+            KeyType::ECDSA(ECCCurve::P521),
+            KeyType::ECDH(ECCCurve::P521),
+            SymmetricKeyAlgorithm::AES256,
+            "nistp521",
+            "aes256",
+        ),
+    ] {
+        for size in &sizes {
+            g.throughput(Throughput::BytesDecimal(*size as u64));
+            g.bench_with_input(
+                BenchmarkId::new(format!("{}_encrypt_key_{}", asym_name, sym_name), size),
+                size,
+                |b, &size| {
+                    let mut bytes = vec![0u8; size];
+                    let mut rng = rand::thread_rng();
+                    rng.fill_bytes(&mut bytes);
 
-                let key = build_key(KeyType::EdDSA, KeyType::ECDH);
-                let signed_key = key.sign(|| "".into()).unwrap();
+                    let key = build_key(kt1.clone(), kt2.clone());
+                    let signed_key = key.sign(|| "".into()).unwrap();
 
-                let message = Message::new_literal_bytes("test", &bytes);
+                    let message = Message::new_literal_bytes("test", &bytes);
 
-                b.iter(|| {
-                    let res = message
+                    b.iter(|| {
+                        let res = message
+                            .encrypt_to_keys(
+                                &mut rng,
+                                SymmetricKeyAlgorithm::AES128,
+                                &[&signed_key.secret_subkeys[0].public_key()],
+                            )
+                            .unwrap();
+
+                        black_box(res);
+                    });
+                },
+            );
+        }
+
+        for size in &sizes {
+            g.throughput(Throughput::BytesDecimal(*size as u64));
+            g.bench_with_input(
+                BenchmarkId::new(format!("{}_decrypt_key_{}", asym_name, sym_name), size),
+                size,
+                |b, &size| {
+                    let mut bytes = vec![0u8; size];
+                    let mut rng = rand::thread_rng();
+                    rng.fill_bytes(&mut bytes);
+
+                    let key = build_key(kt1.clone(), kt2.clone());
+                    let signed_key = key.sign(|| "".into()).unwrap();
+
+                    let message = Message::new_literal_bytes("test", &bytes)
                         .encrypt_to_keys(
                             &mut rng,
-                            SymmetricKeyAlgorithm::AES128,
+                            sym,
                             &[&signed_key.secret_subkeys[0].public_key()],
                         )
                         .unwrap();
 
-                    black_box(res);
-                });
-            },
-        );
-    }
+                    // sanity check
+                    let (res, _) = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
+                    assert_eq!(res.get_content().unwrap().unwrap(), bytes);
 
-    for size in &sizes {
-        g.throughput(Throughput::BytesDecimal(*size as u64));
-        g.bench_with_input(
-            BenchmarkId::new("x25519_decrypt_key_aes128", size),
-            size,
-            |b, &size| {
-                let mut bytes = vec![0u8; size];
-                let mut rng = rand::thread_rng();
-                rng.fill_bytes(&mut bytes);
-
-                let key = build_key(KeyType::EdDSA, KeyType::ECDH);
-                let signed_key = key.sign(|| "".into()).unwrap();
-
-                let message = Message::new_literal_bytes("test", &bytes)
-                    .encrypt_to_keys(
-                        &mut rng,
-                        SymmetricKeyAlgorithm::AES128,
-                        &[&signed_key.secret_subkeys[0].public_key()],
-                    )
-                    .unwrap();
-
-                // sanity check
-                let (res, _) = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
-                assert_eq!(res.get_content().unwrap().unwrap(), bytes);
-
-                b.iter(|| {
-                    let res = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
-                    black_box(res);
-                });
-            },
-        );
+                    b.iter(|| {
+                        let res = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
+                        black_box(res);
+                    });
+                },
+            );
+        }
     }
 }
 
