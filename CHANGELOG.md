@@ -2,7 +2,42 @@
 
 All notable changes to rpgp will be documented in this file.
 
-## [0.12.0-alpha.2](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.1..0.12.0-alpha.2) - 2024-04-07
+## [0.12.0-alpha.3](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.2..0.12.0-alpha.3) - 2024-05-31
+
+### ⛰️  Features
+
+- *(ecdh)* [**breaking**] Implement support for nist p curves - ([1b6d5dd](https://github.com/rpgp/rpgp/commit/1b6d5dd3421196d941eca579f1a089315f78cf48))
+- Update deps - ([f0477f4](https://github.com/rpgp/rpgp/commit/f0477f47cfd44a9c2f809057c5f3c98bacedb1ca))
+- Enable SEIPDv2 decryption via the public API ([#345](https://github.com/rpgp/rpgp/issues/345)) - ([deb8a92](https://github.com/rpgp/rpgp/commit/deb8a92e30176e24a4ba655b25d80e4a0860f79a))
+- Add APIs to create and verify third-party certifications ([#349](https://github.com/rpgp/rpgp/issues/349)) - ([ab39417](https://github.com/rpgp/rpgp/commit/ab394179a6c93da7bd5a1bdf34bcf1bc3b5ac754))
+- Use sha1_checked for Sha1 hashing, except MDC  - ([7c5e6ae](https://github.com/rpgp/rpgp/commit/7c5e6ae9cc8c9e180abf9ad354b9d5e236ea5c7c))
+
+### 🚜 Refactor
+
+- Improve & simplify packet parsing logic  - ([3b71f41](https://github.com/rpgp/rpgp/commit/3b71f41ebbe180af42b830b65e0b511362e11e1e))
+
+### 📚 Documentation
+
+- *(readme)* Fixup copyright - ([9773052](https://github.com/rpgp/rpgp/commit/9773052ae550809bacee2cd96bccbab5bc777cc9))
+- Nist p521 support for ECDH was merged in #304 ([#335](https://github.com/rpgp/rpgp/issues/335)) - ([8e67756](https://github.com/rpgp/rpgp/commit/8e67756ebce780c91b8c2ffc7db1f6230f8a9419))
+- Fix typo "secret" -> "public"  - ([f68aa3d](https://github.com/rpgp/rpgp/commit/f68aa3dc5df4eda6516be7ad83ed5f8d16a09ac6))
+- Update and expand status and readme  - ([9b27d81](https://github.com/rpgp/rpgp/commit/9b27d811e5693d21e2f3c8dfb43ac8ab1aafb922))
+- Small refinements/typo-fixes ([#342](https://github.com/rpgp/rpgp/issues/342)) - ([34d1c79](https://github.com/rpgp/rpgp/commit/34d1c79c1d254245711793688cbd722b730ec789))
+- Add link to interop test suite - ([cc46fa5](https://github.com/rpgp/rpgp/commit/cc46fa5e7906beadf89ebd9d54466fffcbfa6815))
+
+### 🧪 Testing
+
+- Camellia decryption ([#354](https://github.com/rpgp/rpgp/issues/354)) - ([066c1c5](https://github.com/rpgp/rpgp/commit/066c1c5f3f8547d3fe38c964685871635b8d876a))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(echd)* [**breaking**] Prepare for handling more curves - ([35343e0](https://github.com/rpgp/rpgp/commit/35343e061c74e2fa7217e71edabb2dd9e7a3f1ec))
+- Remove unused ios-simulator code ([#339](https://github.com/rpgp/rpgp/issues/339)) - ([8bec797](https://github.com/rpgp/rpgp/commit/8bec797e48188251f0f4dec3729c8f738385f5ac))
+- Add codespell CI job; apply fixes ([#341](https://github.com/rpgp/rpgp/issues/341)) - ([a6b6ad7](https://github.com/rpgp/rpgp/commit/a6b6ad70a2f54e76786214bca1e4ccea229afb56))
+- Remove asm feature from windows  - ([56505aa](https://github.com/rpgp/rpgp/commit/56505aa9cdfe32c57703c79da52c04b82feb1981))
+- Pacify codespell - ([06e840c](https://github.com/rpgp/rpgp/commit/06e840cc34fe1d675a6003da60cdd91d4c387f77))
+
+## [0.12.0-alpha.2](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.1..v0.12.0-alpha.2) - 2024-04-07
 
 ### ⛰️  Features
 
@@ -26,6 +61,7 @@ All notable changes to rpgp will be documented in this file.
 
 ### ⚙️ Miscellaneous Tasks
 
+- *(pgp)* Release 0.12.0-alpha.2 - ([817bf65](https://github.com/rpgp/rpgp/commit/817bf658bc719ad868829307d71923851e2d6cf6))
 - Fix feature = "cargo-clippy" deprecation - ([a75db54](https://github.com/rpgp/rpgp/commit/a75db5470ea75f5c392f0b5688da76762a42ca0b))
 - Set debug in Cargo.toml to the normalized value - ([29adca7](https://github.com/rpgp/rpgp/commit/29adca744539955ccc16895afb8e7f8504936aa3))
 
