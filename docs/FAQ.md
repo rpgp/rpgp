@@ -9,11 +9,11 @@ We aim to step-wise introduce support for the
 during 2024. 
 
 
-### Is rPGP considering adding support for Post Quantum Crypto (PQC)? 
+### Is rPGP considering adding support for Post Quantum Cryptography (PQC)? 
 
 Yes, it is tracked in [#356](https://github.com/rpgp/rpgp/issues/356). 
 
-We are following the IETF [Post-Quantum Cryptography in OpenPGP](https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-03.html) work and discussed with some of its authors
+We are following the IETF [Post-Quantum Cryptography in OpenPGP](https://datatracker.ietf.org/doc/draft-ietf-openpgp-pqc/) work and discussed with some of its authors
 but have not fully assessed yet the work needed to support it in rPGP. 
 
 
@@ -36,7 +36,7 @@ No, at least not soon.
 While we might not agree with, or not praise every detail of the V6 crypto refresh,
 we highly appreciate the work of the IETF OpenPGP WG and the contributors and stakeholders around it. 
 
-If LibrePGP evolves towards a multi-stakeholder community-driven specification, 
+If [LibrePGP](https://librepgp.org/) evolves towards a multi-stakeholder community-driven specification, 
 we might consider partially supporting LibrePGP keys 
 after the work on supporting IETF OpenPGP V6 keys is done. 
 
