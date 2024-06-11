@@ -40,7 +40,7 @@ If [LibrePGP](https://librepgp.org/) evolves towards a multi-stakeholder communi
 we might consider partially supporting LibrePGP keys 
 after the work on supporting IETF OpenPGP V6 keys is done. 
 
-Helping to smoothly move some hundred thousand users of rPGP via [Delta Chat](https://delta.chat) 
+Helping to smoothly and securely move the many [Delta Chat](https://delta.chat) users of rPGP
 to V6 keys is sufficiently challenging for us without considering LibrePGP. 
 
 
