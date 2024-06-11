@@ -38,7 +38,7 @@
 
 > OpenPGP implemented in pure Rust, permissively licensed
 
-rPGP is the only pure Rust implementation of OpenPGP, following the main RFCs
+rPGP is a pure Rust implementation of OpenPGP, following the main RFCs
 
 - [RFC4880]
 - [RFC2440],
