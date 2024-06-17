@@ -2,7 +2,13 @@
 
 All notable changes to rpgp will be documented in this file.
 
-## [0.12.0-alpha.3](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.2..0.12.0-alpha.3) - 2024-05-31
+## [0.13.0](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.3..0.13.0) - 2024-06-17
+
+### 📚 Documentation
+
+- Provide more FAQ items and improve comparisons - ([374026f](https://github.com/rpgp/rpgp/commit/374026f6bf63e94219099b0fe0e33ed01d6eb43c))
+
+## [0.12.0-alpha.3](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.2..v0.12.0-alpha.3) - 2024-05-31
 
 ### ⛰️  Features
 
@@ -32,6 +38,7 @@ All notable changes to rpgp will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - *(echd)* [**breaking**] Prepare for handling more curves - ([35343e0](https://github.com/rpgp/rpgp/commit/35343e061c74e2fa7217e71edabb2dd9e7a3f1ec))
+- *(pgp)* Release 0.12.0-alpha.3 - ([82d49b3](https://github.com/rpgp/rpgp/commit/82d49b3f386003a9ab65196c3409af6efd25d383))
 - Remove unused ios-simulator code ([#339](https://github.com/rpgp/rpgp/issues/339)) - ([8bec797](https://github.com/rpgp/rpgp/commit/8bec797e48188251f0f4dec3729c8f738385f5ac))
 - Add codespell CI job; apply fixes ([#341](https://github.com/rpgp/rpgp/issues/341)) - ([a6b6ad7](https://github.com/rpgp/rpgp/commit/a6b6ad70a2f54e76786214bca1e4ccea229afb56))
 - Remove asm feature from windows  - ([56505aa](https://github.com/rpgp/rpgp/commit/56505aa9cdfe32c57703c79da52c04b82feb1981))
