@@ -65,15 +65,14 @@ use pgp::{SignedSecretKey, Message, Deserializable};
 let key_file = "key.sec.asc";
 let msg_file = "msg.asc";
 
-let key_string = fs::read_to_string("key.sec.asc").unwrap(),
+let key_string = fs::read_to_string("key.sec.asc").unwrap();
 let (secret_key, _headers) = SignedSecretKey::from_string(&key_string).unwrap();
-let public_key = skey.public_key();
 
 let msg_string = fs::read_to_string("msg.asc").unwrap();
-let (msg, _headres) = Message::from_string(msg_string).unwrap();
+let (msg, _headres) = Message::from_string(&msg_string).unwrap();
 
 // Verify this message
-msg.verify(&pkey).unwrap();
+msg.verify(&secret_key.public_key()).unwrap();
 
 let msg_content = msg.get_content().unwrap(); // actual message content
 ```
