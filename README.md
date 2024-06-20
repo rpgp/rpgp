@@ -66,15 +66,34 @@ let key_file = "key.sec.asc";
 let msg_file = "msg.asc";
 
 let key_string = fs::read_to_string("key.sec.asc").unwrap();
-let (secret_key, _headers) = SignedSecretKey::from_string(&key_string).unwrap();
+let (secret_key, _headers_secret) = SignedSecretKey::from_string(&key_string).unwrap();
 
 let msg_string = fs::read_to_string("msg.asc").unwrap();
-let (msg, _headres) = Message::from_string(&msg_string).unwrap();
+let (msg, _headers_msg) = Message::from_string(&msg_string).unwrap();
 
 // Verify this message
 msg.verify(&secret_key.public_key()).unwrap();
 
 let msg_content = msg.get_content().unwrap(); // actual message content
+```
+
+### Generate and Verify a Signature with a GPG Keypair
+```
+let key_file = "key.sec.asc";
+let pub_key_file = "key.asc";
+
+let secret_key_string = fs::read_to_string(key_file).expect("Failed to load secret key");
+let signed_secret_key = SignedSecretKey::from_string(&secret_key_string).unwrap().0;
+
+let data: Vec<u8> = vec![0u8];
+
+// create a new signature
+let new_signature = signed_secret_key.create_signature(|| "".to_string(), pgp::crypto::hash::HashAlgorithm::MD5, &data).unwrap(); 
+
+let key_string = fs::read_to_string(pub_key_file).expect("Failed to load public key");
+let public_key = SignedPublicKey::from_string(&key_string).unwrap().0;
+
+public_key.verify_signature(pgp::crypto::hash::HashAlgorithm::MD5, &data, &new_signature).unwrap();
 ```
 
 ## Current Status
