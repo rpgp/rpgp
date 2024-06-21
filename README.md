@@ -56,49 +56,54 @@ Additionally it fully supports all functionality required by the [Autocrypt 1.1 
 > cargo add pgp
 ```
 
-### Load a key and verify a message
+### Load a public key and verify an inline-signed message
 
 ```rust
 use std::fs;
-use pgp::{SignedSecretKey, Message, Deserializable};
+use pgp::{SignedPublicKey, Message, Deserializable};
 
-let key_file = "key.sec.asc";
+let pub_key_file = "key.asc";
 let msg_file = "msg.asc";
 
-let key_string = fs::read_to_string("key.sec.asc").unwrap();
-let (secret_key, _headers_secret) = SignedSecretKey::from_string(&key_string).unwrap();
+let key_string = fs::read_to_string(pub_key_file).unwrap();
+let (public_key, _headers_public) = SignedPublicKey::from_string(&key_string).unwrap();
 
-let msg_string = fs::read_to_string("msg.asc").unwrap();
+let msg_string = fs::read_to_string(msg_file).unwrap();
 let (msg, _headers_msg) = Message::from_string(&msg_string).unwrap();
 
 // Verify this message
-msg.verify(&secret_key.public_key()).unwrap();
+// NOTE: This assumes that the primary serves as the signing key, which is not always the case!
+msg.verify(&public_key).unwrap();
 
 let msg_content = msg.get_content().unwrap(); // actual message content
+let msg_string = String::from_utf8(msg_content.unwrap()).expect("expect UTF8");
+println!("Signed message: {:?}", msg_string);
 ```
 
 ### Generate and verify a detached signature with an OpenPGP keypair
+
 ```rust
 use std::fs;
 use pgp::{Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::types::{PublicKeyTrait, SecretKeyTrait};
 use pgp::crypto::hash::HashAlgorithm;
 
-let key_file = "key.sec.asc";
+let priv_key_file = "key.sec.asc";
 let pub_key_file = "key.asc";
 
-let secret_key_string = fs::read_to_string(key_file).expect("Failed to load secret key");
+let data = b"Hello world!";
+
+// Create a new signature using the private key
+let secret_key_string = fs::read_to_string(priv_key_file).expect("Failed to load secret key");
 let signed_secret_key = SignedSecretKey::from_string(&secret_key_string).unwrap().0;
 
-let data: Vec<u8> = vec![0u8];
+let new_signature = signed_secret_key.create_signature(|| "".to_string(), HashAlgorithm::default(), &data[..]).unwrap();
 
-// create a new signature
-let new_signature = signed_secret_key.create_signature(|| "".to_string(), HashAlgorithm::default(), &data).unwrap(); 
-
+// Verify the signature using the public key
 let key_string = fs::read_to_string(pub_key_file).expect("Failed to load public key");
 let public_key = SignedPublicKey::from_string(&key_string).unwrap().0;
 
-public_key.verify_signature(HashAlgorithm::default(), &data, &new_signature).unwrap();
+public_key.verify_signature(HashAlgorithm::default(), &data[..], &new_signature).unwrap();
 ```
 
 ## Current Status
