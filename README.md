@@ -79,6 +79,11 @@ let msg_content = msg.get_content().unwrap(); // actual message content
 
 ### Generate and verify a detached signature with an OpenPGP keypair
 ```rust
+use std::fs;
+use pgp::{Deserializable, SignedPublicKey, SignedSecretKey};
+use pgp::types::{PublicKeyTrait, SecretKeyTrait};
+use pgp::crypto::hash::HashAlgorithm;
+
 let key_file = "key.sec.asc";
 let pub_key_file = "key.asc";
 
