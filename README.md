@@ -93,7 +93,7 @@ let signed_secret_key = SignedSecretKey::from_string(&secret_key_string).unwrap(
 let data: Vec<u8> = vec![0u8];
 
 // create a new signature
-let new_signature = signed_secret_key.create_signature(|| "".to_string(), pgp::crypto::hash::HashAlgorithm::MD5, &data).unwrap(); 
+let new_signature = signed_secret_key.create_signature(|| "".to_string(), HashAlgorithm::default(), &data).unwrap(); 
 
 let key_string = fs::read_to_string(pub_key_file).expect("Failed to load public key");
 let public_key = SignedPublicKey::from_string(&key_string).unwrap().0;
