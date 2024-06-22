@@ -77,7 +77,7 @@ msg.verify(&secret_key.public_key()).unwrap();
 let msg_content = msg.get_content().unwrap(); // actual message content
 ```
 
-### Generate and Verify a Signature with a GPG Keypair
+### Generate and verify a detached signature with an OpenPGP keypair
 ```rust
 let key_file = "key.sec.asc";
 let pub_key_file = "key.asc";
