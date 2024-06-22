@@ -98,7 +98,7 @@ let new_signature = signed_secret_key.create_signature(|| "".to_string(), HashAl
 let key_string = fs::read_to_string(pub_key_file).expect("Failed to load public key");
 let public_key = SignedPublicKey::from_string(&key_string).unwrap().0;
 
-public_key.verify_signature(pgp::crypto::hash::HashAlgorithm::MD5, &data, &new_signature).unwrap();
+public_key.verify_signature(HashAlgorithm::default(), &data, &new_signature).unwrap();
 ```
 
 ## Current Status
