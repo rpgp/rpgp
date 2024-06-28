@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_user_id_certification() {
-        let key_type = KeyType::EdDSA;
+        let key_type = KeyType::EdDSALegacy;
 
         let (public_params, secret_params) = key_type
             .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)

@@ -32,7 +32,7 @@ pub enum PublicParams {
         g: Mpi,
         y: Mpi,
     },
-    EdDSA {
+    EdDSALegacy {
         curve: ECCCurve,
         q: Mpi,
     },
@@ -220,7 +220,7 @@ impl Serialize for PublicParams {
                 g.to_writer(writer)?;
                 y.to_writer(writer)?;
             }
-            PublicParams::EdDSA { ref curve, ref q } => {
+            PublicParams::EdDSALegacy { ref curve, ref q } => {
                 let oid = curve.oid();
                 writer.write_all(&[oid.len() as u8])?;
                 writer.write_all(&oid)?;
@@ -282,8 +282,8 @@ impl fmt::Debug for PublicParams {
                 .field("y", &y)
                 .finish(),
 
-            PublicParams::EdDSA { ref curve, ref q } => f
-                .debug_struct("PublicParams::EdDSA")
+            PublicParams::EdDSALegacy { ref curve, ref q } => f
+                .debug_struct("PublicParams::EdDSALegacy")
                 .field("curve", curve)
                 .field("q", &q)
                 .finish(),

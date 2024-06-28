@@ -35,7 +35,7 @@ fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
 }
 
 /// https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
-fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
+fn eddsa_legacy(i: &[u8]) -> IResult<&[u8], PublicParams> {
     let (i, curve) = map_opt(
         // a one-octet size of the following field
         length_data(be_u8),
@@ -46,7 +46,7 @@ fn eddsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     let (i, q) = mpi(i)?;
     Ok((
         i,
-        PublicParams::EdDSA {
+        PublicParams::EdDSALegacy {
             curve,
             q: q.to_owned(),
         },
@@ -127,7 +127,7 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
         PublicKeyAlgorithm::ECDSA => ecdsa(i),
         PublicKeyAlgorithm::ECDH => ecdh(i),
         PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => elgamal(i),
-        PublicKeyAlgorithm::EdDSA => eddsa(i),
+        PublicKeyAlgorithm::EdDSALegacy => eddsa_legacy(i),
 
         PublicKeyAlgorithm::DiffieHellman
         | PublicKeyAlgorithm::Private100
