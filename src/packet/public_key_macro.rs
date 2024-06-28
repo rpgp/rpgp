@@ -280,7 +280,7 @@ macro_rules! impl_public_key {
                             sig[0].as_bytes(),
                         )
                     }
-                    PublicParams::EdDSA { ref curve, ref q } => {
+                    PublicParams::EdDSALegacy { ref curve, ref q } => {
                         $crate::crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
                     }
                     PublicParams::ECDSA(ref params) => {
@@ -332,7 +332,9 @@ macro_rules! impl_public_key {
                     PublicParams::RSA { ref n, ref e } => {
                         $crate::crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
                     }
-                    PublicParams::EdDSA { .. } => bail!("EdDSA is only used for signing"),
+                    PublicParams::EdDSALegacy { .. } => {
+                        bail!("EdDSALegacy is only used for signing")
+                    }
                     PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
                     PublicParams::ECDH {
                         ref curve,

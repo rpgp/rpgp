@@ -22,7 +22,7 @@ pub enum PlainSecretParams {
     ECDSA(Mpi),
     ECDH(Mpi),
     Elgamal(Mpi),
-    EdDSA(Mpi),
+    EdDSALegacy(Mpi),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -37,7 +37,7 @@ pub enum PlainSecretParamsRef<'a> {
     ECDSA(MpiRef<'a>),
     ECDH(MpiRef<'a>),
     Elgamal(MpiRef<'a>),
-    EdDSA(MpiRef<'a>),
+    EdDSALegacy(MpiRef<'a>),
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
@@ -53,7 +53,7 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::ECDSA(v) => PlainSecretParams::ECDSA((*v).to_owned()),
             PlainSecretParamsRef::ECDH(v) => PlainSecretParams::ECDH((*v).to_owned()),
             PlainSecretParamsRef::Elgamal(v) => PlainSecretParams::Elgamal((*v).to_owned()),
-            PlainSecretParamsRef::EdDSA(v) => PlainSecretParams::EdDSA((*v).to_owned()),
+            PlainSecretParamsRef::EdDSALegacy(v) => PlainSecretParams::EdDSALegacy((*v).to_owned()),
         }
     }
 
@@ -81,7 +81,7 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::Elgamal(d) => {
                 (*d).to_writer(writer)?;
             }
-            PlainSecretParamsRef::EdDSA(x) => {
+            PlainSecretParamsRef::EdDSALegacy(x) => {
                 (*x).to_writer(writer)?;
             }
         }
@@ -191,8 +191,8 @@ impl<'a> PlainSecretParamsRef<'a> {
                 },
                 _ => unreachable!("inconsistent key state"),
             },
-            PlainSecretParamsRef::EdDSA(d) => match public_params {
-                PublicParams::EdDSA { ref curve, .. } => match *curve {
+            PlainSecretParamsRef::EdDSALegacy(d) => match public_params {
+                PublicParams::EdDSALegacy { ref curve, .. } => match *curve {
                     ECCCurve::Ed25519 => {
                         const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
 
@@ -286,7 +286,7 @@ impl PlainSecretParams {
             PlainSecretParams::ECDSA(v) => PlainSecretParamsRef::ECDSA(v.as_ref()),
             PlainSecretParams::ECDH(v) => PlainSecretParamsRef::ECDH(v.as_ref()),
             PlainSecretParams::Elgamal(v) => PlainSecretParamsRef::Elgamal(v.as_ref()),
-            PlainSecretParams::EdDSA(v) => PlainSecretParamsRef::EdDSA(v.as_ref()),
+            PlainSecretParams::EdDSALegacy(v) => PlainSecretParamsRef::EdDSALegacy(v.as_ref()),
         }
     }
 
@@ -361,7 +361,7 @@ impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
                 write!(f, "PlainSecretParams(ECDSA {})", hex::encode(x.as_bytes()))
             }
             PlainSecretParamsRef::ECDH(_) => write!(f, "PlainSecretParams(ECDH)"),
-            PlainSecretParamsRef::EdDSA(_) => write!(f, "PlainSecretParams(EdDSA)"),
+            PlainSecretParamsRef::EdDSALegacy(_) => write!(f, "PlainSecretParams(EdDSA)"),
         }
     }
 }
@@ -377,7 +377,9 @@ fn parse_secret_params(
         PublicKeyAlgorithm::Elgamal => map(mpi, |m| PlainSecretParams::Elgamal(m.to_owned()))(i),
         PublicKeyAlgorithm::ECDH => map(mpi, |m| PlainSecretParams::ECDH(m.to_owned()))(i),
         PublicKeyAlgorithm::ECDSA => map(mpi, |m| PlainSecretParams::ECDSA(m.to_owned()))(i),
-        PublicKeyAlgorithm::EdDSA => map(mpi, |m| PlainSecretParams::EdDSA(m.to_owned()))(i),
+        PublicKeyAlgorithm::EdDSALegacy => {
+            map(mpi, |m| PlainSecretParams::EdDSALegacy(m.to_owned()))(i)
+        }
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
             nom::error::ErrorKind::Switch,
         ))),

@@ -344,18 +344,18 @@ fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8]
         &PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
             map(mpi, |v| vec![v.to_owned()])(i)
         }
-        &PublicKeyAlgorithm::DSA | &PublicKeyAlgorithm::ECDSA | &PublicKeyAlgorithm::EdDSA => {
-            fold_many_m_n(
-                2,
-                2,
-                mpi,
-                Vec::new,
-                |mut acc: Vec<Mpi>, item: MpiRef<'_>| {
-                    acc.push(item.to_owned());
-                    acc
-                },
-            )(i)
-        }
+        &PublicKeyAlgorithm::DSA
+        | &PublicKeyAlgorithm::ECDSA
+        | &PublicKeyAlgorithm::EdDSALegacy => fold_many_m_n(
+            2,
+            2,
+            mpi,
+            Vec::new,
+            |mut acc: Vec<Mpi>, item: MpiRef<'_>| {
+                acc.push(item.to_owned());
+                acc
+            },
+        )(i),
         &PublicKeyAlgorithm::Private100
         | &PublicKeyAlgorithm::Private101
         | &PublicKeyAlgorithm::Private102

@@ -102,7 +102,7 @@ impl ECCCurve {
     pub fn pubkey_algo(&self) -> Option<PublicKeyAlgorithm> {
         match self {
             ECCCurve::Curve25519 => Some(PublicKeyAlgorithm::ECDH),
-            ECCCurve::Ed25519 => Some(PublicKeyAlgorithm::EdDSA),
+            ECCCurve::Ed25519 => Some(PublicKeyAlgorithm::EdDSALegacy),
             ECCCurve::P256 => None,
             ECCCurve::P384 => None,
             ECCCurve::P521 => None,

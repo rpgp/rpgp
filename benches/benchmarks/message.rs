@@ -116,7 +116,7 @@ fn bench_message(c: &mut Criterion) {
 
     for (kt1, kt2, sym, asym_name, sym_name) in [
         (
-            KeyType::EdDSA,
+            KeyType::EdDSALegacy,
             KeyType::ECDH(ECCCurve::Curve25519),
             SymmetricKeyAlgorithm::AES128,
             "x25519",

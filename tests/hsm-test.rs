@@ -130,7 +130,7 @@ impl SecretKeyTrait for FakeHsm {
                     Mpi::from_raw_slice(&sig[mid..]),
                 ]
             }
-            PublicKeyAlgorithm::EdDSA => {
+            PublicKeyAlgorithm::EdDSALegacy => {
                 assert_eq!(sig.len(), 64); // FIXME: check curve; add error handling
 
                 vec![
