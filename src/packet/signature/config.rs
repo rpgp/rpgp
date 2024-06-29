@@ -202,7 +202,6 @@ impl SignatureConfig {
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
 
-        eprintln!("sig: {:02x?}", signature);
         Ok(Signature::from_config(self, signed_hash_value, signature))
     }
 
