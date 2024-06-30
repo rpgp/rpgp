@@ -2,11 +2,26 @@
 
 All notable changes to rpgp will be documented in this file.
 
-## [0.13.0](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.3..0.13.0) - 2024-06-17
+## [0.13.1](https://github.com/rpgp/rpgp/compare/v0.13.0..0.13.1) - 2024-06-30
+
+### 🐛 Bug Fixes
+
+- Remove stray eprintln - ([683c529](https://github.com/rpgp/rpgp/commit/683c5294d61a20669725501fe6f1c3b4b7f49f4b))
+
+### 📚 Documentation
+
+- *(readme)* Fix the example - ([cd7a253](https://github.com/rpgp/rpgp/commit/cd7a2530e4fb8607609d3813a894addc6c6fbc77))
+- *(readme)* Some more example adjustments - ([99daf15](https://github.com/rpgp/rpgp/commit/99daf1551c7d732f1a1c9e83074af02c66cbd684))
+
+## [0.13.0](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.3..v0.13.0) - 2024-06-17
 
 ### 📚 Documentation
 
 - Provide more FAQ items and improve comparisons - ([374026f](https://github.com/rpgp/rpgp/commit/374026f6bf63e94219099b0fe0e33ed01d6eb43c))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(pgp)* Release 0.13.0 - ([66fbbb3](https://github.com/rpgp/rpgp/commit/66fbbb31d0bd7597820496b85b914682674b81ea))
 
 ## [0.12.0-alpha.3](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.2..v0.12.0-alpha.3) - 2024-05-31
 
