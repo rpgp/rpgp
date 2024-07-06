@@ -8,9 +8,9 @@ use crate::composed::signed_key::SignedKeyDetails;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{self, write_packet, SignatureType};
+use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams};
+use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, Tag};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
@@ -21,19 +21,59 @@ pub struct SignedPublicKey {
     pub public_subkeys: Vec<SignedPublicSubKey>,
 }
 
-key_parser!(
-    SignedPublicKey,
-    SignedPublicKeyParser,
-    armor::BlockType::PublicKey,
-    Tag::PublicKey,
-    packet::PublicKey,
-    (
-        PublicSubkey,
-        packet::PublicSubkey,
-        SignedPublicSubKey,
-        public_subkeys
-    )
-);
+/// Parse a transferable keys from the given packets.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+pub struct SignedPublicKeyParser<
+    I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,
+> {
+    inner: std::iter::Peekable<I>,
+}
+
+impl<I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>>
+    SignedPublicKeyParser<I>
+{
+    pub fn into_inner(self) -> std::iter::Peekable<I> {
+        self.inner
+    }
+
+    pub fn from_packets(packets: std::iter::Peekable<I>) -> Self {
+        SignedPublicKeyParser { inner: packets }
+    }
+}
+
+impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedPublicKeyParser<I> {
+    type Item = Result<SignedPublicKey>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match super::key_parser::next::<I, packet::PublicKey>(
+            &mut self.inner,
+            Tag::PublicKey,
+            false,
+        ) {
+            Some(Err(err)) => Some(Err(err)),
+            None => None,
+            Some(Ok((primary_key, details, public_subkeys, _))) => Some(Ok(SignedPublicKey::new(
+                primary_key,
+                details,
+                public_subkeys,
+            ))),
+        }
+    }
+}
+
+impl crate::composed::Deserializable for SignedPublicKey {
+    /// Parse a transferable key from packets.
+    /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+    fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
+        packets: std::iter::Peekable<I>,
+    ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
+        Box::new(SignedPublicKeyParser::from_packets(packets))
+    }
+
+    fn matches_block_type(typ: armor::BlockType) -> bool {
+        matches!(typ, armor::BlockType::PublicKey | armor::BlockType::File)
+    }
+}
 
 impl SignedPublicKey {
     pub fn new(

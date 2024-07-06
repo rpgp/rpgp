@@ -103,8 +103,7 @@
 //!     .expect("Verify must succeed");
 //! ```
 
-#[macro_use]
-mod key_parser_macros;
+mod key_parser;
 
 mod parse;
 mod public;
