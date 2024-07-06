@@ -13,13 +13,13 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub(crate) struct PubKeyInner {
-    pub(crate) packet_version: Version,
-    pub(crate) version: KeyVersion,
-    pub(crate) algorithm: PublicKeyAlgorithm,
-    pub(crate) created_at: chrono::DateTime<chrono::Utc>,
-    pub(crate) expiration: Option<u16>,
-    pub(crate) public_params: PublicParams,
+struct PubKeyInner {
+    packet_version: Version,
+    version: KeyVersion,
+    algorithm: PublicKeyAlgorithm,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expiration: Option<u16>,
+    public_params: PublicParams,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
