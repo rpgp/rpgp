@@ -13,6 +13,114 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PublicKey(PubKeyInner);
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PublicSubkey(PubKeyInner);
+
+impl PublicKey {
+    /// Create a new `PublicKey` packet from underlying parameters.
+    pub fn new(
+        packet_version: Version,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        created_at: chrono::DateTime<chrono::Utc>,
+        expiration: Option<u16>,
+        public_params: PublicParams,
+    ) -> Result<Self> {
+        let inner = PubKeyInner::new(
+            packet_version,
+            version,
+            algorithm,
+            created_at,
+            expiration,
+            public_params,
+        )?;
+        Ok(Self(inner))
+    }
+
+    /// Parses a `PublicKeyKey` packet from the given slice.
+    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+        let inner = PubKeyInner::from_slice(packet_version, input)?;
+        Ok(Self(inner))
+    }
+
+    pub fn version(&self) -> KeyVersion {
+        self.0.version
+    }
+
+    pub fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.0.algorithm
+    }
+
+    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.0.created_at
+    }
+
+    pub fn expiration(&self) -> Option<u16> {
+        self.0.expiration
+    }
+
+    pub fn public_params(&self) -> &PublicParams {
+        &self.0.public_params
+    }
+
+    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
+    where
+        F: FnOnce() -> String,
+    {
+        self.0.sign(key, key_pw, SignatureType::KeyBinding)
+    }
+}
+
+impl PublicSubkey {
+    /// Create a new `PublicSubkey` packet from underlying parameters.
+    pub fn new(
+        packet_version: Version,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
+        created_at: chrono::DateTime<chrono::Utc>,
+        expiration: Option<u16>,
+        public_params: PublicParams,
+    ) -> Result<Self> {
+        let inner = PubKeyInner::new(
+            packet_version,
+            version,
+            algorithm,
+            created_at,
+            expiration,
+            public_params,
+        )?;
+        Ok(Self(inner))
+    }
+
+    /// Parses a `PublicSubkey` packet from the given slice.
+    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+        let inner = PubKeyInner::from_slice(packet_version, input)?;
+        Ok(Self(inner))
+    }
+
+    pub fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.0.algorithm
+    }
+
+    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.0.created_at
+    }
+
+    pub fn expiration(&self) -> Option<u16> {
+        self.0.expiration
+    }
+
+    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
+    where
+        F: FnOnce() -> String,
+    {
+        self.0.sign(key, key_pw, SignatureType::SubkeyBinding)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
 struct PubKeyInner {
     packet_version: Version,
     version: KeyVersion,
@@ -22,11 +130,7 @@ struct PubKeyInner {
     public_params: PublicParams,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicKey(PubKeyInner);
-
 impl PubKeyInner {
-    /// Create a new `PublicKeyKey` packet from underlying parameters.
     fn new(
         packet_version: Version,
         version: KeyVersion,
@@ -58,7 +162,6 @@ impl PubKeyInner {
         })
     }
 
-    /// Parses a `PublicKeyKey` packet from the given slice.
     fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, details) = crate::packet::public_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params) = details;
@@ -126,7 +229,13 @@ impl PubKeyInner {
 
 impl crate::ser::Serialize for PublicKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.0.to_writer(writer)
+        crate::ser::Serialize::to_writer(&self.0, writer)
+    }
+}
+
+impl crate::ser::Serialize for PublicSubkey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        crate::ser::Serialize::to_writer(&self.0, writer)
     }
 }
 
@@ -155,24 +264,49 @@ impl crate::packet::PacketTrait for PublicKey {
     }
 }
 
-impl KeyTrait for PublicKey {
-    fn version(&self) -> KeyVersion {
-        self.0.version()
+impl crate::packet::PacketTrait for PublicSubkey {
+    fn packet_version(&self) -> Version {
+        self.0.packet_version
     }
 
-    /// Returns the fingerprint of this key.
-    ///
-    /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
+    fn tag(&self) -> Tag {
+        Tag::PublicSubkey
+    }
+}
+
+impl KeyTrait for PublicKey {
+    fn version(&self) -> KeyVersion {
+        KeyTrait::version(&self.0)
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
-        self.0.fingerprint()
+        KeyTrait::fingerprint(&self.0)
     }
 
     fn key_id(&self) -> KeyId {
-        self.0.key_id()
+        KeyTrait::key_id(&self.0)
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.0.algorithm
+        KeyTrait::algorithm(&self.0)
+    }
+}
+
+impl KeyTrait for PublicSubkey {
+    fn version(&self) -> KeyVersion {
+        KeyTrait::version(&self.0)
+    }
+
+    fn fingerprint(&self) -> Vec<u8> {
+        KeyTrait::fingerprint(&self.0)
+    }
+
+    fn key_id(&self) -> KeyId {
+        KeyTrait::key_id(&self.0)
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        KeyTrait::algorithm(&self.0)
     }
 }
 
@@ -181,9 +315,6 @@ impl KeyTrait for PubKeyInner {
         self.version
     }
 
-    /// Returns the fingerprint of this key.
-    ///
-    /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
     fn fingerprint(&self) -> Vec<u8> {
         use crate::ser::Serialize;
 
@@ -350,7 +481,7 @@ impl PublicKeyTrait for PubKeyInner {
 
 impl PublicKeyTrait for PublicKey {
     fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
-        self.0.verify_signature(hash, hashed, sig)
+        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
@@ -358,7 +489,7 @@ impl PublicKeyTrait for PublicKey {
         rng: &mut R,
         plain: &[u8],
     ) -> Result<Vec<Mpi>> {
-        self.0.encrypt(rng, plain)
+        PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
     fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -370,151 +501,9 @@ impl PublicKeyTrait for PublicKey {
     }
 }
 
-impl PublicKey {
-    /// Create a new `PublicKeyKey` packet from underlying parameters.
-    pub fn new(
-        packet_version: Version,
-        version: KeyVersion,
-        algorithm: PublicKeyAlgorithm,
-        created_at: chrono::DateTime<chrono::Utc>,
-        expiration: Option<u16>,
-        public_params: PublicParams,
-    ) -> Result<Self> {
-        let inner = PubKeyInner::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )?;
-        Ok(Self(inner))
-    }
-
-    /// Parses a `PublicKeyKey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(packet_version, input)?;
-        Ok(Self(inner))
-    }
-
-    pub fn version(&self) -> KeyVersion {
-        self.0.version
-    }
-
-    pub fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.0.algorithm
-    }
-
-    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.0.created_at
-    }
-
-    pub fn expiration(&self) -> Option<u16> {
-        self.0.expiration
-    }
-
-    pub fn public_params(&self) -> &PublicParams {
-        &self.0.public_params
-    }
-
-    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
-    where
-        F: FnOnce() -> String,
-    {
-        self.0.sign(key, key_pw, SignatureType::KeyBinding)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicSubkey(PubKeyInner);
-
-impl PublicSubkey {
-    /// Create a new `PublicKeyKey` packet from underlying parameters.
-    pub fn new(
-        packet_version: Version,
-        version: KeyVersion,
-        algorithm: PublicKeyAlgorithm,
-        created_at: chrono::DateTime<chrono::Utc>,
-        expiration: Option<u16>,
-        public_params: PublicParams,
-    ) -> Result<Self> {
-        let inner = PubKeyInner::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )?;
-        Ok(Self(inner))
-    }
-
-    /// Parses a `PublicKeyKey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(packet_version, input)?;
-        Ok(Self(inner))
-    }
-
-    pub fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.0.algorithm
-    }
-
-    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.0.created_at
-    }
-
-    pub fn expiration(&self) -> Option<u16> {
-        self.0.expiration
-    }
-
-    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
-    where
-        F: FnOnce() -> String,
-    {
-        self.0.sign(key, key_pw, SignatureType::SubkeyBinding)
-    }
-}
-
-impl crate::ser::Serialize for PublicSubkey {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.0.to_writer(writer)
-    }
-}
-
-impl crate::packet::PacketTrait for PublicSubkey {
-    fn packet_version(&self) -> Version {
-        self.0.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::PublicSubkey
-    }
-}
-
-impl KeyTrait for PublicSubkey {
-    fn version(&self) -> KeyVersion {
-        self.0.version()
-    }
-
-    /// Returns the fingerprint of this key.
-    ///
-    /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.0.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.0.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.0.algorithm()
-    }
-}
-
 impl PublicKeyTrait for PublicSubkey {
     fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
-        self.0.verify_signature(hash, hashed, sig)
+        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
@@ -522,7 +511,7 @@ impl PublicKeyTrait for PublicSubkey {
         rng: &mut R,
         plain: &[u8],
     ) -> Result<Vec<Mpi>> {
-        self.0.encrypt(rng, plain)
+        PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
     fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
