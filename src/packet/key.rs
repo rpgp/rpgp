@@ -37,11 +37,10 @@ impl PubKeyInner {
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
-        if version == KeyVersion::V2
-            || version == KeyVersion::V3
-                && !(algorithm == PublicKeyAlgorithm::RSA
-                    || algorithm == PublicKeyAlgorithm::RSAEncrypt
-                    || algorithm == PublicKeyAlgorithm::RSASign)
+        if (version == KeyVersion::V2 || version == KeyVersion::V3)
+            && !(algorithm == PublicKeyAlgorithm::RSA
+                || algorithm == PublicKeyAlgorithm::RSAEncrypt
+                || algorithm == PublicKeyAlgorithm::RSASign)
         {
             // It's sufficient to throw a "soft" Error::Unsupported
             unsupported_err!(
