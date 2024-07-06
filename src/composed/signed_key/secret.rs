@@ -251,6 +251,14 @@ impl PublicKeyTrait for SignedSecretKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.primary_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.primary_key.expiration()
+    }
 }
 
 /// Represents a composed secret PGP SubKey.
@@ -362,6 +370,14 @@ impl PublicKeyTrait for SignedSecretSubKey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.key.expiration()
     }
 }
 

@@ -19,6 +19,10 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 
     fn algorithm(&self) -> PublicKeyAlgorithm;
 
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
+
+    fn expiration(&self) -> Option<u16>;
+
     /// Verify a signed message.
     /// Data will be hashed using `hash`, before verifying.
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()>;
@@ -80,5 +84,13 @@ impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         (*self).algorithm()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        (*self).expiration()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        (*self).created_at()
     }
 }

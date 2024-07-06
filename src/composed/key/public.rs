@@ -87,8 +87,17 @@ impl PublicKeyTrait for PublicKey {
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.primary_key.to_writer_old(writer)
     }
+
     fn public_params(&self) -> &PublicParams {
         self.primary_key.public_params()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.primary_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.primary_key.expiration()
     }
 }
 
@@ -160,5 +169,13 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn public_params(&self) -> &PublicParams {
         self.key.public_params()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.key.expiration()
     }
 }

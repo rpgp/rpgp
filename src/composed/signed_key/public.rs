@@ -189,6 +189,14 @@ impl PublicKeyTrait for SignedPublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.primary_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.primary_key.expiration()
+    }
 }
 
 impl Serialize for SignedPublicKey {
@@ -281,6 +289,14 @@ impl PublicKeyTrait for SignedPublicSubKey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.key.expiration()
     }
 }
 

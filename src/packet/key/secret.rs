@@ -64,14 +64,6 @@ impl SecretKey {
         }))
     }
 
-    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.0.details.created_at()
-    }
-
-    pub fn expiration(&self) -> Option<u16> {
-        self.0.details.expiration()
-    }
-
     pub fn secret_params(&self) -> &SecretParams {
         self.0.secret_params()
     }
@@ -112,14 +104,6 @@ impl SecretSubkey {
             )?,
             secret_params,
         }))
-    }
-
-    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.0.details.created_at()
-    }
-
-    pub fn expiration(&self) -> Option<u16> {
-        self.0.details.expiration()
     }
 
     pub fn secret_params(&self) -> &SecretParams {
@@ -359,6 +343,14 @@ impl PublicKeyTrait for SecretKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         PublicKeyTrait::algorithm(&self.0)
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        PublicKeyTrait::created_at(&self.0)
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        PublicKeyTrait::expiration(&self.0)
+    }
 }
 
 impl PublicKeyTrait for SecretSubkey {
@@ -396,6 +388,14 @@ impl PublicKeyTrait for SecretSubkey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         PublicKeyTrait::algorithm(&self.0)
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        PublicKeyTrait::created_at(&self.0)
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        PublicKeyTrait::expiration(&self.0)
     }
 }
 
@@ -440,5 +440,13 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.details.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.details.expiration()
     }
 }

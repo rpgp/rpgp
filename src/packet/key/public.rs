@@ -42,22 +42,6 @@ impl PublicKey {
         Ok(Self(inner))
     }
 
-    pub fn version(&self) -> KeyVersion {
-        self.0.version
-    }
-
-    pub fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.0.algorithm
-    }
-
-    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.0.created_at
-    }
-
-    pub fn expiration(&self) -> Option<u16> {
-        self.0.expiration
-    }
-
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
     where
         F: FnOnce() -> String,
@@ -91,18 +75,6 @@ impl PublicSubkey {
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let inner = PubKeyInner::from_slice(packet_version, input)?;
         Ok(Self(inner))
-    }
-
-    pub fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.0.algorithm
-    }
-
-    pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        &self.0.created_at
-    }
-
-    pub fn expiration(&self) -> Option<u16> {
-        self.0.expiration
     }
 
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
@@ -431,6 +403,14 @@ impl PublicKeyTrait for PubKeyInner {
     fn public_params(&self) -> &PublicParams {
         &self.public_params
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        &self.created_at
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.expiration
+    }
 }
 
 impl PublicKeyTrait for PublicKey {
@@ -469,6 +449,14 @@ impl PublicKeyTrait for PublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         PublicKeyTrait::algorithm(&self.0)
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        PublicKeyTrait::created_at(&self.0)
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        PublicKeyTrait::expiration(&self.0)
+    }
 }
 
 impl PublicKeyTrait for PublicSubkey {
@@ -506,5 +494,13 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         PublicKeyTrait::algorithm(&self.0)
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        PublicKeyTrait::created_at(&self.0)
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        PublicKeyTrait::expiration(&self.0)
     }
 }
