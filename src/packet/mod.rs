@@ -81,9 +81,6 @@ mod many;
 mod packet_sum;
 mod single;
 
-#[macro_use]
-mod secret_key_macro;
-
 mod compressed_data;
 mod key;
 mod literal_data;

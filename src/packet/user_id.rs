@@ -120,8 +120,8 @@ mod tests {
             .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)
             .unwrap();
 
-        let alice_sec = packet::SecretKey {
-            details: packet::PublicKey::new(
+        let alice_sec = packet::SecretKey::new(
+            packet::PublicKey::new(
                 Version::New,
                 KeyVersion::V4,
                 key_type.to_alg(),
@@ -131,7 +131,7 @@ mod tests {
             )
             .unwrap(),
             secret_params,
-        };
+        );
 
         let alice_pub = alice_sec.public_key();
 
@@ -148,8 +148,8 @@ mod tests {
             .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)
             .unwrap();
 
-        let signer_sec = packet::SecretKey {
-            details: packet::PublicKey::new(
+        let signer_sec = packet::SecretKey::new(
+            packet::PublicKey::new(
                 Version::New,
                 KeyVersion::V4,
                 key_type.to_alg(),
@@ -159,7 +159,7 @@ mod tests {
             )
             .unwrap(),
             secret_params,
-        };
+        );
 
         let signer_pub = signer_sec.public_key();
 

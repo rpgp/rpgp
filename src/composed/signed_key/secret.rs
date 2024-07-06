@@ -203,10 +203,6 @@ impl SecretKeyTrait for SignedSecretKey {
             subkeys,
         )
     }
-
-    fn public_params(&self) -> &PublicParams {
-        self.primary_key.public_params()
-    }
 }
 
 impl PublicKeyTrait for SignedSecretKey {
@@ -220,6 +216,10 @@ impl PublicKeyTrait for SignedSecretKey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.primary_key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
     }
 }
 
@@ -315,10 +315,6 @@ impl SecretKeyTrait for SignedSecretSubKey {
 
         PublicSubkey::new(self.key.public_key(), keyflags)
     }
-
-    fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
-    }
 }
 
 impl PublicKeyTrait for SignedSecretSubKey {
@@ -332,6 +328,10 @@ impl PublicKeyTrait for SignedSecretSubKey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
     }
 }
 

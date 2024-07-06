@@ -11,7 +11,7 @@ use crate::errors::Result;
 use crate::packet::{
     self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyTrait};
+use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -86,6 +86,9 @@ impl PublicKeyTrait for PublicKey {
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.primary_key.to_writer_old(writer)
     }
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
+    }
 }
 
 impl PublicSubkey {
@@ -150,5 +153,9 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
     }
 }

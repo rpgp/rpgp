@@ -86,6 +86,10 @@ impl PublicKeyTrait for FakeHsm {
     fn to_writer_old(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {
         self.public_key.to_writer_old(writer)
     }
+
+    fn public_params(&self) -> &PublicParams {
+        self.public_key.public_params()
+    }
 }
 
 pub struct Unlocked;
@@ -147,10 +151,6 @@ impl SecretKeyTrait for FakeHsm {
 
     fn public_key(&self) -> Self::PublicKey {
         self.public_key.clone()
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.public_key.public_params()
     }
 }
 

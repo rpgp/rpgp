@@ -1,6 +1,5 @@
 mod public;
+mod secret;
 
 pub use self::public::{PublicKey, PublicSubkey};
-
-impl_secret_key!(SecretKey, crate::types::Tag::SecretKey, PublicKey);
-impl_secret_key!(SecretSubkey, crate::types::Tag::SecretSubkey, PublicSubkey);
+pub use self::secret::{SecretKey, SecretSubkey};

@@ -10,7 +10,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, write_packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait};
+use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
@@ -143,6 +143,10 @@ impl PublicKeyTrait for SignedPublicKey {
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.primary_key.to_writer_old(writer)
     }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
+    }
 }
 
 impl Serialize for SignedPublicKey {
@@ -230,6 +234,10 @@ impl PublicKeyTrait for SignedPublicSubKey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
     }
 }
 

@@ -6,6 +6,8 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::types::{KeyTrait, Mpi};
 
+use super::PublicParams;
+
 pub trait PublicKeyTrait: KeyTrait {
     /// Verify a signed message.
     /// Data will be hashed using `hash`, before verifying.
@@ -17,6 +19,7 @@ pub trait PublicKeyTrait: KeyTrait {
     // TODO: figure out a better place for this
     /// This is the data used for hashing in a signature. Only uses the public portion of the key.
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()>;
+    fn public_params(&self) -> &PublicParams;
 }
 
 impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
@@ -30,5 +33,9 @@ impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         (*self).to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        (*self).public_params()
     }
 }

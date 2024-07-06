@@ -171,8 +171,8 @@ impl SecretKeyParams {
         let s2k = self.s2k.unwrap_or_else(|| S2kParams::new_default(&mut rng));
         let (public_params, secret_params) =
             self.key_type.generate_with_rng(&mut rng, passphrase, s2k)?;
-        let primary_key = packet::SecretKey {
-            details: packet::PublicKey::new(
+        let primary_key = packet::SecretKey::new(
+            packet::PublicKey::new(
                 self.packet_version,
                 self.version,
                 self.key_type.to_alg(),
@@ -181,7 +181,7 @@ impl SecretKeyParams {
                 public_params,
             )?,
             secret_params,
-        };
+        );
 
         let mut keyflags = KeyFlags::default();
         keyflags.set_certify(self.can_certify);
@@ -222,8 +222,8 @@ impl SecretKeyParams {
                     keyflags.set_authentication(subkey.can_authenticate);
 
                     Ok(SecretSubkey::new(
-                        packet::SecretSubkey {
-                            details: packet::PublicSubkey::new(
+                        packet::SecretSubkey::new(
+                            packet::PublicSubkey::new(
                                 subkey.packet_version,
                                 subkey.version,
                                 subkey.key_type.to_alg(),
@@ -232,7 +232,7 @@ impl SecretKeyParams {
                                 public_params,
                             )?,
                             secret_params,
-                        },
+                        ),
                         keyflags,
                     ))
                 })

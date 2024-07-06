@@ -334,6 +334,10 @@ impl PublicKeyTrait for PubKeyInner {
 
         Ok(())
     }
+
+    fn public_params(&self) -> &PublicParams {
+        &self.public_params
+    }
 }
 
 impl PublicKeyTrait for PublicKey {
@@ -351,6 +355,10 @@ impl PublicKeyTrait for PublicKey {
 
     fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
         PublicKeyTrait::to_writer_old(&self.0, writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        PublicKeyTrait::public_params(&self.0)
     }
 }
 
@@ -399,14 +407,6 @@ impl PublicKey {
 
     pub fn public_params(&self) -> &PublicParams {
         &self.0.public_params
-    }
-
-    pub(super) fn to_writer_old<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.0.to_writer_old(writer)
-    }
-
-    pub(super) fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.0.to_writer_new(writer)
     }
 
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
@@ -461,18 +461,6 @@ impl PublicSubkey {
 
     pub fn expiration(&self) -> Option<u16> {
         self.0.expiration
-    }
-
-    pub fn public_params(&self) -> &PublicParams {
-        &self.0.public_params
-    }
-
-    pub(super) fn to_writer_old<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.0.to_writer_old(writer)
-    }
-
-    pub(super) fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.0.to_writer_new(writer)
     }
 
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
@@ -531,5 +519,9 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
         PublicKeyTrait::to_writer_old(&self.0, writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        PublicKeyTrait::public_params(&self.0)
     }
 }
