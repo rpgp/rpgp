@@ -1,11 +1,27 @@
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use md5::Md5;
+use sha1_checked::{Digest, Sha1};
+
+use crate::{
+    crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::Result,
+    packet::{Signature, SignatureConfigBuilder, Subpacket, SubpacketData},
+    types::{
+        KeyId, KeyTrait, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait, Tag,
+        Version,
+    },
+};
+
+use super::SignatureType;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct PubKeyInner {
-    pub(crate) packet_version: crate::types::Version,
-    pub(crate) version: crate::types::KeyVersion,
-    pub(crate) algorithm: crate::crypto::public_key::PublicKeyAlgorithm,
+    pub(crate) packet_version: Version,
+    pub(crate) version: KeyVersion,
+    pub(crate) algorithm: PublicKeyAlgorithm,
     pub(crate) created_at: chrono::DateTime<chrono::Utc>,
     pub(crate) expiration: Option<u16>,
-    pub(crate) public_params: crate::types::PublicParams,
+    pub(crate) public_params: PublicParams,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -14,16 +30,13 @@ pub struct PublicKey(PubKeyInner);
 impl PubKeyInner {
     /// Create a new `PublicKeyKey` packet from underlying parameters.
     fn new(
-        packet_version: crate::types::Version,
-        version: crate::types::KeyVersion,
-        algorithm: crate::crypto::public_key::PublicKeyAlgorithm,
+        packet_version: Version,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
         expiration: Option<u16>,
-        public_params: crate::types::PublicParams,
-    ) -> crate::errors::Result<Self> {
-        use crate::crypto::public_key::PublicKeyAlgorithm;
-        use crate::types::KeyVersion;
-
+        public_params: PublicParams,
+    ) -> Result<Self> {
         if version == KeyVersion::V2
             || version == KeyVersion::V3
                 && !(algorithm == PublicKeyAlgorithm::RSA
@@ -49,10 +62,7 @@ impl PubKeyInner {
     }
 
     /// Parses a `PublicKeyKey` packet from the given slice.
-    fn from_slice(
-        packet_version: crate::types::Version,
-        input: &[u8],
-    ) -> crate::errors::Result<Self> {
+    fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, details) = crate::packet::public_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params) = details;
 
@@ -66,9 +76,8 @@ impl PubKeyInner {
         )
     }
 
-    fn to_writer_old<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+    fn to_writer_old<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
-        use byteorder::{BigEndian, WriteBytesExt};
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp() as u32)?;
         writer.write_u16::<BigEndian>(
@@ -81,9 +90,8 @@ impl PubKeyInner {
         Ok(())
     }
 
-    fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+    fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
-        use byteorder::{BigEndian, WriteBytesExt};
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp() as u32)?;
         writer.write_all(&[self.algorithm.into()])?;
@@ -94,50 +102,46 @@ impl PubKeyInner {
 
     fn sign<F>(
         &self,
-        key: &impl crate::types::SecretKeyTrait,
+        key: &impl SecretKeyTrait,
         key_pw: F,
-        sig_type: crate::packet::SignatureType,
-    ) -> crate::errors::Result<crate::packet::Signature>
+        sig_type: SignatureType,
+    ) -> Result<Signature>
     where
         F: FnOnce() -> String,
     {
         use chrono::SubsecRound;
 
-        let mut config = crate::packet::SignatureConfigBuilder::default();
+        let mut config = SignatureConfigBuilder::default();
         config
             .typ(sig_type)
             .pub_alg(key.algorithm())
             .hash_alg(key.hash_alg())
-            .hashed_subpackets(vec![crate::packet::Subpacket::regular(
-                crate::packet::SubpacketData::SignatureCreationTime(
-                    chrono::Utc::now().trunc_subsecs(0),
-                ),
+            .hashed_subpackets(vec![Subpacket::regular(
+                SubpacketData::SignatureCreationTime(chrono::Utc::now().trunc_subsecs(0)),
             )])
-            .unhashed_subpackets(vec![crate::packet::Subpacket::regular(
-                crate::packet::SubpacketData::Issuer(key.key_id()),
-            )])
+            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
+                key.key_id(),
+            ))])
             .build()?
             .sign_key(key, key_pw, &self)
     }
 }
 
 impl crate::ser::Serialize for PublicKey {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.0.to_writer(writer)
     }
 }
 
 impl crate::ser::Serialize for PubKeyInner {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[u8::from(self.version)])?;
 
         match self.version {
-            crate::types::KeyVersion::V2 | crate::types::KeyVersion::V3 => {
-                self.to_writer_old(writer)
-            }
-            crate::types::KeyVersion::V4 => self.to_writer_new(writer),
-            crate::types::KeyVersion::V5 => unimplemented_err!("V5 keys"),
-            crate::types::KeyVersion::Other(v) => {
+            KeyVersion::V2 | KeyVersion::V3 => self.to_writer_old(writer),
+            KeyVersion::V4 => self.to_writer_new(writer),
+            KeyVersion::V5 => unimplemented_err!("V5 keys"),
+            KeyVersion::Other(v) => {
                 unimplemented_err!("Unsupported key version {}", v)
             }
         }
@@ -145,16 +149,16 @@ impl crate::ser::Serialize for PubKeyInner {
 }
 
 impl crate::packet::PacketTrait for PublicKey {
-    fn packet_version(&self) -> crate::types::Version {
+    fn packet_version(&self) -> Version {
         self.0.packet_version
     }
 
-    fn tag(&self) -> crate::types::Tag {
-        crate::types::Tag::PublicKey
+    fn tag(&self) -> Tag {
+        Tag::PublicKey
     }
 }
 
-impl crate::types::KeyTrait for PublicKey {
+impl KeyTrait for PublicKey {
     /// Returns the fingerprint of this key.
     ///
     /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
@@ -162,26 +166,21 @@ impl crate::types::KeyTrait for PublicKey {
         self.0.fingerprint()
     }
 
-    fn key_id(&self) -> crate::types::KeyId {
+    fn key_id(&self) -> KeyId {
         self.0.key_id()
     }
 
-    fn algorithm(&self) -> crate::crypto::public_key::PublicKeyAlgorithm {
+    fn algorithm(&self) -> PublicKeyAlgorithm {
         self.0.algorithm
     }
 }
 
-impl crate::types::KeyTrait for PubKeyInner {
+impl KeyTrait for PubKeyInner {
     /// Returns the fingerprint of this key.
     ///
     /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
     fn fingerprint(&self) -> Vec<u8> {
-        use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-        use md5::Md5;
-        use sha1_checked::{Digest, Sha1};
-
         use crate::ser::Serialize;
-        use crate::types::KeyVersion;
 
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => {
@@ -217,9 +216,7 @@ impl crate::types::KeyTrait for PubKeyInner {
         }
     }
 
-    fn key_id(&self) -> crate::types::KeyId {
-        use crate::types::{KeyId, KeyVersion, PublicParams};
-
+    fn key_id(&self) -> KeyId {
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                 PublicParams::RSA { n, .. } => {
@@ -241,37 +238,22 @@ impl crate::types::KeyTrait for PubKeyInner {
         }
     }
 
-    fn algorithm(&self) -> crate::crypto::public_key::PublicKeyAlgorithm {
+    fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
 }
 
-impl crate::types::PublicKeyTrait for PubKeyInner {
-    fn verify_signature(
-        &self,
-        hash: crate::crypto::hash::HashAlgorithm,
-        hashed: &[u8],
-        sig: &[crate::types::Mpi],
-    ) -> crate::errors::Result<()> {
-        use crate::types::PublicParams;
-
+impl PublicKeyTrait for PubKeyInner {
+    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
         match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
                 ensure_eq!(sig.len(), 1, "invalid signature");
-                crate::crypto::rsa::verify(
-                    n.as_bytes(),
-                    e.as_bytes(),
-                    hash,
-                    hashed,
-                    sig[0].as_bytes(),
-                )
+                crypto::rsa::verify(n.as_bytes(), e.as_bytes(), hash, hashed, sig[0].as_bytes())
             }
             PublicParams::EdDSA { ref curve, ref q } => {
-                crate::crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
+                crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
             }
-            PublicParams::ECDSA(ref params) => {
-                crate::crypto::ecdsa::verify(params, hash, hashed, sig)
-            }
+            PublicParams::ECDSA(ref params) => crypto::ecdsa::verify(params, hash, hashed, sig),
             PublicParams::ECDH {
                 ref curve,
                 ref hash,
@@ -291,7 +273,7 @@ impl crate::types::PublicKeyTrait for PubKeyInner {
             } => {
                 ensure_eq!(sig.len(), 2, "invalid signature");
 
-                crate::crypto::dsa::verify(
+                crypto::dsa::verify(
                     p.into(),
                     q.into(),
                     g.into(),
@@ -311,12 +293,10 @@ impl crate::types::PublicKeyTrait for PubKeyInner {
         &self,
         rng: &mut R,
         plain: &[u8],
-    ) -> crate::errors::Result<Vec<crate::types::Mpi>> {
-        use crate::types::{KeyTrait, PublicParams};
-
+    ) -> Result<Vec<Mpi>> {
         let res = match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
-                crate::crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
+                crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
             }
             PublicParams::EdDSA { .. } => bail!("EdDSA is only used for signing"),
             PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
@@ -325,7 +305,7 @@ impl crate::types::PublicKeyTrait for PubKeyInner {
                 hash,
                 alg_sym,
                 ref p,
-            } => crate::crypto::ecdh::encrypt(
+            } => crypto::ecdh::encrypt(
                 rng,
                 curve,
                 alg_sym,
@@ -341,11 +321,11 @@ impl crate::types::PublicKeyTrait for PubKeyInner {
 
         Ok(res
             .iter()
-            .map(|v| crate::types::Mpi::from_raw_slice(&v[..]))
+            .map(|v| Mpi::from_raw_slice(&v[..]))
             .collect::<Vec<_>>())
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> crate::errors::Result<()> {
+    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
         use crate::ser::Serialize;
 
         let mut key_buf = Vec::new();
@@ -359,13 +339,8 @@ impl crate::types::PublicKeyTrait for PubKeyInner {
     }
 }
 
-impl crate::types::PublicKeyTrait for PublicKey {
-    fn verify_signature(
-        &self,
-        hash: crate::crypto::hash::HashAlgorithm,
-        hashed: &[u8],
-        sig: &[crate::types::Mpi],
-    ) -> crate::errors::Result<()> {
+impl PublicKeyTrait for PublicKey {
+    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
         self.0.verify_signature(hash, hashed, sig)
     }
 
@@ -373,25 +348,25 @@ impl crate::types::PublicKeyTrait for PublicKey {
         &self,
         rng: &mut R,
         plain: &[u8],
-    ) -> crate::errors::Result<Vec<crate::types::Mpi>> {
+    ) -> Result<Vec<Mpi>> {
         self.0.encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> crate::errors::Result<()> {
-        crate::types::PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::to_writer_old(&self.0, writer)
     }
 }
 
 impl PublicKey {
     /// Create a new `PublicKeyKey` packet from underlying parameters.
     pub fn new(
-        packet_version: crate::types::Version,
-        version: crate::types::KeyVersion,
-        algorithm: crate::crypto::public_key::PublicKeyAlgorithm,
+        packet_version: Version,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
         expiration: Option<u16>,
-        public_params: crate::types::PublicParams,
-    ) -> crate::errors::Result<Self> {
+        public_params: PublicParams,
+    ) -> Result<Self> {
         let inner = PubKeyInner::new(
             packet_version,
             version,
@@ -404,19 +379,16 @@ impl PublicKey {
     }
 
     /// Parses a `PublicKeyKey` packet from the given slice.
-    pub fn from_slice(
-        packet_version: crate::types::Version,
-        input: &[u8],
-    ) -> crate::errors::Result<Self> {
+    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let inner = PubKeyInner::from_slice(packet_version, input)?;
         Ok(Self(inner))
     }
 
-    pub fn version(&self) -> crate::types::KeyVersion {
+    pub fn version(&self) -> KeyVersion {
         self.0.version
     }
 
-    pub fn algorithm(&self) -> crate::crypto::public_key::PublicKeyAlgorithm {
+    pub fn algorithm(&self) -> PublicKeyAlgorithm {
         self.0.algorithm
     }
 
@@ -428,34 +400,23 @@ impl PublicKey {
         self.0.expiration
     }
 
-    pub fn public_params(&self) -> &crate::types::PublicParams {
+    pub fn public_params(&self) -> &PublicParams {
         &self.0.public_params
     }
 
-    pub(super) fn to_writer_old<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> crate::errors::Result<()> {
+    pub(super) fn to_writer_old<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.0.to_writer_old(writer)
     }
 
-    pub(super) fn to_writer_new<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> crate::errors::Result<()> {
+    pub(super) fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.0.to_writer_new(writer)
     }
 
-    pub fn sign<F>(
-        &self,
-        key: &impl crate::types::SecretKeyTrait,
-        key_pw: F,
-    ) -> crate::errors::Result<crate::packet::Signature>
+    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
     where
         F: FnOnce() -> String,
     {
-        self.0
-            .sign(key, key_pw, crate::packet::SignatureType::KeyBinding)
+        self.0.sign(key, key_pw, SignatureType::KeyBinding)
     }
 }
 
@@ -465,13 +426,13 @@ pub struct PublicSubkey(PubKeyInner);
 impl PublicSubkey {
     /// Create a new `PublicKeyKey` packet from underlying parameters.
     pub fn new(
-        packet_version: crate::types::Version,
-        version: crate::types::KeyVersion,
-        algorithm: crate::crypto::public_key::PublicKeyAlgorithm,
+        packet_version: Version,
+        version: KeyVersion,
+        algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
         expiration: Option<u16>,
-        public_params: crate::types::PublicParams,
-    ) -> crate::errors::Result<Self> {
+        public_params: PublicParams,
+    ) -> Result<Self> {
         let inner = PubKeyInner::new(
             packet_version,
             version,
@@ -484,19 +445,16 @@ impl PublicSubkey {
     }
 
     /// Parses a `PublicKeyKey` packet from the given slice.
-    pub fn from_slice(
-        packet_version: crate::types::Version,
-        input: &[u8],
-    ) -> crate::errors::Result<Self> {
+    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let inner = PubKeyInner::from_slice(packet_version, input)?;
         Ok(Self(inner))
     }
 
-    pub fn version(&self) -> crate::types::KeyVersion {
+    pub fn version(&self) -> KeyVersion {
         self.0.version
     }
 
-    pub fn algorithm(&self) -> crate::crypto::public_key::PublicKeyAlgorithm {
+    pub fn algorithm(&self) -> PublicKeyAlgorithm {
         self.0.algorithm
     }
 
@@ -508,54 +466,43 @@ impl PublicSubkey {
         self.0.expiration
     }
 
-    pub fn public_params(&self) -> &crate::types::PublicParams {
+    pub fn public_params(&self) -> &PublicParams {
         &self.0.public_params
     }
 
-    pub(super) fn to_writer_old<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> crate::errors::Result<()> {
+    pub(super) fn to_writer_old<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.0.to_writer_old(writer)
     }
 
-    pub(super) fn to_writer_new<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> crate::errors::Result<()> {
+    pub(super) fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.0.to_writer_new(writer)
     }
 
-    pub fn sign<F>(
-        &self,
-        key: &impl crate::types::SecretKeyTrait,
-        key_pw: F,
-    ) -> crate::errors::Result<crate::packet::Signature>
+    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
     where
         F: FnOnce() -> String,
     {
-        self.0
-            .sign(key, key_pw, crate::packet::SignatureType::SubkeyBinding)
+        self.0.sign(key, key_pw, SignatureType::SubkeyBinding)
     }
 }
 
 impl crate::ser::Serialize for PublicSubkey {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         self.0.to_writer(writer)
     }
 }
 
 impl crate::packet::PacketTrait for PublicSubkey {
-    fn packet_version(&self) -> crate::types::Version {
+    fn packet_version(&self) -> Version {
         self.0.packet_version
     }
 
-    fn tag(&self) -> crate::types::Tag {
-        crate::types::Tag::PublicSubkey
+    fn tag(&self) -> Tag {
+        Tag::PublicSubkey
     }
 }
 
-impl crate::types::KeyTrait for PublicSubkey {
+impl KeyTrait for PublicSubkey {
     /// Returns the fingerprint of this key.
     ///
     /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
@@ -563,22 +510,17 @@ impl crate::types::KeyTrait for PublicSubkey {
         self.0.fingerprint()
     }
 
-    fn key_id(&self) -> crate::types::KeyId {
+    fn key_id(&self) -> KeyId {
         self.0.key_id()
     }
 
-    fn algorithm(&self) -> crate::crypto::public_key::PublicKeyAlgorithm {
+    fn algorithm(&self) -> PublicKeyAlgorithm {
         self.0.algorithm()
     }
 }
 
-impl crate::types::PublicKeyTrait for PublicSubkey {
-    fn verify_signature(
-        &self,
-        hash: crate::crypto::hash::HashAlgorithm,
-        hashed: &[u8],
-        sig: &[crate::types::Mpi],
-    ) -> crate::errors::Result<()> {
+impl PublicKeyTrait for PublicSubkey {
+    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
         self.0.verify_signature(hash, hashed, sig)
     }
 
@@ -586,12 +528,12 @@ impl crate::types::PublicKeyTrait for PublicSubkey {
         &self,
         rng: &mut R,
         plain: &[u8],
-    ) -> crate::errors::Result<Vec<crate::types::Mpi>> {
+    ) -> Result<Vec<Mpi>> {
         self.0.encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> crate::errors::Result<()> {
-        crate::types::PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::to_writer_old(&self.0, writer)
     }
 }
 
