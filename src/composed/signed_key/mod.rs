@@ -45,7 +45,6 @@
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::types::KeyTrait;
 //! use pgp::Signature;
 //! use chrono;
 //!

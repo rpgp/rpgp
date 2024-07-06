@@ -37,7 +37,6 @@
 //! # let passwd_fn = || String::new();
 //! # let signed_secret_key = secret_key.sign(passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
-//! use pgp::types::KeyTrait;
 //! use pgp::packet::{SignatureConfigBuilder, Signature};
 //!
 //! let signing_key = signed_secret_key;
