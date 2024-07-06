@@ -45,7 +45,6 @@
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::types::KeyTrait;
 //! use pgp::Signature;
 //! use chrono;
 //!
@@ -103,8 +102,7 @@
 //!     .expect("Verify must succeed");
 //! ```
 
-#[macro_use]
-mod key_parser_macros;
+mod key_parser;
 
 mod parse;
 mod public;

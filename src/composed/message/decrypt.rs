@@ -1,13 +1,13 @@
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{KeyTrait, Mpi, SecretKeyRepr, SecretKeyTrait};
+use crate::types::{Mpi, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
 pub fn decrypt_session_key<F, L>(locked_key: &L, key_pw: F, mpis: &[Mpi]) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
-    L: SecretKeyTrait<Unlocked = SecretKeyRepr> + KeyTrait,
+    L: SecretKeyTrait<Unlocked = SecretKeyRepr>,
 {
     debug!("decrypt session key");
 

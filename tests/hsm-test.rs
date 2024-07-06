@@ -8,7 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
-use pgp::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
+use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey};
 use rand::{CryptoRng, Rng};
@@ -51,20 +51,6 @@ impl FakeHsm {
     }
 }
 
-impl KeyTrait for FakeHsm {
-    fn fingerprint(&self) -> Vec<u8> {
-        self.public_key.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.public_key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.public_key.algorithm()
-    }
-}
-
 impl PublicKeyTrait for FakeHsm {
     fn verify_signature(
         &self,
@@ -85,6 +71,33 @@ impl PublicKeyTrait for FakeHsm {
 
     fn to_writer_old(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {
         self.public_key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.public_key.public_params()
+    }
+    fn version(&self) -> pgp::types::KeyVersion {
+        self.public_key.version()
+    }
+
+    fn fingerprint(&self) -> Vec<u8> {
+        self.public_key.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.public_key.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.public_key.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.public_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.public_key.expiration()
     }
 }
 
@@ -147,10 +160,6 @@ impl SecretKeyTrait for FakeHsm {
 
     fn public_key(&self) -> Self::PublicKey {
         self.public_key.clone()
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.public_key.public_params()
     }
 }
 

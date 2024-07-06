@@ -8,9 +8,9 @@ use crate::composed::signed_key::SignedKeyDetails;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{self, write_packet, SignatureType};
+use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait};
+use crate::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, Tag};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
@@ -21,19 +21,59 @@ pub struct SignedPublicKey {
     pub public_subkeys: Vec<SignedPublicSubKey>,
 }
 
-key_parser!(
-    SignedPublicKey,
-    SignedPublicKeyParser,
-    armor::BlockType::PublicKey,
-    Tag::PublicKey,
-    packet::PublicKey,
-    (
-        PublicSubkey,
-        packet::PublicSubkey,
-        SignedPublicSubKey,
-        public_subkeys
-    )
-);
+/// Parse a transferable keys from the given packets.
+/// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+pub struct SignedPublicKeyParser<
+    I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,
+> {
+    inner: std::iter::Peekable<I>,
+}
+
+impl<I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>>
+    SignedPublicKeyParser<I>
+{
+    pub fn into_inner(self) -> std::iter::Peekable<I> {
+        self.inner
+    }
+
+    pub fn from_packets(packets: std::iter::Peekable<I>) -> Self {
+        SignedPublicKeyParser { inner: packets }
+    }
+}
+
+impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedPublicKeyParser<I> {
+    type Item = Result<SignedPublicKey>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match super::key_parser::next::<I, packet::PublicKey>(
+            &mut self.inner,
+            Tag::PublicKey,
+            false,
+        ) {
+            Some(Err(err)) => Some(Err(err)),
+            None => None,
+            Some(Ok((primary_key, details, public_subkeys, _))) => Some(Ok(SignedPublicKey::new(
+                primary_key,
+                details,
+                public_subkeys,
+            ))),
+        }
+    }
+}
+
+impl crate::composed::Deserializable for SignedPublicKey {
+    /// Parse a transferable key from packets.
+    /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+    fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
+        packets: std::iter::Peekable<I>,
+    ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
+        Box::new(SignedPublicKeyParser::from_packets(packets))
+    }
+
+    fn matches_block_type(typ: armor::BlockType) -> bool {
+        matches!(typ, armor::BlockType::PublicKey | armor::BlockType::File)
+    }
+}
 
 impl SignedPublicKey {
     pub fn new(
@@ -117,20 +157,6 @@ impl SignedPublicKey {
     }
 }
 
-impl KeyTrait for SignedPublicKey {
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.primary_key.algorithm()
-    }
-}
-
 impl PublicKeyTrait for SignedPublicKey {
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
@@ -142,6 +168,34 @@ impl PublicKeyTrait for SignedPublicKey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.primary_key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
+    }
+
+    fn version(&self) -> crate::types::KeyVersion {
+        self.primary_key.version()
+    }
+
+    fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.primary_key.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.primary_key.algorithm()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.primary_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.primary_key.expiration()
     }
 }
 
@@ -203,7 +257,26 @@ impl SignedPublicSubKey {
     }
 }
 
-impl KeyTrait for SignedPublicSubKey {
+impl PublicKeyTrait for SignedPublicSubKey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+        self.key.verify_signature(hash, data, sig)
+    }
+
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
+        self.key.encrypt(rng, plain)
+    }
+
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
+    }
+    fn version(&self) -> crate::types::KeyVersion {
+        self.key.version()
+    }
+
     /// Returns the fingerprint of the key.
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
@@ -217,19 +290,13 @@ impl KeyTrait for SignedPublicSubKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
     }
-}
 
-impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.key.created_at()
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.key.encrypt(rng, plain)
-    }
-
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.to_writer_old(writer)
+    fn expiration(&self) -> Option<u16> {
+        self.key.expiration()
     }
 }
 

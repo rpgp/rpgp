@@ -13,7 +13,7 @@ use buffer_redux::BufReader;
 use chrono::{DateTime, Utc};
 use num_bigint::BigUint;
 use num_traits::ToPrimitive;
-use pgp::armor;
+use pgp::{armor, types::PublicKeyTrait};
 use rand::thread_rng;
 use rsa::{
     traits::{PrivateKeyParts, PublicKeyParts},
@@ -35,7 +35,7 @@ use pgp::packet::{
 };
 use pgp::ser::Serialize;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
+    CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
     SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
 

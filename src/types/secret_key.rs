@@ -20,8 +20,6 @@ pub trait SecretKeyTrait: PublicKeyTrait {
 
     fn public_key(&self) -> Self::PublicKey;
 
-    fn public_params(&self) -> &PublicParams;
-
     /// The suggested hash algorithm to calculate the signature hash digest with, when using this
     /// key as a signer
     fn hash_alg(&self) -> HashAlgorithm {
@@ -54,9 +52,5 @@ impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
 
     fn public_key(&self) -> Self::PublicKey {
         (*self).public_key()
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        (*self).public_params()
     }
 }

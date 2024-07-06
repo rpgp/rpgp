@@ -13,7 +13,7 @@ use std::fs::File;
 use std::io::Read;
 
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
-use pgp::types::KeyTrait;
+use pgp::types::PublicKeyTrait;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

@@ -11,7 +11,7 @@ use crate::errors::Result;
 use crate::packet::{
     self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, SecretKeyTrait};
+use crate::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -60,7 +60,11 @@ impl PublicKey {
     }
 }
 
-impl KeyTrait for PublicKey {
+impl PublicKeyTrait for PublicKey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.primary_key.version()
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
@@ -72,9 +76,6 @@ impl KeyTrait for PublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
-}
-
-impl PublicKeyTrait for PublicKey {
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
@@ -85,6 +86,18 @@ impl PublicKeyTrait for PublicKey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.primary_key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.primary_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.primary_key.expiration()
     }
 }
 
@@ -125,7 +138,11 @@ impl PublicSubkey {
     }
 }
 
-impl KeyTrait for PublicSubkey {
+impl PublicKeyTrait for PublicSubkey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.key.version()
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
     }
@@ -137,9 +154,7 @@ impl KeyTrait for PublicSubkey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
     }
-}
 
-impl PublicKeyTrait for PublicSubkey {
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
@@ -150,5 +165,17 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
         self.key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
+    }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.key.expiration()
     }
 }

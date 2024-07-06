@@ -37,7 +37,6 @@
 //! # let passwd_fn = || String::new();
 //! # let signed_secret_key = secret_key.sign(passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
-//! use pgp::types::KeyTrait;
 //! use pgp::packet::{SignatureConfigBuilder, Signature};
 //!
 //! let signing_key = signed_secret_key;
@@ -80,11 +79,6 @@
 mod many;
 mod packet_sum;
 mod single;
-
-#[macro_use]
-mod secret_key_macro;
-#[macro_use]
-mod public_key_macro;
 
 mod compressed_data;
 mod key;
