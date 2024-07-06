@@ -52,6 +52,10 @@ impl FakeHsm {
 }
 
 impl KeyTrait for FakeHsm {
+    fn version(&self) -> pgp::types::KeyVersion {
+        self.public_key.version()
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
         self.public_key.fingerprint()
     }

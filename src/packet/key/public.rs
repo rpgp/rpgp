@@ -156,6 +156,10 @@ impl crate::packet::PacketTrait for PublicKey {
 }
 
 impl KeyTrait for PublicKey {
+    fn version(&self) -> KeyVersion {
+        self.0.version()
+    }
+
     /// Returns the fingerprint of this key.
     ///
     /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
@@ -173,6 +177,10 @@ impl KeyTrait for PublicKey {
 }
 
 impl KeyTrait for PubKeyInner {
+    fn version(&self) -> KeyVersion {
+        self.version
+    }
+
     /// Returns the fingerprint of this key.
     ///
     /// In case of SHA1 collisions, the "mitigated" hash digest is returned.
@@ -447,10 +455,6 @@ impl PublicSubkey {
         Ok(Self(inner))
     }
 
-    pub fn version(&self) -> KeyVersion {
-        self.0.version
-    }
-
     pub fn algorithm(&self) -> PublicKeyAlgorithm {
         self.0.algorithm
     }
@@ -488,6 +492,10 @@ impl crate::packet::PacketTrait for PublicSubkey {
 }
 
 impl KeyTrait for PublicSubkey {
+    fn version(&self) -> KeyVersion {
+        self.0.version()
+    }
+
     /// Returns the fingerprint of this key.
     ///
     /// In case of SHA1 collisions, the "mitigated" hash digest is returned.

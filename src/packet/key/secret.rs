@@ -64,10 +64,6 @@ impl SecretKey {
         }))
     }
 
-    pub fn version(&self) -> KeyVersion {
-        self.0.details.version()
-    }
-
     pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         self.0.details.created_at()
     }
@@ -116,10 +112,6 @@ impl SecretSubkey {
             )?,
             secret_params,
         }))
-    }
-
-    pub fn version(&self) -> KeyVersion {
-        self.0.details.version()
     }
 
     pub fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
@@ -333,6 +325,10 @@ impl PacketTrait for SecretSubkey {
 }
 
 impl<D: PublicKeyTrait> KeyTrait for SecretKeyInner<D> {
+    fn version(&self) -> KeyVersion {
+        self.details.version()
+    }
+
     /// Returns the fingerprint of this key.
     fn fingerprint(&self) -> Vec<u8> {
         self.details.fingerprint()
@@ -348,6 +344,10 @@ impl<D: PublicKeyTrait> KeyTrait for SecretKeyInner<D> {
 }
 
 impl KeyTrait for SecretKey {
+    fn version(&self) -> KeyVersion {
+        KeyTrait::version(&self.0)
+    }
+
     /// Returns the fingerprint of this key.
     fn fingerprint(&self) -> Vec<u8> {
         KeyTrait::fingerprint(&self.0)
@@ -363,6 +363,10 @@ impl KeyTrait for SecretKey {
 }
 
 impl KeyTrait for SecretSubkey {
+    fn version(&self) -> KeyVersion {
+        KeyTrait::version(&self.0)
+    }
+
     /// Returns the fingerprint of this key.
     fn fingerprint(&self) -> Vec<u8> {
         KeyTrait::fingerprint(&self.0)

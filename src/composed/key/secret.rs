@@ -66,6 +66,10 @@ impl SecretKey {
 }
 
 impl KeyTrait for SecretKey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.primary_key.version()
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
@@ -116,6 +120,10 @@ impl SecretSubkey {
 }
 
 impl KeyTrait for SecretSubkey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.key.version()
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
     }

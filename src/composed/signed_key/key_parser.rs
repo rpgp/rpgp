@@ -3,22 +3,6 @@ use crate::packet::{self, Packet, Signature, SignatureType, UserAttribute, UserI
 use crate::types::{KeyTrait, KeyVersion, SignedUser, SignedUserAttribute, Tag};
 use crate::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey};
 
-pub trait InnerKeyTrait: TryFrom<packet::Packet, Error = crate::errors::Error> + KeyTrait {
-    fn version(&self) -> KeyVersion;
-}
-
-impl InnerKeyTrait for packet::PublicKey {
-    fn version(&self) -> KeyVersion {
-        self.version()
-    }
-}
-
-impl InnerKeyTrait for packet::SecretKey {
-    fn version(&self) -> KeyVersion {
-        self.version()
-    }
-}
-
 #[allow(clippy::complexity)]
 pub fn next<I, IKT>(
     packets: &mut std::iter::Peekable<I>,
@@ -34,7 +18,7 @@ pub fn next<I, IKT>(
 >
 where
     I: Sized + Iterator<Item = Result<Packet>>,
-    IKT: InnerKeyTrait,
+    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + KeyTrait,
 {
     let packets = packets.by_ref();
 

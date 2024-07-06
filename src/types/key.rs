@@ -1,7 +1,11 @@
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::types::KeyId;
 
+use super::KeyVersion;
+
 pub trait KeyTrait: ::std::fmt::Debug {
+    fn version(&self) -> KeyVersion;
+
     fn fingerprint(&self) -> Vec<u8>;
 
     /// Returns the Key ID of the associated primary key.
@@ -28,6 +32,10 @@ pub trait KeyTrait: ::std::fmt::Debug {
 }
 
 impl<'a, T: KeyTrait> KeyTrait for &'a T {
+    fn version(&self) -> KeyVersion {
+        (*self).version()
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
         (*self).fingerprint()
     }

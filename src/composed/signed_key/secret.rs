@@ -24,27 +24,6 @@ pub struct SignedSecretKey {
     pub secret_subkeys: Vec<SignedSecretSubKey>,
 }
 
-// key_parser!(
-//     SignedSecretKey,
-//     SignedSecretKeyParser,
-//     armor::BlockType::PrivateKey,
-//     Tag::SecretKey,
-//     packet::SecretKey,
-//     // secret keys, can contain both public and secret subkeys
-//     (
-//         PublicSubkey,
-//         packet::PublicSubkey,
-//         SignedPublicSubKey,
-//         public_subkeys
-//     ),
-//     (
-//         SecretSubkey,
-//         packet::SecretSubkey,
-//         SignedSecretSubKey,
-//         secret_subkeys
-//     )
-// );
-
 /// Parse a transferable keys from the given packets.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
 pub struct SignedSecretKeyParser<
@@ -186,6 +165,10 @@ impl SignedSecretKey {
 }
 
 impl KeyTrait for SignedSecretKey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.primary_key.version()
+    }
+
     /// Returns the fingerprint of the associated primary key.
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
@@ -310,6 +293,10 @@ impl SignedSecretSubKey {
 }
 
 impl KeyTrait for SignedSecretSubKey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.key.version()
+    }
+
     /// Returns the fingerprint of the key.
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()

@@ -254,6 +254,13 @@ impl Serialize for PublicOrSecret {
 }
 
 impl KeyTrait for PublicOrSecret {
+    fn version(&self) -> crate::types::KeyVersion {
+        match self {
+            PublicOrSecret::Public(k) => k.version(),
+            PublicOrSecret::Secret(k) => k.version(),
+        }
+    }
+
     /// Returns the fingerprint of the key.
     fn fingerprint(&self) -> Vec<u8> {
         match self {

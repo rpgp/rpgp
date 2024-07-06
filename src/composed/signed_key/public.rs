@@ -158,6 +158,10 @@ impl SignedPublicKey {
 }
 
 impl KeyTrait for SignedPublicKey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.primary_key.version()
+    }
+
     fn fingerprint(&self) -> Vec<u8> {
         self.primary_key.fingerprint()
     }
@@ -248,6 +252,10 @@ impl SignedPublicSubKey {
 }
 
 impl KeyTrait for SignedPublicSubKey {
+    fn version(&self) -> crate::types::KeyVersion {
+        self.key.version()
+    }
+
     /// Returns the fingerprint of the key.
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
