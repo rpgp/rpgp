@@ -61,10 +61,6 @@ impl PublicKey {
         self.0.expiration
     }
 
-    pub fn public_params(&self) -> &PublicParams {
-        &self.0.public_params
-    }
-
     pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
     where
         F: FnOnce() -> String,

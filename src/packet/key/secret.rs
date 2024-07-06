@@ -144,7 +144,6 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         &self.secret_params
     }
 
-    /// Checks if we should expect a SHA1 checksum in the encrypted part.
     fn has_sha1_checksum(&self) -> bool {
         self.secret_params.string_to_key_id() == 254
     }
@@ -329,7 +328,6 @@ impl<D: PublicKeyTrait> KeyTrait for SecretKeyInner<D> {
         self.details.version()
     }
 
-    /// Returns the fingerprint of this key.
     fn fingerprint(&self) -> Vec<u8> {
         self.details.fingerprint()
     }
@@ -348,7 +346,6 @@ impl KeyTrait for SecretKey {
         KeyTrait::version(&self.0)
     }
 
-    /// Returns the fingerprint of this key.
     fn fingerprint(&self) -> Vec<u8> {
         KeyTrait::fingerprint(&self.0)
     }
@@ -367,7 +364,6 @@ impl KeyTrait for SecretSubkey {
         KeyTrait::version(&self.0)
     }
 
-    /// Returns the fingerprint of this key.
     fn fingerprint(&self) -> Vec<u8> {
         KeyTrait::fingerprint(&self.0)
     }
