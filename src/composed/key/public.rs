@@ -11,7 +11,7 @@ use crate::errors::Result;
 use crate::packet::{
     self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
+use crate::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -60,7 +60,7 @@ impl PublicKey {
     }
 }
 
-impl KeyTrait for PublicKey {
+impl PublicKeyTrait for PublicKey {
     fn version(&self) -> crate::types::KeyVersion {
         self.primary_key.version()
     }
@@ -76,9 +76,6 @@ impl KeyTrait for PublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
-}
-
-impl PublicKeyTrait for PublicKey {
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
@@ -132,7 +129,7 @@ impl PublicSubkey {
     }
 }
 
-impl KeyTrait for PublicSubkey {
+impl PublicKeyTrait for PublicSubkey {
     fn version(&self) -> crate::types::KeyVersion {
         self.key.version()
     }
@@ -148,9 +145,7 @@ impl KeyTrait for PublicSubkey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
     }
-}
 
-impl PublicKeyTrait for PublicSubkey {
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }

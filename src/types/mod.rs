@@ -1,5 +1,4 @@
 mod compression;
-mod key;
 mod key_id;
 mod mpi;
 mod packet;
@@ -12,7 +11,6 @@ mod secret_key_repr;
 mod user;
 
 pub use self::compression::*;
-pub use self::key::*;
 pub use self::key_id::*;
 pub use self::mpi::*;
 pub use self::packet::*;

@@ -11,7 +11,7 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait, Tag,
+    KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait, Tag,
 };
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
@@ -164,26 +164,6 @@ impl SignedSecretKey {
     }
 }
 
-impl KeyTrait for SignedSecretKey {
-    fn version(&self) -> crate::types::KeyVersion {
-        self.primary_key.version()
-    }
-
-    /// Returns the fingerprint of the associated primary key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.primary_key.algorithm()
-    }
-}
-
 impl Serialize for SignedSecretKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         write_packet(writer, &self.primary_key)?;
@@ -253,6 +233,24 @@ impl PublicKeyTrait for SignedSecretKey {
     fn public_params(&self) -> &PublicParams {
         self.primary_key.public_params()
     }
+
+    fn version(&self) -> crate::types::KeyVersion {
+        self.primary_key.version()
+    }
+
+    /// Returns the fingerprint of the associated primary key.
+    fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
+    }
+
+    /// Returns the Key ID of the associated primary key.
+    fn key_id(&self) -> KeyId {
+        self.primary_key.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.primary_key.algorithm()
+    }
 }
 
 /// Represents a composed secret PGP SubKey.
@@ -289,26 +287,6 @@ impl SignedSecretSubKey {
         }
 
         Ok(())
-    }
-}
-
-impl KeyTrait for SignedSecretSubKey {
-    fn version(&self) -> crate::types::KeyVersion {
-        self.key.version()
-    }
-
-    /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
-        self.key.fingerprint()
-    }
-
-    /// Returns the Key ID of the key.
-    fn key_id(&self) -> KeyId {
-        self.key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.key.algorithm()
     }
 }
 
@@ -368,6 +346,22 @@ impl PublicKeyTrait for SignedSecretSubKey {
 
     fn public_params(&self) -> &PublicParams {
         self.key.public_params()
+    }
+
+    fn version(&self) -> KeyVersion {
+        self.key.version()
+    }
+
+    fn fingerprint(&self) -> Vec<u8> {
+        self.key.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.key.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.key.algorithm()
     }
 }
 

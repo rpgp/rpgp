@@ -6,10 +6,7 @@ use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData},
-    types::{
-        KeyId, KeyTrait, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait, Tag,
-        Version,
-    },
+    types::{KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait, Tag, Version},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -270,43 +267,7 @@ impl crate::packet::PacketTrait for PublicSubkey {
     }
 }
 
-impl KeyTrait for PublicKey {
-    fn version(&self) -> KeyVersion {
-        KeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Vec<u8> {
-        KeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        KeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        KeyTrait::algorithm(&self.0)
-    }
-}
-
-impl KeyTrait for PublicSubkey {
-    fn version(&self) -> KeyVersion {
-        KeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Vec<u8> {
-        KeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        KeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        KeyTrait::algorithm(&self.0)
-    }
-}
-
-impl KeyTrait for PubKeyInner {
+impl PublicKeyTrait for PubKeyInner {
     fn version(&self) -> KeyVersion {
         self.version
     }
@@ -373,9 +334,6 @@ impl KeyTrait for PubKeyInner {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
-}
-
-impl PublicKeyTrait for PubKeyInner {
     fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
         match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
@@ -495,6 +453,22 @@ impl PublicKeyTrait for PublicKey {
     fn public_params(&self) -> &PublicParams {
         PublicKeyTrait::public_params(&self.0)
     }
+
+    fn version(&self) -> KeyVersion {
+        PublicKeyTrait::version(&self.0)
+    }
+
+    fn fingerprint(&self) -> Vec<u8> {
+        PublicKeyTrait::fingerprint(&self.0)
+    }
+
+    fn key_id(&self) -> KeyId {
+        PublicKeyTrait::key_id(&self.0)
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        PublicKeyTrait::algorithm(&self.0)
+    }
 }
 
 impl PublicKeyTrait for PublicSubkey {
@@ -516,5 +490,21 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn public_params(&self) -> &PublicParams {
         PublicKeyTrait::public_params(&self.0)
+    }
+
+    fn version(&self) -> KeyVersion {
+        PublicKeyTrait::version(&self.0)
+    }
+
+    fn fingerprint(&self) -> Vec<u8> {
+        PublicKeyTrait::fingerprint(&self.0)
+    }
+
+    fn key_id(&self) -> KeyId {
+        PublicKeyTrait::key_id(&self.0)
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        PublicKeyTrait::algorithm(&self.0)
     }
 }

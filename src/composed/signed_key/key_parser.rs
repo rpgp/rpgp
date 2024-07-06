@@ -1,6 +1,6 @@
 use crate::errors::Result;
 use crate::packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
-use crate::types::{KeyTrait, KeyVersion, SignedUser, SignedUserAttribute, Tag};
+use crate::types::{KeyVersion, PublicKeyTrait, SignedUser, SignedUserAttribute, Tag};
 use crate::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey};
 
 #[allow(clippy::complexity)]
@@ -18,7 +18,7 @@ pub fn next<I, IKT>(
 >
 where
     I: Sized + Iterator<Item = Result<Packet>>,
-    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + KeyTrait,
+    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + PublicKeyTrait,
 {
     let packets = packets.by_ref();
 

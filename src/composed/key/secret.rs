@@ -2,12 +2,11 @@ use chrono::SubsecRound;
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
-use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
     self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
-use crate::types::{KeyId, KeyTrait, SecretKeyTrait};
+use crate::types::SecretKeyTrait;
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -65,24 +64,6 @@ impl SecretKey {
     }
 }
 
-impl KeyTrait for SecretKey {
-    fn version(&self) -> crate::types::KeyVersion {
-        self.primary_key.version()
-    }
-
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.primary_key.algorithm()
-    }
-}
-
 impl SecretSubkey {
     pub fn new(key: packet::SecretSubkey, keyflags: KeyFlags) -> Self {
         SecretSubkey { key, keyflags }
@@ -116,23 +97,5 @@ impl SecretSubkey {
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 
         Ok(SignedSecretSubKey { key, signatures })
-    }
-}
-
-impl KeyTrait for SecretSubkey {
-    fn version(&self) -> crate::types::KeyVersion {
-        self.key.version()
-    }
-
-    fn fingerprint(&self) -> Vec<u8> {
-        self.key.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.key.algorithm()
     }
 }

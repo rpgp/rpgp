@@ -10,7 +10,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{KeyId, KeyTrait, Mpi, PublicKeyTrait, PublicParams, Tag};
+use crate::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, Tag};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
@@ -157,24 +157,6 @@ impl SignedPublicKey {
     }
 }
 
-impl KeyTrait for SignedPublicKey {
-    fn version(&self) -> crate::types::KeyVersion {
-        self.primary_key.version()
-    }
-
-    fn fingerprint(&self) -> Vec<u8> {
-        self.primary_key.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.primary_key.algorithm()
-    }
-}
-
 impl PublicKeyTrait for SignedPublicKey {
     fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
@@ -190,6 +172,22 @@ impl PublicKeyTrait for SignedPublicKey {
 
     fn public_params(&self) -> &PublicParams {
         self.primary_key.public_params()
+    }
+
+    fn version(&self) -> crate::types::KeyVersion {
+        self.primary_key.version()
+    }
+
+    fn fingerprint(&self) -> Vec<u8> {
+        self.primary_key.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.primary_key.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.primary_key.algorithm()
     }
 }
 
@@ -251,7 +249,22 @@ impl SignedPublicSubKey {
     }
 }
 
-impl KeyTrait for SignedPublicSubKey {
+impl PublicKeyTrait for SignedPublicSubKey {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+        self.key.verify_signature(hash, data, sig)
+    }
+
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
+        self.key.encrypt(rng, plain)
+    }
+
+    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.key.to_writer_old(writer)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
+    }
     fn version(&self) -> crate::types::KeyVersion {
         self.key.version()
     }
@@ -268,24 +281,6 @@ impl KeyTrait for SignedPublicSubKey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
-    }
-}
-
-impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.key.encrypt(rng, plain)
-    }
-
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.to_writer_old(writer)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
     }
 }
 

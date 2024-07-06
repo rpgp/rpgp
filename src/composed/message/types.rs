@@ -22,8 +22,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, PublicKeyTrait, SecretKeyTrait, StringToKey,
-    Tag,
+    CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 
 /// An [OpenPGP message](https://tools.ietf.org/html/rfc4880.html#section-11.3)
@@ -561,7 +560,7 @@ impl Message {
                                 "{:?}",
                                 key.secret_subkeys
                                     .iter()
-                                    .map(KeyTrait::key_id)
+                                    .map(PublicKeyTrait::key_id)
                                     .collect::<Vec<_>>()
                             );
 

@@ -5,10 +5,9 @@ use smallvec::SmallVec;
 
 use crate::composed::key::KeyDetails;
 use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
-use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::ser::Serialize;
-use crate::types::{KeyId, KeyTrait, PublicKeyTrait, SignedUser, SignedUserAttribute};
+use crate::types::{PublicKeyTrait, SignedUser, SignedUserAttribute};
 use crate::{packet, ArmorOptions};
 
 /// Shared details between secret and public keys.
@@ -249,38 +248,6 @@ impl Serialize for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_writer(writer),
             PublicOrSecret::Secret(k) => k.to_writer(writer),
-        }
-    }
-}
-
-impl KeyTrait for PublicOrSecret {
-    fn version(&self) -> crate::types::KeyVersion {
-        match self {
-            PublicOrSecret::Public(k) => k.version(),
-            PublicOrSecret::Secret(k) => k.version(),
-        }
-    }
-
-    /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
-        match self {
-            PublicOrSecret::Public(k) => k.fingerprint(),
-            PublicOrSecret::Secret(k) => k.fingerprint(),
-        }
-    }
-
-    /// Returns the Key ID of the key.
-    fn key_id(&self) -> KeyId {
-        match self {
-            PublicOrSecret::Public(k) => k.key_id(),
-            PublicOrSecret::Secret(k) => k.key_id(),
-        }
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        match self {
-            PublicOrSecret::Public(k) => k.algorithm(),
-            PublicOrSecret::Secret(k) => k.algorithm(),
         }
     }
 }

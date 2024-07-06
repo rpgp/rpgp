@@ -35,7 +35,7 @@ use pgp::packet::{
 };
 use pgp::ser::Serialize;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyTrait, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
+    CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
     SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
 };
 
