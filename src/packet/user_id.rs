@@ -121,14 +121,15 @@ mod tests {
             .unwrap();
 
         let alice_sec = packet::SecretKey {
-            details: packet::PublicKey {
-                packet_version: Version::New,
-                version: KeyVersion::V4,
-                algorithm: key_type.to_alg(),
-                created_at: Utc::now().trunc_subsecs(0),
-                expiration: None,
+            details: packet::PublicKey::new(
+                Version::New,
+                KeyVersion::V4,
+                key_type.to_alg(),
+                Utc::now().trunc_subsecs(0),
+                None,
                 public_params,
-            },
+            )
+            .unwrap(),
             secret_params,
         };
 
@@ -148,14 +149,15 @@ mod tests {
             .unwrap();
 
         let signer_sec = packet::SecretKey {
-            details: packet::PublicKey {
-                packet_version: Version::New,
-                version: KeyVersion::V4,
-                algorithm: key_type.to_alg(),
-                created_at: Utc::now().trunc_subsecs(0),
-                expiration: None,
+            details: packet::PublicKey::new(
+                Version::New,
+                KeyVersion::V4,
+                key_type.to_alg(),
+                Utc::now().trunc_subsecs(0),
+                None,
                 public_params,
-            },
+            )
+            .unwrap(),
             secret_params,
         };
 

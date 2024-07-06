@@ -32,14 +32,14 @@ macro_rules! impl_secret_key {
                 let (version, algorithm, created_at, expiration, public_params, secret_params) =
                     details;
                 Ok($name {
-                    details: $crate::packet::$details {
+                    details: $crate::packet::$details::new(
                         packet_version,
                         version,
                         algorithm,
                         created_at,
                         expiration,
                         public_params,
-                    },
+                    )?,
                     secret_params,
                 })
             }
@@ -72,7 +72,8 @@ macro_rules! impl_secret_key {
             where
                 F: FnOnce() -> String,
             {
-                let plain = ciphertext.unlock(pw, self.details.algorithm, self.public_params())?;
+                let plain =
+                    ciphertext.unlock(pw, self.details.algorithm(), self.public_params())?;
                 self.repr_from_plaintext(&plain)
             }
 

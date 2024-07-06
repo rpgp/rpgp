@@ -83,8 +83,6 @@ mod single;
 
 #[macro_use]
 mod secret_key_macro;
-#[macro_use]
-mod public_key_macro;
 
 mod compressed_data;
 mod key;
