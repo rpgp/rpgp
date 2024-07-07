@@ -10,10 +10,11 @@ use crate::types::{Tag, Version};
 /// Padding Packet
 ///
 /// https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-padding-packet-type-id-21
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub struct Padding {
     packet_version: Version,
     /// Random data.
+    #[debug("{}", hex::encode(data))]
     data: Vec<u8>,
 }
 

@@ -3,10 +3,11 @@ use smallvec::SmallVec;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub struct RevocationKey {
     pub class: RevocationKeyClass,
     pub algorithm: PublicKeyAlgorithm,
+    #[debug("{}", hex::encode(fingerprint))]
     pub fingerprint: SmallVec<[u8; 20]>,
 }
 

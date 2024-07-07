@@ -25,8 +25,8 @@ use crate::types::{Mpi, PlainSecretParams, PublicParams};
 const MAX_KEY_SIZE: usize = 16384;
 
 /// Private Key for RSA.
-#[derive(Debug, ZeroizeOnDrop)]
-pub struct PrivateKey(pub(crate) RsaPrivateKey);
+#[derive(derive_more::Debug, ZeroizeOnDrop)]
+pub struct PrivateKey(#[debug("..")] pub(crate) RsaPrivateKey);
 
 impl Deref for PrivateKey {
     type Target = RsaPrivateKey;

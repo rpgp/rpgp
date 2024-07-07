@@ -17,12 +17,13 @@ use crate::PlainSessionKey;
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.3
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum SymKeyEncryptedSessionKey {
     V4 {
         packet_version: Version,
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
+        #[debug("{:?}", encrypted_key.as_ref().map(hex::encode))]
         encrypted_key: Option<Vec<u8>>,
     },
     V5 {
@@ -30,8 +31,11 @@ pub enum SymKeyEncryptedSessionKey {
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         aead: AeadAlgorithm,
+        #[debug("{}", hex::encode(iv))]
         iv: Vec<u8>,
+        #[debug("{}", hex::encode(auth_tag))]
         auth_tag: Vec<u8>,
+        #[debug("{}", hex::encode(encrypted_key))]
         encrypted_key: Vec<u8>,
     },
     V6 {
@@ -39,8 +43,11 @@ pub enum SymKeyEncryptedSessionKey {
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         aead: AeadAlgorithm,
+        #[debug("{}", hex::encode(iv))]
         iv: Vec<u8>,
+        #[debug("{}", hex::encode(auth_tag))]
         auth_tag: Vec<u8>,
+        #[debug("{}", hex::encode(encrypted_key))]
         encrypted_key: Vec<u8>,
     },
 }
