@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use chrono::SubsecRound;
+use derive_builder::Builder;
 use rand::{thread_rng, CryptoRng, Rng};
 use smallvec::SmallVec;
 
@@ -336,6 +337,7 @@ mod tests {
 
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
+    use smallvec::smallvec;
 
     #[test]
     #[ignore] // slow in debug mode

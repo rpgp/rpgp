@@ -1,6 +1,7 @@
 use std::io;
 
 use chrono::{DateTime, Utc};
+use log::warn;
 use rand::{CryptoRng, Rng};
 
 use crate::composed::key::{PublicKey, PublicSubkey};

@@ -87,6 +87,8 @@ pub enum Error {
     Ocb,
     #[error("SHA1 hash collision detected")]
     Sha1HashCollision,
+    #[error("AES Key Wrap error {0}")]
+    AesKek(#[from] aes_kw::Error),
 }
 
 impl Error {
@@ -126,6 +128,7 @@ impl Error {
             Error::Eax => 31,
             Error::Ocb => 32,
             Error::Sha1HashCollision => 33,
+            Error::AesKek(_) => 34,
         }
     }
 }

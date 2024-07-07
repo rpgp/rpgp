@@ -3,6 +3,8 @@ use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
+use derive_builder::Builder;
+use log::debug;
 
 use crate::crypto::hash::{HashAlgorithm, Hasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;

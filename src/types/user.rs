@@ -1,5 +1,7 @@
 use std::io;
 
+use log::{debug, warn};
+
 use crate::errors::Result;
 use crate::packet::{write_packet, Signature, UserAttribute, UserId};
 use crate::ser::Serialize;

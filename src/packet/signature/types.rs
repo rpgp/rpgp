@@ -1,10 +1,12 @@
 use std::fmt;
 use std::io::Read;
 
+use bitfield::bitfield;
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Duration, Utc};
 use iter_read::IterRead;
+use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -20,7 +22,7 @@ use crate::ser::Serialize;
 use crate::types::{
     self, CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicKeyTrait, Tag, Version,
 };
-use smallvec::SmallVec;
+use smallvec::{smallvec, SmallVec};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2

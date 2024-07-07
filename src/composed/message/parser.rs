@@ -1,5 +1,7 @@
 use std::iter::Peekable;
 
+use log::debug;
+
 use crate::armor::BlockType;
 use crate::composed::message::Message;
 use crate::composed::Deserializable;

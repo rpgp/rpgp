@@ -2,6 +2,7 @@ use std::str;
 
 use bstr::BString;
 use chrono::{DateTime, Duration, TimeZone, Utc};
+use log::{debug, warn};
 use nom::bytes::streaming::{tag, take};
 use nom::combinator::{complete, map, map_opt, map_parser, map_res, rest};
 use nom::multi::{fold_many_m_n, length_data, many0};

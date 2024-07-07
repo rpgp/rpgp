@@ -4,6 +4,7 @@ use bstr::BStr;
 use chrono::SubsecRound;
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
+use log::{debug, warn};
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 

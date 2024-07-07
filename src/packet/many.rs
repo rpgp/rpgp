@@ -2,6 +2,7 @@ use std::io::{BufRead, Read};
 
 use buffer_redux::policy::MinBuffered;
 use buffer_redux::BufReader;
+use log::warn;
 
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;

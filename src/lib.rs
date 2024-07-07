@@ -23,19 +23,6 @@
 // Enable backtraces for thiserror.
 #![cfg_attr(feature = "nightly", feature(error_generic_member_access))]
 
-#[macro_use]
-extern crate nom;
-#[macro_use]
-extern crate generic_array;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate derive_builder;
-#[macro_use]
-extern crate bitfield;
-#[macro_use]
-extern crate smallvec;
-
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;

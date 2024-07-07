@@ -12,7 +12,7 @@ use nom::combinator::{eof, map};
 use nom::multi::many0;
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::preceded;
-use nom::{Err, InputIter, InputLength, Slice};
+use nom::{error_position, Err, InputIter, InputLength, Slice};
 
 use crate::errors::{self, IResult};
 
