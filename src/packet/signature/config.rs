@@ -1,4 +1,3 @@
-use std::fmt;
 use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
@@ -13,7 +12,7 @@ use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket, Subpa
 use crate::ser::Serialize;
 use crate::types::{KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
 
-#[derive(Clone, PartialEq, Eq, Builder)]
+#[derive(Clone, PartialEq, Eq, Debug, Builder)]
 #[builder(build_fn(error = "Error"))]
 pub struct SignatureConfig {
     #[builder(default)]
@@ -419,20 +418,5 @@ impl SignatureConfig {
                 _ => None,
             })
             .collect()
-    }
-}
-
-impl fmt::Debug for SignatureConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SignatureConfig")
-            .field("version", &self.version)
-            .field("typ", &self.typ)
-            .field("pub_alg", &self.pub_alg)
-            .field("hash_alg", &self.hash_alg)
-            .field("created", &self.created)
-            .field("issuer", &self.issuer)
-            .field("unhashed_subpackets", &self.unhashed_subpackets)
-            .field("hashed_subpackets", &self.hashed_subpackets)
-            .finish()
     }
 }

@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::io;
 
 use log::debug;
 use nom::bytes::streaming::take;
@@ -16,49 +16,27 @@ use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SymEncryptedProtectedData {
     packet_version: Version,
     data: Data,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum Data {
     V1 {
+        #[debug("{}", hex::encode(data))]
         data: Vec<u8>,
     },
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: u8,
+        #[debug("{}", hex::encode(salt))]
         salt: [u8; 32],
+        #[debug("{}", hex::encode(data))]
         data: Vec<u8>,
     },
-}
-
-impl fmt::Debug for Data {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Data::V1 { data } => f
-                .debug_struct("V1")
-                .field("data", &hex::encode(data))
-                .finish(),
-            Data::V2 {
-                sym_alg,
-                aead,
-                chunk_size,
-                salt,
-                data,
-            } => f
-                .debug_struct("V2")
-                .field("sym_alg", sym_alg)
-                .field("aead", aead)
-                .field("chunk_size", chunk_size)
-                .field("salt", &hex::encode(salt))
-                .field("data", &hex::encode(data))
-                .finish(),
-        }
-    }
 }
 
 impl SymEncryptedProtectedData {
@@ -258,15 +236,6 @@ impl PacketTrait for SymEncryptedProtectedData {
 
     fn tag(&self) -> Tag {
         Tag::SymEncryptedProtectedData
-    }
-}
-
-impl fmt::Debug for SymEncryptedProtectedData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SymEncryptedProtectedData")
-            .field("packet_version", &self.packet_version)
-            .field("data", &self.data)
-            .finish()
     }
 }
 

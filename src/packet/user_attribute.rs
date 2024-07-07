@@ -20,16 +20,19 @@ use super::SubpacketData;
 
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum UserAttribute {
     Image {
         packet_version: Version,
+        #[debug("{}", hex::encode(header))]
         header: Vec<u8>,
+        #[debug("{}", hex::encode(data))]
         data: Vec<u8>,
     },
     Unknown {
         packet_version: Version,
         typ: u8,
+        #[debug("{}", hex::encode(data))]
         data: Vec<u8>,
     },
 }
@@ -178,27 +181,6 @@ impl Serialize for UserAttribute {
             }
         }
         Ok(())
-    }
-}
-
-impl fmt::Debug for UserAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UserAttribute::Image {
-                ref header,
-                ref data,
-                ..
-            } => f
-                .debug_struct("UserAttribute::Image")
-                .field("header", &hex::encode(header))
-                .field("data", &hex::encode(data))
-                .finish(),
-            UserAttribute::Unknown { typ, ref data, .. } => f
-                .debug_struct("UserAttribute::Image")
-                .field("type", &hex::encode([*typ]))
-                .field("data", &hex::encode(data))
-                .finish(),
-        }
     }
 }
 

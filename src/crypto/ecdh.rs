@@ -1,5 +1,3 @@
-use std::fmt;
-
 use log::debug;
 use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -21,11 +19,12 @@ const ANON_SENDER: [u8; 20] = [
 ];
 
 /// Secret key for ECDH
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
 pub enum SecretKey {
     /// ECDH with Curve25519
     Curve25519 {
         /// The secret point.
+        #[debug("..")]
         secret: [u8; ECCCurve::Curve25519.secret_key_length()],
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
@@ -34,6 +33,7 @@ pub enum SecretKey {
     /// ECDH with Nist P256
     P256 {
         /// The secret point.
+        #[debug("..")]
         secret: [u8; ECCCurve::P256.secret_key_length()],
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
@@ -42,6 +42,7 @@ pub enum SecretKey {
     /// ECDH with Nist P384
     P384 {
         /// The secret point.
+        #[debug("..")]
         secret: [u8; ECCCurve::P384.secret_key_length()],
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
@@ -50,23 +51,11 @@ pub enum SecretKey {
     /// ECDH with Nist P521
     P521 {
         /// The secret point.
+        #[debug("..")]
         secret: [u8; ECCCurve::P521.secret_key_length()],
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
     },
-}
-
-impl fmt::Debug for SecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (curve, alg_sym, hash) = self.key_params();
-
-        f.debug_struct("EcdhSecretKey")
-            .field("secret", &"[..]")
-            .field("hash", &hash)
-            .field("oid", &hex::encode(curve.oid()))
-            .field("alg_sym", &alg_sym)
-            .finish()
-    }
 }
 
 impl KeyParams for SecretKey {

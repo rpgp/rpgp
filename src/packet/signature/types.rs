@@ -1,4 +1,3 @@
-use std::fmt;
 use std::io::Read;
 
 use bitfield::bitfield;
@@ -26,12 +25,12 @@ use smallvec::{smallvec, SmallVec};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Signature {
     packet_version: Version,
 
     pub config: SignatureConfig,
-
+    #[debug("{}", hex::encode(signed_hash_value))]
     pub signed_hash_value: [u8; 2],
     pub signature: Vec<Mpi>,
 }
@@ -898,23 +897,6 @@ pub enum RevocationCode {
     /// Undefined code
     #[num_enum(catch_all)]
     Other(u8),
-}
-
-impl fmt::Debug for Signature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Signature")
-            .field("packet_version", &self.packet_version)
-            .field("config", &self.config)
-            .field("signed_hash_value", &hex::encode(self.signed_hash_value))
-            .field(
-                "signature",
-                &format_args!(
-                    "{:?}",
-                    self.signature.iter().map(hex::encode).collect::<Vec<_>>()
-                ),
-            )
-            .finish()
-    }
 }
 
 impl PacketTrait for Signature {
