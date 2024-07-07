@@ -16,7 +16,6 @@ pub struct Base64Decoder<R> {
     inner: BufReader<R>,
     /// leftover decoded output
     out: Buffer,
-    ///
     out_buffer: [u8; BUF_CAPACITY],
     /// Memorize if we had an error, so we can return it on calls to read again.
     err: Option<io::Error>,

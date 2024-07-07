@@ -19,7 +19,7 @@
     clippy::unwrap_used,
     rust_2018_idioms
 )]
-#![allow(clippy::missing_const_for_fn, clippy::use_self)]
+#![allow(clippy::missing_const_for_fn, clippy::use_self, clippy::needless_borrows_for_generic_args)]
 // Enable backtraces for thiserror.
 #![cfg_attr(feature = "nightly", feature(error_generic_member_access))]
 

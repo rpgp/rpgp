@@ -291,7 +291,7 @@ jobs:
     - uses: actions-rs/toolchain@v1
       with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ env.RUST_NIGHTLY }}
           override: true
           components: clippy
     - uses: actions-rs/clippy-check@v1
