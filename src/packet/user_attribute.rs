@@ -3,6 +3,7 @@ use std::{fmt, io};
 use chrono::{SubsecRound, Utc};
 
 use byteorder::{LittleEndian, WriteBytesExt};
+use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_parser, rest};
 use nom::multi::length_data;

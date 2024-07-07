@@ -1,3 +1,4 @@
+use log::debug;
 use zeroize::Zeroize;
 
 use crate::{

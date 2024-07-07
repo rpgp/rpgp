@@ -19,22 +19,13 @@
     clippy::unwrap_used,
     rust_2018_idioms
 )]
-#![allow(clippy::missing_const_for_fn, clippy::use_self)]
+#![allow(
+    clippy::missing_const_for_fn,
+    clippy::use_self,
+    clippy::needless_borrows_for_generic_args
+)]
 // Enable backtraces for thiserror.
 #![cfg_attr(feature = "nightly", feature(error_generic_member_access))]
-
-#[macro_use]
-extern crate nom;
-#[macro_use]
-extern crate generic_array;
-#[macro_use]
-extern crate log;
-#[macro_use]
-extern crate derive_builder;
-#[macro_use]
-extern crate bitfield;
-#[macro_use]
-extern crate smallvec;
 
 #[cfg(test)]
 #[macro_use]

@@ -2,6 +2,7 @@ use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::Duration;
+use log::debug;
 
 use crate::errors::Result;
 use crate::packet::signature::types::*;

@@ -1,5 +1,7 @@
 use std::io;
 
+use log::debug;
+
 use crate::errors::Result;
 use crate::packet::{
     CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Padding, PublicKey,

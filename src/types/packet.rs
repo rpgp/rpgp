@@ -1,6 +1,7 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
+use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::errors::Result;

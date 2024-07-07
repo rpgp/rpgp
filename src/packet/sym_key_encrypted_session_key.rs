@@ -1,5 +1,6 @@
 use std::io;
 
+use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
 use nom::number::streaming::be_u8;

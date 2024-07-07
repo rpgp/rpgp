@@ -103,7 +103,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
                     "verification failed: {}:{}: public key {}: {:?}",
                     i,
                     j,
-                    hex::encode(&key.key_id()),
+                    hex::encode(key.key_id()),
                     err
                 );
                 actual.err_count += 1;

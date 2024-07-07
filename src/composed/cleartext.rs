@@ -6,6 +6,7 @@ use std::io::{BufRead, Read};
 use buffer_redux::BufReader;
 
 use chrono::SubsecRound;
+use log::debug;
 use nom::branch::alt;
 use nom::bytes::streaming::take_until1;
 use nom::character::streaming::line_ending;

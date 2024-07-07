@@ -1,4 +1,5 @@
 use buffer_redux::BufReader;
+use log::{debug, warn};
 use std::io::{BufRead, Read};
 
 use crate::armor::{self, BlockType};

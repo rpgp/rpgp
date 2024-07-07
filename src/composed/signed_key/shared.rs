@@ -1,6 +1,7 @@
 use std::io;
 
 use chrono::Duration;
+use log::warn;
 use smallvec::SmallVec;
 
 use crate::composed::key::KeyDetails;

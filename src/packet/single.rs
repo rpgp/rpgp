@@ -1,6 +1,7 @@
 // comes from inside somewhere of nom
 #![allow(clippy::useless_let_if_seq)]
 
+use log::warn;
 use nom::bits;
 use nom::branch::alt;
 use nom::combinator::{map, map_res};

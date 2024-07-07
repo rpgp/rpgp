@@ -1,3 +1,5 @@
+use log::{debug, warn};
+
 use crate::errors::Result;
 use crate::packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
 use crate::types::{KeyVersion, PublicKeyTrait, SignedUser, SignedUserAttribute, Tag};

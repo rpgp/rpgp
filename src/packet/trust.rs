@@ -1,5 +1,7 @@
 use std::io;
 
+use log::warn;
+
 use crate::errors::Result;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
