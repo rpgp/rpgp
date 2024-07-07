@@ -120,7 +120,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2024-02-07
+          - nightly-2024-07-07
           - beta
           - stable
         target:
@@ -234,7 +234,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2024-02-07
+          - nightly-2024-07-07
           - beta
           - stable
 
