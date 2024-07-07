@@ -21,16 +21,19 @@ where
 }
 
 /// Decrypted session key.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum PlainSessionKey {
     V4 {
         sym_alg: SymmetricKeyAlgorithm,
+        #[debug("{}", hex::encode(key))]
         key: Vec<u8>,
     },
     V5 {
+        #[debug("{}", hex::encode(key))]
         key: Vec<u8>,
     },
     V6 {
+        #[debug("{}", hex::encode(key))]
         key: Vec<u8>,
     },
 }

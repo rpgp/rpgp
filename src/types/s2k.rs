@@ -31,27 +31,31 @@ pub enum S2kUsage {
     MalleableCfb,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum S2kParams {
     Unprotected,
     LegacyCfb {
         sym_alg: SymmetricKeyAlgorithm,
+        #[debug("{}", hex::encode(iv))]
         iv: Vec<u8>,
     },
     Aead {
         sym_alg: SymmetricKeyAlgorithm,
         aead_mode: AeadAlgorithm,
         s2k: StringToKey,
+        #[debug("{}", hex::encode(nonce))]
         nonce: Vec<u8>,
     },
     Cfb {
         sym_alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
+        #[debug("{}", hex::encode(iv))]
         iv: Vec<u8>,
     },
     MaleableCfb {
         sym_alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
+        #[debug("{}", hex::encode(iv))]
         iv: Vec<u8>,
     },
 }
@@ -101,7 +105,7 @@ impl From<u8> for S2kUsage {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum StringToKey {
     // Type ID 0
     Simple {
@@ -111,23 +115,27 @@ pub enum StringToKey {
     // Type ID 1
     Salted {
         hash_alg: HashAlgorithm,
+        #[debug("{}", hex::encode(salt))]
         salt: [u8; 8],
     },
 
     // Type ID 2
     Reserved {
+        #[debug("{}", hex::encode(unknown))]
         unknown: Vec<u8>,
     },
 
     // Type ID 3
     IteratedAndSalted {
         hash_alg: HashAlgorithm,
+        #[debug("{}", hex::encode(salt))]
         salt: [u8; 8],
         count: u8,
     },
 
     // Type ID 4
     Argon2 {
+        #[debug("{}", hex::encode(salt))]
         salt: [u8; 16],
         t: u8,     // one-octet number of passes t
         p: u8,     // one-octet degree of parallelism p
@@ -137,11 +145,13 @@ pub enum StringToKey {
     // Private/Experimental S2K: 100-110
     Private {
         typ: u8,
+        #[debug("{}", hex::encode(unknown))]
         unknown: Vec<u8>,
     },
 
     Other {
         typ: u8,
+        #[debug("{}", hex::encode(unknown))]
         unknown: Vec<u8>,
     },
 }

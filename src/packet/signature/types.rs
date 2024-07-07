@@ -790,7 +790,7 @@ impl Subpacket {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum SubpacketData {
     /// The time the signature was made.
     SignatureCreationTime(DateTime<Utc>),
@@ -806,9 +806,9 @@ pub enum SubpacketData {
     PreferredHashAlgorithms(SmallVec<[HashAlgorithm; 8]>),
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     PreferredCompressionAlgorithms(SmallVec<[CompressionAlgorithm; 8]>),
-    KeyServerPreferences(SmallVec<[u8; 4]>),
-    KeyFlags(SmallVec<[u8; 1]>),
-    Features(SmallVec<[u8; 1]>),
+    KeyServerPreferences(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 4]>),
+    KeyFlags(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
+    Features(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
     RevocationReason(RevocationCode, BString),
     IsPrimary(bool),
     Revocable(bool),
@@ -822,11 +822,18 @@ pub enum SubpacketData {
     TrustSignature(u8, u8),
     RegularExpression(BString),
     ExportableCertification(bool),
-    IssuerFingerprint(KeyVersion, SmallVec<[u8; 20]>),
+    IssuerFingerprint(
+        KeyVersion,
+        #[debug("{}", hex::encode(_1))] SmallVec<[u8; 20]>,
+    ),
     PreferredAeadAlgorithms(SmallVec<[AeadAlgorithm; 2]>),
-    Experimental(u8, SmallVec<[u8; 2]>),
-    Other(u8, Vec<u8>),
-    SignatureTarget(PublicKeyAlgorithm, HashAlgorithm, Vec<u8>),
+    Experimental(u8, #[debug("{}", hex::encode(_1))] SmallVec<[u8; 2]>),
+    Other(u8, #[debug("{}", hex::encode(_1))] Vec<u8>),
+    SignatureTarget(
+        PublicKeyAlgorithm,
+        HashAlgorithm,
+        #[debug("{}", hex::encode(_2))] Vec<u8>,
+    ),
 }
 
 bitfield! {
