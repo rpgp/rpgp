@@ -14,7 +14,6 @@ use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::de::Deserialize;
 use crate::errors::{IResult, Result};
 use crate::packet::signature::types::*;
 use crate::types::{
@@ -23,9 +22,9 @@ use crate::types::{
 };
 use crate::util::{clone_into_array, packet_length};
 
-impl Deserialize for Signature {
+impl Signature {
     /// Parses a `Signature` packet from the given slice.
-    fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
 
         Ok(pk)
