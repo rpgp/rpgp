@@ -1,4 +1,3 @@
-use std::fmt;
 use std::io::{self, Read};
 
 use flate2::read::{DeflateDecoder, ZlibDecoder};
@@ -8,10 +7,11 @@ use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, Tag, Version};
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct CompressedData {
     packet_version: Version,
     compression_algorithm: CompressionAlgorithm,
+    #[debug("{}", hex::encode(compressed_data))]
     compressed_data: Vec<u8>,
 }
 
@@ -94,15 +94,5 @@ impl PacketTrait for CompressedData {
 
     fn tag(&self) -> Tag {
         Tag::CompressedData
-    }
-}
-
-impl fmt::Debug for CompressedData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("CompressedData")
-            .field("packet_version", &self.packet_version)
-            .field("compression_algorithm", &self.compression_algorithm)
-            .field("compressed_data", &hex::encode(&self.compressed_data))
-            .finish()
     }
 }

@@ -8,7 +8,6 @@ use nom::combinator::{map, map_res};
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::{preceded, tuple};
 
-use crate::de::Deserialize;
 use crate::errors::{Error, IResult, Result};
 use crate::packet::packet_sum::Packet;
 use crate::packet::{

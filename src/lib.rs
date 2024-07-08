@@ -42,7 +42,6 @@ pub mod base64_decoder;
 pub mod base64_reader;
 pub mod composed;
 pub mod crypto;
-pub mod de;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod packet;

@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::io;
 
 use crate::errors::Result;
 use crate::packet::PacketTrait;
@@ -7,9 +7,10 @@ use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Data Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.7
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedData {
     packet_version: Version,
+    #[debug("{}", hex::encode(data))]
     data: Vec<u8>,
 }
 
@@ -41,14 +42,5 @@ impl PacketTrait for SymEncryptedData {
 
     fn tag(&self) -> Tag {
         Tag::SymEncryptedData
-    }
-}
-
-impl fmt::Debug for SymEncryptedData {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SymEncryptedData")
-            .field("packet_version", &self.packet_version)
-            .field("data", &hex::encode(&self.data))
-            .finish()
     }
 }

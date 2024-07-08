@@ -1,5 +1,3 @@
-use std::fmt;
-
 use rand::{CryptoRng, Rng};
 use signature::{Signer as _, Verifier};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
@@ -11,20 +9,13 @@ use crate::errors::Result;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
 /// Secret key for EdDSA with Curve25519, the only combination we currently support.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
 pub struct SecretKey {
     /// The secret point.
+    #[debug("..")]
     pub secret: [u8; 32],
+    #[debug("{}", hex::encode(oid))]
     pub oid: Vec<u8>,
-}
-
-impl fmt::Debug for SecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("EdDSASecretKey")
-            .field("secret", &"[..]")
-            .field("oid", &hex::encode(&self.oid))
-            .finish()
-    }
 }
 
 impl Signer for SecretKey {

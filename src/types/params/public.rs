@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::io;
 
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
@@ -8,7 +8,7 @@ use crate::ser::Serialize;
 use crate::types::{Mpi, MpiRef};
 
 /// Represent the public parameters for the different algorithms.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PublicParams {
     RSA {
         n: Mpi,
@@ -233,65 +233,5 @@ impl Serialize for PublicParams {
         }
 
         Ok(())
-    }
-}
-
-impl fmt::Debug for PublicParams {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PublicParams::RSA { ref n, ref e } => f
-                .debug_struct("PublicParams::RSA")
-                .field("n", &n)
-                .field("e", &e)
-                .finish(),
-            PublicParams::DSA {
-                ref p,
-                ref q,
-                ref g,
-                ref y,
-            } => f
-                .debug_struct("PublicParams::DSA")
-                .field("p", &p)
-                .field("q", &q)
-                .field("g", &y)
-                .field("y", &g)
-                .finish(),
-            PublicParams::ECDSA(params) => {
-                write!(f, "PublicParams::ECDSA({params:?})")
-            }
-            PublicParams::ECDH {
-                ref curve,
-                ref p,
-                hash,
-                alg_sym,
-            } => f
-                .debug_struct("PublicParams::ECDH")
-                .field("curve", curve)
-                .field("hash", hash)
-                .field("alg_sym", alg_sym)
-                .field("p", &p)
-                .finish(),
-            PublicParams::Elgamal {
-                ref p,
-                ref g,
-                ref y,
-            } => f
-                .debug_struct("PublicParams::Elgamal")
-                .field("p", &p)
-                .field("g", &g)
-                .field("y", &y)
-                .finish(),
-
-            PublicParams::EdDSA { ref curve, ref q } => f
-                .debug_struct("PublicParams::EdDSA")
-                .field("curve", curve)
-                .field("q", &q)
-                .finish(),
-
-            PublicParams::Unknown { ref data } => f
-                .debug_struct("PublicParams::Unknown")
-                .field("data", data)
-                .finish(),
-        }
     }
 }

@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use nom::number::streaming::be_u16;
@@ -54,13 +54,13 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
 
 /// Represents an owned MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
-#[derive(Default, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub struct Mpi(Vec<u8>);
+#[derive(Default, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
+pub struct Mpi(#[debug("{}", hex::encode(_0))] Vec<u8>);
 
 /// Represents a borrowed MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
-#[derive(Clone, PartialEq, Eq)]
-pub struct MpiRef<'a>(&'a [u8]);
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+pub struct MpiRef<'a>(#[debug("{}", hex::encode(_0))] &'a [u8]);
 
 impl AsRef<[u8]> for Mpi {
     fn as_ref(&self) -> &[u8] {
@@ -207,18 +207,6 @@ impl<'a, 'b> From<&'b MpiRef<'a>> for BigUint {
 impl<'a> From<&'a BigUint> for Mpi {
     fn from(other: &'a BigUint) -> Self {
         Mpi(other.to_bytes_be())
-    }
-}
-
-impl<'a> fmt::Debug for MpiRef<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Mpi({})", hex::encode(self.0))
-    }
-}
-
-impl fmt::Debug for Mpi {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().fmt(f)
     }
 }
 

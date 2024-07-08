@@ -1,5 +1,3 @@
-use std::fmt;
-
 use ecdsa::SigningKey;
 use elliptic_curve::sec1::ToEncodedPoint;
 use p521::NistP521;
@@ -14,34 +12,19 @@ use crate::errors::Result;
 use crate::types::EcdsaPublicParams;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
-#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 pub enum SecretKey {
-    P256(p256::SecretKey),
-    P384(p384::SecretKey),
-    P521(p521::SecretKey),
-    Secp256k1(k256::SecretKey),
+    P256(#[debug("..")] p256::SecretKey),
+    P384(#[debug("..")] p384::SecretKey),
+    P521(#[debug("..")] p521::SecretKey),
+    Secp256k1(#[debug("..")] k256::SecretKey),
     Unsupported {
         /// The secret point.
+        #[debug("..")]
         x: Mpi,
         #[zeroize(skip)]
         curve: ECCCurve,
     },
-}
-
-impl fmt::Debug for SecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::P256(_) => write!(f, "ECDSASecretKey::P256([..])"),
-            Self::P384(_) => write!(f, "ECDSASecretKey::P384([..])"),
-            Self::P521(_) => write!(f, "ECDSASecretKey::P521([..])"),
-            Self::Secp256k1(_) => write!(f, "ECDSASecretKey::Secp256k1([..])"),
-            Self::Unsupported { curve, .. } => f
-                .debug_struct("ECDSASecretKey::Unsupported")
-                .field("x", &"[..]")
-                .field("curve", &curve)
-                .finish(),
-        }
-    }
 }
 
 impl Signer for SecretKey {

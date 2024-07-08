@@ -1,6 +1,5 @@
 //! # base64 decoder module
 
-use std::fmt;
 use std::io::{self, BufRead, Read};
 
 use base64::engine::{general_purpose::GeneralPurpose, Engine};
@@ -11,6 +10,7 @@ const BUF_CAPACITY: usize = BUF_SIZE / 4 * 3;
 const ENGINE: GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
 /// Decodes Base64 from the supplied reader.
+#[derive(Debug)]
 pub struct Base64Decoder<R> {
     /// The inner Read instance we are reading bytes from.
     inner: BufReader<R>,
@@ -19,18 +19,6 @@ pub struct Base64Decoder<R> {
     out_buffer: [u8; BUF_CAPACITY],
     /// Memorize if we had an error, so we can return it on calls to read again.
     err: Option<io::Error>,
-}
-
-impl<R> fmt::Debug for Base64Decoder<R> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let out_buf = format!("{:?}", &self.out_buffer[..]);
-        f.debug_struct("Base64Decoder")
-            .field("inner", &"BufReader")
-            .field("out", &self.out)
-            .field("out_buffer", &out_buf)
-            .field("err", &self.err)
-            .finish()
-    }
 }
 
 impl<R: Read> Base64Decoder<R> {

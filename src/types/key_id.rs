@@ -3,8 +3,8 @@ use std::fmt;
 use crate::errors::Result;
 
 /// Represents a Key ID.
-#[derive(Clone, Eq, PartialEq)]
-pub struct KeyId([u8; 8]);
+#[derive(Clone, Eq, PartialEq, derive_more::Debug)]
+pub struct KeyId(#[debug("{}", hex::encode(_0))] [u8; 8]);
 
 impl AsRef<[u8]> for KeyId {
     fn as_ref(&self) -> &[u8] {
@@ -23,12 +23,6 @@ impl KeyId {
 
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
-    }
-}
-
-impl fmt::Debug for KeyId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "KeyId({})", hex::encode(self.as_ref()))
     }
 }
 

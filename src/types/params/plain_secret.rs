@@ -1,5 +1,5 @@
 use std::hash::Hasher;
-use std::{fmt, io};
+use std::io;
 
 use byteorder::{BigEndian, ByteOrder};
 use nom::combinator::map;
@@ -15,29 +15,42 @@ use crate::ser::Serialize;
 use crate::types::*;
 use crate::util::TeeWriter;
 
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
 pub enum PlainSecretParams {
-    RSA { d: Mpi, p: Mpi, q: Mpi, u: Mpi },
-    DSA(Mpi),
-    ECDSA(Mpi),
-    ECDH(Mpi),
-    Elgamal(Mpi),
-    EdDSA(Mpi),
+    RSA {
+        #[debug("..")]
+        d: Mpi,
+        #[debug("..")]
+        p: Mpi,
+        #[debug("..")]
+        q: Mpi,
+        #[debug("..")]
+        u: Mpi,
+    },
+    DSA(#[debug("..")] Mpi),
+    ECDSA(#[debug("..")] Mpi),
+    ECDH(#[debug("..")] Mpi),
+    Elgamal(#[debug("..")] Mpi),
+    EdDSA(#[debug("..")] Mpi),
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum PlainSecretParamsRef<'a> {
     RSA {
+        #[debug("..")]
         d: MpiRef<'a>,
+        #[debug("..")]
         p: MpiRef<'a>,
+        #[debug("..")]
         q: MpiRef<'a>,
+        #[debug("..")]
         u: MpiRef<'a>,
     },
-    DSA(MpiRef<'a>),
-    ECDSA(MpiRef<'a>),
-    ECDH(MpiRef<'a>),
-    Elgamal(MpiRef<'a>),
-    EdDSA(MpiRef<'a>),
+    DSA(#[debug("..")] MpiRef<'a>),
+    ECDSA(#[debug("..")] MpiRef<'a>),
+    ECDH(#[debug("..")] MpiRef<'a>),
+    Elgamal(#[debug("..")] MpiRef<'a>),
+    EdDSA(#[debug("..")] MpiRef<'a>),
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
@@ -342,27 +355,6 @@ impl<'a> Serialize for PlainSecretParamsRef<'a> {
         hasher.to_writer(writer)?;
 
         Ok(())
-    }
-}
-
-impl fmt::Debug for PlainSecretParams {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_ref().fmt(f)
-    }
-}
-
-impl<'a> fmt::Debug for PlainSecretParamsRef<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PlainSecretParamsRef::RSA { .. } => write!(f, "PlainSecretParams(RSA)"),
-            PlainSecretParamsRef::DSA(_) => write!(f, "PlainSecretParams(DSA)"),
-            PlainSecretParamsRef::Elgamal(_) => write!(f, "PlainSecretParams(Elgamal)"),
-            PlainSecretParamsRef::ECDSA(x) => {
-                write!(f, "PlainSecretParams(ECDSA {})", hex::encode(x.as_bytes()))
-            }
-            PlainSecretParamsRef::ECDH(_) => write!(f, "PlainSecretParams(ECDH)"),
-            PlainSecretParamsRef::EdDSA(_) => write!(f, "PlainSecretParams(EdDSA)"),
-        }
     }
 }
 

@@ -7,10 +7,11 @@ use crate::types::{Tag, Version};
 
 /// Modification Detection Code Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.14
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub struct ModDetectionCode {
     packet_version: Version,
     /// 20 byte SHA1 hash of the preceding plaintext data.
+    #[debug("{}", hex::encode(hash))]
     hash: [u8; 20],
 }
 

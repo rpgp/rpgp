@@ -1,4 +1,3 @@
-use std::fmt;
 use std::io::Read;
 
 use bitfield::bitfield;
@@ -26,12 +25,12 @@ use smallvec::{smallvec, SmallVec};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Signature {
     packet_version: Version,
 
     pub config: SignatureConfig,
-
+    #[debug("{}", hex::encode(signed_hash_value))]
     pub signed_hash_value: [u8; 2],
     pub signature: Vec<Mpi>,
 }
@@ -791,7 +790,7 @@ impl Subpacket {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum SubpacketData {
     /// The time the signature was made.
     SignatureCreationTime(DateTime<Utc>),
@@ -807,9 +806,9 @@ pub enum SubpacketData {
     PreferredHashAlgorithms(SmallVec<[HashAlgorithm; 8]>),
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     PreferredCompressionAlgorithms(SmallVec<[CompressionAlgorithm; 8]>),
-    KeyServerPreferences(SmallVec<[u8; 4]>),
-    KeyFlags(SmallVec<[u8; 1]>),
-    Features(SmallVec<[u8; 1]>),
+    KeyServerPreferences(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 4]>),
+    KeyFlags(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
+    Features(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
     RevocationReason(RevocationCode, BString),
     IsPrimary(bool),
     Revocable(bool),
@@ -823,11 +822,18 @@ pub enum SubpacketData {
     TrustSignature(u8, u8),
     RegularExpression(BString),
     ExportableCertification(bool),
-    IssuerFingerprint(KeyVersion, SmallVec<[u8; 20]>),
+    IssuerFingerprint(
+        KeyVersion,
+        #[debug("{}", hex::encode(_1))] SmallVec<[u8; 20]>,
+    ),
     PreferredAeadAlgorithms(SmallVec<[AeadAlgorithm; 2]>),
-    Experimental(u8, SmallVec<[u8; 2]>),
-    Other(u8, Vec<u8>),
-    SignatureTarget(PublicKeyAlgorithm, HashAlgorithm, Vec<u8>),
+    Experimental(u8, #[debug("{}", hex::encode(_1))] SmallVec<[u8; 2]>),
+    Other(u8, #[debug("{}", hex::encode(_1))] Vec<u8>),
+    SignatureTarget(
+        PublicKeyAlgorithm,
+        HashAlgorithm,
+        #[debug("{}", hex::encode(_2))] Vec<u8>,
+    ),
 }
 
 bitfield! {
@@ -898,23 +904,6 @@ pub enum RevocationCode {
     /// Undefined code
     #[num_enum(catch_all)]
     Other(u8),
-}
-
-impl fmt::Debug for Signature {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Signature")
-            .field("packet_version", &self.packet_version)
-            .field("config", &self.config)
-            .field("signed_hash_value", &hex::encode(self.signed_hash_value))
-            .field(
-                "signature",
-                &format_args!(
-                    "{:?}",
-                    self.signature.iter().map(hex::encode).collect::<Vec<_>>()
-                ),
-            )
-            .finish()
-    }
 }
 
 impl PacketTrait for Signature {

@@ -1,4 +1,4 @@
-use std::{fmt, io};
+use std::io;
 
 use byteorder::{BigEndian, ByteOrder};
 use digest::Digest;
@@ -9,9 +9,10 @@ use crate::errors::{Error, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct EncryptedSecretParams {
     /// The encrypted data, including the checksum.
+    #[debug("{}", hex::encode(data))]
     data: Vec<u8>,
     /// S2k Params
     s2k_params: S2kParams,
@@ -173,14 +174,5 @@ impl Serialize for EncryptedSecretParams {
         writer.write_all(&self.data)?;
 
         Ok(())
-    }
-}
-
-impl fmt::Debug for EncryptedSecretParams {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("EncryptedSecretParams")
-            .field("data", &hex::encode(&self.data))
-            .field("string_to_key_params", &self.s2k_params)
-            .finish()
     }
 }

@@ -1,5 +1,3 @@
-use std::fmt;
-
 use dsa::{Components, Signature, SigningKey, VerifyingKey};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
@@ -14,15 +12,10 @@ use crate::types::{PlainSecretParams, PublicParams};
 pub use dsa::KeySize;
 
 /// Secret key for DSA.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
 pub struct SecretKey {
+    #[debug("..")]
     pub x: BigUint,
-}
-
-impl fmt::Debug for SecretKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DSASecretKey").field("x", &"[..]").finish()
-    }
 }
 
 impl Signer for SecretKey {
