@@ -167,6 +167,25 @@ impl Edata {
         }
     }
 
+    /// Transform decrypted data into a message.
+    /// Bails if the packets contain no message or multiple messages.
+    fn process_decrypted(packet_data: &[u8]) -> Result<Message> {
+        let mut messages = Message::from_bytes_many(packet_data);
+        // First message is the one we want to return
+        let Some(message) = messages.next() else {
+            bail!("no valid message found");
+        };
+        let message = message?;
+
+        // The only other message allowed is a padding packet, which will be skipped
+        // by the parser, so check that we have only a single message.
+        if let Some(msg) = messages.next() {
+            bail!("unexpected message: {:?}", msg);
+        }
+
+        Ok(message)
+    }
+
     pub fn decrypt(&self, key: PlainSessionKey) -> Result<Message> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
         debug!("decrypting protected = {:?}", protected);
@@ -186,7 +205,7 @@ impl Edata {
                             "Version mismatch between key and integrity packet"
                         );
                         let data = p.decrypt(&key, Some(sym_alg))?;
-                        Message::from_bytes(&data[..])
+                        Self::process_decrypted(&data[..])
                     }
                     Self::SymEncryptedData(p) => {
                         ensure_eq!(
@@ -196,7 +215,7 @@ impl Edata {
                         );
                         let mut data = p.data().to_vec();
                         let res = sym_alg.decrypt(&key, &mut data)?;
-                        Message::from_bytes(res)
+                        Self::process_decrypted(res)
                     }
                 }
             }
@@ -213,31 +232,15 @@ impl Edata {
                     bail!("invalid packet combination");
                 }
             },
-            PlainSessionKey::V6 { key } => {
-                match self {
-                    Self::SymEncryptedProtectedData(p) => {
-                        let decrypted_packets = p.decrypt(&key, None)?;
-
-                        let mut messages = Message::from_bytes_many(&decrypted_packets[..]);
-                        // First message is the one we want to return
-                        let Some(message) = messages.next() else {
-                            bail!("no valid message found");
-                        };
-                        let message = message?;
-
-                        // The only other message allowed is a padding packet, which will be skipped
-                        // by the parser, so check that we have only a single message.
-                        if let Some(msg) = messages.next() {
-                            bail!("unexpected message: {:?}", msg);
-                        }
-
-                        Ok(message)
-                    }
-                    Self::SymEncryptedData(_) => {
-                        bail!("invalid packet combination");
-                    }
+            PlainSessionKey::V6 { key } => match self {
+                Self::SymEncryptedProtectedData(p) => {
+                    let decrypted_packets = p.decrypt(&key, None)?;
+                    Self::process_decrypted(&decrypted_packets[..])
                 }
-            }
+                Self::SymEncryptedData(_) => {
+                    bail!("invalid packet combination");
+                }
+            },
         }
     }
 }
