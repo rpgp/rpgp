@@ -234,6 +234,12 @@ impl Edata {
             },
             PlainSessionKey::V6 { key } => match self {
                 Self::SymEncryptedProtectedData(p) => {
+                    ensure_eq!(
+                        self.version(),
+                        Some(2),
+                        "Version mismatch between key and integrity packet"
+                    );
+
                     let decrypted_packets = p.decrypt(&key, None)?;
                     Self::process_decrypted(&decrypted_packets[..])
                 }
