@@ -31,7 +31,7 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 
     // TODO: figure out a better place for this
     /// This is the data used for hashing in a signature. Only uses the public portion of the key.
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()>;
+    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()>;
     fn public_params(&self) -> &PublicParams;
 
     fn is_signing_key(&self) -> bool {
@@ -61,8 +61,8 @@ impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
         (*self).encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
-        (*self).to_writer_old(writer)
+    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
+        (*self).serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

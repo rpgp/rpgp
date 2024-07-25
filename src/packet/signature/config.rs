@@ -106,7 +106,7 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        signee.to_writer_old(&mut hasher)?;
+        signee.serialize_for_hashing(&mut hasher)?;
 
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
@@ -165,10 +165,10 @@ impl SignatureConfig {
         let mut hasher = self.hash_alg.new_hasher()?;
 
         // Signing Key
-        signing_key.to_writer_old(&mut hasher)?;
+        signing_key.serialize_for_hashing(&mut hasher)?;
 
         // Key being bound
-        key.to_writer_old(&mut hasher)?;
+        key.serialize_for_hashing(&mut hasher)?;
 
         let len = self.hash_signature_data(&mut *hasher)?;
         hasher.update(&self.trailer(len)?);
@@ -194,7 +194,7 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        key.to_writer_old(&mut hasher)?;
+        key.serialize_for_hashing(&mut hasher)?;
 
         let len = self.hash_signature_data(&mut *hasher)?;
         hasher.update(&self.trailer(len)?);

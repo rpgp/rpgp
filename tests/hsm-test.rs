@@ -69,8 +69,8 @@ impl PublicKeyTrait for FakeHsm {
         self.public_key.encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {
-        self.public_key.to_writer_old(writer)
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {
+        self.public_key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

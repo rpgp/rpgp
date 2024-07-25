@@ -387,7 +387,7 @@ impl PublicKeyTrait for PubKeyInner {
             .collect::<Vec<_>>())
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
         use crate::ser::Serialize;
 
         let mut key_buf = Vec::new();
@@ -426,8 +426,8 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -472,8 +472,8 @@ impl PublicKeyTrait for PublicSubkey {
         PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
     }
 
     fn public_params(&self) -> &PublicParams {

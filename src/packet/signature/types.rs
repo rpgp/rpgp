@@ -7,6 +7,7 @@ use chrono::{DateTime, Duration, Utc};
 use iter_read::IterRead;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+use smallvec::{smallvec, SmallVec};
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
@@ -21,7 +22,6 @@ use crate::ser::Serialize;
 use crate::types::{
     self, CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicKeyTrait, Tag, Version,
 };
-use smallvec::{smallvec, SmallVec};
 
 /// Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.2
@@ -173,7 +173,7 @@ impl Signature {
         {
             let mut key_buf = Vec::new();
             // TODO: this is different for V5
-            signee.to_writer_old(&mut key_buf)?;
+            signee.serialize_for_hashing(&mut key_buf)?;
             hasher.update(&key_buf);
         }
 
@@ -267,9 +267,9 @@ impl Signature {
         {
             let mut key_buf = Vec::new();
             if !backsig {
-                signer.to_writer_old(&mut key_buf)?; // primary
+                signer.serialize_for_hashing(&mut key_buf)?; // primary
             } else {
-                signee.to_writer_old(&mut key_buf)?; // primary
+                signee.serialize_for_hashing(&mut key_buf)?; // primary
             }
 
             hasher.update(&key_buf);
@@ -278,9 +278,9 @@ impl Signature {
         {
             let mut key_buf = Vec::new();
             if !backsig {
-                signee.to_writer_old(&mut key_buf)?; // subkey
+                signee.serialize_for_hashing(&mut key_buf)?; // subkey
             } else {
-                signer.to_writer_old(&mut key_buf)?; // subkey
+                signer.serialize_for_hashing(&mut key_buf)?; // subkey
             }
 
             hasher.update(&key_buf);
@@ -313,7 +313,7 @@ impl Signature {
 
         {
             let mut key_buf = Vec::new();
-            key.to_writer_old(&mut key_buf)?;
+            key.serialize_for_hashing(&mut key_buf)?;
 
             hasher.update(&key_buf);
         }
