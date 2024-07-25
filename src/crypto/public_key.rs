@@ -21,8 +21,8 @@ pub enum PublicKeyAlgorithm {
     Elgamal = 20,
     /// Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)
     DiffieHellman = 21,
-    /// EdDSA (not yet assigned)
-    EdDSA = 22,
+    /// EdDSA legacy format [deprecated in RFC 9580, in favor of Ed25519 (27)]
+    EdDSALegacy = 22,
     /// Private experimental range (from OpenGPG)
     Private100 = 100,
     Private101 = 101,

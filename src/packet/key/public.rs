@@ -312,7 +312,7 @@ impl PublicKeyTrait for PubKeyInner {
                 ensure_eq!(sig.len(), 1, "invalid signature");
                 crypto::rsa::verify(n.as_bytes(), e.as_bytes(), hash, hashed, sig[0].as_bytes())
             }
-            PublicParams::EdDSA { ref curve, ref q } => {
+            PublicParams::EdDSALegacy { ref curve, ref q } => {
                 crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
             }
             PublicParams::ECDSA(ref params) => crypto::ecdsa::verify(params, hash, hashed, sig),
@@ -360,7 +360,7 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::RSA { ref n, ref e } => {
                 crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
             }
-            PublicParams::EdDSA { .. } => bail!("EdDSA is only used for signing"),
+            PublicParams::EdDSALegacy { .. } => bail!("EdDSA is only used for signing"),
             PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
             PublicParams::ECDH {
                 ref curve,
@@ -387,7 +387,7 @@ impl PublicKeyTrait for PubKeyInner {
             .collect::<Vec<_>>())
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
         use crate::ser::Serialize;
 
         let mut key_buf = Vec::new();
@@ -426,8 +426,8 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -472,8 +472,8 @@ impl PublicKeyTrait for PublicSubkey {
         PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
     }
 
     fn public_params(&self) -> &PublicParams {

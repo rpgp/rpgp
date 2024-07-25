@@ -2,12 +2,11 @@ use std::io;
 
 use rand::{CryptoRng, Rng};
 
+use super::{KeyId, KeyVersion, PublicParams};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::types::Mpi;
-
-use super::{KeyId, KeyVersion, PublicParams};
 
 pub trait PublicKeyTrait: std::fmt::Debug {
     fn version(&self) -> KeyVersion;
@@ -32,14 +31,14 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 
     // TODO: figure out a better place for this
     /// This is the data used for hashing in a signature. Only uses the public portion of the key.
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()>;
+    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()>;
     fn public_params(&self) -> &PublicParams;
 
     fn is_signing_key(&self) -> bool {
         use crate::crypto::public_key::PublicKeyAlgorithm::*;
         matches!(
             self.algorithm(),
-            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSA
+            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSALegacy
         )
     }
 
@@ -62,8 +61,8 @@ impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
         (*self).encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
-        (*self).to_writer_old(writer)
+    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
+        (*self).serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

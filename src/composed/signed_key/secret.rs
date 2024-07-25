@@ -227,8 +227,8 @@ impl PublicKeyTrait for SignedSecretKey {
         self.primary_key.encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.primary_key.to_writer_old(writer)
+    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.primary_key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -349,8 +349,8 @@ impl PublicKeyTrait for SignedSecretSubKey {
         self.key.encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.to_writer_old(writer)
+    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
+        self.key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

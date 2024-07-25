@@ -107,14 +107,15 @@ impl PacketTrait for UserId {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use rand::thread_rng;
+
     use super::*;
     use crate::types::{KeyVersion, S2kParams};
     use crate::{packet, KeyType};
-    use rand::thread_rng;
 
     #[test]
     fn test_user_id_certification() {
-        let key_type = KeyType::EdDSA;
+        let key_type = KeyType::EdDSALegacy;
 
         let (public_params, secret_params) = key_type
             .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)

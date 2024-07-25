@@ -371,8 +371,8 @@ impl PublicKeyTrait for SecretKey {
         PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -417,8 +417,8 @@ impl PublicKeyTrait for SecretSubkey {
         PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::to_writer_old(&self.0, writer)
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -463,7 +463,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
         self.details.encrypt(rng, plain)
     }
 
-    fn to_writer_old(&self, writer: &mut impl std::io::Write) -> Result<()> {
+    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
         let mut key_buf = Vec::new();
         self.details.to_writer(&mut key_buf)?;
 
@@ -607,7 +607,7 @@ mod tests {
     #[test]
     fn secret_key_protection() {
         const DATA: &[u8] = &[0x23, 0x05];
-        let key_type = crate::KeyType::EdDSA;
+        let key_type = crate::KeyType::EdDSALegacy;
 
         let (public_params, secret_params) = key_type
             .generate_with_rng(
