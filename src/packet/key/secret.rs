@@ -607,7 +607,7 @@ mod tests {
     #[test]
     fn secret_key_protection() {
         const DATA: &[u8] = &[0x23, 0x05];
-        let key_type = crate::KeyType::EdDSA;
+        let key_type = crate::KeyType::EdDSALegacy;
 
         let (public_params, secret_params) = key_type
             .generate_with_rng(

@@ -25,7 +25,7 @@ impl Signer for SecretKey {
         digest: &[u8],
         pub_params: &PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        let PublicParams::EdDSA { curve, q } = pub_params else {
+        let PublicParams::EdDSALegacy { curve, q } = pub_params else {
             bail!("invalid public params");
         };
         if curve != &ECCCurve::Ed25519 {
@@ -64,11 +64,11 @@ pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecre
     bytes.zeroize();
 
     (
-        PublicParams::EdDSA {
+        PublicParams::EdDSALegacy {
             curve: ECCCurve::Ed25519,
             q: q.into(),
         },
-        PlainSecretParams::EdDSA(p),
+        PlainSecretParams::EdDSALegacy(p),
     )
 }
 

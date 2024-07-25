@@ -2,12 +2,11 @@ use std::io;
 
 use rand::{CryptoRng, Rng};
 
+use super::{KeyId, KeyVersion, PublicParams};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::types::Mpi;
-
-use super::{KeyId, KeyVersion, PublicParams};
 
 pub trait PublicKeyTrait: std::fmt::Debug {
     fn version(&self) -> KeyVersion;
@@ -39,7 +38,7 @@ pub trait PublicKeyTrait: std::fmt::Debug {
         use crate::crypto::public_key::PublicKeyAlgorithm::*;
         matches!(
             self.algorithm(),
-            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSA
+            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSALegacy
         )
     }
 

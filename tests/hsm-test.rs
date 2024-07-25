@@ -1,7 +1,7 @@
-use chrono::{DateTime, Utc};
 use std::fmt::Debug;
 use std::fs::File;
 
+use chrono::{DateTime, Utc};
 use pgp::crypto::checksum;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::hash::HashAlgorithm;
@@ -143,7 +143,7 @@ impl SecretKeyTrait for FakeHsm {
                     Mpi::from_raw_slice(&sig[mid..]),
                 ]
             }
-            PublicKeyAlgorithm::EdDSA => {
+            PublicKeyAlgorithm::EdDSALegacy => {
                 assert_eq!(sig.len(), 64); // FIXME: check curve; add error handling
 
                 vec![

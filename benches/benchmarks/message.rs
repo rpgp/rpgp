@@ -2,7 +2,6 @@ use std::fs::{self, File};
 use std::io::Read;
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
-
 use pgp::composed::{Deserializable, Message, SignedSecretKey};
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
@@ -116,7 +115,7 @@ fn bench_message(c: &mut Criterion) {
 
     for (kt1, kt2, sym, asym_name, sym_name) in [
         (
-            KeyType::EdDSA,
+            KeyType::EdDSALegacy,
             KeyType::ECDH(ECCCurve::Curve25519),
             SymmetricKeyAlgorithm::AES128,
             "x25519",

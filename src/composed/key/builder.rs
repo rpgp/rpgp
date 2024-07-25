@@ -104,7 +104,7 @@ impl SecretKeyParamsBuilder {
                     return Err("Keys with less than 2048bits are considered insecure".into());
                 }
             }
-            Some(KeyType::EdDSA) => {
+            Some(KeyType::EdDSALegacy) => {
                 if let Some(can_encrypt) = self.can_encrypt {
                     if can_encrypt {
                         return Err("EdDSA can only be used for signing keys".into());
@@ -248,8 +248,8 @@ pub enum KeyType {
     Rsa(u32),
     /// Encrypting with ECDH
     ECDH(ECCCurve),
-    /// Signing with Curve25519
-    EdDSA,
+    /// Signing with Curve25519, legacy format (deprecated in RFC 9580)
+    EdDSALegacy,
     /// Signing with ECDSA
     ECDSA(ECCCurve),
     /// Signing with DSA for the given bitsize.
@@ -283,7 +283,7 @@ impl KeyType {
         match self {
             KeyType::Rsa(_) => PublicKeyAlgorithm::RSA,
             KeyType::ECDH(_) => PublicKeyAlgorithm::ECDH,
-            KeyType::EdDSA => PublicKeyAlgorithm::EdDSA,
+            KeyType::EdDSALegacy => PublicKeyAlgorithm::EdDSALegacy,
             KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
         }
@@ -307,7 +307,7 @@ impl KeyType {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => rsa::generate_key(rng, *bit_size as usize)?,
             KeyType::ECDH(curve) => ecdh::generate_key(rng, curve)?,
-            KeyType::EdDSA => eddsa::generate_key(rng),
+            KeyType::EdDSALegacy => eddsa::generate_key(rng),
             KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
             KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
         };
@@ -330,14 +330,13 @@ impl KeyType {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
-
-    use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-    use crate::types::SecretKeyTrait;
-
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
     use smallvec::smallvec;
+
+    use super::*;
+    use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
+    use crate::types::SecretKeyTrait;
 
     #[test]
     #[ignore] // slow in debug mode
@@ -478,7 +477,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
-            .key_type(KeyType::EdDSA)
+            .key_type(KeyType::EdDSALegacy)
             .can_certify(true)
             .can_sign(true)
             .primary_user_id("Me-X <me-x25519@mail.com>".into())
