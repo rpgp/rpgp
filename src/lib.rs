@@ -54,5 +54,7 @@ pub use self::composed::key::*;
 pub use self::composed::*;
 pub use self::packet::Signature;
 
+pub use bstr;
+
 /// The version of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
