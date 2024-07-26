@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::io::{BufRead, Read};
 
 use buffer_redux::BufReader;
-
 use chrono::SubsecRound;
 use log::debug;
 use nom::branch::alt;
@@ -12,15 +11,14 @@ use nom::bytes::streaming::take_until1;
 use nom::character::streaming::line_ending;
 use nom::combinator::{complete, map_res};
 use nom::IResult;
-use smallvec::SmallVec;
 
 use crate::armor::{self, header_parser, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
-use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
+use crate::packet::{SignatureConfig, SignatureType, SignatureVersion, Subpacket, SubpacketData};
+use crate::types::{PublicKeyTrait, SecretKeyTrait};
 use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
 
 /// Implementation of a Cleartext Signed Message.
@@ -65,8 +63,9 @@ impl CleartextSignedMessage {
     }
 
     /// Sign the given text.
-    pub fn sign<F>(text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
+    pub fn sign<R, F>(rng: &mut R, text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
     where
+        R: rand::Rng + rand::CryptoRng,
         F: FnOnce() -> String,
     {
         let key_id = key.key_id();
@@ -74,8 +73,8 @@ impl CleartextSignedMessage {
         let hash_algorithm = key.hash_alg();
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(
-                KeyVersion::V4,
-                SmallVec::from_slice(&key.fingerprint()),
+                key.version(),
+                key.fingerprint(),
             )),
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
@@ -83,13 +82,17 @@ impl CleartextSignedMessage {
         ];
         let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))];
 
+        let sig_ver: SignatureVersion = key.version().try_into()?;
+        let salt = crate::types::salt_for(rng, sig_ver, hash_algorithm);
+
         let config = SignatureConfig::new_v4(
-            Default::default(),
+            sig_ver,
             SignatureType::Text,
             algorithm,
             hash_algorithm,
             hashed_subpackets,
             unhashed_subpackets,
+            salt,
         );
 
         Self::new(text, config, key, key_pw)
@@ -360,9 +363,10 @@ fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::{Any, SignedSecretKey};
+    use rand::thread_rng;
 
     use super::*;
+    use crate::{Any, SignedSecretKey};
 
     #[test]
     fn test_cleartext_openpgp_1() {
@@ -554,8 +558,13 @@ mod tests {
     fn test_sign() {
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign("hello\n-world-what-\nis up\n", &key, String::new)
-            .unwrap();
+        let msg = CleartextSignedMessage::sign(
+            &mut thread_rng(),
+            "hello\n-world-what-\nis up\n",
+            &key,
+            String::new,
+        )
+        .unwrap();
         msg.verify(&key.public_key()).unwrap();
     }
 
@@ -565,7 +574,7 @@ mod tests {
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(MSG, &key, String::new).unwrap();
+        let msg = CleartextSignedMessage::sign(&mut thread_rng(), MSG, &key, String::new).unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 

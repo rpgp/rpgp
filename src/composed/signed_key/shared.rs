@@ -129,6 +129,7 @@ impl SignedKeyDetails {
         let preferred_hash_algorithms = SmallVec::from_slice(primary_sig.preferred_hash_algs());
         let preferred_compression_algorithms =
             SmallVec::from_slice(primary_sig.preferred_compression_algs());
+        let preferred_aead_algorithms = SmallVec::from_slice(primary_sig.preferred_aead_algs());
         let revocation_key = primary_sig.revocation_key().cloned();
 
         KeyDetails::new(
@@ -146,6 +147,7 @@ impl SignedKeyDetails {
             preferred_symmetric_algorithms,
             preferred_hash_algorithms,
             preferred_compression_algorithms,
+            preferred_aead_algorithms,
             revocation_key,
         )
     }

@@ -38,6 +38,22 @@ impl Default for HashAlgorithm {
     }
 }
 
+impl HashAlgorithm {
+    /// V6 signature salt size
+    /// https://www.rfc-editor.org/rfc/rfc9580.html#hash-algos
+    pub fn salt_len(&self) -> usize {
+        match self {
+            Self::SHA2_224 => 16,
+            Self::SHA2_256 => 16,
+            Self::SHA2_384 => 24,
+            Self::SHA2_512 => 32,
+            Self::SHA3_256 => 16,
+            Self::SHA3_512 => 32,
+            _ => 0,
+        }
+    }
+}
+
 impl FromStr for HashAlgorithm {
     type Err = Error;
 

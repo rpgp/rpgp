@@ -1,10 +1,10 @@
 use std::io;
+use std::io::Write;
 
 use byteorder::{BigEndian, ByteOrder};
 use digest::Digest;
 
 use crate::crypto::checksum;
-use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::ser::Serialize;
 use crate::types::*;
@@ -55,12 +55,50 @@ impl EncryptedSecretParams {
     pub fn unlock<F>(
         &self,
         pw: F,
-        alg: PublicKeyAlgorithm,
-        params: &PublicParams,
+        pub_key: &(impl PublicKeyTrait + Serialize),
+        secret_type_id: Option<Tag>,
     ) -> Result<PlainSecretParams>
     where
         F: FnOnce() -> String,
     {
+        // Argon2 is only used with AEAD (S2K usage octet 253).
+        //
+        // An implementation MUST NOT create and MUST reject as malformed any secret key packet
+        // where the S2K usage octet is not AEAD (253) and the S2K specifier type is Argon2.
+        match &self.s2k_params {
+            S2kParams::Cfb { s2k, .. } | S2kParams::MaleableCfb { s2k, .. } => {
+                if matches!(s2k, StringToKey::Argon2 { .. }) {
+                    bail!(
+                        "S2K method Argon2 is only allowed in combination with usage mode 'AEAD'"
+                    );
+                }
+            }
+            _ => {}
+        }
+
+        // For Version 6 keys: Additionally refuse legacy s2k mechanisms.
+        // Those should never be generated or used.
+        if pub_key.version() == KeyVersion::V6 {
+            match &self.s2k_params {
+                S2kParams::Aead { s2k, .. } | S2kParams::Cfb { s2k, .. } => {
+                    match s2k {
+                        StringToKey::Argon2 { .. }
+                        | StringToKey::IteratedAndSalted { .. }
+                        | StringToKey::Salted { .. } => {
+                            // we'll allow these
+                        }
+                        _ => bail!("Version 6 keys may not use the weak S2k type {:?}", s2k),
+                    }
+                }
+                _ => bail!("Version 6 keys may only be encrypted with S2k usage AEAD or CFB"),
+            }
+        }
+
+        // We're willing to unlock.
+
+        let alg = pub_key.algorithm();
+        let params = pub_key.public_params();
+
         match &self.s2k_params {
             S2kParams::Unprotected => unreachable!(),
             S2kParams::LegacyCfb { sym_alg, iv } => {
@@ -83,10 +121,42 @@ impl EncryptedSecretParams {
 
                 PlainSecretParams::from_slice(plaintext, alg, params)
             }
-            S2kParams::Aead { .. } => {
-                // let _key = s2k.derive_key(&pw(), sym_alg.key_size())?;
-                // let mut _plaintext = self.data.clone();
-                unimplemented_err!("s2k AEAD")
+            S2kParams::Aead {
+                sym_alg,
+                aead_mode,
+                s2k,
+                nonce,
+            } => {
+                match s2k {
+                    StringToKey::Argon2 { .. } | StringToKey::IteratedAndSalted { .. } => {
+                        // derive key
+                        let derived = s2k.derive_key(&pw(), 32)?;
+
+                        let Some(secret_type_id) = secret_type_id else {
+                            bail!("no secret_type_id provided");
+                        };
+
+                        let (okm, ad) = s2k_usage_aead(
+                            &derived,
+                            secret_type_id,
+                            pub_key,
+                            *sym_alg,
+                            *aead_mode,
+                        )?;
+
+                        // AEAD decrypt
+                        let (ciphertext, tag) =
+                            self.data.split_at(self.data.len() - aead_mode.tag_size());
+
+                        let mut decrypt: Vec<_> = ciphertext.to_vec();
+                        aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, tag, &mut decrypt)?;
+
+                        // "decrypt" now contains the decrypted key material
+                        PlainSecretParams::from_slice(&decrypt, alg, pub_key.public_params())
+                    }
+
+                    _ => bail!("S2K usage AEAD is not allowed with S2K type {:?}", s2k.id()),
+                }
             }
             S2kParams::Cfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
@@ -131,18 +201,20 @@ impl EncryptedSecretParams {
             }
         }
     }
-}
 
-impl Serialize for EncryptedSecretParams {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[(&self.s2k_params).into()])?;
+    pub(crate) fn to_writer<W: io::Write>(&self, w: &mut W, version: KeyVersion) -> Result<()> {
+        w.write_all(&[(&self.s2k_params).into()])?;
+
+        let mut s2k_params = vec![];
+
+        let mut s2k_writer = &mut s2k_params;
 
         match &self.s2k_params {
             S2kParams::Unprotected => {
                 panic!("encrypted secret params should not have an unencrypted identifier")
             }
             S2kParams::LegacyCfb { ref iv, .. } => {
-                writer.write_all(iv)?;
+                s2k_writer.write_all(iv)?;
             }
             S2kParams::Aead {
                 sym_alg,
@@ -150,10 +222,15 @@ impl Serialize for EncryptedSecretParams {
                 s2k,
                 ref nonce,
             } => {
-                writer.write_all(&[u8::from(*sym_alg)])?;
-                writer.write_all(&[u8::from(*aead_mode)])?;
-                s2k.to_writer(writer)?;
-                writer.write_all(nonce)?;
+                s2k_writer.write_all(&[u8::from(*sym_alg)])?;
+                s2k_writer.write_all(&[u8::from(*aead_mode)])?;
+
+                if version == KeyVersion::V6 {
+                    s2k_writer.write_all(&[s2k.len()?])?; // length of S2K Specifier Type
+                }
+                s2k.to_writer(&mut s2k_writer)?;
+
+                s2k_writer.write_all(nonce)?;
             }
             S2kParams::Cfb {
                 sym_alg,
@@ -165,13 +242,26 @@ impl Serialize for EncryptedSecretParams {
                 s2k,
                 ref iv,
             } => {
-                writer.write_all(&[u8::from(*sym_alg)])?;
-                s2k.to_writer(writer)?;
-                writer.write_all(iv)?;
+                s2k_writer.write_all(&[u8::from(*sym_alg)])?;
+
+                if version == KeyVersion::V6 && matches!(self.s2k_params, S2kParams::Cfb { .. }) {
+                    s2k_writer.write_all(&[s2k.len()?])?; // length of S2K Specifier Type
+                }
+
+                s2k.to_writer(&mut s2k_writer)?;
+
+                s2k_writer.write_all(iv)?;
             }
         }
 
-        writer.write_all(&self.data)?;
+        if self.s2k_params != S2kParams::Unprotected {
+            if version == KeyVersion::V6 {
+                w.write_all(&[s2k_params.len().try_into().expect("FIXME")])?;
+            }
+            w.write_all(&s2k_params)?;
+        }
+
+        w.write_all(&self.data)?;
 
         Ok(())
     }

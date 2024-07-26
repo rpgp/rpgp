@@ -6,7 +6,6 @@ use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use log::{debug, warn};
 use rand::{CryptoRng, Rng};
-use smallvec::SmallVec;
 
 use crate::armor;
 use crate::composed::message::decrypt::*;
@@ -417,7 +416,7 @@ impl Message {
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(
                 KeyVersion::V4,
-                SmallVec::from_slice(&key.fingerprint()),
+                key.fingerprint(),
             )),
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
@@ -440,6 +439,7 @@ impl Message {
                     hash_algorithm,
                     hashed_subpackets,
                     unhashed_subpackets,
+                    None,
                 );
                 (typ, signature_config.sign(key, key_pw, l.data())?)
             }
@@ -452,6 +452,7 @@ impl Message {
                     hash_algorithm,
                     hashed_subpackets,
                     unhashed_subpackets,
+                    None,
                 );
 
                 let data = self.to_bytes()?;
@@ -460,7 +461,7 @@ impl Message {
                 (typ, signature)
             }
         };
-        let ops = OnePassSignature::from_details(typ, hash_algorithm, algorithm, key_id);
+        let ops = OnePassSignature::from_details_v3(typ, hash_algorithm, algorithm, key_id);
 
         Ok(Message::Signed {
             message: Some(Box::new(self)),
@@ -795,9 +796,11 @@ impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
-    use rand::thread_rng;
     use std::fs;
+
+    use rand::thread_rng;
+
+    use super::*;
 
     #[test]
     fn test_compression_zlib() {

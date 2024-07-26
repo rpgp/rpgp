@@ -15,7 +15,6 @@ use crate::types::{KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
 #[derive(Clone, PartialEq, Eq, Debug, Builder)]
 #[builder(build_fn(error = "Error"))]
 pub struct SignatureConfig {
-    #[builder(default)]
     pub version: SignatureVersion,
     pub typ: SignatureType,
     pub pub_alg: PublicKeyAlgorithm,
@@ -29,6 +28,9 @@ pub struct SignatureConfig {
     pub created: Option<DateTime<Utc>>,
     #[builder(default)]
     pub issuer: Option<KeyId>,
+
+    // only for V6 signatures
+    pub salt: Option<Vec<u8>>,
 }
 
 impl SignatureConfig {
@@ -39,6 +41,7 @@ impl SignatureConfig {
         hash_alg: HashAlgorithm,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
+        salt: Option<Vec<u8>>,
     ) -> Self {
         SignatureConfig {
             version,
@@ -49,6 +52,7 @@ impl SignatureConfig {
             unhashed_subpackets,
             issuer: None,
             created: None,
+            salt,
         }
     }
 
@@ -59,6 +63,11 @@ impl SignatureConfig {
         R: Read,
     {
         let mut hasher = self.hash_alg.new_hasher()?;
+
+        if self.version == SignatureVersion::V6 {
+            // FIXME: don't use expect
+            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        }
 
         self.hash_data_to_sign(&mut *hasher, data)?;
         let len = self.hash_signature_data(&mut *hasher)?;
@@ -106,6 +115,11 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
+        if self.version == SignatureVersion::V6 {
+            // FIXME: don't use expect
+            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        }
+
         signee.serialize_for_hashing(&mut hasher)?;
 
         let mut packet_buf = Vec::new();
@@ -115,11 +129,11 @@ impl SignatureConfig {
             SignatureVersion::V2 | SignatureVersion::V3 => {
                 // Nothing to do
             }
-            SignatureVersion::V4 | SignatureVersion::V5 => {
+            SignatureVersion::V4 | SignatureVersion::V6 => {
                 let prefix = match tag {
                     Tag::UserId => 0xB4,
                     Tag::UserAttribute => 0xD1,
-                    _ => bail!("invalid tag for certification validation: {:?}", tag),
+                    _ => bail!("invalid tag for certification signature: {:?}", tag),
                 };
 
                 let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
@@ -127,6 +141,9 @@ impl SignatureConfig {
 
                 // prefixes
                 hasher.update(&prefix_buf);
+            }
+            SignatureVersion::V5 => {
+                bail!("v5 signature unsupported sign tps")
             }
             SignatureVersion::Other(version) => {
                 bail!("unsupported signature version {}", version)
@@ -164,6 +181,11 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
+        if self.version == SignatureVersion::V6 {
+            // FIXME: don't use expect
+            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        }
+
         // Signing Key
         signing_key.serialize_for_hashing(&mut hasher)?;
 
@@ -193,6 +215,11 @@ impl SignatureConfig {
         debug!("signing key (revocation): {:#?} - {:#?}", self, key);
 
         let mut hasher = self.hash_alg.new_hasher()?;
+
+        if self.version == SignatureVersion::V6 {
+            // FIXME: don't use expect
+            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        }
 
         key.serialize_for_hashing(&mut hasher)?;
 
@@ -229,8 +256,7 @@ impl SignatureConfig {
                 // no trailer
                 Ok(0)
             }
-            SignatureVersion::V4 | SignatureVersion::V5 => {
-                // TODO: validate this is the right thing to do for v5
+            SignatureVersion::V4 | SignatureVersion::V6 => {
                 // TODO: reduce duplication with serialization code
 
                 let mut res = vec![
@@ -242,9 +268,6 @@ impl SignatureConfig {
                     self.pub_alg.into(),
                     // the hash algorithm
                     self.hash_alg.into(),
-                    // will be filled with the length
-                    0u8,
-                    0u8,
                 ];
 
                 // hashed subpackets
@@ -254,15 +277,21 @@ impl SignatureConfig {
                     packet.to_writer(&mut hashed_subpackets)?;
                 }
 
-                BigEndian::write_u16(&mut res[4..6], hashed_subpackets.len().try_into()?);
+                // append hashed area length, as u16 for v4, and u32 for v6
+                if self.version == SignatureVersion::V4 {
+                    res.extend(u16::try_from(hashed_subpackets.len())?.to_be_bytes());
+                } else if self.version == SignatureVersion::V6 {
+                    res.extend(u32::try_from(hashed_subpackets.len())?.to_be_bytes());
+                }
+
                 res.extend(hashed_subpackets);
 
                 hasher.update(&res);
 
-                // TODO: V5 signatures hash additional values here
-                // see https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-rfc4880bis-10#name-computing-signatures
-
                 Ok(res.len())
+            }
+            SignatureVersion::V5 => {
+                bail!("v5 signature unsupported hash data")
             }
             SignatureVersion::Other(version) => {
                 bail!("unsupported signature version {}", version)
@@ -311,10 +340,13 @@ impl SignatureConfig {
                 // Nothing to do
                 Ok(Vec::new())
             }
-            SignatureVersion::V4 | SignatureVersion::V5 => {
-                let mut trailer = vec![0x04, 0xFF, 0, 0, 0, 0];
+            SignatureVersion::V4 | SignatureVersion::V6 => {
+                let mut trailer = vec![self.version.into(), 0xFF, 0, 0, 0, 0];
                 BigEndian::write_u32(&mut trailer[2..], len as u32);
                 Ok(trailer)
+            }
+            SignatureVersion::V5 => {
+                bail!("v5 signature unsupported")
             }
             SignatureVersion::Other(version) => {
                 bail!("unsupported signature version {}", version)

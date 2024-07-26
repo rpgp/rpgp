@@ -8,6 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
+use pgp::types::Sig;
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey};
@@ -56,7 +57,7 @@ impl PublicKeyTrait for FakeHsm {
         &self,
         hash: HashAlgorithm,
         data: &[u8],
-        sig: &[Mpi],
+        sig: &Sig,
     ) -> pgp::errors::Result<()> {
         self.public_key.verify_signature(hash, data, sig)
     }
@@ -122,7 +123,7 @@ impl SecretKeyTrait for FakeHsm {
         _key_pw: F,
         _hash: HashAlgorithm,
         data: &[u8],
-    ) -> pgp::errors::Result<Vec<Mpi>>
+    ) -> pgp::errors::Result<Sig>
     where
         F: FnOnce() -> String,
     {
@@ -155,7 +156,7 @@ impl SecretKeyTrait for FakeHsm {
             _ => unimplemented!(),
         };
 
-        Ok(mpis)
+        Ok(mpis.into())
     }
 
     fn public_key(&self) -> Self::PublicKey {
@@ -481,6 +482,7 @@ fn card_sign() {
                 packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())),
             ],
             vec![],
+            None, // no salt
         );
 
         let signature = signature.sign(&hsm, String::new, DATA).unwrap();

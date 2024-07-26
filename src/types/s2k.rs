@@ -321,6 +321,19 @@ impl StringToKey {
 
         Ok(key)
     }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub(crate) fn len(&self) -> Result<u8> {
+        let len = match self {
+            Self::Simple { .. } => 2,
+            Self::Salted { .. } => 10,
+            Self::IteratedAndSalted { .. } => 11,
+            Self::Argon2 { .. } => 20,
+            _ => bail!("not implemented for StringToKey: {:?}", self),
+        };
+
+        Ok(len)
+    }
 }
 
 pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {

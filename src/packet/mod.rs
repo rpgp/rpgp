@@ -10,6 +10,7 @@
 //!
 //! ```rust
 //! # const DATA :&'static [u8] = b"Hello World";
+//! # use rand::thread_rng;
 //! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, key::SecretKeyParamsBuilder};
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, UserId};
@@ -35,7 +36,7 @@
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
 //! # let secret_key = secret_key_params.generate().expect("Failed to generate a plain key.");
 //! # let passwd_fn = || String::new();
-//! # let signed_secret_key = secret_key.sign(passwd_fn).expect("Must be able to sign its own metadata");
+//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
 //! use pgp::packet::{SignatureConfigBuilder, Signature};
 //!
@@ -55,6 +56,7 @@
 //!      .hash_alg(HashAlgorithm::SHA2_256)
 //!      .issuer(Some(signing_key.key_id()))
 //!      .created(Some(now))
+//!      .salt(None)
 //!      .unhashed_subpackets(vec![]) // must be initialized
 //!      .hashed_subpackets(vec![
 //!           packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
@@ -73,7 +75,6 @@
 //! signature_packet
 //!      .verify(&verification_key, DATA)
 //!      .expect("Failed to validate signature");
-//!
 //! ```
 
 mod many;
@@ -102,20 +103,18 @@ mod secret_key_parser;
 pub use self::compressed_data::*;
 pub use self::key::*;
 pub use self::literal_data::*;
+pub use self::many::*;
 pub use self::marker::*;
 pub use self::mod_detection_code::*;
 pub use self::one_pass_signature::*;
+pub use self::packet_sum::*;
 pub use self::padding::*;
 pub use self::public_key_encrypted_session_key::*;
 pub use self::signature::*;
 pub use self::sym_encrypted_data::*;
+pub use self::sym_encrypted_protected_data::Data;
 pub use self::sym_encrypted_protected_data::*;
 pub use self::sym_key_encrypted_session_key::*;
 pub use self::trust::*;
 pub use self::user_attribute::*;
 pub use self::user_id::*;
-
-pub use self::many::*;
-pub use self::packet_sum::*;
-
-pub use self::sym_encrypted_protected_data::Data;

@@ -53,6 +53,30 @@ fn eddsa_legacy(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
+/// xx
+fn ed25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    // 32 bytes of public key
+    let (i, p) = nom::bytes::complete::take(32u8)(i)?;
+    Ok((
+        i,
+        PublicParams::Ed25519 {
+            public: p.try_into().expect("foo"),
+        },
+    ))
+}
+
+/// xx
+fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    // 32 bytes of public key
+    let (i, p) = nom::bytes::complete::take(32u8)(i)?;
+    Ok((
+        i,
+        PublicParams::X25519 {
+            public: p.try_into().expect("foo"),
+        },
+    ))
+}
+
 /// Ref: https://tools.ietf.org/html/rfc6637#section-9
 fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
     map(
@@ -129,6 +153,11 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
         PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => elgamal(i),
         PublicKeyAlgorithm::EdDSALegacy => eddsa_legacy(i),
 
+        PublicKeyAlgorithm::Ed25519 => ed25519(i),
+        PublicKeyAlgorithm::X25519 => x25519(i),
+        PublicKeyAlgorithm::Ed448 => unknown(i), // FIXME?
+        PublicKeyAlgorithm::X448 => unknown(i),  // FIXME?
+
         PublicKeyAlgorithm::DiffieHellman
         | PublicKeyAlgorithm::Private100
         | PublicKeyAlgorithm::Private101
@@ -145,7 +174,7 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
     }
 }
 
-fn new_public_key_parser(
+fn public_key_parser_v4_v6(
     key_ver: &KeyVersion,
 ) -> impl Fn(
     &[u8],
@@ -162,12 +191,22 @@ fn new_public_key_parser(
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
+
+        let i = if *key_ver == KeyVersion::V6 {
+            // "scalar octet count for the following public key material" -> skip
+            let (i, _len) = be_u32(i)?;
+
+            i
+        } else {
+            i
+        };
+
         let (i, params) = parse_pub_fields(alg)(i)?;
         Ok((i, (*key_ver, alg, created_at, None, params)))
     }
 }
 
-fn old_public_key_parser(
+fn public_key_parser_v2_v3(
     key_ver: &KeyVersion,
 ) -> impl Fn(
     &[u8],
@@ -208,8 +247,8 @@ pub(crate) fn parse(
 > {
     let (i, key_ver) = map(be_u8, KeyVersion::from)(i)?;
     let (i, key) = match &key_ver {
-        &KeyVersion::V2 | &KeyVersion::V3 => old_public_key_parser(&key_ver)(i)?,
-        &KeyVersion::V4 => new_public_key_parser(&key_ver)(i)?,
+        &KeyVersion::V2 | &KeyVersion::V3 => public_key_parser_v2_v3(&key_ver)(i)?,
+        &KeyVersion::V4 | &KeyVersion::V6 => public_key_parser_v4_v6(&key_ver)(i)?,
         KeyVersion::V5 | KeyVersion::Other(_) => {
             return Err(nom::Err::Error(crate::errors::Error::Unsupported(format!(
                 "Unsupported key version {}",

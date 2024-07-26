@@ -23,7 +23,9 @@ pub struct OnePassSignature {
     pub typ: SignatureType,
     pub hash_algorithm: HashAlgorithm,
     pub pub_algorithm: PublicKeyAlgorithm,
-    pub key_id: KeyId,
+    pub salt: Option<Vec<u8>>,
+    pub key_id: Option<KeyId>,
+    pub fingerprint: Option<[u8; 32]>,
     pub last: u8,
 }
 
@@ -32,14 +34,14 @@ impl OnePassSignature {
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
 
-        if pk.version != 2 && pk.version != 3 && pk.version != 4 && pk.version != 5 {
+        if pk.version != 2 && pk.version != 3 && pk.version != 4 && pk.version != 6 {
             unsupported_err!("unsupported signature version {}", pk.version);
         }
 
         Ok(pk)
     }
 
-    pub fn from_details(
+    pub fn from_details_v3(
         typ: SignatureType,
         hash_algorithm: HashAlgorithm,
         pub_algorithm: PublicKeyAlgorithm,
@@ -51,7 +53,29 @@ impl OnePassSignature {
             typ,
             hash_algorithm,
             pub_algorithm,
-            key_id,
+            salt: None,
+            key_id: Some(key_id),
+            fingerprint: None,
+            last: 1,
+        }
+    }
+
+    pub fn from_details_v6(
+        typ: SignatureType,
+        hash_algorithm: HashAlgorithm,
+        pub_algorithm: PublicKeyAlgorithm,
+        salt: Vec<u8>,
+        fingerprint: [u8; 32],
+    ) -> Self {
+        OnePassSignature {
+            packet_version: Default::default(),
+            version: 0x06,
+            typ,
+            hash_algorithm,
+            pub_algorithm,
+            salt: Some(salt),
+            key_id: None,
+            fingerprint: Some(fingerprint),
             last: 1,
         }
     }
@@ -78,7 +102,9 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
                 typ,
                 hash_algorithm: hash,
                 pub_algorithm: pub_alg,
-                key_id,
+                salt: None,           // FIXME
+                key_id: Some(key_id), // FIXME
+                fingerprint: None,    // FIXME
                 last,
             },
         )(i)
@@ -93,7 +119,21 @@ impl Serialize for OnePassSignature {
             self.hash_algorithm.into(),
             self.pub_algorithm.into(),
         ])?;
-        writer.write_all(self.key_id.as_ref())?;
+
+        // salt, if v6
+        if self.version == 6 {
+            let salt: &[u8] = self.salt.as_ref().expect("v6");
+
+            let len: u8 = salt.len().try_into()?;
+            writer.write_all(&[len])?;
+            writer.write_all(salt)?;
+        }
+
+        if self.version == 3 {
+            writer.write_all(self.key_id.as_ref().expect("v3").as_ref())?;
+        } else if self.version == 6 {
+            writer.write_all(self.fingerprint.as_ref().expect("v6").as_ref())?;
+        }
         writer.write_all(&[self.last])?;
 
         Ok(())

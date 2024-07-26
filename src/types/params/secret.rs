@@ -9,7 +9,6 @@ use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
-use crate::ser::Serialize;
 use crate::types::*;
 
 /// A list of params that are used to represent the values of possibly encrypted key,
@@ -37,8 +36,13 @@ impl SecretParams {
         }
     }
 
-    pub fn from_slice(data: &[u8], alg: PublicKeyAlgorithm, params: &PublicParams) -> Result<Self> {
-        let (_, params) = parse_secret_fields(alg, params)(data)?;
+    pub fn from_slice(
+        data: &[u8],
+        key_ver: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        params: &PublicParams,
+    ) -> Result<Self> {
+        let (_, params) = parse_secret_fields(key_ver, alg, params)(data)?;
         Ok(params)
     }
 
@@ -55,24 +59,33 @@ impl SecretParams {
             SecretParams::Encrypted(k) => k.checksum(),
         }
     }
-}
 
-impl Serialize for SecretParams {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+    pub fn to_writer<W: io::Write>(&self, writer: &mut W, version: KeyVersion) -> Result<()> {
         match self {
-            SecretParams::Plain(k) => k.to_writer(writer),
-            SecretParams::Encrypted(k) => k.to_writer(writer),
+            SecretParams::Plain(k) => k.to_writer(writer, version),
+            SecretParams::Encrypted(k) => k.to_writer(writer, version),
         }
     }
 }
 
 /// Parse possibly encrypted private fields of a key.
 fn parse_secret_fields(
+    key_ver: KeyVersion,
     alg: PublicKeyAlgorithm,
     public_params: &PublicParams,
 ) -> impl Fn(&[u8]) -> IResult<&[u8], SecretParams> + '_ {
     move |i: &[u8]| {
         let (i, s2k_usage) = map_res(be_u8, S2kUsage::try_from)(i)?;
+
+        let i = if key_ver == KeyVersion::V6 && s2k_usage != S2kUsage::Unprotected {
+            // consume s2k len
+            let (i, _s2k_len) = take(1u8)(i)?; // FIXME take u8
+
+            i
+        } else {
+            i
+        };
+
         let (i, enc_params) = match s2k_usage {
             // 0 is no encryption
             S2kUsage::Unprotected => (i, S2kParams::Unprotected),
@@ -90,6 +103,14 @@ fn parse_secret_fields(
             S2kUsage::Aead => {
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
                 let (i, aead_mode) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
+
+                let i = if key_ver == KeyVersion::V6 {
+                    let (i, _len) = take(1u8)(i)?; // FIXME take as u8
+                    i
+                } else {
+                    i
+                };
+
                 let (i, s2k) = s2k_parser(i)?;
                 let (i, nonce) = take(aead_mode.nonce_size())(i)?;
                 (
@@ -105,6 +126,14 @@ fn parse_secret_fields(
             // symmetric key + string-to-key
             S2kUsage::Cfb => {
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+
+                let i = if key_ver == KeyVersion::V6 {
+                    let (i, _len) = take(1u8)(i)?; // FIXME take as u8
+                    i
+                } else {
+                    i
+                };
+
                 let (i, s2k) = s2k_parser(i)?;
                 let (i, iv) = take(sym_alg.block_size())(i)?;
                 (

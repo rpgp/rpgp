@@ -1,13 +1,16 @@
+use aes_gcm::aead::rand_core::CryptoRng;
 use chrono::SubsecRound;
+use rand::Rng;
 use smallvec::SmallVec;
 
 use crate::composed::SignedKeyDetails;
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
-    UserAttribute, UserId,
+    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket,
+    SubpacketData, UserAttribute, UserId,
 };
 use crate::types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
@@ -20,6 +23,7 @@ pub struct KeyDetails {
     preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
     preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+    preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
     revocation_key: Option<RevocationKey>,
 }
 
@@ -33,6 +37,7 @@ impl KeyDetails {
         preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
         preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
         preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+        preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
         revocation_key: Option<RevocationKey>,
     ) -> Self {
         KeyDetails {
@@ -43,18 +48,28 @@ impl KeyDetails {
             preferred_symmetric_algorithms,
             preferred_hash_algorithms,
             preferred_compression_algorithms,
+            preferred_aead_algorithms,
             revocation_key,
         }
     }
 
-    pub fn sign<F>(self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedKeyDetails>
+    pub fn sign<R, F>(
+        self,
+        mut rng: &mut R,
+        key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<SignedKeyDetails>
     where
+        R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
     {
+        let sig_version = key.version().try_into()?;
+
         let keyflags: SmallVec<[u8; 1]> = self.keyflags.into();
         let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
         let preferred_hash_algorithms = self.preferred_hash_algorithms;
         let preferred_compression_algorithms = self.preferred_compression_algorithms;
+        let preferred_aead_algorithms = self.preferred_aead_algorithms;
         let revocation_key = self.revocation_key;
 
         let mut users = vec![];
@@ -77,23 +92,32 @@ impl KeyDetails {
                 Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                     preferred_compression_algorithms.clone(),
                 )),
+                Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
+                    preferred_aead_algorithms.clone(),
+                )),
                 Subpacket::regular(SubpacketData::IssuerFingerprint(
-                    Default::default(),
-                    SmallVec::from_slice(&key.fingerprint()),
+                    key.version(),
+                    key.fingerprint(),
                 )),
             ];
             if let Some(rkey) = revocation_key {
                 hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey)));
             }
 
+            let hash_alg = key.hash_alg();
+
+            let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+
             let config = SignatureConfigBuilder::default()
+                .version(sig_version)
                 .typ(SignatureType::CertGeneric)
                 .pub_alg(key.algorithm())
-                .hash_alg(key.hash_alg())
+                .hash_alg(hash_alg)
                 .hashed_subpackets(hashed_subpackets)
                 .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                     key.key_id(),
                 ))])
+                .salt(salt)
                 .build()?;
 
             let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
@@ -107,10 +131,15 @@ impl KeyDetails {
             self.user_ids
                 .into_iter()
                 .map(|id| {
+                    let hash_alg = key.hash_alg();
+
+                    let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+
                     let config = SignatureConfigBuilder::default()
+                        .version(sig_version)
                         .typ(SignatureType::CertGeneric)
                         .pub_alg(key.algorithm())
-                        .hash_alg(key.hash_alg())
+                        .hash_alg(hash_alg)
                         .hashed_subpackets(vec![
                             Subpacket::regular(SubpacketData::SignatureCreationTime(
                                 chrono::Utc::now().trunc_subsecs(0),
@@ -125,14 +154,18 @@ impl KeyDetails {
                             Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                                 preferred_compression_algorithms.clone(),
                             )),
+                            Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
+                                preferred_aead_algorithms.clone(),
+                            )),
                             Subpacket::regular(SubpacketData::IssuerFingerprint(
-                                Default::default(),
-                                SmallVec::from_slice(&key.fingerprint()),
+                                key.version(),
+                                key.fingerprint(),
                             )),
                         ])
                         .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                             key.key_id(),
                         ))])
+                        .salt(salt)
                         .build()?;
 
                     let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
@@ -145,7 +178,7 @@ impl KeyDetails {
         let user_attributes = self
             .user_attributes
             .into_iter()
-            .map(|u| u.sign(key, key_pw.clone()))
+            .map(|u| u.sign(&mut rng, key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedKeyDetails {

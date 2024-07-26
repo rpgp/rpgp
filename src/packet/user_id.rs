@@ -1,11 +1,14 @@
 use std::{fmt, io, str};
 
+use aes_gcm::aead::rand_core::CryptoRng;
 use bstr::{BStr, BString};
 use chrono::{SubsecRound, Utc};
+use rand::Rng;
 
 use crate::errors::Result;
 use crate::packet::{
-    PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
+    PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket,
+    SubpacketData,
 };
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, Version};
@@ -39,27 +42,42 @@ impl UserId {
     }
 
     /// Create a self-signature
-    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUser>
+    pub fn sign<R, F>(
+        &self,
+        rng: &mut R,
+        key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<SignedUser>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
-        self.sign_third_party(key, key_pw, key)
+        self.sign_third_party(rng, key, key_pw, key)
     }
 
     /// Create a third-party signature
-    pub fn sign_third_party<F>(
+    pub fn sign_third_party<R, F>(
         &self,
+        rng: &mut R,
         signer: &impl SecretKeyTrait,
         signer_pw: F,
         signee: &impl PublicKeyTrait,
     ) -> Result<SignedUser>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
+        let sig_version = signer.version().try_into()?;
+
+        let hash_alg = signer.hash_alg();
+        let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+
         let config = SignatureConfigBuilder::default()
+            .version(sig_version)
             .typ(SignatureType::CertGeneric)
             .pub_alg(signer.algorithm())
-            .hash_alg(signer.hash_alg())
+            .hash_alg(hash_alg)
+            .salt(salt)
             .hashed_subpackets(vec![Subpacket::regular(
                 SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
             )])
@@ -110,16 +128,14 @@ mod tests {
     use rand::thread_rng;
 
     use super::*;
-    use crate::types::{KeyVersion, S2kParams};
+    use crate::types::KeyVersion;
     use crate::{packet, KeyType};
 
     #[test]
     fn test_user_id_certification() {
         let key_type = KeyType::EdDSALegacy;
 
-        let (public_params, secret_params) = key_type
-            .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)
-            .unwrap();
+        let (public_params, secret_params) = key_type.generate_with_rng(thread_rng()).unwrap();
 
         let alice_sec = packet::SecretKey::new(
             packet::PublicKey::new(
@@ -139,15 +155,15 @@ mod tests {
         let alice_uid = UserId::from_str(Version::New, "<alice@example.org>");
 
         // test self-signature
-        let self_signed = alice_uid.sign(&alice_sec, String::default).unwrap();
+        let self_signed = alice_uid
+            .sign(&mut thread_rng(), &alice_sec, String::default)
+            .unwrap();
         self_signed
             .verify(&alice_pub)
             .expect("self signature verification failed");
 
         // test third-party signature
-        let (public_params, secret_params) = key_type
-            .generate_with_rng(thread_rng(), None, S2kParams::Unprotected)
-            .unwrap();
+        let (public_params, secret_params) = key_type.generate_with_rng(thread_rng()).unwrap();
 
         let signer_sec = packet::SecretKey::new(
             packet::PublicKey::new(
@@ -165,7 +181,7 @@ mod tests {
         let signer_pub = signer_sec.public_key();
 
         let third_signed = alice_uid
-            .sign_third_party(&signer_sec, String::default, &alice_pub)
+            .sign_third_party(&mut thread_rng(), &signer_sec, String::default, &alice_pub)
             .unwrap();
         third_signed
             .verify_third_party(&alice_pub, &signer_pub)

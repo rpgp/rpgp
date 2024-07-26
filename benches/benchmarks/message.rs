@@ -7,12 +7,13 @@ use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::types::{SecretKeyTrait, StringToKey};
 use pgp::KeyType;
-use rand::RngCore;
+use rand::{thread_rng, RngCore};
 
 use super::build_key;
 
 fn bench_message(c: &mut Criterion) {
     let mut g = c.benchmark_group("message");
+    let mut rng = thread_rng();
 
     g.bench_function("parse_armored_rsa", |b| {
         let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
@@ -62,7 +63,6 @@ fn bench_message(c: &mut Criterion) {
             size,
             |b, &size| {
                 let mut bytes = vec![0u8; size];
-                let mut rng = rand::thread_rng();
                 rng.fill_bytes(&mut bytes);
 
                 let s2k = StringToKey::new_default(&mut rng);
@@ -154,7 +154,7 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(|| "".into()).unwrap();
+                    let signed_key = key.sign(&mut rng, || "".into()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes);
 
@@ -184,7 +184,7 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(|| "".into()).unwrap();
+                    let signed_key = key.sign(&mut rng, || "".into()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes)
                         .encrypt_to_keys(

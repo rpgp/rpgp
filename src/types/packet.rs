@@ -5,6 +5,7 @@ use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::errors::Result;
+use crate::packet::SignatureVersion;
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4
@@ -78,6 +79,8 @@ pub enum Tag {
 }
 
 impl Tag {
+    /// Packet Type ID encoded in OpenPGP format
+    /// (bits 7 and 6 set, bits 5-0 carry the packet type ID)
     pub fn encode(self) -> u8 {
         let t: u8 = self.into();
         0b1100_0000 | t
@@ -142,6 +145,7 @@ pub enum KeyVersion {
     V3 = 3,
     V4 = 4,
     V5 = 5,
+    V6 = 6,
 
     #[num_enum(catch_all)]
     Other(u8),
@@ -150,6 +154,21 @@ pub enum KeyVersion {
 impl Default for KeyVersion {
     fn default() -> Self {
         Self::V4
+    }
+}
+
+impl TryFrom<KeyVersion> for SignatureVersion {
+    type Error = crate::errors::Error;
+
+    fn try_from(value: KeyVersion) -> std::result::Result<Self, Self::Error> {
+        match value {
+            KeyVersion::V4 => Ok(SignatureVersion::V4),
+            KeyVersion::V6 => Ok(SignatureVersion::V6),
+            _ => bail!(
+                "Signatures for key version {:?} are currently unsupported",
+                value
+            ),
+        }
     }
 }
 

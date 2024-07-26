@@ -1,22 +1,22 @@
 use std::{fmt, io};
 
-use chrono::{SubsecRound, Utc};
-
+use aes_gcm::aead::rand_core::CryptoRng;
 use byteorder::{LittleEndian, WriteBytesExt};
+use chrono::{SubsecRound, Utc};
 use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_parser, rest};
 use nom::multi::length_data;
 use nom::number::streaming::{be_u8, le_u16};
 use nom::sequence::pair;
+use rand::Rng;
 
+use super::{SubpacketData};
 use crate::errors::{IResult, Result};
 use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Version};
 use crate::util::{packet_length, write_packet_length};
-
-use super::SubpacketData;
 
 /// User Attribute Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.12
@@ -66,27 +66,42 @@ impl UserAttribute {
     }
 
     /// Create a self-signature
-    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUserAttribute>
+    pub fn sign<R, F>(
+        &self,
+        rng: &mut R,
+        key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<SignedUserAttribute>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
-        self.sign_third_party(key, key_pw, key)
+        self.sign_third_party(rng, key, key_pw, key)
     }
 
     /// Create a third-party signature
-    pub fn sign_third_party<F>(
+    pub fn sign_third_party<R, F>(
         &self,
+        rng: &mut R,
         signer: &impl SecretKeyTrait,
         signer_pw: F,
         signee: &impl PublicKeyTrait,
     ) -> Result<SignedUserAttribute>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
+        let sig_version = signer.version().try_into()?;
+
+        let hash_alg = signer.hash_alg();
+        let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+
         let config = SignatureConfigBuilder::default()
+            .version(sig_version)
             .typ(SignatureType::CertGeneric)
             .pub_alg(signer.algorithm())
-            .hash_alg(signer.hash_alg())
+            .hash_alg(hash_alg)
+            .salt(salt)
             .hashed_subpackets(vec![Subpacket::regular(
                 SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
             )])

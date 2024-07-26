@@ -11,7 +11,8 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, Tag};
+use crate::types::{KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams};
+use crate::types::{Sig, Tag};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
@@ -83,6 +84,7 @@ impl SignedPublicKey {
         mut public_subkeys: Vec<SignedPublicSubKey>,
     ) -> Self {
         public_subkeys.retain(|key| {
+            // FIXME: is it useful to make subkey retention depend on unvalidated signatures?
             if key.signatures.is_empty() {
                 warn!("ignoring unsigned {:?}", key.key);
                 false
@@ -159,7 +161,7 @@ impl SignedPublicKey {
 }
 
 impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
@@ -175,7 +177,7 @@ impl PublicKeyTrait for SignedPublicKey {
         self.primary_key.public_params()
     }
 
-    fn version(&self) -> crate::types::KeyVersion {
+    fn version(&self) -> KeyVersion {
         self.primary_key.version()
     }
 
@@ -259,7 +261,7 @@ impl SignedPublicSubKey {
 }
 
 impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 
@@ -274,7 +276,8 @@ impl PublicKeyTrait for SignedPublicSubKey {
     fn public_params(&self) -> &PublicParams {
         self.key.public_params()
     }
-    fn version(&self) -> crate::types::KeyVersion {
+
+    fn version(&self) -> KeyVersion {
         self.key.version()
     }
 
@@ -282,7 +285,6 @@ impl PublicKeyTrait for SignedPublicSubKey {
     fn fingerprint(&self) -> Vec<u8> {
         self.key.fingerprint()
     }
-
     /// Returns the Key ID of the key.
     fn key_id(&self) -> KeyId {
         self.key.key_id()
@@ -307,6 +309,42 @@ impl Serialize for SignedPublicSubKey {
         for sig in &self.signatures {
             write_packet(writer, sig)?;
         }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use crate::composed::shared::Deserializable;
+
+    #[test]
+    fn test_v6_annex_a_3() -> Result<()> {
+        let _ = pretty_env_logger::try_init();
+
+        // A.3. Sample v6 Certificate (Transferable Public Key)
+
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+xioGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laPCsQYf
+GwoAAABCBYJjh3/jAwsJBwUVCg4IDAIWAAKbAwIeCSIhBssYbE8GCaaX5NUt+mxy
+KwwfHifBilZwj2Ul7Ce62azJBScJAgcCAAAAAK0oIBA+LX0ifsDm185Ecds2v8lw
+gyU2kCcUmKfvBXbAf6rhRYWzuQOwEn7E/aLwIwRaLsdry0+VcallHhSu4RN6HWaE
+QsiPlR4zxP/TP7mhfVEe7XWPxtnMUMtf15OyA51YBM4qBmOHf+MZAAAAIIaTJINn
++eUBXbki+PSAld2nhJh/LVmFsS+60WyvXkQ1wpsGGBsKAAAALAWCY4d/4wKbDCIh
+BssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce62azJAAAAAAQBIKbpGG2dWTX8
+j+VjFM21J0hqWlEg+bdiojWnKfA5AQpWUWtnNwDEM0g12vYxoWM8Y81W+bHBw805
+I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUrk0mXubZvyl4GBg==
+-----END PGP PUBLIC KEY BLOCK-----";
+
+        let (spk, _) = SignedPublicKey::from_armor_single(io::Cursor::new(c))?;
+
+        eprintln!("spk: {:#02x?}", spk);
+
+        spk.verify()?;
 
         Ok(())
     }

@@ -6,11 +6,12 @@ use rand::{thread_rng, CryptoRng, Rng};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa};
+use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa, x25519};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, UserAttribute, UserId};
 use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey, S2kParams};
@@ -38,6 +39,8 @@ pub struct SecretKeyParams {
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+    #[builder(default)]
+    preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
     #[builder(default)]
     revocation_key: Option<RevocationKey>,
 
@@ -170,9 +173,8 @@ impl SecretKeyParams {
     pub fn generate_with_rng<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
         let passphrase = self.passphrase;
         let s2k = self.s2k.unwrap_or_else(|| S2kParams::new_default(&mut rng));
-        let (public_params, secret_params) =
-            self.key_type.generate_with_rng(&mut rng, passphrase, s2k)?;
-        let primary_key = packet::SecretKey::new(
+        let (public_params, secret_params) = self.key_type.generate_with_rng(&mut rng)?;
+        let mut primary_key = packet::SecretKey::new(
             packet::PublicKey::new(
                 self.packet_version,
                 self.version,
@@ -183,6 +185,9 @@ impl SecretKeyParams {
             )?,
             secret_params,
         );
+        if let Some(passphrase) = passphrase {
+            primary_key.set_password_with_s2k(|| passphrase, s2k)?;
+        }
 
         let mut keyflags = KeyFlags::default();
         keyflags.set_certify(self.can_certify);
@@ -203,6 +208,7 @@ impl SecretKeyParams {
                 self.preferred_symmetric_algorithms,
                 self.preferred_hash_algorithms,
                 self.preferred_compression_algorithms,
+                self.preferred_aead_algorithms,
                 self.revocation_key,
             ),
             Default::default(),
@@ -213,8 +219,7 @@ impl SecretKeyParams {
                     let s2k = subkey
                         .s2k
                         .unwrap_or_else(|| S2kParams::new_default(&mut rng));
-                    let (public_params, secret_params) =
-                        subkey.key_type.generate(passphrase, s2k)?;
+                    let (public_params, secret_params) = subkey.key_type.generate()?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_certify(subkey.can_certify);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
@@ -222,20 +227,23 @@ impl SecretKeyParams {
                     keyflags.set_sign(subkey.can_sign);
                     keyflags.set_authentication(subkey.can_authenticate);
 
-                    Ok(SecretSubkey::new(
-                        packet::SecretSubkey::new(
-                            packet::PublicSubkey::new(
-                                subkey.packet_version,
-                                subkey.version,
-                                subkey.key_type.to_alg(),
-                                subkey.created_at,
-                                subkey.expiration.map(|v| v.as_secs() as u16),
-                                public_params,
-                            )?,
-                            secret_params,
-                        ),
-                        keyflags,
-                    ))
+                    let mut sub = packet::SecretSubkey::new(
+                        packet::PublicSubkey::new(
+                            subkey.packet_version,
+                            subkey.version,
+                            subkey.key_type.to_alg(),
+                            subkey.created_at,
+                            subkey.expiration.map(|v| v.as_secs() as u16),
+                            public_params,
+                        )?,
+                        secret_params,
+                    );
+
+                    if let Some(passphrase) = passphrase {
+                        sub.set_password_with_s2k(|| passphrase, s2k)?;
+                    }
+
+                    Ok(SecretSubkey::new(sub, keyflags))
                 })
                 .collect::<Result<Vec<_>>>()?,
         ))
@@ -254,6 +262,10 @@ pub enum KeyType {
     ECDSA(ECCCurve),
     /// Signing with DSA for the given bitsize.
     Dsa(DsaKeySize),
+    /// Signing with Ed25519
+    Ed25519,
+    /// Encrypting with X25519
+    X25519,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -286,43 +298,31 @@ impl KeyType {
             KeyType::EdDSALegacy => PublicKeyAlgorithm::EdDSALegacy,
             KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
+            KeyType::Ed25519 => PublicKeyAlgorithm::Ed25519,
+            KeyType::X25519 => PublicKeyAlgorithm::X25519,
         }
     }
 
-    pub fn generate(
-        &self,
-        passphrase: Option<String>,
-        s2k: types::S2kParams,
-    ) -> Result<(PublicParams, types::SecretParams)> {
+    pub fn generate(&self) -> Result<(PublicParams, types::SecretParams)> {
         let rng = thread_rng();
-        self.generate_with_rng(rng, passphrase, s2k)
+        self.generate_with_rng(rng)
     }
 
     pub fn generate_with_rng<R: Rng + CryptoRng>(
         &self,
         rng: R,
-        passphrase: Option<String>,
-        s2k: types::S2kParams,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => rsa::generate_key(rng, *bit_size as usize)?,
             KeyType::ECDH(curve) => ecdh::generate_key(rng, curve)?,
-            KeyType::EdDSALegacy => eddsa::generate_key(rng),
+            KeyType::EdDSALegacy => eddsa::generate_key(rng, eddsa::Mode::EdDSALegacy),
             KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
             KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
+            KeyType::Ed25519 => eddsa::generate_key(rng, eddsa::Mode::Ed25519),
+            KeyType::X25519 => x25519::generate_key(rng),
         };
 
-        let secret = match passphrase {
-            Some(passphrase) => {
-                // TODO: derive from key itself
-                let version = types::KeyVersion::default();
-
-                types::SecretParams::Encrypted(plain.encrypt(&passphrase, s2k, version)?)
-            }
-            None => types::SecretParams::Plain(plain),
-        };
-
-        Ok((pub_params, secret))
+        Ok((pub_params, types::SecretParams::Plain(plain)))
     }
 }
 
@@ -406,8 +406,12 @@ mod tests {
             .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key_enc = key_enc.sign(|| "hello".into()).expect("failed to sign key");
-        let signed_key_plain = key_plain.sign(|| "".into()).expect("failed to sign key");
+        let signed_key_enc = key_enc
+            .sign(&mut rng, || "hello".into())
+            .expect("failed to sign key");
+        let signed_key_plain = key_plain
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor_enc = signed_key_enc
             .to_armored_string(None.into())
@@ -439,7 +443,7 @@ mod tests {
         let public_key = signed_key_plain.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key_plain, || "".into())
+            .sign(&mut rng, &signed_key_plain, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -473,7 +477,7 @@ mod tests {
         }
     }
 
-    fn gen_x25519<R: Rng + CryptoRng>(rng: R) {
+    fn gen_x25519<R: Rng + CryptoRng>(mut rng: R) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -510,10 +514,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -531,7 +537,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key, || "".into())
+            .sign(&mut rng, &signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -547,7 +553,7 @@ mod tests {
         signed_key2.verify().expect("invalid public key");
     }
 
-    fn gen_ecdsa<R: Rng + CryptoRng>(rng: &mut R, curve: ECCCurve) {
+    fn gen_ecdsa<R: Rng + CryptoRng>(mut rng: &mut R, curve: ECCCurve) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -584,10 +590,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -604,7 +612,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key, || "".into())
+            .sign(&mut rng, &signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -652,7 +660,7 @@ mod tests {
         }
     }
 
-    fn gen_dsa<R: Rng + CryptoRng>(rng: &mut R, key_size: DsaKeySize) {
+    fn gen_dsa<R: Rng + CryptoRng>(mut rng: &mut R, key_size: DsaKeySize) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -689,10 +697,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -709,7 +719,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key, || "".into())
+            .sign(&mut rng, &signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");

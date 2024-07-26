@@ -8,6 +8,7 @@ use crate::errors::Result;
 use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
 use crate::ser::Serialize;
+use crate::types::Sig;
 use crate::util::write_packet_length;
 
 impl Serialize for Signature {
@@ -16,7 +17,10 @@ impl Serialize for Signature {
 
         match self.config.version {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
-            SignatureVersion::V4 | SignatureVersion::V5 => self.to_writer_v4(writer),
+            SignatureVersion::V4 | SignatureVersion::V6 => self.to_writer_v4_v6(writer),
+            SignatureVersion::V5 => {
+                bail!("v5 signature unsupported writer")
+            }
             SignatureVersion::Other(version) => bail!("Unsupported signature version {}", version),
         }
     }
@@ -115,7 +119,12 @@ impl Subpacket {
                 writer.write_all(fp)?;
             }
             SubpacketData::PreferredAeadAlgorithms(algs) => {
-                writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
+                writer.write_all(
+                    &algs
+                        .iter()
+                        .flat_map(|&(sym_alg, aead)| [sym_alg.into(), aead.into()])
+                        .collect::<Vec<_>>(),
+                )?;
             }
             SubpacketData::Experimental(_, body) => {
                 writer.write_all(body)?;
@@ -172,7 +181,7 @@ impl Subpacket {
             SubpacketData::RegularExpression(regexp) => regexp.len(),
             SubpacketData::ExportableCertification(_) => 1,
             SubpacketData::IssuerFingerprint(_, fp) => 1 + fp.len(),
-            SubpacketData::PreferredAeadAlgorithms(algs) => algs.len(),
+            SubpacketData::PreferredAeadAlgorithms(algs) => algs.len() * 2,
             SubpacketData::Experimental(_, body) => body.len(),
             SubpacketData::Other(_, body) => body.len(),
             SubpacketData::SignatureTarget(_, _, hash) => 2 + hash.len(),
@@ -260,8 +269,8 @@ impl SignatureConfig {
         Ok(())
     }
 
-    /// Serializes a v4 or v5 signature.
-    fn to_writer_v4<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+    /// Serializes a v4 or v6 signature.
+    fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[
             // type
             self.typ as u8,
@@ -277,7 +286,12 @@ impl SignatureConfig {
             packet.to_writer(&mut hashed_subpackets)?;
         }
 
-        writer.write_u16::<BigEndian>(hashed_subpackets.len() as u16)?;
+        match self.version {
+            SignatureVersion::V4 => writer.write_u16::<BigEndian>(hashed_subpackets.len() as u16)?,
+            SignatureVersion::V6 => writer.write_u32::<BigEndian>(hashed_subpackets.len() as u32)?,
+            _ => unimplemented!(),
+        }
+
         writer.write_all(&hashed_subpackets)?;
 
         // unhashed subpackets
@@ -286,7 +300,16 @@ impl SignatureConfig {
             packet.to_writer(&mut unhashed_subpackets)?;
         }
 
-        writer.write_u16::<BigEndian>(unhashed_subpackets.len() as u16)?;
+        match self.version {
+            SignatureVersion::V4 => {
+                writer.write_u16::<BigEndian>(unhashed_subpackets.len() as u16)?
+            }
+            SignatureVersion::V6 => {
+                writer.write_u32::<BigEndian>(unhashed_subpackets.len() as u32)?
+            }
+            _ => unimplemented!(),
+        }
+
         writer.write_all(&unhashed_subpackets)?;
 
         Ok(())
@@ -302,25 +325,50 @@ impl Signature {
         writer.write_all(&self.signed_hash_value)?;
 
         // the actual signature
-        for val in &self.signature {
-            debug!("writing: {}", hex::encode(val));
-            val.to_writer(writer)?;
+        match &self.signature {
+            Sig::Mpis(mpis) => {
+                // the actual signature
+                for val in mpis {
+                    debug!("writing: {}", hex::encode(val));
+                    val.to_writer(writer)?;
+                }
+            }
+            Sig::Native(sig) => {
+                writer.write_all(sig)?;
+            }
         }
 
         Ok(())
     }
 
-    /// Serializes a v4 or v5 signature.
-    fn to_writer_v4<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.config.to_writer_v4(writer)?;
+    /// Serializes a v4 or v6 signature.
+    fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.config.to_writer_v4_v6(writer)?;
 
         // signed hash value
         writer.write_all(&self.signed_hash_value)?;
 
+        // salt, if v6
+        if self.config.version == SignatureVersion::V6 {
+            let salt: &[u8] = self.config.salt.as_ref().expect("v6");
+
+            let len: u8 = salt.len().try_into()?;
+            writer.write_all(&[len])?;
+            writer.write_all(salt)?;
+        }
+
         // the actual signature
-        for val in &self.signature {
-            debug!("writing signature: {}", hex::encode(val));
-            val.to_writer(writer)?;
+        match &self.signature {
+            Sig::Mpis(mpis) => {
+                // the actual signature
+                for val in mpis {
+                    debug!("writing: {}", hex::encode(val));
+                    val.to_writer(writer)?;
+                }
+            }
+            Sig::Native(sig) => {
+                writer.write_all(sig)?;
+            }
         }
 
         Ok(())
@@ -331,11 +379,11 @@ impl Signature {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
     use std::fs::File;
     use std::io::Read;
     use std::path::Path;
 
+    use super::*;
     use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {

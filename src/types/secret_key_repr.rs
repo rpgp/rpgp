@@ -1,11 +1,10 @@
 use log::debug;
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, rsa, Decryptor};
-use crate::errors::Result;
-
 use super::Mpi;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, rsa, x25519, Decryptor};
+use crate::errors::Result;
 
 /// The version of the secret key that is actually exposed to users to do crypto operations.
 #[allow(clippy::large_enum_variant)] // FIXME
@@ -16,6 +15,7 @@ pub enum SecretKeyRepr {
     ECDSA(ecdsa::SecretKey),
     ECDH(ecdh::SecretKey),
     EdDSA(eddsa::SecretKey),
+    X25519(x25519::SecretKey),
 }
 
 impl SecretKeyRepr {
@@ -30,6 +30,7 @@ impl SecretKeyRepr {
             SecretKeyRepr::ECDSA(_) => bail!("ECDSA is only used for signing"),
             SecretKeyRepr::ECDH(ref priv_key) => priv_key.decrypt(mpis, fingerprint)?,
             SecretKeyRepr::EdDSA(_) => unimplemented_err!("EdDSA"),
+            SecretKeyRepr::X25519(_) => todo!(),
         };
 
         let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);

@@ -12,7 +12,7 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait, Tag,
+    KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait, Sig, Tag,
 };
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
@@ -193,7 +193,7 @@ impl SecretKeyTrait for SignedSecretKey {
         self.primary_key.unlock(pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
     where
         F: FnOnce() -> String,
     {
@@ -219,7 +219,7 @@ impl SecretKeyTrait for SignedSecretKey {
 }
 
 impl PublicKeyTrait for SignedSecretKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
@@ -235,7 +235,7 @@ impl PublicKeyTrait for SignedSecretKey {
         self.primary_key.public_params()
     }
 
-    fn version(&self) -> crate::types::KeyVersion {
+    fn version(&self) -> KeyVersion {
         self.primary_key.version()
     }
 
@@ -322,7 +322,7 @@ impl SecretKeyTrait for SignedSecretSubKey {
         self.key.unlock(pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
     where
         F: FnOnce() -> String,
     {
@@ -341,7 +341,7 @@ impl SecretKeyTrait for SignedSecretSubKey {
 }
 
 impl PublicKeyTrait for SignedSecretSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 
@@ -401,5 +401,104 @@ impl From<SignedSecretKey> for SignedPublicKey {
 impl From<SignedSecretSubKey> for SignedPublicSubKey {
     fn from(value: SignedSecretSubKey) -> Self {
         SignedPublicSubKey::new(value.key.public_key(), value.signatures)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use packet::LiteralData;
+
+    use super::*;
+    use crate::{composed::shared::Deserializable, Message};
+
+    #[test]
+    fn test_v6_annex_a_4() -> Result<()> {
+        let _ = pretty_env_logger::try_init();
+
+        // A.4. Sample v6 Secret Key (Transferable Secret Key)
+
+        let tsk = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xUsGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laMAGXKB
+exK+cH6NX1hs5hNhIB00TrJmosgv3mg1ditlsLfCsQYfGwoAAABCBYJjh3/jAwsJ
+BwUVCg4IDAIWAAKbAwIeCSIhBssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce6
+2azJBScJAgcCAAAAAK0oIBA+LX0ifsDm185Ecds2v8lwgyU2kCcUmKfvBXbAf6rh
+RYWzuQOwEn7E/aLwIwRaLsdry0+VcallHhSu4RN6HWaEQsiPlR4zxP/TP7mhfVEe
+7XWPxtnMUMtf15OyA51YBMdLBmOHf+MZAAAAIIaTJINn+eUBXbki+PSAld2nhJh/
+LVmFsS+60WyvXkQ1AE1gCk95TUR3XFeibg/u/tVY6a//1q0NWC1X+yui3O24wpsG
+GBsKAAAALAWCY4d/4wKbDCIhBssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce6
+2azJAAAAAAQBIKbpGG2dWTX8j+VjFM21J0hqWlEg+bdiojWnKfA5AQpWUWtnNwDE
+M0g12vYxoWM8Y81W+bHBw805I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUr
+k0mXubZvyl4GBg==
+-----END PGP PRIVATE KEY BLOCK-----";
+
+        let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(tsk))?;
+
+        eprintln!("ssk: {:#02x?}", ssk);
+
+        ssk.verify()?;
+
+        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
+        let msg = Message::Literal(lit);
+
+        let pri = ssk.primary_key;
+        let signed = msg.sign(&pri, String::default, HashAlgorithm::SHA2_256)?;
+
+        signed.verify(&pri)?;
+
+        let mut sink = vec![];
+        signed
+            .to_armored_writer(&mut sink, ArmorOptions::default())
+            .expect("FIXME");
+
+        eprintln!("{}", String::from_utf8_lossy(&sink));
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // slow in debug mode
+    fn test_v6_annex_a_5() -> Result<()> {
+        let _ = pretty_env_logger::try_init();
+
+        // A.5. Sample locked v6 Secret Key (Transferable Secret Key)
+
+        let tsk = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xYIGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laP9JgkC
+FARdb9ccngltHraRe25uHuyuAQQVtKipJ0+r5jL4dacGWSAheCWPpITYiyfyIOPS
+3gIDyg8f7strd1OB4+LZsUhcIjOMpVHgmiY/IutJkulneoBYwrEGHxsKAAAAQgWC
+Y4d/4wMLCQcFFQoOCAwCFgACmwMCHgkiIQbLGGxPBgmml+TVLfpscisMHx4nwYpW
+cI9lJewnutmsyQUnCQIHAgAAAACtKCAQPi19In7A5tfORHHbNr/JcIMlNpAnFJin
+7wV2wH+q4UWFs7kDsBJ+xP2i8CMEWi7Ha8tPlXGpZR4UruETeh1mhELIj5UeM8T/
+0z+5oX1RHu11j8bZzFDLX9eTsgOdWATHggZjh3/jGQAAACCGkySDZ/nlAV25Ivj0
+gJXdp4SYfy1ZhbEvutFsr15ENf0mCQIUBA5hhGgp2oaavg6mFUXcFMwBBBUuE8qf
+9Ock+xwusd+GAglBr5LVyr/lup3xxQvHXFSjjA2haXfoN6xUGRdDEHI6+uevKjVR
+v5oAxgu7eJpaXNjCmwYYGwoAAAAsBYJjh3/jApsMIiEGyxhsTwYJppfk1S36bHIr
+DB8eJ8GKVnCPZSXsJ7rZrMkAAAAABAEgpukYbZ1ZNfyP5WMUzbUnSGpaUSD5t2Ki
+Nacp8DkBClZRa2c3AMQzSDXa9jGhYzxjzVb5scHDzTkjyRZWRdTq8U6L4da+/+Kt
+ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
+-----END PGP PRIVATE KEY BLOCK-----";
+
+        let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(tsk))?;
+
+        ssk.verify()?;
+
+        let passphrase = "correct horse battery staple";
+
+        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
+        let msg = Message::Literal(lit);
+
+        let msg = msg.sign(
+            &ssk.primary_key,
+            || passphrase.to_string(),
+            HashAlgorithm::SHA2_256,
+        )?;
+
+        msg.verify(&ssk.primary_key)?;
+
+        Ok(())
     }
 }

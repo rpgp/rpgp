@@ -1,6 +1,7 @@
 use log::debug;
 use zeroize::Zeroize;
 
+use crate::types::Sig;
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -24,6 +25,7 @@ pub struct SecretSubkey(SecretKeyInner<PublicSubkey>);
 struct SecretKeyInner<D> {
     details: D,
     secret_params: SecretParams,
+    tag: Tag,
 }
 
 impl<D> zeroize::Zeroize for SecretKeyInner<D> {
@@ -45,11 +47,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         P: FnOnce() -> String,
     {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
-            let unlocked = enc.unlock(
-                password,
-                self.details.algorithm(),
-                self.details.public_params(),
-            )?;
+            let unlocked = enc.unlock(password, &self.details, Some(self.tag))?;
             self.secret_params = SecretParams::Plain(unlocked);
         }
 
@@ -83,7 +81,8 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         self.secret_params = SecretParams::Encrypted(plain.clone().encrypt(
             &password(),
             s2k_params,
-            self.version(),
+            &self.details,
+            Some(self.tag),
         )?);
 
         Ok(())
@@ -95,6 +94,7 @@ impl SecretKey {
         Self(SecretKeyInner {
             details,
             secret_params,
+            tag: Tag::SecretKey,
         })
     }
 
@@ -112,6 +112,7 @@ impl SecretKey {
                 public_params,
             )?,
             secret_params,
+            tag: Tag::SecretKey,
         }))
     }
 
@@ -137,6 +138,7 @@ impl SecretSubkey {
         Self(SecretKeyInner {
             details,
             secret_params,
+            tag: Tag::SecretSubkey,
         })
     }
 
@@ -154,6 +156,7 @@ impl SecretSubkey {
                 public_params,
             )?,
             secret_params,
+            tag: Tag::SecretSubkey,
         }))
     }
 
@@ -209,7 +212,9 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
     }
 }
 
-impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyTrait for SecretKeyInner<D> {
+impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyTrait
+    for SecretKeyInner<D>
+{
     type PublicKey = D;
     type Unlocked = SecretKeyRepr;
 
@@ -221,7 +226,7 @@ impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyTrait for Secre
         let decrypted = match self.secret_params {
             SecretParams::Plain(ref k) => k.as_ref().as_repr(self.public_params()),
             SecretParams::Encrypted(ref k) => {
-                let plain = k.unlock(pw, self.details.algorithm(), self.public_params())?;
+                let plain = k.unlock(pw, &self.details, Some(self.tag))?;
                 plain.as_ref().as_repr(self.public_params())
             }
         }?;
@@ -229,35 +234,60 @@ impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyTrait for Secre
         work(&decrypted)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
     where
         F: FnOnce() -> String,
     {
         use crate::crypto::Signer;
 
-        let mut signature: Option<Vec<Mpi>> = None;
+        let mut signature: Option<Sig> = None;
         self.unlock(key_pw, |priv_key| {
             debug!("unlocked key");
             let sig = match *priv_key {
-                SecretKeyRepr::RSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
-                SecretKeyRepr::ECDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.public_params())
+                SecretKeyRepr::RSA(ref priv_key) => {
+                    priv_key.sign(hash, data, self.details.public_params())
                 }
-                SecretKeyRepr::DSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
+                SecretKeyRepr::ECDSA(ref priv_key) => {
+                    priv_key.sign(hash, data, self.details.public_params())
+                }
+                SecretKeyRepr::DSA(ref priv_key) => {
+                    priv_key.sign(hash, data, self.details.public_params())
+                }
                 SecretKeyRepr::ECDH(_) => {
                     bail!("ECDH can not be used to for signing operations")
                 }
+                SecretKeyRepr::X25519(_) => {
+                    bail!("X25519 can not be used to for signing operations")
+                }
                 SecretKeyRepr::EdDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.public_params())
+                    priv_key.sign(hash, data, self.details.public_params())
                 }
             }?;
 
-            // strip leading zeros, to match parse results from MPIs
-            signature = Some(
-                sig.iter()
-                    .map(|v| Mpi::from_raw_slice(&v[..]))
-                    .collect::<Vec<_>>(),
-            );
+            match self.details.public_params() {
+                PublicParams::Ed25519 { .. } => {
+                    // native format
+
+                    ensure_eq!(sig.len(), 2, "expect two signature parts");
+
+                    let mut native = sig[0].clone();
+                    native.extend_from_slice(&sig[1]);
+
+                    ensure_eq!(native.len(), 64, "expect 64 byte signature");
+
+                    signature = Some(Sig::Native(native));
+                }
+                _ => {
+                    // MPI format:
+                    // strip leading zeros, to match parse results from MPIs
+                    let mpis = sig
+                        .iter()
+                        .map(|v| Mpi::from_raw_slice(&v[..]))
+                        .collect::<Vec<_>>();
+
+                    signature = Some(Sig::Mpis(mpis));
+                }
+            }
             Ok(())
         })?;
 
@@ -281,7 +311,7 @@ impl SecretKeyTrait for SecretKey {
         SecretKeyTrait::unlock(&self.0, pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
     where
         F: FnOnce() -> String,
     {
@@ -305,7 +335,7 @@ impl SecretKeyTrait for SecretSubkey {
         SecretKeyTrait::unlock(&self.0, pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
+    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
     where
         F: FnOnce() -> String,
     {
@@ -321,7 +351,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> crate::ser::Serialize for Secret
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         // writes version and public part
         crate::ser::Serialize::to_writer(&self.details, writer)?;
-        self.secret_params.to_writer(writer)?;
+        self.secret_params.to_writer(writer, self.version())?;
         Ok(())
     }
 }
@@ -359,7 +389,7 @@ impl PacketTrait for SecretSubkey {
 }
 
 impl PublicKeyTrait for SecretKey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
@@ -405,7 +435,7 @@ impl PublicKeyTrait for SecretKey {
 }
 
 impl PublicKeyTrait for SecretSubkey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
@@ -451,7 +481,7 @@ impl PublicKeyTrait for SecretSubkey {
 }
 
 impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInner<D> {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
         self.details.verify_signature(hash, hashed, sig)
     }
 
@@ -464,11 +494,31 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
+        use byteorder::{BigEndian, WriteBytesExt};
+
+        // FIXME: avoid duplication with key/public.rs!
+
         let mut key_buf = Vec::new();
         self.details.to_writer(&mut key_buf)?;
 
         // old style packet header for the key
-        writer.write_all(&[0x99, (key_buf.len() >> 8) as u8, key_buf.len() as u8])?;
+        match self.version() {
+            KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 => {
+                // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
+                // followed by a two-octet length of the key, and then the body of the key packet.
+                writer.write_all(&[0x99, (key_buf.len() >> 8) as u8, key_buf.len() as u8])?;
+            }
+
+            KeyVersion::V6 => {
+                // When a v6 signature is made over a key, the hash data starts with the salt,
+                // then octet 0x9B, followed by a four-octet length of the key, and then the body of the key packet.
+                writer.write_all(&[0x9b])?;
+                writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
+            }
+
+            _ => unimplemented!(),
+        }
+
         writer.write_all(&key_buf)?;
 
         Ok(())
@@ -609,13 +659,7 @@ mod tests {
         const DATA: &[u8] = &[0x23, 0x05];
         let key_type = crate::KeyType::EdDSALegacy;
 
-        let (public_params, secret_params) = key_type
-            .generate_with_rng(
-                thread_rng(),
-                Some("password".to_string()),
-                crate::types::S2kParams::new_default(thread_rng()),
-            )
-            .unwrap();
+        let (public_params, secret_params) = key_type.generate_with_rng(thread_rng()).unwrap();
 
         let mut alice_sec = SecretKey::new(
             PublicKey::new(
@@ -629,6 +673,13 @@ mod tests {
             .unwrap(),
             secret_params,
         );
+
+        alice_sec
+            .set_password_with_s2k(
+                || "password".to_string(),
+                crate::types::S2kParams::new_default(thread_rng()),
+            )
+            .unwrap();
 
         // signing with a wrong password should fail
         assert!(alice_sec
