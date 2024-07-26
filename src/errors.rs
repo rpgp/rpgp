@@ -6,7 +6,7 @@ use nom::{
     ErrorConvert,
 };
 
-pub type Result<T> = ::std::result::Result<T, Error>;
+pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
 // custom nom error types
 pub const MPI_TOO_LONG: u32 = 1000;

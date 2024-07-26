@@ -84,6 +84,24 @@ impl LiteralData {
         &self.data
     }
 
+    #[inline]
+    /// Extracts data in to raw data
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.data
+    }
+
+    #[inline]
+    /// Extracts data as string, returning raw bytes as Err if not valid utf-8 string
+    pub fn into_string(self) -> Result<String, Vec<u8>> {
+        match self.mode {
+            DataMode::Binary => Err(self.data),
+            _ => match String::from_utf8(self.data) {
+                Ok(data) => Ok(data),
+                Err(error) => Err(error.into_bytes()),
+            },
+        }
+    }
+
     /// Convert the data to a UTF-8 string, if appropriate for the type.
     /// Returns `None` if `mode` is `Binary`, or the data is not valid UTF-8.
     pub fn to_string(&self) -> Option<String> {
@@ -91,6 +109,13 @@ impl LiteralData {
             DataMode::Binary => None,
             _ => std::str::from_utf8(&self.data).map(str::to_owned).ok(),
         }
+    }
+}
+
+impl AsRef<[u8]> for LiteralData {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        &self.data
     }
 }
 
