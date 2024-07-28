@@ -17,8 +17,9 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
-    PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType, Subpacket,
-    SubpacketData, SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
+    PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType, SignatureVersion,
+    SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
+    SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
@@ -465,7 +466,28 @@ impl Message {
                 (typ, signature)
             }
         };
-        let ops = OnePassSignature::from_details_v3(typ, hash_algorithm, algorithm, key_id);
+
+        let ops = match sig_version {
+            SignatureVersion::V4 => {
+                OnePassSignature::from_details_v3(typ, hash_algorithm, algorithm, key_id)
+            }
+            SignatureVersion::V6 => {
+                let SignatureVersionSpecific::V6 { ref salt } = signature.config.version_specific
+                else {
+                    // This should never happen
+                    bail!("Inconsistent Signature and OnePassSignature version")
+                };
+
+                OnePassSignature::from_details_v6(
+                    typ,
+                    hash_algorithm,
+                    algorithm,
+                    salt.clone(),
+                    key.fingerprint().try_into().expect("v6 fp"),
+                )
+            }
+            _ => bail!("Unsupported signature version {:sig_version?}"),
+        };
 
         Ok(Message::Signed {
             message: Some(Box::new(self)),
