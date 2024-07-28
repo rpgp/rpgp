@@ -56,10 +56,10 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         Ok(())
     }
 
-    fn set_password<P, R>(&mut self, password: P, rng: R) -> Result<()>
+    fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
     where
-        P: FnOnce() -> String,
         R: rand::Rng + rand::CryptoRng,
+        P: FnOnce() -> String,
     {
         let s2k = crate::types::S2kParams::new_default(rng);
         Self::set_password_with_s2k(self, password, s2k)
@@ -523,12 +523,12 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<P, R>(&mut self, password: P, rng: R) -> Result<()>
+    pub fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
     where
-        P: FnOnce() -> String,
         R: rand::Rng + rand::CryptoRng,
+        P: FnOnce() -> String,
     {
-        self.0.set_password(password, rng)
+        self.0.set_password(rng, password)
     }
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet
@@ -569,12 +569,12 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<P, R>(&mut self, password: P, rng: R) -> Result<()>
+    pub fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
     where
-        P: FnOnce() -> String,
         R: rand::Rng + rand::CryptoRng,
+        P: FnOnce() -> String,
     {
-        self.0.set_password(password, rng)
+        self.0.set_password(rng, password)
     }
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet
@@ -652,7 +652,7 @@ mod tests {
 
         // set different password protection
         alice_sec
-            .set_password(|| "foo".to_string(), thread_rng())
+            .set_password(thread_rng(), || "foo".to_string())
             .unwrap();
 
         // signing without a password should fail now
