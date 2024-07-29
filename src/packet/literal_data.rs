@@ -92,7 +92,7 @@ impl LiteralData {
 
     #[inline]
     /// Extracts data as string, returning raw bytes as Err if not valid utf-8 string
-    pub fn into_string(self) -> Result<String, Vec<u8>> {
+    pub fn try_into_string(self) -> Result<String, Vec<u8>> {
         match self.mode {
             DataMode::Binary => Err(self.data),
             _ => match String::from_utf8(self.data) {
