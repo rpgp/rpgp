@@ -41,7 +41,7 @@ impl Default for HashAlgorithm {
 impl HashAlgorithm {
     /// V6 signature salt size
     /// https://www.rfc-editor.org/rfc/rfc9580.html#hash-algos
-    pub fn salt_len(&self) -> usize {
+    pub const fn salt_len(&self) -> usize {
         match self {
             Self::SHA2_224 => 16,
             Self::SHA2_256 => 16,
