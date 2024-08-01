@@ -41,6 +41,13 @@ impl OnePassSignature {
         Ok(pk)
     }
 
+    /// RFC 4880-era OpenPGP uses v3 one pass signature packets (there is no v4 OPS)
+    ///
+    /// "When generating a one-pass signature, the OPS packet version MUST correspond to the
+    /// version of the associated Signature packet, except for the historical accident that version
+    /// 4 keys use a version 3 One-Pass Signature packet (there is no version 4 OPS)."
+    ///
+    /// https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t
     pub fn from_details_v3(
         typ: SignatureType,
         hash_algorithm: HashAlgorithm,
@@ -60,6 +67,9 @@ impl OnePassSignature {
         }
     }
 
+    /// Version 6 OpenPGP signatures must be combined with v6 one pass signature packets.
+    ///
+    /// https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t
     pub fn from_details_v6(
         typ: SignatureType,
         hash_algorithm: HashAlgorithm,
