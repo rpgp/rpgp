@@ -33,6 +33,32 @@ pub enum Sig {
     Native(Vec<u8>),
 }
 
+impl<'a> TryFrom<&'a Sig> for &'a [Mpi] {
+    type Error = crate::errors::Error;
+
+    fn try_from(value: &'a Sig) -> std::result::Result<Self, Self::Error> {
+        match value {
+            Sig::Mpis(mpis) => Ok(mpis),
+
+            // We reject this operation because it doesn't fit with the intent of the Sig abstraction
+            Sig::Native(_) => bail!("Native Sig can't be transformed into Mpis"),
+        }
+    }
+}
+
+impl<'a> TryFrom<&'a Sig> for &'a [u8] {
+    type Error = crate::errors::Error;
+
+    fn try_from(value: &'a Sig) -> std::result::Result<Self, Self::Error> {
+        match value {
+            // We reject this operation because it doesn't fit with the intent of the Sig abstraction
+            Sig::Mpis(_) => bail!("Mpi-based Sig can't be transformed into &[u8]"),
+
+            Sig::Native(native) => Ok(native),
+        }
+    }
+}
+
 pub(crate) fn salt_for<R: CryptoRng + Rng>(
     rng: &mut R,
     sig_version: SignatureVersion,

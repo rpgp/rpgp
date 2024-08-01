@@ -353,28 +353,6 @@ fn subpackets<'a>(i: &'a [u8]) -> IResult<&'a [u8], Vec<Subpacket>> {
     }))(i)
 }
 
-impl<'a> TryFrom<&'a Sig> for &'a [Mpi] {
-    type Error = crate::errors::Error;
-
-    fn try_from(value: &'a Sig) -> std::result::Result<Self, Self::Error> {
-        match value {
-            Sig::Mpis(mpis) => Ok(mpis),
-            Sig::Native(_) => unimplemented!(),
-        }
-    }
-}
-
-impl<'a> TryFrom<&'a Sig> for &'a [u8] {
-    type Error = crate::errors::Error;
-
-    fn try_from(value: &'a Sig) -> std::result::Result<Self, Self::Error> {
-        match value {
-            Sig::Mpis(_) => unimplemented!(),
-            Sig::Native(native) => Ok(native),
-        }
-    }
-}
-
 fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], Sig> + '_ {
     move |i: &[u8]| match typ {
         &PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
