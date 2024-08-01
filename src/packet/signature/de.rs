@@ -272,7 +272,7 @@ fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     let (i, fingerprint) = match version {
         4 => take(20usize)(i),
         6 => take(32usize)(i),
-        _ => unimplemented!(),
+        _ => unimplemented!(), // FIXME
     }?;
 
     Ok((

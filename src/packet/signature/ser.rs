@@ -289,7 +289,7 @@ impl SignatureConfig {
         match self.version {
             SignatureVersion::V4 => writer.write_u16::<BigEndian>(hashed_subpackets.len() as u16)?,
             SignatureVersion::V6 => writer.write_u32::<BigEndian>(hashed_subpackets.len() as u32)?,
-            _ => unimplemented!(),
+            v => unimplemented_err!("signature version {:?}", v),
         }
 
         writer.write_all(&hashed_subpackets)?;
@@ -307,7 +307,7 @@ impl SignatureConfig {
             SignatureVersion::V6 => {
                 writer.write_u32::<BigEndian>(unhashed_subpackets.len() as u32)?
             }
-            _ => unimplemented!(),
+            v => unimplemented_err!("signature version {:?}", v),
         }
 
         writer.write_all(&unhashed_subpackets)?;

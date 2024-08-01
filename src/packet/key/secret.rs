@@ -516,7 +516,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
                 writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
             }
 
-            _ => unimplemented!(),
+            v => unimplemented_err!("key version {:?}", v),
         }
 
         writer.write_all(&key_buf)?;

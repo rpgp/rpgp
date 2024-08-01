@@ -34,7 +34,7 @@ impl Decryptor for SecretKey {
     // - Encrypted and wrapped session key.
 
     fn decrypt(&self, _mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
-        unimplemented!()
+        unimplemented_err!("decrypt for x25519")
     }
 }
 

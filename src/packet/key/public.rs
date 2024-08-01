@@ -469,7 +469,7 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
             PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
             PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
-            PublicParams::X25519 { .. } => unimplemented!(),
+            PublicParams::X25519 { .. } => unimplemented_err!("X25519"),
         }?;
 
         Ok(res
@@ -500,7 +500,7 @@ impl PublicKeyTrait for PubKeyInner {
                 writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
             }
 
-            _ => unimplemented!(),
+            v => unimplemented_err!("key version {:?}", v),
         }
 
         writer.write_all(&key_buf)?;
