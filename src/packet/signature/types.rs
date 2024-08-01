@@ -51,7 +51,7 @@ impl Signature {
     ) -> Self {
         Signature {
             packet_version,
-            config: SignatureConfig::new_v4(
+            config: SignatureConfig::new_v4_v6(
                 version,
                 typ,
                 pub_alg,

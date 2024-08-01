@@ -432,7 +432,7 @@ impl Message {
                     SignatureType::Text
                 };
 
-                let signature_config = SignatureConfig::new_v4(
+                let signature_config = SignatureConfig::new_v4_v6(
                     Default::default(),
                     typ,
                     algorithm,
@@ -445,7 +445,7 @@ impl Message {
             }
             _ => {
                 let typ = SignatureType::Binary;
-                let signature_config = SignatureConfig::new_v4(
+                let signature_config = SignatureConfig::new_v4_v6(
                     Default::default(),
                     typ,
                     algorithm,

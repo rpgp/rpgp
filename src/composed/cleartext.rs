@@ -85,7 +85,7 @@ impl CleartextSignedMessage {
         let sig_ver: SignatureVersion = key.version().try_into()?;
         let salt = crate::types::salt_for(rng, sig_ver, hash_algorithm);
 
-        let config = SignatureConfig::new_v4(
+        let config = SignatureConfig::new_v4_v6(
             sig_ver,
             SignatureType::Text,
             algorithm,

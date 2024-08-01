@@ -41,6 +41,27 @@ impl SignatureConfig {
         hash_alg: HashAlgorithm,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
+    ) -> Self {
+        // FIXME: must not be called for v6 signatures
+
+        Self::new_v4_v6(
+            version,
+            typ,
+            pub_alg,
+            hash_alg,
+            hashed_subpackets,
+            unhashed_subpackets,
+            None,
+        )
+    }
+
+    pub fn new_v4_v6(
+        version: SignatureVersion,
+        typ: SignatureType,
+        pub_alg: PublicKeyAlgorithm,
+        hash_alg: HashAlgorithm,
+        hashed_subpackets: Vec<Subpacket>,
+        unhashed_subpackets: Vec<Subpacket>,
         salt: Option<Vec<u8>>,
     ) -> Self {
         SignatureConfig {
