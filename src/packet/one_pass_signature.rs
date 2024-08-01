@@ -3,7 +3,6 @@ use std::io;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_res};
 use nom::number::streaming::be_u8;
-use nom::sequence::tuple;
 use nom::IResult;
 
 use crate::crypto::hash::HashAlgorithm;
@@ -16,27 +15,47 @@ use crate::types::{KeyId, Tag, Version};
 
 /// One-Pass Signature Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.4
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+pub enum OnePassSignature {
+    V3 {
+        common: OnePassSignatureCommon,
+        key_id: KeyId,
+    },
+    V6 {
+        common: OnePassSignatureCommon,
+        salt: Vec<u8>,
+        fingerprint: [u8; 32],
+    },
+}
+
+impl OnePassSignature {
+    pub fn version(&self) -> u8 {
+        match self {
+            Self::V3 { .. } => 3,
+            Self::V6 { .. } => 6,
+        }
+    }
+
+    fn common(&self) -> &OnePassSignatureCommon {
+        match self {
+            Self::V3 { common, .. } | Self::V6 { common, .. } => common,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OnePassSignature {
-    pub packet_version: Version,
-    pub version: u8,
-    pub typ: SignatureType,
-    pub hash_algorithm: HashAlgorithm,
-    pub pub_algorithm: PublicKeyAlgorithm,
-    pub salt: Option<Vec<u8>>,
-    pub key_id: Option<KeyId>,
-    pub fingerprint: Option<[u8; 32]>,
-    pub last: u8,
+pub struct OnePassSignatureCommon {
+    packet_version: Version,
+    typ: SignatureType,
+    hash_algorithm: HashAlgorithm,
+    pub_algorithm: PublicKeyAlgorithm,
+    last: u8,
 }
 
 impl OnePassSignature {
     /// Parses a `OnePassSignature` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
-
-        if pk.version != 2 && pk.version != 3 && pk.version != 4 && pk.version != 6 {
-            unsupported_err!("unsupported signature version {}", pk.version);
-        }
 
         Ok(pk)
     }
@@ -54,16 +73,15 @@ impl OnePassSignature {
         pub_algorithm: PublicKeyAlgorithm,
         key_id: KeyId,
     ) -> Self {
-        OnePassSignature {
-            packet_version: Default::default(),
-            version: 0x03,
-            typ,
-            hash_algorithm,
-            pub_algorithm,
-            salt: None,
-            key_id: Some(key_id),
-            fingerprint: None,
-            last: 1,
+        OnePassSignature::V3 {
+            common: OnePassSignatureCommon {
+                packet_version: Default::default(),
+                typ,
+                hash_algorithm,
+                pub_algorithm,
+                last: 1,
+            },
+            key_id,
         }
     }
 
@@ -77,74 +95,87 @@ impl OnePassSignature {
         salt: Vec<u8>,
         fingerprint: [u8; 32],
     ) -> Self {
-        OnePassSignature {
-            packet_version: Default::default(),
-            version: 0x06,
-            typ,
-            hash_algorithm,
-            pub_algorithm,
-            salt: Some(salt),
-            key_id: None,
-            fingerprint: Some(fingerprint),
-            last: 1,
+        OnePassSignature::V6 {
+            common: OnePassSignatureCommon {
+                packet_version: Default::default(),
+                typ,
+                hash_algorithm,
+                pub_algorithm,
+                last: 1,
+            },
+            salt,
+            fingerprint,
         }
     }
 
     pub fn packet_version(&self) -> Version {
-        self.packet_version
+        self.common().packet_version
     }
 }
 
 fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSignature> {
     move |i: &[u8]| {
-        map(
-            tuple((
-                be_u8,
-                map_res(be_u8, SignatureType::try_from),
-                map(be_u8, HashAlgorithm::from),
-                map(be_u8, PublicKeyAlgorithm::from),
-                map_res(take(8usize), KeyId::from_slice),
-                be_u8,
-            )),
-            |(version, typ, hash, pub_alg, key_id, last)| OnePassSignature {
-                packet_version,
-                version,
-                typ,
-                hash_algorithm: hash,
-                pub_algorithm: pub_alg,
-                salt: None,           // FIXME
-                key_id: Some(key_id), // FIXME
-                fingerprint: None,    // FIXME
-                last,
-            },
-        )(i)
+        let (i, version) = be_u8(i)?;
+        let (i, typ) = map_res(be_u8, SignatureType::try_from)(i)?;
+        let (i, hash_algorithm) = map(be_u8, HashAlgorithm::from)(i)?;
+        let (i, pub_algorithm) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
+
+        match version {
+            3 => {
+                let (i, key_id) = map_res(take(8usize), KeyId::from_slice)(i)?;
+                let (i, last) = be_u8(i)?;
+
+                let common = OnePassSignatureCommon {
+                    packet_version,
+                    typ,
+                    hash_algorithm,
+                    pub_algorithm,
+                    last,
+                };
+
+                let ops = OnePassSignature::V3 { common, key_id };
+
+                Ok((i, ops))
+            }
+            6 => {
+                unimplemented!(); // FIXME: todo
+
+                // OnePassSignature::V6 {
+                //     common,
+                //     salt,
+                //     fingerprint,
+                // }
+            }
+            _ => unimplemented!(),
+        }
     }
 }
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[
-            self.version,
-            self.typ as u8,
-            self.hash_algorithm.into(),
-            self.pub_algorithm.into(),
+            self.version(),
+            self.common().typ as u8,
+            self.common().hash_algorithm.into(),
+            self.common().pub_algorithm.into(),
         ])?;
 
         // salt, if v6
-        if self.version == 6 {
-            let salt: &[u8] = self.salt.as_ref().expect("v6");
-
+        if let OnePassSignature::V6 { salt, .. } = self {
             let len: u8 = salt.len().try_into()?;
             writer.write_all(&[len])?;
             writer.write_all(salt)?;
         }
 
-        if self.version == 3 {
-            writer.write_all(self.key_id.as_ref().expect("v3").as_ref())?;
-        } else if self.version == 6 {
-            writer.write_all(self.fingerprint.as_ref().expect("v6").as_ref())?;
+        match self {
+            Self::V3 { key_id, .. } => {
+                writer.write_all(key_id.as_ref())?;
+            }
+            Self::V6 { fingerprint, .. } => {
+                writer.write_all(fingerprint.as_ref())?;
+            }
         }
-        writer.write_all(&[self.last])?;
+        writer.write_all(&[self.common().last])?;
 
         Ok(())
     }
@@ -152,7 +183,7 @@ impl Serialize for OnePassSignature {
 
 impl PacketTrait for OnePassSignature {
     fn packet_version(&self) -> Version {
-        self.packet_version
+        self.packet_version()
     }
 
     fn tag(&self) -> Tag {
