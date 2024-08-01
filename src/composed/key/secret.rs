@@ -5,10 +5,9 @@ use rand::Rng;
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
 use crate::errors::Result;
 use crate::packet::{
-    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket,
-    SubpacketData,
+    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
-use crate::types::{SecretKeyTrait};
+use crate::types::SecretKeyTrait;
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]

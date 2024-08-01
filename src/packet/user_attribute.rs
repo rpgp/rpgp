@@ -11,7 +11,7 @@ use nom::number::streaming::{be_u8, le_u16};
 use nom::sequence::pair;
 use rand::Rng;
 
-use super::{SubpacketData};
+use super::SubpacketData;
 use crate::errors::{IResult, Result};
 use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use crate::ser::Serialize;

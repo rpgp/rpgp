@@ -7,8 +7,7 @@ use rand::Rng;
 
 use crate::errors::Result;
 use crate::packet::{
-    PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket,
-    SubpacketData,
+    PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, Version};

@@ -8,8 +8,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket,
-    SubpacketData,
+    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
 use crate::types::{KeyId, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use crate::types::{Mpi, Sig};

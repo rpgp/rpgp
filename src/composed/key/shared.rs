@@ -9,8 +9,8 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket,
-    SubpacketData, UserAttribute, UserId,
+    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
+    UserAttribute, UserId,
 };
 use crate::types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
