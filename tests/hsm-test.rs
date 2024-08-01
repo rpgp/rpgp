@@ -470,7 +470,7 @@ fn card_sign() {
         const DATA: &[u8] = b"Hello World";
 
         // -- use hsm signer
-        let signature = SignatureConfig::new_v4_v6(
+        let signature = SignatureConfig::new_v4(
             packet::SignatureVersion::V4,
             packet::SignatureType::Binary,
             hsm.public_key().algorithm(),
@@ -482,7 +482,6 @@ fn card_sign() {
                 packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())),
             ],
             vec![],
-            None, // no salt
         );
 
         let signature = signature.sign(&hsm, String::new, DATA).unwrap();

@@ -409,6 +409,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use packet::LiteralData;
+    use rand::thread_rng;
 
     use super::*;
     use crate::{composed::shared::Deserializable, Message};
@@ -444,7 +445,12 @@ k0mXubZvyl4GBg==
         let msg = Message::Literal(lit);
 
         let pri = ssk.primary_key;
-        let signed = msg.sign(&pri, String::default, HashAlgorithm::SHA2_256)?;
+        let signed = msg.sign(
+            &mut thread_rng(),
+            &pri,
+            String::default,
+            HashAlgorithm::SHA2_256,
+        )?;
 
         signed.verify(&pri)?;
 
@@ -492,6 +498,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let msg = Message::Literal(lit);
 
         let msg = msg.sign(
+            &mut thread_rng(),
             &ssk.primary_key,
             || passphrase.to_string(),
             HashAlgorithm::SHA2_256,

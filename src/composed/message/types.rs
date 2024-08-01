@@ -402,13 +402,15 @@ impl Message {
     }
 
     /// Sign this message using the provided key.
-    pub fn sign<F>(
+    pub fn sign<R, F>(
         self,
+        rng: &mut R,
         key: &impl SecretKeyTrait,
         key_pw: F,
         hash_algorithm: HashAlgorithm,
     ) -> Result<Self>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
         let key_id = key.key_id();
@@ -424,6 +426,9 @@ impl Message {
         ];
         let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id.clone()))];
 
+        let sig_version = key.version().try_into()?;
+        let salt = crate::types::salt_for(rng, sig_version, hash_algorithm);
+
         let (typ, signature) = match self {
             Message::Literal(ref l) => {
                 let typ = if l.is_binary() {
@@ -433,26 +438,26 @@ impl Message {
                 };
 
                 let signature_config = SignatureConfig::new_v4_v6(
-                    Default::default(),
+                    sig_version,
                     typ,
                     algorithm,
                     hash_algorithm,
                     hashed_subpackets,
                     unhashed_subpackets,
-                    None,
+                    salt,
                 );
                 (typ, signature_config.sign(key, key_pw, l.data())?)
             }
             _ => {
                 let typ = SignatureType::Binary;
                 let signature_config = SignatureConfig::new_v4_v6(
-                    Default::default(),
+                    sig_version,
                     typ,
                     algorithm,
                     hash_algorithm,
                     hashed_subpackets,
                     unhashed_subpackets,
-                    None,
+                    salt,
                 );
 
                 let data = self.to_bytes()?;
@@ -989,7 +994,12 @@ mod tests {
         assert!(lit_msg.verify(&pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
-            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(
+                &mut thread_rng(),
+                &skey,
+                || "".into(),
+                HashAlgorithm::SHA2_256,
+            )
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1012,7 +1022,12 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(
+                &mut thread_rng(),
+                &skey,
+                || "".into(),
+                HashAlgorithm::SHA2_256,
+            )
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1035,7 +1050,12 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(
+                &mut thread_rng(),
+                &skey,
+                || "".into(),
+                HashAlgorithm::SHA2_256,
+            )
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
@@ -1063,7 +1083,12 @@ mod tests {
 
             let lit_msg = Message::new_literal("hello.txt", "hello world\n");
             let signed_msg = lit_msg
-                .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+                .sign(
+                    &mut thread_rng(),
+                    &skey,
+                    || "test".into(),
+                    HashAlgorithm::SHA2_256,
+                )
                 .unwrap();
 
             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1088,7 +1113,12 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(
+                &mut thread_rng(),
+                &skey,
+                || "test".into(),
+                HashAlgorithm::SHA2_256,
+            )
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1112,7 +1142,12 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(
+                &mut thread_rng(),
+                &skey,
+                || "test".into(),
+                HashAlgorithm::SHA2_256,
+            )
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
