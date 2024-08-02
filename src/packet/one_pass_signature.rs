@@ -26,6 +26,10 @@ pub enum OnePassSignature {
         salt: Vec<u8>,
         fingerprint: [u8; 32],
     },
+    Other {
+        packet_version: Version,
+        version: u8,
+    },
 }
 
 impl OnePassSignature {
@@ -33,12 +37,7 @@ impl OnePassSignature {
         match self {
             Self::V3 { .. } => 3,
             Self::V6 { .. } => 6,
-        }
-    }
-
-    fn common(&self) -> &OnePassSignatureCommon {
-        match self {
-            Self::V3 { common, .. } | Self::V6 { common, .. } => common,
+            Self::Other { version, .. } => *version,
         }
     }
 }
@@ -109,7 +108,10 @@ impl OnePassSignature {
     }
 
     pub fn packet_version(&self) -> Version {
-        self.common().packet_version
+        match self {
+            Self::V3 { common, .. } | Self::V6 { common, .. } => common.packet_version,
+            Self::Other { packet_version, .. } => *packet_version,
+        }
     }
 }
 
@@ -123,6 +125,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
         match version {
             3 => {
                 let (i, key_id) = map_res(take(8usize), KeyId::from_slice)(i)?;
+
                 let (i, last) = be_u8(i)?;
 
                 let common = OnePassSignatureCommon {
@@ -138,26 +141,51 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
                 Ok((i, ops))
             }
             6 => {
-                unimplemented!(); // FIXME: todo
+                let (i, salt_len) = be_u8(i)?;
+                let (i, salt) = map(take(salt_len), |salt: &[u8]| salt.to_vec())(i)?;
+                let (i, fingerprint) = map_res(take(32usize), TryInto::try_into)(i)?;
 
-                // OnePassSignature::V6 {
-                //     common,
-                //     salt,
-                //     fingerprint,
-                // }
+                let (i, last) = be_u8(i)?;
+
+                let common = OnePassSignatureCommon {
+                    packet_version,
+                    typ,
+                    hash_algorithm,
+                    pub_algorithm,
+                    last,
+                };
+
+                let ops = OnePassSignature::V6 {
+                    common,
+                    salt,
+                    fingerprint,
+                };
+
+                Ok((i, ops))
             }
-            _ => unimplemented!(),
+            _ => Ok((
+                i,
+                OnePassSignature::Other {
+                    packet_version,
+                    version,
+                },
+            )),
         }
     }
 }
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        let common = match self {
+            Self::V3 { common, .. } | Self::V6 { common, .. } => common,
+            Self::Other { version, .. } => unsupported_err!("OPS version {}", version),
+        };
+
         writer.write_all(&[
             self.version(),
-            self.common().typ as u8,
-            self.common().hash_algorithm.into(),
-            self.common().pub_algorithm.into(),
+            common.typ as u8,
+            common.hash_algorithm.into(),
+            common.pub_algorithm.into(),
         ])?;
 
         // salt, if v6
@@ -174,8 +202,9 @@ impl Serialize for OnePassSignature {
             Self::V6 { fingerprint, .. } => {
                 writer.write_all(fingerprint.as_ref())?;
             }
+            Self::Other { version, .. } => unsupported_err!("OPS version {}", version),
         }
-        writer.write_all(&[self.common().last])?;
+        writer.write_all(&[common.last])?;
 
         Ok(())
     }
