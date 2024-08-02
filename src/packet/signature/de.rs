@@ -17,7 +17,8 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::packet::signature::types::*;
 use crate::types::{
-    mpi, CompressionAlgorithm, KeyId, Mpi, MpiRef, RevocationKey, RevocationKeyClass, Sig, Version,
+    mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
+    Sig, Version,
 };
 use crate::util::{clone_into_array, packet_length};
 
@@ -267,17 +268,16 @@ fn embedded_sig(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse an issuer subpacket
 /// Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
 fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    let (i, version) = be_u8(i)?;
-
+    let (i, version) = map(be_u8, KeyVersion::from)(i)?;
     let (i, fingerprint) = match version {
-        4 => take(20usize)(i),
-        6 => take(32usize)(i),
-        _ => unimplemented!(), // FIXME
+        // This subpacket is only used for v4 and newer fingerprints
+        KeyVersion::V4 | KeyVersion::V5 | KeyVersion::V6 => take(version.fingerprint_len())(i),
+        _ => Err(invalid_key_version(version)),
     }?;
 
     Ok((
         i,
-        SubpacketData::IssuerFingerprint(version.into(), fingerprint.to_vec()),
+        SubpacketData::IssuerFingerprint(version, fingerprint.to_vec()),
     ))
 }
 
@@ -290,17 +290,16 @@ fn preferred_encryption_modes(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 
 /// Parse an intended recipient fingerprint subpacket
 fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    let (i, version) = be_u8(i)?;
-
+    let (i, version) = map(be_u8, KeyVersion::from)(i)?;
     let (i, fingerprint) = match version {
-        4 => take(20usize)(i),
-        5 => take(32usize)(i),
-        _ => unimplemented!(), // FIXME
+        // This subpacket is only used for v4 and newer fingerprints
+        KeyVersion::V4 | KeyVersion::V5 | KeyVersion::V6 => take(version.fingerprint_len())(i),
+        _ => Err(invalid_key_version(version)),
     }?;
 
     Ok((
         i,
-        SubpacketData::IntendedRecipientFingerprint(version.into(), fingerprint.to_vec()),
+        SubpacketData::IntendedRecipientFingerprint(version, fingerprint.to_vec()),
     ))
 }
 
@@ -536,15 +535,16 @@ fn v6_parser(
             let (i, len) = be_u8(i)?;
             let (i, salt) = take(len)(i)?;
 
+            // Only for v6 signatures, a variable-length field containing:
+            // A one-octet salt size. The value MUST match the value defined for the hash algorithm as specified in Table 23.
+            // The salt; a random value of the specified size.
+
+            assert_eq!(hash_alg.salt_len(), salt.len()); // FIXME
+
             (i, Some(salt.to_vec()))
         } else {
             (i, None)
         };
-
-        // FIXME
-        // Only for v6 signatures, a variable-length field containing:
-        // A one-octet salt size. The value MUST match the value defined for the hash algorithm as specified in Table 23.
-        // The salt; a random value of the specified size.
 
         // One or more multiprecision integers comprising the signature.
         let (i, sig) = actual_signature(&pub_alg)(i)?;
@@ -566,10 +566,16 @@ fn v6_parser(
     }
 }
 
-fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Signature> {
-    Err(nom::Err::Error(crate::errors::Error::Unsupported(format!(
-        "unknown signature version {version:?}"
-    ))))
+fn invalid_sig_version(version: SignatureVersion) -> nom::Err<crate::errors::Error> {
+    nom::Err::Error(crate::errors::Error::Unsupported(format!(
+        "invalid signature version {version:?}"
+    )))
+}
+
+fn invalid_key_version(version: KeyVersion) -> nom::Err<crate::errors::Error> {
+    nom::Err::Error(crate::errors::Error::Unsupported(format!(
+        "invalid key version {version:?}"
+    )))
 }
 
 /// Parse a signature packet (Tag 2)
@@ -581,7 +587,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature>
             &SignatureVersion::V2 | &SignatureVersion::V3 => v3_parser(packet_version, version)(i),
             &SignatureVersion::V4 | &SignatureVersion::V5 => v4_parser(packet_version, version)(i),
             &SignatureVersion::V6 => v6_parser(packet_version, version)(i),
-            _ => invalid_version(i, version),
+            _ => Err(invalid_sig_version(version)),
         }?;
         Ok((i, signature))
     }

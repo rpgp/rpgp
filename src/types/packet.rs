@@ -151,6 +151,19 @@ pub enum KeyVersion {
     Other(u8),
 }
 
+impl KeyVersion {
+    /// Size of OpenPGP fingerprint in bytes
+    /// (returns 0 for unknown versions)
+    pub const fn fingerprint_len(&self) -> usize {
+        match self {
+            KeyVersion::V2 | KeyVersion::V3 => 16, // MD5
+            KeyVersion::V4 => 20,                  // SHA1
+            KeyVersion::V5 | KeyVersion::V6 => 32, // SHA256
+            KeyVersion::Other(_) => 0,             // FIXME?
+        }
+    }
+}
+
 impl Default for KeyVersion {
     fn default() -> Self {
         Self::V4
