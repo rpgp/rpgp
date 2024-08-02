@@ -281,6 +281,29 @@ fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
+/// Parse a preferred encryption modes subpacket
+fn preferred_encryption_modes(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+    let list: SmallVec<[AeadAlgorithm; 2]> = body.iter().map(|v| AeadAlgorithm::from(*v)).collect();
+
+    Ok((&b""[..], SubpacketData::PreferredEncryptionModes(list)))
+}
+
+/// Parse an intended recipient fingerprint subpacket
+fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    let (i, version) = be_u8(i)?;
+
+    let (i, fingerprint) = match version {
+        4 => take(20usize)(i),
+        5 => take(32usize)(i),
+        _ => unimplemented!(), // FIXME
+    }?;
+
+    Ok((
+        i,
+        SubpacketData::IntendedRecipientFingerprint(version.into(), fingerprint.to_vec()),
+    ))
+}
+
 /// Parse a preferred aead subpacket
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]> = body
@@ -326,6 +349,8 @@ fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8
         SignatureTarget => sig_target(body),
         EmbeddedSignature => embedded_sig(body),
         IssuerFingerprint => issuer_fingerprint(body),
+        PreferredEncryptionModes => preferred_encryption_modes(body),
+        IntendedRecipientFingerprint => intended_recipient_fingerprint(body),
         PreferredAead => pref_aead_alg(body),
         Experimental(n) => Ok((
             body,

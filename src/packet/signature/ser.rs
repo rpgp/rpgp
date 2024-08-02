@@ -118,6 +118,13 @@ impl Subpacket {
                 writer.write_all(&[u8::from(*version)])?;
                 writer.write_all(fp)?;
             }
+            SubpacketData::PreferredEncryptionModes(algs) => {
+                writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
+            }
+            SubpacketData::IntendedRecipientFingerprint(version, fp) => {
+                writer.write_all(&[u8::from(*version)])?;
+                writer.write_all(fp)?;
+            }
             SubpacketData::PreferredAeadAlgorithms(algs) => {
                 writer.write_all(
                     &algs
@@ -181,6 +188,8 @@ impl Subpacket {
             SubpacketData::RegularExpression(regexp) => regexp.len(),
             SubpacketData::ExportableCertification(_) => 1,
             SubpacketData::IssuerFingerprint(_, fp) => 1 + fp.len(),
+            SubpacketData::PreferredEncryptionModes(algs) => algs.len(),
+            SubpacketData::IntendedRecipientFingerprint(_, fp) => 1 + fp.len(),
             SubpacketData::PreferredAeadAlgorithms(algs) => algs.len() * 2,
             SubpacketData::Experimental(_, body) => body.len(),
             SubpacketData::Other(_, body) => body.len(),
@@ -219,6 +228,10 @@ impl Subpacket {
             SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
             SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
             SubpacketData::IssuerFingerprint(_, _) => SubpacketType::IssuerFingerprint,
+            SubpacketData::PreferredEncryptionModes(_) => SubpacketType::PreferredEncryptionModes,
+            SubpacketData::IntendedRecipientFingerprint(_, _) => {
+                SubpacketType::IntendedRecipientFingerprint
+            }
             SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
             SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
             SubpacketData::Other(n, _) => SubpacketType::Other(*n),
