@@ -189,7 +189,7 @@ impl Serialize for OnePassSignature {
 
         writer.write_all(&[
             self.version(),
-            common.typ as u8,
+            common.typ.into(),
             common.hash_algorithm.into(),
             common.pub_algorithm.into(),
         ])?;

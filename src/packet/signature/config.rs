@@ -264,7 +264,7 @@ impl SignatureConfig {
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
                 let mut buf = [0u8; 5];
-                buf[0] = self.typ as u8;
+                buf[0] = self.typ.into();
                 BigEndian::write_u32(
                     &mut buf[1..],
                     self.created
@@ -284,7 +284,7 @@ impl SignatureConfig {
                     // the signature version
                     self.version.into(),
                     // the signature type
-                    self.typ as u8,
+                    self.typ.into(),
                     // the public-key algorithm
                     self.pub_alg.into(),
                     // the hash algorithm
@@ -352,6 +352,8 @@ impl SignatureConfig {
             }
             SignatureType::KeyRevocation => unimplemented_err!("KeyRevocation"),
             SignatureType::ThirdParty => unimplemented_err!("signing ThirdParty"),
+
+            SignatureType::Other(id) => unimplemented_err!("Other ({})", id),
         }
     }
 

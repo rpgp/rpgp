@@ -6,7 +6,7 @@ use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Duration, Utc};
 use iter_read::IterRead;
 use log::debug;
-use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive};
 use smallvec::{smallvec, SmallVec};
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -593,11 +593,11 @@ impl Default for SignatureVersion {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum SignatureType {
     /// Signature of a binary document.
-    /// This means the signer owns it, created it, or certifies that ithas not been modified.
+    /// This means the signer owns it, created it, or certifies that it has not been modified.
     Binary = 0x00,
     /// Signature of a canonical text document.
     /// This means the signer owns it, created it, or certifies that it
@@ -688,6 +688,9 @@ pub enum SignatureType {
     /// party that only sees the signature, not the key or source
     /// document) that cannot include a target subpacket.
     ThirdParty = 0x50,
+
+    #[num_enum(catch_all)]
+    Other(u8),
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]

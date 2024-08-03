@@ -257,7 +257,7 @@ impl SignatureConfig {
             // tag
             0x05,
             // type
-            self.typ as u8,
+            self.typ.into(),
         ])?;
 
         writer.write_u32::<BigEndian>(
@@ -286,7 +286,7 @@ impl SignatureConfig {
     fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[
             // type
-            self.typ as u8,
+            self.typ.into(),
             // public algorithm
             u8::from(self.pub_alg),
             // hash algorithm
