@@ -44,17 +44,23 @@ impl OnePassSignature {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OnePassSignatureCommon {
-    packet_version: Version,
-    typ: SignatureType,
-    hash_algorithm: HashAlgorithm,
-    pub_algorithm: PublicKeyAlgorithm,
-    last: u8,
+    pub packet_version: Version,
+    pub typ: SignatureType,
+    pub hash_algorithm: HashAlgorithm,
+    pub pub_algorithm: PublicKeyAlgorithm,
+    pub last: u8,
 }
 
 impl OnePassSignature {
     /// Parses a `OnePassSignature` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         let (_, pk) = parse(packet_version)(input)?;
+
+        // We don't emit "Other" Signature packets, so we also must not emit "Other" OPS packets
+        // (otherwise the message parser will complain about unmatched OPSes).
+        if let OnePassSignature::Other { version, .. } = pk {
+            unsupported_err!("OPS packet version {}", version);
+        }
 
         Ok(pk)
     }
