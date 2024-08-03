@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
-use nom::bytes::streaming::tag;
+use nom::bytes::streaming::{tag, take};
 use nom::combinator::{map, map_opt, map_res};
 use nom::multi::length_data;
 use nom::number::streaming::{be_u16, be_u32, be_u8};
@@ -137,12 +137,26 @@ fn rsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     })(i)
 }
 
-fn unknown(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    Ok((i, PublicParams::Unknown { data: vec![] })) // FIXME
+fn unknown(i: &[u8], len: Option<usize>) -> IResult<&[u8], PublicParams> {
+    if let Some(pub_len) = len {
+        let (i, data) = take(pub_len)(i)?;
+        Ok((
+            i,
+            PublicParams::Unknown {
+                data: data.to_vec(),
+            },
+        ))
+    } else {
+        // we don't know how many bytes to consume
+        Ok((i, PublicParams::Unknown { data: vec![] }))
+    }
 }
 
 /// Parse the fields of a public key.
-pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
+pub fn parse_pub_fields(
+    typ: PublicKeyAlgorithm,
+    len: Option<usize>,
+) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
     move |i: &[u8]| match typ {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
             rsa(i)
@@ -155,8 +169,8 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
 
         PublicKeyAlgorithm::Ed25519 => ed25519(i),
         PublicKeyAlgorithm::X25519 => x25519(i),
-        PublicKeyAlgorithm::Ed448 => unknown(i), // FIXME?
-        PublicKeyAlgorithm::X448 => unknown(i),  // FIXME?
+        PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME?
+        PublicKeyAlgorithm::X448 => unknown(i, len),  // FIXME?
 
         PublicKeyAlgorithm::DiffieHellman
         | PublicKeyAlgorithm::Private100
@@ -170,7 +184,7 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
         | PublicKeyAlgorithm::Private108
         | PublicKeyAlgorithm::Private109
         | PublicKeyAlgorithm::Private110
-        | PublicKeyAlgorithm::Unknown(_) => unknown(i),
+        | PublicKeyAlgorithm::Unknown(_) => unknown(i, len),
     }
 }
 
@@ -201,7 +215,7 @@ fn public_key_parser_v4_v6(
             i
         };
 
-        let (i, params) = parse_pub_fields(alg)(i)?;
+        let (i, params) = parse_pub_fields(alg, None)(i)?;
         Ok((i, (*key_ver, alg, created_at, None, params)))
     }
 }
@@ -224,7 +238,7 @@ fn public_key_parser_v2_v3(
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, exp) = be_u16(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
-        let (i, params) = parse_pub_fields(alg)(i)?;
+        let (i, params) = parse_pub_fields(alg, None)(i)?;
 
         Ok((i, (*key_ver, alg, created_at, Some(exp), params)))
     }
