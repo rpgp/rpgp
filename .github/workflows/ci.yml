@@ -215,7 +215,7 @@ jobs:
     - name: Install stable
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.74
+        toolchain: 1.75
         target: ${{ matrix.target }}
         override: true
 
