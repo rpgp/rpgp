@@ -127,6 +127,9 @@ pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
         }
         Tag::ModDetectionCode => ModDetectionCode::from_slice(ver, body).map(Into::into),
         Tag::Padding => Padding::from_slice(ver, body).map(Into::into),
+        Tag::Other(20) => {
+            unimplemented_err!("GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported")
+        }
         Tag::Other(other) => unimplemented_err!("Unknown packet typ: {}", other),
     };
 
