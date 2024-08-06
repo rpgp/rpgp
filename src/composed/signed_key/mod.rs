@@ -17,7 +17,7 @@
 //! # const DATA :&'static [u8] = b"Hello World";
 //! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, key::SecretKeyParamsBuilder};
 //! # use pgp::errors::Result;
-//! # use pgp::packet::{self, KeyFlags, UserAttribute, UserId};
+//! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! # use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
 //! # use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm};
 //! # use rand::thread_rng;
@@ -82,13 +82,13 @@
 //!     PublicKeyAlgorithm::RSA,
 //!     HashAlgorithm::SHA2_256,
 //!     [digest[0], digest[1]],
-//!     None,
 //!     signature,
 //!     vec![
 //!         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
 //!         packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
 //!     ],
 //!     vec![],
+//!     SignatureVersionSpecific::V4 {}
 //! );
 //!
 //! // sign and and write the package (the package written here is NOT rfc4880 compliant)

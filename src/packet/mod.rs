@@ -13,7 +13,7 @@
 //! # use rand::thread_rng;
 //! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, key::SecretKeyParamsBuilder};
 //! # use pgp::errors::Result;
-//! # use pgp::packet::{self, KeyFlags, UserAttribute, UserId};
+//! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
 //! use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm};
 //! use smallvec::*;
@@ -54,14 +54,12 @@
 //!      .typ(packet::SignatureType::Binary)
 //!      .pub_alg(PublicKeyAlgorithm::RSA)
 //!      .hash_alg(HashAlgorithm::SHA2_256)
-//!      .issuer(Some(signing_key.key_id()))
-//!      .created(Some(now))
-//!      .salt(None)
 //!      .unhashed_subpackets(vec![]) // must be initialized
 //!      .hashed_subpackets(vec![
 //!           packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
 //!           packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
 //!      ]) // must be initialized
+//!      .version_specific(SignatureVersionSpecific::V4 {})
 //!      .build()
 //!      .unwrap();
 //!
