@@ -22,8 +22,8 @@ use pgp::crypto::{
 };
 use pgp::errors::Error;
 use pgp::packet::{
-    KeyFlags, Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, UserAttribute,
-    UserId,
+    KeyFlags, Signature, SignatureType, SignatureVersion, SignatureVersionSpecific, Subpacket,
+    SubpacketData, UserAttribute, UserId,
 };
 use pgp::ser::Serialize;
 use pgp::types::{
@@ -401,7 +401,6 @@ fn test_parse_details() {
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::SHA1,
         [0x7c, 0x63],
-        None,
         vec![Mpi::from(vec![
             0x15, 0xb5, 0x4f, 0xca, 0x11, 0x7f, 0x1b, 0x1d, 0xc0, 0x7a, 0x05, 0x97, 0x25, 0x10,
             0x4b, 0x6a, 0x76, 0x12, 0xf8, 0x89, 0x48, 0x76, 0x74, 0xeb, 0x8b, 0x22, 0xcf, 0xeb,
@@ -460,6 +459,7 @@ fn test_parse_details() {
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer.clone()],
+        SignatureVersionSpecific::V4 {},
     );
 
     let u1 = SignedUser::new(
@@ -474,7 +474,6 @@ fn test_parse_details() {
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::SHA1,
         [0xca, 0x6c],
-        None,
         vec![Mpi::from(vec![
             0x49, 0xa0, 0xb5, 0x41, 0xbd, 0x33, 0xa8, 0xda, 0xda, 0x6e, 0xb1, 0xe5, 0x28, 0x74,
             0x18, 0xee, 0x39, 0xc8, 0x8d, 0xfd, 0x39, 0xe8, 0x3b, 0x09, 0xdc, 0x9d, 0x04, 0x91,
@@ -533,6 +532,7 @@ fn test_parse_details() {
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer.clone()],
+        SignatureVersionSpecific::V4 {},
     );
 
     let u2 = SignedUser::new(
@@ -559,7 +559,6 @@ fn test_parse_details() {
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::SHA1,
         [0x02, 0x0c],
-        None,
         vec![Mpi::from(vec![
             0x5b, 0x4b, 0xeb, 0xff, 0x1a, 0x89, 0xc2, 0xe1, 0x80, 0x20, 0x26, 0x3b, 0xf4, 0x4d,
             0x2d, 0x46, 0xba, 0x96, 0x78, 0xb2, 0x88, 0xf8, 0xf9, 0xd5, 0xf1, 0x5f, 0x7d, 0x45,
@@ -614,6 +613,7 @@ fn test_parse_details() {
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer],
+        SignatureVersionSpecific::V4 {},
     );
 
     assert_eq!(ua.signatures, vec![sig3]);

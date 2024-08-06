@@ -4,6 +4,7 @@ use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use log::debug;
+use rand::{CryptoRng, Rng};
 
 use crate::crypto::hash::{HashAlgorithm, Hasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
@@ -23,14 +24,20 @@ pub struct SignatureConfig {
     pub unhashed_subpackets: Vec<Subpacket>,
     pub hashed_subpackets: Vec<Subpacket>,
 
-    // only set on V2 and V3 keys
-    #[builder(default)]
-    pub created: Option<DateTime<Utc>>,
-    #[builder(default)]
-    pub issuer: Option<KeyId>,
+    pub version_specific: SignatureVersionSpecific,
+}
 
-    // only for V6 signatures
-    pub salt: Option<Vec<u8>>,
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum SignatureVersionSpecific {
+    // specific to V2 and V3 signatures
+    V3 {
+        created: DateTime<Utc>,
+        issuer: KeyId,
+    },
+    V4 {},
+    V6 {
+        salt: Vec<u8>,
+    },
 }
 
 impl SignatureConfig {
@@ -44,26 +51,6 @@ impl SignatureConfig {
     ) -> Self {
         // FIXME: must not be called for v6 signatures
 
-        Self::new_v4_v6(
-            version,
-            typ,
-            pub_alg,
-            hash_alg,
-            hashed_subpackets,
-            unhashed_subpackets,
-            None,
-        )
-    }
-
-    pub fn new_v4_v6(
-        version: SignatureVersion,
-        typ: SignatureType,
-        pub_alg: PublicKeyAlgorithm,
-        hash_alg: HashAlgorithm,
-        hashed_subpackets: Vec<Subpacket>,
-        unhashed_subpackets: Vec<Subpacket>,
-        salt: Option<Vec<u8>>,
-    ) -> Self {
         SignatureConfig {
             version,
             typ,
@@ -71,10 +58,48 @@ impl SignatureConfig {
             hash_alg,
             hashed_subpackets,
             unhashed_subpackets,
-            issuer: None,
-            created: None,
-            salt,
+            version_specific: SignatureVersionSpecific::V4 {},
         }
+    }
+
+    pub fn version_specific<R>(
+        mut rng: &mut R,
+        version: SignatureVersion,
+        hash_alg: HashAlgorithm,
+    ) -> Result<SignatureVersionSpecific>
+    where
+        R: CryptoRng + Rng,
+    {
+        match version {
+            SignatureVersion::V6 => Ok(SignatureVersionSpecific::V6 {
+                salt: crate::types::salt_for(&mut rng, hash_alg),
+            }),
+            SignatureVersion::V4 => Ok(SignatureVersionSpecific::V4 {}),
+            _ => bail!("Unsupported signature version {:version?}"),
+        }
+    }
+
+    pub fn new_v4_v6<R>(
+        mut rng: &mut R,
+        version: SignatureVersion,
+        typ: SignatureType,
+        pub_alg: PublicKeyAlgorithm,
+        hash_alg: HashAlgorithm,
+        hashed_subpackets: Vec<Subpacket>,
+        unhashed_subpackets: Vec<Subpacket>,
+    ) -> Result<Self>
+    where
+        R: CryptoRng + Rng,
+    {
+        Ok(SignatureConfig {
+            version,
+            typ,
+            pub_alg,
+            hash_alg,
+            hashed_subpackets,
+            unhashed_subpackets,
+            version_specific: Self::version_specific(&mut rng, version, hash_alg)?,
+        })
     }
 
     /// Sign the given data.
@@ -85,9 +110,8 @@ impl SignatureConfig {
     {
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        if self.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         self.hash_data_to_sign(&mut *hasher, data)?;
@@ -136,9 +160,8 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        if self.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         signee.serialize_for_hashing(&mut hasher)?;
@@ -202,9 +225,8 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        if self.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         // Signing Key
@@ -237,9 +259,8 @@ impl SignatureConfig {
 
         let mut hasher = self.hash_alg.new_hasher()?;
 
-        if self.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         key.serialize_for_hashing(&mut hasher)?;
@@ -263,14 +284,17 @@ impl SignatureConfig {
     pub fn hash_signature_data(&self, hasher: &mut dyn Hasher) -> Result<usize> {
         match self.version {
             SignatureVersion::V2 | SignatureVersion::V3 => {
+                let created = {
+                    if let SignatureVersionSpecific::V3 { created, .. } = self.version_specific {
+                        created
+                    } else {
+                        bail!("must exist for a v3 signature")
+                    }
+                };
+
                 let mut buf = [0u8; 5];
                 buf[0] = self.typ.into();
-                BigEndian::write_u32(
-                    &mut buf[1..],
-                    self.created
-                        .expect("must exist for a v3 signature")
-                        .timestamp() as u32,
-                );
+                BigEndian::write_u32(&mut buf[1..], created.timestamp() as u32);
 
                 hasher.update(&buf);
 
@@ -417,8 +441,8 @@ impl SignatureConfig {
     ///
     /// Returns the first Signature Creation Time subpacket, only from the hashed area.
     pub fn created(&self) -> Option<&DateTime<Utc>> {
-        if self.created.is_some() {
-            return self.created.as_ref();
+        if let SignatureVersionSpecific::V3 { created, .. } = &self.version_specific {
+            return Some(created);
         }
 
         self.hashed_subpackets().find_map(|p| match p.data {
@@ -436,7 +460,7 @@ impl SignatureConfig {
     /// Returns Issuer subpacket data from both the hashed and unhashed area.
     pub fn issuer(&self) -> Vec<&KeyId> {
         // legacy v2/v3 signatures have an explicit "issuer" field
-        if let Some(issuer) = self.issuer.as_ref() {
+        if let SignatureVersionSpecific::V3 { issuer, .. } = &self.version_specific {
             return vec![issuer];
         }
 

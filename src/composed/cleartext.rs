@@ -63,7 +63,12 @@ impl CleartextSignedMessage {
     }
 
     /// Sign the given text.
-    pub fn sign<R, F>(rng: &mut R, text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
+    pub fn sign<R, F>(
+        mut rng: &mut R,
+        text: &str,
+        key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
         F: FnOnce() -> String,
@@ -83,17 +88,16 @@ impl CleartextSignedMessage {
         let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))];
 
         let sig_ver: SignatureVersion = key.version().try_into()?;
-        let salt = crate::types::salt_for(rng, sig_ver, hash_algorithm);
 
         let config = SignatureConfig::new_v4_v6(
+            &mut rng,
             sig_ver,
             SignatureType::Text,
             algorithm,
             hash_algorithm,
             hashed_subpackets,
             unhashed_subpackets,
-            salt,
-        );
+        )?;
 
         Self::new(text, config, key, key_pw)
     }

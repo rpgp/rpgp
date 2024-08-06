@@ -24,7 +24,6 @@ pub use self::secret_key::*;
 pub use self::secret_key_repr::*;
 pub use self::user::*;
 use crate::crypto::hash::HashAlgorithm;
-use crate::packet::SignatureVersion;
 
 /// OpenPGP signature data
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -59,20 +58,11 @@ impl<'a> TryFrom<&'a Sig> for &'a [u8] {
     }
 }
 
-pub(crate) fn salt_for<R: CryptoRng + Rng>(
-    rng: &mut R,
-    sig_version: SignatureVersion,
-    hash_alg: HashAlgorithm,
-) -> Option<Vec<u8>> {
-    match sig_version {
-        SignatureVersion::V6 => {
-            let mut salt = vec![0; hash_alg.salt_len()];
-            rng.fill_bytes(&mut salt);
+pub(crate) fn salt_for<R: CryptoRng + Rng>(rng: &mut R, hash_alg: HashAlgorithm) -> Vec<u8> {
+    let mut salt = vec![0; hash_alg.salt_len()];
+    rng.fill_bytes(&mut salt);
 
-            Some(salt)
-        }
-        _ => None,
-    }
+    salt
 }
 
 impl From<Vec<Mpi>> for Sig {

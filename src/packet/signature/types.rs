@@ -17,7 +17,7 @@ use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
 use crate::packet::signature::SignatureConfig;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketTrait, SignatureVersionSpecific};
 use crate::ser::Serialize;
 use crate::types::{
     self, CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, Sig, Tag, Version,
@@ -44,22 +44,22 @@ impl Signature {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         signed_hash_value: [u8; 2],
-        salt: Option<Vec<u8>>, // only exists in v6
         signature: Sig,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
+        version_specific: SignatureVersionSpecific,
     ) -> Self {
         Signature {
             packet_version,
-            config: SignatureConfig::new_v4_v6(
+            config: SignatureConfig {
                 version,
                 typ,
                 pub_alg,
                 hash_alg,
                 hashed_subpackets,
                 unhashed_subpackets,
-                salt,
-            ),
+                version_specific,
+            },
             signed_hash_value,
             signature,
         }
@@ -121,9 +121,8 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        if self.config.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.config.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         if matches!(self.typ(), SignatureType::Text) {
@@ -176,9 +175,8 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        if self.config.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.config.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         // the key of the signee
@@ -274,9 +272,8 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        if self.config.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.config.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         // Hash the two keys:
@@ -331,9 +328,8 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
-        if self.config.version == SignatureVersion::V6 {
-            // FIXME: don't use expect
-            hasher.update(self.config.salt.as_ref().expect("v6 signature"))
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
         }
 
         {

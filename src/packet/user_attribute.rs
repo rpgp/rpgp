@@ -11,7 +11,7 @@ use nom::number::streaming::{be_u8, le_u16};
 use nom::sequence::pair;
 use rand::Rng;
 
-use super::SubpacketData;
+use super::{SignatureVersion, SignatureVersionSpecific, SubpacketData};
 use crate::errors::{IResult, Result};
 use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use crate::ser::Serialize;
@@ -94,14 +94,22 @@ impl UserAttribute {
         let sig_version = signer.version().try_into()?;
 
         let hash_alg = signer.hash_alg();
-        let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+
+        let version_specific = match sig_version {
+            SignatureVersion::V6 => {
+                let salt = crate::types::salt_for(rng, hash_alg);
+                SignatureVersionSpecific::V6 { salt }
+            }
+            SignatureVersion::V4 => SignatureVersionSpecific::V4 {},
+            _ => unimplemented!(),
+        };
 
         let config = SignatureConfigBuilder::default()
             .version(sig_version)
             .typ(SignatureType::CertGeneric)
             .pub_alg(signer.algorithm())
             .hash_alg(hash_alg)
-            .salt(salt)
+            .version_specific(version_specific)
             .hashed_subpackets(vec![Subpacket::regular(
                 SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
             )])

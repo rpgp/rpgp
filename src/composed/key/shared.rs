@@ -9,8 +9,8 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
-    UserAttribute, UserId,
+    KeyFlags, PacketTrait, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
+    SubpacketData, UserAttribute, UserId,
 };
 use crate::types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
 
@@ -105,8 +105,8 @@ impl KeyDetails {
             }
 
             let hash_alg = key.hash_alg();
-
-            let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+            let version_specific =
+                SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
 
             let config = SignatureConfigBuilder::default()
                 .version(sig_version)
@@ -117,7 +117,7 @@ impl KeyDetails {
                 .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                     key.key_id(),
                 ))])
-                .salt(salt)
+                .version_specific(version_specific)
                 .build()?;
 
             let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
@@ -132,8 +132,8 @@ impl KeyDetails {
                 .into_iter()
                 .map(|id| {
                     let hash_alg = key.hash_alg();
-
-                    let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+                    let version_specific =
+                        SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
 
                     let config = SignatureConfigBuilder::default()
                         .version(sig_version)
@@ -165,7 +165,7 @@ impl KeyDetails {
                         .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                             key.key_id(),
                         ))])
-                        .salt(salt)
+                        .version_specific(version_specific)
                         .build()?;
 
                     let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;

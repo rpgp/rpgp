@@ -427,7 +427,6 @@ impl Message {
         let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id.clone()))];
 
         let sig_version = key.version().try_into()?;
-        let salt = crate::types::salt_for(rng, sig_version, hash_algorithm);
 
         let (typ, signature) = match self {
             Message::Literal(ref l) => {
@@ -438,27 +437,27 @@ impl Message {
                 };
 
                 let signature_config = SignatureConfig::new_v4_v6(
+                    rng,
                     sig_version,
                     typ,
                     algorithm,
                     hash_algorithm,
                     hashed_subpackets,
                     unhashed_subpackets,
-                    salt,
-                );
+                )?;
                 (typ, signature_config.sign(key, key_pw, l.data())?)
             }
             _ => {
                 let typ = SignatureType::Binary;
                 let signature_config = SignatureConfig::new_v4_v6(
+                    rng,
                     sig_version,
                     typ,
                     algorithm,
                     hash_algorithm,
                     hashed_subpackets,
                     unhashed_subpackets,
-                    salt,
-                );
+                )?;
 
                 let data = self.to_bytes()?;
                 let signature = signature_config.sign(key, key_pw, &data[..])?;

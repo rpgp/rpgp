@@ -16,6 +16,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::packet::signature::types::*;
+use crate::packet::SignatureVersionSpecific;
 use crate::types::{
     mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
     Sig, Version,
@@ -442,24 +443,22 @@ fn v3_parser(
         ))(i)?;
         // One or more multiprecision integers comprising the signature.
         let (i, sig) = actual_signature(&pub_alg)(i)?;
+
+        let version_specific = SignatureVersionSpecific::V3 { created, issuer };
+
         Ok((i, {
-            let mut s = Signature::new(
+            Signature::new(
                 packet_version,
                 version,
                 typ,
                 pub_alg,
                 hash_alg,
                 clone_into_array(ls_hash),
-                None,
                 sig,
                 vec![],
                 vec![],
-            );
-
-            s.config.created = Some(created);
-            s.config.issuer = Some(issuer);
-
-            s
+                version_specific,
+            )
         }))
     }
 }
@@ -498,10 +497,10 @@ fn v4_parser(
                 pub_alg,
                 hash_alg,
                 clone_into_array(ls_hash),
-                None,
                 sig,
                 hsub,
                 usub,
+                SignatureVersionSpecific::V4 {},
             ),
         ))
     }
@@ -541,9 +540,9 @@ fn v6_parser(
 
             assert_eq!(hash_alg.salt_len(), salt.len()); // FIXME
 
-            (i, Some(salt.to_vec()))
+            (i, salt.to_vec())
         } else {
-            (i, None)
+            unimplemented!()
         };
 
         // One or more multiprecision integers comprising the signature.
@@ -557,10 +556,10 @@ fn v6_parser(
                 pub_alg,
                 hash_alg,
                 clone_into_array(ls_hash),
-                salt,
                 sig,
                 hsub,
                 usub,
+                SignatureVersionSpecific::V6 { salt },
             ),
         ))
     }

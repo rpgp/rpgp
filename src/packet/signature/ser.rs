@@ -7,6 +7,7 @@ use log::debug;
 use crate::errors::Result;
 use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
+use crate::packet::SignatureVersionSpecific;
 use crate::ser::Serialize;
 use crate::types::Sig;
 use crate::util::write_packet_length;
@@ -260,18 +261,13 @@ impl SignatureConfig {
             self.typ.into(),
         ])?;
 
-        writer.write_u32::<BigEndian>(
-            self.created
-                .expect("must exist for a v3 signature")
-                .timestamp() as u32,
-        )?;
+        if let SignatureVersionSpecific::V3 { created, issuer } = &self.version_specific {
+            writer.write_u32::<BigEndian>(created.timestamp() as u32)?;
+            writer.write_all(issuer.as_ref())?;
+        } else {
+            bail!("must exist for a v3 signature")
+        }
 
-        writer.write_all(
-            self.issuer
-                .as_ref()
-                .expect("must exist for a v3 signature")
-                .as_ref(),
-        )?;
         writer.write_all(&[
             // public algorithm
             u8::from(self.pub_alg),
@@ -362,9 +358,7 @@ impl Signature {
         writer.write_all(&self.signed_hash_value)?;
 
         // salt, if v6
-        if self.config.version == SignatureVersion::V6 {
-            let salt: &[u8] = self.config.salt.as_ref().expect("v6");
-
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
             let len: u8 = salt.len().try_into()?;
             writer.write_all(&[len])?;
             writer.write_all(salt)?;

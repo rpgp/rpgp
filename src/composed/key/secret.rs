@@ -5,7 +5,8 @@ use rand::Rng;
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
 use crate::errors::Result;
 use crate::packet::{
-    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
+    self, KeyFlags, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
+    SubpacketData,
 };
 use crate::types::SecretKeyTrait;
 
@@ -73,7 +74,7 @@ impl SecretSubkey {
 
     pub fn sign<R, F>(
         self,
-        rng: &mut R,
+        mut rng: &mut R,
         sec_key: &impl SecretKeyTrait,
         key_pw: F,
     ) -> Result<SignedSecretSubKey>
@@ -96,8 +97,7 @@ impl SecretSubkey {
         ];
 
         let hash_alg = sec_key.hash_alg();
-
-        let salt = crate::types::salt_for(rng, sig_version, hash_alg);
+        let version_specific = SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
 
         let config = SignatureConfigBuilder::default()
             .version(sig_version)
@@ -108,7 +108,7 @@ impl SecretSubkey {
             .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                 sec_key.key_id(),
             ))])
-            .salt(salt)
+            .version_specific(version_specific)
             .build()?;
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 
