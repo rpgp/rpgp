@@ -11,7 +11,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData};
 use crate::ser::Serialize;
-use crate::types::{KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
+use crate::types::{Fingerprint, KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
 
 #[derive(Clone, PartialEq, Eq, Debug, Builder)]
 #[builder(build_fn(error = "Error"))]
@@ -489,11 +489,11 @@ impl SignatureConfig {
     /// https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-rfc4880bis-10#name-issuer-fingerprint
     ///
     /// Returns Issuer Fingerprint subpacket data from both the hashed and unhashed area.
-    pub fn issuer_fingerprint(&self) -> Vec<&[u8]> {
+    pub fn issuer_fingerprint(&self) -> Vec<&Fingerprint> {
         self.hashed_subpackets()
             .chain(self.unhashed_subpackets())
             .filter_map(|sp| match &sp.data {
-                SubpacketData::IssuerFingerprint(_, fp) => Some(fp.as_slice()),
+                SubpacketData::IssuerFingerprint(fp) => Some(fp),
                 _ => None,
             })
             .collect()

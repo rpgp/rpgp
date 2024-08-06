@@ -2,7 +2,7 @@ use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use md5::Md5;
 use sha1_checked::{Digest, Sha1};
 
-use crate::types::{Mpi, Sig};
+use crate::types::{Fingerprint, Mpi, Sig};
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -253,7 +253,7 @@ impl PublicKeyTrait for PubKeyInner {
         self.version
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         use crate::ser::Serialize;
 
         match self.version {
@@ -262,7 +262,13 @@ impl PublicKeyTrait for PubKeyInner {
                 self.public_params
                     .to_writer(&mut h)
                     .expect("write to hasher");
-                h.finalize().to_vec()
+                let digest = h.finalize();
+
+                if self.version == KeyVersion::V2 {
+                    Fingerprint::V2(digest.into())
+                } else {
+                    Fingerprint::V3(digest.into())
+                }
             }
             KeyVersion::V4 => {
                 // A one-octet version number (4).
@@ -283,7 +289,9 @@ impl PublicKeyTrait for PubKeyInner {
                     .expect("write to hasher");
                 h.update(&packet);
 
-                h.finalize().to_vec()
+                let digest = h.finalize();
+
+                Fingerprint::V4(digest.into())
             }
             KeyVersion::V5 => unimplemented!("V5 keys"),
             KeyVersion::V6 => {
@@ -321,7 +329,9 @@ impl PublicKeyTrait for PubKeyInner {
                 // f) algorithm-specific fields.
                 h.update(&pp);
 
-                h.finalize().to_vec()
+                let digest = h.finalize();
+
+                Fingerprint::V6(digest.into())
             }
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
@@ -342,14 +352,14 @@ impl PublicKeyTrait for PubKeyInner {
                 let f = self.fingerprint();
                 let offset = f.len() - 8;
 
-                KeyId::from_slice(&f[offset..]).expect("fixed size slice")
+                KeyId::from_slice(&f.as_bytes()[offset..]).expect("fixed size slice")
             }
             KeyVersion::V5 => unimplemented!("V5 keys"),
             KeyVersion::V6 => {
                 // High 64 bits
                 let f = self.fingerprint();
 
-                KeyId::from_slice(&f[0..8]).expect("fixed size slice")
+                KeyId::from_slice(&f.as_bytes()[0..8]).expect("fixed size slice")
             }
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
@@ -461,7 +471,7 @@ impl PublicKeyTrait for PubKeyInner {
                 curve,
                 alg_sym,
                 hash,
-                &self.fingerprint(),
+                self.fingerprint().as_bytes(),
                 p.as_bytes(),
                 plain,
             ),
@@ -546,7 +556,7 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::version(&self.0)
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         PublicKeyTrait::fingerprint(&self.0)
     }
 
@@ -592,7 +602,7 @@ impl PublicKeyTrait for PublicSubkey {
         PublicKeyTrait::version(&self.0)
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         PublicKeyTrait::fingerprint(&self.0)
     }
 

@@ -18,8 +18,8 @@ use crate::errors::{IResult, Result};
 use crate::packet::signature::types::*;
 use crate::packet::SignatureVersionSpecific;
 use crate::types::{
-    mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
-    Sig, Version,
+    mpi, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey,
+    RevocationKeyClass, Sig, Version,
 };
 use crate::util::{clone_into_array, packet_length};
 
@@ -276,10 +276,9 @@ fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
         _ => Err(invalid_key_version(version)),
     }?;
 
-    Ok((
-        i,
-        SubpacketData::IssuerFingerprint(version, fingerprint.to_vec()),
-    ))
+    let fp = Fingerprint::new(version, fingerprint)?;
+
+    Ok((i, SubpacketData::IssuerFingerprint(fp)))
 }
 
 /// Parse a preferred encryption modes subpacket
@@ -298,10 +297,9 @@ fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
         _ => Err(invalid_key_version(version)),
     }?;
 
-    Ok((
-        i,
-        SubpacketData::IntendedRecipientFingerprint(version, fingerprint.to_vec()),
-    ))
+    let fp = Fingerprint::new(version, fingerprint)?;
+
+    Ok((i, SubpacketData::IntendedRecipientFingerprint(fp)))
 }
 
 /// Parse a preferred aead subpacket

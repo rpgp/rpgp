@@ -23,7 +23,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
+    CompressionAlgorithm, Fingerprint, KeyId, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 
 /// An [OpenPGP message](https://tools.ietf.org/html/rfc4880.html#section-11.3)
@@ -417,10 +417,7 @@ impl Message {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                KeyVersion::V4,
-                key.fingerprint(),
-            )),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             )),
@@ -478,13 +475,11 @@ impl Message {
                     bail!("Inconsistent Signature and OnePassSignature version")
                 };
 
-                OnePassSignature::from_details_v6(
-                    typ,
-                    hash_algorithm,
-                    algorithm,
-                    salt.clone(),
-                    key.fingerprint().try_into().expect("v6 fp"),
-                )
+                let Fingerprint::V6(fp) = key.fingerprint() else {
+                    bail!("Inconsistent Signature and Fingerprint version")
+                };
+
+                OnePassSignature::from_details_v6(typ, hash_algorithm, algorithm, salt.clone(), fp)
             }
             _ => bail!("Unsupported signature version {:sig_version?}"),
         };

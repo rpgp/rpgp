@@ -8,7 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
-use pgp::types::Sig;
+use pgp::types::{Fingerprint, Sig};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey};
@@ -81,7 +81,7 @@ impl PublicKeyTrait for FakeHsm {
         self.public_key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.public_key.fingerprint()
     }
 
@@ -220,7 +220,7 @@ impl FakeHsm {
                     encrypted_session_key,
                     encrypted_key_len,
                     &(curve.clone(), *alg_sym, *hash),
-                    &self.public_key.fingerprint(),
+                    self.public_key.fingerprint().as_bytes(),
                 )?;
 
                 decrypted_key

@@ -95,10 +95,7 @@ impl KeyDetails {
                 Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
                     preferred_aead_algorithms.clone(),
                 )),
-                Subpacket::regular(SubpacketData::IssuerFingerprint(
-                    key.version(),
-                    key.fingerprint(),
-                )),
+                Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
             ];
             if let Some(rkey) = revocation_key {
                 hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey)));
@@ -157,10 +154,7 @@ impl KeyDetails {
                             Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
                                 preferred_aead_algorithms.clone(),
                             )),
-                            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                                key.version(),
-                                key.fingerprint(),
-                            )),
+                            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
                         ])
                         .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
                             key.key_id(),

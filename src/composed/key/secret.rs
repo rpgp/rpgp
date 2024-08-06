@@ -90,10 +90,7 @@ impl SecretSubkey {
                 chrono::Utc::now().trunc_subsecs(0),
             )),
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                sec_key.version(),
-                sec_key.fingerprint(),
-            )),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
         ];
 
         let hash_alg = sec_key.hash_alg();

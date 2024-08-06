@@ -5,12 +5,12 @@ use rand::{CryptoRng, Rng};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::types::{KeyId, KeyVersion, Mpi, PublicParams, Sig};
+use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicParams, Sig};
 
 pub trait PublicKeyTrait: std::fmt::Debug {
     fn version(&self) -> KeyVersion;
 
-    fn fingerprint(&self) -> Vec<u8>;
+    fn fingerprint(&self) -> Fingerprint;
 
     /// Returns the Key ID of the associated primary key.
     fn key_id(&self) -> KeyId;
@@ -72,7 +72,7 @@ impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
         (*self).version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         (*self).fingerprint()
     }
 

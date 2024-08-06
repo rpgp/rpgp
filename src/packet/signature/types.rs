@@ -20,7 +20,7 @@ use crate::packet::signature::SignatureConfig;
 use crate::packet::{PacketTrait, SignatureVersionSpecific};
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, Sig, Tag, Version,
+    self, CompressionAlgorithm, Fingerprint, KeyId, PublicKeyTrait, Sig, Tag, Version,
 };
 
 /// Signature Packet
@@ -105,7 +105,7 @@ impl Signature {
 
         // Does any issuer or issuer fingerprint subpacket matche the identity of `sig`?
         issuers.iter().any(|&key_id| key_id == &key.key_id())
-            || issuer_fps.iter().any(|&fp| fp == key.fingerprint())
+            || issuer_fps.iter().any(|&fp| fp == &key.fingerprint())
     }
 
     /// Verify this signature.
@@ -379,7 +379,7 @@ impl Signature {
         self.config.issuer()
     }
 
-    pub fn issuer_fingerprint(&self) -> Vec<&[u8]> {
+    pub fn issuer_fingerprint(&self) -> Vec<&Fingerprint> {
         self.config.issuer_fingerprint()
     }
 
@@ -870,9 +870,9 @@ pub enum SubpacketData {
     TrustSignature(u8, u8),
     RegularExpression(BString),
     ExportableCertification(bool),
-    IssuerFingerprint(KeyVersion, #[debug("{}", hex::encode(_1))] Vec<u8>),
+    IssuerFingerprint(Fingerprint),
     PreferredEncryptionModes(SmallVec<[AeadAlgorithm; 2]>),
-    IntendedRecipientFingerprint(KeyVersion, #[debug("{}", hex::encode(_1))] Vec<u8>),
+    IntendedRecipientFingerprint(Fingerprint),
     PreferredAeadAlgorithms(SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>),
     Experimental(u8, #[debug("{}", hex::encode(_1))] SmallVec<[u8; 2]>),
     Other(u8, #[debug("{}", hex::encode(_1))] Vec<u8>),

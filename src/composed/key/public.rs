@@ -11,7 +11,7 @@ use crate::packet::{
     self, KeyFlags, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
     SubpacketData,
 };
-use crate::types::{KeyId, PublicKeyTrait, PublicParams, SecretKeyTrait};
+use crate::types::{Fingerprint, KeyId, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use crate::types::{Mpi, Sig};
 
 /// User facing interface to work with a public key.
@@ -72,7 +72,7 @@ impl PublicKeyTrait for PublicKey {
         self.primary_key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.primary_key.fingerprint()
     }
 
@@ -131,10 +131,7 @@ impl PublicSubkey {
                 chrono::Utc::now().trunc_subsecs(0),
             )),
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                sec_key.version(),
-                sec_key.fingerprint(),
-            )),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
         ];
 
         let hash_alg = sec_key.hash_alg();
@@ -164,7 +161,7 @@ impl PublicKeyTrait for PublicSubkey {
         self.key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.key.fingerprint()
     }
 

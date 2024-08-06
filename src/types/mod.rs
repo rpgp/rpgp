@@ -1,4 +1,5 @@
 mod compression;
+mod fingerprint;
 mod key_id;
 mod mpi;
 mod packet;
@@ -13,6 +14,7 @@ mod user;
 use rand::{CryptoRng, Rng};
 
 pub use self::compression::*;
+pub use self::fingerprint::*;
 pub use self::key_id::*;
 pub use self::mpi::*;
 pub use self::packet::*;

@@ -338,7 +338,7 @@ fn test_parse_details() {
     key.verify().expect("invalid key");
 
     assert_eq!(
-        hex::encode(key.primary_key.fingerprint()),
+        hex::encode(key.primary_key.fingerprint().as_bytes()),
         "56c65c513a0d1b9cff532d784c073ae0c8445c0c"
     );
 
@@ -709,7 +709,10 @@ fn get_test_fingerprint(filename: &str) -> (serde_json::Value, SignedPublicKey) 
 #[test]
 fn test_fingerprint_rsa() {
     let (json, key) = get_test_fingerprint("gnupg-v1-003");
-    assert_eq!(json["expected_fingerprint"], hex::encode(key.fingerprint()));
+    assert_eq!(
+        json["expected_fingerprint"],
+        hex::encode(key.fingerprint().as_bytes())
+    );
 
     key.verify().expect("invalid key");
 }
@@ -718,13 +721,19 @@ fn test_fingerprint_rsa() {
 fn test_fingerprint_dsa() {
     let (json, key) = get_test_fingerprint("gnupg-v1-001");
 
-    assert_eq!(json["expected_fingerprint"], hex::encode(key.fingerprint()));
+    assert_eq!(
+        json["expected_fingerprint"],
+        hex::encode(key.fingerprint().as_bytes())
+    );
 }
 
 #[test]
 fn test_fingerprint_ecdsa() {
     let (json, key) = get_test_fingerprint("e2e-001");
-    assert_eq!(json["expected_fingerprint"], hex::encode(key.fingerprint()));
+    assert_eq!(
+        json["expected_fingerprint"],
+        hex::encode(key.fingerprint().as_bytes())
+    );
 
     // TODO: signature mismatch
     // key.verify().expect("invalid key");
@@ -739,7 +748,7 @@ fn test_fingerprint_ecdh() {
         json["expected_subkeys"].as_array().unwrap()[0]
             .as_object()
             .unwrap()["expected_fingerprint"],
-        hex::encode(key.public_subkeys[0].key.fingerprint())
+        hex::encode(key.public_subkeys[0].key.fingerprint().as_bytes())
     );
 }
 
@@ -751,7 +760,7 @@ fn test_fingerprint_elgamel() {
         json["expected_subkeys"].as_array().unwrap()[0]
             .as_object()
             .unwrap()["expected_fingerprint"],
-        hex::encode(key.public_subkeys[0].key.fingerprint())
+        hex::encode(key.public_subkeys[0].key.fingerprint().as_bytes())
     );
 }
 

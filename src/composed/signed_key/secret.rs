@@ -12,7 +12,8 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait, Sig, Tag,
+    Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
+    SecretKeyTrait, Sig, Tag,
 };
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
@@ -240,7 +241,7 @@ impl PublicKeyTrait for SignedSecretKey {
     }
 
     /// Returns the fingerprint of the associated primary key.
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.primary_key.fingerprint()
     }
 
@@ -361,7 +362,7 @@ impl PublicKeyTrait for SignedSecretSubKey {
         self.key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.key.fingerprint()
     }
 

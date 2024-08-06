@@ -115,16 +115,16 @@ impl Subpacket {
                 let val = u8::from(*is_exportable);
                 writer.write_all(&[val])?;
             }
-            SubpacketData::IssuerFingerprint(version, fp) => {
-                writer.write_all(&[u8::from(*version)])?;
-                writer.write_all(fp)?;
+            SubpacketData::IssuerFingerprint(fp) => {
+                writer.write_all(&[u8::from(fp.version().expect("versioned fingerprint"))])?;
+                writer.write_all(fp.as_bytes())?;
             }
             SubpacketData::PreferredEncryptionModes(algs) => {
                 writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
             }
-            SubpacketData::IntendedRecipientFingerprint(version, fp) => {
-                writer.write_all(&[u8::from(*version)])?;
-                writer.write_all(fp)?;
+            SubpacketData::IntendedRecipientFingerprint(fp) => {
+                writer.write_all(&[u8::from(fp.version().expect("versioned fingerprint"))])?;
+                writer.write_all(fp.as_bytes())?;
             }
             SubpacketData::PreferredAeadAlgorithms(algs) => {
                 writer.write_all(
@@ -188,9 +188,9 @@ impl Subpacket {
             SubpacketData::TrustSignature(_, _) => 2,
             SubpacketData::RegularExpression(regexp) => regexp.len(),
             SubpacketData::ExportableCertification(_) => 1,
-            SubpacketData::IssuerFingerprint(_, fp) => 1 + fp.len(),
+            SubpacketData::IssuerFingerprint(fp) => 1 + fp.len(),
             SubpacketData::PreferredEncryptionModes(algs) => algs.len(),
-            SubpacketData::IntendedRecipientFingerprint(_, fp) => 1 + fp.len(),
+            SubpacketData::IntendedRecipientFingerprint(fp) => 1 + fp.len(),
             SubpacketData::PreferredAeadAlgorithms(algs) => algs.len() * 2,
             SubpacketData::Experimental(_, body) => body.len(),
             SubpacketData::Other(_, body) => body.len(),
@@ -228,9 +228,9 @@ impl Subpacket {
             SubpacketData::TrustSignature(_, _) => SubpacketType::TrustSignature,
             SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
             SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
-            SubpacketData::IssuerFingerprint(_, _) => SubpacketType::IssuerFingerprint,
+            SubpacketData::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
             SubpacketData::PreferredEncryptionModes(_) => SubpacketType::PreferredEncryptionModes,
-            SubpacketData::IntendedRecipientFingerprint(_, _) => {
+            SubpacketData::IntendedRecipientFingerprint(_) => {
                 SubpacketType::IntendedRecipientFingerprint
             }
             SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,

@@ -1,7 +1,7 @@
 use log::debug;
 use zeroize::Zeroize;
 
-use crate::types::Sig;
+use crate::types::{Fingerprint, Sig};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -413,7 +413,7 @@ impl PublicKeyTrait for SecretKey {
         PublicKeyTrait::version(&self.0)
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         PublicKeyTrait::fingerprint(&self.0)
     }
 
@@ -459,7 +459,7 @@ impl PublicKeyTrait for SecretSubkey {
         PublicKeyTrait::version(&self.0)
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         PublicKeyTrait::fingerprint(&self.0)
     }
 
@@ -531,7 +531,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
         self.details.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.details.fingerprint()
     }
 
