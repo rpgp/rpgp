@@ -22,27 +22,21 @@ pub enum Fingerprint {
 
 impl Fingerprint {
     pub fn new(version: KeyVersion, fp: &[u8]) -> Result<Self> {
+        let e = |_| {
+            Error::Message(format!(
+                "Illegal fingerprint length {} for key version {:?}",
+                fp.len(),
+                version
+            ))
+        };
+
         let fp = match version {
-            KeyVersion::V2 => Fingerprint::V2(
-                fp.try_into()
-                    .map_err(|_| Error::Message("foo".to_string()))?,
-            ),
-            KeyVersion::V3 => Fingerprint::V3(
-                fp.try_into()
-                    .map_err(|_| Error::Message("foo".to_string()))?,
-            ),
-            KeyVersion::V4 => Fingerprint::V4(
-                fp.try_into()
-                    .map_err(|_| Error::Message("foo".to_string()))?,
-            ),
-            KeyVersion::V5 => Fingerprint::V5(
-                fp.try_into()
-                    .map_err(|_| Error::Message("foo".to_string()))?,
-            ),
-            KeyVersion::V6 => Fingerprint::V6(
-                fp.try_into()
-                    .map_err(|_| Error::Message("foo".to_string()))?,
-            ),
+            KeyVersion::V2 => Fingerprint::V2(fp.try_into().map_err(e)?),
+            KeyVersion::V3 => Fingerprint::V3(fp.try_into().map_err(e)?),
+            KeyVersion::V4 => Fingerprint::V4(fp.try_into().map_err(e)?),
+            KeyVersion::V5 => Fingerprint::V5(fp.try_into().map_err(e)?),
+            KeyVersion::V6 => Fingerprint::V6(fp.try_into().map_err(e)?),
+
             KeyVersion::Other(v) => bail!("Unsupported version {}", v),
         };
 
