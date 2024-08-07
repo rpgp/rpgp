@@ -422,6 +422,8 @@ impl PlainSecretParams {
         if version != KeyVersion::V6 {
             // Only for a version 3 or 4 packet where the string-to-key usage octet is zero, a
             // two-octet checksum of the algorithm-specific portion (sum of all octets, mod 65536).
+            //
+            // https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.3-3.6.1
             hasher.to_writer(writer)?;
         }
 

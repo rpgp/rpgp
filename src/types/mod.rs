@@ -27,7 +27,13 @@ pub use self::secret_key_repr::*;
 pub use self::user::*;
 use crate::crypto::hash::HashAlgorithm;
 
-/// OpenPGP signature data
+/// An OpenPGP cryptographic signature.
+///
+/// It is an element of a [pgp::packet::Signature] packet.
+/// Historically, cryptographic signatures in OpenPGP were encoded as [pgp::types::Mpi],
+/// however, in RFC 9580, native encoding is used for the modern Ed25519 and Ed448 signatures.
+///
+/// This type can represent both flavors of cryptographic signature data.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Sig {
     Mpis(Vec<Mpi>),
@@ -60,13 +66,6 @@ impl<'a> TryFrom<&'a Sig> for &'a [u8] {
     }
 }
 
-pub(crate) fn salt_for<R: CryptoRng + Rng>(rng: &mut R, hash_alg: HashAlgorithm) -> Vec<u8> {
-    let mut salt = vec![0; hash_alg.salt_len()];
-    rng.fill_bytes(&mut salt);
-
-    salt
-}
-
 impl From<Vec<Mpi>> for Sig {
     fn from(value: Vec<Mpi>) -> Self {
         Sig::Mpis(value)
@@ -77,4 +76,11 @@ impl From<Vec<u8>> for Sig {
     fn from(value: Vec<u8>) -> Self {
         Sig::Native(value)
     }
+}
+
+pub(crate) fn salt_for<R: CryptoRng + Rng>(rng: &mut R, hash_alg: HashAlgorithm) -> Vec<u8> {
+    let mut salt = vec![0; hash_alg.salt_len()];
+    rng.fill_bytes(&mut salt);
+
+    salt
 }

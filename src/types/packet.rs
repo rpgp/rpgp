@@ -174,6 +174,16 @@ impl TryFrom<KeyVersion> for SignatureVersion {
     type Error = crate::errors::Error;
 
     fn try_from(value: KeyVersion) -> std::result::Result<Self, Self::Error> {
+        // NOTE: This function is intended to determine what signature version we want to make
+        // with a given key.
+
+        // However, diverging versions of signatures may occur in a TPK/TSK.
+        // For example, a third party may issue a v4 certifying signature for a v6 key.
+        // Also, historically, v3 signatures and v4 key packets were sometimes mixed.
+
+        // So there is no guarantee that v4 TPKs or TSKs contain only v4 signatures
+        // (and analogously for v6).
+
         match value {
             KeyVersion::V4 => Ok(SignatureVersion::V4),
             KeyVersion::V6 => Ok(SignatureVersion::V6),
