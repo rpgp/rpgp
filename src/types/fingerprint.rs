@@ -17,7 +17,7 @@ pub enum Fingerprint {
 
     #[debug("{}", hex::encode(_0))]
     /// Fingerprint with unknown key version
-    Other(Vec<u8>),
+    Unknown(Box<[u8]>),
 }
 
 impl Fingerprint {
@@ -49,13 +49,25 @@ impl Fingerprint {
         Ok(fp)
     }
 
+    /// Make a fingerprint with unknown key version.
+    ///
+    /// A fingerprint without version information is not usually desirable to have.
+    /// It can't be processed in a lot of places, in rPGP.
+    ///
+    /// However, sometimes a fingerprint may be obtained where the key version is unknown.
+    /// Then, this is the only possible way to encode it.
+    #[allow(dead_code)]
+    pub(crate) fn new_unknown(fp: &[u8]) -> Result<Self> {
+        Ok(Fingerprint::Unknown(Box::from(fp)))
+    }
+
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         match self {
             Self::V2(_) | Self::V3(_) => 16,
             Self::V4(_) => 20,
             Self::V5(_) | Self::V6(_) => 32,
-            Self::Other(fp) => fp.len(),
+            Self::Unknown(fp) => fp.len(),
         }
     }
 
@@ -66,7 +78,7 @@ impl Fingerprint {
             Self::V4(_) => Some(KeyVersion::V4),
             Self::V5(_) => Some(KeyVersion::V5),
             Self::V6(_) => Some(KeyVersion::V6),
-            Self::Other(_) => None,
+            Self::Unknown(_) => None,
         }
     }
 
@@ -75,7 +87,7 @@ impl Fingerprint {
             Self::V2(fp) | Self::V3(fp) => &fp[..],
             Self::V4(fp) => &fp[..],
             Self::V5(fp) | Self::V6(fp) => &fp[..],
-            Self::Other(fp) => fp,
+            Self::Unknown(fp) => fp,
         }
     }
 }
