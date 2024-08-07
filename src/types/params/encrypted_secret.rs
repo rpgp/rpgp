@@ -256,7 +256,10 @@ impl EncryptedSecretParams {
 
         if self.s2k_params != S2kParams::Unprotected {
             if version == KeyVersion::V6 {
-                w.write_all(&[s2k_params.len().try_into().expect("FIXME")])?;
+                let len = s2k_params.len();
+                ensure!(len <= 255, "unexpected s2k_params length {}", len);
+
+                w.write_all(&[len as u8])?;
             }
             w.write_all(&s2k_params)?;
         }

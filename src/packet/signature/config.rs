@@ -42,17 +42,14 @@ pub enum SignatureVersionSpecific {
 
 impl SignatureConfig {
     pub fn new_v4(
-        version: SignatureVersion,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
     ) -> Self {
-        // FIXME: must not be called for v6 signatures
-
         SignatureConfig {
-            version,
+            version: SignatureVersion::V4,
             typ,
             pub_alg,
             hash_alg,

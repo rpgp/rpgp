@@ -304,15 +304,16 @@ fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 
 /// Parse a preferred aead subpacket
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+    if body.len() % 2 != 0 {
+        return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+            "Illegal preferred aead subpacket len {} must be a multiple of 2",
+            body.len(),
+        ))));
+    }
+
     let list: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]> = body
         .chunks(2)
-        .map(|v| {
-            if v.len() != 2 {
-                unimplemented!() // FIXME: return error about bad subpacket format
-            }
-
-            (SymmetricKeyAlgorithm::from(v[0]), AeadAlgorithm::from(v[1]))
-        })
+        .map(|v| (SymmetricKeyAlgorithm::from(v[0]), AeadAlgorithm::from(v[1])))
         .collect();
 
     Ok((&b""[..], SubpacketData::PreferredAeadAlgorithms(list)))
@@ -506,10 +507,7 @@ fn v4_parser(
 
 /// Parse a v6 signature packet
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-versions-4-and-6-signature-
-fn v6_parser(
-    packet_version: Version,
-    version: SignatureVersion,
-) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
+fn v6_parser(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
     move |i: &[u8]| {
         let (i, (typ, pub_alg, hash_alg, hsub, usub, ls_hash)) = tuple((
             // One-octet signature type.
@@ -528,20 +526,19 @@ fn v6_parser(
             take(2usize),
         ))(i)?;
 
-        let (i, salt) = if version == SignatureVersion::V6 {
-            let (i, len) = be_u8(i)?;
-            let (i, salt) = take(len)(i)?;
+        // A variable-length field containing:
+        // A one-octet salt size. The value MUST match the value defined for the hash algorithm as specified in Table 23.
+        // The salt; a random value of the specified size.
+        let (i, len) = be_u8(i)?;
+        let (i, salt) = take(len)(i)?;
 
-            // Only for v6 signatures, a variable-length field containing:
-            // A one-octet salt size. The value MUST match the value defined for the hash algorithm as specified in Table 23.
-            // The salt; a random value of the specified size.
-
-            assert_eq!(hash_alg.salt_len(), salt.len()); // FIXME
-
-            (i, salt.to_vec())
-        } else {
-            unimplemented!()
-        };
+        if hash_alg.salt_len() != salt.len() {
+            return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+                "Illegal salt length {} found for {:?}",
+                salt.len(),
+                hash_alg
+            ))));
+        }
 
         // One or more multiprecision integers comprising the signature.
         let (i, sig) = actual_signature(&pub_alg)(i)?;
@@ -549,7 +546,7 @@ fn v6_parser(
             i,
             Signature::new(
                 packet_version,
-                version,
+                SignatureVersion::V6,
                 typ,
                 pub_alg,
                 hash_alg,
@@ -557,7 +554,9 @@ fn v6_parser(
                 sig,
                 hsub,
                 usub,
-                SignatureVersionSpecific::V6 { salt },
+                SignatureVersionSpecific::V6 {
+                    salt: salt.to_vec(),
+                },
             ),
         ))
     }
@@ -583,7 +582,7 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature>
         let (i, signature) = match &version {
             &SignatureVersion::V2 | &SignatureVersion::V3 => v3_parser(packet_version, version)(i),
             &SignatureVersion::V4 | &SignatureVersion::V5 => v4_parser(packet_version, version)(i),
-            &SignatureVersion::V6 => v6_parser(packet_version, version)(i),
+            &SignatureVersion::V6 => v6_parser(packet_version)(i),
             _ => Err(invalid_sig_version(version)),
         }?;
         Ok((i, signature))

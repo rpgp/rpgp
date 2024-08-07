@@ -471,7 +471,6 @@ fn card_sign() {
 
         // -- use hsm signer
         let signature = SignatureConfig::new_v4(
-            packet::SignatureVersion::V4,
             packet::SignatureType::Binary,
             hsm.public_key().algorithm(),
             HashAlgorithm::SHA2_256,
