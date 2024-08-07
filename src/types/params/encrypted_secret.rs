@@ -202,8 +202,12 @@ impl EncryptedSecretParams {
         }
     }
 
-    pub(crate) fn to_writer<W: io::Write>(&self, w: &mut W, version: KeyVersion) -> Result<()> {
-        w.write_all(&[(&self.s2k_params).into()])?;
+    pub(crate) fn to_writer<W: io::Write>(
+        &self,
+        writer: &mut W,
+        version: KeyVersion,
+    ) -> Result<()> {
+        writer.write_all(&[(&self.s2k_params).into()])?;
 
         let mut s2k_params = vec![];
 
@@ -259,12 +263,12 @@ impl EncryptedSecretParams {
                 let len = s2k_params.len();
                 ensure!(len <= 255, "unexpected s2k_params length {}", len);
 
-                w.write_all(&[len as u8])?;
+                writer.write_all(&[len as u8])?;
             }
-            w.write_all(&s2k_params)?;
+            writer.write_all(&s2k_params)?;
         }
 
-        w.write_all(&self.data)?;
+        writer.write_all(&self.data)?;
 
         Ok(())
     }
