@@ -91,7 +91,8 @@ fn parse_secret_fields(
             (i, None)
         };
 
-        // the length of the remaining data after the conditionally included s2k parameter fields
+        // expected length of the remaining data after consuming the conditionally included
+        // s2k parameter fields
         let after_s2k = s2k_len.map(|len| i.len() - len as usize);
 
         let (i, enc_params) = match s2k_usage {
@@ -195,8 +196,7 @@ fn parse_secret_fields(
         if let Some(after_s2k) = after_s2k {
             if i.len() != after_s2k {
                 return Err(nom::Err::Error(crate::errors::Error::Message(
-                    "Unexpected cumulative length of conditionally included S2K parameter fields"
-                        .to_string(),
+                    "Unexpected length of S2K parameter fields".to_string(),
                 )));
             }
         }
