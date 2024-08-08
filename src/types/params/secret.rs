@@ -1,7 +1,7 @@
 use std::io;
 
 use nom::bytes::streaming::take;
-use nom::combinator::{map_res, rest_len};
+use nom::combinator::{map, map_res, rest_len};
 use nom::number::streaming::be_u8;
 use zeroize::Zeroize;
 
@@ -75,16 +75,24 @@ fn parse_secret_fields(
     public_params: &PublicParams,
 ) -> impl Fn(&[u8]) -> IResult<&[u8], SecretParams> + '_ {
     move |i: &[u8]| {
+        // We've already consumed the public fields, and have arrived at the private key-specific
+        // part of this secret key packet
+        // (see https://www.rfc-editor.org/rfc/rfc9580.html#name-secret-key-packet-formats)
+
         let (i, s2k_usage) = map_res(be_u8, S2kUsage::try_from)(i)?;
 
-        let i = if key_ver == KeyVersion::V6 && s2k_usage != S2kUsage::Unprotected {
-            // consume s2k len
-            let (i, _s2k_len) = take(1u8)(i)?; // FIXME take u8
-
-            i
+        // FIXME: use s2k_len
+        let (i, s2k_len) = if key_ver == KeyVersion::V6 && s2k_usage != S2kUsage::Unprotected {
+            // Only for a version 6 packet where the secret key material is encrypted (that is,
+            // where the previous octet is not zero), a 1-octet scalar octet count of the
+            // cumulative length of all the following conditionally included S2K parameter fields.
+            map(be_u8, Some)(i)?
         } else {
-            i
+            (i, None)
         };
+
+        // the length of the remaining data after the conditionally included s2k parameter fields
+        let after_s2k = s2k_len.map(|len| i.len() - len as usize);
 
         let (i, enc_params) = match s2k_usage {
             // 0 is no encryption
@@ -104,14 +112,26 @@ fn parse_secret_fields(
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
                 let (i, aead_mode) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
 
-                let i = if key_ver == KeyVersion::V6 {
-                    let (i, _len) = take(1u8)(i)?; // FIXME take as u8
-                    i
+                let (i, len) = if key_ver == KeyVersion::V6 {
+                    // Only for a version 6 packet, and if the S2K usage octet was 253 or 254,
+                    // a 1-octet count of the size of the one field following this octet.
+                    map(be_u8, Some)(i)?
                 } else {
-                    i
+                    (i, None)
                 };
 
                 let (i, s2k) = s2k_parser(i)?;
+
+                // if we got a length field (in v6), check that it contained a consistent value
+                if let Some(len) = len {
+                    if s2k.len()? != len {
+                        return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+                            "String2Key length {} doesn't match for s2k type {:?}",
+                            len, s2k
+                        ))));
+                    }
+                }
+
                 let (i, nonce) = take(aead_mode.nonce_size())(i)?;
                 (
                     i,
@@ -127,14 +147,26 @@ fn parse_secret_fields(
             S2kUsage::Cfb => {
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
 
-                let i = if key_ver == KeyVersion::V6 {
-                    let (i, _len) = take(1u8)(i)?; // FIXME take as u8
-                    i
+                let (i, len) = if key_ver == KeyVersion::V6 {
+                    // Only for a version 6 packet, and if the S2K usage octet was 253 or 254,
+                    // a 1-octet count of the size of the one field following this octet.
+                    map(be_u8, Some)(i)?
                 } else {
-                    i
+                    (i, None)
                 };
 
                 let (i, s2k) = s2k_parser(i)?;
+
+                // if we got a length field (in v6), check that it contained a consistent value
+                if let Some(len) = len {
+                    if s2k.len()? != len {
+                        return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+                            "String2Key length {} doesn't match for s2k type {:?}",
+                            len, s2k
+                        ))));
+                    }
+                }
+
                 let (i, iv) = take(sym_alg.block_size())(i)?;
                 (
                     i,
@@ -159,6 +191,15 @@ fn parse_secret_fields(
                 )
             }
         };
+
+        if let Some(after_s2k) = after_s2k {
+            if i.len() != after_s2k {
+                return Err(nom::Err::Error(crate::errors::Error::Message(
+                    "Unexpected cumulative length of conditionally included S2K parameter fields"
+                        .to_string(),
+                )));
+            }
+        }
 
         let (i, len) = rest_len(i)?;
         let (i, data) = take(len)(i)?;
