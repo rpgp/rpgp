@@ -21,11 +21,11 @@ pub struct OnePassSignature {
     pub hash_algorithm: HashAlgorithm,
     pub pub_algorithm: PublicKeyAlgorithm,
     pub last: u8,
-    pub version_specific: VersionSpecific,
+    pub version_specific: OpsVersionSpecific,
 }
 
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
-pub enum VersionSpecific {
+pub enum OpsVersionSpecific {
     V3 {
         key_id: KeyId,
     },
@@ -38,8 +38,8 @@ pub enum VersionSpecific {
 impl OnePassSignature {
     pub fn version(&self) -> u8 {
         match self.version_specific {
-            VersionSpecific::V3 { .. } => 3,
-            VersionSpecific::V6 { .. } => 6,
+            OpsVersionSpecific::V3 { .. } => 3,
+            OpsVersionSpecific::V6 { .. } => 6,
         }
     }
 }
@@ -74,7 +74,7 @@ impl OnePassSignature {
             hash_algorithm,
             pub_algorithm,
             last: 1,
-            version_specific: VersionSpecific::V3 { key_id },
+            version_specific: OpsVersionSpecific::V3 { key_id },
         }
     }
 
@@ -94,7 +94,7 @@ impl OnePassSignature {
             hash_algorithm,
             pub_algorithm,
             last: 1,
-            version_specific: VersionSpecific::V6 { salt, fingerprint },
+            version_specific: OpsVersionSpecific::V6 { salt, fingerprint },
         }
     }
 }
@@ -110,14 +110,14 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
             3 => {
                 let (i, key_id) = map_res(take(8usize), KeyId::from_slice)(i)?;
 
-                (i, VersionSpecific::V3 { key_id })
+                (i, OpsVersionSpecific::V3 { key_id })
             }
             6 => {
                 let (i, salt_len) = be_u8(i)?;
                 let (i, salt) = map(take(salt_len), |salt: &[u8]| salt.to_vec())(i)?;
                 let (i, fingerprint) = map_res(take(32usize), TryInto::try_into)(i)?;
 
-                (i, VersionSpecific::V6 { salt, fingerprint })
+                (i, OpsVersionSpecific::V6 { salt, fingerprint })
             }
             _ => {
                 return Err(nom::Err::Error(crate::errors::Error::Unsupported(format!(
@@ -151,17 +151,17 @@ impl Serialize for OnePassSignature {
         ])?;
 
         // salt, if v6
-        if let VersionSpecific::V6 { salt, .. } = &self.version_specific {
+        if let OpsVersionSpecific::V6 { salt, .. } = &self.version_specific {
             let len: u8 = salt.len().try_into()?;
             writer.write_all(&[len])?;
             writer.write_all(salt)?;
         }
 
         match &self.version_specific {
-            VersionSpecific::V3 { key_id } => {
+            OpsVersionSpecific::V3 { key_id } => {
                 writer.write_all(key_id.as_ref())?;
             }
-            VersionSpecific::V6 { fingerprint, .. } => {
+            OpsVersionSpecific::V6 { fingerprint, .. } => {
                 writer.write_all(fingerprint.as_ref())?;
             }
         }
