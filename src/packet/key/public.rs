@@ -2,12 +2,14 @@ use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use md5::Md5;
 use sha1_checked::{Digest, Sha1};
 
-use crate::types::{Fingerprint, Mpi, Sig};
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData},
-    types::{KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait, Tag, Version},
+    types::{
+        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait, Sig,
+        Tag, Version,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -82,8 +82,6 @@ impl SecretSubkey {
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
     {
-        let sig_version = sec_key.version().try_into()?;
-
         let key = self.key;
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -93,6 +91,7 @@ impl SecretSubkey {
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
         ];
 
+        let sig_version = sec_key.version().try_into()?;
         let hash_alg = sec_key.hash_alg();
         let version_specific = SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
 

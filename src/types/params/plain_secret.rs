@@ -377,7 +377,7 @@ impl PlainSecretParams {
                 let enc_data = match version {
                     KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
                     KeyVersion::V3 => unimplemented_err!("v3 encryption"),
-                    KeyVersion::V4 => unimplemented_err!("v4 aead encryption"),
+                    KeyVersion::V4 => unimplemented_err!("v4 aead encryption"), // FIXME: implement
                     KeyVersion::V5 => unimplemented_err!("v5 encryption"),
                     KeyVersion::V6 => {
                         let mut data = Vec::new();

@@ -11,7 +11,7 @@ mod secret_key;
 mod secret_key_repr;
 mod user;
 
-use rand::{CryptoRng, Rng};
+use log::debug;
 
 pub use self::compression::*;
 pub use self::fingerprint::*;
@@ -25,7 +25,6 @@ pub use self::s2k::*;
 pub use self::secret_key::*;
 pub use self::secret_key_repr::*;
 pub use self::user::*;
-use crate::crypto::hash::HashAlgorithm;
 
 /// An OpenPGP cryptographic signature.
 ///
@@ -38,6 +37,27 @@ use crate::crypto::hash::HashAlgorithm;
 pub enum Sig {
     Mpis(Vec<Mpi>),
     Native(Vec<u8>),
+}
+
+impl Sig {
+    pub(crate) fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
+        use crate::ser::Serialize;
+
+        match &self {
+            Sig::Mpis(mpis) => {
+                // the actual signature
+                for val in mpis {
+                    debug!("writing: {}", hex::encode(val));
+                    val.to_writer(writer)?;
+                }
+            }
+            Sig::Native(sig) => {
+                writer.write_all(sig)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> TryFrom<&'a Sig> for &'a [Mpi] {
@@ -76,11 +96,4 @@ impl From<Vec<u8>> for Sig {
     fn from(value: Vec<u8>) -> Self {
         Sig::Native(value)
     }
-}
-
-pub(crate) fn salt_for<R: CryptoRng + Rng>(rng: &mut R, hash_alg: HashAlgorithm) -> Vec<u8> {
-    let mut salt = vec![0; hash_alg.salt_len()];
-    rng.fill_bytes(&mut salt);
-
-    salt
 }

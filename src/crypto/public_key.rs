@@ -21,7 +21,7 @@ pub enum PublicKeyAlgorithm {
     Elgamal = 20,
     /// Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)
     DiffieHellman = 21,
-    /// EdDSA legacy format [deprecated in RFC 9580, replaced by Ed25519 (27)]
+    /// EdDSA legacy format [deprecated in RFC 9580, superseded by Ed25519 (27)]
     EdDSALegacy = 22,
 
     /// X25519 [RFC 9580]

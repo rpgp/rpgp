@@ -6,9 +6,8 @@ use chrono::{SubsecRound, Utc};
 use rand::Rng;
 
 use crate::errors::Result;
-use crate::packet::signature::config::SignatureVersionSpecific;
 use crate::packet::{
-    PacketTrait, Signature, SignatureConfigBuilder, SignatureType, SignatureVersion, Subpacket,
+    PacketTrait, Signature, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
     SubpacketData,
 };
 use crate::ser::Serialize;
@@ -70,15 +69,7 @@ impl UserId {
     {
         let sig_version = signer.version().try_into()?;
         let hash_alg = signer.hash_alg();
-
-        let version_specific = match sig_version {
-            SignatureVersion::V6 => {
-                let salt = crate::types::salt_for(rng, hash_alg);
-                SignatureVersionSpecific::V6 { salt }
-            }
-            SignatureVersion::V4 => SignatureVersionSpecific::V4 {},
-            _ => unimplemented!(),
-        };
+        let version_specific = SignatureConfig::version_specific(rng, sig_version, hash_alg)?;
 
         let config = SignatureConfigBuilder::default()
             .version(sig_version)

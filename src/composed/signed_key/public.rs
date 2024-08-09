@@ -11,8 +11,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams};
-use crate::types::{Sig, Tag};
+use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, Sig, Tag};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.

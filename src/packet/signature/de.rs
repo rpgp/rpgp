@@ -71,8 +71,8 @@ fn key_expiration(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Parse a preferred symmetric algorithms subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
+/// Parse a preferred symmetric algorithms subpacket (for SEIPD v1)
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#preferred-v1-seipd
 fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
         .iter()
@@ -281,7 +281,7 @@ fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((i, SubpacketData::IssuerFingerprint(fp)))
 }
 
-/// Parse a preferred encryption modes subpacket
+/// Parse a preferred encryption modes subpacket (non-RFC subpacket for GnuPG "OCB" mode)
 fn preferred_encryption_modes(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[AeadAlgorithm; 2]> = body.iter().map(|v| AeadAlgorithm::from(*v)).collect();
 
@@ -302,7 +302,9 @@ fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((i, SubpacketData::IntendedRecipientFingerprint(fp)))
 }
 
-/// Parse a preferred aead subpacket
+/// Parse a preferred aead subpacket (for SEIPD v2)
+///
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-preferred-aead-ciphersuites
 fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     if body.len() % 2 != 0 {
         return Err(nom::Err::Error(crate::errors::Error::Message(format!(

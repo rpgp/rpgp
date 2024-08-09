@@ -60,7 +60,7 @@ impl SignatureConfig {
     }
 
     pub fn version_specific<R>(
-        mut rng: &mut R,
+        rng: &mut R,
         version: SignatureVersion,
         hash_alg: HashAlgorithm,
     ) -> Result<SignatureVersionSpecific>
@@ -68,9 +68,13 @@ impl SignatureConfig {
         R: CryptoRng + Rng,
     {
         match version {
-            SignatureVersion::V6 => Ok(SignatureVersionSpecific::V6 {
-                salt: crate::types::salt_for(&mut rng, hash_alg),
-            }),
+            SignatureVersion::V6 => {
+                // generate a salt with the correct length for hash_alg
+                let mut salt = vec![0; hash_alg.salt_len()];
+                rng.fill_bytes(&mut salt);
+
+                Ok(SignatureVersionSpecific::V6 { salt })
+            }
             SignatureVersion::V4 => Ok(SignatureVersionSpecific::V4 {}),
             _ => bail!("Unsupported signature version {:version?}"),
         }

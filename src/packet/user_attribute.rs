@@ -11,7 +11,7 @@ use nom::number::streaming::{be_u8, le_u16};
 use nom::sequence::pair;
 use rand::Rng;
 
-use super::{SignatureVersion, SignatureVersionSpecific, SubpacketData};
+use super::{SignatureConfig, SubpacketData};
 use crate::errors::{IResult, Result};
 use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
 use crate::ser::Serialize;
@@ -92,17 +92,8 @@ impl UserAttribute {
         F: FnOnce() -> String,
     {
         let sig_version = signer.version().try_into()?;
-
         let hash_alg = signer.hash_alg();
-
-        let version_specific = match sig_version {
-            SignatureVersion::V6 => {
-                let salt = crate::types::salt_for(rng, hash_alg);
-                SignatureVersionSpecific::V6 { salt }
-            }
-            SignatureVersion::V4 => SignatureVersionSpecific::V4 {},
-            _ => unimplemented!(),
-        };
+        let version_specific = SignatureConfig::version_specific(rng, sig_version, hash_alg)?;
 
         let config = SignatureConfigBuilder::default()
             .version(sig_version)

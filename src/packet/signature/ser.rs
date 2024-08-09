@@ -2,14 +2,12 @@ use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::Duration;
-use log::debug;
 
 use crate::errors::Result;
 use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
 use crate::packet::SignatureVersionSpecific;
 use crate::ser::Serialize;
-use crate::types::Sig;
 use crate::util::write_packet_length;
 
 impl Serialize for Signature {
@@ -116,15 +114,23 @@ impl Subpacket {
                 writer.write_all(&[val])?;
             }
             SubpacketData::IssuerFingerprint(fp) => {
-                writer.write_all(&[u8::from(fp.version().expect("versioned fingerprint"))])?;
-                writer.write_all(fp.as_bytes())?;
+                if let Some(version) = fp.version() {
+                    writer.write_all(&[u8::from(version)])?;
+                    writer.write_all(fp.as_bytes())?;
+                } else {
+                    bail!("IssuerFingerprint: needs versioned fingerprint")
+                }
             }
             SubpacketData::PreferredEncryptionModes(algs) => {
                 writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
             }
             SubpacketData::IntendedRecipientFingerprint(fp) => {
-                writer.write_all(&[u8::from(fp.version().expect("versioned fingerprint"))])?;
-                writer.write_all(fp.as_bytes())?;
+                if let Some(version) = fp.version() {
+                    writer.write_all(&[u8::from(version)])?;
+                    writer.write_all(fp.as_bytes())?;
+                } else {
+                    bail!("IntendedRecipientFingerprint: needs versioned fingerprint")
+                }
             }
             SubpacketData::PreferredAeadAlgorithms(algs) => {
                 writer.write_all(
@@ -265,7 +271,7 @@ impl SignatureConfig {
             writer.write_u32::<BigEndian>(created.timestamp() as u32)?;
             writer.write_all(issuer.as_ref())?;
         } else {
-            bail!("must exist for a v3 signature")
+            bail!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")
         }
 
         writer.write_all(&[
@@ -333,19 +339,8 @@ impl Signature {
         // signed hash value
         writer.write_all(&self.signed_hash_value)?;
 
-        // the actual signature
-        match &self.signature {
-            Sig::Mpis(mpis) => {
-                // the actual signature
-                for val in mpis {
-                    debug!("writing: {}", hex::encode(val));
-                    val.to_writer(writer)?;
-                }
-            }
-            Sig::Native(sig) => {
-                writer.write_all(sig)?;
-            }
-        }
+        // the actual cryptographic signature
+        self.signature.to_writer(writer)?;
 
         Ok(())
     }
@@ -364,19 +359,8 @@ impl Signature {
             writer.write_all(salt)?;
         }
 
-        // the actual signature
-        match &self.signature {
-            Sig::Mpis(mpis) => {
-                // the actual signature
-                for val in mpis {
-                    debug!("writing: {}", hex::encode(val));
-                    val.to_writer(writer)?;
-                }
-            }
-            Sig::Native(sig) => {
-                writer.write_all(sig)?;
-            }
-        }
+        // the actual cryptographic signature
+        self.signature.to_writer(writer)?;
 
         Ok(())
     }

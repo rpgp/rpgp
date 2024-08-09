@@ -53,26 +53,26 @@ fn eddsa_legacy(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
-/// xx
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed2
 fn ed25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
     // 32 bytes of public key
     let (i, p) = nom::bytes::complete::take(32u8)(i)?;
     Ok((
         i,
         PublicParams::Ed25519 {
-            public: p.try_into().expect("foo"),
+            public: p.try_into().expect("we took 32 bytes"),
         },
     ))
 }
 
-/// xx
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x
 fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
     // 32 bytes of public key
     let (i, p) = nom::bytes::complete::take(32u8)(i)?;
     Ok((
         i,
         PublicParams::X25519 {
-            public: p.try_into().expect("foo"),
+            public: p.try_into().expect("we took 32 bytes"),
         },
     ))
 }
@@ -169,8 +169,8 @@ pub fn parse_pub_fields(
 
         PublicKeyAlgorithm::Ed25519 => ed25519(i),
         PublicKeyAlgorithm::X25519 => x25519(i),
-        PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME?
-        PublicKeyAlgorithm::X448 => unknown(i, len),  // FIXME?
+        PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
+        PublicKeyAlgorithm::X448 => unknown(i, len),  // FIXME: implement later
 
         PublicKeyAlgorithm::DiffieHellman
         | PublicKeyAlgorithm::Private100

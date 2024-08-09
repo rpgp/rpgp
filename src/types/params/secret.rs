@@ -81,7 +81,6 @@ fn parse_secret_fields(
 
         let (i, s2k_usage) = map_res(be_u8, S2kUsage::try_from)(i)?;
 
-        // FIXME: use s2k_len
         let (i, s2k_len) = if key_ver == KeyVersion::V6 && s2k_usage != S2kUsage::Unprotected {
             // Only for a version 6 packet where the secret key material is encrypted (that is,
             // where the previous octet is not zero), a 1-octet scalar octet count of the

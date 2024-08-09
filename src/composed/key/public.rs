@@ -11,8 +11,7 @@ use crate::packet::{
     self, KeyFlags, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
     SubpacketData,
 };
-use crate::types::{Fingerprint, KeyId, PublicKeyTrait, PublicParams, SecretKeyTrait};
-use crate::types::{Mpi, Sig};
+use crate::types::{Fingerprint, KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait, Sig};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -123,8 +122,6 @@ impl PublicSubkey {
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
     {
-        let sig_version = sec_key.version().try_into()?;
-
         let key = self.key;
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -134,8 +131,8 @@ impl PublicSubkey {
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
         ];
 
+        let sig_version = sec_key.version().try_into()?;
         let hash_alg = sec_key.hash_alg();
-
         let version_specific = SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
 
         let config = SignatureConfigBuilder::default()

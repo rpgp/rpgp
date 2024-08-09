@@ -65,11 +65,13 @@ impl EncryptedSecretParams {
         //
         // An implementation MUST NOT create and MUST reject as malformed any secret key packet
         // where the S2K usage octet is not AEAD (253) and the S2K specifier type is Argon2.
+        //
+        // Ref: https://www.rfc-editor.org/rfc/rfc9580.html#section-3.7.2.1-10
         match &self.s2k_params {
             S2kParams::Cfb { s2k, .. } | S2kParams::MaleableCfb { s2k, .. } => {
                 if matches!(s2k, StringToKey::Argon2 { .. }) {
                     bail!(
-                        "S2K method Argon2 is only allowed in combination with usage mode 'AEAD'"
+                        "S2k method Argon2 is only allowed in combination with usage mode 'AEAD'"
                     );
                 }
             }
