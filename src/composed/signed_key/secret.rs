@@ -13,7 +13,7 @@ use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
     Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
-    SecretKeyTrait, Sig, Tag,
+    SecretKeyTrait, SignatureBytes, Tag,
 };
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
@@ -194,7 +194,12 @@ impl SecretKeyTrait for SignedSecretKey {
         self.primary_key.unlock(pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes>
     where
         F: FnOnce() -> String,
     {
@@ -220,7 +225,12 @@ impl SecretKeyTrait for SignedSecretKey {
 }
 
 impl PublicKeyTrait for SignedSecretKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
@@ -323,7 +333,12 @@ impl SecretKeyTrait for SignedSecretSubKey {
         self.key.unlock(pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes>
     where
         F: FnOnce() -> String,
     {
@@ -342,7 +357,12 @@ impl SecretKeyTrait for SignedSecretSubKey {
 }
 
 impl PublicKeyTrait for SignedSecretSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 

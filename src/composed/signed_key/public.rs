@@ -11,7 +11,9 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, Sig, Tag};
+use crate::types::{
+    Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
@@ -160,7 +162,12 @@ impl SignedPublicKey {
 }
 
 impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
@@ -260,7 +267,12 @@ impl SignedPublicSubKey {
 }
 
 impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 

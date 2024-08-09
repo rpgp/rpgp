@@ -34,24 +34,24 @@ pub use self::user::*;
 ///
 /// This type can represent both flavors of cryptographic signature data.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Sig {
+pub enum SignatureBytes {
     Mpis(Vec<Mpi>),
     Native(Vec<u8>),
 }
 
-impl Sig {
+impl SignatureBytes {
     pub(crate) fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> crate::errors::Result<()> {
         use crate::ser::Serialize;
 
         match &self {
-            Sig::Mpis(mpis) => {
+            SignatureBytes::Mpis(mpis) => {
                 // the actual signature
                 for val in mpis {
                     debug!("writing: {}", hex::encode(val));
                     val.to_writer(writer)?;
                 }
             }
-            Sig::Native(sig) => {
+            SignatureBytes::Native(sig) => {
                 writer.write_all(sig)?;
             }
         }
@@ -60,40 +60,40 @@ impl Sig {
     }
 }
 
-impl<'a> TryFrom<&'a Sig> for &'a [Mpi] {
+impl<'a> TryFrom<&'a SignatureBytes> for &'a [Mpi] {
     type Error = crate::errors::Error;
 
-    fn try_from(value: &'a Sig) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &'a SignatureBytes) -> std::result::Result<Self, Self::Error> {
         match value {
-            Sig::Mpis(mpis) => Ok(mpis),
+            SignatureBytes::Mpis(mpis) => Ok(mpis),
 
             // We reject this operation because it doesn't fit with the intent of the Sig abstraction
-            Sig::Native(_) => bail!("Native Sig can't be transformed into Mpis"),
+            SignatureBytes::Native(_) => bail!("Native Sig can't be transformed into Mpis"),
         }
     }
 }
 
-impl<'a> TryFrom<&'a Sig> for &'a [u8] {
+impl<'a> TryFrom<&'a SignatureBytes> for &'a [u8] {
     type Error = crate::errors::Error;
 
-    fn try_from(value: &'a Sig) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &'a SignatureBytes) -> std::result::Result<Self, Self::Error> {
         match value {
             // We reject this operation because it doesn't fit with the intent of the Sig abstraction
-            Sig::Mpis(_) => bail!("Mpi-based Sig can't be transformed into &[u8]"),
+            SignatureBytes::Mpis(_) => bail!("Mpi-based Sig can't be transformed into &[u8]"),
 
-            Sig::Native(native) => Ok(native),
+            SignatureBytes::Native(native) => Ok(native),
         }
     }
 }
 
-impl From<Vec<Mpi>> for Sig {
+impl From<Vec<Mpi>> for SignatureBytes {
     fn from(value: Vec<Mpi>) -> Self {
-        Sig::Mpis(value)
+        SignatureBytes::Mpis(value)
     }
 }
 
-impl From<Vec<u8>> for Sig {
+impl From<Vec<u8>> for SignatureBytes {
     fn from(value: Vec<u8>) -> Self {
-        Sig::Native(value)
+        SignatureBytes::Native(value)
     }
 }

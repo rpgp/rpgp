@@ -7,8 +7,8 @@ use crate::{
     errors::Result,
     packet::{Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData},
     types::{
-        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait, Sig,
-        Tag, Version,
+        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        SignatureBytes, Tag, Version,
     },
 };
 
@@ -370,7 +370,12 @@ impl PublicKeyTrait for PubKeyInner {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
                 let sig: &[Mpi] = sig.try_into()?;
@@ -537,7 +542,12 @@ impl PublicKeyTrait for PubKeyInner {
 }
 
 impl PublicKeyTrait for PublicKey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
@@ -583,7 +593,12 @@ impl PublicKeyTrait for PublicKey {
 }
 
 impl PublicKeyTrait for PublicSubkey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 

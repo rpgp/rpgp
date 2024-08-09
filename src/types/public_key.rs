@@ -5,7 +5,7 @@ use rand::{CryptoRng, Rng};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicParams, Sig};
+use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicParams, SignatureBytes};
 
 pub trait PublicKeyTrait: std::fmt::Debug {
     fn version(&self) -> KeyVersion;
@@ -23,7 +23,12 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 
     /// Verify a signed message.
     /// Data will be hashed using `hash`, before verifying.
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()>;
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()>;
 
     /// Encrypt the given `plain` for this key.
     fn encrypt<R: CryptoRng + Rng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>>;
@@ -53,7 +58,12 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 }
 
 impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         (*self).verify_signature(hash, data, sig)
     }
 

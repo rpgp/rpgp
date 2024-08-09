@@ -1,7 +1,6 @@
 use log::debug;
 use zeroize::Zeroize;
 
-use crate::types::{Fingerprint, Sig};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -10,8 +9,8 @@ use crate::{
         Subpacket, SubpacketData,
     },
     types::{
-        KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait,
-        SecretParams, Tag, Version,
+        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
+        SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
     },
 };
 
@@ -234,13 +233,18 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
         work(&decrypted)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes>
     where
         F: FnOnce() -> String,
     {
         use crate::crypto::Signer;
 
-        let mut signature: Option<Sig> = None;
+        let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |priv_key| {
             debug!("unlocked key");
             let sig = match *priv_key {
@@ -271,7 +275,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
 
                     ensure_eq!(native.len(), 64, "expect 64 byte signature");
 
-                    signature = Some(Sig::Native(native));
+                    signature = Some(SignatureBytes::Native(native));
                 }
                 _ => {
                     // MPI format:
@@ -281,7 +285,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                         .map(|v| Mpi::from_raw_slice(&v[..]))
                         .collect::<Vec<_>>();
 
-                    signature = Some(Sig::Mpis(mpis));
+                    signature = Some(SignatureBytes::Mpis(mpis));
                 }
             }
             Ok(())
@@ -307,7 +311,12 @@ impl SecretKeyTrait for SecretKey {
         SecretKeyTrait::unlock(&self.0, pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes>
     where
         F: FnOnce() -> String,
     {
@@ -331,7 +340,12 @@ impl SecretKeyTrait for SecretSubkey {
         SecretKeyTrait::unlock(&self.0, pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Sig>
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes>
     where
         F: FnOnce() -> String,
     {
@@ -385,7 +399,12 @@ impl PacketTrait for SecretSubkey {
 }
 
 impl PublicKeyTrait for SecretKey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
@@ -431,7 +450,12 @@ impl PublicKeyTrait for SecretKey {
 }
 
 impl PublicKeyTrait for SecretSubkey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
@@ -477,7 +501,12 @@ impl PublicKeyTrait for SecretSubkey {
 }
 
 impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInner<D> {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &Sig) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.details.verify_signature(hash, hashed, sig)
     }
 

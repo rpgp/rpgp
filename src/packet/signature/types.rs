@@ -20,7 +20,7 @@ use crate::packet::signature::SignatureConfig;
 use crate::packet::{PacketTrait, SignatureVersionSpecific};
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, Fingerprint, KeyId, PublicKeyTrait, Sig, Tag, Version,
+    self, CompressionAlgorithm, Fingerprint, KeyId, PublicKeyTrait, SignatureBytes, Tag, Version,
 };
 
 /// Signature Packet
@@ -32,7 +32,7 @@ pub struct Signature {
     pub config: SignatureConfig,
     #[debug("{}", hex::encode(signed_hash_value))]
     pub signed_hash_value: [u8; 2],
-    pub signature: Sig,
+    pub signature: SignatureBytes,
 }
 
 impl Signature {
@@ -44,7 +44,7 @@ impl Signature {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         signed_hash_value: [u8; 2],
-        signature: Sig,
+        signature: SignatureBytes,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
         version_specific: SignatureVersionSpecific,
@@ -68,7 +68,7 @@ impl Signature {
     pub fn from_config(
         config: SignatureConfig,
         signed_hash_value: [u8; 2],
-        signature: Sig,
+        signature: SignatureBytes,
     ) -> Self {
         Signature {
             packet_version: Default::default(),

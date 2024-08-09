@@ -19,7 +19,7 @@ use crate::packet::signature::types::*;
 use crate::packet::SignatureVersionSpecific;
 use crate::types::{
     mpi, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey,
-    RevocationKeyClass, Sig, Version,
+    RevocationKeyClass, SignatureBytes, Version,
 };
 use crate::util::{clone_into_array, packet_length};
 
@@ -379,7 +379,9 @@ fn subpackets<'a>(i: &'a [u8]) -> IResult<&'a [u8], Vec<Subpacket>> {
     }))(i)
 }
 
-fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], Sig> + '_ {
+fn actual_signature(
+    typ: &PublicKeyAlgorithm,
+) -> impl Fn(&[u8]) -> IResult<&[u8], SignatureBytes> + '_ {
     move |i: &[u8]| match typ {
         &PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
             map(mpi, |v| vec![v.to_owned()].into())(i)
@@ -401,7 +403,7 @@ fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8]
         &PublicKeyAlgorithm::Ed25519 => {
             let (i, sig) = nom::bytes::complete::take(64u8)(i)?;
 
-            Ok((i, Sig::Native(sig.to_vec())))
+            Ok((i, SignatureBytes::Native(sig.to_vec())))
         }
 
         &PublicKeyAlgorithm::Private100
@@ -415,7 +417,7 @@ fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8]
         | &PublicKeyAlgorithm::Private108
         | &PublicKeyAlgorithm::Private109
         | &PublicKeyAlgorithm::Private110 => map(mpi, |v| vec![v.to_owned()].into())(i),
-        _ => Ok((i, Sig::Native(vec![]))), // don't assume format, could be non-MPI
+        _ => Ok((i, SignatureBytes::Native(vec![]))), // don't assume format, could be non-MPI
     }
 }
 
