@@ -299,7 +299,7 @@ fn validate_headers(headers: Headers) -> Result<Vec<HashAlgorithm>> {
 ///
 /// This implementation is implicitly agnostic between "\n" and "\r\n" line endings.
 ///
-/// Ref https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-dash-escaped-text
+/// Ref https://www.rfc-editor.org/rfc/rfc9580.html#name-dash-escaped-text
 fn dash_escape(text: &str) -> String {
     let mut out = String::new();
     for line in text.split_inclusive('\n') {

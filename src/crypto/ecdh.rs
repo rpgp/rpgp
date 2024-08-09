@@ -3,14 +3,13 @@ use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
+use super::hash::HashAlgorithm;
 use crate::crypto::{
     aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
     Decryptor, KeyParams,
 };
 use crate::errors::{Error, Result};
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
-
-use super::hash::HashAlgorithm;
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -111,7 +110,7 @@ impl Decryptor for SecretKey {
                     let private_key = &secret[..];
 
                     // create scalar and reverse to little endian
-                    // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-curve25519legacy-ecdh-secre
+                    // https://www.rfc-editor.org/rfc/rfc9580.html#name-curve25519legacy-ecdh-secre
                     let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
                     let mut private_key_arr = [0u8; 32];
                     private_key_arr[..].copy_from_slice(&private_key_le);
@@ -519,12 +518,12 @@ where
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
     use std::fs;
 
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
+    use super::*;
     use crate::types::SecretKeyRepr;
     use crate::{Deserializable, Message, SignedSecretKey};
 
