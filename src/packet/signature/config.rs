@@ -109,6 +109,14 @@ impl SignatureConfig {
         F: FnOnce() -> String,
         R: Read,
     {
+        ensure_eq!(
+            self.version,
+            key.version().try_into()?,
+            "signature version {:?} not allowed for signer version {:?}",
+            self.version,
+            key.version()
+        );
+
         let mut hasher = self.hash_alg.new_hasher()?;
 
         if let SignatureVersionSpecific::V6 { salt } = &self.version_specific {
@@ -153,10 +161,18 @@ impl SignatureConfig {
     where
         F: FnOnce() -> String,
     {
+        ensure_eq!(
+            self.version,
+            signer.version().try_into()?,
+            "signature version {:?} not allowed for signer version {:?}",
+            self.version,
+            signer.version()
+        );
         ensure!(
             self.is_certification(),
             "can not sign non certification as certification"
         );
+
         debug!("signing certification {:#?}", self.typ);
 
         let mut hasher = self.hash_alg.new_hasher()?;
@@ -219,6 +235,13 @@ impl SignatureConfig {
     where
         F: FnOnce() -> String,
     {
+        ensure_eq!(
+            self.version,
+            signing_key.version().try_into()?,
+            "signature version {:?} not allowed for signer version {:?}",
+            self.version,
+            signing_key.version()
+        );
         debug!(
             "signing key binding: {:#?} - {:#?} - {:#?}",
             self, signing_key, key
@@ -256,6 +279,13 @@ impl SignatureConfig {
     where
         F: FnOnce() -> String,
     {
+        ensure_eq!(
+            self.version,
+            signing_key.version().try_into()?,
+            "signature version {:?} not allowed for signer version {:?}",
+            self.version,
+            signing_key.version()
+        );
         debug!("signing key (revocation): {:#?} - {:#?}", self, key);
 
         let mut hasher = self.hash_alg.new_hasher()?;
