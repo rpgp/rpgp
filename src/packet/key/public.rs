@@ -504,8 +504,11 @@ impl PublicKeyTrait for PubKeyInner {
             }
 
             KeyVersion::V6 => {
-                // When a v6 signature is made over a key, the hash data starts with the salt,
-                // then octet 0x9B, followed by a four-octet length of the key, and then the body of the key packet.
+                // When a v6 signature is made over a key, the hash data starts with the salt
+                // [NOTE: the salt is hashed in packet/signature/config.rs],
+
+                // then octet 0x9B, followed by a four-octet length of the key,
+                // and then the body of the key packet.
                 writer.write_all(&[0x9b])?;
                 writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
             }
