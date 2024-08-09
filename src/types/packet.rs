@@ -33,7 +33,12 @@ impl From<usize> for PacketLength {
     }
 }
 
-/// Packet tag as defined in RFC 4880, Section 4.3 "Packet Tags"
+/// Packet Type ID, see https://www.rfc-editor.org/rfc/rfc9580.html#packet-types
+///
+/// The "Packet Type ID" was called "Packet tag" in RFC 4880 (Section 4.3 "Packet Tags").
+/// Ref https://www.rfc-editor.org/rfc/rfc9580.html#appendix-B.1-3.7.1
+///
+/// However, rPGP will continue to use the term "(Packet) Tag" for the time being.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum Tag {
