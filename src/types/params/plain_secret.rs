@@ -337,7 +337,7 @@ impl PlainSecretParams {
         passphrase: &str,
         s2k_params: S2kParams,
         pub_key: &(impl PublicKeyTrait + Serialize),
-        secret_type_id: Option<Tag>,
+        secret_tag: Option<Tag>,
     ) -> Result<EncryptedSecretParams> {
         let version = pub_key.version();
 
@@ -385,12 +385,12 @@ impl PlainSecretParams {
                             .to_writer_raw(&mut data)
                             .expect("preallocated vector");
 
-                        let Some(secret_type_id) = secret_type_id else {
-                            bail!("no secret_type_id provided");
+                        let Some(secret_tag) = secret_tag else {
+                            bail!("no secret_tag provided");
                         };
 
                         let (okm, ad) =
-                            s2k_usage_aead(&key, secret_type_id, pub_key, *sym_alg, *aead_mode)?;
+                            s2k_usage_aead(&key, secret_tag, pub_key, *sym_alg, *aead_mode)?;
 
                         // AEAD encrypt
                         let tag =
@@ -476,7 +476,7 @@ fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParams> {
 /// https://www.rfc-editor.org/rfc/rfc9580.html#name-secret-key-packet-formats
 pub(crate) fn s2k_usage_aead(
     derived: &[u8],
-    secret_type_id: Tag,
+    secret_tag: Tag,
     pub_key: &(impl PublicKeyTrait + Serialize),
     sym_alg: SymmetricKeyAlgorithm,
     aead_mode: AeadAlgorithm,
@@ -485,7 +485,7 @@ pub(crate) fn s2k_usage_aead(
     let hk = Hkdf::<Sha256>::new(None, derived);
     let mut okm = [0u8; 32];
 
-    let type_id = u8::from(secret_type_id) | 0xc0;
+    let type_id = u8::from(secret_tag) | 0xc0;
 
     // HKDF info parameter
     let info = &[

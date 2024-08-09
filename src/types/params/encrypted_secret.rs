@@ -56,7 +56,7 @@ impl EncryptedSecretParams {
         &self,
         pw: F,
         pub_key: &(impl PublicKeyTrait + Serialize),
-        secret_type_id: Option<Tag>,
+        secret_tag: Option<Tag>,
     ) -> Result<PlainSecretParams>
     where
         F: FnOnce() -> String,
@@ -134,17 +134,12 @@ impl EncryptedSecretParams {
                         // derive key
                         let derived = s2k.derive_key(&pw(), 32)?;
 
-                        let Some(secret_type_id) = secret_type_id else {
-                            bail!("no secret_type_id provided");
+                        let Some(secret_tag) = secret_tag else {
+                            bail!("no secret_tag provided");
                         };
 
-                        let (okm, ad) = s2k_usage_aead(
-                            &derived,
-                            secret_type_id,
-                            pub_key,
-                            *sym_alg,
-                            *aead_mode,
-                        )?;
+                        let (okm, ad) =
+                            s2k_usage_aead(&derived, secret_tag, pub_key, *sym_alg, *aead_mode)?;
 
                         // AEAD decrypt
                         let (ciphertext, tag) =
