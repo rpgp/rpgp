@@ -244,15 +244,11 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
         self.unlock(key_pw, |priv_key| {
             debug!("unlocked key");
             let sig = match *priv_key {
-                SecretKeyRepr::RSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.details.public_params())
-                }
+                SecretKeyRepr::RSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
                 SecretKeyRepr::ECDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.details.public_params())
+                    priv_key.sign(hash, data, self.public_params())
                 }
-                SecretKeyRepr::DSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.details.public_params())
-                }
+                SecretKeyRepr::DSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
                 SecretKeyRepr::ECDH(_) => {
                     bail!("ECDH can not be used to for signing operations")
                 }
@@ -260,11 +256,11 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                     bail!("X25519 can not be used to for signing operations")
                 }
                 SecretKeyRepr::EdDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.details.public_params())
+                    priv_key.sign(hash, data, self.public_params())
                 }
             }?;
 
-            match self.details.public_params() {
+            match self.public_params() {
                 PublicParams::Ed25519 { .. } => {
                     // native format
 
