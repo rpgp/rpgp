@@ -44,9 +44,6 @@ impl OnePassSignature {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OnePassSignatureCommon {}
-
 impl OnePassSignature {
     /// Parses a `OnePassSignature` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
