@@ -321,6 +321,19 @@ impl StringToKey {
 
         Ok(key)
     }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub(crate) fn len(&self) -> Result<u8> {
+        let len = match self {
+            Self::Simple { .. } => 2,
+            Self::Salted { .. } => 10,
+            Self::IteratedAndSalted { .. } => 11,
+            Self::Argon2 { .. } => 20,
+            _ => bail!("not implemented for StringToKey: {:?}", self),
+        };
+
+        Ok(len)
+    }
 }
 
 pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {
@@ -426,7 +439,6 @@ mod tests {
     use rand::distributions::{Alphanumeric, DistString};
 
     use super::*;
-
     use crate::ArmorOptions;
 
     #[test]
@@ -468,7 +480,7 @@ mod tests {
     #[test]
     #[ignore] // slow in debug mode
     fn argon2() {
-        // test vectors from draft-ietf-openpgp-crypto-refresh
+        // test vectors from RFC 9580
 
         // 16 byte key size
         let s2k = StringToKey::Argon2 {
@@ -533,7 +545,7 @@ mod tests {
     #[ignore] // slow in debug mode
     fn argon2_skesk_msg() {
         // Tests decrypting the messages from
-        // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-sample-messages-encrypted-u
+        // https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-messages-encrypted-u
         //
         // "These messages are the literal data "Hello, world!" encrypted using v1 SEIPD, with Argon2
         // and the passphrase "password", using different session key sizes."

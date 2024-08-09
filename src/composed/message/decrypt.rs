@@ -14,7 +14,7 @@ where
     debug!("decrypt session key");
 
     locked_key.unlock(key_pw, |priv_key| {
-        let (key, sym_alg) = priv_key.decrypt(mpis, &locked_key.fingerprint())?;
+        let (key, sym_alg) = priv_key.decrypt(mpis, locked_key.fingerprint().as_bytes())?;
         // TODO: handle other versions
         Ok(PlainSessionKey::V4 { key, sym_alg })
     })

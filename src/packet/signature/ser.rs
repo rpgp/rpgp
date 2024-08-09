@@ -2,11 +2,11 @@ use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::Duration;
-use log::debug;
 
 use crate::errors::Result;
 use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
+use crate::packet::SignatureVersionSpecific;
 use crate::ser::Serialize;
 use crate::util::write_packet_length;
 
@@ -16,7 +16,10 @@ impl Serialize for Signature {
 
         match self.config.version {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
-            SignatureVersion::V4 | SignatureVersion::V5 => self.to_writer_v4(writer),
+            SignatureVersion::V4 | SignatureVersion::V6 => self.to_writer_v4_v6(writer),
+            SignatureVersion::V5 => {
+                bail!("v5 signature unsupported writer")
+            }
             SignatureVersion::Other(version) => bail!("Unsupported signature version {}", version),
         }
     }
@@ -110,12 +113,32 @@ impl Subpacket {
                 let val = u8::from(*is_exportable);
                 writer.write_all(&[val])?;
             }
-            SubpacketData::IssuerFingerprint(version, fp) => {
-                writer.write_all(&[u8::from(*version)])?;
-                writer.write_all(fp)?;
+            SubpacketData::IssuerFingerprint(fp) => {
+                if let Some(version) = fp.version() {
+                    writer.write_all(&[u8::from(version)])?;
+                    writer.write_all(fp.as_bytes())?;
+                } else {
+                    bail!("IssuerFingerprint: needs versioned fingerprint")
+                }
+            }
+            SubpacketData::PreferredEncryptionModes(algs) => {
+                writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
+            }
+            SubpacketData::IntendedRecipientFingerprint(fp) => {
+                if let Some(version) = fp.version() {
+                    writer.write_all(&[u8::from(version)])?;
+                    writer.write_all(fp.as_bytes())?;
+                } else {
+                    bail!("IntendedRecipientFingerprint: needs versioned fingerprint")
+                }
             }
             SubpacketData::PreferredAeadAlgorithms(algs) => {
-                writer.write_all(&algs.iter().map(|&alg| alg.into()).collect::<Vec<_>>())?;
+                writer.write_all(
+                    &algs
+                        .iter()
+                        .flat_map(|&(sym_alg, aead)| [sym_alg.into(), aead.into()])
+                        .collect::<Vec<_>>(),
+                )?;
             }
             SubpacketData::Experimental(_, body) => {
                 writer.write_all(body)?;
@@ -171,8 +194,10 @@ impl Subpacket {
             SubpacketData::TrustSignature(_, _) => 2,
             SubpacketData::RegularExpression(regexp) => regexp.len(),
             SubpacketData::ExportableCertification(_) => 1,
-            SubpacketData::IssuerFingerprint(_, fp) => 1 + fp.len(),
-            SubpacketData::PreferredAeadAlgorithms(algs) => algs.len(),
+            SubpacketData::IssuerFingerprint(fp) => 1 + fp.len(),
+            SubpacketData::PreferredEncryptionModes(algs) => algs.len(),
+            SubpacketData::IntendedRecipientFingerprint(fp) => 1 + fp.len(),
+            SubpacketData::PreferredAeadAlgorithms(algs) => algs.len() * 2,
             SubpacketData::Experimental(_, body) => body.len(),
             SubpacketData::Other(_, body) => body.len(),
             SubpacketData::SignatureTarget(_, _, hash) => 2 + hash.len(),
@@ -209,7 +234,11 @@ impl Subpacket {
             SubpacketData::TrustSignature(_, _) => SubpacketType::TrustSignature,
             SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
             SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
-            SubpacketData::IssuerFingerprint(_, _) => SubpacketType::IssuerFingerprint,
+            SubpacketData::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
+            SubpacketData::PreferredEncryptionModes(_) => SubpacketType::PreferredEncryptionModes,
+            SubpacketData::IntendedRecipientFingerprint(_) => {
+                SubpacketType::IntendedRecipientFingerprint
+            }
             SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
             SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
             SubpacketData::Other(n, _) => SubpacketType::Other(*n),
@@ -235,21 +264,16 @@ impl SignatureConfig {
             // tag
             0x05,
             // type
-            self.typ as u8,
+            self.typ.into(),
         ])?;
 
-        writer.write_u32::<BigEndian>(
-            self.created
-                .expect("must exist for a v3 signature")
-                .timestamp() as u32,
-        )?;
+        if let SignatureVersionSpecific::V3 { created, issuer } = &self.version_specific {
+            writer.write_u32::<BigEndian>(created.timestamp() as u32)?;
+            writer.write_all(issuer.as_ref())?;
+        } else {
+            bail!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")
+        }
 
-        writer.write_all(
-            self.issuer
-                .as_ref()
-                .expect("must exist for a v3 signature")
-                .as_ref(),
-        )?;
         writer.write_all(&[
             // public algorithm
             u8::from(self.pub_alg),
@@ -260,11 +284,11 @@ impl SignatureConfig {
         Ok(())
     }
 
-    /// Serializes a v4 or v5 signature.
-    fn to_writer_v4<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+    /// Serializes a v4 or v6 signature.
+    fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_all(&[
             // type
-            self.typ as u8,
+            self.typ.into(),
             // public algorithm
             u8::from(self.pub_alg),
             // hash algorithm
@@ -277,7 +301,12 @@ impl SignatureConfig {
             packet.to_writer(&mut hashed_subpackets)?;
         }
 
-        writer.write_u16::<BigEndian>(hashed_subpackets.len() as u16)?;
+        match self.version {
+            SignatureVersion::V4 => writer.write_u16::<BigEndian>(hashed_subpackets.len() as u16)?,
+            SignatureVersion::V6 => writer.write_u32::<BigEndian>(hashed_subpackets.len() as u32)?,
+            v => unimplemented_err!("signature version {:?}", v),
+        }
+
         writer.write_all(&hashed_subpackets)?;
 
         // unhashed subpackets
@@ -286,7 +315,16 @@ impl SignatureConfig {
             packet.to_writer(&mut unhashed_subpackets)?;
         }
 
-        writer.write_u16::<BigEndian>(unhashed_subpackets.len() as u16)?;
+        match self.version {
+            SignatureVersion::V4 => {
+                writer.write_u16::<BigEndian>(unhashed_subpackets.len() as u16)?
+            }
+            SignatureVersion::V6 => {
+                writer.write_u32::<BigEndian>(unhashed_subpackets.len() as u32)?
+            }
+            v => unimplemented_err!("signature version {:?}", v),
+        }
+
         writer.write_all(&unhashed_subpackets)?;
 
         Ok(())
@@ -301,27 +339,28 @@ impl Signature {
         // signed hash value
         writer.write_all(&self.signed_hash_value)?;
 
-        // the actual signature
-        for val in &self.signature {
-            debug!("writing: {}", hex::encode(val));
-            val.to_writer(writer)?;
-        }
+        // the actual cryptographic signature
+        self.signature.to_writer(writer)?;
 
         Ok(())
     }
 
-    /// Serializes a v4 or v5 signature.
-    fn to_writer_v4<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.config.to_writer_v4(writer)?;
+    /// Serializes a v4 or v6 signature.
+    fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.config.to_writer_v4_v6(writer)?;
 
         // signed hash value
         writer.write_all(&self.signed_hash_value)?;
 
-        // the actual signature
-        for val in &self.signature {
-            debug!("writing signature: {}", hex::encode(val));
-            val.to_writer(writer)?;
+        // salt, if v6
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            let len: u8 = salt.len().try_into()?;
+            writer.write_all(&[len])?;
+            writer.write_all(salt)?;
         }
+
+        // the actual cryptographic signature
+        self.signature.to_writer(writer)?;
 
         Ok(())
     }
@@ -331,11 +370,11 @@ impl Signature {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
     use std::fs::File;
     use std::io::Read;
     use std::path::Path;
 
+    use super::*;
     use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {

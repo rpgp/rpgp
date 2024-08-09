@@ -9,7 +9,7 @@ use crate::types::{Tag, Version};
 
 /// Padding Packet
 ///
-/// https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-padding-packet-type-id-21
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-padding-packet-type-id-21
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub struct Padding {
     packet_version: Version,
@@ -65,9 +65,8 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
-    use super::*;
-
     use super::super::single;
+    use super::*;
     use crate::packet::Packet;
     use crate::types::PacketLength;
 

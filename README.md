@@ -38,17 +38,20 @@
 
 > OpenPGP implemented in pure Rust, permissively licensed
 
-rPGP is a pure Rust implementation of OpenPGP, following the main RFCs
+rPGP is a pure Rust implementation of OpenPGP, following the main RFC
 
-- [RFC4880]
-- [RFC2440],
-- [RFC6637] and
-- [draft-ietf-openpgp-crypto-refresh]
+- [RFC9580]
+
+Also see the historical RFCs
+
+- [RFC4880],
+- [RFC2440] and
+- [RFC6637]
 
 See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented PGP features.
 
-It offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
-Additionally it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
+rPGP offers a flexible low-level API and gives users the ability to build higher level PGP tooling in the most compatible way possible.
+Additionally, it fully supports all functionality required by the [Autocrypt 1.1 e-mail encryption specification].
 
 ## Usage
 
@@ -108,7 +111,7 @@ public_key.verify_signature(HashAlgorithm::default(), &data[..], &new_signature)
 
 ## Current Status
 
-> Last updated *April 2024*
+> Last updated *August 2024*
 
 - Implementation Status: [IMPL_STATUS.md](docs/IMPL_STATUS.md)
 - Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
@@ -135,6 +138,13 @@ Checkout [FAQ.md](docs/FAQ.md).
 All crates in this repository support Rust 1.75 or higher. In future minimally supported
 version of Rust can be changed, but it will be done with a minor version bump.
 
+## Funding
+
+[RFC 9580 support for rPGP](https://nlnet.nl/project/rPGP-cryptorefresh/)
+has been funded in part through [NGI0 Core](https://nlnet.nl/core/),
+a fund established by [NLnet](https://nlnet.nl)
+with financial support from the European Commission's [Next Generation Internet](https://ngi.eu) programme.
+
 ## License
 
 This project is licensed under either of
@@ -154,6 +164,8 @@ shall be dual licensed as above, without any additional terms or conditions.
 
 [RFC2440]: https://tools.ietf.org/html/rfc2440
 [RFC4880]: https://tools.ietf.org/html/rfc4880.html
+[RFC6637]: https://www.rfc-editor.org/rfc/rfc6637
+[RFC9580]: https://www.rfc-editor.org/rfc/rfc9580.html
 [Autocrypt 1.1 e-mail encryption specification]: https://autocrypt.org/level1.html
 [the `pgp` Crate]: https://crates.io/crates/pgp/
 [Delta Chat]: https://delta.chat
@@ -161,5 +173,3 @@ shall be dual licensed as above, without any additional terms or conditions.
 [`rpgpie`]: https://crates.io/crates/rpgpie
 [`rpm`]: https://crates.io/crates/rpm
 [`debian-packaging`]: https://crates.io/crates/debian-packaging 
-[RFC6637]: https://www.rfc-editor.org/rfc/rfc6637
-[draft-ietf-openpgp-crypto-refresh]: https://datatracker.ietf.org/doc/draft-ietf-openpgp-crypto-refresh/13/

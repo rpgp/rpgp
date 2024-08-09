@@ -6,7 +6,7 @@ use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Duration, Utc};
 use iter_read::IterRead;
 use log::debug;
-use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive};
 use smallvec::{smallvec, SmallVec};
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -17,10 +17,10 @@ use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
 use crate::packet::signature::SignatureConfig;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketTrait, SignatureVersionSpecific};
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicKeyTrait, Tag, Version,
+    self, CompressionAlgorithm, Fingerprint, KeyId, PublicKeyTrait, SignatureBytes, Tag, Version,
 };
 
 /// Signature Packet
@@ -32,7 +32,7 @@ pub struct Signature {
     pub config: SignatureConfig,
     #[debug("{}", hex::encode(signed_hash_value))]
     pub signed_hash_value: [u8; 2],
-    pub signature: Vec<Mpi>,
+    pub signature: SignatureBytes,
 }
 
 impl Signature {
@@ -44,20 +44,22 @@ impl Signature {
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
         signed_hash_value: [u8; 2],
-        signature: Vec<Mpi>,
+        signature: SignatureBytes,
         hashed_subpackets: Vec<Subpacket>,
         unhashed_subpackets: Vec<Subpacket>,
+        version_specific: SignatureVersionSpecific,
     ) -> Self {
         Signature {
             packet_version,
-            config: SignatureConfig::new_v4(
+            config: SignatureConfig {
                 version,
                 typ,
                 pub_alg,
                 hash_alg,
                 hashed_subpackets,
                 unhashed_subpackets,
-            ),
+                version_specific,
+            },
             signed_hash_value,
             signature,
         }
@@ -66,7 +68,7 @@ impl Signature {
     pub fn from_config(
         config: SignatureConfig,
         signed_hash_value: [u8; 2],
-        signature: Vec<Mpi>,
+        signature: SignatureBytes,
     ) -> Self {
         Signature {
             packet_version: Default::default(),
@@ -103,7 +105,7 @@ impl Signature {
 
         // Does any issuer or issuer fingerprint subpacket matche the identity of `sig`?
         issuers.iter().any(|&key_id| key_id == &key.key_id())
-            || issuer_fps.iter().any(|&fp| fp == key.fingerprint())
+            || issuer_fps.iter().any(|&fp| fp == &key.fingerprint())
     }
 
     /// Verify this signature.
@@ -118,6 +120,10 @@ impl Signature {
         );
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
+
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
+        }
 
         if matches!(self.typ(), SignatureType::Text) {
             let normalized = Normalized::new(data.bytes().flat_map(|b| b.ok()), LineBreak::Crlf);
@@ -169,6 +175,10 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
+        }
+
         // the key of the signee
         {
             let mut key_buf = Vec::new();
@@ -186,7 +196,7 @@ impl Signature {
                 SignatureVersion::V2 | SignatureVersion::V3 => {
                     // Nothing to do
                 }
-                SignatureVersion::V4 | SignatureVersion::V5 => {
+                SignatureVersion::V4 | SignatureVersion::V6 => {
                     let prefix = match tag {
                         Tag::UserId => 0xB4,
                         Tag::UserAttribute => 0xD1,
@@ -198,6 +208,9 @@ impl Signature {
 
                     // prefixes
                     hasher.update(&prefix_buf);
+                }
+                SignatureVersion::V5 => {
+                    bail!("v5 signature unsupported tpc")
                 }
                 SignatureVersion::Other(version) => {
                     bail!("unsupported signature version: {:?}", version)
@@ -259,6 +272,10 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
+        }
+
         // Hash the two keys:
         // - for a regular binding signature, first the signer (primary), then the signee (subkey)
         // - for a "backward signature" (Primary Key Binding Signature), the order of hashing is signee (primary), signer (subkey)
@@ -311,6 +328,10 @@ impl Signature {
 
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            hasher.update(salt.as_ref())
+        }
+
         {
             let mut key_buf = Vec::new();
             key.serialize_for_hashing(&mut key_buf)?;
@@ -358,7 +379,7 @@ impl Signature {
         self.config.issuer()
     }
 
-    pub fn issuer_fingerprint(&self) -> Vec<&[u8]> {
+    pub fn issuer_fingerprint(&self) -> Vec<&Fingerprint> {
         self.config.issuer_fingerprint()
     }
 
@@ -367,6 +388,16 @@ impl Signature {
             .hashed_subpackets()
             .find_map(|p| match &p.data {
                 SubpacketData::PreferredSymmetricAlgorithms(d) => Some(&d[..]),
+                _ => None,
+            })
+            .unwrap_or_else(|| &[][..])
+    }
+
+    pub fn preferred_aead_algs(&self) -> &[(SymmetricKeyAlgorithm, AeadAlgorithm)] {
+        self.config
+            .hashed_subpackets()
+            .find_map(|p| match &p.data {
+                SubpacketData::PreferredAeadAlgorithms(d) => Some(&d[..]),
                 _ => None,
             })
             .unwrap_or_else(|| &[][..])
@@ -546,6 +577,7 @@ pub enum SignatureVersion {
     V3 = 3,
     V4 = 4,
     V5 = 5,
+    V6 = 6,
 
     #[num_enum(catch_all)]
     Other(u8),
@@ -557,11 +589,11 @@ impl Default for SignatureVersion {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, TryFromPrimitive)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum SignatureType {
     /// Signature of a binary document.
-    /// This means the signer owns it, created it, or certifies that ithas not been modified.
+    /// This means the signer owns it, created it, or certifies that it has not been modified.
     Binary = 0x00,
     /// Signature of a canonical text document.
     /// This means the signer owns it, created it, or certifies that it
@@ -652,6 +684,9 @@ pub enum SignatureType {
     /// party that only sees the signature, not the key or source
     /// document) that cannot include a target subpacket.
     ThirdParty = 0x50,
+
+    #[num_enum(catch_all)]
+    Other(u8),
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -681,6 +716,10 @@ pub enum SubpacketType {
     SignatureTarget,
     EmbeddedSignature,
     IssuerFingerprint,
+    PreferredEncryptionModes, // non-RFC, may only be 1: EAX, 2: OCB
+    IntendedRecipientFingerprint,
+    // AttestedCertifications, // non-RFC
+    // KeyBlock,               // non-RFC
     PreferredAead,
     Experimental(u8),
     Other(u8),
@@ -713,7 +752,11 @@ impl SubpacketType {
             SubpacketType::SignatureTarget => 31,
             SubpacketType::EmbeddedSignature => 32,
             SubpacketType::IssuerFingerprint => 33,
-            SubpacketType::PreferredAead => 34,
+            SubpacketType::PreferredEncryptionModes => 34,
+            SubpacketType::IntendedRecipientFingerprint => 35,
+            // SubpacketType::AttestedCertifications => 37,
+            // SubpacketType::KeyBlock => 38,
+            SubpacketType::PreferredAead => 39,
             SubpacketType::Experimental(n) => *n,
             SubpacketType::Other(n) => *n,
         };
@@ -757,7 +800,11 @@ impl SubpacketType {
             31 => SubpacketType::SignatureTarget,
             32 => SubpacketType::EmbeddedSignature,
             33 => SubpacketType::IssuerFingerprint,
-            34 => SubpacketType::PreferredAead,
+            34 => SubpacketType::PreferredEncryptionModes,
+            35 => SubpacketType::IntendedRecipientFingerprint,
+            // 37 => SubpacketType::AttestedCertifications,
+            // 38 => SubpacketType::KeyBlock,
+            39 => SubpacketType::PreferredAead,
             100..=110 => SubpacketType::Experimental(n),
             _ => SubpacketType::Other(n),
         };
@@ -801,6 +848,7 @@ pub enum SubpacketData {
     /// The OpenPGP Key ID of the key issuing the signature.
     Issuer(KeyId),
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
+    /// Renamed to "Preferred Symmetric Ciphers for v1 SEIPD" in RFC 9580
     PreferredSymmetricAlgorithms(SmallVec<[SymmetricKeyAlgorithm; 8]>),
     /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
     PreferredHashAlgorithms(SmallVec<[HashAlgorithm; 8]>),
@@ -822,11 +870,10 @@ pub enum SubpacketData {
     TrustSignature(u8, u8),
     RegularExpression(BString),
     ExportableCertification(bool),
-    IssuerFingerprint(
-        KeyVersion,
-        #[debug("{}", hex::encode(_1))] SmallVec<[u8; 20]>,
-    ),
-    PreferredAeadAlgorithms(SmallVec<[AeadAlgorithm; 2]>),
+    IssuerFingerprint(Fingerprint),
+    PreferredEncryptionModes(SmallVec<[AeadAlgorithm; 2]>),
+    IntendedRecipientFingerprint(Fingerprint),
+    PreferredAeadAlgorithms(SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>),
     Experimental(u8, #[debug("{}", hex::encode(_1))] SmallVec<[u8; 2]>),
     Other(u8, #[debug("{}", hex::encode(_1))] Vec<u8>),
     SignatureTarget(

@@ -36,6 +36,12 @@ pub enum PublicParams {
         curve: ECCCurve,
         q: Mpi,
     },
+    Ed25519 {
+        public: [u8; 32],
+    },
+    X25519 {
+        public: [u8; 32],
+    },
     Unknown {
         data: Vec<u8>,
     },
@@ -226,6 +232,12 @@ impl Serialize for PublicParams {
                 writer.write_all(&oid)?;
 
                 q.to_writer(writer)?;
+            }
+            PublicParams::Ed25519 { ref public } => {
+                writer.write_all(&public[..])?;
+            }
+            PublicParams::X25519 { ref public } => {
+                writer.write_all(&public[..])?;
             }
             PublicParams::Unknown { ref data } => {
                 writer.write_all(data)?;

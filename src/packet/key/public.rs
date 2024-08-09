@@ -6,7 +6,10 @@ use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData},
-    types::{KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait, Tag, Version},
+    types::{
+        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        SignatureBytes, Tag, Version,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -141,7 +144,7 @@ impl PubKeyInner {
         )
     }
 
-    fn to_writer_old<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+    fn to_writer_v2_v3<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp() as u32)?;
@@ -155,12 +158,20 @@ impl PubKeyInner {
         Ok(())
     }
 
-    fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+    fn to_writer_v4_v6<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp() as u32)?;
         writer.write_all(&[self.algorithm.into()])?;
-        self.public_params.to_writer(writer)?;
+
+        let mut public_params = vec![];
+        self.public_params.to_writer(&mut public_params)?;
+
+        if self.version == KeyVersion::V6 {
+            writer.write_u32::<BigEndian>(public_params.len() as u32)?;
+        }
+
+        writer.write_all(&public_params)?;
 
         Ok(())
     }
@@ -209,8 +220,8 @@ impl crate::ser::Serialize for PubKeyInner {
         writer.write_all(&[u8::from(self.version)])?;
 
         match self.version {
-            KeyVersion::V2 | KeyVersion::V3 => self.to_writer_old(writer),
-            KeyVersion::V4 => self.to_writer_new(writer),
+            KeyVersion::V2 | KeyVersion::V3 => self.to_writer_v2_v3(writer),
+            KeyVersion::V4 | KeyVersion::V6 => self.to_writer_v4_v6(writer),
             KeyVersion::V5 => unimplemented_err!("V5 keys"),
             KeyVersion::Other(v) => {
                 unimplemented_err!("Unsupported key version {}", v)
@@ -244,7 +255,7 @@ impl PublicKeyTrait for PubKeyInner {
         self.version
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         use crate::ser::Serialize;
 
         match self.version {
@@ -253,7 +264,13 @@ impl PublicKeyTrait for PubKeyInner {
                 self.public_params
                     .to_writer(&mut h)
                     .expect("write to hasher");
-                h.finalize().to_vec()
+                let digest = h.finalize();
+
+                if self.version == KeyVersion::V2 {
+                    Fingerprint::V2(digest.into())
+                } else {
+                    Fingerprint::V3(digest.into())
+                }
             }
             KeyVersion::V4 => {
                 // A one-octet version number (4).
@@ -274,9 +291,50 @@ impl PublicKeyTrait for PubKeyInner {
                     .expect("write to hasher");
                 h.update(&packet);
 
-                h.finalize().to_vec()
+                let digest = h.finalize();
+
+                Fingerprint::V4(digest.into())
             }
             KeyVersion::V5 => unimplemented!("V5 keys"),
+            KeyVersion::V6 => {
+                // Serialize public parameters
+                let mut pp: Vec<u8> = vec![];
+                self.public_params
+                    .to_writer(&mut pp)
+                    .expect("serialize to Vec<u8>");
+
+                // A v6 fingerprint is the 256-bit SHA2-256 hash of:
+                let mut h = sha2::Sha256::new();
+
+                // a.1) 0x9B (1 octet)
+                h.update(&[0x9B]);
+
+                // a.2) four-octet scalar octet count of (b)-(f)
+                let total_len: u32 = 1 + 4 + 1 + 4 + pp.len() as u32;
+                h.write_u32::<BigEndian>(total_len)
+                    .expect("write to hasher");
+
+                // b) version number = 6 (1 octet);
+                h.update(&[0x06]);
+
+                // c) timestamp of key creation (4 octets);
+                h.write_u32::<BigEndian>(self.created_at.timestamp() as u32)
+                    .expect("write to hasher");
+
+                // d) algorithm (1 octet);
+                h.update(&[self.algorithm.into()]);
+
+                // e) four-octet scalar octet count for the following key material;
+                h.write_u32::<BigEndian>(pp.len() as u32)
+                    .expect("write to hasher");
+
+                // f) algorithm-specific fields.
+                h.update(&pp);
+
+                let digest = h.finalize();
+
+                Fingerprint::V6(digest.into())
+            }
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
     }
@@ -296,9 +354,15 @@ impl PublicKeyTrait for PubKeyInner {
                 let f = self.fingerprint();
                 let offset = f.len() - 8;
 
-                KeyId::from_slice(&f[offset..]).expect("fixed size slice")
+                KeyId::from_slice(&f.as_bytes()[offset..]).expect("fixed size slice")
             }
             KeyVersion::V5 => unimplemented!("V5 keys"),
+            KeyVersion::V6 => {
+                // High 64 bits
+                let f = self.fingerprint();
+
+                KeyId::from_slice(&f.as_bytes()[0..8]).expect("fixed size slice")
+            }
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
     }
@@ -306,16 +370,56 @@ impl PublicKeyTrait for PubKeyInner {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
+                let sig: &[Mpi] = sig.try_into()?;
+
                 ensure_eq!(sig.len(), 1, "invalid signature");
                 crypto::rsa::verify(n.as_bytes(), e.as_bytes(), hash, hashed, sig[0].as_bytes())
             }
             PublicParams::EdDSALegacy { ref curve, ref q } => {
-                crypto::eddsa::verify(curve, q.as_bytes(), hash, hashed, sig)
+                let sig: &[Mpi] = sig.try_into()?;
+
+                ensure_eq!(sig.len(), 2);
+
+                let r = sig[0].as_bytes();
+                let s = sig[1].as_bytes();
+
+                ensure!(r.len() < 33, "invalid R (len)");
+                ensure!(s.len() < 33, "invalid S (len)");
+                ensure_eq!(q.len(), 33, "invalid Q (len)");
+                ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
+
+                let public = &q[1..];
+
+                let mut sig_bytes = vec![0u8; 64];
+                // add padding if the values were encoded short
+                sig_bytes[(32 - r.len())..32].copy_from_slice(r);
+                sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
+
+                crypto::eddsa::verify(curve, public, hash, hashed, &sig_bytes)
             }
-            PublicParams::ECDSA(ref params) => crypto::ecdsa::verify(params, hash, hashed, sig),
+            PublicParams::Ed25519 { ref public } => crypto::eddsa::verify(
+                &crypto::ecc_curve::ECCCurve::Ed25519,
+                public,
+                hash,
+                hashed,
+                sig.try_into()?,
+            ),
+            PublicParams::X25519 { .. } => {
+                unimplemented_err!("verify X25519");
+            }
+            PublicParams::ECDSA(ref params) => {
+                let sig: &[Mpi] = sig.try_into()?;
+
+                crypto::ecdsa::verify(params, hash, hashed, sig)
+            }
             PublicParams::ECDH {
                 ref curve,
                 ref hash,
@@ -333,6 +437,8 @@ impl PublicKeyTrait for PubKeyInner {
                 ref g,
                 ref y,
             } => {
+                let sig: &[Mpi] = sig.try_into()?;
+
                 ensure_eq!(sig.len(), 2, "invalid signature");
 
                 crypto::dsa::verify(
@@ -372,13 +478,15 @@ impl PublicKeyTrait for PubKeyInner {
                 curve,
                 alg_sym,
                 hash,
-                &self.fingerprint(),
+                self.fingerprint().as_bytes(),
                 p.as_bytes(),
                 plain,
             ),
             PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
             PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
             PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
+            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
+            PublicParams::X25519 { .. } => unimplemented_err!("X25519"),
         }?;
 
         Ok(res
@@ -394,7 +502,27 @@ impl PublicKeyTrait for PubKeyInner {
         self.to_writer(&mut key_buf)?;
 
         // old style packet header for the key
-        writer.write_all(&[0x99, (key_buf.len() >> 8) as u8, key_buf.len() as u8])?;
+
+        match self.version {
+            KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 => {
+                // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
+                // followed by a two-octet length of the key, and then the body of the key packet.
+                writer.write_all(&[0x99, (key_buf.len() >> 8) as u8, key_buf.len() as u8])?;
+            }
+
+            KeyVersion::V6 => {
+                // When a v6 signature is made over a key, the hash data starts with the salt
+                // [NOTE: the salt is hashed in packet/signature/config.rs],
+
+                // then octet 0x9B, followed by a four-octet length of the key,
+                // and then the body of the key packet.
+                writer.write_all(&[0x9b])?;
+                writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
+            }
+
+            v => unimplemented_err!("key version {:?}", v),
+        }
+
         writer.write_all(&key_buf)?;
 
         Ok(())
@@ -414,7 +542,12 @@ impl PublicKeyTrait for PubKeyInner {
 }
 
 impl PublicKeyTrait for PublicKey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
@@ -438,7 +571,7 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::version(&self.0)
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         PublicKeyTrait::fingerprint(&self.0)
     }
 
@@ -460,7 +593,12 @@ impl PublicKeyTrait for PublicKey {
 }
 
 impl PublicKeyTrait for PublicSubkey {
-    fn verify_signature(&self, hash: HashAlgorithm, hashed: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        hashed: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
@@ -484,7 +622,7 @@ impl PublicKeyTrait for PublicSubkey {
         PublicKeyTrait::version(&self.0)
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         PublicKeyTrait::fingerprint(&self.0)
     }
 

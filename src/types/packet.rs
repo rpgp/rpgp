@@ -5,6 +5,7 @@ use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::errors::Result;
+use crate::packet::SignatureVersion;
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
 /// Ref: https://tools.ietf.org/html/rfc4880.html#section-4
@@ -32,7 +33,12 @@ impl From<usize> for PacketLength {
     }
 }
 
-/// Packet tag as defined in RFC 4880, Section 4.3 "Packet Tags"
+/// Packet Type ID, see https://www.rfc-editor.org/rfc/rfc9580.html#packet-types
+///
+/// The "Packet Type ID" was called "Packet tag" in RFC 4880 (Section 4.3 "Packet Tags").
+/// Ref https://www.rfc-editor.org/rfc/rfc9580.html#appendix-B.1-3.7.1
+///
+/// However, rPGP will continue to use the term "(Packet) Tag" for the time being.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum Tag {
@@ -78,6 +84,8 @@ pub enum Tag {
 }
 
 impl Tag {
+    /// Packet Type ID encoded in OpenPGP format
+    /// (bits 7 and 6 set, bits 5-0 carry the packet type ID)
     pub fn encode(self) -> u8 {
         let t: u8 = self.into();
         0b1100_0000 | t
@@ -142,14 +150,53 @@ pub enum KeyVersion {
     V3 = 3,
     V4 = 4,
     V5 = 5,
+    V6 = 6,
 
     #[num_enum(catch_all)]
     Other(u8),
 }
 
+impl KeyVersion {
+    /// Size of OpenPGP fingerprint in bytes
+    /// (returns 0 for unknown versions)
+    pub const fn fingerprint_len(&self) -> usize {
+        match self {
+            KeyVersion::V2 | KeyVersion::V3 => 16, // MD5
+            KeyVersion::V4 => 20,                  // SHA1
+            KeyVersion::V5 | KeyVersion::V6 => 32, // SHA256
+            KeyVersion::Other(_) => 0,             // FIXME?
+        }
+    }
+}
+
 impl Default for KeyVersion {
     fn default() -> Self {
         Self::V4
+    }
+}
+
+impl TryFrom<KeyVersion> for SignatureVersion {
+    type Error = crate::errors::Error;
+
+    fn try_from(value: KeyVersion) -> std::result::Result<Self, Self::Error> {
+        // NOTE: This function is intended to determine what signature version we want to make
+        // with a given key.
+
+        // However, diverging versions of signatures may occur in a TPK/TSK.
+        // For example, a third party may issue a v4 certifying signature for a v6 key.
+        // Also, historically, v3 signatures and v4 key packets were sometimes mixed.
+
+        // So there is no guarantee that v4 TPKs or TSKs contain only v4 signatures
+        // (and analogously for v6).
+
+        match value {
+            KeyVersion::V4 => Ok(SignatureVersion::V4),
+            KeyVersion::V6 => Ok(SignatureVersion::V6),
+            _ => bail!(
+                "Signatures for key version {:?} are currently unsupported",
+                value
+            ),
+        }
     }
 }
 

@@ -17,9 +17,10 @@
 //! # const DATA :&'static [u8] = b"Hello World";
 //! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, key::SecretKeyParamsBuilder};
 //! # use pgp::errors::Result;
-//! # use pgp::packet::{self, KeyFlags, UserAttribute, UserId};
+//! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! # use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
 //! # use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm};
+//! # use rand::thread_rng;
 //! # use smallvec::*;
 //! #
 //! # let mut key_params = SecretKeyParamsBuilder::default();
@@ -40,7 +41,7 @@
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
 //! # let secret_key = secret_key_params.generate().expect("Failed to generate a plain key.");
 //! # let passwd_fn = || String::new();
-//! # let signed_secret_key = secret_key.sign(passwd_fn).expect("Must be able to sign its own metadata");
+//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
@@ -87,6 +88,7 @@
 //!         packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
 //!     ],
 //!     vec![],
+//!     SignatureVersionSpecific::V4,
 //! );
 //!
 //! // sign and and write the package (the package written here is NOT rfc4880 compliant)

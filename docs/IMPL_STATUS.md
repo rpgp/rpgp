@@ -13,10 +13,10 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
 ## Low Level API
 
 - [x] Packet Parser
-  - [x] Old Format ("v3")
-  - [x] New Format (RFC 2440, 4880) ("v4")
+  - [x] Historical RFC 1991 (PGP 2.x, "v2/v3")
+  - [x] RFC 2440, 4880 ("v4")
   - [ ] draft-koch-librepgp Format ("v5")
-  - [ ] draft-ietf-openpgp-crypto-refresh Format ("v6")
+  - [x] RFC 9580 ("v6")
 - [x] Packet Generation
 - [x] ASCII Armor
   - [x] Reading
@@ -25,9 +25,9 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
 - [x] Signatures (v4)
   - [x] Validation
   - [x] Generation
-- [ ] Signatures (v6)
-  - [ ] Validation
-  - [ ] Generation
+- [x] Signatures (v6)
+  - [x] Validation
+  - [x] Generation
 - [ ] Encryption
   - [x] PKESK v3, SKESK v4, SEIPD v1
   - [ ] PKESK v6, SKESK v6, SEIPD v2
@@ -38,10 +38,10 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] Generation
   - [x] Export
   - [x] Import
-- [ ] Keys (v6)
-  - [ ] Generation
-  - [ ] Export
-  - [ ] Import
+- [x] Keys (v6)
+  - [x] Generation
+  - [x] Export
+  - [x] Import
 - [x] Public-Key Algorithms
   - [x] RSA
   - [ ] 🚫 Elgamal (Encrypt only)
