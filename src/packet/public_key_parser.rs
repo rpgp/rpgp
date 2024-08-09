@@ -206,16 +206,31 @@ fn public_key_parser_v4_v6(
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
 
-        let i = if *key_ver == KeyVersion::V6 {
-            // "scalar octet count for the following public key material" -> skip
-            let (i, _len) = be_u32(i)?;
+        let (i, pub_len) = if *key_ver == KeyVersion::V6 {
+            // "scalar octet count for the following public key material"
+            let (i, len) = be_u32(i)?;
 
-            i
+            (i, Some(len as usize))
         } else {
-            i
+            (i, None)
         };
 
-        let (i, params) = parse_pub_fields(alg, None)(i)?;
+        // If we got a pub_len, we expect to consume this amount of data, and have `expected_rest`
+        // left after `parse_pub_fields`
+        let expected_rest = pub_len.map(|len| i.len() - len);
+
+        let (i, params) = parse_pub_fields(alg, pub_len)(i)?;
+
+        // consistency check for pub_len, if available
+        if let Some(expected_rest) = expected_rest {
+            if expected_rest != i.len() {
+                return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+                    "Inconsistent pub_len in secret key packet {}",
+                    pub_len.expect("if expected_rest is Some, pub_len is Some")
+                ))));
+            }
+        }
+
         Ok((i, (*key_ver, alg, created_at, None, params)))
     }
 }
