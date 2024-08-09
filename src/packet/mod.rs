@@ -59,7 +59,7 @@
 //!           packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
 //!           packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
 //!      ]) // must be initialized
-//!      .version_specific(SignatureVersionSpecific::V4 {})
+//!      .version_specific(SignatureVersionSpecific::V4)
 //!      .build()
 //!      .unwrap();
 //!

@@ -503,7 +503,7 @@ fn v4_parser(
                 sig,
                 hsub,
                 usub,
-                SignatureVersionSpecific::V4 {},
+                SignatureVersionSpecific::V4,
             ),
         ))
     }

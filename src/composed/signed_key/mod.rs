@@ -88,7 +88,7 @@
 //!         packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
 //!     ],
 //!     vec![],
-//!     SignatureVersionSpecific::V4 {}
+//!     SignatureVersionSpecific::V4,
 //! );
 //!
 //! // sign and and write the package (the package written here is NOT rfc4880 compliant)

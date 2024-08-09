@@ -34,7 +34,7 @@ pub enum SignatureVersionSpecific {
         created: DateTime<Utc>,
         issuer: KeyId,
     },
-    V4 {},
+    V4,
     V6 {
         salt: Vec<u8>,
     },
@@ -55,7 +55,7 @@ impl SignatureConfig {
             hash_alg,
             hashed_subpackets,
             unhashed_subpackets,
-            version_specific: SignatureVersionSpecific::V4 {},
+            version_specific: SignatureVersionSpecific::V4,
         }
     }
 
@@ -75,7 +75,7 @@ impl SignatureConfig {
 
                 Ok(SignatureVersionSpecific::V6 { salt })
             }
-            SignatureVersion::V4 => Ok(SignatureVersionSpecific::V4 {}),
+            SignatureVersion::V4 => Ok(SignatureVersionSpecific::V4),
             _ => bail!("Unsupported signature version {:version?}"),
         }
     }

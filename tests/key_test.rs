@@ -459,7 +459,7 @@ fn test_parse_details() {
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer.clone()],
-        SignatureVersionSpecific::V4 {},
+        SignatureVersionSpecific::V4,
     );
 
     let u1 = SignedUser::new(
@@ -532,7 +532,7 @@ fn test_parse_details() {
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer.clone()],
-        SignatureVersionSpecific::V4 {},
+        SignatureVersionSpecific::V4,
     );
 
     let u2 = SignedUser::new(
@@ -613,7 +613,7 @@ fn test_parse_details() {
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
         ],
         vec![issuer],
-        SignatureVersionSpecific::V4 {},
+        SignatureVersionSpecific::V4,
     );
 
     assert_eq!(ua.signatures, vec![sig3]);
