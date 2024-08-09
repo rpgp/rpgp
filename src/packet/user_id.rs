@@ -7,11 +7,12 @@ use rand::Rng;
 
 use crate::errors::Result;
 use crate::packet::{
-    PacketTrait, Signature, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
-    SubpacketData,
+    PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
 };
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, Version};
+
+use super::SignatureVersion;
 
 /// User ID Packet
 /// https://tools.ietf.org/html/rfc4880.html#section-5.11
@@ -68,22 +69,29 @@ impl UserId {
         F: FnOnce() -> String,
     {
         let sig_version = signer.version().try_into()?;
-        let hash_alg = signer.hash_alg();
-        let version_specific = SignatureConfig::version_specific(rng, sig_version, hash_alg)?;
+        let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
+            Utc::now().trunc_subsecs(0),
+        ))];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))];
 
-        let config = SignatureConfigBuilder::default()
-            .version(sig_version)
-            .typ(SignatureType::CertGeneric)
-            .pub_alg(signer.algorithm())
-            .hash_alg(hash_alg)
-            .version_specific(version_specific)
-            .hashed_subpackets(vec![Subpacket::regular(
-                SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
-            )])
-            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                signer.key_id(),
-            ))])
-            .build()?;
+        let config = match sig_version {
+            SignatureVersion::V4 => SignatureConfigBuilder::v4()
+                .typ(SignatureType::CertGeneric)
+                .pub_alg(signer.algorithm())
+                .hash_alg(signer.hash_alg())
+                .hashed_subpackets(hashed_subpackets)
+                .unhashed_subpackets(unhashed_subpackets)
+                .build()?,
+            SignatureVersion::V6 => SignatureConfigBuilder::v6()
+                .typ(SignatureType::CertGeneric)
+                .pub_alg(signer.algorithm())
+                .hash_alg(signer.hash_alg())
+                .hashed_subpackets(hashed_subpackets)
+                .unhashed_subpackets(unhashed_subpackets)
+                .generate_salt(rng)?
+                .build()?,
+            _ => unsupported_err!("unsupported signature version: {:?}", sig_version),
+        };
 
         let sig =
             config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;

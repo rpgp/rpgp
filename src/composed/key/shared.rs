@@ -9,7 +9,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    KeyFlags, PacketTrait, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
+    KeyFlags, PacketTrait, SignatureConfigBuilder, SignatureType, SignatureVersion, Subpacket,
     SubpacketData, UserAttribute, UserId,
 };
 use crate::types::{CompressionAlgorithm, RevocationKey, SecretKeyTrait};
@@ -101,21 +101,28 @@ impl KeyDetails {
                 hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey)));
             }
 
-            let hash_alg = key.hash_alg();
-            let version_specific =
-                SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
-
-            let config = SignatureConfigBuilder::default()
-                .version(sig_version)
-                .typ(SignatureType::CertGeneric)
-                .pub_alg(key.algorithm())
-                .hash_alg(hash_alg)
-                .hashed_subpackets(hashed_subpackets)
-                .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                    key.key_id(),
-                ))])
-                .version_specific(version_specific)
-                .build()?;
+            let config = match sig_version {
+                SignatureVersion::V4 => SignatureConfigBuilder::v4()
+                    .typ(SignatureType::CertGeneric)
+                    .pub_alg(key.algorithm())
+                    .hash_alg(key.hash_alg())
+                    .hashed_subpackets(hashed_subpackets)
+                    .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
+                        key.key_id(),
+                    ))])
+                    .build()?,
+                SignatureVersion::V6 => SignatureConfigBuilder::v6()
+                    .typ(SignatureType::CertGeneric)
+                    .pub_alg(key.algorithm())
+                    .hash_alg(key.hash_alg())
+                    .hashed_subpackets(hashed_subpackets)
+                    .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
+                        key.key_id(),
+                    ))])
+                    .generate_salt(&mut rng)?
+                    .build()?,
+                _ => unsupported_err!("unsupported signature version: {:?}", sig_version),
+            };
 
             let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
 
@@ -128,39 +135,46 @@ impl KeyDetails {
             self.user_ids
                 .into_iter()
                 .map(|id| {
-                    let hash_alg = key.hash_alg();
-                    let version_specific =
-                        SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
+                    let hashed_subpackets = vec![
+                        Subpacket::regular(SubpacketData::SignatureCreationTime(
+                            chrono::Utc::now().trunc_subsecs(0),
+                        )),
+                        Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone())),
+                        Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
+                            preferred_symmetric_algorithms.clone(),
+                        )),
+                        Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
+                            preferred_hash_algorithms.clone(),
+                        )),
+                        Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
+                            preferred_compression_algorithms.clone(),
+                        )),
+                        Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
+                            preferred_aead_algorithms.clone(),
+                        )),
+                        Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
+                    ];
+                    let unhashed_subpackets =
+                        vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))];
 
-                    let config = SignatureConfigBuilder::default()
-                        .version(sig_version)
-                        .typ(SignatureType::CertGeneric)
-                        .pub_alg(key.algorithm())
-                        .hash_alg(hash_alg)
-                        .hashed_subpackets(vec![
-                            Subpacket::regular(SubpacketData::SignatureCreationTime(
-                                chrono::Utc::now().trunc_subsecs(0),
-                            )),
-                            Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone())),
-                            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
-                                preferred_symmetric_algorithms.clone(),
-                            )),
-                            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
-                                preferred_hash_algorithms.clone(),
-                            )),
-                            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
-                                preferred_compression_algorithms.clone(),
-                            )),
-                            Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
-                                preferred_aead_algorithms.clone(),
-                            )),
-                            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
-                        ])
-                        .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                            key.key_id(),
-                        ))])
-                        .version_specific(version_specific)
-                        .build()?;
+                    let config = match sig_version {
+                        SignatureVersion::V4 => SignatureConfigBuilder::v4()
+                            .typ(SignatureType::CertGeneric)
+                            .pub_alg(key.algorithm())
+                            .hash_alg(key.hash_alg())
+                            .hashed_subpackets(hashed_subpackets)
+                            .unhashed_subpackets(unhashed_subpackets)
+                            .build()?,
+                        SignatureVersion::V6 => SignatureConfigBuilder::v6()
+                            .typ(SignatureType::CertGeneric)
+                            .pub_alg(key.algorithm())
+                            .hash_alg(key.hash_alg())
+                            .hashed_subpackets(hashed_subpackets)
+                            .unhashed_subpackets(unhashed_subpackets)
+                            .generate_salt(&mut rng)?
+                            .build()?,
+                        _ => unsupported_err!("unsupported signature version: {:?}", sig_version),
+                    };
 
                     let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
 

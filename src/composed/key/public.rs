@@ -8,7 +8,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    self, KeyFlags, SignatureConfig, SignatureConfigBuilder, SignatureType, Subpacket,
+    self, KeyFlags, SignatureConfigBuilder, SignatureType, SignatureVersion, Subpacket,
     SubpacketData,
 };
 use crate::types::{
@@ -121,7 +121,7 @@ impl PublicSubkey {
 
     pub fn sign<R, F>(
         self,
-        mut rng: &mut R,
+        rng: &mut R,
         sec_key: &impl SecretKeyTrait,
         key_pw: F,
     ) -> Result<SignedPublicSubKey>
@@ -137,22 +137,27 @@ impl PublicSubkey {
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
         ];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))];
 
         let sig_version = sec_key.version().try_into()?;
-        let hash_alg = sec_key.hash_alg();
-        let version_specific = SignatureConfig::version_specific(&mut rng, sig_version, hash_alg)?;
-
-        let config = SignatureConfigBuilder::default()
-            .version(sig_version)
-            .typ(SignatureType::SubkeyBinding)
-            .pub_alg(sec_key.algorithm())
-            .hash_alg(hash_alg)
-            .hashed_subpackets(hashed_subpackets)
-            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                sec_key.key_id(),
-            ))])
-            .version_specific(version_specific)
-            .build()?;
+        let config = match sig_version {
+            SignatureVersion::V4 => SignatureConfigBuilder::v4()
+                .typ(SignatureType::SubkeyBinding)
+                .pub_alg(sec_key.algorithm())
+                .hash_alg(sec_key.hash_alg())
+                .hashed_subpackets(hashed_subpackets)
+                .unhashed_subpackets(unhashed_subpackets)
+                .build()?,
+            SignatureVersion::V6 => SignatureConfigBuilder::v6()
+                .typ(SignatureType::SubkeyBinding)
+                .pub_alg(sec_key.algorithm())
+                .hash_alg(sec_key.hash_alg())
+                .hashed_subpackets(hashed_subpackets)
+                .unhashed_subpackets(unhashed_subpackets)
+                .generate_salt(rng)?
+                .build()?,
+            _ => unsupported_err!("unsupported signature version: {:?}", sig_version),
+        };
 
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 

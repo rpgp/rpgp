@@ -187,8 +187,8 @@ impl PubKeyInner {
     {
         use chrono::SubsecRound;
 
-        let mut config = SignatureConfigBuilder::default();
-        config
+        // TODO: correct version?
+        SignatureConfigBuilder::v4()
             .typ(sig_type)
             .pub_alg(key.algorithm())
             .hash_alg(key.hash_alg())

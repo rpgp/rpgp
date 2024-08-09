@@ -2,19 +2,17 @@ use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
-use derive_builder::Builder;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
 use crate::crypto::hash::{HashAlgorithm, Hasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData};
 use crate::ser::Serialize;
 use crate::types::{Fingerprint, KeyId, PublicKeyTrait, SecretKeyTrait, Tag};
 
-#[derive(Clone, PartialEq, Eq, Debug, Builder)]
-#[builder(build_fn(error = "Error"))]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
     pub version: SignatureVersion,
     pub typ: SignatureType,
@@ -25,6 +23,173 @@ pub struct SignatureConfig {
     pub hashed_subpackets: Vec<Subpacket>,
 
     pub version_specific: SignatureVersionSpecific,
+}
+
+#[derive(Default)]
+pub struct SignatureV3 {
+    created: Option<DateTime<Utc>>,
+    issuer: Option<KeyId>,
+}
+#[derive(Default)]
+pub struct SignatureV4;
+#[derive(Default)]
+pub struct SignatureV6 {
+    salt: Option<Vec<u8>>,
+}
+
+impl SignatureConfigVersion for SignatureV3 {
+    fn build(self) -> Result<SignatureVersionSpecific> {
+        ensure!(self.created.is_some(), "created is missing");
+        ensure!(self.issuer.is_some(), "issuer is missing");
+        Ok(SignatureVersionSpecific::V3 {
+            created: self.created.expect("checked"),
+            issuer: self.issuer.expect("issuer"),
+        })
+    }
+}
+
+impl SignatureConfigVersion for SignatureV4 {
+    fn build(self) -> Result<SignatureVersionSpecific> {
+        Ok(SignatureVersionSpecific::V4)
+    }
+}
+
+impl SignatureConfigVersion for SignatureV6 {
+    fn build(self) -> Result<SignatureVersionSpecific> {
+        ensure!(self.salt.is_some(), "salt is missing");
+
+        Ok(SignatureVersionSpecific::V6 {
+            salt: self.salt.expect("checked"),
+        })
+    }
+}
+
+#[doc(hidden)]
+pub trait SignatureConfigVersion {
+    fn build(self) -> Result<SignatureVersionSpecific>;
+}
+
+/// Builder to construct a `SignatureConfig`.
+#[derive(Clone)]
+pub struct SignatureConfigBuilder<V> {
+    typ: Option<SignatureType>,
+    pub_alg: Option<PublicKeyAlgorithm>,
+    hash_alg: Option<HashAlgorithm>,
+
+    unhashed_subpackets: Vec<Subpacket>,
+    hashed_subpackets: Vec<Subpacket>,
+
+    version: V,
+}
+
+impl<V: Default> Default for SignatureConfigBuilder<V> {
+    fn default() -> Self {
+        Self {
+            typ: None,
+            pub_alg: None,
+            hash_alg: None,
+            unhashed_subpackets: Vec::new(),
+            hashed_subpackets: Vec::new(),
+            version: V::default(),
+        }
+    }
+}
+
+impl SignatureConfigBuilder<SignatureV3> {
+    /// Create a v3 signature config.
+    pub fn v3() -> Self {
+        Self::default()
+    }
+
+    pub fn created(&mut self, created: DateTime<Utc>) -> &mut Self {
+        self.version.created.replace(created);
+        self
+    }
+
+    pub fn issuer(&mut self, issuer: KeyId) -> &mut Self {
+        self.version.issuer.replace(issuer);
+        self
+    }
+}
+
+impl SignatureConfigBuilder<SignatureV4> {
+    /// Create a v4 signature config.
+    pub fn v4() -> Self {
+        Self::default()
+    }
+}
+
+impl SignatureConfigBuilder<SignatureV6> {
+    /// Create a v6 signature config.
+    pub fn v6() -> Self {
+        Self::default()
+    }
+
+    pub fn salt(mut self, salt: Vec<u8>) -> Self {
+        self.version.salt.replace(salt);
+        self
+    }
+
+    // generate a salt with the correct length for hash_alg
+    pub fn generate_salt<R: CryptoRng + Rng>(self, mut rng: R) -> Result<Self> {
+        ensure!(self.hash_alg.is_some(), "missing hash algorithm");
+        let mut salt = vec![0; self.hash_alg.expect("checked").salt_len()];
+        rng.fill_bytes(&mut salt);
+        Ok(self.salt(salt))
+    }
+}
+
+impl<V: SignatureConfigVersion> SignatureConfigBuilder<V> {
+    pub fn typ(mut self, typ: SignatureType) -> Self {
+        self.typ.replace(typ);
+        self
+    }
+
+    pub fn pub_alg(mut self, pub_alg: PublicKeyAlgorithm) -> Self {
+        self.pub_alg.replace(pub_alg);
+        self
+    }
+
+    pub fn hash_alg(mut self, hash_alg: HashAlgorithm) -> Self {
+        self.hash_alg.replace(hash_alg);
+        self
+    }
+
+    pub fn hashed_subpackets(mut self, p: Vec<Subpacket>) -> Self {
+        self.hashed_subpackets = p;
+        self
+    }
+
+    pub fn unhashed_subpackets(mut self, p: Vec<Subpacket>) -> Self {
+        self.unhashed_subpackets = p;
+        self
+    }
+
+    pub fn build(self) -> Result<SignatureConfig> {
+        let SignatureConfigBuilder {
+            typ,
+            pub_alg,
+            hash_alg,
+            unhashed_subpackets,
+            hashed_subpackets,
+            version,
+        } = self;
+        ensure!(typ.is_some(), "missing signature type");
+        ensure!(pub_alg.is_some(), "missing public key algorithm");
+        ensure!(hash_alg.is_some(), "missing hash algorithm");
+
+        let version_specific = version.build()?;
+
+        Ok(SignatureConfig {
+            version: SignatureVersion::V4,
+            typ: typ.expect("verified"),
+            pub_alg: pub_alg.expect("verified"),
+            hash_alg: hash_alg.expect("verified"),
+            unhashed_subpackets,
+            hashed_subpackets,
+            version_specific,
+        })
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
