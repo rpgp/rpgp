@@ -437,6 +437,8 @@ impl Serialize for StringToKey {
 #[cfg(test)]
 mod tests {
     use rand::distributions::{Alphanumeric, DistString};
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::ArmorOptions;
@@ -445,7 +447,7 @@ mod tests {
     #[ignore]
     fn iterated_and_salted() {
         let sizes = [10, 100, 1000];
-        let mut rng = rand::thread_rng();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let algs = [
             HashAlgorithm::SHA1,

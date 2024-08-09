@@ -819,7 +819,8 @@ mod tests {
 
     use std::fs;
 
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
 
@@ -857,8 +858,6 @@ mod tests {
 
     #[test]
     fn test_rsa_encryption() {
-        use rand::SeedableRng;
-
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
@@ -901,7 +900,7 @@ mod tests {
 
         // subkey[0] is the encryption key
         let pkey = skey.secret_subkeys[0].public_key();
-        let mut rng = thread_rng();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
@@ -925,7 +924,7 @@ mod tests {
     fn test_password_encryption() {
         let _ = pretty_env_logger::try_init();
 
-        let mut rng = thread_rng();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
@@ -1005,17 +1004,13 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         assert!(lit_msg.verify(&pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
-            .sign(
-                &mut thread_rng(),
-                &skey,
-                || "".into(),
-                HashAlgorithm::SHA2_256,
-            )
+            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1035,15 +1030,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(
-                &mut thread_rng(),
-                &skey,
-                || "".into(),
-                HashAlgorithm::SHA2_256,
-            )
+            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1063,15 +1054,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(
-                &mut thread_rng(),
-                &skey,
-                || "".into(),
-                HashAlgorithm::SHA2_256,
-            )
+            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
@@ -1096,15 +1083,11 @@ mod tests {
             .unwrap();
 
             let pkey = skey.public_key();
+            let mut rng = ChaCha8Rng::seed_from_u64(0);
 
             let lit_msg = Message::new_literal("hello.txt", "hello world\n");
             let signed_msg = lit_msg
-                .sign(
-                    &mut thread_rng(),
-                    &skey,
-                    || "test".into(),
-                    HashAlgorithm::SHA2_256,
-                )
+                .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
                 .unwrap();
 
             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1126,15 +1109,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(
-                &mut thread_rng(),
-                &skey,
-                || "test".into(),
-                HashAlgorithm::SHA2_256,
-            )
+            .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1155,15 +1134,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(
-                &mut thread_rng(),
-                &skey,
-                || "test".into(),
-                HashAlgorithm::SHA2_256,
-            )
+            .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();

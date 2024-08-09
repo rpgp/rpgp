@@ -364,7 +364,8 @@ fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::{Any, SignedSecretKey};
@@ -557,10 +558,12 @@ mod tests {
 
     #[test]
     fn test_sign() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
         let msg = CleartextSignedMessage::sign(
-            &mut thread_rng(),
+            &mut rng,
             "hello\n-world-what-\nis up\n",
             &key,
             String::new,
@@ -572,10 +575,11 @@ mod tests {
     #[test]
     fn test_sign_no_newline() {
         const MSG: &str = "message without newline at the end";
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(&mut thread_rng(), MSG, &key, String::new).unwrap();
+        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &key, String::new).unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 

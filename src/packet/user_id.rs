@@ -124,7 +124,8 @@ impl PacketTrait for UserId {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::types::KeyVersion;
@@ -133,8 +134,9 @@ mod tests {
     #[test]
     fn test_user_id_certification() {
         let key_type = KeyType::EdDSALegacy;
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let (public_params, secret_params) = key_type.generate_with_rng(thread_rng()).unwrap();
+        let (public_params, secret_params) = key_type.generate_with_rng(&mut rng).unwrap();
 
         let alice_sec = packet::SecretKey::new(
             packet::PublicKey::new(
@@ -155,14 +157,14 @@ mod tests {
 
         // test self-signature
         let self_signed = alice_uid
-            .sign(&mut thread_rng(), &alice_sec, String::default)
+            .sign(&mut rng, &alice_sec, String::default)
             .unwrap();
         self_signed
             .verify(&alice_pub)
             .expect("self signature verification failed");
 
         // test third-party signature
-        let (public_params, secret_params) = key_type.generate_with_rng(thread_rng()).unwrap();
+        let (public_params, secret_params) = key_type.generate_with_rng(&mut rng).unwrap();
 
         let signer_sec = packet::SecretKey::new(
             packet::PublicKey::new(
@@ -180,7 +182,7 @@ mod tests {
         let signer_pub = signer_sec.public_key();
 
         let third_signed = alice_uid
-            .sign_third_party(&mut thread_rng(), &signer_sec, String::default, &alice_pub)
+            .sign_third_party(&mut rng, &signer_sec, String::default, &alice_pub)
             .unwrap();
         third_signed
             .verify_third_party(&alice_pub, &signer_pub)

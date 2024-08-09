@@ -430,7 +430,8 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use packet::LiteralData;
-    use rand::thread_rng;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::{composed::shared::Deserializable, Message};
@@ -466,12 +467,9 @@ k0mXubZvyl4GBg==
         let msg = Message::Literal(lit);
 
         let pri = ssk.primary_key;
-        let signed = msg.sign(
-            &mut thread_rng(),
-            &pri,
-            String::default,
-            HashAlgorithm::SHA2_256,
-        )?;
+
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let signed = msg.sign(&mut rng, &pri, String::default, HashAlgorithm::SHA2_256)?;
 
         signed.verify(&pri)?;
 
@@ -518,8 +516,9 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
         let msg = Message::Literal(lit);
 
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
         let msg = msg.sign(
-            &mut thread_rng(),
+            &mut rng,
             &ssk.primary_key,
             || passphrase.to_string(),
             HashAlgorithm::SHA2_256,
