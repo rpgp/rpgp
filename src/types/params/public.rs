@@ -1,5 +1,7 @@
 use std::io;
 
+use byteorder::WriteBytesExt;
+
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -150,7 +152,7 @@ impl Serialize for EcdsaPublicParams {
             EcdsaPublicParams::Unsupported { curve, .. } => curve.oid(),
         };
 
-        writer.write_all(&[oid.len() as u8])?;
+        writer.write_u8(oid.len().try_into()?)?;
         writer.write_all(&oid)?;
 
         match self {
@@ -203,19 +205,15 @@ impl Serialize for PublicParams {
                 ref alg_sym,
             } => {
                 let oid = curve.oid();
-                writer.write_all(&[oid.len() as u8])?;
+                writer.write_u8(oid.len().try_into()?)?;
                 writer.write_all(&oid)?;
 
                 p.to_writer(writer)?;
 
-                writer.write_all(&[
-                    // len of the following fields
-                    0x03,
-                    // fixed tag
-                    0x01,
-                    (*hash).into(),
-                    u8::from(*alg_sym),
-                ])?;
+                writer.write_u8(0x03)?; // len of the following fields
+                writer.write_u8(0x01)?; // fixed tag
+                writer.write_u8((*hash).into())?;
+                writer.write_u8((*alg_sym).into())?;
             }
             PublicParams::Elgamal {
                 ref p,
@@ -228,7 +226,7 @@ impl Serialize for PublicParams {
             }
             PublicParams::EdDSALegacy { ref curve, ref q } => {
                 let oid = curve.oid();
-                writer.write_all(&[oid.len() as u8])?;
+                writer.write_u8(oid.len().try_into()?)?;
                 writer.write_all(&oid)?;
 
                 q.to_writer(writer)?;

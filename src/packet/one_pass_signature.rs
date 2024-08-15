@@ -1,5 +1,6 @@
 use std::io;
 
+use byteorder::WriteBytesExt;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_res};
 use nom::number::streaming::be_u8;
@@ -158,17 +159,14 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[
-            self.version(),
-            self.typ.into(),
-            self.hash_algorithm.into(),
-            self.pub_algorithm.into(),
-        ])?;
+        writer.write_u8(self.version())?;
+        writer.write_u8(self.typ.into())?;
+        writer.write_u8(self.hash_algorithm.into())?;
+        writer.write_u8(self.pub_algorithm.into())?;
 
         // salt, if v6
         if let OpsVersionSpecific::V6 { salt, .. } = &self.version_specific {
-            let len: u8 = salt.len().try_into()?;
-            writer.write_all(&[len])?;
+            writer.write_u8(salt.len().try_into()?)?;
             writer.write_all(salt)?;
         }
 
@@ -180,7 +178,7 @@ impl Serialize for OnePassSignature {
                 writer.write_all(fingerprint.as_ref())?;
             }
         }
-        writer.write_all(&[self.last])?;
+        writer.write_u8(self.last)?;
 
         Ok(())
     }

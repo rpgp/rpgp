@@ -1,5 +1,6 @@
 use std::io;
 
+use byteorder::WriteBytesExt;
 use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
@@ -209,7 +210,7 @@ impl Serialize for SymEncryptedProtectedData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match &self.data {
             Data::V1 { data } => {
-                writer.write_all(&[0x01])?;
+                writer.write_u8(0x01)?;
                 writer.write_all(data)?;
             }
             Data::V2 {
@@ -219,8 +220,10 @@ impl Serialize for SymEncryptedProtectedData {
                 salt,
                 data,
             } => {
-                writer.write_all(&[0x02])?;
-                writer.write_all(&[(*sym_alg).into(), (*aead).into(), *chunk_size])?;
+                writer.write_u8(0x02)?;
+                writer.write_u8((*sym_alg).into())?;
+                writer.write_u8((*aead).into())?;
+                writer.write_u8(*chunk_size)?;
                 writer.write_all(salt)?;
                 writer.write_all(data)?;
             }

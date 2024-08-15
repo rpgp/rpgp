@@ -12,7 +12,7 @@ use crate::util::write_packet_length;
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[u8::from(self.config.version())])?;
+        writer.write_u8(self.config.version().into())?;
 
         match self.config.version() {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
@@ -65,16 +65,14 @@ impl Subpacket {
                 writer.write_all(features)?;
             }
             SubpacketData::RevocationReason(code, reason) => {
-                writer.write_all(&[u8::from(*code)])?;
+                writer.write_u8((*code).into())?;
                 writer.write_all(reason)?;
             }
             SubpacketData::IsPrimary(is_primary) => {
-                let val = u8::from(*is_primary);
-                writer.write_all(&[val])?;
+                writer.write_u8((*is_primary).into())?;
             }
             SubpacketData::Revocable(is_revocable) => {
-                let val = u8::from(*is_revocable);
-                writer.write_all(&[val])?;
+                writer.write_u8((*is_revocable).into())?;
             }
             SubpacketData::EmbeddedSignature(inner_sig) => {
                 (*inner_sig).to_writer(writer)?;
@@ -94,7 +92,8 @@ impl Subpacket {
                 writer.write_all(&notation.value)?;
             }
             SubpacketData::RevocationKey(rev_key) => {
-                writer.write_all(&[rev_key.class as u8, rev_key.algorithm.into()])?;
+                writer.write_u8(rev_key.class as u8)?;
+                writer.write_u8(rev_key.algorithm.into())?;
                 writer.write_all(&rev_key.fingerprint[..])?;
             }
             SubpacketData::SignersUserID(body) => {
@@ -104,18 +103,18 @@ impl Subpacket {
                 writer.write_all(uri.as_bytes())?;
             }
             SubpacketData::TrustSignature(depth, value) => {
-                writer.write_all(&[*depth, *value])?;
+                writer.write_u8(*depth)?;
+                writer.write_u8(*value)?;
             }
             SubpacketData::RegularExpression(regexp) => {
                 writer.write_all(regexp)?;
             }
             SubpacketData::ExportableCertification(is_exportable) => {
-                let val = u8::from(*is_exportable);
-                writer.write_all(&[val])?;
+                writer.write_u8((*is_exportable).into())?;
             }
             SubpacketData::IssuerFingerprint(fp) => {
                 if let Some(version) = fp.version() {
-                    writer.write_all(&[u8::from(version)])?;
+                    writer.write_u8(version.into())?;
                     writer.write_all(fp.as_bytes())?;
                 } else {
                     bail!("IssuerFingerprint: needs versioned fingerprint")
@@ -126,7 +125,7 @@ impl Subpacket {
             }
             SubpacketData::IntendedRecipientFingerprint(fp) => {
                 if let Some(version) = fp.version() {
-                    writer.write_all(&[u8::from(version)])?;
+                    writer.write_u8(version.into())?;
                     writer.write_all(fp.as_bytes())?;
                 } else {
                     bail!("IntendedRecipientFingerprint: needs versioned fingerprint")
@@ -147,7 +146,8 @@ impl Subpacket {
                 writer.write_all(body)?;
             }
             SubpacketData::SignatureTarget(pub_alg, hash_alg, hash) => {
-                writer.write_all(&[u8::from(*pub_alg), u8::from(*hash_alg)])?;
+                writer.write_u8((*pub_alg).into())?;
+                writer.write_u8((*hash_alg).into())?;
                 writer.write_all(hash)?;
             }
         }
@@ -250,7 +250,7 @@ impl Subpacket {
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         write_packet_length(1 + self.body_len()?, writer)?;
-        writer.write_all(&[self.typ().as_u8(self.is_critical)])?;
+        writer.write_u8(self.typ().as_u8(self.is_critical))?;
         self.body_to_writer(writer)?;
 
         Ok(())
@@ -260,12 +260,8 @@ impl Serialize for Subpacket {
 impl SignatureConfig {
     /// Serializes a v2 or v3 signature.
     fn to_writer_v3<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[
-            // tag
-            0x05,
-            // type
-            self.typ.into(),
-        ])?;
+        writer.write_u8(0x05)?; // 1-octet length of the following hashed material; it MUST be 5
+        writer.write_u8(self.typ.into())?; // type
 
         if let SignatureVersionSpecific::V2 { created, issuer }
         | SignatureVersionSpecific::V3 { created, issuer } = &self.version_specific
@@ -276,26 +272,18 @@ impl SignatureConfig {
             bail!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")
         }
 
-        writer.write_all(&[
-            // public algorithm
-            u8::from(self.pub_alg),
-            // hash algorithm
-            u8::from(self.hash_alg),
-        ])?;
+        writer.write_u8(self.pub_alg.into())?; // public algorithm
+        writer.write_u8(self.hash_alg.into())?; // hash algorithm
 
         Ok(())
     }
 
     /// Serializes a v4 or v6 signature.
     fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[
-            // type
-            self.typ.into(),
-            // public algorithm
-            u8::from(self.pub_alg),
-            // hash algorithm
-            u8::from(self.hash_alg),
-        ])?;
+        writer.write_u8(self.typ.into())?; // type
+
+        writer.write_u8(self.pub_alg.into())?; // public algorithm
+        writer.write_u8(self.hash_alg.into())?; // hash algorithm
 
         // hashed subpackets
         let mut hashed_subpackets = Vec::new();
@@ -360,8 +348,7 @@ impl Signature {
 
         // salt, if v6
         if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
-            let len: u8 = salt.len().try_into()?;
-            writer.write_all(&[len])?;
+            writer.write_u8(salt.len().try_into()?)?;
             writer.write_all(salt)?;
         }
 

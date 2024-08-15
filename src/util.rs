@@ -118,7 +118,7 @@ pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::R
     if len < 8384 {
         // nothing
     } else {
-        writer.write_all(&[0xFF])?;
+        writer.write_u8(0xFF)?;
     }
 
     write_packet_len(len, writer)
@@ -127,9 +127,10 @@ pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::R
 /// Write the raw packet length.
 pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
     if len < 192 {
-        writer.write_all(&[len as u8])?;
+        writer.write_u8(len.try_into()?)?;
     } else if len < 8384 {
-        writer.write_all(&[(((len - 192) / 256) + 192) as u8, ((len - 192) % 256) as u8])?;
+        writer.write_u8((((len - 192) / 256) + 192) as u8)?;
+        writer.write_u8(((len - 192) % 256) as u8)?;
     } else {
         writer.write_u32::<BigEndian>(len as u32)?;
     }
