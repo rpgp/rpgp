@@ -2,7 +2,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 /// Available compression algorithms.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.3
+/// Ref: <https://tools.ietf.org/html/rfc4880.html#section-9.3>
 #[repr(u8)]
 pub enum CompressionAlgorithm {
     Uncompressed = 0,

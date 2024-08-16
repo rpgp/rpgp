@@ -16,7 +16,7 @@ use crate::ser::Serialize;
 use crate::types::{mpi, KeyId, Mpi, PublicKeyTrait, Tag, Version};
 
 /// Public Key Encrypted Session Key Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.1
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.1>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicKeyEncryptedSessionKey {
     packet_version: Version,
@@ -40,7 +40,7 @@ impl PublicKeyEncryptedSessionKey {
 
     /// Encrypts the given session key to the passed in public key.
     pub fn from_session_key<R: CryptoRng + Rng>(
-        rng: &mut R,
+        rng: R,
         session_key: &[u8],
         alg: SymmetricKeyAlgorithm,
         pkey: &impl PublicKeyTrait,
@@ -160,7 +160,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                     Some(l) => *l as usize,
                     None => 0,
                 };
-                writer.write_all(&[blen as u8])?;
+                writer.write_all(&[blen.try_into()?])?;
                 let padding_len = blen - self.mpis[2].as_bytes().len();
                 for _ in 0..padding_len {
                     writer.write_u8(0)?;

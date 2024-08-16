@@ -109,7 +109,7 @@ impl zeroize::DefaultIsZeroes for SymmetricKeyAlgorithm {}
 
 impl SymmetricKeyAlgorithm {
     /// The size of a single block in bytes.
-    /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher
+    /// Based on <https://github.com/gpg/libgcrypt/blob/master/cipher>
     pub fn block_size(self) -> usize {
         match self {
             SymmetricKeyAlgorithm::Plaintext => 0,
@@ -129,7 +129,7 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// The size of a single block in bytes.
-    /// Based on https://github.com/gpg/libgcrypt/blob/master/cipher
+    /// Based on <https://github.com/gpg/libgcrypt/blob/master/cipher>
     pub fn key_size(self) -> usize {
         match self {
             SymmetricKeyAlgorithm::Plaintext => 0,
@@ -392,7 +392,7 @@ impl SymmetricKeyAlgorithm {
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     pub fn encrypt_with_rng<R: CryptoRng + Rng>(
         self,
-        rng: &mut R,
+        mut rng: R,
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Vec<u8>> {
@@ -431,7 +431,7 @@ impl SymmetricKeyAlgorithm {
 
     pub fn encrypt_protected_with_rng<R: CryptoRng + Rng>(
         self,
-        rng: &mut R,
+        mut rng: R,
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Vec<u8>> {
@@ -580,7 +580,7 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Generate a new session key.
-    pub fn new_session_key<R: Rng + CryptoRng>(self, rng: &mut R) -> Vec<u8> {
+    pub fn new_session_key<R: Rng + CryptoRng>(self, mut rng: R) -> Vec<u8> {
         let mut session_key = vec![0u8; self.key_size()];
         rng.fill_bytes(&mut session_key);
         session_key
@@ -589,10 +589,10 @@ impl SymmetricKeyAlgorithm {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use rand::SeedableRng;
     use rand_xorshift::XorShiftRng;
+
+    use super::*;
 
     macro_rules! roundtrip {
         ($name:ident, $alg:path) => {

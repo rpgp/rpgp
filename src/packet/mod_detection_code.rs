@@ -6,7 +6,7 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Modification Detection Code Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.14
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.14>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub struct ModDetectionCode {
     packet_version: Version,

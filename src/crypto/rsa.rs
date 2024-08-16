@@ -92,7 +92,7 @@ impl Signer for PrivateKey {
 
 /// RSA encryption using PKCS1v15 padding.
 pub fn encrypt<R: CryptoRng + Rng>(
-    rng: &mut R,
+    mut rng: R,
     n: &[u8],
     e: &[u8],
     plaintext: &[u8],
@@ -102,7 +102,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
         BigUint::from_bytes_be(e),
         MAX_KEY_SIZE,
     )?;
-    let data = key.encrypt(rng, Pkcs1v15Encrypt, plaintext)?;
+    let data = key.encrypt(&mut rng, Pkcs1v15Encrypt, plaintext)?;
 
     Ok(vec![data])
 }

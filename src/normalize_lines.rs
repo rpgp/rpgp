@@ -3,10 +3,11 @@
 //! This crate provides a `normalize` method that takes an u8 iterator and returns
 //! a new one with newlines normalized to a single style.
 //!
-//! Based on https://github.com/derekdreery/normalize-line-endings.
+//! Based on <https://github.com/derekdreery/normalize-line-endings>.
+
+use std::iter::Peekable;
 
 use crate::line_writer::LineBreak;
-use std::iter::Peekable;
 
 /// This struct wraps an u8 iterator to normalize line endings.
 pub struct Normalized<I>
@@ -24,8 +25,9 @@ impl<I: Iterator<Item = u8>> Normalized<I> {
     /// # Example
     /// ```
     /// use std::iter::FromIterator;
-    /// use pgp::normalize_lines::Normalized;
+    ///
     /// use pgp::line_writer::LineBreak;
+    /// use pgp::normalize_lines::Normalized;
     ///
     /// let input = "This is a string \n with \r some \n\r\n random newlines\r\r\n\n";
     /// assert_eq!(

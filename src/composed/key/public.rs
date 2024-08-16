@@ -2,16 +2,16 @@ use std::io;
 
 use chrono::SubsecRound;
 use rand::{CryptoRng, Rng};
-use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{
-    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
+use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
+use crate::types::{
+    Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait,
+    SignatureBytes,
 };
-use crate::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -40,16 +40,22 @@ impl PublicKey {
         }
     }
 
-    pub fn sign<F>(self, sec_key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedPublicKey>
+    pub fn sign<R, F>(
+        self,
+        mut rng: R,
+        sec_key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<SignedPublicKey>
     where
+        R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
     {
         let primary_key = self.primary_key;
-        let details = self.details.sign(sec_key, key_pw.clone())?;
+        let details = self.details.sign(&mut rng, sec_key, key_pw.clone())?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(sec_key, key_pw.clone()))
+            .map(|k| k.sign(&mut rng, sec_key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedPublicKey {
@@ -65,7 +71,7 @@ impl PublicKeyTrait for PublicKey {
         self.primary_key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.primary_key.fingerprint()
     }
 
@@ -76,11 +82,16 @@ impl PublicKeyTrait for PublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.primary_key.encrypt(rng, plain)
     }
 
@@ -106,8 +117,14 @@ impl PublicSubkey {
         PublicSubkey { key, keyflags }
     }
 
-    pub fn sign<F>(self, sec_key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedPublicSubKey>
+    pub fn sign<R, F>(
+        self,
+        mut rng: R,
+        sec_key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<SignedPublicSubKey>
     where
+        R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
     {
         let key = self.key;
@@ -116,21 +133,27 @@ impl PublicSubkey {
                 chrono::Utc::now().trunc_subsecs(0),
             )),
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                Default::default(),
-                SmallVec::from_slice(&sec_key.fingerprint()),
-            )),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
         ];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))];
 
-        let config = SignatureConfigBuilder::default()
-            .typ(SignatureType::SubkeyBinding)
-            .pub_alg(sec_key.algorithm())
-            .hash_alg(sec_key.hash_alg())
-            .hashed_subpackets(hashed_subpackets)
-            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                sec_key.key_id(),
-            ))])
-            .build()?;
+        let mut config = match sec_key.version() {
+            KeyVersion::V4 => SignatureConfig::v4(
+                SignatureType::SubkeyBinding,
+                sec_key.algorithm(),
+                sec_key.hash_alg(),
+            ),
+            KeyVersion::V6 => SignatureConfig::v6(
+                &mut rng,
+                SignatureType::SubkeyBinding,
+                sec_key.algorithm(),
+                sec_key.hash_alg(),
+            )?,
+            v => unsupported_err!("unsupported key version: {:?}", v),
+        };
+
+        config.hashed_subpackets = hashed_subpackets;
+        config.unhashed_subpackets = unhashed_subpackets;
 
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 
@@ -143,7 +166,7 @@ impl PublicKeyTrait for PublicSubkey {
         self.key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.key.fingerprint()
     }
 
@@ -155,11 +178,16 @@ impl PublicKeyTrait for PublicSubkey {
         self.key.algorithm()
     }
 
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.key.encrypt(rng, plain)
     }
 

@@ -1,12 +1,11 @@
+use aes_gcm::aead::rand_core::CryptoRng;
 use chrono::SubsecRound;
-use smallvec::SmallVec;
+use rand::Rng;
 
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
 use crate::errors::Result;
-use crate::packet::{
-    self, KeyFlags, SignatureConfigBuilder, SignatureType, Subpacket, SubpacketData,
-};
-use crate::types::SecretKeyTrait;
+use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
+use crate::types::{KeyVersion, SecretKeyTrait};
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,21 +37,22 @@ impl SecretKey {
         }
     }
 
-    pub fn sign<F>(self, key_pw: F) -> Result<SignedSecretKey>
+    pub fn sign<R, F>(self, mut rng: R, key_pw: F) -> Result<SignedSecretKey>
     where
+        R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
     {
         let primary_key = self.primary_key;
-        let details = self.details.sign(&primary_key, key_pw.clone())?;
+        let details = self.details.sign(&mut rng, &primary_key, key_pw.clone())?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&primary_key, key_pw.clone()))
+            .map(|k| k.sign(&mut rng, &primary_key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
         let secret_subkeys = self
             .secret_subkeys
             .into_iter()
-            .map(|k| k.sign(&primary_key, key_pw.clone()))
+            .map(|k| k.sign(&mut rng, &primary_key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedSecretKey {
@@ -69,31 +69,43 @@ impl SecretSubkey {
         SecretSubkey { key, keyflags }
     }
 
-    pub fn sign<F>(self, sec_key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedSecretSubKey>
+    pub fn sign<R, F>(
+        self,
+        mut rng: R,
+        sec_key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<SignedSecretSubKey>
     where
+        R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
     {
         let key = self.key;
-        let hashed_subpackets = vec![
+
+        let mut config = match sec_key.version() {
+            KeyVersion::V4 => SignatureConfig::v4(
+                SignatureType::SubkeyBinding,
+                sec_key.algorithm(),
+                sec_key.hash_alg(),
+            ),
+            KeyVersion::V6 => SignatureConfig::v6(
+                &mut rng,
+                SignatureType::SubkeyBinding,
+                sec_key.algorithm(),
+                sec_key.hash_alg(),
+            )?,
+            v => unsupported_err!("unsupported key version: {:?}", v),
+        };
+
+        config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             )),
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                Default::default(),
-                SmallVec::from_slice(&sec_key.fingerprint()),
-            )),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
         ];
+        config.unhashed_subpackets =
+            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))];
 
-        let config = SignatureConfigBuilder::default()
-            .typ(SignatureType::SubkeyBinding)
-            .pub_alg(sec_key.algorithm())
-            .hash_alg(sec_key.hash_alg())
-            .hashed_subpackets(hashed_subpackets)
-            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                sec_key.key_id(),
-            ))])
-            .build()?;
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 
         Ok(SignedSecretSubKey { key, signatures })

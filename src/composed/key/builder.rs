@@ -6,11 +6,12 @@ use rand::{thread_rng, CryptoRng, Rng};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa};
+use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa, x25519};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, UserAttribute, UserId};
 use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey, S2kParams};
@@ -38,6 +39,8 @@ pub struct SecretKeyParams {
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+    #[builder(default)]
+    preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
     #[builder(default)]
     revocation_key: Option<RevocationKey>,
 
@@ -170,9 +173,8 @@ impl SecretKeyParams {
     pub fn generate_with_rng<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
         let passphrase = self.passphrase;
         let s2k = self.s2k.unwrap_or_else(|| S2kParams::new_default(&mut rng));
-        let (public_params, secret_params) =
-            self.key_type.generate_with_rng(&mut rng, passphrase, s2k)?;
-        let primary_key = packet::SecretKey::new(
+        let (public_params, secret_params) = self.key_type.generate_with_rng(&mut rng)?;
+        let mut primary_key = packet::SecretKey::new(
             packet::PublicKey::new(
                 self.packet_version,
                 self.version,
@@ -183,6 +185,9 @@ impl SecretKeyParams {
             )?,
             secret_params,
         );
+        if let Some(passphrase) = passphrase {
+            primary_key.set_password_with_s2k(|| passphrase, s2k)?;
+        }
 
         let mut keyflags = KeyFlags::default();
         keyflags.set_certify(self.can_certify);
@@ -203,6 +208,7 @@ impl SecretKeyParams {
                 self.preferred_symmetric_algorithms,
                 self.preferred_hash_algorithms,
                 self.preferred_compression_algorithms,
+                self.preferred_aead_algorithms,
                 self.revocation_key,
             ),
             Default::default(),
@@ -213,8 +219,7 @@ impl SecretKeyParams {
                     let s2k = subkey
                         .s2k
                         .unwrap_or_else(|| S2kParams::new_default(&mut rng));
-                    let (public_params, secret_params) =
-                        subkey.key_type.generate(passphrase, s2k)?;
+                    let (public_params, secret_params) = subkey.key_type.generate()?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_certify(subkey.can_certify);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
@@ -222,20 +227,23 @@ impl SecretKeyParams {
                     keyflags.set_sign(subkey.can_sign);
                     keyflags.set_authentication(subkey.can_authenticate);
 
-                    Ok(SecretSubkey::new(
-                        packet::SecretSubkey::new(
-                            packet::PublicSubkey::new(
-                                subkey.packet_version,
-                                subkey.version,
-                                subkey.key_type.to_alg(),
-                                subkey.created_at,
-                                subkey.expiration.map(|v| v.as_secs() as u16),
-                                public_params,
-                            )?,
-                            secret_params,
-                        ),
-                        keyflags,
-                    ))
+                    let mut sub = packet::SecretSubkey::new(
+                        packet::PublicSubkey::new(
+                            subkey.packet_version,
+                            subkey.version,
+                            subkey.key_type.to_alg(),
+                            subkey.created_at,
+                            subkey.expiration.map(|v| v.as_secs() as u16),
+                            public_params,
+                        )?,
+                        secret_params,
+                    );
+
+                    if let Some(passphrase) = passphrase {
+                        sub.set_password_with_s2k(|| passphrase, s2k)?;
+                    }
+
+                    Ok(SecretSubkey::new(sub, keyflags))
                 })
                 .collect::<Result<Vec<_>>>()?,
         ))
@@ -254,6 +262,10 @@ pub enum KeyType {
     ECDSA(ECCCurve),
     /// Signing with DSA for the given bitsize.
     Dsa(DsaKeySize),
+    /// Signing with Ed25519
+    Ed25519,
+    /// Encrypting with X25519
+    X25519,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -286,43 +298,31 @@ impl KeyType {
             KeyType::EdDSALegacy => PublicKeyAlgorithm::EdDSALegacy,
             KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
+            KeyType::Ed25519 => PublicKeyAlgorithm::Ed25519,
+            KeyType::X25519 => PublicKeyAlgorithm::X25519,
         }
     }
 
-    pub fn generate(
-        &self,
-        passphrase: Option<String>,
-        s2k: types::S2kParams,
-    ) -> Result<(PublicParams, types::SecretParams)> {
+    pub fn generate(&self) -> Result<(PublicParams, types::SecretParams)> {
         let rng = thread_rng();
-        self.generate_with_rng(rng, passphrase, s2k)
+        self.generate_with_rng(rng)
     }
 
     pub fn generate_with_rng<R: Rng + CryptoRng>(
         &self,
         rng: R,
-        passphrase: Option<String>,
-        s2k: types::S2kParams,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => rsa::generate_key(rng, *bit_size as usize)?,
             KeyType::ECDH(curve) => ecdh::generate_key(rng, curve)?,
-            KeyType::EdDSALegacy => eddsa::generate_key(rng),
+            KeyType::EdDSALegacy => eddsa::generate_key(rng, eddsa::Mode::EdDSALegacy),
             KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
             KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
+            KeyType::Ed25519 => eddsa::generate_key(rng, eddsa::Mode::Ed25519),
+            KeyType::X25519 => x25519::generate_key(rng),
         };
 
-        let secret = match passphrase {
-            Some(passphrase) => {
-                // TODO: derive from key itself
-                let version = types::KeyVersion::default();
-
-                types::SecretParams::Encrypted(plain.encrypt(&passphrase, s2k, version)?)
-            }
-            None => types::SecretParams::Plain(plain),
-        };
-
-        Ok((pub_params, secret))
+        Ok((pub_params, types::SecretParams::Plain(plain)))
     }
 }
 
@@ -336,7 +336,7 @@ mod tests {
 
     use super::*;
     use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-    use crate::types::SecretKeyTrait;
+    use crate::types::{KeyVersion, SecretKeyTrait};
 
     #[test]
     #[ignore] // slow in debug mode
@@ -344,15 +344,23 @@ mod tests {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for i in 0..50 {
-            println!("round {i}");
-            gen_rsa_2048(&mut rng);
+        for key_version in [
+            KeyVersion::V4,
+            // KeyVersion::V6 // TODO: we can't do RSA tests for V6 yet: v6 secret key material locking is missing
+        ] {
+            println!("key version {:?}", key_version);
+
+            for i in 0..50 {
+                println!("round {i}");
+                gen_rsa_2048(&mut rng, key_version);
+            }
         }
     }
 
-    fn gen_rsa_2048<R: Rng + CryptoRng>(mut rng: R) {
+    fn gen_rsa_2048<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
         let mut key_params = SecretKeyParamsBuilder::default();
         key_params
+            .version(version)
             .key_type(KeyType::Rsa(2048))
             .can_certify(true)
             .can_sign(true)
@@ -379,6 +387,7 @@ mod tests {
             .passphrase(Some("hello".into()))
             .subkey(
                 SubkeyParamsBuilder::default()
+                    .version(version)
                     .key_type(KeyType::Rsa(2048))
                     .passphrase(Some("hello".into()))
                     .can_encrypt(true)
@@ -406,8 +415,12 @@ mod tests {
             .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key_enc = key_enc.sign(|| "hello".into()).expect("failed to sign key");
-        let signed_key_plain = key_plain.sign(|| "".into()).expect("failed to sign key");
+        let signed_key_enc = key_enc
+            .sign(&mut rng, || "hello".into())
+            .expect("failed to sign key");
+        let signed_key_plain = key_plain
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor_enc = signed_key_enc
             .to_armored_string(None.into())
@@ -439,7 +452,7 @@ mod tests {
         let public_key = signed_key_plain.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key_plain, || "".into())
+            .sign(&mut rng, &signed_key_plain, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -457,30 +470,32 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn key_gen_x25519_long() {
+    fn key_gen_25519_legacy_long() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         for i in 0..10_000 {
             println!("round {i}");
-            gen_x25519(&mut rng);
+            gen_25519_legacy(&mut rng);
         }
     }
 
     #[test]
-    fn key_gen_x25519_short() {
+    fn key_gen_25519_legacy_short() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         for _ in 0..100 {
-            gen_x25519(&mut rng);
+            gen_25519_legacy(&mut rng);
         }
     }
 
-    fn gen_x25519<R: Rng + CryptoRng>(rng: R) {
+    fn gen_25519_legacy<R: Rng + CryptoRng>(mut rng: R) {
+        // The v4-only key format variants based on Curve 25519 (EdDSALegacy/ECDH over 25519)
+
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
             .key_type(KeyType::EdDSALegacy)
             .can_certify(true)
             .can_sign(true)
-            .primary_user_id("Me-X <me-x25519@mail.com>".into())
+            .primary_user_id("Me-X <me-25519-legacy@mail.com>".into())
             .passphrase(None)
             .preferred_symmetric_algorithms(smallvec![
                 SymmetricKeyAlgorithm::AES256,
@@ -510,17 +525,18 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
             .expect("failed to serialize key");
 
-        println!("armor: {armor:?}");
-        std::fs::write("sample-x25519.sec.asc", &armor).unwrap();
+        std::fs::write("sample-25519-legacy.sec.asc", &armor).unwrap();
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
@@ -531,7 +547,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key, || "".into())
+            .sign(&mut rng, &signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -540,18 +556,131 @@ mod tests {
             .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
-        std::fs::write("sample-x25519.pub.asc", &armor).unwrap();
+        std::fs::write("sample-25519-legacy.pub.asc", &armor).unwrap();
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
         signed_key2.verify().expect("invalid public key");
     }
 
-    fn gen_ecdsa<R: Rng + CryptoRng>(rng: &mut R, curve: ECCCurve) {
+    #[ignore]
+    #[test]
+    fn key_gen_25519_rfc9580_long() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for i in 0..10_000 {
+                println!("round {i}");
+                gen_25519_rfc9580(&mut rng, key_version);
+            }
+        }
+    }
+
+    #[test]
+    fn key_gen_25519_rfc9580_short() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for _ in 0..100 {
+                gen_25519_rfc9580(&mut rng, key_version);
+            }
+        }
+    }
+
+    fn gen_25519_rfc9580<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+        // The RFC 9580 key format variants based on Curve 25519 (X25519/Ed25519)
+
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
-            .key_type(KeyType::ECDSA(curve.clone()))
+            .version(version)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("Me-X <me-25519-rfc9580@mail.com>".into())
+            .passphrase(None)
+            .preferred_symmetric_algorithms(smallvec![
+                SymmetricKeyAlgorithm::AES256,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES128,
+            ])
+            .preferred_hash_algorithms(smallvec![
+                HashAlgorithm::SHA2_256,
+                HashAlgorithm::SHA2_384,
+                HashAlgorithm::SHA2_512,
+                HashAlgorithm::SHA2_224,
+                HashAlgorithm::SHA1,
+            ])
+            .preferred_compression_algorithms(smallvec![
+                CompressionAlgorithm::ZLIB,
+                CompressionAlgorithm::ZIP,
+            ])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(version)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate_with_rng(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
+
+        let armor = signed_key
+            .to_armored_string(None.into())
+            .expect("failed to serialize key");
+
+        std::fs::write("sample-25519-rfc9580.sec.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        signed_key2.verify().expect("invalid key");
+
+        assert_eq!(signed_key, signed_key2);
+
+        let public_key = signed_key.public_key();
+
+        let public_signed_key = public_key
+            .sign(&mut rng, &signed_key, || "".into())
+            .expect("failed to sign public key");
+
+        public_signed_key.verify().expect("invalid public key");
+
+        let armor = public_signed_key
+            .to_armored_string(None.into())
+            .expect("failed to serialize public key");
+
+        std::fs::write("sample-25519-rfc9580.pub.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
+        signed_key2.verify().expect("invalid public key");
+    }
+
+    fn gen_ecdsa_ecdh<R: Rng + CryptoRng>(
+        mut rng: R,
+        ecdsa: ECCCurve,
+        ecdh: ECCCurve,
+        version: KeyVersion,
+    ) {
+        let _ = pretty_env_logger::try_init();
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(version)
+            .key_type(KeyType::ECDSA(ecdsa.clone()))
             .can_certify(true)
             .can_sign(true)
             .primary_user_id("Me-X <me-ecdsa@mail.com>".into())
@@ -574,7 +703,8 @@ mod tests {
             ])
             .subkey(
                 SubkeyParamsBuilder::default()
-                    .key_type(KeyType::ECDH(ECCCurve::Curve25519))
+                    .version(version)
+                    .key_type(KeyType::ECDH(ecdh.clone()))
                     .can_encrypt(true)
                     .passphrase(None)
                     .build()
@@ -584,16 +714,22 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
             .expect("failed to serialize key");
 
-        std::fs::write("sample-ecdsa.sec.asc", &armor).unwrap();
+        std::fs::write(
+            format!("sample-ecdsa-{ecdsa:?}-ecdh-{ecdh:?}.pub.asc"),
+            &armor,
+        )
+        .unwrap();
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
@@ -604,7 +740,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key, || "".into())
+            .sign(&mut rng, &signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -613,7 +749,11 @@ mod tests {
             .to_armored_string(None.into())
             .expect("failed to serialize public key");
 
-        std::fs::write(format!("sample-ecdsa-{curve:?}.pub.asc"), &armor).unwrap();
+        std::fs::write(
+            format!("sample-ecdsa-{ecdsa:?}-ecdh-{ecdh:?}.pub.asc"),
+            &armor,
+        )
+        .unwrap();
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
@@ -622,37 +762,58 @@ mod tests {
 
     #[test]
     fn key_gen_ecdsa_p256() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..=175 {
-            gen_ecdsa(rng, ECCCurve::P256);
+        let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for _ in 0..=175 {
+                gen_ecdsa_ecdh(&mut rng, ECCCurve::P256, ECCCurve::P256, key_version);
+            }
         }
     }
 
     #[test]
     fn key_gen_ecdsa_p384() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..100 {
-            gen_ecdsa(rng, ECCCurve::P384);
+        let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for _ in 0..100 {
+                gen_ecdsa_ecdh(&mut rng, ECCCurve::P384, ECCCurve::P384, key_version);
+            }
         }
     }
 
     #[test]
     fn key_gen_ecdsa_p521() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..100 {
-            gen_ecdsa(rng, ECCCurve::P521);
+        let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for _ in 0..100 {
+                gen_ecdsa_ecdh(&mut rng, ECCCurve::P521, ECCCurve::P521, key_version);
+            }
         }
     }
 
     #[test]
     fn key_gen_ecdsa_secp256k1() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
+
         for _ in 0..100 {
-            gen_ecdsa(rng, ECCCurve::Secp256k1);
+            gen_ecdsa_ecdh(
+                &mut rng,
+                ECCCurve::Secp256k1,
+                ECCCurve::Curve25519, // we don't currently support ECDH over Secp256k1
+                KeyVersion::V4,       // use of secp256k1 isn't specified in RFC 9580
+            );
         }
     }
 
-    fn gen_dsa<R: Rng + CryptoRng>(rng: &mut R, key_size: DsaKeySize) {
+    fn gen_dsa<R: Rng + CryptoRng>(mut rng: R, key_size: DsaKeySize) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
@@ -689,10 +850,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(|| "".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign(&mut rng, || "".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -709,7 +872,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&signed_key, || "".into())
+            .sign(&mut rng, &signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -729,11 +892,11 @@ mod tests {
     #[test]
     #[ignore]
     fn key_gen_dsa() {
-        let rng = &mut ChaCha8Rng::seed_from_u64(0);
+        let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
         for _ in 0..10 {
-            gen_dsa(rng, DsaKeySize::B1024);
-            gen_dsa(rng, DsaKeySize::B2048);
-            gen_dsa(rng, DsaKeySize::B3072);
+            gen_dsa(&mut rng, DsaKeySize::B1024);
+            gen_dsa(&mut rng, DsaKeySize::B2048);
+            gen_dsa(&mut rng, DsaKeySize::B3072);
         }
     }
 }

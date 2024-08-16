@@ -18,7 +18,7 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Literal Data Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.9
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.9>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct LiteralData {
     packet_version: Version,
@@ -122,9 +122,9 @@ impl AsRef<[u8]> for LiteralData {
 impl Serialize for LiteralData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let name = &self.file_name;
-        writer.write_all(&[u8::from(self.mode), name.len() as u8])?;
+        writer.write_all(&[u8::from(self.mode), name.len().try_into()?])?;
         writer.write_all(name)?;
-        writer.write_u32::<BigEndian>(self.created.timestamp() as u32)?;
+        writer.write_u32::<BigEndian>(self.created.timestamp().try_into()?)?;
 
         // Line endings are stored internally normalized, so we do not need to worry
         // about changing them here.

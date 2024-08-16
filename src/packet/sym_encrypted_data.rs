@@ -6,7 +6,7 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Data Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.7
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.7>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedData {
     packet_version: Version,

@@ -15,7 +15,7 @@ use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 const MAX_EXTERN_MPI_BITS: u32 = 16384;
 
 /// Parse Multi Precision Integers
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-3.2
+/// Ref: <https://tools.ietf.org/html/rfc4880.html#section-3.2>
 ///
 /// # Examples
 ///
@@ -28,7 +28,6 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 ///     (&b""[..], (&[1][..]).into())
 /// );
 /// ```
-///
 pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
     let (number, len) = be_u16(input)?;
 

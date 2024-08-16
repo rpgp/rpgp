@@ -16,7 +16,7 @@ use crate::util::rest_len;
 use crate::PlainSessionKey;
 
 /// Symmetric-Key Encrypted Session Key Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.3
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.3>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum SymKeyEncryptedSessionKey {
     V4 {
@@ -354,11 +354,11 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 let mut buf = Vec::new();
                 s2k.to_writer(&mut buf)?;
-                first_buf.push(buf.len() as u8);
+                first_buf.push(buf.len().try_into()?);
                 first_buf.extend(buf);
                 first_buf.extend_from_slice(iv);
 
-                writer.write_all(&[first_buf.len() as u8])?;
+                writer.write_all(&[first_buf.len().try_into()?])?;
                 writer.write_all(&first_buf)?;
 
                 writer.write_all(encrypted_key)?;
@@ -378,11 +378,11 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 let mut buf = Vec::new();
                 s2k.to_writer(&mut buf)?;
-                first_buf.push(buf.len() as u8);
+                first_buf.push(buf.len().try_into()?);
                 first_buf.extend(buf);
                 first_buf.extend_from_slice(iv);
 
-                writer.write_all(&[first_buf.len() as u8])?;
+                writer.write_all(&[first_buf.len().try_into()?])?;
                 writer.write_all(&first_buf)?;
 
                 writer.write_all(encrypted_key)?;

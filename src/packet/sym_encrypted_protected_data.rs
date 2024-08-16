@@ -15,7 +15,7 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.12
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.12>
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SymEncryptedProtectedData {
     packet_version: Version,
@@ -53,7 +53,7 @@ impl SymEncryptedProtectedData {
 
     /// Encrypts the data using the given symmetric key.
     pub fn encrypt_with_rng<R: CryptoRng + Rng>(
-        rng: &mut R,
+        rng: R,
         alg: SymmetricKeyAlgorithm,
         key: &[u8],
         plaintext: &[u8],

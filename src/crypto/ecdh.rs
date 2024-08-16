@@ -3,14 +3,13 @@ use rand::{CryptoRng, Rng};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
+use super::hash::HashAlgorithm;
 use crate::crypto::{
     aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
     Decryptor, KeyParams,
 };
 use crate::errors::{Error, Result};
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
-
-use super::hash::HashAlgorithm;
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -111,7 +110,7 @@ impl Decryptor for SecretKey {
                     let private_key = &secret[..];
 
                     // create scalar and reverse to little endian
-                    // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-curve25519legacy-ecdh-secre
+                    // https://www.rfc-editor.org/rfc/rfc9580.html#name-curve25519legacy-ecdh-secre
                     let mut private_key_le = private_key.iter().rev().cloned().collect::<Vec<u8>>();
                     let mut private_key_arr = [0u8; 32];
                     private_key_arr[..].copy_from_slice(&private_key_le);
@@ -187,7 +186,7 @@ where
 /// Obtain the OpenPGP session key for a DH shared secret.
 ///
 /// This helper function performs the key derivation and unwrapping steps
-/// described in https://www.rfc-editor.org/rfc/rfc6637.html#section-8
+/// described in <https://www.rfc-editor.org/rfc/rfc6637.html#section-8>
 pub fn derive_session_key(
     shared_secret: &[u8],
     encrypted_session_key: &[u8],
@@ -331,7 +330,7 @@ where
 }
 
 /// Build param for ECDH algorithm (as defined in RFC 6637)
-/// https://tools.ietf.org/html/rfc6637#section-8
+/// <https://tools.ietf.org/html/rfc6637#section-8>
 pub fn build_ecdh_param(
     oid: &[u8],
     alg_sym: SymmetricKeyAlgorithm,
@@ -362,7 +361,7 @@ pub fn build_ecdh_param(
 }
 
 /// Key Derivation Function for ECDH (as defined in RFC 6637).
-/// https://tools.ietf.org/html/rfc6637#section-7
+/// <https://tools.ietf.org/html/rfc6637#section-7>
 pub fn kdf(hash: HashAlgorithm, x: &[u8], length: usize, param: &[u8]) -> Result<Vec<u8>> {
     let prefix = vec![0, 0, 0, 1];
 
@@ -414,7 +413,7 @@ fn pad(plain: &[u8]) -> Vec<u8> {
 
 /// ECDH encryption.
 pub fn encrypt<R: CryptoRng + Rng>(
-    rng: &mut R,
+    mut rng: R,
     curve: &ECCCurve,
     alg_sym: SymmetricKeyAlgorithm,
     hash: HashAlgorithm,
@@ -490,7 +489,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 /// Derive a shared secret in encryption, for a Rust Crypto curve.
 /// Returns a pair of `(our_public key, shared_secret)`.
 fn derive_shared_secret_encryption<C, R: CryptoRng + Rng>(
-    rng: &mut R,
+    mut rng: R,
     q: &[u8],
 ) -> Result<(Vec<u8>, Vec<u8>)>
 where
@@ -500,7 +499,7 @@ where
         elliptic_curve::sec1::FromEncodedPoint<C> + elliptic_curve::sec1::ToEncodedPoint<C>,
 {
     let their_public = elliptic_curve::PublicKey::<C>::from_sec1_bytes(q)?;
-    let our_secret = elliptic_curve::ecdh::EphemeralSecret::<C>::random(rng);
+    let our_secret = elliptic_curve::ecdh::EphemeralSecret::<C>::random(&mut rng);
 
     // derive shared secret
     let shared_secret = our_secret.diffie_hellman(&their_public);
@@ -519,12 +518,12 @@ where
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
     use std::fs;
 
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
+    use super::*;
     use crate::types::SecretKeyRepr;
     use crate::{Deserializable, Message, SignedSecretKey};
 

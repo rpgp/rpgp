@@ -6,7 +6,6 @@ use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use log::{debug, warn};
 use rand::{CryptoRng, Rng};
-use smallvec::SmallVec;
 
 use crate::armor;
 use crate::composed::message::decrypt::*;
@@ -18,12 +17,14 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
     write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
-    PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType, Subpacket,
-    SubpacketData, SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
+    PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType,
+    SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
+    SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
+    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
+    StringToKey, Tag,
 };
 
 /// An [OpenPGP message](https://tools.ietf.org/html/rfc4880.html#section-11.3)
@@ -334,31 +335,35 @@ impl Message {
     /// Encrypt the message to the list of passed in public keys.
     pub fn encrypt_to_keys<R: CryptoRng + Rng>(
         &self,
-        rng: &mut R,
+        mut rng: R,
         alg: SymmetricKeyAlgorithm,
         pkeys: &[&impl PublicKeyTrait],
     ) -> Result<Self> {
         // 1. Generate a session key.
-        let session_key = alg.new_session_key(rng);
+        let session_key = alg.new_session_key(&mut rng);
 
         // 2. Encrypt (pub) the session key, to each PublicKey.
         let esk = pkeys
             .iter()
             .map(|pkey| {
-                let pkes =
-                    PublicKeyEncryptedSessionKey::from_session_key(rng, &session_key, alg, pkey)?;
+                let pkes = PublicKeyEncryptedSessionKey::from_session_key(
+                    &mut rng,
+                    &session_key,
+                    alg,
+                    pkey,
+                )?;
                 Ok(Esk::PublicKeyEncryptedSessionKey(pkes))
             })
             .collect::<Result<_>>()?;
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(rng, esk, alg, session_key)
+        self.encrypt_symmetric(&mut rng, esk, alg, session_key)
     }
 
     /// Encrypt the message using the given password.
     pub fn encrypt_with_password<R, F>(
         &self,
-        rng: &mut R,
+        mut rng: R,
         s2k: StringToKey,
         alg: SymmetricKeyAlgorithm,
         msg_pw: F,
@@ -368,7 +373,7 @@ impl Message {
         F: FnOnce() -> String + Clone,
     {
         // 1. Generate a session key.
-        let session_key = alg.new_session_key(rng);
+        let session_key = alg.new_session_key(&mut rng);
 
         // 2. Encrypt (sym) the session key using the provided password.
         let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt(
@@ -385,7 +390,7 @@ impl Message {
     /// Symmetrically encrypts oneself using the provided `session_key`.
     fn encrypt_symmetric<R: CryptoRng + Rng>(
         &self,
-        rng: &mut R,
+        rng: R,
         esk: Vec<Esk>,
         alg: SymmetricKeyAlgorithm,
         session_key: Vec<u8>,
@@ -403,22 +408,21 @@ impl Message {
     }
 
     /// Sign this message using the provided key.
-    pub fn sign<F>(
+    pub fn sign<R, F>(
         self,
+        rng: R,
         key: &impl SecretKeyTrait,
         key_pw: F,
         hash_algorithm: HashAlgorithm,
     ) -> Result<Self>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                KeyVersion::V4,
-                SmallVec::from_slice(&key.fingerprint()),
-            )),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             )),
@@ -433,34 +437,51 @@ impl Message {
                     SignatureType::Text
                 };
 
-                let signature_config = SignatureConfig::new_v4(
-                    Default::default(),
-                    typ,
-                    algorithm,
-                    hash_algorithm,
-                    hashed_subpackets,
-                    unhashed_subpackets,
-                );
-                (typ, signature_config.sign(key, key_pw, l.data())?)
+                let mut config = match key.version() {
+                    KeyVersion::V4 => SignatureConfig::v4(typ, algorithm, hash_algorithm),
+                    KeyVersion::V6 => SignatureConfig::v6(rng, typ, algorithm, hash_algorithm)?,
+                    v => bail!("unsupported key version {:?}", v),
+                };
+                config.hashed_subpackets = hashed_subpackets;
+                config.unhashed_subpackets = unhashed_subpackets;
+
+                (typ, config.sign(key, key_pw, l.data())?)
             }
             _ => {
                 let typ = SignatureType::Binary;
-                let signature_config = SignatureConfig::new_v4(
-                    Default::default(),
-                    typ,
-                    algorithm,
-                    hash_algorithm,
-                    hashed_subpackets,
-                    unhashed_subpackets,
-                );
+
+                let mut config = match key.version() {
+                    KeyVersion::V4 => SignatureConfig::v4(typ, algorithm, hash_algorithm),
+                    KeyVersion::V6 => SignatureConfig::v6(rng, typ, algorithm, hash_algorithm)?,
+                    v => bail!("unsupported key version {:?}", v),
+                };
+                config.hashed_subpackets = hashed_subpackets;
+                config.unhashed_subpackets = unhashed_subpackets;
 
                 let data = self.to_bytes()?;
-                let signature = signature_config.sign(key, key_pw, &data[..])?;
+                let signature = config.sign(key, key_pw, &data[..])?;
 
                 (typ, signature)
             }
         };
-        let ops = OnePassSignature::from_details(typ, hash_algorithm, algorithm, key_id);
+
+        let ops = match key.version() {
+            KeyVersion::V4 => OnePassSignature::v3(typ, hash_algorithm, algorithm, key_id),
+            KeyVersion::V6 => {
+                let SignatureVersionSpecific::V6 { ref salt } = signature.config.version_specific
+                else {
+                    // This should never happen
+                    bail!("Inconsistent Signature and OnePassSignature version")
+                };
+
+                let Fingerprint::V6(fp) = key.fingerprint() else {
+                    bail!("Inconsistent Signature and Fingerprint version")
+                };
+
+                OnePassSignature::v6(typ, hash_algorithm, algorithm, salt.clone(), fp)
+            }
+            v => bail!("Unsupported key version {:?}", v),
+        };
 
         Ok(Message::Signed {
             message: Some(Box::new(self)),
@@ -795,9 +816,12 @@ impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
-    use rand::thread_rng;
     use std::fs;
+
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+
+    use super::*;
 
     #[test]
     fn test_compression_zlib() {
@@ -833,8 +857,6 @@ mod tests {
 
     #[test]
     fn test_rsa_encryption() {
-        use rand::SeedableRng;
-
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
@@ -877,7 +899,7 @@ mod tests {
 
         // subkey[0] is the encryption key
         let pkey = skey.secret_subkeys[0].public_key();
-        let mut rng = thread_rng();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
@@ -901,7 +923,7 @@ mod tests {
     fn test_password_encryption() {
         let _ = pretty_env_logger::try_init();
 
-        let mut rng = thread_rng();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
@@ -981,12 +1003,13 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         assert!(lit_msg.verify(&pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
-            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1006,10 +1029,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1029,10 +1053,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
@@ -1057,10 +1082,11 @@ mod tests {
             .unwrap();
 
             let pkey = skey.public_key();
+            let mut rng = ChaCha8Rng::seed_from_u64(0);
 
             let lit_msg = Message::new_literal("hello.txt", "hello world\n");
             let signed_msg = lit_msg
-                .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+                .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
                 .unwrap();
 
             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1082,10 +1108,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1106,10 +1133,11 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();

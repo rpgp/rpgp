@@ -11,7 +11,9 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, Tag};
+use crate::types::{
+    Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+};
 use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
@@ -23,7 +25,7 @@ pub struct SignedPublicKey {
 }
 
 /// Parse a transferable keys from the given packets.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+/// Ref: <https://tools.ietf.org/html/rfc4880.html#section-11.1>
 pub struct SignedPublicKeyParser<
     I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,
 > {
@@ -64,7 +66,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedPublicKeyPar
 
 impl crate::composed::Deserializable for SignedPublicKey {
     /// Parse a transferable key from packets.
-    /// Ref: https://tools.ietf.org/html/rfc4880.html#section-11.1
+    /// Ref: <https://tools.ietf.org/html/rfc4880.html#section-11.1>
     fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
@@ -159,11 +161,16 @@ impl SignedPublicKey {
 }
 
 impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.primary_key.encrypt(rng, plain)
     }
 
@@ -175,11 +182,11 @@ impl PublicKeyTrait for SignedPublicKey {
         self.primary_key.public_params()
     }
 
-    fn version(&self) -> crate::types::KeyVersion {
+    fn version(&self) -> KeyVersion {
         self.primary_key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.primary_key.fingerprint()
     }
 
@@ -259,11 +266,16 @@ impl SignedPublicSubKey {
 }
 
 impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
         self.key.encrypt(rng, plain)
     }
 
@@ -274,15 +286,15 @@ impl PublicKeyTrait for SignedPublicSubKey {
     fn public_params(&self) -> &PublicParams {
         self.key.public_params()
     }
-    fn version(&self) -> crate::types::KeyVersion {
+
+    fn version(&self) -> KeyVersion {
         self.key.version()
     }
 
     /// Returns the fingerprint of the key.
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.key.fingerprint()
     }
-
     /// Returns the Key ID of the key.
     fn key_id(&self) -> KeyId {
         self.key.key_id()
@@ -307,6 +319,42 @@ impl Serialize for SignedPublicSubKey {
         for sig in &self.signatures {
             write_packet(writer, sig)?;
         }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use crate::composed::shared::Deserializable;
+
+    #[test]
+    fn test_v6_annex_a_3() -> Result<()> {
+        let _ = pretty_env_logger::try_init();
+
+        // A.3. Sample v6 Certificate (Transferable Public Key)
+
+        let c = "-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+xioGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laPCsQYf
+GwoAAABCBYJjh3/jAwsJBwUVCg4IDAIWAAKbAwIeCSIhBssYbE8GCaaX5NUt+mxy
+KwwfHifBilZwj2Ul7Ce62azJBScJAgcCAAAAAK0oIBA+LX0ifsDm185Ecds2v8lw
+gyU2kCcUmKfvBXbAf6rhRYWzuQOwEn7E/aLwIwRaLsdry0+VcallHhSu4RN6HWaE
+QsiPlR4zxP/TP7mhfVEe7XWPxtnMUMtf15OyA51YBM4qBmOHf+MZAAAAIIaTJINn
++eUBXbki+PSAld2nhJh/LVmFsS+60WyvXkQ1wpsGGBsKAAAALAWCY4d/4wKbDCIh
+BssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce62azJAAAAAAQBIKbpGG2dWTX8
+j+VjFM21J0hqWlEg+bdiojWnKfA5AQpWUWtnNwDEM0g12vYxoWM8Y81W+bHBw805
+I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUrk0mXubZvyl4GBg==
+-----END PGP PUBLIC KEY BLOCK-----";
+
+        let (spk, _) = SignedPublicKey::from_armor_single(io::Cursor::new(c))?;
+
+        eprintln!("spk: {:#02x?}", spk);
+
+        spk.verify()?;
 
         Ok(())
     }
