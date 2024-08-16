@@ -1,7 +1,8 @@
 //! # Cryptography module
 
+use crate::types::PublicParams;
+
 use self::hash::HashAlgorithm;
-use crate::types::{Mpi, PublicParams};
 
 pub mod aead;
 pub mod aes_kw;
@@ -18,7 +19,9 @@ pub mod sym;
 pub mod x25519;
 
 pub trait Decryptor {
-    fn decrypt(&self, mpis: &[Mpi], fingerprint: &[u8]) -> crate::errors::Result<Vec<u8>>;
+    type Data<'a>;
+
+    fn decrypt(&self, data: Self::Data<'_>) -> crate::errors::Result<Vec<u8>>;
 }
 
 pub trait Signer {

@@ -22,10 +22,8 @@ use crate::packet::{
     SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
-use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
-    StringToKey, Tag,
-};
+use crate::types::{CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
+    StringToKey, Tag};
 
 /// An [OpenPGP message](https://tools.ietf.org/html/rfc4880.html#section-11.3)
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -397,12 +395,9 @@ impl Message {
     ) -> Result<Self> {
         let data = self.to_bytes()?;
 
-        let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_with_rng(
-            rng,
-            alg,
-            &session_key,
-            &data,
-        )?);
+        let edata = Edata::SymEncryptedProtectedData(
+            SymEncryptedProtectedData::encrypt_with_rng_seipdv1(rng, alg, &session_key, &data)?,
+        );
 
         Ok(Message::Encrypted { esk, edata })
     }
@@ -421,6 +416,7 @@ impl Message {
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
+
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -625,15 +621,16 @@ impl Message {
                 let session_keys = valid_keys
                     .iter()
                     .map(|(packet, encoding_key, encoding_subkey)| {
+                        let v = packet.version();
                         if let Some(ek) = encoding_key {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), packet.mpis())?,
+                                decrypt_session_key(ek, key_pw.clone(), packet.values(), v)?,
                             ))
                         } else if let Some(ek) = encoding_subkey {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), packet.mpis())?,
+                                decrypt_session_key(ek, key_pw.clone(), packet.values(), v)?,
                             ))
                         } else {
                             unreachable!("either a key or a subkey were found");

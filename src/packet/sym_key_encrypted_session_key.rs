@@ -5,6 +5,7 @@ use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
 use nom::number::streaming::be_u8;
+use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -230,6 +231,60 @@ impl SymKeyEncryptedSessionKey {
             s2k,
             sym_algorithm: alg,
             encrypted_key: Some(encrypted_key),
+        })
+    }
+
+    pub fn encrypt6<F, R: CryptoRng + Rng>(
+        rng: &mut R,
+        msg_pw: F,
+        session_key: &[u8],
+        s2k: StringToKey,
+        sym_algorithm: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+    ) -> Result<Self>
+    where
+        F: FnOnce() -> String + Clone,
+    {
+        // Initial key material is the s2k derived key.
+        let ikm = s2k.derive_key(&msg_pw(), sym_algorithm.key_size())?;
+        // No salt is used
+        let salt = None;
+
+        let info = [
+            Tag::SymKeyEncryptedSessionKey.encode(), // packet type
+            0x06,                                    // version
+            sym_algorithm.into(),
+            aead.into(),
+        ];
+
+        let hk = hkdf::Hkdf::<Sha256>::new(salt, &ikm);
+        let mut okm = [0u8; 42];
+        hk.expand(&info, &mut okm).expect("42");
+        debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
+
+        let mut iv = vec![0; aead.iv_size()];
+        rng.fill_bytes(&mut iv);
+        debug!("nonce: {}", hex::encode(&iv));
+
+        // AEAD encrypt
+        let mut encrypted_key = session_key.to_vec();
+        let auth_tag =
+            aead.encrypt_in_place(&sym_algorithm, &okm, &iv, &info, &mut encrypted_key)?;
+
+        debug!(
+            "encrypted_key: {} - auth_tag: {}",
+            hex::encode(&encrypted_key),
+            hex::encode(&auth_tag)
+        );
+
+        Ok(SymKeyEncryptedSessionKey::V6 {
+            packet_version: Default::default(),
+            sym_algorithm,
+            s2k,
+            aead,
+            iv,
+            auth_tag,
+            encrypted_key,
         })
     }
 }
