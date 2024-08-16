@@ -4,7 +4,8 @@ on:
   pull_request:
   push:
     branches:
-      - master
+      - main
+      - v-0-13
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -12,7 +13,7 @@ concurrency:
 env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: -Dwarnings
-  RUST_NIGHTLY: nightly-2024-02-07
+  RUST_NIGHTLY: nightly-2024-07-07
 
 jobs:
   build_and_test_nix:
@@ -22,7 +23,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - nightly-2024-02-07
+          - nightly-2024-07-07
           - beta
           - stable
 
@@ -120,7 +121,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2024-02-07
+          - nightly-2024-07-07
           - beta
           - stable
         target:
@@ -234,7 +235,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2024-02-07
+          - nightly-2024-07-07
           - beta
           - stable
 
