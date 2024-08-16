@@ -3,6 +3,10 @@ use generic_array::GenericArray;
 
 use crate::errors::Result;
 
+/// Default initial value (IV)
+/// https://www.rfc-editor.org/rfc/rfc3394#section-2.2.3.1
+const IV: [u8; 8] = [0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6, 0xA6];
+
 /// AES Key Wrap
 /// As defined in RFC 3394.
 pub fn wrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>> {

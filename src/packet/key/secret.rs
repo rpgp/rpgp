@@ -14,6 +14,7 @@ use crate::{
         Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
         SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
     },
+    EskBytes,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
@@ -425,8 +426,13 @@ impl PublicKeyTrait for SecretKey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        v6_esk: bool,
+    ) -> Result<EskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -472,8 +478,13 @@ impl PublicKeyTrait for SecretSubkey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        v6_esk: bool,
+    ) -> Result<EskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -519,8 +530,13 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
         self.details.verify_signature(hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.details.encrypt(rng, plain)
+    fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        v6_esk: bool,
+    ) -> Result<EskBytes> {
+        self.details.encrypt(rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {

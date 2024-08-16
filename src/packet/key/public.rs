@@ -4,14 +4,16 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
+use crate::types::Mpi;
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{
-        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SignatureBytes, Tag, Version,
     },
+    EskBytes,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -471,12 +473,18 @@ impl PublicKeyTrait for PubKeyInner {
         }
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        let res = match self.public_params {
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        mut rng: R,
+        plain: &[u8],
+        v6_esk: bool, // true for v6 PK-/SKESK, false for v3/4
+    ) -> Result<EskBytes> {
+        match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
                 crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
             }
-            PublicParams::EdDSALegacy { .. } => bail!("EdDSA is only used for signing"),
+            PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
+            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
             PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
             PublicParams::ECDH {
                 ref curve,
@@ -492,17 +500,38 @@ impl PublicKeyTrait for PubKeyInner {
                 p.as_bytes(),
                 plain,
             ),
+            PublicParams::X25519 { ref public } => {
+                if v6_esk {
+                    let (ephemeral, session_key) =
+                        crypto::x25519::encrypt(&mut rng, *public, plain)?;
+
+                    Ok(EskBytes::X25519 {
+                        ephemeral,
+                        session_key,
+                        sym_alg: None,
+                    })
+                } else {
+                    // v3 pkesk / v4 skesk
+
+                    // byte 0 is the symmetric algo, in v3 pkesk
+                    let sym_alg = Some(plain[0].into());
+                    // for v3: strip algorithm
+                    let plain = &plain[1..];
+
+                    let (ephemeral, session_key) =
+                        crypto::x25519::encrypt(&mut rng, *public, plain)?;
+
+                    Ok(EskBytes::X25519 {
+                        ephemeral,
+                        session_key,
+                        sym_alg,
+                    })
+                }
+            }
             PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
             PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
             PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
-            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
-            PublicParams::X25519 { .. } => unimplemented_err!("X25519"),
-        }?;
-
-        Ok(res
-            .iter()
-            .map(|v| Mpi::from_raw_slice(&v[..]))
-            .collect::<Vec<_>>())
+        }
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -561,8 +590,13 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        v6_esk: bool,
+    ) -> Result<EskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -608,8 +642,13 @@ impl PublicKeyTrait for PublicSubkey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        v6_esk: bool,
+    ) -> Result<EskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {

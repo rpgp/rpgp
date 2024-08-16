@@ -10,6 +10,7 @@ use crate::crypto::{
 };
 use crate::errors::{Error, Result};
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::EskBytes;
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -71,17 +72,18 @@ impl KeyParams for SecretKey {
 }
 
 impl Decryptor for SecretKey {
-    fn decrypt(&self, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
+    type Data<'a> = (&'a Mpi, &'a [u8], &'a [u8]);
+
+    fn decrypt(&self, data: Self::Data<'_>) -> Result<Vec<u8>> {
+        let (
+            public_point,
+            encrypted_session_key, // encrypted and wrapped value derived from the session key
+            fingerprint,
+        ) = data;
+
         debug!("ECDH decrypt");
 
-        ensure_eq!(mpis.len(), 3);
-
-        let public_point = &mpis[0];
-
-        let encrypted_key_len: usize = mpis[1].first().map(|l| *l as usize).unwrap_or(0);
-
-        // encrypted and wrapped value derived from the session key
-        let encrypted_session_key = mpis[2].as_bytes();
+        let encrypted_key_len: usize = encrypted_session_key.len();
 
         let (curve, alg_sym, hash) = self.key_params();
 
@@ -409,7 +411,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     fingerprint: &[u8],
     q: &[u8],
     plain: &[u8],
-) -> Result<Vec<Vec<u8>>> {
+) -> Result<EskBytes> {
     debug!("ECDH encrypt");
 
     // Maximum length for `plain`:
@@ -468,11 +470,13 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let plain_padded = pad(plain);
 
     // Perform AES Key Wrap
-    let encrypted_key = aes_kw::wrap(&z, &plain_padded)?;
+    let encrypted_session_key = aes_kw::wrap(&z, &plain_padded)?;
 
-    let encrypted_key_len = vec![u8::try_from(encrypted_key.len())?];
-
-    Ok(vec![encoded_public, encrypted_key_len, encrypted_key])
+    // Ok(vec![encoded_public, encrypted_key_len, encrypted_key])
+    Ok(EskBytes::Ecdh {
+        public_point: Mpi::from_raw_slice(&encoded_public),
+        encrypted_session_key,
+    })
 }
 
 /// Derive a shared secret in encryption, for a Rust Crypto curve.
@@ -536,7 +540,7 @@ mod tests {
                     let mut plain = vec![0u8; text_size];
                     rng.fill_bytes(&mut plain);
 
-                    let mpis = match pkey {
+                    let values = match pkey {
                         PublicParams::ECDH {
                             ref curve,
                             ref p,
@@ -555,10 +559,16 @@ mod tests {
                         _ => panic!("invalid key generated"),
                     };
 
-                    let mpis = mpis.into_iter().map(Into::into).collect::<Vec<Mpi>>();
-
-                    let decrypted = match skey.as_ref().as_repr(&pkey).unwrap() {
-                        SecretKeyRepr::ECDH(ref skey) => skey.decrypt(&mpis, &fingerprint).unwrap(),
+                    let decrypted = match (skey.as_ref().as_repr(&pkey).unwrap(), values) {
+                        (
+                            SecretKeyRepr::ECDH(ref skey),
+                            EskBytes::Ecdh {
+                                public_point,
+                                encrypted_session_key,
+                            },
+                        ) => skey
+                            .decrypt((&public_point, &encrypted_session_key, &fingerprint))
+                            .unwrap(),
                         _ => panic!("invalid key generated"),
                     };
 

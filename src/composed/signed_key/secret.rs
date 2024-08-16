@@ -12,10 +12,10 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
-    SecretKeyTrait, SignatureBytes, Tag,
+    Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait,
+    SignatureBytes, Tag,
 };
-use crate::{armor, ArmorOptions, SignedPublicKey};
+use crate::{armor, ArmorOptions, EskBytes, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -234,8 +234,8 @@ impl PublicKeyTrait for SignedSecretKey {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.primary_key.encrypt(rng, plain)
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8], v6_esk: bool) -> Result<EskBytes> {
+        self.primary_key.encrypt(rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
@@ -366,8 +366,8 @@ impl PublicKeyTrait for SignedSecretSubKey {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.key.encrypt(rng, plain)
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8], v6_esk: bool) -> Result<EskBytes> {
+        self.key.encrypt(rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
@@ -525,6 +525,8 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         )?;
 
         msg.verify(&ssk.primary_key)?;
+
+        // FIXME: test roundtrip unlock/lock?
 
         Ok(())
     }

@@ -5,7 +5,8 @@ use rand::{CryptoRng, Rng};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicParams, SignatureBytes};
+use crate::types::{Fingerprint, KeyId, KeyVersion, PublicParams, SignatureBytes};
+use crate::EskBytes;
 
 pub trait PublicKeyTrait: std::fmt::Debug {
     fn version(&self) -> KeyVersion;
@@ -31,7 +32,7 @@ pub trait PublicKeyTrait: std::fmt::Debug {
     ) -> Result<()>;
 
     /// Encrypt the given `plain` for this key.
-    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>>;
+    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8], v6_esk: bool) -> Result<EskBytes>;
 
     // TODO: figure out a better place for this
     /// This is the data used for hashing in a signature. Only uses the public portion of the key.
@@ -67,8 +68,8 @@ impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
         (*self).verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        (*self).encrypt(rng, plain)
+    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8], v6_esk: bool) -> Result<EskBytes> {
+        (*self).encrypt(rng, plain, v6_esk)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
