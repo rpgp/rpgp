@@ -9,7 +9,7 @@ use crate::types::{Tag, Version};
 const PGP: [u8; 3] = [0x50, 0x47, 0x50];
 
 /// Marker Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.8
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.8>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Marker {
     packet_version: Version,

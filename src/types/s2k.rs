@@ -176,7 +176,7 @@ impl StringToKey {
         }
     }
 
-    pub fn new_argon2<R: CryptoRng + Rng>(rng: &mut R, t: u8, p: u8, m_enc: u8) -> Self {
+    pub fn new_argon2<R: CryptoRng + Rng>(mut rng: R, t: u8, p: u8, m_enc: u8) -> Self {
         let mut salt = [0u8; 16];
         rng.fill(&mut salt[..]);
 
@@ -207,7 +207,7 @@ impl StringToKey {
     }
 
     /// String-To-Key methods are used to convert a given password string into a key.
-    /// Ref: https://tools.ietf.org/html/rfc4880#section-3.7
+    /// Ref: <https://tools.ietf.org/html/rfc4880#section-3.7>
     pub fn derive_key(&self, passphrase: &str, key_size: usize) -> Result<Vec<u8>> {
         let key = match self {
             Self::Simple { hash_alg, .. }
@@ -321,6 +321,19 @@ impl StringToKey {
 
         Ok(key)
     }
+
+    #[allow(clippy::len_without_is_empty)]
+    pub(crate) fn len(&self) -> Result<u8> {
+        let len = match self {
+            Self::Simple { .. } => 2,
+            Self::Salted { .. } => 10,
+            Self::IteratedAndSalted { .. } => 11,
+            Self::Argon2 { .. } => 20,
+            _ => bail!("not implemented for StringToKey: {:?}", self),
+        };
+
+        Ok(len)
+    }
 }
 
 pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {
@@ -424,16 +437,17 @@ impl Serialize for StringToKey {
 #[cfg(test)]
 mod tests {
     use rand::distributions::{Alphanumeric, DistString};
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
-
     use crate::ArmorOptions;
 
     #[test]
     #[ignore]
     fn iterated_and_salted() {
         let sizes = [10, 100, 1000];
-        let mut rng = rand::thread_rng();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let algs = [
             HashAlgorithm::SHA1,
@@ -468,7 +482,7 @@ mod tests {
     #[test]
     #[ignore] // slow in debug mode
     fn argon2() {
-        // test vectors from draft-ietf-openpgp-crypto-refresh
+        // test vectors from RFC 9580
 
         // 16 byte key size
         let s2k = StringToKey::Argon2 {
@@ -533,7 +547,7 @@ mod tests {
     #[ignore] // slow in debug mode
     fn argon2_skesk_msg() {
         // Tests decrypting the messages from
-        // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-sample-messages-encrypted-u
+        // https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-messages-encrypted-u
         //
         // "These messages are the literal data "Hello, world!" encrypted using v1 SEIPD, with Argon2
         // and the passphrase "password", using different session key sizes."

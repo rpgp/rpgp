@@ -2,16 +2,15 @@ use std::io;
 
 use rand::{CryptoRng, Rng};
 
-use super::{KeyId, KeyVersion, PublicParams};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::types::Mpi;
+use crate::types::{Fingerprint, KeyId, KeyVersion, Mpi, PublicParams, SignatureBytes};
 
 pub trait PublicKeyTrait: std::fmt::Debug {
     fn version(&self) -> KeyVersion;
 
-    fn fingerprint(&self) -> Vec<u8>;
+    fn fingerprint(&self) -> Fingerprint;
 
     /// Returns the Key ID of the associated primary key.
     fn key_id(&self) -> KeyId;
@@ -24,14 +23,20 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 
     /// Verify a signed message.
     /// Data will be hashed using `hash`, before verifying.
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()>;
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()>;
 
     /// Encrypt the given `plain` for this key.
-    fn encrypt<R: CryptoRng + Rng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>>;
+    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>>;
 
     // TODO: figure out a better place for this
     /// This is the data used for hashing in a signature. Only uses the public portion of the key.
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()>;
+
     fn public_params(&self) -> &PublicParams;
 
     fn is_signing_key(&self) -> bool {
@@ -53,11 +58,16 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 }
 
 impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
-    fn verify_signature(&self, hash: HashAlgorithm, data: &[u8], sig: &[Mpi]) -> Result<()> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
         (*self).verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: CryptoRng + Rng>(&self, rng: &mut R, plain: &[u8]) -> Result<Vec<Mpi>> {
+    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
         (*self).encrypt(rng, plain)
     }
 
@@ -72,7 +82,7 @@ impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
         (*self).version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         (*self).fingerprint()
     }
 

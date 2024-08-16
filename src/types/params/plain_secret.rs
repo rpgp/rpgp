@@ -2,14 +2,18 @@ use std::hash::Hasher;
 use std::io;
 
 use byteorder::{BigEndian, ByteOrder};
+use hkdf::Hkdf;
 use nom::combinator::map;
 use nom::sequence::tuple;
 use rsa::RsaPrivateKey;
+use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::checksum;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
 use crate::types::*;
@@ -32,6 +36,8 @@ pub enum PlainSecretParams {
     ECDH(#[debug("..")] Mpi),
     Elgamal(#[debug("..")] Mpi),
     EdDSALegacy(#[debug("..")] Mpi),
+    Ed25519(#[debug("..")] [u8; 32]),
+    X25519(#[debug("..")] [u8; 32]),
 }
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
@@ -51,6 +57,8 @@ pub enum PlainSecretParamsRef<'a> {
     ECDH(#[debug("..")] MpiRef<'a>),
     Elgamal(#[debug("..")] MpiRef<'a>),
     EdDSALegacy(#[debug("..")] MpiRef<'a>),
+    Ed25519(#[debug("..")] &'a [u8; 32]),
+    X25519(#[debug("..")] &'a [u8; 32]),
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
@@ -67,6 +75,8 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::ECDH(v) => PlainSecretParams::ECDH((*v).to_owned()),
             PlainSecretParamsRef::Elgamal(v) => PlainSecretParams::Elgamal((*v).to_owned()),
             PlainSecretParamsRef::EdDSALegacy(v) => PlainSecretParams::EdDSALegacy((*v).to_owned()),
+            PlainSecretParamsRef::Ed25519(s) => PlainSecretParams::Ed25519((*s).to_owned()),
+            PlainSecretParamsRef::X25519(s) => PlainSecretParams::X25519((*s).to_owned()),
         }
     }
 
@@ -96,6 +106,12 @@ impl<'a> PlainSecretParamsRef<'a> {
             }
             PlainSecretParamsRef::EdDSALegacy(x) => {
                 (*x).to_writer(writer)?;
+            }
+            PlainSecretParamsRef::Ed25519(s) => {
+                writer.write_all(&s[..])?;
+            }
+            PlainSecretParamsRef::X25519(s) => {
+                writer.write_all(&s[..])?;
             }
         }
 
@@ -218,6 +234,17 @@ impl<'a> PlainSecretParamsRef<'a> {
                 },
                 _ => unreachable!("inconsistent key state"),
             },
+            PlainSecretParamsRef::Ed25519(d) => {
+                Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
+                    oid: ECCCurve::Ed25519.oid(),
+                    secret: **d,
+                }))
+            }
+            PlainSecretParamsRef::X25519(d) => {
+                Ok(SecretKeyRepr::X25519(crate::crypto::x25519::SecretKey {
+                    secret: **d,
+                }))
+            }
             PlainSecretParamsRef::DSA(x) => Ok(SecretKeyRepr::DSA(crate::crypto::dsa::SecretKey {
                 x: x.into(),
             })),
@@ -300,15 +327,20 @@ impl PlainSecretParams {
             PlainSecretParams::ECDH(v) => PlainSecretParamsRef::ECDH(v.as_ref()),
             PlainSecretParams::Elgamal(v) => PlainSecretParamsRef::Elgamal(v.as_ref()),
             PlainSecretParams::EdDSALegacy(v) => PlainSecretParamsRef::EdDSALegacy(v.as_ref()),
+            PlainSecretParams::Ed25519(s) => PlainSecretParamsRef::Ed25519(s),
+            PlainSecretParams::X25519(s) => PlainSecretParamsRef::X25519(s),
         }
     }
 
     pub fn encrypt(
-        self,
+        &self,
         passphrase: &str,
         s2k_params: S2kParams,
-        version: KeyVersion,
+        pub_key: &(impl PublicKeyTrait + Serialize),
+        secret_tag: Option<Tag>,
     ) -> Result<EncryptedSecretParams> {
+        let version = pub_key.version();
+
         match &s2k_params {
             S2kParams::Unprotected => bail!("cannot encrypt to uprotected"),
             S2kParams::Cfb { sym_alg, s2k, iv } => {
@@ -328,6 +360,47 @@ impl PlainSecretParams {
                         data
                     }
                     KeyVersion::V5 => unimplemented_err!("v5 encryption"),
+                    KeyVersion::V6 => unimplemented_err!("v6 encryption"),
+                    KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
+                };
+
+                Ok(EncryptedSecretParams::new(enc_data, s2k_params))
+            }
+            S2kParams::Aead {
+                sym_alg,
+                aead_mode,
+                s2k,
+                nonce,
+            } => {
+                let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
+
+                let enc_data = match version {
+                    KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
+                    KeyVersion::V3 => unimplemented_err!("v3 encryption"),
+                    KeyVersion::V4 => unimplemented_err!("v4 aead encryption"), // FIXME: implement
+                    KeyVersion::V5 => unimplemented_err!("v5 encryption"),
+                    KeyVersion::V6 => {
+                        let mut data = Vec::new();
+                        self.as_ref()
+                            .to_writer_raw(&mut data)
+                            .expect("preallocated vector");
+
+                        let Some(secret_tag) = secret_tag else {
+                            bail!("no secret_tag provided");
+                        };
+
+                        let (okm, ad) =
+                            s2k_usage_aead(&key, secret_tag, pub_key, *sym_alg, *aead_mode)?;
+
+                        // AEAD encrypt
+                        let tag =
+                            aead_mode.encrypt_in_place(sym_alg, &okm, nonce, &ad, &mut data)?;
+
+                        // append tag to now encrypted secret params
+                        data.extend_from_slice(&tag);
+
+                        data
+                    }
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
@@ -336,23 +409,23 @@ impl PlainSecretParams {
             _ => unimplemented_err!("{:?} not implemented yet", s2k_params),
         }
     }
-}
 
-impl Serialize for PlainSecretParams {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.as_ref().to_writer(writer)
-    }
-}
-
-impl<'a> Serialize for PlainSecretParamsRef<'a> {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+    pub fn to_writer<W: io::Write>(&self, writer: &mut W, version: KeyVersion) -> Result<()> {
         writer.write_all(&[self.string_to_key_id()])?;
+
         let mut hasher = checksum::SimpleChecksum::default();
         {
             let mut tee = TeeWriter::new(&mut hasher, writer);
-            self.to_writer_raw(&mut tee)?;
+            self.as_ref().to_writer_raw(&mut tee)?;
         }
-        hasher.to_writer(writer)?;
+
+        if version == KeyVersion::V3 || version == KeyVersion::V4 {
+            // Only for a version 3 or 4 packet where the string-to-key usage octet is zero, a
+            // two-octet checksum of the algorithm-specific portion (sum of all octets, mod 65536).
+            //
+            // https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.3-3.6.1
+            hasher.to_writer(writer)?;
+        }
 
         Ok(())
     }
@@ -372,13 +445,21 @@ fn parse_secret_params(
         PublicKeyAlgorithm::EdDSALegacy => {
             map(mpi, |m| PlainSecretParams::EdDSALegacy(m.to_owned()))(i)
         }
+        PublicKeyAlgorithm::Ed25519 => {
+            let (i, s) = nom::bytes::complete::take(32u8)(i)?;
+            Ok((i, PlainSecretParams::Ed25519(s.try_into().expect("foo"))))
+        }
+        PublicKeyAlgorithm::X25519 => {
+            let (i, s) = nom::bytes::complete::take(32u8)(i)?;
+            Ok((i, PlainSecretParams::X25519(s.try_into().expect("foo"))))
+        }
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
             nom::error::ErrorKind::Switch,
         ))),
     }
 }
 
-// Parse the decrpyted private params of an RSA private key.
+// Parse the decrypted private params of an RSA private key.
 fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParams> {
     map(tuple((mpi, mpi, mpi, mpi)), |(d, p, q, u)| {
         PlainSecretParams::RSA {
@@ -388,4 +469,40 @@ fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParams> {
             u: u.to_owned(),
         }
     })(i)
+}
+
+/// Derive output keying material and associated data for the s2k usage method AEAD.
+///
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-secret-key-packet-formats
+pub(crate) fn s2k_usage_aead(
+    derived: &[u8],
+    secret_tag: Tag,
+    pub_key: &(impl PublicKeyTrait + Serialize),
+    sym_alg: SymmetricKeyAlgorithm,
+    aead_mode: AeadAlgorithm,
+) -> Result<([u8; 32], Vec<u8>)> {
+    // HKDF to derive output keying material
+    let hk = Hkdf::<Sha256>::new(None, derived);
+    let mut okm = [0u8; 32];
+
+    let type_id = u8::from(secret_tag) | 0xc0;
+
+    // HKDF info parameter
+    let info = [
+        type_id,
+        pub_key.version().into(),
+        sym_alg.into(),
+        aead_mode.into(),
+    ];
+
+    hk.expand(&info, &mut okm)
+        .expect("32 is a valid length for Sha256 to output");
+
+    // Additional data:
+    // - the Packet Type ID in OpenPGP format encoding
+    // - followed by the public key packet fields, starting with the packet version number
+    let mut ad = vec![type_id];
+    pub_key.to_writer(&mut ad)?;
+
+    Ok((okm, ad))
 }

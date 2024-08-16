@@ -167,9 +167,9 @@ where
             p.tag() == Tag::PublicSubkey || (parse_secrect_subkeys && p.tag() == Tag::SecretSubkey)
         })
     }) {
-        // -- Only V4 keys should have sub keys
-        if primary_key.version() != KeyVersion::V4 {
-            return Some(Err(format_err!("only V4 keys can have subkeys")));
+        // -- V2/3 keys can not have sub keys
+        if primary_key.version() == KeyVersion::V2 || primary_key.version() == KeyVersion::V3 {
+            return Some(Err(format_err!("V2/3 keys can not have subkeys")));
         }
 
         let packet = match res {

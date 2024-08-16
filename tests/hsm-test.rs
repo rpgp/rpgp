@@ -8,6 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
+use pgp::types::{Fingerprint, SignatureBytes};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey};
@@ -56,16 +57,12 @@ impl PublicKeyTrait for FakeHsm {
         &self,
         hash: HashAlgorithm,
         data: &[u8],
-        sig: &[Mpi],
+        sig: &SignatureBytes,
     ) -> pgp::errors::Result<()> {
         self.public_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        rng: &mut R,
-        plain: &[u8],
-    ) -> pgp::errors::Result<Vec<Mpi>> {
+    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8]) -> pgp::errors::Result<Vec<Mpi>> {
         self.public_key.encrypt(rng, plain)
     }
 
@@ -80,7 +77,7 @@ impl PublicKeyTrait for FakeHsm {
         self.public_key.version()
     }
 
-    fn fingerprint(&self) -> Vec<u8> {
+    fn fingerprint(&self) -> Fingerprint {
         self.public_key.fingerprint()
     }
 
@@ -122,7 +119,7 @@ impl SecretKeyTrait for FakeHsm {
         _key_pw: F,
         _hash: HashAlgorithm,
         data: &[u8],
-    ) -> pgp::errors::Result<Vec<Mpi>>
+    ) -> pgp::errors::Result<SignatureBytes>
     where
         F: FnOnce() -> String,
     {
@@ -155,7 +152,7 @@ impl SecretKeyTrait for FakeHsm {
             _ => unimplemented!(),
         };
 
-        Ok(mpis)
+        Ok(mpis.into())
     }
 
     fn public_key(&self) -> Self::PublicKey {
@@ -219,7 +216,7 @@ impl FakeHsm {
                     encrypted_session_key,
                     encrypted_key_len,
                     &(curve.clone(), *alg_sym, *hash),
-                    &self.public_key.fingerprint(),
+                    self.public_key.fingerprint().as_bytes(),
                 )?;
 
                 decrypted_key
@@ -469,21 +466,20 @@ fn card_sign() {
         const DATA: &[u8] = b"Hello World";
 
         // -- use hsm signer
-        let signature = SignatureConfig::new_v4(
-            packet::SignatureVersion::V4,
+        let mut config = SignatureConfig::v4(
             packet::SignatureType::Binary,
             hsm.public_key().algorithm(),
             HashAlgorithm::SHA2_256,
-            vec![
-                packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
-                    DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
-                )),
-                packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())),
-            ],
-            vec![],
         );
 
-        let signature = signature.sign(&hsm, String::new, DATA).unwrap();
+        config.hashed_subpackets = vec![
+            packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
+                DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
+            )),
+            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())),
+        ];
+
+        let signature = config.sign(&hsm, String::new, DATA).unwrap();
 
         signature.verify(&pubkey, DATA).expect("ok");
     }

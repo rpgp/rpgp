@@ -9,7 +9,7 @@ use sha1_checked::{CollisionResult, Sha1};
 use crate::errors::{Error, Result};
 
 /// Available hash algorithms.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-9.4
+/// Ref: <https://tools.ietf.org/html/rfc4880.html#section-9.4>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive, Hash)]
 #[repr(u8)]
 pub enum HashAlgorithm {
@@ -35,6 +35,22 @@ pub enum HashAlgorithm {
 impl Default for HashAlgorithm {
     fn default() -> Self {
         Self::SHA2_256
+    }
+}
+
+impl HashAlgorithm {
+    /// V6 signature salt size
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#hash-algos>
+    pub const fn salt_len(&self) -> Option<usize> {
+        match self {
+            Self::SHA2_224 => Some(16),
+            Self::SHA2_256 => Some(16),
+            Self::SHA2_384 => Some(24),
+            Self::SHA2_512 => Some(32),
+            Self::SHA3_256 => Some(16),
+            Self::SHA3_512 => Some(32),
+            _ => None,
+        }
     }
 }
 

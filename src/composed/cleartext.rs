@@ -4,7 +4,6 @@ use std::collections::HashSet;
 use std::io::{BufRead, Read};
 
 use buffer_redux::BufReader;
-
 use chrono::SubsecRound;
 use log::debug;
 use nom::branch::alt;
@@ -12,7 +11,6 @@ use nom::bytes::streaming::take_until1;
 use nom::character::streaming::line_ending;
 use nom::combinator::{complete, map_res};
 use nom::IResult;
-use smallvec::SmallVec;
 
 use crate::armor::{self, header_parser, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
@@ -25,7 +23,7 @@ use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
 
 /// Implementation of a Cleartext Signed Message.
 ///
-/// Ref https://datatracker.ietf.org/doc/html/rfc4880.html#section-7
+/// Ref <https://datatracker.ietf.org/doc/html/rfc4880.html#section-7>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleartextSignedMessage {
     /// Normalized and dash-escaped representation of the signed text.
@@ -65,32 +63,31 @@ impl CleartextSignedMessage {
     }
 
     /// Sign the given text.
-    pub fn sign<F>(text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
+    pub fn sign<R, F>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
     where
+        R: rand::Rng + rand::CryptoRng,
         F: FnOnce() -> String,
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
         let hash_algorithm = key.hash_alg();
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(
-                KeyVersion::V4,
-                SmallVec::from_slice(&key.fingerprint()),
-            )),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             )),
         ];
         let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))];
 
-        let config = SignatureConfig::new_v4(
-            Default::default(),
-            SignatureType::Text,
-            algorithm,
-            hash_algorithm,
-            hashed_subpackets,
-            unhashed_subpackets,
-        );
+        let mut config = match key.version() {
+            KeyVersion::V4 => SignatureConfig::v4(SignatureType::Text, algorithm, hash_algorithm),
+            KeyVersion::V6 => {
+                SignatureConfig::v6(rng, SignatureType::Text, algorithm, hash_algorithm)?
+            }
+            v => bail!("unsupported key version {:?}", v),
+        };
+        config.hashed_subpackets = hashed_subpackets;
+        config.unhashed_subpackets = unhashed_subpackets;
 
         Self::new(text, config, key, key_pw)
     }
@@ -295,7 +292,7 @@ fn validate_headers(headers: Headers) -> Result<Vec<HashAlgorithm>> {
 ///
 /// This implementation is implicitly agnostic between "\n" and "\r\n" line endings.
 ///
-/// Ref https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-dash-escaped-text
+/// Ref https://www.rfc-editor.org/rfc/rfc9580.html#name-dash-escaped-text
 fn dash_escape(text: &str) -> String {
     let mut out = String::new();
     for line in text.split_inclusive('\n') {
@@ -360,9 +357,11 @@ fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::{Any, SignedSecretKey};
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
+    use crate::{Any, SignedSecretKey};
 
     #[test]
     fn test_cleartext_openpgp_1() {
@@ -552,20 +551,28 @@ mod tests {
 
     #[test]
     fn test_sign() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign("hello\n-world-what-\nis up\n", &key, String::new)
-            .unwrap();
+        let msg = CleartextSignedMessage::sign(
+            &mut rng,
+            "hello\n-world-what-\nis up\n",
+            &key,
+            String::new,
+        )
+        .unwrap();
         msg.verify(&key.public_key()).unwrap();
     }
 
     #[test]
     fn test_sign_no_newline() {
         const MSG: &str = "message without newline at the end";
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(MSG, &key, String::new).unwrap();
+        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &key, String::new).unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 

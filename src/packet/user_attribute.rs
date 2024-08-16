@@ -1,25 +1,26 @@
 use std::{fmt, io};
 
-use chrono::{SubsecRound, Utc};
-
+use aes_gcm::aead::rand_core::CryptoRng;
 use byteorder::{LittleEndian, WriteBytesExt};
+use chrono::{SubsecRound, Utc};
 use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_parser, rest};
 use nom::multi::length_data;
 use nom::number::streaming::{be_u8, le_u16};
 use nom::sequence::pair;
+use rand::Rng;
 
 use crate::errors::{IResult, Result};
-use crate::packet::{PacketTrait, Signature, SignatureConfigBuilder, SignatureType, Subpacket};
+use crate::packet::{
+    PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+};
 use crate::ser::Serialize;
-use crate::types::{PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Version};
+use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Version};
 use crate::util::{packet_length, write_packet_length};
 
-use super::SubpacketData;
-
 /// User Attribute Packet
-/// https://tools.ietf.org/html/rfc4880.html#section-5.12
+/// <https://tools.ietf.org/html/rfc4880.html#section-5.12>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum UserAttribute {
     Image {
@@ -66,34 +67,54 @@ impl UserAttribute {
     }
 
     /// Create a self-signature
-    pub fn sign<F>(&self, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUserAttribute>
+    pub fn sign<R, F>(
+        &self,
+        rng: R,
+        key: &impl SecretKeyTrait,
+        key_pw: F,
+    ) -> Result<SignedUserAttribute>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
-        self.sign_third_party(key, key_pw, key)
+        self.sign_third_party(rng, key, key_pw, key)
     }
 
     /// Create a third-party signature
-    pub fn sign_third_party<F>(
+    pub fn sign_third_party<R, F>(
         &self,
+        mut rng: R,
         signer: &impl SecretKeyTrait,
         signer_pw: F,
         signee: &impl PublicKeyTrait,
     ) -> Result<SignedUserAttribute>
     where
+        R: CryptoRng + Rng,
         F: FnOnce() -> String,
     {
-        let config = SignatureConfigBuilder::default()
-            .typ(SignatureType::CertGeneric)
-            .pub_alg(signer.algorithm())
-            .hash_alg(signer.hash_alg())
-            .hashed_subpackets(vec![Subpacket::regular(
-                SubpacketData::SignatureCreationTime(Utc::now().trunc_subsecs(0)),
-            )])
-            .unhashed_subpackets(vec![Subpacket::regular(SubpacketData::Issuer(
-                signer.key_id(),
-            ))])
-            .build()?;
+        let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
+            Utc::now().trunc_subsecs(0),
+        ))];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))];
+
+        let mut config = match signer.version() {
+            KeyVersion::V4 => SignatureConfig::v4(
+                SignatureType::CertGeneric,
+                signer.algorithm(),
+                signer.hash_alg(),
+            ),
+
+            KeyVersion::V6 => SignatureConfig::v6(
+                &mut rng,
+                SignatureType::CertGeneric,
+                signer.algorithm(),
+                signer.hash_alg(),
+            )?,
+            v => unsupported_err!("unsupported key version: {:?}", v),
+        };
+
+        config.hashed_subpackets = hashed_subpackets;
+        config.unhashed_subpackets = unhashed_subpackets;
 
         let sig =
             config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;
@@ -169,7 +190,7 @@ impl Serialize for UserAttribute {
             } => {
                 // typ: image
                 writer.write_all(&[0x01])?;
-                writer.write_u16::<LittleEndian>((header.len() + 2) as u16)?;
+                writer.write_u16::<LittleEndian>((header.len() + 2).try_into()?)?;
                 writer.write_all(header)?;
 
                 // actual data

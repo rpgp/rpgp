@@ -17,8 +17,8 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::packet::signature::types::*;
 use crate::types::{
-    mpi, CompressionAlgorithm, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey, RevocationKeyClass,
-    Version,
+    mpi, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, Mpi, MpiRef, RevocationKey,
+    RevocationKeyClass, SignatureBytes, Version,
 };
 use crate::util::{clone_into_array, packet_length};
 
@@ -70,8 +70,8 @@ fn key_expiration(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Parse a preferred symmetric algorithms subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.7
+/// Parse a preferred symmetric algorithms subpacket (for SEIPD v1)
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#preferred-v1-seipd
 fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
         .iter()
@@ -268,17 +268,64 @@ fn embedded_sig(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse an issuer subpacket
 /// Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
 fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    map(
-        pair(map(be_u8, KeyVersion::from), rest),
-        |(version, fingerprint)| {
-            SubpacketData::IssuerFingerprint(version, SmallVec::from_slice(fingerprint))
-        },
-    )(i)
+    let (i, version) = map(be_u8, KeyVersion::from)(i)?;
+
+    // This subpacket is only used for v4 and newer fingerprints
+    if version != KeyVersion::V4 && version != KeyVersion::V5 && version != KeyVersion::V6 {
+        return Err(invalid_key_version(version));
+    }
+
+    if let Some(fingerprint_len) = version.fingerprint_len() {
+        let (i, fingerprint) = take(fingerprint_len)(i)?;
+        let fp = Fingerprint::new(version, fingerprint)?;
+
+        Ok((i, SubpacketData::IssuerFingerprint(fp)))
+    } else {
+        Err(invalid_key_version(version))
+    }
 }
 
-/// Parse a preferred aead subpacket
-fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+/// Parse a preferred encryption modes subpacket (non-RFC subpacket for GnuPG "OCB" mode)
+fn preferred_encryption_modes(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[AeadAlgorithm; 2]> = body.iter().map(|v| AeadAlgorithm::from(*v)).collect();
+
+    Ok((&b""[..], SubpacketData::PreferredEncryptionModes(list)))
+}
+
+/// Parse an intended recipient fingerprint subpacket
+fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
+    let (i, version) = map(be_u8, KeyVersion::from)(i)?;
+
+    // This subpacket is only used for v4 and newer fingerprints
+    if version != KeyVersion::V4 && version != KeyVersion::V5 && version != KeyVersion::V6 {
+        return Err(invalid_key_version(version));
+    }
+
+    if let Some(fingerprint_len) = version.fingerprint_len() {
+        let (i, fingerprint) = take(fingerprint_len)(i)?;
+        let fp = Fingerprint::new(version, fingerprint)?;
+
+        Ok((i, SubpacketData::IntendedRecipientFingerprint(fp)))
+    } else {
+        Err(invalid_key_version(version))
+    }
+}
+
+/// Parse a preferred aead subpacket (for SEIPD v2)
+///
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-preferred-aead-ciphersuites
+fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+    if body.len() % 2 != 0 {
+        return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+            "Illegal preferred aead subpacket len {} must be a multiple of 2",
+            body.len(),
+        ))));
+    }
+
+    let list: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]> = body
+        .chunks(2)
+        .map(|v| (SymmetricKeyAlgorithm::from(v[0]), AeadAlgorithm::from(v[1])))
+        .collect();
 
     Ok((&b""[..], SubpacketData::PreferredAeadAlgorithms(list)))
 }
@@ -312,6 +359,8 @@ fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8
         SignatureTarget => sig_target(body),
         EmbeddedSignature => embedded_sig(body),
         IssuerFingerprint => issuer_fingerprint(body),
+        PreferredEncryptionModes => preferred_encryption_modes(body),
+        IntendedRecipientFingerprint => intended_recipient_fingerprint(body),
         PreferredAead => pref_aead_alg(body),
         Experimental(n) => Ok((
             body,
@@ -339,10 +388,12 @@ fn subpackets<'a>(i: &'a [u8]) -> IResult<&'a [u8], Vec<Subpacket>> {
     }))(i)
 }
 
-fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], Vec<Mpi>> + '_ {
+fn actual_signature(
+    typ: &PublicKeyAlgorithm,
+) -> impl Fn(&[u8]) -> IResult<&[u8], SignatureBytes> + '_ {
     move |i: &[u8]| match typ {
         &PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
-            map(mpi, |v| vec![v.to_owned()])(i)
+            map(mpi, |v| vec![v.to_owned()].into())(i)
         }
         &PublicKeyAlgorithm::DSA
         | &PublicKeyAlgorithm::ECDSA
@@ -355,7 +406,15 @@ fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8]
                 acc.push(item.to_owned());
                 acc
             },
-        )(i),
+        )(i)
+        .map(|(i, sig)| (i, sig.into())),
+
+        &PublicKeyAlgorithm::Ed25519 => {
+            let (i, sig) = nom::bytes::complete::take(64u8)(i)?;
+
+            Ok((i, SignatureBytes::Native(sig.to_vec())))
+        }
+
         &PublicKeyAlgorithm::Private100
         | &PublicKeyAlgorithm::Private101
         | &PublicKeyAlgorithm::Private102
@@ -366,8 +425,8 @@ fn actual_signature(typ: &PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8]
         | &PublicKeyAlgorithm::Private107
         | &PublicKeyAlgorithm::Private108
         | &PublicKeyAlgorithm::Private109
-        | &PublicKeyAlgorithm::Private110 => map(mpi, |v| vec![v.to_owned()])(i),
-        _ => Ok((i, vec![])), // don't assume format, could be non-MPI
+        | &PublicKeyAlgorithm::Private110 => map(mpi, |v| vec![v.to_owned()].into())(i),
+        _ => Ok((i, SignatureBytes::Native(vec![]))), // don't assume format, could be non-MPI
     }
 }
 
@@ -394,26 +453,38 @@ fn v3_parser(
             // Two-octet field holding left 16 bits of signed hash value.
             take(2usize),
         ))(i)?;
-        // One or more multiprecision integers comprising the signature.
+        // The SignatureBytes comprising the signature.
         let (i, sig) = actual_signature(&pub_alg)(i)?;
-        Ok((i, {
-            let mut s = Signature::new(
-                packet_version,
-                version,
-                typ,
-                pub_alg,
-                hash_alg,
-                clone_into_array(ls_hash),
-                sig,
-                vec![],
-                vec![],
-            );
 
-            s.config.created = Some(created);
-            s.config.issuer = Some(issuer);
-
-            s
-        }))
+        match version {
+            SignatureVersion::V2 => Ok((i, {
+                Signature::v2(
+                    packet_version,
+                    typ,
+                    pub_alg,
+                    hash_alg,
+                    created,
+                    issuer,
+                    clone_into_array(ls_hash),
+                    sig,
+                )
+            })),
+            SignatureVersion::V3 => Ok((i, {
+                Signature::v3(
+                    packet_version,
+                    typ,
+                    pub_alg,
+                    hash_alg,
+                    created,
+                    issuer,
+                    clone_into_array(ls_hash),
+                    sig,
+                )
+            })),
+            _ => Err(nom::Err::Error(crate::errors::Error::Message(
+                "must only be called for V2/V3".to_string(),
+            ))),
+        }
     }
 }
 
@@ -440,13 +511,20 @@ fn v4_parser(
             // Two-octet field holding the left 16 bits of the signed hash value.
             take(2usize),
         ))(i)?;
-        // One or more multiprecision integers comprising the signature.
+        // The SignatureBytes comprising the signature.
         let (i, sig) = actual_signature(&pub_alg)(i)?;
+
+        if version != SignatureVersion::V4 {
+            return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+                "Unsupported version {:?}",
+                version
+            ))));
+        }
+
         Ok((
             i,
-            Signature::new(
+            Signature::v4(
                 packet_version,
-                version,
                 typ,
                 pub_alg,
                 hash_alg,
@@ -459,10 +537,70 @@ fn v4_parser(
     }
 }
 
-fn invalid_version(_body: &[u8], version: SignatureVersion) -> IResult<&[u8], Signature> {
-    Err(nom::Err::Error(crate::errors::Error::Unsupported(format!(
-        "unknown signature version {version:?}"
-    ))))
+/// Parse a v6 signature packet
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-versions-4-and-6-signature-
+fn v6_parser(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
+    move |i: &[u8]| {
+        let (i, (typ, pub_alg, hash_alg, hsub, usub, ls_hash)) = tuple((
+            // One-octet signature type.
+            map_res(be_u8, SignatureType::try_from),
+            // One-octet public-key algorithm.
+            map(be_u8, PublicKeyAlgorithm::from),
+            // One-octet hash algorithm.
+            map(be_u8, HashAlgorithm::from),
+            // Four-octet scalar octet count for following hashed subpacket data.
+            // Hashed subpacket data set (zero or more subpackets).
+            map_parser(length_data(be_u32), subpackets),
+            // Four-octet scalar octet count for the following unhashed subpacket data.
+            // Unhashed subpacket data set (zero or more subpackets).
+            map_parser(length_data(be_u32), subpackets),
+            // Two-octet field holding the left 16 bits of the signed hash value.
+            take(2usize),
+        ))(i)?;
+
+        // A variable-length field containing:
+        // A one-octet salt size. The value MUST match the value defined for the hash algorithm as specified in Table 23.
+        // The salt; a random value of the specified size.
+        let (i, len) = be_u8(i)?;
+        let (i, salt) = take(len)(i)?;
+
+        if hash_alg.salt_len() != Some(salt.len()) {
+            return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+                "Illegal salt length {} found for {:?}",
+                salt.len(),
+                hash_alg
+            ))));
+        }
+
+        // The SignatureBytes comprising the signature.
+        let (i, sig) = actual_signature(&pub_alg)(i)?;
+        Ok((
+            i,
+            Signature::v6(
+                packet_version,
+                typ,
+                pub_alg,
+                hash_alg,
+                clone_into_array(ls_hash),
+                sig,
+                hsub,
+                usub,
+                salt.to_vec(),
+            ),
+        ))
+    }
+}
+
+fn invalid_sig_version(version: SignatureVersion) -> nom::Err<crate::errors::Error> {
+    nom::Err::Error(crate::errors::Error::Unsupported(format!(
+        "invalid signature version {version:?}"
+    )))
+}
+
+fn invalid_key_version(version: KeyVersion) -> nom::Err<crate::errors::Error> {
+    nom::Err::Error(crate::errors::Error::Unsupported(format!(
+        "invalid key version {version:?}"
+    )))
 }
 
 /// Parse a signature packet (Tag 2)
@@ -473,7 +611,8 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature>
         let (i, signature) = match &version {
             &SignatureVersion::V2 | &SignatureVersion::V3 => v3_parser(packet_version, version)(i),
             &SignatureVersion::V4 | &SignatureVersion::V5 => v4_parser(packet_version, version)(i),
-            _ => invalid_version(i, version),
+            &SignatureVersion::V6 => v6_parser(packet_version)(i),
+            _ => Err(invalid_sig_version(version)),
         }?;
         Ok((i, signature))
     }

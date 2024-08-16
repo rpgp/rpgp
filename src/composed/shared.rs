@@ -165,6 +165,9 @@ pub trait Deserializable: Sized {
 /// - Skip `Error::EllipticCurve`
 /// - Pass through other errors.
 pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<Packet>> {
+    // FIXME: handle padding packets (skip)
+    // FIXME: handle criticality of packets from 9580 (error, if unsupported)
+
     match &p {
         Ok(Packet::Marker(_m)) => {
             debug!("skipping marker packet");

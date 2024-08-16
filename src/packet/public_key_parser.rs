@@ -1,5 +1,5 @@
 use chrono::{DateTime, TimeZone, Utc};
-use nom::bytes::streaming::tag;
+use nom::bytes::streaming::{tag, take};
 use nom::combinator::{map, map_opt, map_res};
 use nom::multi::length_data;
 use nom::number::streaming::{be_u16, be_u32, be_u8};
@@ -49,6 +49,30 @@ fn eddsa_legacy(i: &[u8]) -> IResult<&[u8], PublicParams> {
         PublicParams::EdDSALegacy {
             curve,
             q: q.to_owned(),
+        },
+    ))
+}
+
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed2
+fn ed25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    // 32 bytes of public key
+    let (i, p) = nom::bytes::complete::take(32u8)(i)?;
+    Ok((
+        i,
+        PublicParams::Ed25519 {
+            public: p.try_into().expect("we took 32 bytes"),
+        },
+    ))
+}
+
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x
+fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    // 32 bytes of public key
+    let (i, p) = nom::bytes::complete::take(32u8)(i)?;
+    Ok((
+        i,
+        PublicParams::X25519 {
+            public: p.try_into().expect("we took 32 bytes"),
         },
     ))
 }
@@ -113,12 +137,26 @@ fn rsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     })(i)
 }
 
-fn unknown(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    Ok((i, PublicParams::Unknown { data: vec![] })) // FIXME
+fn unknown(i: &[u8], len: Option<usize>) -> IResult<&[u8], PublicParams> {
+    if let Some(pub_len) = len {
+        let (i, data) = take(pub_len)(i)?;
+        Ok((
+            i,
+            PublicParams::Unknown {
+                data: data.to_vec(),
+            },
+        ))
+    } else {
+        // we don't know how many bytes to consume
+        Ok((i, PublicParams::Unknown { data: vec![] }))
+    }
 }
 
 /// Parse the fields of a public key.
-pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
+pub fn parse_pub_fields(
+    typ: PublicKeyAlgorithm,
+    len: Option<usize>,
+) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
     move |i: &[u8]| match typ {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
             rsa(i)
@@ -128,6 +166,11 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
         PublicKeyAlgorithm::ECDH => ecdh(i),
         PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => elgamal(i),
         PublicKeyAlgorithm::EdDSALegacy => eddsa_legacy(i),
+
+        PublicKeyAlgorithm::Ed25519 => ed25519(i),
+        PublicKeyAlgorithm::X25519 => x25519(i),
+        PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
+        PublicKeyAlgorithm::X448 => unknown(i, len),  // FIXME: implement later
 
         PublicKeyAlgorithm::DiffieHellman
         | PublicKeyAlgorithm::Private100
@@ -141,11 +184,11 @@ pub fn parse_pub_fields(typ: PublicKeyAlgorithm) -> impl Fn(&[u8]) -> IResult<&[
         | PublicKeyAlgorithm::Private108
         | PublicKeyAlgorithm::Private109
         | PublicKeyAlgorithm::Private110
-        | PublicKeyAlgorithm::Unknown(_) => unknown(i),
+        | PublicKeyAlgorithm::Unknown(_) => unknown(i, len),
     }
 }
 
-fn new_public_key_parser(
+fn public_key_parser_v4_v6(
     key_ver: &KeyVersion,
 ) -> impl Fn(
     &[u8],
@@ -162,12 +205,37 @@ fn new_public_key_parser(
     |i: &[u8]| {
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
-        let (i, params) = parse_pub_fields(alg)(i)?;
+
+        let (i, pub_len) = if *key_ver == KeyVersion::V6 {
+            // "scalar octet count for the following public key material"
+            let (i, len) = be_u32(i)?;
+
+            (i, Some(len as usize))
+        } else {
+            (i, None)
+        };
+
+        // If we got a pub_len, we expect to consume this amount of data, and have `expected_rest`
+        // left after `parse_pub_fields`
+        let expected_rest = pub_len.map(|len| i.len() - len);
+
+        let (i, params) = parse_pub_fields(alg, pub_len)(i)?;
+
+        // consistency check for pub_len, if available
+        if let Some(expected_rest) = expected_rest {
+            if expected_rest != i.len() {
+                return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+                    "Inconsistent pub_len in secret key packet {}",
+                    pub_len.expect("if expected_rest is Some, pub_len is Some")
+                ))));
+            }
+        }
+
         Ok((i, (*key_ver, alg, created_at, None, params)))
     }
 }
 
-fn old_public_key_parser(
+fn public_key_parser_v2_v3(
     key_ver: &KeyVersion,
 ) -> impl Fn(
     &[u8],
@@ -185,7 +253,7 @@ fn old_public_key_parser(
         let (i, created_at) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
         let (i, exp) = be_u16(i)?;
         let (i, alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
-        let (i, params) = parse_pub_fields(alg)(i)?;
+        let (i, params) = parse_pub_fields(alg, None)(i)?;
 
         Ok((i, (*key_ver, alg, created_at, Some(exp), params)))
     }
@@ -208,8 +276,8 @@ pub(crate) fn parse(
 > {
     let (i, key_ver) = map(be_u8, KeyVersion::from)(i)?;
     let (i, key) = match &key_ver {
-        &KeyVersion::V2 | &KeyVersion::V3 => old_public_key_parser(&key_ver)(i)?,
-        &KeyVersion::V4 => new_public_key_parser(&key_ver)(i)?,
+        &KeyVersion::V2 | &KeyVersion::V3 => public_key_parser_v2_v3(&key_ver)(i)?,
+        &KeyVersion::V4 | &KeyVersion::V6 => public_key_parser_v4_v6(&key_ver)(i)?,
         KeyVersion::V5 | KeyVersion::Other(_) => {
             return Err(nom::Err::Error(crate::errors::Error::Unsupported(format!(
                 "Unsupported key version {}",

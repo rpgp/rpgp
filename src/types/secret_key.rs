@@ -1,6 +1,6 @@
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
-use crate::types::{EcdsaPublicParams, Mpi, PublicKeyTrait, PublicParams};
+use crate::types::{EcdsaPublicParams, PublicKeyTrait, PublicParams, SignatureBytes};
 
 pub trait SecretKeyTrait: PublicKeyTrait {
     type PublicKey;
@@ -14,7 +14,12 @@ pub trait SecretKeyTrait: PublicKeyTrait {
         F: FnOnce() -> String,
         G: FnOnce(&Self::Unlocked) -> Result<T>;
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<crate::types::SignatureBytes>
     where
         F: FnOnce() -> String;
 
@@ -43,7 +48,12 @@ impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
         (*self).unlock(pw, work)
     }
 
-    fn create_signature<F>(&self, key_pw: F, hash: HashAlgorithm, data: &[u8]) -> Result<Vec<Mpi>>
+    fn create_signature<F>(
+        &self,
+        key_pw: F,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes>
     where
         F: FnOnce() -> String,
     {

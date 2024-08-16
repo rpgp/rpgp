@@ -7,7 +7,7 @@ use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 use crate::errors::Result;
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-4
+/// Ref: <https://tools.ietf.org/html/rfc4880.html#section-4>
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Packet {
     /// Indicator if this is an old or new versioned packet
@@ -32,7 +32,12 @@ impl From<usize> for PacketLength {
     }
 }
 
-/// Packet tag as defined in RFC 4880, Section 4.3 "Packet Tags"
+/// Packet Type ID, see <https://www.rfc-editor.org/rfc/rfc9580.html#packet-types>
+///
+/// The "Packet Type ID" was called "Packet tag" in RFC 4880 (Section 4.3 "Packet Tags").
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#appendix-B.1-3.7.1>
+///
+/// However, rPGP will continue to use the term "(Packet) Tag" for the time being.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum Tag {
@@ -78,6 +83,8 @@ pub enum Tag {
 }
 
 impl Tag {
+    /// Packet Type ID encoded in OpenPGP format
+    /// (bits 7 and 6 set, bits 5-0 carry the packet type ID)
     pub fn encode(self) -> u8 {
         let t: u8 = self.into();
         0b1100_0000 | t
@@ -142,9 +149,23 @@ pub enum KeyVersion {
     V3 = 3,
     V4 = 4,
     V5 = 5,
+    V6 = 6,
 
     #[num_enum(catch_all)]
     Other(u8),
+}
+
+impl KeyVersion {
+    /// Size of OpenPGP fingerprint in bytes
+    /// (returns `None` for unknown versions)
+    pub const fn fingerprint_len(&self) -> Option<usize> {
+        match self {
+            KeyVersion::V2 | KeyVersion::V3 => Some(16), // MD5
+            KeyVersion::V4 => Some(20),                  // SHA1
+            KeyVersion::V5 | KeyVersion::V6 => Some(32), // SHA256
+            KeyVersion::Other(_) => None,
+        }
+    }
 }
 
 impl Default for KeyVersion {
