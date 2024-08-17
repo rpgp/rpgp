@@ -164,7 +164,7 @@ impl PubKeyInner {
             self.expiration
                 .expect("old key versions have an expiration"),
         )?;
-        writer.write_all(&[self.algorithm.into()])?;
+        writer.write_u8(self.algorithm.into())?;
         self.public_params.to_writer(writer)?;
 
         Ok(())
@@ -174,7 +174,7 @@ impl PubKeyInner {
         use crate::ser::Serialize;
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp().try_into()?)?;
-        writer.write_all(&[self.algorithm.into()])?;
+        writer.write_u8(self.algorithm.into())?;
 
         let mut public_params = vec![];
         self.public_params.to_writer(&mut public_params)?;
@@ -231,7 +231,7 @@ impl crate::ser::Serialize for PublicSubkey {
 
 impl crate::ser::Serialize for PubKeyInner {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[u8::from(self.version)])?;
+        writer.write_u8(self.version.into())?;
 
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => self.to_writer_v2_v3(writer),
@@ -516,7 +516,7 @@ impl PublicKeyTrait for PubKeyInner {
             KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 => {
                 // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
                 // followed by a two-octet length of the key, and then the body of the key packet.
-                writer.write_all(&[0x99])?;
+                writer.write_u8(0x99)?;
                 writer.write_u16::<BigEndian>(key_buf.len().try_into()?)?;
             }
 
@@ -526,7 +526,7 @@ impl PublicKeyTrait for PubKeyInner {
 
                 // then octet 0x9B, followed by a four-octet length of the key,
                 // and then the body of the key packet.
-                writer.write_all(&[0x9b])?;
+                writer.write_u8(0x9b)?;
                 writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
             }
 

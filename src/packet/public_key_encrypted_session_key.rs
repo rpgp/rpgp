@@ -138,9 +138,9 @@ fn parse(
 
 impl Serialize for PublicKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[self.version])?;
+        writer.write_u8(self.version)?;
         writer.write_all(self.id.as_ref())?;
-        writer.write_all(&[self.algorithm.into()])?;
+        writer.write_u8(self.algorithm.into())?;
 
         match self.algorithm {
             PublicKeyAlgorithm::RSA
@@ -160,7 +160,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                     Some(l) => *l as usize,
                     None => 0,
                 };
-                writer.write_all(&[blen.try_into()?])?;
+                writer.write_u8(blen.try_into()?)?;
                 let padding_len = blen - self.mpis[2].as_bytes().len();
                 for _ in 0..padding_len {
                     writer.write_u8(0)?;

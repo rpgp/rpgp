@@ -189,7 +189,7 @@ impl Serialize for UserAttribute {
                 ..
             } => {
                 // typ: image
-                writer.write_all(&[0x01])?;
+                writer.write_u8(0x01)?;
                 writer.write_u16::<LittleEndian>((header.len() + 2).try_into()?)?;
                 writer.write_all(header)?;
 
@@ -197,7 +197,7 @@ impl Serialize for UserAttribute {
                 writer.write_all(data)?;
             }
             UserAttribute::Unknown { ref data, typ, .. } => {
-                writer.write_all(&[*typ])?;
+                writer.write_u8(*typ)?;
                 writer.write_all(data)?;
             }
         }

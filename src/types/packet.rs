@@ -110,28 +110,27 @@ impl Version {
             Version::Old => {
                 if len < 256 {
                     // one octet
-                    writer.write_all(&[0b1000_0000 | tag << 2, len as u8])?;
+                    writer.write_u8(0b1000_0000 | tag << 2)?;
+                    writer.write_u8(len.try_into()?)?;
                 } else if len < 65536 {
                     // two octets
-                    writer.write_all(&[0b1000_0001 | tag << 2])?;
+                    writer.write_u8(0b1000_0001 | tag << 2)?;
                     writer.write_u16::<BigEndian>(len as u16)?;
                 } else {
                     // four octets
-                    writer.write_all(&[0b1000_0010 | tag << 2])?;
+                    writer.write_u8(0b1000_0010 | tag << 2)?;
                     writer.write_u32::<BigEndian>(len as u32)?;
                 }
             }
             Version::New => {
-                writer.write_all(&[0b1100_0000 | tag])?;
+                writer.write_u8(0b1100_0000 | tag)?;
                 if len < 192 {
-                    writer.write_all(&[len as u8])?;
+                    writer.write_u8(len.try_into()?)?;
                 } else if len < 8384 {
-                    writer.write_all(&[
-                        (((len - 192) >> 8) + 192) as u8,
-                        ((len - 192) & 0xFF) as u8,
-                    ])?;
+                    writer.write_u8((((len - 192) >> 8) + 192) as u8)?;
+                    writer.write_u8(((len - 192) & 0xFF) as u8)?;
                 } else {
-                    writer.write_all(&[255])?;
+                    writer.write_u8(255)?;
                     writer.write_u32::<BigEndian>(len as u32)?;
                 }
             }

@@ -1,5 +1,6 @@
 use std::io::{self, Read};
 
+use byteorder::WriteBytesExt;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 
 use crate::errors::Result;
@@ -80,7 +81,7 @@ impl CompressedData {
 
 impl Serialize for CompressedData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(&[u8::from(self.compression_algorithm)])?;
+        writer.write_u8(self.compression_algorithm.into())?;
         writer.write_all(&self.compressed_data)?;
 
         Ok(())

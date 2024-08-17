@@ -1,7 +1,7 @@
 use std::io;
 use std::io::Write;
 
-use byteorder::{BigEndian, ByteOrder};
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use digest::Digest;
 
 use crate::crypto::checksum;
@@ -204,7 +204,7 @@ impl EncryptedSecretParams {
         writer: &mut W,
         version: KeyVersion,
     ) -> Result<()> {
-        writer.write_all(&[(&self.s2k_params).into()])?;
+        writer.write_u8((&self.s2k_params).into())?;
 
         let mut s2k_params = vec![];
 
@@ -223,11 +223,11 @@ impl EncryptedSecretParams {
                 s2k,
                 ref nonce,
             } => {
-                s2k_writer.write_all(&[u8::from(*sym_alg)])?;
-                s2k_writer.write_all(&[u8::from(*aead_mode)])?;
+                s2k_writer.write_u8((*sym_alg).into())?;
+                s2k_writer.write_u8((*aead_mode).into())?;
 
                 if version == KeyVersion::V6 {
-                    s2k_writer.write_all(&[s2k.len()?])?; // length of S2K Specifier Type
+                    s2k_writer.write_u8(s2k.len()?)?; // length of S2K Specifier Type
                 }
                 s2k.to_writer(&mut s2k_writer)?;
 
@@ -243,10 +243,10 @@ impl EncryptedSecretParams {
                 s2k,
                 ref iv,
             } => {
-                s2k_writer.write_all(&[u8::from(*sym_alg)])?;
+                s2k_writer.write_u8((*sym_alg).into())?;
 
                 if version == KeyVersion::V6 && matches!(self.s2k_params, S2kParams::Cfb { .. }) {
-                    s2k_writer.write_all(&[s2k.len()?])?; // length of S2K Specifier Type
+                    s2k_writer.write_u8(s2k.len()?)?; // length of S2K Specifier Type
                 }
 
                 s2k.to_writer(&mut s2k_writer)?;
@@ -260,7 +260,7 @@ impl EncryptedSecretParams {
                 let len = s2k_params.len();
                 ensure!(len <= 255, "unexpected s2k_params length {}", len);
 
-                writer.write_all(&[len as u8])?;
+                writer.write_u8(len.try_into()?)?;
             }
             writer.write_all(&s2k_params)?;
         }

@@ -122,7 +122,8 @@ impl AsRef<[u8]> for LiteralData {
 impl Serialize for LiteralData {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let name = &self.file_name;
-        writer.write_all(&[u8::from(self.mode), name.len().try_into()?])?;
+        writer.write_u8(self.mode.into())?;
+        writer.write_u8(name.len().try_into()?)?;
         writer.write_all(name)?;
         writer.write_u32::<BigEndian>(self.created.timestamp().try_into()?)?;
 

@@ -1,5 +1,6 @@
 use std::io;
 
+use byteorder::WriteBytesExt;
 use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
@@ -334,7 +335,8 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 s2k,
                 encrypted_key,
             } => {
-                writer.write_all(&[0x04, u8::from(*sym_algorithm)])?;
+                writer.write_u8(0x04)?;
+                writer.write_u8((*sym_algorithm).into())?;
                 s2k.to_writer(writer)?;
                 if let Some(ref key) = encrypted_key {
                     writer.write_all(key)?;
@@ -349,7 +351,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 auth_tag,
                 encrypted_key,
             } => {
-                writer.write_all(&[0x05])?;
+                writer.write_u8(0x05)?;
                 let mut first_buf = vec![u8::from(*sym_algorithm), u8::from(*aead)];
 
                 let mut buf = Vec::new();
@@ -358,7 +360,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 first_buf.extend(buf);
                 first_buf.extend_from_slice(iv);
 
-                writer.write_all(&[first_buf.len().try_into()?])?;
+                writer.write_u8(first_buf.len().try_into()?)?;
                 writer.write_all(&first_buf)?;
 
                 writer.write_all(encrypted_key)?;
@@ -373,7 +375,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 auth_tag,
                 encrypted_key,
             } => {
-                writer.write_all(&[0x06])?;
+                writer.write_u8(0x06)?;
                 let mut first_buf = vec![u8::from(*sym_algorithm), u8::from(*aead)];
 
                 let mut buf = Vec::new();
@@ -382,7 +384,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 first_buf.extend(buf);
                 first_buf.extend_from_slice(iv);
 
-                writer.write_all(&[first_buf.len().try_into()?])?;
+                writer.write_u8(first_buf.len().try_into()?)?;
                 writer.write_all(&first_buf)?;
 
                 writer.write_all(encrypted_key)?;

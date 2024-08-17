@@ -1,5 +1,6 @@
 use std::io;
 
+use byteorder::WriteBytesExt;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, rest};
 use nom::number::streaming::be_u8;
@@ -401,10 +402,12 @@ impl Serialize for StringToKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
             Self::Simple { hash_alg } => {
-                writer.write_all(&[self.id(), u8::from(*hash_alg)])?;
+                writer.write_u8(self.id())?;
+                writer.write_u8((*hash_alg).into())?;
             }
             Self::Salted { hash_alg, salt } => {
-                writer.write_all(&[self.id(), u8::from(*hash_alg)])?;
+                writer.write_u8(self.id())?;
+                writer.write_u8((*hash_alg).into())?;
                 writer.write_all(salt)?;
             }
             Self::IteratedAndSalted {
@@ -412,12 +415,13 @@ impl Serialize for StringToKey {
                 salt,
                 count,
             } => {
-                writer.write_all(&[self.id(), u8::from(*hash_alg)])?;
+                writer.write_u8(self.id())?;
+                writer.write_u8((*hash_alg).into())?;
                 writer.write_all(salt)?;
-                writer.write_all(&[*count])?;
+                writer.write_u8(*count)?;
             }
             Self::Argon2 { salt, t, p, m_enc } => {
-                writer.write_all(&[self.id()])?;
+                writer.write_u8(self.id())?;
                 writer.write_all(salt)?;
                 writer.write_all(&[*t, *p, *m_enc])?;
             }
@@ -425,7 +429,7 @@ impl Serialize for StringToKey {
             Self::Reserved { unknown, .. }
             | Self::Private { unknown, .. }
             | Self::Other { unknown, .. } => {
-                writer.write_all(&[self.id()])?;
+                writer.write_u8(self.id())?;
                 writer.write_all(unknown)?;
             }
         }
