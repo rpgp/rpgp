@@ -379,20 +379,9 @@ pub fn kdf(hash: HashAlgorithm, x: &[u8], length: usize, param: &[u8]) -> Result
 fn pad(plain: &[u8]) -> Vec<u8> {
     let len = plain.len();
 
-    /// Our default target padded length (based on the size of a padded AES256 key).
-    /// This value should be increased if we support symmetric keys that are longer than AES256.
-    const PAD_DEFAULT_TARGET: usize = 40;
-
-    // The padded message length (must be a multiple of the block size)
-    let padded_len = if len < PAD_DEFAULT_TARGET {
-        // Normally, we just pad to the default target size ...
-        PAD_DEFAULT_TARGET
-    } else {
-        // ... but if `plain` isn't shorter than our target size, we pad to the next full block
-        let remainder = len % 8; // e.g. 3 for len==19
-
-        len + 8 - remainder // (e.g. "8 + 8 - 0 => 16", or "19 + 8 - 3 => 24")
-    };
+    // We produce "short padding" (between 1 and 8 bytes)
+    let remainder = len % 8; // (e.g. 3 for len==19)
+    let padded_len = len + 8 - remainder; // (e.g. "8 + 8 - 0 => 16", or "19 + 8 - 3 => 24")
     debug_assert!(padded_len % 8 == 0, "Unexpected padded_len {}", padded_len);
 
     // The value we'll use for padding (must not be zero, and fit into a u8)
