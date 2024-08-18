@@ -472,7 +472,6 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // Perform AES Key Wrap
     let encrypted_session_key = aes_kw::wrap(&z, &plain_padded)?;
 
-    // Ok(vec![encoded_public, encrypted_key_len, encrypted_key])
     Ok(EskBytes::Ecdh {
         public_point: Mpi::from_raw_slice(&encoded_public),
         encrypted_session_key,
