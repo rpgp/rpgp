@@ -22,8 +22,10 @@ use crate::packet::{
     SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
-use crate::types::{CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
-    StringToKey, Tag};
+use crate::types::{
+    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
+    StringToKey, Tag,
+};
 
 /// An [OpenPGP message](https://tools.ietf.org/html/rfc4880.html#section-11.3)
 #[derive(Clone, Debug, PartialEq, Eq)]

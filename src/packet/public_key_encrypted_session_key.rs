@@ -113,21 +113,12 @@ impl PublicKeyEncryptedSessionKey {
         })
     }
 
-    // FIXME: helper fn to check if a Key matches with this PKESK's target (can we remove id/fp?)
-    // v3: keyid or wildcard match
-    // v6: fp or implicit wildcard match
-
+    /// Check if a Key matches with this PKESK's target
+    /// - for v3: is PKESK key id the wildcard, or does it match `id`?
+    /// - for v6: is PKESK fingerprint the wildcard (represented as `None`), or does it match `fp`?
     pub fn match_identity(&self, key_id: &KeyId, fp: &Fingerprint) -> bool {
         match self {
-            Self::V3 { id, .. } => {
-                let wildcard_id =
-                    KeyId::from_slice(&[0, 0, 0, 0, 0, 0, 0, 0]).expect("wildcard_id");
-                if id == &wildcard_id {
-                    true
-                } else {
-                    id == key_id
-                }
-            }
+            Self::V3 { id, .. } => id.is_wildcard() || (id == key_id),
             Self::V6 { fingerprint, .. } => {
                 if let Some(fingerprint) = fingerprint {
                     fingerprint == fp
@@ -146,7 +137,7 @@ impl PublicKeyEncryptedSessionKey {
         }
     }
 
-    pub fn fp(&self) -> Option<&Fingerprint> {
+    pub fn fingerprint(&self) -> Option<&Fingerprint> {
         match self {
             Self::V6 { fingerprint, .. } => fingerprint.as_ref(),
             _ => None,

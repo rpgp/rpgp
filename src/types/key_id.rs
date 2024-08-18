@@ -24,6 +24,10 @@ impl KeyId {
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }
+
+    pub fn is_wildcard(&self) -> bool {
+        self.0 == [0, 0, 0, 0, 0, 0, 0, 0]
+    }
 }
 
 impl fmt::LowerHex for KeyId {
