@@ -132,8 +132,6 @@ impl SymKeyEncryptedSessionKey {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
-                debug!("nonce: {}", hex::encode(iv));
 
                 // AEAD decrypt
                 aead.decrypt_in_place(
@@ -169,8 +167,6 @@ impl SymKeyEncryptedSessionKey {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
-                debug!("nonce: {}", hex::encode(iv));
 
                 // AEAD decrypt
                 aead.decrypt_in_place(
@@ -260,22 +256,14 @@ impl SymKeyEncryptedSessionKey {
         let hk = hkdf::Hkdf::<Sha256>::new(salt, &ikm);
         let mut okm = [0u8; 42];
         hk.expand(&info, &mut okm).expect("42");
-        debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
 
         let mut iv = vec![0; aead.iv_size()];
         rng.fill_bytes(&mut iv);
-        debug!("nonce: {}", hex::encode(&iv));
 
         // AEAD encrypt
         let mut encrypted_key = session_key.to_vec();
         let auth_tag =
             aead.encrypt_in_place(&sym_algorithm, &okm, &iv, &info, &mut encrypted_key)?;
-
-        debug!(
-            "encrypted_key: {} - auth_tag: {}",
-            hex::encode(&encrypted_key),
-            hex::encode(&auth_tag)
-        );
 
         Ok(SymKeyEncryptedSessionKey::V6 {
             packet_version: Default::default(),

@@ -1,7 +1,6 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
 use nom::number::streaming::be_u8;
@@ -97,23 +96,13 @@ impl SymEncryptedProtectedData {
         let hk = hkdf::Hkdf::<Sha256>::new(Some(&salt[..]), ikm);
         let mut okm = [0u8; 42];
         hk.expand(&info, &mut okm).expect("42");
-        debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
+
         let message_key = &okm[..sym_alg.key_size()];
         let raw_iv_len = aead.nonce_size() - 8;
         let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
         let mut nonce = vec![0u8; aead.nonce_size()];
         nonce[..raw_iv_len].copy_from_slice(iv);
 
-        debug!("message_key: {}", hex::encode(message_key));
-        debug!("iv: {}", hex::encode(iv));
-        debug!("nonce: {}", hex::encode(&nonce));
-
-        debug!(
-            "data {}, chunk_size {} - {}",
-            hex::encode(plaintext),
-            chunk_size_expanded,
-            plaintext.len()
-        );
         let mut out = Vec::new();
 
         let mut chunk_index: u64 = 0;
@@ -127,9 +116,6 @@ impl SymEncryptedProtectedData {
 
             let auth_tag =
                 aead.encrypt_in_place(&sym_alg, message_key, &nonce, &info, encrypt_chunk)?;
-
-            debug!("encrypted {}", hex::encode(&encrypt_chunk));
-            debug!("auth_tag {}", hex::encode(&auth_tag));
 
             out.extend_from_slice(&auth_tag);
 
@@ -146,9 +132,6 @@ impl SymEncryptedProtectedData {
         let mut final_info = info.to_vec();
         final_info.extend_from_slice(&size.to_be_bytes());
 
-        debug!("final nonce {}", hex::encode(&nonce));
-        debug!("final auth {}", hex::encode(&final_info));
-
         let final_auth_tag = aead.encrypt_in_place(
             &sym_alg,
             message_key,
@@ -157,7 +140,6 @@ impl SymEncryptedProtectedData {
             &mut [][..], // encrypts empty string
         )?;
         out.extend_from_slice(&final_auth_tag);
-        debug!("final_auth_tag {}", hex::encode(&final_auth_tag));
 
         Ok(SymEncryptedProtectedData {
             packet_version: Default::default(),
@@ -240,25 +222,15 @@ impl SymEncryptedProtectedData {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
+
                 let message_key = &okm[..sym_alg.key_size()];
                 let raw_iv_len = aead.nonce_size() - 8;
                 let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
                 let mut nonce = vec![0u8; aead.nonce_size()];
                 nonce[..raw_iv_len].copy_from_slice(iv);
 
-                debug!("message_key: {}", hex::encode(message_key));
-                debug!("iv: {}", hex::encode(iv));
-                debug!("nonce: {}", hex::encode(&nonce));
-
                 let mut data = data.clone();
 
-                debug!(
-                    "data {}, chunk_size {} - {}",
-                    hex::encode(&data),
-                    chunk_size,
-                    data.len()
-                );
                 let mut out = Vec::new();
                 let chunk_size = usize::try_from(chunk_size)?;
 
@@ -271,14 +243,8 @@ impl SymEncryptedProtectedData {
                     let offset = chunk.len() - aead.tag_size();
                     let (chunk, auth_tag) = chunk.split_at_mut(offset);
 
-                    debug!(
-                        "chunk {} - tag {}",
-                        hex::encode(&chunk),
-                        hex::encode(&auth_tag)
-                    );
-
                     aead.decrypt_in_place(sym_alg, message_key, &nonce, &info, auth_tag, chunk)?;
-                    debug!("decrypted {}", hex::encode(&chunk));
+
                     out.extend_from_slice(chunk);
 
                     // Update nonce to include the next chunk index
@@ -288,7 +254,6 @@ impl SymEncryptedProtectedData {
                 }
 
                 // verify final auth tag
-                debug!("final auth tag: {}", hex::encode(&final_auth_tag));
 
                 // Associated data is extended with number of plaintext octets.
                 let size = out.len() as u64;
@@ -296,9 +261,6 @@ impl SymEncryptedProtectedData {
                 final_info.extend_from_slice(&size.to_be_bytes());
 
                 // Update final nonce
-                debug!("final nonce {}", hex::encode(&nonce));
-                debug!("final auth {}", hex::encode(&final_info));
-
                 aead.decrypt_in_place(
                     sym_alg,
                     message_key,
