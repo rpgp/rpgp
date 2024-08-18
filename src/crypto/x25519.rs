@@ -130,8 +130,8 @@ pub fn encrypt<R: CryptoRng + Rng>(
 ) -> Result<([u8; 32], Vec<u8>)> {
     debug!("X25519 encrypt");
 
-    // Maximum length for `plain` - FIXME: what is the maximum here?
-    const MAX_SIZE: usize = 239;
+    // Maximum length for `plain` - FIXME: what should the maximum be, here?
+    const MAX_SIZE: usize = 255;
     ensure!(
         plain.len() <= MAX_SIZE,
         "unable to encrypt larger than {} bytes",
@@ -172,14 +172,13 @@ pub fn encrypt<R: CryptoRng + Rng>(
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use std::ops::Deref;
+
+    use rand::{RngCore, SeedableRng};
+    use rand_chacha::ChaChaRng;
+
     use super::*;
-    // use std::fs;
-
-    // use rand::{RngCore, SeedableRng};
-    // use rand_chacha::ChaChaRng;
-
-    // use crate::types::SecretKeyRepr;
-    // use crate::{Deserializable, Message, SignedSecretKey};
+    use crate::types::SecretKeyRepr;
 
     #[test]
     fn x25519_hkdf() {
@@ -234,55 +233,34 @@ mod tests {
         assert_eq!(decrypted_key, decrypted2);
     }
 
-    // #[test]
-    // fn test_encrypt_decrypt() {
-    //     for curve in [
-    //         ECCCurve::Curve25519,
-    //         ECCCurve::P256,
-    //         ECCCurve::P384,
-    //         ECCCurve::P521,
-    //     ] {
-    //         let mut rng = ChaChaRng::from_seed([0u8; 32]);
+    #[test]
+    fn test_encrypt_decrypt() {
+        let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-    //         let (pkey, skey) = generate_key(&mut rng, &curve).unwrap();
+        let (pkey, skey) = generate_key(&mut rng);
 
-    //         for text_size in 1..=239 {
-    //             for _i in 0..10 {
-    //                 let mut fingerprint = vec![0u8; 20];
-    //                 rng.fill_bytes(&mut fingerprint);
+        let PublicParams::X25519 { public } = pkey else {
+            panic!("invalid key generated")
+        };
+        let SecretKeyRepr::X25519(ref secret) = skey.as_ref().as_repr(&pkey).unwrap() else {
+            panic!("invalid key generated")
+        };
 
-    //                 let mut plain = vec![0u8; text_size];
-    //                 rng.fill_bytes(&mut plain);
+        for text_size in (8..=248).step_by(8) {
+            for _i in 0..10 {
+                let mut fingerprint = vec![0u8; 20];
+                rng.fill_bytes(&mut fingerprint);
 
-    //                 let mpis = match pkey {
-    //                     PublicParams::ECDH {
-    //                         ref curve,
-    //                         ref p,
-    //                         hash,
-    //                         sym_alg,
-    //                     } => encrypt(
-    //                         &mut rng,
-    //                         curve,
-    //                         sym_alg,
-    //                         hash,
-    //                         &fingerprint,
-    //                         p.as_bytes(),
-    //                         &plain[..],
-    //                     )
-    //                     .unwrap(),
-    //                     _ => panic!("invalid key generated"),
-    //                 };
+                let mut plain = vec![0u8; text_size];
+                rng.fill_bytes(&mut plain);
 
-    //                 let mpis = mpis.into_iter().map(Into::into).collect::<Vec<Mpi>>();
+                let (ephemeral, enc_sk) = encrypt(&mut rng, public, &plain[..]).unwrap();
 
-    //                 let decrypted = match skey.as_ref().as_repr(&pkey).unwrap() {
-    //                     SecretKeyRepr::ECDH(ref skey) => skey.decrypt(&mpis, &fingerprint).unwrap(),
-    //                     _ => panic!("invalid key generated"),
-    //                 };
+                let data = (ephemeral, public, enc_sk.deref());
+                let decrypted = secret.decrypt(data).unwrap();
 
-    //                 assert_eq!(&plain[..], &decrypted[..]);
-    //             }
-    //         }
-    //     }
-    // }
+                assert_eq!(&plain[..], &decrypted[..]);
+            }
+        }
+    }
 }
