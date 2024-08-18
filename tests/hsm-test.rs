@@ -62,13 +62,8 @@ impl PublicKeyTrait for FakeHsm {
         self.public_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        v6_esk: bool,
-    ) -> pgp::errors::Result<EskBytes> {
-        self.public_key.encrypt(rng, plain, v6_esk)
+    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8]) -> pgp::errors::Result<EskBytes> {
+        self.public_key.encrypt(rng, plain)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {

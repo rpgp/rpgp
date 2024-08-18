@@ -234,8 +234,8 @@ impl PublicKeyTrait for SignedSecretKey {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8], v6_esk: bool) -> Result<EskBytes> {
-        self.primary_key.encrypt(rng, plain, v6_esk)
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<EskBytes> {
+        self.primary_key.encrypt(rng, plain)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
@@ -366,8 +366,8 @@ impl PublicKeyTrait for SignedSecretSubKey {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8], v6_esk: bool) -> Result<EskBytes> {
-        self.key.encrypt(rng, plain, v6_esk)
+    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<EskBytes> {
+        self.key.encrypt(rng, plain)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {

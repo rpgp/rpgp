@@ -477,7 +477,6 @@ impl PublicKeyTrait for PubKeyInner {
         &self,
         mut rng: R,
         plain: &[u8],
-        v6_esk: bool, // true for v6 PK-/SKESK, false for v3/4
     ) -> Result<EskBytes> {
         match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
@@ -501,7 +500,7 @@ impl PublicKeyTrait for PubKeyInner {
                 plain,
             ),
             PublicParams::X25519 { ref public } => {
-                if v6_esk {
+                if self.version() == KeyVersion::V6 {
                     let (ephemeral, session_key) =
                         crypto::x25519::encrypt(&mut rng, *public, plain)?;
 
@@ -590,13 +589,8 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        v6_esk: bool,
-    ) -> Result<EskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<EskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -642,13 +636,8 @@ impl PublicKeyTrait for PublicSubkey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        v6_esk: bool,
-    ) -> Result<EskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<EskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {

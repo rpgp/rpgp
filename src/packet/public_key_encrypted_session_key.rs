@@ -75,7 +75,7 @@ impl PublicKeyEncryptedSessionKey {
             }
         }
 
-        let values = pkey.encrypt(rng, &data, false)?;
+        let values = pkey.encrypt(rng, &data)?;
 
         Ok(PublicKeyEncryptedSessionKey::V3 {
             packet_version: Default::default(),
@@ -102,7 +102,7 @@ impl PublicKeyEncryptedSessionKey {
             _ => data.extend_from_slice(&checksum::calculate_simple(session_key).to_be_bytes()),
         }
 
-        let values = pkey.encrypt(rng, &data, true)?;
+        let values = pkey.encrypt(rng, &data)?;
 
         Ok(PublicKeyEncryptedSessionKey::V6 {
             packet_version: Default::default(),
