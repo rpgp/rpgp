@@ -343,22 +343,17 @@ impl Serialize for PublicKeyEncryptedSessionKey {
             (
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSASign
-                | PublicKeyAlgorithm::RSAEncrypt
-                | PublicKeyAlgorithm::Elgamal
-                | PublicKeyAlgorithm::ElgamalSign,
-                _, // FIXME!
+                | PublicKeyAlgorithm::RSAEncrypt,
+                EskBytes::Rsa { mpi },
             ) => {
-                // FIXME: impl Elgamal
-                let EskBytes::Rsa { mpi } = self.values() else {
-                    unimplemented!("FIXME")
-                };
-
-                // FIXME: impl Elgamal
                 mpi.to_writer(writer)?;
-
-                // for mpi in mpis {
-                //     mpi.to_writer(writer)?;
-                // }
+            }
+            (
+                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign,
+                EskBytes::Elgamal { first, second },
+            ) => {
+                first.to_writer(writer)?;
+                second.to_writer(writer)?;
             }
             (
                 PublicKeyAlgorithm::ECDH,
@@ -402,8 +397,8 @@ impl Serialize for PublicKeyEncryptedSessionKey {
 
                 writer.write_all(session_key)?; // ESK
             }
-            _ => {
-                unimplemented_err!("writing {:?}", self.algorithm());
+            (alg, _) => {
+                bail!("failed to write EskBytes for {:?}", alg);
             }
         }
 
