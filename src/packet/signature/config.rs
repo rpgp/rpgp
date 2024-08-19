@@ -182,7 +182,7 @@ impl SignatureConfig {
         }
 
         self.hash_data_to_sign(&mut *hasher, data)?;
-        let len = self.hash_signature_data(&mut *hasher)?;
+        let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
@@ -272,7 +272,7 @@ impl SignatureConfig {
         // the packet content
         hasher.update(&packet_buf);
 
-        let len = self.hash_signature_data(&mut *hasher)?;
+        let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
@@ -318,7 +318,7 @@ impl SignatureConfig {
         // Key being bound
         key.serialize_for_hashing(&mut hasher)?;
 
-        let len = self.hash_signature_data(&mut *hasher)?;
+        let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
@@ -356,7 +356,7 @@ impl SignatureConfig {
 
         key.serialize_for_hashing(&mut hasher)?;
 
-        let len = self.hash_signature_data(&mut *hasher)?;
+        let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
         let hash = &hasher.finish()[..];
@@ -372,7 +372,7 @@ impl SignatureConfig {
     }
 
     /// Calculate the serialized version of this packet, but only the part relevant for hashing.
-    pub fn hash_signature_data(&self, hasher: &mut dyn Hasher) -> Result<usize> {
+    pub fn hash_signature_data(&self, hasher: &mut dyn std::io::Write) -> Result<usize> {
         match self.version() {
             SignatureVersion::V2 | SignatureVersion::V3 => {
                 let created = {
@@ -389,7 +389,7 @@ impl SignatureConfig {
                 buf[0] = self.typ.into();
                 BigEndian::write_u32(&mut buf[1..], created.timestamp().try_into()?);
 
-                hasher.update(&buf);
+                hasher.write_all(&buf)?;
 
                 // no trailer
                 Ok(0)
@@ -424,7 +424,7 @@ impl SignatureConfig {
 
                 res.extend(hashed_subpackets);
 
-                hasher.update(&res);
+                hasher.write_all(&res)?;
 
                 Ok(res.len())
             }

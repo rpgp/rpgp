@@ -220,7 +220,7 @@ impl Signature {
         } else {
             self.config.hash_data_to_sign(&mut *hasher, data)?;
         }
-        let len = self.config.hash_signature_data(&mut *hasher)?;
+        let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
@@ -307,7 +307,7 @@ impl Signature {
             hasher.update(&packet_buf);
         }
 
-        let len = self.config.hash_signature_data(&mut *hasher)?;
+        let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
@@ -390,7 +390,7 @@ impl Signature {
             hasher.update(&key_buf);
         }
 
-        let len = self.config.hash_signature_data(&mut *hasher)?;
+        let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
@@ -426,7 +426,7 @@ impl Signature {
             hasher.update(&key_buf);
         }
 
-        let len = self.config.hash_signature_data(&mut *hasher)?;
+        let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
