@@ -431,6 +431,9 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::X25519 { .. } => {
                 unimplemented_err!("verify X25519");
             }
+            PublicParams::X448 { .. } => {
+                unimplemented_err!("verify X448");
+            }
             PublicParams::ECDSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
 
@@ -522,6 +525,32 @@ impl PublicKeyTrait for PubKeyInner {
                         crypto::x25519::encrypt(&mut rng, *public, plain)?;
 
                     Ok(EskBytes::X25519 {
+                        ephemeral,
+                        session_key,
+                        sym_alg,
+                    })
+                }
+            }
+            PublicParams::X448 { ref public } => {
+                if v6_esk {
+                    let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
+
+                    Ok(EskBytes::X448 {
+                        ephemeral,
+                        session_key,
+                        sym_alg: None,
+                    })
+                } else {
+                    // v3 pkesk / v4 skesk
+
+                    // byte 0 is the symmetric algo, in v3 pkesk
+                    let sym_alg = Some(plain[0].into());
+                    // for v3: strip algorithm
+                    let plain = &plain[1..];
+
+                    let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
+
+                    Ok(EskBytes::X448 {
                         ephemeral,
                         session_key,
                         sym_alg,

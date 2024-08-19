@@ -18,6 +18,7 @@ pub enum SecretKeyRepr {
     ECDH(ecdh::SecretKey),
     EdDSA(eddsa::SecretKey),
     X25519(x25519::SecretKey),
+    X448(crate::crypto::x448::SecretKey),
 }
 
 impl SecretKeyRepr {
@@ -74,6 +75,35 @@ impl SecretKeyRepr {
                     Ok(PlainSessionKey::V6 { key })
                 };
             }
+
+            (
+                SecretKeyRepr::X448(ref priv_key),
+                EskBytes::X448 {
+                    ephemeral,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                // Recipient public key (56 bytes)
+                let PublicParams::X448 { public } = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for X448",
+                        recipient.public_params()
+                    );
+                };
+
+                let key = priv_key.decrypt((ephemeral.to_owned(), *public, session_key))?;
+
+                // FIXME: no postprocessing for X448 (especially: no checksum)
+
+                // We expect `algo` to be set for v3 PKESK, and unset for v6 PKESK
+                return if let Some(sym_alg) = *sym_alg {
+                    Ok(PlainSessionKey::V4 { key, sym_alg })
+                } else {
+                    Ok(PlainSessionKey::V6 { key })
+                };
+            }
+
             (SecretKeyRepr::EdDSA(_), _) => unimplemented_err!("EdDSA"),
             _ => todo!(),
         };

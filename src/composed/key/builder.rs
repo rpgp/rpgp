@@ -266,6 +266,8 @@ pub enum KeyType {
     Ed25519,
     /// Encrypting with X25519
     X25519,
+    /// Encrypting with X448
+    X448,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -300,6 +302,7 @@ impl KeyType {
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
             KeyType::Ed25519 => PublicKeyAlgorithm::Ed25519,
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
+            KeyType::X448 => PublicKeyAlgorithm::X448,
         }
     }
 
@@ -320,6 +323,7 @@ impl KeyType {
             KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
             KeyType::Ed25519 => eddsa::generate_key(rng, eddsa::Mode::Ed25519),
             KeyType::X25519 => x25519::generate_key(rng),
+            KeyType::X448 => crate::crypto::x448::generate_key(rng),
         };
 
         Ok((pub_params, types::SecretParams::Plain(plain)))

@@ -1,8 +1,7 @@
 //! # Cryptography module
 
-use crate::types::PublicParams;
-
 use self::hash::HashAlgorithm;
+use crate::types::PublicParams;
 
 pub mod aead;
 pub mod aes_kw;
@@ -17,6 +16,7 @@ pub mod public_key;
 pub mod rsa;
 pub mod sym;
 pub mod x25519;
+pub mod x448;
 
 pub trait Decryptor {
     type Data<'a>;

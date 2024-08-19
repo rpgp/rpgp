@@ -50,6 +50,16 @@ pub enum EskBytes {
         // Set for v3 only (the sym_algo is not encrypted with the session key for X25519)
         sym_alg: Option<SymmetricKeyAlgorithm>,
     },
+    X448 {
+        // Ephemeral X448 public key (56 bytes).
+        ephemeral: [u8; 56],
+
+        // Encrypted and wrapped session key.
+        session_key: Vec<u8>,
+
+        // Set for v3 only (the sym_algo is not encrypted with the session key for X448)
+        sym_alg: Option<SymmetricKeyAlgorithm>,
+    },
     Other,
 }
 

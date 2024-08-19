@@ -65,10 +65,10 @@ impl PublicKeyEncryptedSessionKey {
         data[0] = u8::from(alg);
         data[1..=len].copy_from_slice(session_key);
 
-        // Appended a checksum, except for x25519/x448
+        // Append a checksum, except for x25519/x448
         // FIXME: factor this difference out and up?
         match pkey.public_params() {
-            PublicParams::X25519 { .. } => {}
+            PublicParams::X25519 { .. } | PublicParams::X448 { .. } => {}
             _ => {
                 // and appended a checksum
                 data.extend_from_slice(&checksum::calculate_simple(session_key).to_be_bytes())
@@ -95,10 +95,10 @@ impl PublicKeyEncryptedSessionKey {
         // the session key
         let mut data = session_key.to_vec();
 
-        // Appended a checksum, except for x25519/x448
+        // Append a checksum, except for x25519/x448
         // FIXME: factor this difference out and up?
         match pkey.public_params() {
-            PublicParams::X25519 { .. } => {}
+            PublicParams::X25519 { .. } | PublicParams::X448 { .. } => {}
             _ => data.extend_from_slice(&checksum::calculate_simple(session_key).to_be_bytes()),
         }
 
@@ -221,6 +221,34 @@ fn parse_esk<'i>(
                 i,
                 EskBytes::X25519 {
                     ephemeral: ephemeral_public.try_into().expect("FIXME"),
+                    sym_alg,
+                    session_key: esk.to_vec(),
+                },
+            ))
+        }
+        PublicKeyAlgorithm::X448 => {
+            // 56 octets representing an ephemeral X448 public key.
+            let (i, ephemeral_public) = nom::bytes::complete::take(56u8)(i)?;
+
+            // A one-octet size of the following fields.
+            let (i, len) = be_u8(i)?;
+
+            let (i, sym_alg) = if version != 6 {
+                // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
+                map(be_u8, SymmetricKeyAlgorithm::from)(i).map(|(i, alg)| (i, Some(alg)))?
+            } else {
+                (i, None)
+            };
+
+            let take = if version == 6 { len } else { len - 1 };
+
+            // The encrypted session key.
+            let (i, esk) = nom::bytes::complete::take(take)(i)?;
+
+            Ok((
+                i,
+                EskBytes::X448 {
+                    ephemeral: ephemeral_public.try_into().expect("56"),
                     sym_alg,
                     session_key: esk.to_vec(),
                 },
@@ -373,6 +401,33 @@ impl Serialize for PublicKeyEncryptedSessionKey {
             (
                 PublicKeyAlgorithm::X25519,
                 EskBytes::X25519 {
+                    ephemeral,
+                    sym_alg,
+                    session_key,
+                },
+            ) => {
+                writer.write_all(ephemeral)?;
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted.
+                //
+                // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-
+                if let Some(sym_alg) = sym_alg {
+                    // len: algo + esk len
+                    writer.write_u8((session_key.len() + 1).try_into()?)?;
+
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                    writer.write_u8((*sym_alg).into())?;
+                } else {
+                    // len: esk len
+                    writer.write_u8(session_key.len().try_into()?)?;
+                }
+
+                writer.write_all(session_key)?; // ESK
+            }
+            (
+                PublicKeyAlgorithm::X448,
+                EskBytes::X448 {
                     ephemeral,
                     sym_alg,
                     session_key,

@@ -38,6 +38,7 @@ pub enum PlainSecretParams {
     EdDSALegacy(#[debug("..")] Mpi),
     Ed25519(#[debug("..")] [u8; 32]),
     X25519(#[debug("..")] [u8; 32]),
+    X448(#[debug("..")] [u8; 56]),
 }
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
@@ -59,6 +60,7 @@ pub enum PlainSecretParamsRef<'a> {
     EdDSALegacy(#[debug("..")] MpiRef<'a>),
     Ed25519(#[debug("..")] &'a [u8; 32]),
     X25519(#[debug("..")] &'a [u8; 32]),
+    X448(#[debug("..")] &'a [u8; 56]),
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
@@ -77,6 +79,7 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::EdDSALegacy(v) => PlainSecretParams::EdDSALegacy((*v).to_owned()),
             PlainSecretParamsRef::Ed25519(s) => PlainSecretParams::Ed25519((*s).to_owned()),
             PlainSecretParamsRef::X25519(s) => PlainSecretParams::X25519((*s).to_owned()),
+            PlainSecretParamsRef::X448(s) => PlainSecretParams::X448((*s).to_owned()),
         }
     }
 
@@ -111,6 +114,9 @@ impl<'a> PlainSecretParamsRef<'a> {
                 writer.write_all(&s[..])?;
             }
             PlainSecretParamsRef::X25519(s) => {
+                writer.write_all(&s[..])?;
+            }
+            PlainSecretParamsRef::X448(s) => {
                 writer.write_all(&s[..])?;
             }
         }
@@ -245,6 +251,11 @@ impl<'a> PlainSecretParamsRef<'a> {
                     secret: **d,
                 }))
             }
+            PlainSecretParamsRef::X448(d) => {
+                Ok(SecretKeyRepr::X448(crate::crypto::x448::SecretKey {
+                    secret: **d,
+                }))
+            }
             PlainSecretParamsRef::DSA(x) => Ok(SecretKeyRepr::DSA(crate::crypto::dsa::SecretKey {
                 x: x.into(),
             })),
@@ -329,6 +340,7 @@ impl PlainSecretParams {
             PlainSecretParams::EdDSALegacy(v) => PlainSecretParamsRef::EdDSALegacy(v.as_ref()),
             PlainSecretParams::Ed25519(s) => PlainSecretParamsRef::Ed25519(s),
             PlainSecretParams::X25519(s) => PlainSecretParamsRef::X25519(s),
+            PlainSecretParams::X448(s) => PlainSecretParamsRef::X448(s),
         }
     }
 
@@ -447,11 +459,15 @@ fn parse_secret_params(
         }
         PublicKeyAlgorithm::Ed25519 => {
             let (i, s) = nom::bytes::complete::take(32u8)(i)?;
-            Ok((i, PlainSecretParams::Ed25519(s.try_into().expect("foo"))))
+            Ok((i, PlainSecretParams::Ed25519(s.try_into().expect("32"))))
         }
         PublicKeyAlgorithm::X25519 => {
             let (i, s) = nom::bytes::complete::take(32u8)(i)?;
-            Ok((i, PlainSecretParams::X25519(s.try_into().expect("foo"))))
+            Ok((i, PlainSecretParams::X25519(s.try_into().expect("32"))))
+        }
+        PublicKeyAlgorithm::X448 => {
+            let (i, s) = nom::bytes::complete::take(56u8)(i)?;
+            Ok((i, PlainSecretParams::X448(s.try_into().expect("56"))))
         }
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
             nom::error::ErrorKind::Switch,
