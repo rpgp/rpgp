@@ -175,59 +175,6 @@ mod tests {
     use super::*;
     use crate::types::SecretKeyRepr;
 
-    // #[test]
-    // fn x25519_hkdf() {
-    //     // A.8.2. X25519 encryption/decryption of the session key
-    //
-    //     // Ephemeral key:
-    //     let ephemeral_key = "87cf18d5f1b53f817cce5a004cf393cc8958bddc065f25f84af509b17dd36764";
-    //     let ephemeral_key: [u8; 32] = hex::decode(ephemeral_key).unwrap().try_into().unwrap();
-    //
-    //     // This ephemeral key is derived from the following ephemeral secret key material, which is never placed on the wire:
-    //     let _ephemeral_secret = "af1e43c0d123efe893a7d4d390f3a761e3fac33dfc7f3edaa830c9011352c779";
-    //
-    //     // Public key from target certificate (see Appendix A.3):
-    //     let public_key = "8693248367f9e5015db922f8f48095dda784987f2d5985b12fbad16caf5e4435";
-    //     let public_key: [u8; 32] = hex::decode(public_key).unwrap().try_into().unwrap();
-    //
-    //     // The corresponding long-lived X25519 private key material (see Appendix A.4):
-    //     let long_lived_private = "4d600a4f794d44775c57a26e0feefed558e9afffd6ad0d582d57fb2ba2dcedb8";
-    //     let long_lived_private: [u8; 32] =
-    //         hex::decode(long_lived_private).unwrap().try_into().unwrap();
-    //
-    //     // Shared point:
-    //     let shared_point = "67e30e69cdc7bab2a2680d78aca46a2f8b6e2ae44d398bdc6f92c5ad4a492514";
-    //     let shared_point: [u8; 32] = hex::decode(shared_point).unwrap().try_into().unwrap();
-    //
-    //     // HKDF output:
-    //     let hkdf = "f66dadcff64592239b254539b64ff607";
-    //     let hkdf: [u8; 16] = hex::decode(hkdf).unwrap().try_into().unwrap();
-    //
-    //     // Decrypted session key:
-    //     let decrypted = "dd708f6fa1ed65114d68d2343e7c2f1d";
-    //     let decrypted: [u8; 16] = hex::decode(decrypted).unwrap().try_into().unwrap();
-    //
-    //     let esk = "dea355437956617901e06957fbca8a6a47a5b5153e8d3ab7";
-    //     let esk = hex::decode(esk).unwrap();
-    //
-    //     // ---
-    //
-    //     // test hkdf helper
-    //     let okm = super::hkdf(&ephemeral_key, &public_key, &shared_point).unwrap();
-    //     assert_eq!(okm, hkdf);
-    //
-    //     let decrypted_key = aes_kw::unwrap(&okm, &esk).unwrap();
-    //     assert_eq!(decrypted_key, decrypted);
-    //
-    //     // test SecretKey::decrypt
-    //     let sk = SecretKey {
-    //         secret: long_lived_private,
-    //     };
-    //     let decrypted2 = sk.decrypt((ephemeral_key, public_key, &esk)).unwrap();
-    //
-    //     assert_eq!(decrypted_key, decrypted2);
-    // }
-
     #[test]
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
