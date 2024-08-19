@@ -47,10 +47,10 @@ impl KeyParams for PrivateKey {
 }
 
 impl Decryptor for PrivateKey {
-    type Data<'a> = &'a Mpi;
+    type EncryptionFields<'a> = &'a Mpi;
 
     /// RSA decryption using PKCS1v15 padding.
-    fn decrypt(&self, mpi: Self::Data<'_>) -> Result<Vec<u8>> {
+    fn decrypt(&self, mpi: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
         let m = self.0.decrypt(Pkcs1v15Encrypt, mpi.as_bytes())?;
 
         Ok(m)

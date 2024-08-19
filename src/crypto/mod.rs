@@ -19,9 +19,9 @@ pub mod x25519;
 pub mod x448;
 
 pub trait Decryptor {
-    type Data<'a>;
+    type EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::Data<'_>) -> crate::errors::Result<Vec<u8>>;
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> crate::errors::Result<Vec<u8>>;
 }
 
 pub trait Signer {

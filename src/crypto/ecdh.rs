@@ -71,19 +71,19 @@ impl KeyParams for SecretKey {
     }
 }
 
+pub struct EncryptionFields<'a> {
+    pub public_point: &'a Mpi,
+    pub encrypted_session_key: &'a [u8], // encrypted and wrapped value derived from the session key
+    pub fingerprint: &'a [u8], // FIXME: not part of the "Algorithm-Specific Fields", but needed for session key derivation
+}
+
 impl Decryptor for SecretKey {
-    type Data<'a> = (&'a Mpi, &'a [u8], &'a [u8]);
+    type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::Data<'_>) -> Result<Vec<u8>> {
-        let (
-            public_point,
-            encrypted_session_key, // encrypted and wrapped value derived from the session key
-            fingerprint,
-        ) = data;
-
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
         debug!("ECDH decrypt");
 
-        let encrypted_key_len: usize = encrypted_session_key.len();
+        let encrypted_key_len: usize = data.encrypted_session_key.len();
 
         let (curve, alg_sym, hash) = self.key_params();
 
@@ -94,11 +94,11 @@ impl Decryptor for SecretKey {
                     curve.secret_key_length(),
                     "invalid secret point"
                 );
-                ensure_eq!(public_point.len(), 33, "invalid public point"); // prefix "0x40" + 32 bytes = 33 bytes
+                ensure_eq!(data.public_point.len(), 33, "invalid public point"); // prefix "0x40" + 32 bytes = 33 bytes
 
                 let their_public = {
                     // public part of the ephemeral key (removes 0x40 prefix)
-                    let ephemeral_public_key = &public_point.as_bytes()[1..];
+                    let ephemeral_public_key = &data.public_point.as_bytes()[1..];
 
                     // create montgomery point
                     let mut ephemeral_public_key_arr = [0u8; 32];
@@ -126,14 +126,20 @@ impl Decryptor for SecretKey {
 
                 shared_secret.to_bytes().to_vec()
             }
-            SecretKey::P256 { secret, .. } => {
-                derive_shared_secret_decryption::<p256::NistP256>(public_point, secret, &curve, 65)?
-            }
-            SecretKey::P384 { secret, .. } => {
-                derive_shared_secret_decryption::<p384::NistP384>(public_point, secret, &curve, 97)?
-            }
+            SecretKey::P256 { secret, .. } => derive_shared_secret_decryption::<p256::NistP256>(
+                data.public_point,
+                secret,
+                &curve,
+                65,
+            )?,
+            SecretKey::P384 { secret, .. } => derive_shared_secret_decryption::<p384::NistP384>(
+                data.public_point,
+                secret,
+                &curve,
+                97,
+            )?,
             SecretKey::P521 { secret, .. } => derive_shared_secret_decryption::<p521::NistP521>(
-                public_point,
+                data.public_point,
                 secret,
                 &curve,
                 133,
@@ -143,10 +149,10 @@ impl Decryptor for SecretKey {
         // obtain the session key from the shared secret
         derive_session_key(
             &shared_secret,
-            encrypted_session_key,
+            data.encrypted_session_key,
             encrypted_key_len,
             &(curve, alg_sym, hash),
-            fingerprint,
+            data.fingerprint,
         )
     }
 }
@@ -566,7 +572,11 @@ mod tests {
                                 encrypted_session_key,
                             },
                         ) => skey
-                            .decrypt((&public_point, &encrypted_session_key, &fingerprint))
+                            .decrypt(EncryptionFields {
+                                public_point: &public_point,
+                                encrypted_session_key: &encrypted_session_key,
+                                fingerprint: &fingerprint,
+                            })
                             .unwrap(),
                         _ => panic!("invalid key generated"),
                     };

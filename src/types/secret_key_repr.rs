@@ -42,11 +42,11 @@ impl SecretKeyRepr {
                     public_point,
                     encrypted_session_key,
                 },
-            ) => priv_key.decrypt((
+            ) => priv_key.decrypt(ecdh::EncryptionFields {
                 public_point,
                 encrypted_session_key,
-                recipient.fingerprint().as_bytes(),
-            ))?,
+                fingerprint: recipient.fingerprint().as_bytes(),
+            })?,
 
             (
                 SecretKeyRepr::X25519(ref priv_key),
@@ -64,7 +64,13 @@ impl SecretKeyRepr {
                     );
                 };
 
-                let key = priv_key.decrypt((ephemeral.to_owned(), *public, session_key))?;
+                let data = x25519::EncryptionFields {
+                    ephemeral_public_point: ephemeral.to_owned(),
+                    recipient_public: *public,
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?;
 
                 // FIXME: no postprocessing for X25519 (especially: no checksum)
 
@@ -92,7 +98,13 @@ impl SecretKeyRepr {
                     );
                 };
 
-                let key = priv_key.decrypt((ephemeral.to_owned(), *public, session_key))?;
+                let data = crate::crypto::x448::EncryptionFields {
+                    ephemeral_public_point: ephemeral.to_owned(),
+                    recipient_public: *public,
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?;
 
                 // FIXME: no postprocessing for X448 (especially: no checksum)
 

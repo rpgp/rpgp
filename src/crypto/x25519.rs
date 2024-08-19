@@ -22,20 +22,26 @@ impl KeyParams for SecretKey {
     fn key_params(&self) {}
 }
 
+pub struct EncryptionFields<'a> {
+    /// Ephemeral X25519 public key (32 bytes)
+    pub ephemeral_public_point: [u8; 32],
+
+    /// Recipient public key (32 bytes)
+    pub recipient_public: [u8; 32],
+
+    /// Encrypted and wrapped session key
+    pub encrypted_session_key: &'a [u8],
+}
+
 impl Decryptor for SecretKey {
-    // - Ephemeral X25519 public key (32 bytes).
-    // - Recipient public key (32 bytes). [FIXME: use PublicParams and expect PublicParams::X25519?]
-    // - Encrypted and wrapped session key.
-    type Data<'a> = ([u8; 32], [u8; 32], &'a [u8]);
+    type EncryptionFields<'a> = EncryptionFields<'a>;
 
-    fn decrypt(&self, data: Self::Data<'_>) -> Result<Vec<u8>> {
-        let (ephemeral_public_point, recipient_public, encrypted_session_key) = data;
-
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
         debug!("X25519 decrypt");
 
         let shared_secret = {
             // create montgomery point
-            let their_public = x25519_dalek::PublicKey::from(ephemeral_public_point);
+            let their_public = x25519_dalek::PublicKey::from(data.ephemeral_public_point);
 
             // private key of the recipient.
             let our_secret = StaticSecret::from(self.secret);
@@ -48,10 +54,10 @@ impl Decryptor for SecretKey {
 
         // obtain the session key from the shared secret
         derive_session_key(
-            ephemeral_public_point,
-            recipient_public,
+            data.ephemeral_public_point,
+            data.recipient_public,
             shared_secret,
-            encrypted_session_key,
+            data.encrypted_session_key,
         )
     }
 }
@@ -228,7 +234,13 @@ mod tests {
         let sk = SecretKey {
             secret: long_lived_private,
         };
-        let decrypted2 = sk.decrypt((ephemeral_key, public_key, &esk)).unwrap();
+        let decrypted2 = sk
+            .decrypt(EncryptionFields {
+                ephemeral_public_point: ephemeral_key,
+                recipient_public: public_key,
+                encrypted_session_key: &esk,
+            })
+            .unwrap();
 
         assert_eq!(decrypted_key, decrypted2);
     }
@@ -256,7 +268,12 @@ mod tests {
 
                 let (ephemeral, enc_sk) = encrypt(&mut rng, public, &plain[..]).unwrap();
 
-                let data = (ephemeral, public, enc_sk.deref());
+                let data = EncryptionFields {
+                    ephemeral_public_point: ephemeral,
+                    recipient_public: public,
+                    encrypted_session_key: enc_sk.deref(),
+                };
+
                 let decrypted = secret.decrypt(data).unwrap();
 
                 assert_eq!(&plain[..], &decrypted[..]);
