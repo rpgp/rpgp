@@ -3,6 +3,7 @@ use log::debug;
 use rand::Rng;
 use zeroize::Zeroize;
 
+use crate::types::EskType;
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -433,9 +434,9 @@ impl PublicKeyTrait for SecretKey {
         &self,
         rng: R,
         plain: &[u8],
-        v6_esk: bool,
+        typ: EskType,
     ) -> Result<EskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -485,9 +486,9 @@ impl PublicKeyTrait for SecretSubkey {
         &self,
         rng: R,
         plain: &[u8],
-        v6_esk: bool,
+        typ: EskType,
     ) -> Result<EskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -537,9 +538,9 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
         &self,
         rng: R,
         plain: &[u8],
-        v6_esk: bool,
+        typ: EskType,
     ) -> Result<EskBytes> {
-        self.details.encrypt(rng, plain, v6_esk)
+        self.details.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {

@@ -8,7 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
-use pgp::types::{Fingerprint, SignatureBytes};
+use pgp::types::{EskType, Fingerprint, SignatureBytes};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk, EskBytes};
 use pgp::{Message, SignedPublicKey};
@@ -66,9 +66,9 @@ impl PublicKeyTrait for FakeHsm {
         &self,
         rng: R,
         plain: &[u8],
-        v6_esk: bool,
+        typ: EskType,
     ) -> pgp::errors::Result<EskBytes> {
-        self.public_key.encrypt(rng, plain, v6_esk)
+        self.public_key.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {

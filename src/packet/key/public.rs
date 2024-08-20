@@ -4,7 +4,7 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
-use crate::types::Mpi;
+use crate::types::{EskType, Mpi};
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -480,7 +480,7 @@ impl PublicKeyTrait for PubKeyInner {
         &self,
         mut rng: R,
         plain: &[u8],
-        v6_esk: bool, // true for v6 PK-/SKESK, false for v3/4
+        typ: EskType,
     ) -> Result<EskBytes> {
         match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
@@ -504,57 +504,65 @@ impl PublicKeyTrait for PubKeyInner {
                 plain,
             ),
             PublicParams::X25519 { ref public } => {
-                if v6_esk {
-                    let (ephemeral, session_key) =
-                        crypto::x25519::encrypt(&mut rng, *public, plain)?;
+                match typ {
+                    EskType::V6 => {
+                        let (ephemeral, session_key) =
+                            crypto::x25519::encrypt(&mut rng, *public, plain)?;
 
-                    Ok(EskBytes::X25519 {
-                        ephemeral,
-                        session_key,
-                        sym_alg: None,
-                    })
-                } else {
-                    // v3 pkesk / v4 skesk
+                        Ok(EskBytes::X25519 {
+                            ephemeral,
+                            session_key,
+                            sym_alg: None,
+                        })
+                    }
+                    EskType::V3_4 => {
+                        // v3 pkesk / v4 skesk
 
-                    // byte 0 is the symmetric algo, in v3 pkesk
-                    let sym_alg = Some(plain[0].into());
-                    // for v3: strip algorithm
-                    let plain = &plain[1..];
+                        // byte 0 is the symmetric algo, in v3 pkesk
+                        let sym_alg = Some(plain[0].into());
+                        // for v3: strip algorithm
+                        let plain = &plain[1..];
 
-                    let (ephemeral, session_key) =
-                        crypto::x25519::encrypt(&mut rng, *public, plain)?;
+                        let (ephemeral, session_key) =
+                            crypto::x25519::encrypt(&mut rng, *public, plain)?;
 
-                    Ok(EskBytes::X25519 {
-                        ephemeral,
-                        session_key,
-                        sym_alg,
-                    })
+                        Ok(EskBytes::X25519 {
+                            ephemeral,
+                            session_key,
+                            sym_alg,
+                        })
+                    }
                 }
             }
             PublicParams::X448 { ref public } => {
-                if v6_esk {
-                    let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
+                match typ {
+                    EskType::V6 => {
+                        let (ephemeral, session_key) =
+                            crypto::x448::encrypt(&mut rng, *public, plain)?;
 
-                    Ok(EskBytes::X448 {
-                        ephemeral,
-                        session_key,
-                        sym_alg: None,
-                    })
-                } else {
-                    // v3 pkesk / v4 skesk
+                        Ok(EskBytes::X448 {
+                            ephemeral,
+                            session_key,
+                            sym_alg: None,
+                        })
+                    }
+                    EskType::V3_4 => {
+                        // v3 pkesk / v4 skesk
 
-                    // byte 0 is the symmetric algo, in v3 pkesk
-                    let sym_alg = Some(plain[0].into());
-                    // for v3: strip algorithm
-                    let plain = &plain[1..];
+                        // byte 0 is the symmetric algo, in v3 pkesk
+                        let sym_alg = Some(plain[0].into());
+                        // for v3: strip algorithm
+                        let plain = &plain[1..];
 
-                    let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
+                        let (ephemeral, session_key) =
+                            crypto::x448::encrypt(&mut rng, *public, plain)?;
 
-                    Ok(EskBytes::X448 {
-                        ephemeral,
-                        session_key,
-                        sym_alg,
-                    })
+                        Ok(EskBytes::X448 {
+                            ephemeral,
+                            session_key,
+                            sym_alg,
+                        })
+                    }
                 }
             }
             PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
@@ -623,9 +631,9 @@ impl PublicKeyTrait for PublicKey {
         &self,
         rng: R,
         plain: &[u8],
-        v6_esk: bool,
+        typ: EskType,
     ) -> Result<EskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -675,9 +683,9 @@ impl PublicKeyTrait for PublicSubkey {
         &self,
         rng: R,
         plain: &[u8],
-        v6_esk: bool,
+        typ: EskType,
     ) -> Result<EskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, v6_esk)
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {

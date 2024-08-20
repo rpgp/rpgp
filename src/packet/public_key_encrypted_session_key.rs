@@ -14,6 +14,7 @@ use crate::errors::{IResult, Result};
 use crate::message::EskBytes;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
+use crate::types::EskType;
 use crate::types::{
     mpi, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, Tag, Version,
 };
@@ -75,7 +76,7 @@ impl PublicKeyEncryptedSessionKey {
             }
         }
 
-        let values = pkey.encrypt(rng, &data, false)?;
+        let values = pkey.encrypt(rng, &data, EskType::V3_4)?;
 
         Ok(PublicKeyEncryptedSessionKey::V3 {
             packet_version: Default::default(),
@@ -102,7 +103,7 @@ impl PublicKeyEncryptedSessionKey {
             _ => data.extend_from_slice(&checksum::calculate_simple(session_key).to_be_bytes()),
         }
 
-        let values = pkey.encrypt(rng, &data, true)?;
+        let values = pkey.encrypt(rng, &data, EskType::V6)?;
 
         Ok(PublicKeyEncryptedSessionKey::V6 {
             packet_version: Default::default(),
