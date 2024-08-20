@@ -350,10 +350,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [
-            KeyVersion::V4,
-            // KeyVersion::V6 // TODO: we can't do RSA tests for V6 yet: v6 secret key material locking is missing
-        ] {
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
             println!("key version {:?}", key_version);
 
             for i in 0..50 {
