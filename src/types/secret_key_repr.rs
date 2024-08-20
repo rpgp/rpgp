@@ -72,8 +72,6 @@ impl SecretKeyRepr {
 
                 let key = priv_key.decrypt(data)?;
 
-                // FIXME: no postprocessing for X25519 (especially: no checksum)
-
                 // We expect `algo` to be set for v3 PKESK, and unset for v6 PKESK
                 return if let Some(sym_alg) = *sym_alg {
                     Ok(PlainSessionKey::V4 { key, sym_alg })
@@ -105,8 +103,6 @@ impl SecretKeyRepr {
                 };
 
                 let key = priv_key.decrypt(data)?;
-
-                // FIXME: no postprocessing for X448 (especially: no checksum)
 
                 // We expect `algo` to be set for v3 PKESK, and unset for v6 PKESK
                 return if let Some(sym_alg) = *sym_alg {
