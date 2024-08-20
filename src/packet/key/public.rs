@@ -504,66 +504,46 @@ impl PublicKeyTrait for PubKeyInner {
                 plain,
             ),
             PublicParams::X25519 { ref public } => {
-                match typ {
-                    EskType::V6 => {
-                        let (ephemeral, session_key) =
-                            crypto::x25519::encrypt(&mut rng, *public, plain)?;
-
-                        Ok(EskBytes::X25519 {
-                            ephemeral,
-                            session_key,
-                            sym_alg: None,
-                        })
-                    }
+                let (sym_alg, plain) = match typ {
+                    EskType::V6 => (None, plain),
                     EskType::V3_4 => {
-                        // v3 pkesk / v4 skesk
+                        ensure!(!plain.is_empty(), "plain may not be empty");
 
-                        // byte 0 is the symmetric algo, in v3 pkesk
-                        let sym_alg = Some(plain[0].into());
-                        // for v3: strip algorithm
-                        let plain = &plain[1..];
-
-                        let (ephemeral, session_key) =
-                            crypto::x25519::encrypt(&mut rng, *public, plain)?;
-
-                        Ok(EskBytes::X25519 {
-                            ephemeral,
-                            session_key,
-                            sym_alg,
-                        })
+                        (
+                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                            &plain[1..],           // strip symmetric algorithm
+                        )
                     }
-                }
+                };
+
+                let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, *public, plain)?;
+
+                Ok(EskBytes::X25519 {
+                    ephemeral,
+                    session_key,
+                    sym_alg,
+                })
             }
             PublicParams::X448 { ref public } => {
-                match typ {
-                    EskType::V6 => {
-                        let (ephemeral, session_key) =
-                            crypto::x448::encrypt(&mut rng, *public, plain)?;
-
-                        Ok(EskBytes::X448 {
-                            ephemeral,
-                            session_key,
-                            sym_alg: None,
-                        })
-                    }
+                let (sym_alg, plain) = match typ {
+                    EskType::V6 => (None, plain),
                     EskType::V3_4 => {
-                        // v3 pkesk / v4 skesk
+                        ensure!(!plain.is_empty(), "plain may not be empty");
 
-                        // byte 0 is the symmetric algo, in v3 pkesk
-                        let sym_alg = Some(plain[0].into());
-                        // for v3: strip algorithm
-                        let plain = &plain[1..];
-
-                        let (ephemeral, session_key) =
-                            crypto::x448::encrypt(&mut rng, *public, plain)?;
-
-                        Ok(EskBytes::X448 {
-                            ephemeral,
-                            session_key,
-                            sym_alg,
-                        })
+                        (
+                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                            &plain[1..],           // strip symmetric algorithm
+                        )
                     }
-                }
+                };
+
+                let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
+
+                Ok(EskBytes::X448 {
+                    ephemeral,
+                    session_key,
+                    sym_alg,
+                })
             }
             PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
             PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
