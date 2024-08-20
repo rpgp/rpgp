@@ -5,7 +5,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, rsa, x25519, Decryptor};
 use crate::errors::Result;
 use crate::message::EskBytes;
-use crate::types::{PublicKeyTrait, PublicParams};
+use crate::types::{EskType, PublicKeyTrait, PublicParams};
 use crate::PlainSessionKey;
 
 /// The version of the secret key that is actually exposed to users to do crypto operations.
@@ -22,11 +22,10 @@ pub enum SecretKeyRepr {
 }
 
 impl SecretKeyRepr {
-    /// FIXME: `esk_version` is weird. We use 3 vs. 6, but in reality, "3" means v3 PKESK or v4 SKESK
     pub fn decrypt<P>(
         &self,
         values: &EskBytes,
-        esk_version: u8,
+        typ: EskType,
         recipient: &P,
     ) -> Result<PlainSessionKey>
     where
@@ -116,9 +115,8 @@ impl SecretKeyRepr {
             _ => todo!(),
         };
 
-        // FIXME: this is not nice at all. shouldn't use a u8.
-        match esk_version {
-            3 => {
+        match typ {
+            EskType::V3_4 => {
                 let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
                 ensure!(
                     session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
@@ -153,7 +151,7 @@ impl SecretKeyRepr {
                 })
             }
 
-            6 => {
+            EskType::V6 => {
                 let (k, checksum) = {
                     let dec_len = decrypted_key.len();
                     (
@@ -166,7 +164,6 @@ impl SecretKeyRepr {
 
                 Ok(PlainSessionKey::V6 { key: k.to_vec() })
             }
-            _ => unimplemented!(),
         }
     }
 }

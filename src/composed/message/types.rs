@@ -23,7 +23,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
+    CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
     StringToKey, Tag,
 };
 
@@ -623,16 +623,21 @@ impl Message {
                 let session_keys = valid_keys
                     .iter()
                     .map(|(packet, encoding_key, encoding_subkey)| {
-                        let v = packet.version();
+                        let typ = match packet.version() {
+                            3 => EskType::V3_4,
+                            6 => EskType::V6,
+                            v => unimplemented_err!("Unexpected PKESK version {}", v),
+                        };
+
                         if let Some(ek) = encoding_key {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), packet.values(), v)?,
+                                decrypt_session_key(ek, key_pw.clone(), packet.values(), typ)?,
                             ))
                         } else if let Some(ek) = encoding_subkey {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), packet.values(), v)?,
+                                decrypt_session_key(ek, key_pw.clone(), packet.values(), typ)?,
                             ))
                         } else {
                             unreachable!("either a key or a subkey were found");

@@ -3,14 +3,14 @@ use log::debug;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{Mpi, SecretKeyRepr, SecretKeyTrait};
+use crate::types::{EskType, Mpi, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
 pub fn decrypt_session_key<F, L>(
     locked_key: &L,
     key_pw: F,
     values: &EskBytes,
-    esk_version: u8, // FIXME: this is a bad hack
+    typ: EskType,
 ) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
@@ -18,9 +18,7 @@ where
 {
     debug!("decrypt session key");
 
-    locked_key.unlock(key_pw, |priv_key| {
-        priv_key.decrypt(values, esk_version, locked_key)
-    })
+    locked_key.unlock(key_pw, |priv_key| priv_key.decrypt(values, typ, locked_key))
 }
 
 /// Values comprising the encrypted session key
