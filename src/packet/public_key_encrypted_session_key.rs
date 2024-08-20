@@ -411,7 +411,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
                 // the symmetric algorithm ID is not encrypted.
                 //
-                // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
                 if let Some(sym_alg) = sym_alg {
                     // len: algo + esk len
                     writer.write_u8((session_key.len() + 1).try_into()?)?;
@@ -438,7 +438,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
                 // the symmetric algorithm ID is not encrypted.
                 //
-                // https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
                 if let Some(sym_alg) = sym_alg {
                     // len: algo + esk len
                     writer.write_u8((session_key.len() + 1).try_into()?)?;

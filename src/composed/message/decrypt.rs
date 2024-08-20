@@ -68,7 +68,7 @@ pub enum EskBytes {
 /// A v4 session key can be used with a SED, or a v1 SEIPD.
 /// A v6 session key can only be used with a v2 SEIPD.
 ///
-/// https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#encrypted-message-versions
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-versions-in-encrypte
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum PlainSessionKey {
     /// Obtained from a v3 PKESK or a v4 SKESK

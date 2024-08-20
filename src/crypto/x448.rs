@@ -65,7 +65,7 @@ impl Decryptor for SecretKey {
 /// Obtain the decrypted OpenPGP session key
 ///
 /// This helper function performs the steps described in
-/// https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
 pub fn derive_session_key(
     ephemeral: [u8; 56],
     recipient_public: [u8; 56],
@@ -95,7 +95,7 @@ pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecre
 }
 
 /// HKDF for X448
-/// https://www.ietf.org/archive/id/draft-ietf-openpgp-crypto-refresh-13.html#name-algorithm-specific-fields-for-
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
 pub fn hkdf(
     ephemeral: &[u8; 56],
     recipient_public: &[u8; 56],
