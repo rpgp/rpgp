@@ -111,7 +111,7 @@ impl SecretKeyRepr {
                 };
             }
 
-            (SecretKeyRepr::EdDSA(_), _) => unimplemented_err!("EdDSA"),
+            (SecretKeyRepr::EdDSA(_), _) => bail!("EdDSA is only used for signing"),
             _ => todo!(),
         };
 
