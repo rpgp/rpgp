@@ -62,7 +62,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         R: rand::Rng + rand::CryptoRng,
         P: FnOnce() -> String,
     {
-        let s2k = crate::types::S2kParams::new_default(rng);
+        let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
     }
 
@@ -702,7 +702,7 @@ mod tests {
         alice_sec
             .set_password_with_s2k(
                 || "password".to_string(),
-                crate::types::S2kParams::new_default(&mut rng),
+                crate::types::S2kParams::new_default(&mut rng, KeyVersion::V4),
             )
             .unwrap();
 

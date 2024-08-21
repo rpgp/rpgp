@@ -172,7 +172,9 @@ impl SecretKeyParams {
 
     pub fn generate_with_rng<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
         let passphrase = self.passphrase;
-        let s2k = self.s2k.unwrap_or_else(|| S2kParams::new_default(&mut rng));
+        let s2k = self
+            .s2k
+            .unwrap_or_else(|| S2kParams::new_default(&mut rng, self.version));
         let (public_params, secret_params) = self.key_type.generate_with_rng(&mut rng)?;
         let mut primary_key = packet::SecretKey::new(
             packet::PublicKey::new(
@@ -218,7 +220,7 @@ impl SecretKeyParams {
                     let passphrase = subkey.passphrase;
                     let s2k = subkey
                         .s2k
-                        .unwrap_or_else(|| S2kParams::new_default(&mut rng));
+                        .unwrap_or_else(|| S2kParams::new_default(&mut rng, subkey.version));
                     let (public_params, secret_params) = subkey.key_type.generate()?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_certify(subkey.can_certify);

@@ -11,6 +11,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
 use crate::ser::Serialize;
+use crate::types::KeyVersion;
 
 const EXPBIAS: u32 = 6;
 const DEFAULT_ITER_SALTED_COUNT: u8 = 224;
@@ -80,16 +81,44 @@ impl S2kParams {
     /// - AES256
     /// - CFB
     /// - Iterated and Salted with 224 rounds
-    pub fn new_default<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let sym_alg = SymmetricKeyAlgorithm::AES256;
+    pub fn new_default<R: Rng + CryptoRng>(mut rng: R, key_version: KeyVersion) -> Self {
+        match key_version {
+            KeyVersion::V6 => {
+                let sym_alg = SymmetricKeyAlgorithm::AES256;
+                let aead_mode = AeadAlgorithm::Ocb;
 
-        let mut iv = vec![0u8; sym_alg.block_size()];
-        rng.fill(&mut iv[..]);
+                let mut nonce = vec![0u8; aead_mode.nonce_size()];
+                rng.fill(&mut nonce[..]);
 
-        Self::Cfb {
-            sym_alg,
-            s2k: StringToKey::new_default(rng),
-            iv,
+                let mut salt = [0u8; 16];
+                rng.fill(&mut salt[..]);
+
+                S2kParams::Aead {
+                    sym_alg,
+                    aead_mode,
+
+                    // parameter choice (2) from https://www.rfc-editor.org/rfc/rfc9106#name-parameter-choice
+                    s2k: StringToKey::Argon2 {
+                        salt,
+                        t: 3,
+                        p: 4,
+                        m_enc: 16, // 64 MiB
+                    },
+                    nonce,
+                }
+            }
+            _ => {
+                let sym_alg = SymmetricKeyAlgorithm::AES256;
+
+                let mut iv = vec![0u8; sym_alg.block_size()];
+                rng.fill(&mut iv[..]);
+
+                Self::Cfb {
+                    sym_alg,
+                    s2k: StringToKey::new_default(rng),
+                    iv,
+                }
+            }
         }
     }
 }
