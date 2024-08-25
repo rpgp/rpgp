@@ -105,7 +105,8 @@ impl From<Vec<u8>> for SignatureBytes {
     }
 }
 
-/// Select which type of encrypted session key data should be produced in an encryption step
+/// Select which type of encrypted session key data should be produced in an encryption step\
+#[derive(Debug)]
 pub enum EskType {
     /// V3 PKESK or V4 SKESK (these are used in RFC 4880 and 2440)
     V3_4,

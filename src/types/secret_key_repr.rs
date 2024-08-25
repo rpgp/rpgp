@@ -71,11 +71,11 @@ impl SecretKeyRepr {
 
                 let key = priv_key.decrypt(data)?;
 
-                // We expect `algo` to be set for v3 PKESK, and unset for v6 PKESK
-                return if let Some(sym_alg) = *sym_alg {
-                    Ok(PlainSessionKey::V4 { key, sym_alg })
-                } else {
-                    Ok(PlainSessionKey::V6 { key })
+                return match (&typ, *sym_alg) {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    (EskType::V3_4, Some(sym_alg)) => Ok(PlainSessionKey::V4 { key, sym_alg }),
+                    (EskType::V6, None) => Ok(PlainSessionKey::V6 { key }),
+                    _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
                 };
             }
 
