@@ -434,6 +434,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
+    use crate::types::S2kParams;
     use crate::{composed::shared::Deserializable, Message};
 
     #[test]
@@ -483,14 +484,8 @@ k0mXubZvyl4GBg==
         Ok(())
     }
 
-    #[test]
-    #[ignore] // slow in debug mode
-    fn test_v6_annex_a_5() -> Result<()> {
-        let _ = pretty_env_logger::try_init();
-
-        // A.5. Sample locked v6 Secret Key (Transferable Secret Key)
-
-        let tsk = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+    // A.5. Sample locked v6 Secret Key (Transferable Secret Key)
+    const ANNEX_A_5: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
 
 xYIGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laP9JgkC
 FARdb9ccngltHraRe25uHuyuAQQVtKipJ0+r5jL4dacGWSAheCWPpITYiyfyIOPS
@@ -507,26 +502,86 @@ Nacp8DkBClZRa2c3AMQzSDXa9jGhYzxjzVb5scHDzTkjyRZWRdTq8U6L4da+/+Kt
 ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
 -----END PGP PRIVATE KEY BLOCK-----";
 
-        let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(tsk))?;
+    const ANNEX_A_5_PASSPHRASE: &str = "correct horse battery staple";
 
+    #[test]
+    #[ignore] // slow in debug mode (argon2)
+    fn test_v6_annex_a_5() -> Result<()> {
+        let _ = pretty_env_logger::try_init();
+
+        let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
         ssk.verify()?;
 
-        let passphrase = "correct horse battery staple";
-
         let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
-        let msg = Message::Literal(lit);
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let msg = msg.sign(
+        let msg = Message::Literal(lit).sign(
             &mut rng,
             &ssk.primary_key,
-            || passphrase.to_string(),
+            || ANNEX_A_5_PASSPHRASE.to_string(),
             HashAlgorithm::SHA2_256,
         )?;
 
         msg.verify(&ssk.primary_key)?;
 
-        // FIXME: test roundtrip unlock/lock?
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // slow in debug mode
+    fn secret_key_protection_v6() -> Result<()> {
+        let _ = pretty_env_logger::try_init();
+
+        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
+        ssk.verify()?;
+
+        // we will test unlock/lock on the primary key
+        let mut pri = ssk.primary_key;
+
+        // remove passphrase
+        pri.remove_password(|| ANNEX_A_5_PASSPHRASE.to_string())?;
+
+        // try signing without pw
+        let msg = Message::Literal(lit.clone()).sign(
+            &mut rng,
+            &pri,
+            String::default,
+            HashAlgorithm::SHA2_256,
+        )?;
+        msg.verify(&pri)?;
+
+        // set passphrase with default s2k
+        pri.set_password(&mut rng, || ANNEX_A_5_PASSPHRASE.to_string())?;
+
+        // try signing with pw
+        let msg = Message::Literal(lit.clone()).sign(
+            &mut rng,
+            &pri,
+            || ANNEX_A_5_PASSPHRASE.to_string(),
+            HashAlgorithm::SHA2_256,
+        )?;
+        msg.verify(&pri)?;
+
+        // remove passphrase
+        pri.remove_password(|| ANNEX_A_5_PASSPHRASE.to_string())?;
+
+        // set passphrase with Cfb s2k (default for KeyVersion::V4)
+        pri.set_password_with_s2k(
+            || ANNEX_A_5_PASSPHRASE.to_string(),
+            S2kParams::new_default(&mut rng, KeyVersion::V4),
+        )?;
+
+        // try signing with pw
+        let msg = Message::Literal(lit).sign(
+            &mut rng,
+            &pri,
+            || ANNEX_A_5_PASSPHRASE.to_string(),
+            HashAlgorithm::SHA2_256,
+        )?;
+        msg.verify(&pri)?;
 
         Ok(())
     }

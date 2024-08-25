@@ -678,10 +678,11 @@ mod tests {
 
     use crate::crypto::hash::HashAlgorithm;
     use crate::packet::{PublicKey, SecretKey};
-    use crate::types::{KeyVersion, SecretKeyTrait, Version};
+    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait, Version};
 
     #[test]
-    fn secret_key_protection() {
+    #[ignore] // slow in debug mode (argon2)
+    fn secret_key_protection_v4() {
         const DATA: &[u8] = &[0x23, 0x05];
         let key_type = crate::KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -741,6 +742,22 @@ mod tests {
         // signing with the right password should succeed
         assert!(alice_sec
             .create_signature(|| "foo".to_string(), HashAlgorithm::default(), DATA)
+            .is_ok());
+
+        // remove the password protection again
+        alice_sec.remove_password(|| "foo".to_string()).unwrap();
+
+        // set password protection with v6 s2k defaults (AEAD+Argon2)
+        alice_sec
+            .set_password_with_s2k(
+                || "bar".to_string(),
+                S2kParams::new_default(&mut rng, KeyVersion::V6),
+            )
+            .unwrap();
+
+        // signing with the right password should succeed
+        assert!(alice_sec
+            .create_signature(|| "bar".to_string(), HashAlgorithm::default(), DATA)
             .is_ok());
     }
 }
