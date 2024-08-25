@@ -356,6 +356,13 @@ impl PlainSecretParams {
         match &s2k_params {
             S2kParams::Unprotected => bail!("cannot encrypt to unprotected"),
             S2kParams::Cfb { sym_alg, s2k, iv } => {
+                // An implementation MUST NOT create [..] any Secret Key packet where the S2K usage
+                // octet is not AEAD (253) and the S2K Specifier Type is Argon2.
+                ensure!(
+                    !matches!(s2k, StringToKey::Argon2 { .. }),
+                    "Argon2 not allowed with Cfb"
+                );
+
                 let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
                 let enc_data = match version {
                     KeyVersion::V2 | KeyVersion::V3 => {
