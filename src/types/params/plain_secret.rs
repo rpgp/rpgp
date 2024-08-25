@@ -354,13 +354,14 @@ impl PlainSecretParams {
         let version = pub_key.version();
 
         match &s2k_params {
-            S2kParams::Unprotected => bail!("cannot encrypt to uprotected"),
+            S2kParams::Unprotected => bail!("cannot encrypt to unprotected"),
             S2kParams::Cfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
                 let enc_data = match version {
-                    KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
-                    KeyVersion::V3 => unimplemented_err!("v3 encryption"),
-                    KeyVersion::V4 => {
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        unimplemented_err!("Encryption for V2/V3 keys is not available")
+                    }
+                    KeyVersion::V4 | KeyVersion::V6 => {
                         let mut data = Vec::new();
                         self.as_ref()
                             .to_writer_raw(&mut data)
@@ -372,7 +373,6 @@ impl PlainSecretParams {
                         data
                     }
                     KeyVersion::V5 => unimplemented_err!("v5 encryption"),
-                    KeyVersion::V6 => unimplemented_err!("v6 encryption"),
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
@@ -387,11 +387,10 @@ impl PlainSecretParams {
                 let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
 
                 let enc_data = match version {
-                    KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
-                    KeyVersion::V3 => unimplemented_err!("v3 encryption"),
-                    KeyVersion::V4 => unimplemented_err!("v4 aead encryption"), // FIXME: implement
-                    KeyVersion::V5 => unimplemented_err!("v5 encryption"),
-                    KeyVersion::V6 => {
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        unimplemented_err!("Encryption for V2/V3 keys is not available")
+                    }
+                    KeyVersion::V4 | KeyVersion::V6 => {
                         let mut data = Vec::new();
                         self.as_ref()
                             .to_writer_raw(&mut data)
@@ -413,6 +412,7 @@ impl PlainSecretParams {
 
                         data
                     }
+                    KeyVersion::V5 => unimplemented_err!("v5 encryption"),
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
