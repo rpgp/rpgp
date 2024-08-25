@@ -591,8 +591,10 @@ impl SecretKey {
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet.
     ///
-    /// This function uses the default S2K locking mechanism
-    /// (`Cfb` with iterated and salted derivation of the password).
+    /// This function uses the default S2K locking mechanism for the key version:
+    ///
+    /// - for V6 keys: `Aead` with `Argon2` derivation,
+    /// - for V4 keys: `Cfb` with iterated and salted derivation of the password.
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
