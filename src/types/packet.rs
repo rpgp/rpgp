@@ -97,7 +97,7 @@ impl Tag {
 /// (see https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers):
 ///
 /// 1) the (current) OpenPGP packet format specified by this document and its
-/// predecessors [RFC4880] and [RFC2440] and
+///    predecessors [RFC4880] and [RFC2440] and
 ///
 /// 2) the Legacy packet format as used by implementations predating any IETF specification of OpenPGP.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
