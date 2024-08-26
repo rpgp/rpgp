@@ -154,7 +154,7 @@ fn derive_shared_secret_decryption<C>(
     public_point: &Mpi,
     secret: &[u8],
     curve: &ECCCurve,
-    pub_bits: usize,
+    pub_bytes: usize,
 ) -> Result<Vec<u8>>
 where
     C: elliptic_curve::CurveArithmetic,
@@ -167,7 +167,7 @@ where
         curve.secret_key_length(),
         "invalid secret point"
     );
-    ensure_eq!(public_point.len(), pub_bits, "invalid public point");
+    ensure_eq!(public_point.len(), pub_bytes, "invalid public point");
 
     let ephemeral_public_key =
         elliptic_curve::PublicKey::<C>::from_sec1_bytes(public_point.as_bytes())?;
