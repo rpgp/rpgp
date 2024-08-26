@@ -273,13 +273,13 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                 }
                 SecretKeyRepr::DSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
                 SecretKeyRepr::ECDH(_) => {
-                    bail!("ECDH can not be used to for signing operations")
+                    bail!("ECDH can not be used for signing operations")
                 }
                 SecretKeyRepr::X25519(_) => {
-                    bail!("X25519 can not be used to for signing operations")
+                    bail!("X25519 can not be used for signing operations")
                 }
                 SecretKeyRepr::X448(_) => {
-                    bail!("X448 can not be used to for signing operations")
+                    bail!("X448 can not be used for signing operations")
                 }
                 SecretKeyRepr::EdDSA(ref priv_key) => {
                     priv_key.sign(hash, data, self.public_params())

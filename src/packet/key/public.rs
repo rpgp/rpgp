@@ -429,10 +429,10 @@ impl PublicKeyTrait for PubKeyInner {
                 sig.try_into()?,
             ),
             PublicParams::X25519 { .. } => {
-                unimplemented_err!("verify X25519");
+                bail!("X25519 can not be used for verify operations");
             }
             PublicParams::X448 { .. } => {
-                unimplemented_err!("verify X448");
+                bail!("X448 can not be used for verify operations");
             }
             PublicParams::ECDSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
@@ -445,7 +445,12 @@ impl PublicKeyTrait for PubKeyInner {
                 ref alg_sym,
                 ..
             } => {
-                unimplemented_err!("verify ECDH: {:?} {:?} {:?}", curve, hash, alg_sym);
+                bail!(
+                    "ECDH ({:?} {:?} {:?}) can not be used for verify operations",
+                    curve,
+                    hash,
+                    alg_sym
+                );
             }
             PublicParams::Elgamal { .. } => {
                 unimplemented_err!("verify Elgamal");
@@ -471,7 +476,7 @@ impl PublicKeyTrait for PubKeyInner {
                 )
             }
             PublicParams::Unknown { .. } => {
-                unimplemented_err!("verify unknown");
+                unimplemented_err!("PublicParams::Unknown can not be used for verify operations");
             }
         }
     }
