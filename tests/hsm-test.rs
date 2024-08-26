@@ -377,7 +377,7 @@ fn card_decrypt() {
         };
 
         let values = if let Esk::PublicKeyEncryptedSessionKey(ref k) = esk[0] {
-            k.values()
+            k.values().expect("known PKESK version")
         } else {
             panic!("whoops")
         };

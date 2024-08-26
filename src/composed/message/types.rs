@@ -632,12 +632,12 @@ impl Message {
                         if let Some(ek) = encoding_key {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), pkesk.values(), typ)?,
+                                decrypt_session_key(ek, key_pw.clone(), pkesk.values()?, typ)?,
                             ))
                         } else if let Some(ek) = encoding_subkey {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), pkesk.values(), typ)?,
+                                decrypt_session_key(ek, key_pw.clone(), pkesk.values()?, typ)?,
                             ))
                         } else {
                             unreachable!("either a key or a subkey were found");

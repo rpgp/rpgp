@@ -145,10 +145,10 @@ impl PublicKeyEncryptedSessionKey {
         }
     }
 
-    pub fn values(&self) -> &EskBytes {
+    pub fn values(&self) -> Result<&EskBytes> {
         match self {
-            Self::V3 { values, .. } | Self::V6 { values, .. } => values,
-            _ => unimplemented!(),
+            Self::V3 { values, .. } | Self::V6 { values, .. } => Ok(values),
+            Self::Other { version, .. } => bail!("Unsupported PKESK version {}", version),
         }
     }
 
@@ -368,7 +368,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
 
         writer.write_u8(self.algorithm().into())?;
 
-        match (self.algorithm(), self.values()) {
+        match (self.algorithm(), self.values()?) {
             (
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSASign
