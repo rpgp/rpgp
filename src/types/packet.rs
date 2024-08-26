@@ -91,13 +91,22 @@ impl Tag {
     }
 }
 
+/// The version of the packet format.
+///
+/// There are two packet formats
+/// (see https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers):
+///
+/// 1) the (current) OpenPGP packet format specified by this document and its
+/// predecessors [RFC4880] and [RFC2440] and
+///
+/// 2) the Legacy packet format as used by implementations predating any IETF specification of OpenPGP.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
 pub enum Version {
-    /// Old Packet Format
+    /// Old Packet Format ("Legacy packet format")
     Old = 0,
-    /// New Packet Format
+    /// New Packet Format ("OpenPGP packet format")
     #[default]
     New = 1,
 }
