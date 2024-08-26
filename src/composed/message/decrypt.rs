@@ -63,22 +63,27 @@ pub enum EskBytes {
 
 /// Decrypted session key.
 ///
-/// A v4 session key can be used with a SED, or a v1 SEIPD.
+/// A v3/v4 session key can be used with a SED, or a v1 SEIPD.
 /// A v6 session key can only be used with a v2 SEIPD.
 ///
 /// https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-versions-in-encrypte
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum PlainSessionKey {
-    /// Obtained from a v3 PKESK or a v4 SKESK
-    V4 {
+    /// A session key from a v3 PKESK or a v4 SKESK
+    ///
+    /// (Note: for historical reasons, the OpenPGP format doesn't specify a v4 PKESK or a V3 SKESK)
+    V3_4 {
         sym_alg: SymmetricKeyAlgorithm,
         #[debug("..")]
         key: Vec<u8>,
     },
+
     V5 {
         #[debug("..")]
         key: Vec<u8>,
     },
+
+    /// A session key from a v6 PKESK or a v6 SKESK
     V6 {
         #[debug("..")]
         key: Vec<u8>,
@@ -113,7 +118,7 @@ where
         // There is no encrypted session key.
         //
         // S2K-derived key is the session key.
-        return Ok(PlainSessionKey::V4 {
+        return Ok(PlainSessionKey::V3_4 {
             key,
             sym_alg: packet_algorithm,
         });

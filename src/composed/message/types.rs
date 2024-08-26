@@ -192,7 +192,7 @@ impl Edata {
         debug!("decrypting protected = {:?}", protected);
 
         match key {
-            PlainSessionKey::V4 { sym_alg, key } => {
+            PlainSessionKey::V3_4 { sym_alg, key } => {
                 ensure!(
                     sym_alg != SymmetricKeyAlgorithm::Plaintext,
                     "session key algorithm cannot be plaintext"

@@ -387,7 +387,7 @@ fn card_decrypt() {
             .unwrap();
 
         let decrypted = edata
-            .decrypt(pgp::PlainSessionKey::V4 {
+            .decrypt(pgp::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })
