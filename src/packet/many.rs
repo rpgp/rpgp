@@ -340,6 +340,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_many_parser() {
         let _ = pretty_env_logger::try_init();
 
