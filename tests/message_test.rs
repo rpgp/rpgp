@@ -152,7 +152,7 @@ macro_rules! msg_test {
         fn $name() {
             test_parse_msg(
                 &format!("{}.json", $pos),
-                "./tests/opengpg-interop/testcases/messages",
+                "./tests/openpgp-interop/testcases/messages",
                 $normalized,
             );
         }

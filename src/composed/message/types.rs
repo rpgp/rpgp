@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn test_rsa_encryption() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
         )
         .unwrap();
@@ -1075,7 +1075,7 @@ mod tests {
         for _ in 0..100 {
             let (skey, _headers) = SignedSecretKey::from_armor_single(
                 fs::File::open(
-                    "./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc",
+                    "./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc",
                 )
                 .unwrap(),
             )
@@ -1102,7 +1102,7 @@ mod tests {
     #[test]
     fn test_rsa_signing_bytes() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
         )
         .unwrap();
@@ -1127,7 +1127,7 @@ mod tests {
     #[test]
     fn test_rsa_signing_bytes_compressed() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
         )
         .unwrap();
