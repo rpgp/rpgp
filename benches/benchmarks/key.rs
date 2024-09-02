@@ -14,7 +14,7 @@ fn bench_key(c: &mut Criterion) {
     let mut g = c.benchmark_group("secret_key");
 
     g.bench_function("rsa_parse", |b| {
-        let p = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc";
+        let p = "./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc";
         b.iter(|| {
             let mut decrypt_key_file = File::open(p).unwrap();
             black_box(SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap())
