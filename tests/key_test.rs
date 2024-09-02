@@ -48,7 +48,7 @@ fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
 }
 
 fn get_test_key(name: &str) -> File {
-    read_file(Path::new("./tests/opengpg-interop/testcases/keys").join(name))
+    read_file(Path::new("./tests/openpgp-interop/testcases/keys").join(name))
 }
 
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -332,7 +332,7 @@ fn test_parse_openpgp_sample_rsa_private() {
 fn test_parse_details() {
     let _ = pretty_env_logger::try_init();
 
-    let file = File::open("./tests/opengpg-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
+    let file = File::open("./tests/openpgp-interop/testcases/keys/gnupg-v1-003.asc").unwrap();
     let (key, _headers) = SignedPublicKey::from_armor_single(file).expect("failed to parse key");
     key.verify().expect("invalid key");
 
@@ -614,7 +614,7 @@ fn test_parse_details() {
 
 #[test]
 fn encrypted_private_key() {
-    let p = Path::new("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
+    let p = Path::new("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
     let mut file = read_file(p.to_path_buf());
 
     let mut buf = vec![];
@@ -679,13 +679,13 @@ fn encrypted_private_key() {
 fn get_test_fingerprint(filename: &str) -> (serde_json::Value, SignedPublicKey) {
     let mut asc = read_file(
         Path::new(&format!(
-            "./tests/opengpg-interop/testcases/keys/{filename}.asc"
+            "./tests/openpgp-interop/testcases/keys/{filename}.asc"
         ))
         .to_path_buf(),
     );
     let json_file = read_file(
         Path::new(&format!(
-            "./tests/opengpg-interop/testcases/keys/{filename}.json"
+            "./tests/openpgp-interop/testcases/keys/{filename}.json"
         ))
         .to_path_buf(),
     );
@@ -1259,7 +1259,7 @@ fn test_invalid() {
 #[test]
 fn test_handle_incomplete_packets_end() {
     let _ = pretty_env_logger::try_init();
-    let p = Path::new("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
+    let p = Path::new("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
     let mut file = read_file(p.to_path_buf());
 
     let mut buf = vec![];

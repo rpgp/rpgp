@@ -16,7 +16,7 @@ fn bench_message(c: &mut Criterion) {
     let mut rng = thread_rng();
 
     g.bench_function("parse_armored_rsa", |b| {
-        let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
+        let message_file_path = "./tests/openpgp-interop/testcases/messages/gnupg-v1-001.asc";
         let mut message_file = File::open(message_file_path).unwrap();
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
@@ -35,11 +35,11 @@ fn bench_message(c: &mut Criterion) {
 
     g.bench_function("rsa_decrypt", |b| {
         let mut decrypt_key_file =
-            File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+            File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap();
         let (decrypt_key, _headers) =
             SignedSecretKey::from_armor_single(&mut decrypt_key_file).unwrap();
-        let message_file_path = "./tests/opengpg-interop/testcases/messages/gnupg-v1-001.asc";
+        let message_file_path = "./tests/openpgp-interop/testcases/messages/gnupg-v1-001.asc";
         let message_file = fs::read(message_file_path).unwrap();
 
         b.iter(|| {
