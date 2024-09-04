@@ -46,8 +46,10 @@ impl Decryptor for SecretKey {
             // private key of the recipient.
             let our_secret = x448::Secret::from(self.secret);
 
-            // derive shared secret
-            let shared_secret = our_secret.as_diffie_hellman(&their_public).expect("FIXME");
+            // derive shared secret (None for low order points)
+            let Some(shared_secret) = our_secret.as_diffie_hellman(&their_public) else {
+                bail!("x448 Secret::as_diffie_hellman returned None");
+            };
 
             *shared_secret.as_bytes()
         };
@@ -148,8 +150,10 @@ pub fn encrypt<R: CryptoRng + Rng>(
         rng.fill_bytes(&mut *ephemeral_secret_key_bytes);
         let our_secret = x448::Secret::from(*ephemeral_secret_key_bytes);
 
-        // derive shared secret
-        let shared_secret = our_secret.as_diffie_hellman(&their_public).expect("FIXME");
+        // derive shared secret (None for low order points)
+        let Some(shared_secret) = our_secret.as_diffie_hellman(&their_public) else {
+            bail!("x448 Secret::as_diffie_hellman returned None");
+        };
 
         // Encode public point
         let ephemeral_public = x448::PublicKey::from(&our_secret);
