@@ -581,17 +581,20 @@ impl Message {
                                     .collect::<Vec<_>>()
                             );
 
-                            // find the key with the matching key id
+                            // find the matching key or subkey
 
-                            if &key.primary_key.key_id() == esk_packet.id() {
+                            if esk_packet.match_identity(
+                                &key.primary_key.key_id(),
+                                &key.primary_key.fingerprint(),
+                            ) {
                                 encoding_key = Some(&key.primary_key);
                             }
 
                             if encoding_key.is_none() {
-                                encoding_subkey = key
-                                    .secret_subkeys
-                                    .iter()
-                                    .find(|&subkey| &subkey.key_id() == esk_packet.id());
+                                encoding_subkey = key.secret_subkeys.iter().find(|&subkey| {
+                                    esk_packet
+                                        .match_identity(&subkey.key_id(), &subkey.fingerprint())
+                                });
                             }
 
                             if encoding_key.is_some() || encoding_subkey.is_some() {

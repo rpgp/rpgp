@@ -136,17 +136,17 @@ impl PublicKeyEncryptedSessionKey {
         }
     }
 
-    pub fn id(&self) -> &KeyId {
+    pub fn id(&self) -> Result<&KeyId> {
         match self {
-            Self::V3 { id, .. } => id,
-            _ => unimplemented!(), // FIXME
+            Self::V3 { id, .. } => Ok(id),
+            _ => bail!("KeyID is only available for V3 PKESK"),
         }
     }
 
-    pub fn fingerprint(&self) -> Option<&Fingerprint> {
+    pub fn fingerprint(&self) -> Result<Option<&Fingerprint>> {
         match self {
-            Self::V6 { fingerprint, .. } => fingerprint.as_ref(),
-            _ => None,
+            Self::V6 { fingerprint, .. } => Ok(fingerprint.as_ref()),
+            _ => bail!("Fingerprint is only available for V6 PKESK"),
         }
     }
 
