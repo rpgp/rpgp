@@ -157,10 +157,10 @@ impl PublicKeyEncryptedSessionKey {
         }
     }
 
-    pub fn algorithm(&self) -> PublicKeyAlgorithm {
+    pub fn algorithm(&self) -> Result<PublicKeyAlgorithm> {
         match self {
-            Self::V3 { pk_algo, .. } | Self::V6 { pk_algo, .. } => *pk_algo,
-            _ => unimplemented!(),
+            Self::V3 { pk_algo, .. } | Self::V6 { pk_algo, .. } => Ok(*pk_algo),
+            _ => bail!("PublicKeyAlgorithm unknown for {:?}", self),
         }
     }
 
@@ -371,9 +371,10 @@ impl Serialize for PublicKeyEncryptedSessionKey {
             PublicKeyEncryptedSessionKey::Other { .. } => todo!(),
         }
 
-        writer.write_u8(self.algorithm().into())?;
+        let algorithm = self.algorithm()?;
+        writer.write_u8(algorithm.into())?;
 
-        match (self.algorithm(), self.values()?) {
+        match (algorithm, self.values()?) {
             (
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSASign
