@@ -33,7 +33,6 @@ pub enum PublicKeyEncryptedSessionKey {
 
     V6 {
         packet_version: Version,
-        key_version: Option<KeyVersion>,
         fingerprint: Option<Fingerprint>,
         pk_algo: PublicKeyAlgorithm,
         values: PkeskBytes,
@@ -107,7 +106,6 @@ impl PublicKeyEncryptedSessionKey {
 
         Ok(PublicKeyEncryptedSessionKey::V6 {
             packet_version: Default::default(),
-            key_version: Some(pkey.version()),
             fingerprint: Some(pkey.fingerprint()),
             pk_algo: pkey.algorithm(),
             values,
@@ -294,8 +292,8 @@ fn parse(
             // for an "anonymous recipient" (see Section 5.1.8).
             let (i, len) = be_u8(i)?;
 
-            let (i, key_version, fingerprint) = match len {
-                0 => (i, None, None),
+            let (i, fingerprint) = match len {
+                0 => (i, None),
                 _ => {
                     // A one octet key version number.
                     let (i, v) = map(be_u8, KeyVersion::from)(i)?;
@@ -305,7 +303,7 @@ fn parse(
 
                     let fp = Fingerprint::new(v, fp)?;
 
-                    (i, Some(v), Some(fp))
+                    (i, Some(fp))
                 }
             };
 
@@ -319,7 +317,6 @@ fn parse(
                 i,
                 PublicKeyEncryptedSessionKey::V6 {
                     packet_version,
-                    key_version,
                     fingerprint,
                     pk_algo,
                     values,
@@ -343,19 +340,20 @@ impl Serialize for PublicKeyEncryptedSessionKey {
 
         match self {
             PublicKeyEncryptedSessionKey::V3 { id, .. } => writer.write_all(id.as_ref())?,
-            PublicKeyEncryptedSessionKey::V6 {
-                key_version,
-                fingerprint,
-                ..
-            } => {
+            PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } => {
                 // A one-octet size of the following two fields. This size may be zero, if the key version number field and the fingerprint field are omitted for an "anonymous recipient" (see Section 5.1.8).
-                match (key_version, fingerprint) {
-                    (Some(key_version), Some(fingerprint)) => {
+                match fingerprint {
+                    Some(fingerprint) => {
                         let len = fingerprint.len() + 1;
                         writer.write_u8(len.try_into()?)?;
 
                         // A one octet key version number.
-                        writer.write_u8((*key_version).into())?;
+                        match fingerprint.version() {
+                            Some(version) => writer.write_u8(version.into())?,
+                            None => {
+                                bail!("Fingerprint without version information {:?}", fingerprint)
+                            }
+                        }
 
                         // The fingerprint of the public key or subkey to which the session key is encrypted. Note that the length N of the fingerprint for a version 4 key is 20 octets; for a version 6 key N is 32.
                         writer.write_all(fingerprint.as_bytes())?;
