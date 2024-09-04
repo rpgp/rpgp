@@ -197,7 +197,10 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
-    pub fn encrypt<F>(
+    /// Encrypt a session key to a password as a Version 4 Symmetric Key Encrypted Session Key Packet
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-4-symmetric-key-enc>
+    pub fn encrypt_v4<F>(
         msg_pw: F,
         session_key: &[u8],
         s2k: StringToKey,
@@ -230,7 +233,10 @@ impl SymKeyEncryptedSessionKey {
         })
     }
 
-    pub fn encrypt6<F, R: CryptoRng + Rng>(
+    /// Encrypt a session key to a password as a Version 6 Symmetric Key Encrypted Session Key Packet
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-6-symmetric-key-enc>
+    pub fn encrypt_v6<F, R: CryptoRng + Rng>(
         rng: &mut R,
         msg_pw: F,
         session_key: &[u8],

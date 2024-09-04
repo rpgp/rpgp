@@ -376,7 +376,7 @@ impl Message {
         let session_key = alg.new_session_key(&mut rng);
 
         // 2. Encrypt (sym) the session key using the provided password.
-        let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt(
+        let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v4(
             msg_pw,
             &session_key,
             s2k,
