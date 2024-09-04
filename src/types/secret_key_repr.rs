@@ -112,7 +112,11 @@ impl SecretKeyRepr {
             }
 
             (SecretKeyRepr::EdDSA(_), _) => bail!("EdDSA is only used for signing"),
-            _ => todo!(),
+            _ => unimplemented_err!(
+                "Unsupported: SecretKeyRepr {:?}, PkeskBytes {:?}",
+                self,
+                values
+            ),
         };
 
         match typ {
