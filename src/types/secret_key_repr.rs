@@ -121,52 +121,47 @@ impl SecretKeyRepr {
 
         match typ {
             EskType::V3_4 => {
-                let session_key_algorithm = SymmetricKeyAlgorithm::from(decrypted_key[0]);
+                let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
                 ensure!(
-                    session_key_algorithm != SymmetricKeyAlgorithm::Plaintext,
+                    sym_alg != SymmetricKeyAlgorithm::Plaintext,
                     "session key algorithm cannot be plaintext"
                 );
-                let alg = session_key_algorithm;
-                debug!("alg: {:?}", alg);
 
-                let (k, checksum) = match self {
-                    // TODO: this distinction seems unnecessary. remove?
-                    SecretKeyRepr::ECDH(_) => {
-                        let dec_len = decrypted_key.len();
-                        (
-                            &decrypted_key[1..dec_len - 2],
-                            &decrypted_key[dec_len - 2..],
-                        )
-                    }
-                    _ => {
-                        let key_size = session_key_algorithm.key_size();
-                        (
-                            &decrypted_key[1..=key_size],
-                            &decrypted_key[key_size + 1..key_size + 3],
-                        )
-                    }
-                };
+                debug!("sym_alg: {:?}", sym_alg);
 
-                checksum::simple(checksum, k)?;
+                let key_size = sym_alg.key_size();
+                ensure_eq!(
+                    decrypted_key.len(),
+                    key_size + 3,
+                    "unexpected decrypted_key length ({}) for sym_alg {:?}",
+                    decrypted_key.len(),
+                    sym_alg
+                );
 
-                Ok(PlainSessionKey::V3_4 {
-                    key: k.to_vec(),
-                    sym_alg: alg,
-                })
+                let key = decrypted_key[1..=key_size].to_vec();
+                let checksum = &decrypted_key[key_size + 1..key_size + 3];
+
+                checksum::simple(checksum, &key)?;
+
+                Ok(PlainSessionKey::V3_4 { key, sym_alg })
             }
 
             EskType::V6 => {
-                let (k, checksum) = {
-                    let dec_len = decrypted_key.len();
-                    (
-                        &decrypted_key[0..dec_len - 2],
-                        &decrypted_key[dec_len - 2..],
-                    )
-                };
+                let len = decrypted_key.len();
 
-                checksum::simple(checksum, k)?;
+                // ensure minimal length so that we don't panic in the slice splitting, below
+                ensure!(
+                    len >= 2,
+                    "unexpected decrypted_key length ({}) for V6 ESK",
+                    len,
+                );
 
-                Ok(PlainSessionKey::V6 { key: k.to_vec() })
+                let key = decrypted_key[0..len - 2].to_vec();
+                let checksum = &decrypted_key[len - 2..];
+
+                checksum::simple(checksum, &key)?;
+
+                Ok(PlainSessionKey::V6 { key })
             }
         }
     }
