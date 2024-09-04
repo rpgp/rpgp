@@ -113,7 +113,7 @@ fn encrypt_rpgp_cur(msg: &[u8], keyfile: &str) -> String {
     let enc = &ssk.secret_subkeys[0];
 
     let enc_msg = msg
-        .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[enc])
+        .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[enc])
         .unwrap();
 
     enc_msg.to_armored_string(ArmorOptions::default()).unwrap()

@@ -54,7 +54,7 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Encrypts the given session key as a v3 pkesk, to the passed in public key.
-    pub fn from_session_key<R: CryptoRng + Rng>(
+    pub fn from_session_key_v3<R: CryptoRng + Rng>(
         rng: R,
         session_key: &[u8],
         alg: SymmetricKeyAlgorithm,
@@ -88,7 +88,7 @@ impl PublicKeyEncryptedSessionKey {
 
     /// Encrypts the given session key to the passed in public key, as a v6 pkesk.
     /// FIXME: cleanup/DRY with from_session_key
-    pub fn from_session_key6<R: CryptoRng + Rng>(
+    pub fn from_session_key_v6<R: CryptoRng + Rng>(
         rng: &mut R,
         session_key: &[u8],
         pkey: &impl PublicKeyTrait,

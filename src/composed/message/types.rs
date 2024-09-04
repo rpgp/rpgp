@@ -332,8 +332,8 @@ impl Message {
         }
     }
 
-    /// Encrypt the message to the list of passed in public keys.
-    pub fn encrypt_to_keys<R: CryptoRng + Rng>(
+    /// Encrypt the message in SEIPDv1 format to a list of public keys `pkeys`.
+    pub fn encrypt_to_keys_seipdv1<R: CryptoRng + Rng>(
         &self,
         mut rng: R,
         alg: SymmetricKeyAlgorithm,
@@ -346,7 +346,7 @@ impl Message {
         let esk = pkeys
             .iter()
             .map(|pkey| {
-                let pkes = PublicKeyEncryptedSessionKey::from_session_key(
+                let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
                     &mut rng,
                     &session_key,
                     alg,
@@ -357,11 +357,11 @@ impl Message {
             .collect::<Result<_>>()?;
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(&mut rng, esk, alg, session_key)
+        self.encrypt_symmetric_seipdv1(&mut rng, esk, alg, session_key)
     }
 
-    /// Encrypt the message using the given password.
-    pub fn encrypt_with_password<R, F>(
+    /// Encrypt the message in SEIPDv1 format to a password `msg_pw`.
+    pub fn encrypt_with_password_seipdv1<R, F>(
         &self,
         mut rng: R,
         s2k: StringToKey,
@@ -384,11 +384,13 @@ impl Message {
         )?);
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(rng, vec![skesk], alg, session_key)
+        self.encrypt_symmetric_seipdv1(rng, vec![skesk], alg, session_key)
     }
 
-    /// Symmetrically encrypts oneself using the provided `session_key`.
-    fn encrypt_symmetric<R: CryptoRng + Rng>(
+    /// Symmetrically encrypt this Message in SEIPDv1 format using the provided `session_key`.
+    ///
+    /// This function assumes that it is only called with Esk that are legal to use with SEIPDv1.
+    fn encrypt_symmetric_seipdv1<R: CryptoRng + Rng>(
         &self,
         rng: R,
         esk: Vec<Esk>,
@@ -860,7 +862,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rsa_encryption() {
+    fn test_rsa_encryption_seipdv1() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
@@ -877,10 +879,10 @@ mod tests {
 
         // Encrypt and test that rng is the only source of randomness.
         let encrypted = compressed_msg
-            .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+            .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
             .unwrap();
         let encrypted2 = compressed_msg
-            .encrypt_to_keys(&mut rng2, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+            .encrypt_to_keys_seipdv1(&mut rng2, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
             .unwrap();
         assert_eq!(encrypted, encrypted2);
 
@@ -895,7 +897,7 @@ mod tests {
     }
 
     #[test]
-    fn test_x25519_encryption() {
+    fn test_x25519_encryption_seipdv1() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
         )
@@ -909,7 +911,7 @@ mod tests {
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
         for _ in 0..1000 {
             let encrypted = compressed_msg
-                .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .unwrap();
 
             let armored = encrypted.to_armored_bytes(None.into()).unwrap();
@@ -924,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    fn test_password_encryption() {
+    fn test_password_encryption_seipdv1() {
         let _ = pretty_env_logger::try_init();
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -935,7 +937,7 @@ mod tests {
         let s2k = StringToKey::new_default(&mut rng);
 
         let encrypted = compressed_msg
-            .encrypt_with_password(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
+            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
                 "secret".into()
             })
             .unwrap();
