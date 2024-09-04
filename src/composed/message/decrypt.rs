@@ -3,7 +3,7 @@ use log::debug;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{EskType, Mpi, PkeskBytes, SecretKeyRepr, SecretKeyTrait};
+use crate::types::{EskType, PkeskBytes, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
 pub fn decrypt_session_key<F, L>(
