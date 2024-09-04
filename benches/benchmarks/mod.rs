@@ -1,6 +1,7 @@
 use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 use pgp::types::CompressionAlgorithm;
 use pgp::{KeyType, SecretKey, SecretKeyParamsBuilder, SubkeyParamsBuilder};
+use rand::thread_rng;
 use smallvec::smallvec;
 
 pub mod key;
@@ -73,6 +74,6 @@ pub fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
         .build()
         .unwrap();
     key_params
-        .generate()
+        .generate(thread_rng())
         .expect("failed to generate secret key, encrypted")
 }
