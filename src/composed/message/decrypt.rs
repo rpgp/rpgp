@@ -3,13 +3,13 @@ use log::debug;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{EskType, Mpi, SecretKeyRepr, SecretKeyTrait};
+use crate::types::{EskType, Mpi, PkeskBytes, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
 pub fn decrypt_session_key<F, L>(
     locked_key: &L,
     key_pw: F,
-    values: &EskBytes,
+    values: &PkeskBytes,
     typ: EskType,
 ) -> Result<PlainSessionKey>
 where
@@ -19,46 +19,6 @@ where
     debug!("decrypt session key");
 
     locked_key.unlock(key_pw, |priv_key| priv_key.decrypt(values, typ, locked_key))
-}
-
-/// Values comprising the encrypted session key
-///
-/// FIXME: extend for algorithm specific values? (and/or v3 vs. v6)
-/// FIXME: naming?
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum EskBytes {
-    Rsa {
-        mpi: Mpi,
-    },
-    Elgamal {
-        first: Mpi,
-        second: Mpi,
-    },
-    Ecdh {
-        public_point: Mpi,
-        encrypted_session_key: Vec<u8>,
-    },
-    X25519 {
-        // Ephemeral X25519 public key (32 bytes).
-        ephemeral: [u8; 32],
-
-        // Encrypted and wrapped session key.
-        session_key: Vec<u8>,
-
-        // Set for v3 only (the sym_algo is not encrypted with the session key for X25519)
-        sym_alg: Option<SymmetricKeyAlgorithm>,
-    },
-    X448 {
-        // Ephemeral X448 public key (56 bytes).
-        ephemeral: [u8; 56],
-
-        // Encrypted and wrapped session key.
-        session_key: Vec<u8>,
-
-        // Set for v3 only (the sym_algo is not encrypted with the session key for X448)
-        sym_alg: Option<SymmetricKeyAlgorithm>,
-    },
-    Other,
 }
 
 /// Decrypted session key.

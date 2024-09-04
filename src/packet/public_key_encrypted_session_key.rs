@@ -11,10 +11,10 @@ use crate::crypto::checksum;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
-use crate::message::EskBytes;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::EskType;
+use crate::types::PkeskBytes;
 use crate::types::{
     mpi, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, Tag, Version,
 };
@@ -28,7 +28,7 @@ pub enum PublicKeyEncryptedSessionKey {
         packet_version: Version,
         id: KeyId,
         pk_algo: PublicKeyAlgorithm,
-        values: EskBytes,
+        values: PkeskBytes,
     },
 
     V6 {
@@ -36,7 +36,7 @@ pub enum PublicKeyEncryptedSessionKey {
         key_version: Option<KeyVersion>,
         fingerprint: Option<Fingerprint>,
         pk_algo: PublicKeyAlgorithm,
-        values: EskBytes,
+        values: PkeskBytes,
     },
 
     Other {
@@ -145,7 +145,7 @@ impl PublicKeyEncryptedSessionKey {
         }
     }
 
-    pub fn values(&self) -> Result<&EskBytes> {
+    pub fn values(&self) -> Result<&PkeskBytes> {
         match self {
             Self::V3 { values, .. } | Self::V6 { values, .. } => Ok(values),
             Self::Other { version, .. } => bail!("Unsupported PKESK version {}", version),
@@ -172,19 +172,19 @@ fn parse_esk<'i>(
     alg: &PublicKeyAlgorithm,
     i: &'i [u8],
     version: u8,
-) -> IResult<&'i [u8], EskBytes> {
+) -> IResult<&'i [u8], PkeskBytes> {
     match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSASign | PublicKeyAlgorithm::RSAEncrypt => {
-            map(mpi, |v| EskBytes::Rsa { mpi: v.to_owned() })(i)
+            map(mpi, |v| PkeskBytes::Rsa { mpi: v.to_owned() })(i)
         }
         PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
-            map(pair(mpi, mpi), |(first, second)| EskBytes::Elgamal {
+            map(pair(mpi, mpi), |(first, second)| PkeskBytes::Elgamal {
                 first: first.to_owned(),
                 second: second.to_owned(),
             })(i)
         }
         PublicKeyAlgorithm::ECDSA | PublicKeyAlgorithm::DSA | PublicKeyAlgorithm::DiffieHellman => {
-            Ok((i, EskBytes::Other))
+            Ok((i, PkeskBytes::Other))
         }
         PublicKeyAlgorithm::ECDH => {
             let (i, a) = mpi(i)?;
@@ -193,7 +193,7 @@ fn parse_esk<'i>(
 
             Ok((
                 i,
-                EskBytes::Ecdh {
+                PkeskBytes::Ecdh {
                     public_point: a.to_owned(),
                     encrypted_session_key: b.into(),
                 },
@@ -220,7 +220,7 @@ fn parse_esk<'i>(
 
             Ok((
                 i,
-                EskBytes::X25519 {
+                PkeskBytes::X25519 {
                     ephemeral: ephemeral_public.try_into().expect("FIXME"),
                     sym_alg,
                     session_key: esk.to_vec(),
@@ -248,14 +248,14 @@ fn parse_esk<'i>(
 
             Ok((
                 i,
-                EskBytes::X448 {
+                PkeskBytes::X448 {
                     ephemeral: ephemeral_public.try_into().expect("56"),
                     sym_alg,
                     session_key: esk.to_vec(),
                 },
             ))
         }
-        PublicKeyAlgorithm::Unknown(_) => Ok((i, EskBytes::Other)), // we don't know the format of this data
+        PublicKeyAlgorithm::Unknown(_) => Ok((i, PkeskBytes::Other)), // we don't know the format of this data
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
             nom::error::ErrorKind::Switch,
         ))),
@@ -373,20 +373,20 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSASign
                 | PublicKeyAlgorithm::RSAEncrypt,
-                EskBytes::Rsa { mpi },
+                PkeskBytes::Rsa { mpi },
             ) => {
                 mpi.to_writer(writer)?;
             }
             (
                 PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign,
-                EskBytes::Elgamal { first, second },
+                PkeskBytes::Elgamal { first, second },
             ) => {
                 first.to_writer(writer)?;
                 second.to_writer(writer)?;
             }
             (
                 PublicKeyAlgorithm::ECDH,
-                EskBytes::Ecdh {
+                PkeskBytes::Ecdh {
                     public_point,
                     encrypted_session_key,
                 },
@@ -401,7 +401,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
             }
             (
                 PublicKeyAlgorithm::X25519,
-                EskBytes::X25519 {
+                PkeskBytes::X25519 {
                     ephemeral,
                     sym_alg,
                     session_key,
@@ -428,7 +428,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
             }
             (
                 PublicKeyAlgorithm::X448,
-                EskBytes::X448 {
+                PkeskBytes::X448 {
                     ephemeral,
                     sym_alg,
                     session_key,

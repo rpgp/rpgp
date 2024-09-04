@@ -4,7 +4,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, rsa, x25519, Decryptor};
 use crate::errors::Result;
-use crate::message::EskBytes;
+use crate::types::PkeskBytes;
 use crate::types::{EskType, PublicKeyTrait, PublicParams};
 use crate::PlainSessionKey;
 
@@ -24,7 +24,7 @@ pub enum SecretKeyRepr {
 impl SecretKeyRepr {
     pub fn decrypt<P>(
         &self,
-        values: &EskBytes,
+        values: &PkeskBytes,
         typ: EskType,
         recipient: &P,
     ) -> Result<PlainSessionKey>
@@ -32,12 +32,12 @@ impl SecretKeyRepr {
         P: PublicKeyTrait,
     {
         let decrypted_key = match (self, values) {
-            (SecretKeyRepr::RSA(ref priv_key), EskBytes::Rsa { mpi }) => priv_key.decrypt(mpi)?,
+            (SecretKeyRepr::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => priv_key.decrypt(mpi)?,
             (SecretKeyRepr::DSA(_), _) => bail!("DSA is only used for signing"),
             (SecretKeyRepr::ECDSA(_), _) => bail!("ECDSA is only used for signing"),
             (
                 SecretKeyRepr::ECDH(ref priv_key),
-                EskBytes::Ecdh {
+                PkeskBytes::Ecdh {
                     public_point,
                     encrypted_session_key,
                 },
@@ -49,7 +49,7 @@ impl SecretKeyRepr {
 
             (
                 SecretKeyRepr::X25519(ref priv_key),
-                EskBytes::X25519 {
+                PkeskBytes::X25519 {
                     ephemeral,
                     session_key,
                     sym_alg,
@@ -81,7 +81,7 @@ impl SecretKeyRepr {
 
             (
                 SecretKeyRepr::X448(ref priv_key),
-                EskBytes::X448 {
+                PkeskBytes::X448 {
                     ephemeral,
                     session_key,
                     sym_alg,

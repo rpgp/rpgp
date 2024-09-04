@@ -12,9 +12,10 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
+    SignatureBytes, Tag,
 };
-use crate::{armor, ArmorOptions, EskBytes};
+use crate::{armor, ArmorOptions};
 
 /// Represents a Public PGP key, which is signed and either received or ready to be transferred.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -170,7 +171,12 @@ impl PublicKeyTrait for SignedPublicKey {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8], typ: EskType) -> Result<EskBytes> {
+    fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
         self.primary_key.encrypt(rng, plain, typ)
     }
 
@@ -275,7 +281,12 @@ impl PublicKeyTrait for SignedPublicSubKey {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8], typ: EskType) -> Result<EskBytes> {
+    fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
     }
 

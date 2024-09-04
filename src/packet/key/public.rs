@@ -4,7 +4,7 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
-use crate::types::{EskType, Mpi};
+use crate::types::{EskType, Mpi, PkeskBytes};
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -13,7 +13,6 @@ use crate::{
         Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SignatureBytes, Tag, Version,
     },
-    EskBytes,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -486,7 +485,7 @@ impl PublicKeyTrait for PubKeyInner {
         mut rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> Result<EskBytes> {
+    ) -> Result<PkeskBytes> {
         match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
                 crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
@@ -523,7 +522,7 @@ impl PublicKeyTrait for PubKeyInner {
 
                 let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, *public, plain)?;
 
-                Ok(EskBytes::X25519 {
+                Ok(PkeskBytes::X25519 {
                     ephemeral,
                     session_key,
                     sym_alg,
@@ -544,7 +543,7 @@ impl PublicKeyTrait for PubKeyInner {
 
                 let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
 
-                Ok(EskBytes::X448 {
+                Ok(PkeskBytes::X448 {
                     ephemeral,
                     session_key,
                     sym_alg,
@@ -617,7 +616,7 @@ impl PublicKeyTrait for PublicKey {
         rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> Result<EskBytes> {
+    ) -> Result<PkeskBytes> {
         PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
@@ -669,7 +668,7 @@ impl PublicKeyTrait for PublicSubkey {
         rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> Result<EskBytes> {
+    ) -> Result<PkeskBytes> {
         PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 

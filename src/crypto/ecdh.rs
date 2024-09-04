@@ -9,8 +9,8 @@ use crate::crypto::{
     Decryptor, KeyParams,
 };
 use crate::errors::{Error, Result};
+use crate::types::PkeskBytes;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
-use crate::EskBytes;
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -417,7 +417,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     fingerprint: &[u8],
     q: &[u8],
     plain: &[u8],
-) -> Result<EskBytes> {
+) -> Result<PkeskBytes> {
     debug!("ECDH encrypt");
 
     // Maximum length for `plain`:
@@ -478,7 +478,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // Perform AES Key Wrap
     let encrypted_session_key = aes_kw::wrap(&z, &plain_padded)?;
 
-    Ok(EskBytes::Ecdh {
+    Ok(PkeskBytes::Ecdh {
         public_point: Mpi::from_raw_slice(&encoded_public),
         encrypted_session_key,
     })
@@ -567,7 +567,7 @@ mod tests {
                     let decrypted = match (skey.as_ref().as_repr(&pkey).unwrap(), values) {
                         (
                             SecretKeyRepr::ECDH(ref skey),
-                            EskBytes::Ecdh {
+                            PkeskBytes::Ecdh {
                                 public_point,
                                 encrypted_session_key,
                             },

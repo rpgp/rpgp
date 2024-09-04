@@ -8,9 +8,9 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
-use pgp::types::{EskType, Fingerprint, SignatureBytes};
+use pgp::types::{EskType, Fingerprint, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
-use pgp::{packet, Deserializable, Esk, EskBytes};
+use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey};
 use rand::{CryptoRng, Rng};
 
@@ -67,7 +67,7 @@ impl PublicKeyTrait for FakeHsm {
         rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> pgp::errors::Result<EskBytes> {
+    ) -> pgp::errors::Result<PkeskBytes> {
         self.public_key.encrypt(rng, plain, typ)
     }
 
@@ -168,10 +168,10 @@ impl SecretKeyTrait for FakeHsm {
 impl FakeHsm {
     pub fn decrypt(
         &self,
-        values: &EskBytes,
+        values: &PkeskBytes,
     ) -> pgp::errors::Result<(Vec<u8>, SymmetricKeyAlgorithm)> {
         let decrypted_key = match (self.public_key.public_params(), values) {
-            (PublicParams::RSA { .. }, EskBytes::Rsa { mpi }) => {
+            (PublicParams::RSA { .. }, PkeskBytes::Rsa { mpi }) => {
                 // The test data in self.decrypt_data must match the parameters
                 // (this fake hsm just stores the answer for one request, and it's only legal to
                 // call it with the exact set of parameters we have stored)
@@ -193,7 +193,7 @@ impl FakeHsm {
                     hash,
                     ..
                 },
-                EskBytes::Ecdh {
+                PkeskBytes::Ecdh {
                     public_point,
                     encrypted_session_key,
                 },

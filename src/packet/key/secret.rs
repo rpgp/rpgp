@@ -3,7 +3,7 @@ use log::debug;
 use rand::Rng;
 use zeroize::Zeroize;
 
-use crate::types::EskType;
+use crate::types::{EskType, PkeskBytes};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -15,7 +15,6 @@ use crate::{
         Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
         SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
     },
-    EskBytes,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
@@ -435,7 +434,7 @@ impl PublicKeyTrait for SecretKey {
         rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> Result<EskBytes> {
+    ) -> Result<PkeskBytes> {
         PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
@@ -487,7 +486,7 @@ impl PublicKeyTrait for SecretSubkey {
         rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> Result<EskBytes> {
+    ) -> Result<PkeskBytes> {
         PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
@@ -539,7 +538,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
         rng: R,
         plain: &[u8],
         typ: EskType,
-    ) -> Result<EskBytes> {
+    ) -> Result<PkeskBytes> {
         self.details.encrypt(rng, plain, typ)
     }
 
