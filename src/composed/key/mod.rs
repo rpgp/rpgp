@@ -30,7 +30,7 @@
 //!     .build()
 //!     .expect("Must be able to create secret key params");
 //! let secret_key = secret_key_params
-//!     .generate()
+//!     .generate(thread_rng())
 //!     .expect("Failed to generate a plain key.");
 //! let passwd_fn = || String::new();
 //! let signed_secret_key = secret_key
