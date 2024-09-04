@@ -19,10 +19,17 @@ use crate::types::{
     mpi, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, Tag, Version,
 };
 
-/// Public Key Encrypted Session Key Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.1>
+/// Public Key Encrypted Session Key Packet (PKESK)
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-encrypted-sessio>
+///
+/// A PKESK contains an encrypted session key that has been encrypted to a specific public key.
+/// PKESK are used in combination with a symmetric encryption container:
+///
+/// - V3 PKESK are used in combination with [version 1 Symmetrically Encrypted and Integrity
+///   Protected Data Packets](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-1-symmetrically-enc).
+/// - V6 PKESK are used in combination with [version 2 Symmetrically Encrypted and Integrity
+///   Protected Data Packets](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-2-symmetrically-enc).
 #[derive(Debug, Clone, PartialEq, Eq)]
-
 pub enum PublicKeyEncryptedSessionKey {
     V3 {
         packet_version: Version,
