@@ -25,6 +25,9 @@ impl KeyId {
         self.0.to_vec()
     }
 
+    /// True, if `self` is the "wild card" (or "anonymous recipient") Key ID of all zeros.
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#pkesk-notes>
     pub fn is_wildcard(&self) -> bool {
         self.0 == [0, 0, 0, 0, 0, 0, 0, 0]
     }
