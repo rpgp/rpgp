@@ -226,7 +226,7 @@ fn parse_esk<'i>(
             Ok((
                 i,
                 PkeskBytes::X25519 {
-                    ephemeral: ephemeral_public.try_into().expect("FIXME"),
+                    ephemeral: ephemeral_public.try_into().expect("32"),
                     sym_alg,
                     session_key: esk.to_vec(),
                 },
@@ -318,7 +318,7 @@ fn parse(
             let (i, pk_algo) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
 
             // A series of values comprising the encrypted session key. This is algorithm-specific and described below.
-            let (i, values) = parse_esk(&pk_algo, i, version)?; // FIXME: shouldn't be Mpis
+            let (i, values) = parse_esk(&pk_algo, i, version)?;
 
             Ok((
                 i,
