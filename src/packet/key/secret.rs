@@ -686,7 +686,7 @@ mod tests {
         let key_type = crate::KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let (public_params, secret_params) = key_type.generate_with_rng(&mut rng).unwrap();
+        let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
         let mut alice_sec = SecretKey::new(
             PublicKey::new(

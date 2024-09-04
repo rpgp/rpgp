@@ -399,9 +399,12 @@ impl Message {
     ) -> Result<Self> {
         let data = self.to_bytes()?;
 
-        let edata = Edata::SymEncryptedProtectedData(
-            SymEncryptedProtectedData::encrypt_with_rng_seipdv1(rng, alg, &session_key, &data)?,
-        );
+        let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_seipdv1(
+            rng,
+            alg,
+            &session_key,
+            &data,
+        )?);
 
         Ok(Message::Encrypted { esk, edata })
     }

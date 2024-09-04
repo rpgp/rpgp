@@ -4,7 +4,7 @@ use byteorder::WriteBytesExt;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
 use nom::number::streaming::be_u8;
-use rand::{thread_rng, CryptoRng, Rng};
+use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -52,13 +52,13 @@ impl SymEncryptedProtectedData {
     }
 
     /// Encrypts the data using the given symmetric key.
-    pub fn encrypt_with_rng_seipdv1<R: CryptoRng + Rng>(
+    pub fn encrypt_seipdv1<R: CryptoRng + Rng>(
         rng: R,
         alg: SymmetricKeyAlgorithm,
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Self> {
-        let data = alg.encrypt_protected_with_rng(rng, key, plaintext)?;
+        let data = alg.encrypt_protected(rng, key, plaintext)?;
 
         Ok(SymEncryptedProtectedData {
             packet_version: Default::default(),
@@ -67,7 +67,7 @@ impl SymEncryptedProtectedData {
     }
 
     /// Encrypts the data using the given symmetric key.
-    pub fn encrypt_with_rng_seipdv2<R: CryptoRng + Rng>(
+    pub fn encrypt_seipdv2<R: CryptoRng + Rng>(
         rng: &mut R,
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
@@ -151,18 +151,6 @@ impl SymEncryptedProtectedData {
                 data: out,
             },
         })
-    }
-
-    /// Same as [`encrypt_with_rng_seipdv1`], but uses [`thread_rng`] for RNG.
-    ///
-    /// [`encrypt_with_rng_seipdv1`]: SymEncryptedProtectedData::encrypt_with_rng_seipdv1
-    /// [`thread_rng`]: rand::thread_rng
-    pub fn encrypt_seipdv1(
-        alg: SymmetricKeyAlgorithm,
-        key: &[u8],
-        plaintext: &[u8],
-    ) -> Result<Self> {
-        Self::encrypt_with_rng_seipdv1(&mut thread_rng(), alg, key, plaintext)
     }
 
     pub fn data(&self) -> &Data {
