@@ -544,20 +544,6 @@ impl Message {
         }
     }
 
-    /// Returns a list of [KeyId]s that the message is encrypted to. For non encrypted messages this list is empty.
-    pub fn get_recipients(&self) -> Vec<&KeyId> {
-        match self {
-            Message::Encrypted { esk, .. } => esk
-                .iter()
-                .filter_map(|e| match e {
-                    Esk::PublicKeyEncryptedSessionKey(k) => Some(k.id()),
-                    _ => None,
-                })
-                .collect(),
-            _ => Vec::new(),
-        }
-    }
-
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt<G>(&self, key_pw: G, keys: &[&SignedSecretKey]) -> Result<(Message, Vec<KeyId>)>
