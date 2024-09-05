@@ -116,10 +116,7 @@ pub enum EskType {
     V6,
 }
 
-/// Values comprising a public key encrypted session key
-///
-/// FIXME: extend for algorithm specific values? (and/or v3 vs. v6)
-/// FIXME: naming?
+/// Values comprising a Public Key Encrypted Session Key
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PkeskBytes {
     Rsa {

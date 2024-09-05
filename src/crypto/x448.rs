@@ -103,6 +103,8 @@ pub fn hkdf(
     recipient_public: &[u8; 56],
     shared_secret: &[u8; 56],
 ) -> Result<[u8; 32]> {
+    // TODO: maybe share/DRY this code with the analogous x25519 implementation?
+
     const INFO: &[u8] = b"OpenPGP X448";
 
     // The input of HKDF is the concatenation of the following three values:

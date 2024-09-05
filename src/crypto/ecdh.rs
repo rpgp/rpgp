@@ -73,8 +73,12 @@ impl KeyParams for SecretKey {
 
 pub struct EncryptionFields<'a> {
     pub public_point: &'a Mpi,
-    pub encrypted_session_key: &'a [u8], // encrypted and wrapped value derived from the session key
-    pub fingerprint: &'a [u8], // FIXME: not part of the "Algorithm-Specific Fields", but needed for session key derivation
+
+    /// Encrypted and wrapped value, derived from the session key
+    pub encrypted_session_key: &'a [u8],
+
+    /// NOTE: The fingerprint isn't part of the "Algorithm-Specific Fields", but it is needed for session key derivation
+    pub fingerprint: &'a [u8],
 }
 
 impl Decryptor for SecretKey {
