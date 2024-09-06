@@ -130,7 +130,7 @@ pub fn hkdf(
 ///
 /// Returns (ephemeral, encrypted session key)
 pub fn encrypt<R: CryptoRng + Rng>(
-    rng: &mut R,
+    mut rng: R,
     recipient_public: [u8; 32],
     plain: &[u8],
 ) -> Result<([u8; 32], Vec<u8>)> {

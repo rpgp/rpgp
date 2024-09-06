@@ -237,7 +237,7 @@ impl SymKeyEncryptedSessionKey {
     ///
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-6-symmetric-key-enc>
     pub fn encrypt_v6<F, R: CryptoRng + Rng>(
-        rng: &mut R,
+        mut rng: R,
         msg_pw: F,
         session_key: &[u8],
         s2k: StringToKey,

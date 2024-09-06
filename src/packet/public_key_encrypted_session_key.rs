@@ -95,7 +95,7 @@ impl PublicKeyEncryptedSessionKey {
     /// Encrypts the given session key to the passed in public key, as a v6 pkesk.
     /// FIXME: cleanup/DRY with from_session_key
     pub fn from_session_key_v6<R: CryptoRng + Rng>(
-        rng: &mut R,
+        rng: R,
         session_key: &[u8],
         pkey: &impl PublicKeyTrait,
     ) -> Result<Self> {
