@@ -4,6 +4,7 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
+use crate::crypto::ecc_curve::ECCCurve;
 use crate::types::{EskType, Mpi, PkeskBytes};
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
@@ -131,6 +132,32 @@ impl PubKeyInner {
                 algorithm,
                 version,
             );
+        }
+
+        // "Ed25519Legacy and Curve25519Legacy are used only in version 4 keys [..].
+        // Implementations MUST NOT accept [..] version 6 key material using the deprecated OIDs."
+        //
+        // See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.2-6
+        if version != KeyVersion::V4 {
+            if matches!(
+                public_params,
+                PublicParams::ECDH {
+                    curve: ECCCurve::Curve25519,
+                    ..
+                }
+            ) {
+                bail!(
+                    "ECDH over Curve25519 is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+
+            if matches!(public_params, PublicParams::EdDSALegacy { .. }) {
+                bail!(
+                    "EdDSALegacy is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
         }
 
         Ok(Self {
