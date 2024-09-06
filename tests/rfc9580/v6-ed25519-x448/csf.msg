@@ -1,0 +1,11 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+
+hello world
+
+-----BEGIN PGP SIGNATURE-----
+
+wpgGARsKAAAAKQWCZtnHUSKhBgE1Dx+jBtZm/Zk3BMflKej8xdwMR2u9GtLEkTb/
+p3WPAAAAANWGIO0i+dgMlmX4q0mk4jIgkqz2K/Z5S9IsAkW8w/En/HryXG7VdRni
+9Rx8/Hnn5u+MLW9mYjqpfEOvl8rCmNNO7Z1Gq7TXCUwMFeuJB+gBXbYwFzHwyxpz
+D/5Q1dzntb/fBg==
+-----END PGP SIGNATURE-----
