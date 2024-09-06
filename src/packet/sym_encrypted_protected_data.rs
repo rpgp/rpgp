@@ -68,7 +68,7 @@ impl SymEncryptedProtectedData {
 
     /// Encrypts the data using the given symmetric key.
     pub fn encrypt_seipdv2<R: CryptoRng + Rng>(
-        rng: &mut R,
+        mut rng: R,
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: u8,

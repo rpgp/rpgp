@@ -12,6 +12,7 @@ use crate::composed::message::decrypt::*;
 use crate::composed::shared::Deserializable;
 use crate::composed::signed_key::SignedSecretKey;
 use crate::composed::StandaloneSignature;
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
@@ -360,6 +361,35 @@ impl Message {
         self.encrypt_symmetric_seipdv1(&mut rng, esk, alg, session_key)
     }
 
+    /// Encrypt the message in SEIPDv2 format to a list of public keys `pkeys`.
+    pub fn encrypt_to_keys_seipdv2<R: CryptoRng + Rng>(
+        &self,
+        mut rng: R,
+        alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        pkeys: &[&impl PublicKeyTrait],
+    ) -> Result<Self> {
+        // 1. Generate a session key.
+        let session_key = alg.new_session_key(&mut rng);
+
+        // 2. Encrypt (pub) the session key, to each PublicKey.
+        let esk = pkeys
+            .iter()
+            .map(|pkey| {
+                let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+                    &mut rng,
+                    &session_key,
+                    pkey,
+                )?;
+                Ok(Esk::PublicKeyEncryptedSessionKey(pkes))
+            })
+            .collect::<Result<_>>()?;
+
+        // 3. Encrypt (sym) the data using the session key.
+        self.encrypt_symmetric_seipdv2(&mut rng, esk, alg, aead, chunk_size, session_key)
+    }
+
     /// Encrypt the message in SEIPDv1 format to a password `msg_pw`.
     pub fn encrypt_with_password_seipdv1<R, F>(
         &self,
@@ -387,6 +417,37 @@ impl Message {
         self.encrypt_symmetric_seipdv1(rng, vec![skesk], alg, session_key)
     }
 
+    /// Encrypt the message in SEIPDv2 format to a password `msg_pw`.
+    pub fn encrypt_with_password_seipdv2<R, F>(
+        &self,
+        mut rng: R,
+        s2k: StringToKey,
+        alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        msg_pw: F,
+    ) -> Result<Self>
+    where
+        R: Rng + CryptoRng,
+        F: FnOnce() -> String + Clone,
+    {
+        // 1. Generate a session key.
+        let session_key = alg.new_session_key(&mut rng);
+
+        // 2. Encrypt (sym) the session key using the provided password.
+        let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v6(
+            &mut rng,
+            msg_pw,
+            &session_key,
+            s2k,
+            alg,
+            aead,
+        )?);
+
+        // 3. Encrypt (sym) the data using the session key.
+        self.encrypt_symmetric_seipdv2(rng, vec![skesk], alg, aead, chunk_size, session_key)
+    }
+
     /// Symmetrically encrypt this Message in SEIPDv1 format using the provided `session_key`.
     ///
     /// This function assumes that it is only called with Esk that are legal to use with SEIPDv1.
@@ -402,6 +463,32 @@ impl Message {
         let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_seipdv1(
             rng,
             alg,
+            &session_key,
+            &data,
+        )?);
+
+        Ok(Message::Encrypted { esk, edata })
+    }
+
+    /// Symmetrically encrypt this Message in SEIPDv2 format using the provided `session_key`.
+    ///
+    /// This function assumes that it is only called with Esk that are legal to use with SEIPDv2.
+    fn encrypt_symmetric_seipdv2<R: CryptoRng + Rng>(
+        &self,
+        rng: R,
+        esk: Vec<Esk>,
+        alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        session_key: Vec<u8>,
+    ) -> Result<Self> {
+        let data = self.to_bytes()?;
+
+        let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_seipdv2(
+            rng,
+            alg,
+            aead,
+            chunk_size,
             &session_key,
             &data,
         )?);
