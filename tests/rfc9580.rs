@@ -19,11 +19,16 @@ const CASES_9580: &[&str] = &[
     ("tests/rfc9580/v6-ed25519-x448"), // TSK using Ed25519/X448 (TODO: replace with Ed448/X448 once rPGP supports it)
     ("tests/rfc9580/v6-rsa"),          // TSK using RSA
     ("tests/rfc9580/v6-nistp"),        // TSK using NIST P-256
-    ("tests/rfc9580/v4-ed25519-x25519"), // version 4 TSK using the RFC 9580 Ed25519/X25519 formats
+    ("tests/rfc9580/v4-ed25519-x25519"), // Version 4 TSK using the RFC 9580 Ed25519/X25519 formats
 ];
 
-// Test cases based on keys that don't use new formats from RFC9580
-const CASES_PRE_9580: &[&str] = &[];
+// Test cases based on keys that don't use new formats from RFC9580.
+// These keys are traditional v4 keys, but they have the SEIPDv2 feature flag enabled.
+const CASES_PRE_9580: &[&str] = &[
+    ("tests/rfc9580/v4-rsa"),    // Version 4 TSK using RSA
+    ("tests/rfc9580/v4-nistp"),  // Version 4 TSK using NIST P-256
+    ("tests/rfc9580/v4-legacy"), // Version 4 TSK using Ed25519Legacy and Curve25519Legacy
+];
 
 fn load_ssk(filename: &str) -> SignedSecretKey {
     let (mut iter, _) =
