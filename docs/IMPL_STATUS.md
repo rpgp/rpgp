@@ -28,12 +28,12 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
 - [x] Signatures (v6)
   - [x] Validation
   - [x] Generation
-- [ ] Encryption
+- [x] Encryption
   - [x] PKESK v3, SKESK v4, SEIPD v1
-  - [ ] PKESK v6, SKESK v6, SEIPD v2
-- [ ] Decryption
+  - [x] PKESK v6, SKESK v6, SEIPD v2
+- [x] Decryption
   - [x] PKESK v3, SKESK v4, SEIPD v1
-  - [ ] PKESK v6, SKESK v6, SEIPD v2
+  - [x] PKESK v6, SKESK v6, SEIPD v2
 - [x] Keys (v4)
   - [x] Generation
   - [x] Export
@@ -57,7 +57,8 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [ ] brainpoolP384r1
   - [ ] brainpoolP512r1
   - [x] Curve 25519
-  - [ ] Curve 448
+  - [ ] Ed448
+  - [x] X448
   - [x] Secp256k1
 - [x] Symmetric Algorithms
   - [x] Plaintext
