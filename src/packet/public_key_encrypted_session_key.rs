@@ -120,14 +120,14 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// Check if a Key matches with this PKESK's target
-    /// - for v3: is PKESK key id the wildcard, or does it match `id`?
-    /// - for v6: is PKESK fingerprint the wildcard (represented as `None`), or does it match `fp`?
-    pub fn match_identity(&self, key_id: &KeyId, fp: &Fingerprint) -> bool {
+    /// - for v3: is PKESK key id the wildcard, or does it match the key id of `pkey`?
+    /// - for v6: is PKESK fingerprint the wildcard (represented as `None`), or does it match the fingerprint of `pkey`?
+    pub fn match_identity(&self, pkey: &impl PublicKeyTrait) -> bool {
         match self {
-            Self::V3 { id, .. } => id.is_wildcard() || (id == key_id),
+            Self::V3 { id, .. } => id.is_wildcard() || (id == &pkey.key_id()),
             Self::V6 { fingerprint, .. } => {
                 if let Some(fingerprint) = fingerprint {
-                    fingerprint == fp
+                    fingerprint == &pkey.fingerprint()
                 } else {
                     true // wildcard always matches
                 }

@@ -673,18 +673,15 @@ impl Message {
 
                             // find the matching key or subkey
 
-                            if esk_packet.match_identity(
-                                &key.primary_key.key_id(),
-                                &key.primary_key.fingerprint(),
-                            ) {
+                            if esk_packet.match_identity(&key.primary_key) {
                                 encoding_key = Some(&key.primary_key);
                             }
 
                             if encoding_key.is_none() {
-                                encoding_subkey = key.secret_subkeys.iter().find(|&subkey| {
-                                    esk_packet
-                                        .match_identity(&subkey.key_id(), &subkey.fingerprint())
-                                });
+                                encoding_subkey = key
+                                    .secret_subkeys
+                                    .iter()
+                                    .find(|&subkey| esk_packet.match_identity(&subkey));
                             }
 
                             if encoding_key.is_some() || encoding_subkey.is_some() {
