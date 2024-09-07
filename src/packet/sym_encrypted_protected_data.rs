@@ -75,7 +75,7 @@ impl SymEncryptedProtectedData {
         session_key: &[u8],
         plaintext: &[u8],
     ) -> Result<Self> {
-        // FIXME: DRY decrypt/encrypt code duplication
+        // TODO: DRY decrypt/encrypt code duplication?
 
         // Initial key material is the session key.
         let ikm = session_key;

@@ -78,6 +78,11 @@ impl S2kParams {
     /// Create a new default set of parameters
     /// and initialises relevant randomized values.
     ///
+    /// For v6 keys:
+    /// - Ocb with AES256
+    /// - Argon2 derivation (with parameter choice (2) from https://www.rfc-editor.org/rfc/rfc9106#name-parameter-choice)
+    ///
+    /// For v4 keys:
     /// - AES256
     /// - CFB
     /// - Iterated and Salted with 224 rounds

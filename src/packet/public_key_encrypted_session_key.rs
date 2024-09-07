@@ -58,7 +58,7 @@ impl PublicKeyEncryptedSessionKey {
         Ok(pk)
     }
 
-    /// Encrypts the given session key as a v3 pkesk, to the passed in public key.
+    /// Encrypts the given session key to `pkey` as a v3 pkesk.
     pub fn from_session_key_v3<R: CryptoRng + Rng>(
         rng: R,
         session_key: &[u8],
@@ -91,8 +91,7 @@ impl PublicKeyEncryptedSessionKey {
         })
     }
 
-    /// Encrypts the given session key to the passed in public key, as a v6 pkesk.
-    /// FIXME: cleanup/DRY with from_session_key
+    /// Encrypts the given session key to `pkey` as a v6 pkesk.
     pub fn from_session_key_v6<R: CryptoRng + Rng>(
         rng: R,
         session_key: &[u8],
@@ -304,7 +303,9 @@ fn parse(
                     // A one octet key version number.
                     let (i, v) = map(be_u8, KeyVersion::from)(i)?;
 
-                    // The fingerprint of the public key or subkey to which the session key is encrypted. Note that the length N of the fingerprint for a version 4 key is 20 octets; for a version 6 key N is 32.
+                    // The fingerprint of the public key or subkey to which the session key is encrypted.
+                    // Note that the length N of the fingerprint for a version 4 key is 20 octets;
+                    // for a version 6 key N is 32.
                     let (i, fp) = nom::bytes::complete::take(len - 1)(i)?;
 
                     let fp = Fingerprint::new(v, fp)?;
@@ -347,7 +348,9 @@ impl Serialize for PublicKeyEncryptedSessionKey {
         match self {
             PublicKeyEncryptedSessionKey::V3 { id, .. } => writer.write_all(id.as_ref())?,
             PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } => {
-                // A one-octet size of the following two fields. This size may be zero, if the key version number field and the fingerprint field are omitted for an "anonymous recipient" (see Section 5.1.8).
+                // A one-octet size of the following two fields.
+                // This size may be zero, if the key version number field and the fingerprint field
+                // are omitted for an "anonymous recipient" (see Section 5.1.8).
                 match fingerprint {
                     Some(fingerprint) => {
                         let len = fingerprint.len() + 1;
@@ -361,7 +364,9 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                             }
                         }
 
-                        // The fingerprint of the public key or subkey to which the session key is encrypted. Note that the length N of the fingerprint for a version 4 key is 20 octets; for a version 6 key N is 32.
+                        // The fingerprint of the public key or subkey to which the session key is encrypted.
+                        // Note that the length N of the fingerprint for a version 4 key is 20 octets;
+                        // for a version 6 key N is 32.
                         writer.write_all(fingerprint.as_bytes())?;
                     }
                     _ => writer.write_u8(0)?,
@@ -398,8 +403,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
             ) => {
                 public_point.to_writer(writer)?;
 
-                // The second value is not encoded as an actual MPI, but rather as a length prefixed
-                // number.
+                // length of session key as one octet
                 writer.write_u8(encrypted_session_key.len().try_into()?)?;
 
                 writer.write_all(encrypted_session_key)?;

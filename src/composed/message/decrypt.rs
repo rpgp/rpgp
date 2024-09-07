@@ -23,10 +23,14 @@ where
 
 /// Decrypted session key.
 ///
-/// A v3/v4 session key can be used with a SED, or a v1 SEIPD.
+/// A v3/v4 session key can be used  v1 SEIPD (and historically with SED packets).
 /// A v6 session key can only be used with a v2 SEIPD.
 ///
 /// https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-versions-in-encrypte
+///
+/// (Note that SED packets are malleable. They are historical and considered dangerous!
+/// They MUST NOT be produced and decryption is also discouraged:
+/// https://www.rfc-editor.org/rfc/rfc9580.html#sed)
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum PlainSessionKey {
     /// A session key from a v3 PKESK or a v4 SKESK
