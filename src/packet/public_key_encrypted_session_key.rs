@@ -211,17 +211,17 @@ fn parse_esk<'i>(
             // A one-octet size of the following fields.
             let (i, len) = be_u8(i)?;
 
-            let (i, sym_alg) = if version != 6 {
-                // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
+            // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
+            let (i, sym_alg) = if version == 3 {
                 map(be_u8, SymmetricKeyAlgorithm::from)(i).map(|(i, alg)| (i, Some(alg)))?
             } else {
                 (i, None)
             };
 
-            let take = if version == 6 { len } else { len - 1 };
+            let skey_len = if version == 3 { len - 1 } else { len };
 
             // The encrypted session key.
-            let (i, esk) = nom::bytes::complete::take(take)(i)?;
+            let (i, esk) = nom::bytes::complete::take(skey_len)(i)?;
 
             Ok((
                 i,
@@ -239,17 +239,17 @@ fn parse_esk<'i>(
             // A one-octet size of the following fields.
             let (i, len) = be_u8(i)?;
 
-            let (i, sym_alg) = if version != 6 {
-                // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
+            // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
+            let (i, sym_alg) = if version == 3 {
                 map(be_u8, SymmetricKeyAlgorithm::from)(i).map(|(i, alg)| (i, Some(alg)))?
             } else {
                 (i, None)
             };
 
-            let take = if version == 6 { len } else { len - 1 };
+            let skey_len = if version == 3 { len - 1 } else { len };
 
             // The encrypted session key.
-            let (i, esk) = nom::bytes::complete::take(take)(i)?;
+            let (i, esk) = nom::bytes::complete::take(skey_len)(i)?;
 
             Ok((
                 i,
