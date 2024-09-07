@@ -416,21 +416,34 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 writer.write_all(ephemeral)?;
 
                 // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
-                // the symmetric algorithm ID is not encrypted.
+                // the symmetric algorithm ID is not encrypted [for X25519].
                 //
                 // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
                 if let Some(sym_alg) = sym_alg {
-                    // len: algo + esk len
+                    ensure!(
+                        matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
+                        "Inconsistent: X25519 SymmetricKeyAlgorithm is set for v{} PKESK",
+                        self.version()
+                    );
+
+                    // len: algo octet + session_key len
                     writer.write_u8((session_key.len() + 1).try_into()?)?;
 
-                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
                     writer.write_u8((*sym_alg).into())?;
                 } else {
+                    ensure!(
+                        matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
+                        "Inconsistent: X25519 SymmetricKeyAlgorithm is unset for v{} PKESK",
+                        self.version()
+                    );
+
                     // len: esk len
                     writer.write_u8(session_key.len().try_into()?)?;
+
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
                 }
 
-                writer.write_all(session_key)?; // ESK
+                writer.write_all(session_key)?; // encrypted session key
             }
             (
                 PublicKeyAlgorithm::X448,
@@ -443,21 +456,34 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 writer.write_all(ephemeral)?;
 
                 // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
-                // the symmetric algorithm ID is not encrypted.
+                // the symmetric algorithm ID is not encrypted [for X448].
                 //
                 // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
                 if let Some(sym_alg) = sym_alg {
+                    ensure!(
+                        matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
+                        "Inconsistent: X448 SymmetricKeyAlgorithm is set for v{} PKESK",
+                        self.version()
+                    );
+
                     // len: algo + esk len
                     writer.write_u8((session_key.len() + 1).try_into()?)?;
 
-                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
                     writer.write_u8((*sym_alg).into())?;
                 } else {
-                    // len: esk len
+                    ensure!(
+                        matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
+                        "Inconsistent: X448 SymmetricKeyAlgorithm is unset for v{} PKESK",
+                        self.version()
+                    );
+
+                    // len: algo octet + session_key len
                     writer.write_u8(session_key.len().try_into()?)?;
+
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
                 }
 
-                writer.write_all(session_key)?; // ESK
+                writer.write_all(session_key)?; // encrypted session key
             }
             (alg, _) => {
                 bail!("failed to write EskBytes for {:?}", alg);
