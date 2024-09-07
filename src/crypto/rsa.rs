@@ -20,8 +20,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
 use crate::errors::Result;
-use crate::types::PkeskBytes;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PkeskBytes, PlainSecretParams, PublicParams};
 
 const MAX_KEY_SIZE: usize = 16384;
 

@@ -4,15 +4,13 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
-use crate::crypto::ecc_curve::ECCCurve;
-use crate::types::{EskType, Mpi, PkeskBytes};
 use crate::{
-    crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{self, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{
-        Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SignatureBytes, Tag, Version,
+        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SignatureBytes, Tag, Version,
     },
 };
 

@@ -13,10 +13,9 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{IResult, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
-use crate::types::EskType;
-use crate::types::PkeskBytes;
 use crate::types::{
-    mpi, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, Tag, Version,
+    mpi, EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams, Tag,
+    Version,
 };
 
 /// Public Key Encrypted Session Key Packet (PKESK)

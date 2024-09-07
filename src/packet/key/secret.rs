@@ -3,7 +3,6 @@ use log::debug;
 use rand::Rng;
 use zeroize::Zeroize;
 
-use crate::types::{EskType, PkeskBytes};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -12,8 +11,8 @@ use crate::{
         SubpacketData,
     },
     types::{
-        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
-        SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
+        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyRepr, SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
     },
 };
 
