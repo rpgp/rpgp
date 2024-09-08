@@ -1061,25 +1061,28 @@ mod tests {
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
-        for _ in 0..1000 {
-            let encrypted = compressed_msg
-                .encrypt_to_keys_seipdv2(
-                    &mut rng,
-                    SymmetricKeyAlgorithm::AES128,
-                    AeadAlgorithm::Ocb,
-                    0x06,
-                    &[&pkey][..],
-                )
-                .unwrap();
 
-            let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-            fs::write("./message-x25519.asc", &armored).unwrap();
+        for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
+            for sym in [
+                SymmetricKeyAlgorithm::AES128,
+                // SymmetricKeyAlgorithm::AES192, // TODO: not currently supported
+                SymmetricKeyAlgorithm::AES256,
+            ] {
+                for _ in 0..1000 {
+                    let encrypted = compressed_msg
+                        .encrypt_to_keys_seipdv2(&mut rng, sym, aead, 0x06, &[&pkey][..])
+                        .unwrap();
 
-            let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+                    let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+                    fs::write("./message-x25519.asc", &armored).unwrap();
 
-            let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
+                    let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-            assert_eq!(compressed_msg, decrypted);
+                    let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
+
+                    assert_eq!(compressed_msg, decrypted);
+                }
+            }
         }
     }
 
@@ -1119,27 +1122,30 @@ mod tests {
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
-        let s2k = StringToKey::new_default(&mut rng);
-
-        let encrypted = compressed_msg
-            .encrypt_with_password_seipdv2(
-                &mut rng,
-                s2k,
+        for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
+            for sym in [
                 SymmetricKeyAlgorithm::AES128,
-                AeadAlgorithm::Ocb,
-                0x06,
-                || "secret".into(),
-            )
-            .unwrap();
+                // SymmetricKeyAlgorithm::AES192, // TODO: not currently supported
+                SymmetricKeyAlgorithm::AES256,
+            ] {
+                let s2k = StringToKey::new_default(&mut rng);
 
-        let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-        fs::write("./message-password.asc", &armored).unwrap();
+                let encrypted = compressed_msg
+                    .encrypt_with_password_seipdv2(&mut rng, s2k, sym, aead, 0x06, || {
+                        "secret".into()
+                    })
+                    .unwrap();
 
-        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+                let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+                fs::write("./message-password.asc", &armored).unwrap();
 
-        let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
+                let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-        assert_eq!(compressed_msg, decrypted);
+                let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
+
+                assert_eq!(compressed_msg, decrypted);
+            }
+        }
     }
 
     #[test]
