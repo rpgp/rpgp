@@ -1065,7 +1065,7 @@ mod tests {
         for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
             for sym in [
                 SymmetricKeyAlgorithm::AES128,
-                // SymmetricKeyAlgorithm::AES192, // TODO: not currently supported
+                SymmetricKeyAlgorithm::AES192,
                 SymmetricKeyAlgorithm::AES256,
             ] {
                 for _ in 0..1000 {
@@ -1125,7 +1125,7 @@ mod tests {
         for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
             for sym in [
                 SymmetricKeyAlgorithm::AES128,
-                // SymmetricKeyAlgorithm::AES192, // TODO: not currently supported
+                SymmetricKeyAlgorithm::AES192,
                 SymmetricKeyAlgorithm::AES256,
             ] {
                 let s2k = StringToKey::new_default(&mut rng);
