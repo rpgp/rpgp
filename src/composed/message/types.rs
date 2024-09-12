@@ -975,7 +975,8 @@ mod tests {
     #[test]
     fn test_rsa_encryption_seipdv2() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
-            fs::File::open("./tests/rfc9580/v4-rsa/tsk.asc").unwrap(),
+            fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
         )
         .unwrap();
 
