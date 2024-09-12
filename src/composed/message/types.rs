@@ -974,11 +974,18 @@ mod tests {
 
     #[test]
     fn test_rsa_encryption_seipdv2() {
-        let (skey, _headers) = SignedSecretKey::from_armor_single(
+        let dir = fs::read_dir("./tests/opengpg-interop/testcases/messages")
+            .unwrap()
+            .map(|f| f.unwrap().path())
+            .collect::<Vec<_>>();
+        for file in dir {
+            println!("- {}", file.display());
+        }
+
+        let file =
             fs::File::open("./tests/opengpg-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-                .unwrap(),
-        )
-        .unwrap();
+                .expect("file not found");
+        let (skey, _headers) = SignedSecretKey::from_armor_single(file).unwrap();
 
         // subkey[0] is the encryption key
         let pkey = skey.secret_subkeys[0].public_key();
