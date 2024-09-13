@@ -302,7 +302,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                     // strip leading zeros, to match parse results from MPIs
                     let mpis = sig
                         .iter()
-                        .map(|v| Mpi::from_raw_slice(&v[..]))
+                        .map(|v| Mpi::from_slice(&v[..]))
                         .collect::<Vec<_>>();
 
                     signature = Some(SignatureBytes::Mpis(mpis));

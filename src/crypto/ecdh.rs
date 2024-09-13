@@ -333,11 +333,11 @@ where
     Ok((
         PublicParams::ECDH {
             curve: curve.clone(),
-            p: Mpi::from_raw_slice(public.to_sec1_bytes().as_ref()),
+            p: Mpi::from_slice(public.to_sec1_bytes().as_ref()),
             hash: curve.hash_algo()?,
             alg_sym: curve.sym_algo()?,
         },
-        PlainSecretParams::ECDH(Mpi::from_raw_slice(secret.to_bytes().as_slice())),
+        PlainSecretParams::ECDH(Mpi::from_slice(secret.to_bytes().as_slice())),
     ))
 }
 
@@ -483,7 +483,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let encrypted_session_key = aes_kw::wrap(&z, &plain_padded)?;
 
     Ok(PkeskBytes::Ecdh {
-        public_point: Mpi::from_raw_slice(&encoded_public),
+        public_point: Mpi::from_slice(&encoded_public),
         encrypted_session_key,
     })
 }
