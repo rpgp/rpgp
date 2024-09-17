@@ -135,7 +135,7 @@ mod tests {
         let key_type = KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let (public_params, secret_params) = key_type.generate_with_rng(&mut rng).unwrap();
+        let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
         let alice_sec = packet::SecretKey::new(
             packet::PublicKey::new(
@@ -163,7 +163,7 @@ mod tests {
             .expect("self signature verification failed");
 
         // test third-party signature
-        let (public_params, secret_params) = key_type.generate_with_rng(&mut rng).unwrap();
+        let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
         let signer_sec = packet::SecretKey::new(
             packet::PublicKey::new(

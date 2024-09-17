@@ -33,7 +33,7 @@ pub enum PublicKeyAlgorithm {
     /// Ed448 [RFC 9580]
     Ed448 = 28,
 
-    /// Private experimental range (from OpenGPG)
+    /// Private experimental range (from OpenPGP)
     Private100 = 100,
     Private101 = 101,
     Private102 = 102,

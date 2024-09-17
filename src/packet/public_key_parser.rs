@@ -77,6 +77,18 @@ fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4
+fn x448(i: &[u8]) -> IResult<&[u8], PublicParams> {
+    // 56 bytes of public key
+    let (i, p) = nom::bytes::complete::take(56u8)(i)?;
+    Ok((
+        i,
+        PublicParams::X448 {
+            public: p.try_into().expect("we took 56 bytes"),
+        },
+    ))
+}
+
 /// Ref: https://tools.ietf.org/html/rfc6637#section-9
 fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
     map(
@@ -170,7 +182,7 @@ pub fn parse_pub_fields(
         PublicKeyAlgorithm::Ed25519 => ed25519(i),
         PublicKeyAlgorithm::X25519 => x25519(i),
         PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
-        PublicKeyAlgorithm::X448 => unknown(i, len),  // FIXME: implement later
+        PublicKeyAlgorithm::X448 => x448(i),
 
         PublicKeyAlgorithm::DiffieHellman
         | PublicKeyAlgorithm::Private100

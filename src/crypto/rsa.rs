@@ -20,7 +20,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
 use crate::errors::Result;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PkeskBytes, PlainSecretParams, PublicParams};
 
 const MAX_KEY_SIZE: usize = 16384;
 
@@ -46,12 +46,10 @@ impl KeyParams for PrivateKey {
 }
 
 impl Decryptor for PrivateKey {
-    /// RSA decryption using PKCS1v15 padding.
-    fn decrypt(&self, mpis: &[Mpi], _fingerprint: &[u8]) -> Result<Vec<u8>> {
-        // rsa consist of exactly one mpi
-        ensure_eq!(mpis.len(), 1, "invalid input");
+    type EncryptionFields<'a> = &'a Mpi;
 
-        let mpi = &mpis[0];
+    /// RSA decryption using PKCS1v15 padding.
+    fn decrypt(&self, mpi: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
         let m = self.0.decrypt(Pkcs1v15Encrypt, mpi.as_bytes())?;
 
         Ok(m)
@@ -96,7 +94,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     n: &[u8],
     e: &[u8],
     plaintext: &[u8],
-) -> Result<Vec<Vec<u8>>> {
+) -> Result<PkeskBytes> {
     let key = RsaPublicKey::new_with_max_size(
         BigUint::from_bytes_be(n),
         BigUint::from_bytes_be(e),
@@ -104,7 +102,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
     )?;
     let data = key.encrypt(&mut rng, Pkcs1v15Encrypt, plaintext)?;
 
-    Ok(vec![data])
+    Ok(PkeskBytes::Rsa {
+        mpi: Mpi::from_raw_slice(&data[..]),
+    })
 }
 
 /// Generate an RSA KeyPair.

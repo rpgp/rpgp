@@ -1,37 +1,54 @@
 use log::debug;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{Mpi, SecretKeyRepr, SecretKeyTrait};
+use crate::types::{EskType, PkeskBytes, SecretKeyRepr, SecretKeyTrait};
 
 /// Decrypts session key using secret key.
-pub fn decrypt_session_key<F, L>(locked_key: &L, key_pw: F, mpis: &[Mpi]) -> Result<PlainSessionKey>
+pub fn decrypt_session_key<F, L>(
+    locked_key: &L,
+    key_pw: F,
+    values: &PkeskBytes,
+    typ: EskType,
+) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
     L: SecretKeyTrait<Unlocked = SecretKeyRepr>,
 {
     debug!("decrypt session key");
 
-    locked_key.unlock(key_pw, |priv_key| {
-        let (key, sym_alg) = priv_key.decrypt(mpis, locked_key.fingerprint().as_bytes())?;
-        // TODO: handle other versions
-        Ok(PlainSessionKey::V4 { key, sym_alg })
-    })
+    locked_key.unlock(key_pw, |priv_key| priv_key.decrypt(values, typ, locked_key))
 }
 
 /// Decrypted session key.
-#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+///
+/// A v3/v4 session key can be used  v1 SEIPD (and historically with SED packets).
+/// A v6 session key can only be used with a v2 SEIPD.
+///
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-versions-in-encrypte
+///
+/// (Note that SED packets are malleable. They are historical and considered dangerous!
+/// They MUST NOT be produced and decryption is also discouraged:
+/// https://www.rfc-editor.org/rfc/rfc9580.html#sed)
+#[derive(derive_more::Debug, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub enum PlainSessionKey {
-    V4 {
+    /// A session key from a v3 PKESK or a v4 SKESK
+    ///
+    /// (Note: for historical reasons, the OpenPGP format doesn't specify a v4 PKESK or a V3 SKESK)
+    V3_4 {
         sym_alg: SymmetricKeyAlgorithm,
         #[debug("..")]
         key: Vec<u8>,
     },
+
     V5 {
         #[debug("..")]
         key: Vec<u8>,
     },
+
+    /// A session key from a v6 PKESK or a v6 SKESK
     V6 {
         #[debug("..")]
         key: Vec<u8>,
@@ -66,7 +83,7 @@ where
         // There is no encrypted session key.
         //
         // S2K-derived key is the session key.
-        return Ok(PlainSessionKey::V4 {
+        return Ok(PlainSessionKey::V3_4 {
             key,
             sym_alg: packet_algorithm,
         });

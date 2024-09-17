@@ -1,12 +1,12 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
 use nom::number::streaming::be_u8;
-use rand::{thread_rng, CryptoRng, Rng};
+use rand::{CryptoRng, Rng};
 use sha2::Sha256;
+use zeroize::Zeroizing;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
@@ -41,7 +41,7 @@ pub enum Data {
 }
 
 impl SymEncryptedProtectedData {
-    /// Parses a `SymEncryptedData` packet from the given slice.
+    /// Parses a `SymEncryptedProtectedData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         ensure!(input.len() > 1, "invalid input length");
         let (_, data) = parse()(input)?;
@@ -53,13 +53,13 @@ impl SymEncryptedProtectedData {
     }
 
     /// Encrypts the data using the given symmetric key.
-    pub fn encrypt_with_rng<R: CryptoRng + Rng>(
+    pub fn encrypt_seipdv1<R: CryptoRng + Rng>(
         rng: R,
         alg: SymmetricKeyAlgorithm,
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Self> {
-        let data = alg.encrypt_protected_with_rng(rng, key, plaintext)?;
+        let data = alg.encrypt_protected(rng, key, plaintext)?;
 
         Ok(SymEncryptedProtectedData {
             packet_version: Default::default(),
@@ -67,12 +67,124 @@ impl SymEncryptedProtectedData {
         })
     }
 
-    /// Same as [`encrypt_with_rng`], but uses [`thread_rng`] for RNG.
-    ///
-    /// [`encrypt_with_rng`]: SymEncryptedProtectedData::encrypt_with_rng
-    /// [`thread_rng`]: rand::thread_rng
-    pub fn encrypt(alg: SymmetricKeyAlgorithm, key: &[u8], plaintext: &[u8]) -> Result<Self> {
-        Self::encrypt_with_rng(&mut thread_rng(), alg, key, plaintext)
+    /// Get (info, message_key, nonce) for the given parameters
+    #[allow(clippy::type_complexity)]
+    fn aead_setup(
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        salt: &[u8],
+        ikm: &[u8],
+    ) -> Result<([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>)> {
+        let info = [
+            Tag::SymEncryptedProtectedData.encode(), // packet type
+            0x02,                                    // version
+            sym_alg.into(),
+            aead.into(),
+            chunk_size,
+        ];
+
+        let hk = hkdf::Hkdf::<Sha256>::new(Some(salt), ikm);
+        let mut okm = Zeroizing::new([0u8; 42]);
+        hk.expand(&info, okm.as_mut_slice()).expect("42");
+
+        let mut message_key = Zeroizing::new(vec![0; sym_alg.key_size()]);
+        message_key.copy_from_slice(&okm.as_slice()[..sym_alg.key_size()]);
+
+        let raw_iv_len = aead.nonce_size() - 8;
+        let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
+        let mut nonce = vec![0u8; aead.nonce_size()];
+        nonce[..raw_iv_len].copy_from_slice(iv);
+
+        Ok((info, message_key, nonce))
+    }
+
+    /// Encrypts the data using the given symmetric key.
+    pub fn encrypt_seipdv2<R: CryptoRng + Rng>(
+        mut rng: R,
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        session_key: &[u8],
+        plaintext: &[u8],
+    ) -> Result<Self> {
+        ensure_eq!(
+            session_key.len(),
+            sym_alg.key_size(),
+            "Unexpected session key length for {:?}",
+            sym_alg
+        );
+
+        // Initial key material is the session key.
+        let ikm = session_key;
+
+        // Generate new salt for this seipd packet.
+        let mut salt = [0u8; 32];
+        rng.fill(&mut salt[..]);
+
+        let chunk_size_expanded = usize::try_from(expand_chunk_size(chunk_size))?;
+
+        let (info, message_key, mut nonce) =
+            Self::aead_setup(sym_alg, aead, chunk_size, &salt[..], ikm)?;
+
+        // Calculate output size (for more efficient vector allocation):
+        // - plaintext length
+        let plain_len = plaintext.len();
+        // - number of chunks: plaintext length divided by chunk size, rounded up to the next integer
+        let num_chunks = (plain_len + chunk_size_expanded - 1) / chunk_size_expanded;
+        // - total output size: plaintext length + size of all authentication tags (one tag per chunk, plus one final tag)
+        let out_len = plain_len + (num_chunks + 1) * aead.tag_size();
+
+        let mut out = Vec::with_capacity(out_len);
+
+        let mut chunk_index: u64 = 0;
+        for chunk in plaintext.chunks(chunk_size_expanded) {
+            let pos = out.len();
+
+            // append this next unencrypted chunk to `out`, and encrypt it in place
+            out.extend_from_slice(chunk);
+
+            let encrypt_chunk = &mut out[pos..];
+
+            let auth_tag =
+                aead.encrypt_in_place(&sym_alg, &message_key, &nonce, &info, encrypt_chunk)?;
+
+            out.extend_from_slice(&auth_tag);
+
+            // Update nonce to include the next chunk index
+            chunk_index += 1;
+            let l = nonce.len() - 8;
+            nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
+        }
+
+        // Make and append final auth tag
+
+        // Associated data is extended with number of plaintext octets.
+        let size = plaintext.len() as u64;
+        let mut final_info = info.to_vec();
+        final_info.extend_from_slice(&size.to_be_bytes());
+
+        let final_auth_tag = aead.encrypt_in_place(
+            &sym_alg,
+            &message_key,
+            &nonce,
+            &final_info,
+            &mut [][..], // encrypts empty string
+        )?;
+        out.extend_from_slice(&final_auth_tag);
+
+        debug_assert_eq!(out.len(), out_len, "we pre-allocated the wrong output size");
+
+        Ok(SymEncryptedProtectedData {
+            packet_version: Default::default(),
+            data: Data::V2 {
+                sym_alg,
+                aead,
+                chunk_size,
+                salt,
+                data: out,
+            },
+        })
     }
 
     pub fn data(&self) -> &Data {
@@ -114,63 +226,44 @@ impl SymEncryptedProtectedData {
                 salt,
                 data,
             } => {
+                ensure_eq!(
+                    session_key.len(),
+                    sym_alg.key_size(),
+                    "Unexpected session key length for {:?}",
+                    sym_alg
+                );
+
                 // Initial key material is the session key.
                 let ikm = session_key;
 
-                // Salt is used.
-                let salt = Some(&salt[..]);
+                let chunk_size_expanded = usize::try_from(expand_chunk_size(*chunk_size))?;
 
-                let info = [
-                    Tag::SymEncryptedProtectedData.encode(), // packet type
-                    0x02,                                    // version
-                    (*sym_alg).into(),
-                    (*aead).into(),
-                    *chunk_size,
-                ];
-
-                let chunk_size = expand_chunk_size(*chunk_size);
-                let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
-                let mut okm = [0u8; 42];
-                hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
-                let message_key = &okm[..sym_alg.key_size()];
-                let raw_iv_len = aead.nonce_size() - 8;
-                let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
-                let mut nonce = vec![0u8; aead.nonce_size()];
-                nonce[..raw_iv_len].copy_from_slice(iv);
-
-                debug!("message_key: {}", hex::encode(message_key));
-                debug!("iv: {}", hex::encode(iv));
-                debug!("nonce: {}", hex::encode(&nonce));
+                let (info, message_key, mut nonce) =
+                    Self::aead_setup(*sym_alg, *aead, *chunk_size, &salt[..], ikm)?;
 
                 let mut data = data.clone();
-
-                debug!(
-                    "data {}, chunk_size {} - {}",
-                    hex::encode(&data),
-                    chunk_size,
-                    data.len()
-                );
-                let mut out = Vec::new();
-                let chunk_size = usize::try_from(chunk_size)?;
 
                 // There are n chunks, n auth tags + 1 final auth tag
                 let offset = data.len() - aead.tag_size();
                 let (main_chunks, final_auth_tag) = data.split_at_mut(offset);
 
+                // Calculate output size (for more efficient vector allocation):
+                // - number of chunks: main_chunks length divided by (chunk size + tag size), rounded up to the next integer
+                let chunk_and_tag_len = chunk_size_expanded + aead.tag_size();
+                let main_len = main_chunks.len();
+                let num_chunks = (main_len + chunk_and_tag_len - 1) / chunk_and_tag_len;
+                // - total output size: main_chunks length - size of one authentication tag per chunk
+                let out_len = main_len - num_chunks * aead.tag_size();
+
+                let mut out = Vec::with_capacity(out_len);
+
                 let mut chunk_index: u64 = 0;
-                for chunk in main_chunks.chunks_mut(chunk_size + aead.tag_size()) {
+                for chunk in main_chunks.chunks_mut(chunk_size_expanded + aead.tag_size()) {
                     let offset = chunk.len() - aead.tag_size();
                     let (chunk, auth_tag) = chunk.split_at_mut(offset);
 
-                    debug!(
-                        "chunk {} - tag {}",
-                        hex::encode(&chunk),
-                        hex::encode(&auth_tag)
-                    );
+                    aead.decrypt_in_place(sym_alg, &message_key, &nonce, &info, auth_tag, chunk)?;
 
-                    aead.decrypt_in_place(sym_alg, message_key, &nonce, &info, auth_tag, chunk)?;
-                    debug!("decrypted {}", hex::encode(&chunk));
                     out.extend_from_slice(chunk);
 
                     // Update nonce to include the next chunk index
@@ -180,7 +273,6 @@ impl SymEncryptedProtectedData {
                 }
 
                 // verify final auth tag
-                debug!("final auth tag: {}", hex::encode(&final_auth_tag));
 
                 // Associated data is extended with number of plaintext octets.
                 let size = out.len() as u64;
@@ -188,17 +280,16 @@ impl SymEncryptedProtectedData {
                 final_info.extend_from_slice(&size.to_be_bytes());
 
                 // Update final nonce
-                debug!("final nonce {}", hex::encode(&nonce));
-                debug!("final auth {}", hex::encode(&final_info));
-
                 aead.decrypt_in_place(
                     sym_alg,
-                    message_key,
+                    &message_key,
                     &nonce,
                     &final_info,
                     final_auth_tag,
-                    &mut [][..], // encrypts empty string
+                    &mut [][..], // decrypts empty string
                 )?;
+
+                debug_assert_eq!(out.len(), out_len, "we pre-allocated the wrong output size");
 
                 Ok(out)
             }
@@ -269,7 +360,7 @@ fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
                 ))
             }
             _ => Err(nom::Err::Error(Error::Unsupported(format!(
-                "unknown SymEncryptedProtecedData version {}",
+                "unknown SymEncryptedProtectedData version {}",
                 version
             )))),
         }

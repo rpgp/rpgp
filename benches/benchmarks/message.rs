@@ -59,7 +59,7 @@ fn bench_message(c: &mut Criterion) {
     for size in &sizes {
         g.throughput(Throughput::BytesDecimal(*size as u64));
         g.bench_with_input(
-            BenchmarkId::new("encrypt_password_s2k_iter_aes128", size),
+            BenchmarkId::new("encrypt_password_s2k_iter_aes128_seipdv1", size),
             size,
             |b, &size| {
                 let mut bytes = vec![0u8; size];
@@ -70,7 +70,7 @@ fn bench_message(c: &mut Criterion) {
 
                 b.iter(|| {
                     let res = message
-                        .encrypt_with_password(
+                        .encrypt_with_password_seipdv1(
                             &mut rng,
                             s2k.clone(),
                             SymmetricKeyAlgorithm::default(),
@@ -87,7 +87,7 @@ fn bench_message(c: &mut Criterion) {
     for size in &sizes {
         g.throughput(Throughput::BytesDecimal(*size as u64));
         g.bench_with_input(
-            BenchmarkId::new("decrypt_password_s2k_iter_aes128", size),
+            BenchmarkId::new("decrypt_password_s2k_iter_aes128_seipdv1", size),
             size,
             |b, &size| {
                 let mut bytes = vec![0u8; size];
@@ -96,9 +96,12 @@ fn bench_message(c: &mut Criterion) {
 
                 let s2k = StringToKey::new_default(&mut rng);
                 let message = Message::new_literal_bytes("test", &bytes)
-                    .encrypt_with_password(&mut rng, s2k, SymmetricKeyAlgorithm::default(), || {
-                        "pw".into()
-                    })
+                    .encrypt_with_password_seipdv1(
+                        &mut rng,
+                        s2k,
+                        SymmetricKeyAlgorithm::default(),
+                        || "pw".into(),
+                    )
                     .unwrap();
 
                 // sanity check
@@ -146,7 +149,10 @@ fn bench_message(c: &mut Criterion) {
         for size in &sizes {
             g.throughput(Throughput::BytesDecimal(*size as u64));
             g.bench_with_input(
-                BenchmarkId::new(format!("{}_encrypt_key_{}", asym_name, sym_name), size),
+                BenchmarkId::new(
+                    format!("{}_encrypt_key_{}_seipdv1", asym_name, sym_name),
+                    size,
+                ),
                 size,
                 |b, &size| {
                     let mut bytes = vec![0u8; size];
@@ -160,7 +166,7 @@ fn bench_message(c: &mut Criterion) {
 
                     b.iter(|| {
                         let res = message
-                            .encrypt_to_keys(
+                            .encrypt_to_keys_seipdv1(
                                 &mut rng,
                                 SymmetricKeyAlgorithm::AES128,
                                 &[&signed_key.secret_subkeys[0].public_key()],
@@ -176,7 +182,10 @@ fn bench_message(c: &mut Criterion) {
         for size in &sizes {
             g.throughput(Throughput::BytesDecimal(*size as u64));
             g.bench_with_input(
-                BenchmarkId::new(format!("{}_decrypt_key_{}", asym_name, sym_name), size),
+                BenchmarkId::new(
+                    format!("{}_decrypt_key_{}_seipdv1", asym_name, sym_name),
+                    size,
+                ),
                 size,
                 |b, &size| {
                     let mut bytes = vec![0u8; size];
@@ -187,7 +196,7 @@ fn bench_message(c: &mut Criterion) {
                     let signed_key = key.sign(&mut rng, || "".into()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes)
-                        .encrypt_to_keys(
+                        .encrypt_to_keys_seipdv1(
                             &mut rng,
                             sym,
                             &[&signed_key.secret_subkeys[0].public_key()],

@@ -8,8 +8,9 @@ use des::TdesEde3;
 use idea::Idea;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use rand::{thread_rng, CryptoRng, Rng};
+use rand::{CryptoRng, Rng};
 use twofish::Twofish;
+use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
 
@@ -130,7 +131,7 @@ impl SymmetricKeyAlgorithm {
 
     /// The size of a single block in bytes.
     /// Based on <https://github.com/gpg/libgcrypt/blob/master/cipher>
-    pub fn key_size(self) -> usize {
+    pub const fn key_size(self) -> usize {
         match self {
             SymmetricKeyAlgorithm::Plaintext => 0,
             SymmetricKeyAlgorithm::IDEA => 16,
@@ -390,7 +391,7 @@ impl SymmetricKeyAlgorithm {
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
-    pub fn encrypt_with_rng<R: CryptoRng + Rng>(
+    pub fn encrypt<R: CryptoRng + Rng>(
         self,
         mut rng: R,
         key: &[u8],
@@ -421,15 +422,7 @@ impl SymmetricKeyAlgorithm {
         Ok(ciphertext)
     }
 
-    /// Same as [`encrypt_with_rng`], but uses [`rand::thread_rng`] for RNG.
-    ///
-    /// [`encrypt_with_rng`]: SymmetricKeyAlgorithm::encrypt_with_rng
-    /// [`rand::thread_rng`]: rand::thread_rng
-    pub fn encrypt(self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
-        self.encrypt_with_rng(&mut thread_rng(), key, plaintext)
-    }
-
-    pub fn encrypt_protected_with_rng<R: CryptoRng + Rng>(
+    pub fn encrypt_protected<R: CryptoRng + Rng>(
         self,
         mut rng: R,
         key: &[u8],
@@ -472,10 +465,6 @@ impl SymmetricKeyAlgorithm {
         self.encrypt_with_iv(key, &iv_vec, &mut ciphertext, false)?;
 
         Ok(ciphertext)
-    }
-
-    pub fn encrypt_protected(self, key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>> {
-        self.encrypt_protected_with_rng(&mut thread_rng(), key, plaintext)
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
@@ -580,8 +569,8 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Generate a new session key.
-    pub fn new_session_key<R: Rng + CryptoRng>(self, mut rng: R) -> Vec<u8> {
-        let mut session_key = vec![0u8; self.key_size()];
+    pub fn new_session_key<R: Rng + CryptoRng>(self, mut rng: R) -> Zeroizing<Vec<u8>> {
+        let mut session_key = Zeroizing::new(vec![0u8; self.key_size()]);
         rng.fill_bytes(&mut session_key);
         session_key
     }
@@ -590,7 +579,7 @@ impl SymmetricKeyAlgorithm {
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
-    use rand_xorshift::XorShiftRng;
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
 
@@ -598,16 +587,14 @@ mod tests {
         ($name:ident, $alg:path) => {
             #[test]
             fn $name() {
-                let rng = &mut XorShiftRng::from_seed([
-                    0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe, 0x3, 0x8, 0x3, 0xe,
-                ]);
+                let mut rng = ChaCha8Rng::seed_from_u64(0);
 
                 // Protected
                 for i in 1..1024 {
                     let data = (0..i).map(|_| rng.gen()).collect::<Vec<_>>();
                     let key = (0..$alg.key_size()).map(|_| rng.gen()).collect::<Vec<_>>();
 
-                    let mut ciphertext = $alg.encrypt_protected(&key, &data).unwrap();
+                    let mut ciphertext = $alg.encrypt_protected(&mut rng, &key, &data).unwrap();
                     assert_ne!(data, ciphertext);
 
                     let plaintext = $alg.decrypt_protected(&key, &mut ciphertext).unwrap();
