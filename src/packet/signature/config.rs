@@ -530,7 +530,7 @@ impl SignatureConfig {
     /// The time the signature was made.
     /// MUST be present in the hashed area.
     ///
-    /// <https://datatracker.ietf.org/doc/html/rfc4880#section-5.2.3.4>
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-creation-time>
     ///
     /// Returns the first Signature Creation Time subpacket, only from the hashed area.
     pub fn created(&self) -> Option<&DateTime<Utc>> {
@@ -546,11 +546,11 @@ impl SignatureConfig {
         })
     }
 
-    /// Issuer.
+    /// Issuer Key ID.
     ///
     /// The OpenPGP Key ID of the key issuing the signature.
     ///
-    /// <https://datatracker.ietf.org/doc/html/rfc4880#section-5.2.3.5>
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-key-id>
     ///
     /// Returns Issuer subpacket data from both the hashed and unhashed area.
     pub fn issuer(&self) -> Vec<&KeyId> {
@@ -580,10 +580,7 @@ impl SignatureConfig {
     ///
     /// The OpenPGP Key fingerprint of the key issuing the signature.
     ///
-    /// This subpacket type was introduced after RFC 4880, in the RFC 4880-bis lifecycle.
-    /// It sees some use in the wild for v4 signatures, in both the hashed and unhashed areas.
-    ///
-    /// <https://datatracker.ietf.org/doc/html/draft-ietf-openpgp-rfc4880bis-10#name-issuer-fingerprint>
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-fingerprint>
     ///
     /// Returns Issuer Fingerprint subpacket data from both the hashed and unhashed area.
     pub fn issuer_fingerprint(&self) -> Vec<&Fingerprint> {

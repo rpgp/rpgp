@@ -23,7 +23,7 @@ use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
 
 /// Implementation of a Cleartext Signed Message.
 ///
-/// Ref <https://datatracker.ietf.org/doc/html/rfc4880.html#section-7>
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-cleartext-signature-framewo>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CleartextSignedMessage {
     /// Normalized and dash-escaped representation of the signed text.
@@ -292,7 +292,7 @@ fn validate_headers(headers: Headers) -> Result<Vec<HashAlgorithm>> {
 ///
 /// This implementation is implicitly agnostic between "\n" and "\r\n" line endings.
 ///
-/// Ref https://www.rfc-editor.org/rfc/rfc9580.html#name-dash-escaped-text
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-dash-escaped-text>
 fn dash_escape(text: &str) -> String {
     let mut out = String::new();
     for line in text.split_inclusive('\n') {

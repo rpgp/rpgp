@@ -1,6 +1,6 @@
 //! Internal key definitions
 //!
-//! These APIs do not provide guaranteed RFC4880 compliance,
+//! These APIs do not provide guaranteed RFC 9580 compliance,
 //! since hashing is to be done externally.
 //!
 //!

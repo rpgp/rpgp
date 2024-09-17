@@ -165,7 +165,7 @@ impl EncryptedSecretParams {
                 // Checksum
 
                 // Check SHA-1 hash if it is present.
-                // See RFC 4880, "5.5.3 Secret-Key Packet Formats" for details.
+                // See <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.3-3.5.1> for details.
                 if plaintext.len() < 20 {
                     return Err(Error::InvalidInput);
                 }

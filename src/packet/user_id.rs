@@ -13,7 +13,7 @@ use crate::ser::Serialize;
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, Version};
 
 /// User ID Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.11>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-id-packet-type-id-13>
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserId {
     packet_version: Version,

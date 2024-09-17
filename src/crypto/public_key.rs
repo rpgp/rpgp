@@ -13,9 +13,9 @@ pub enum PublicKeyAlgorithm {
     ElgamalSign = 16,
     /// DSA (Digital Signature Algorithm)
     DSA = 17,
-    /// Elliptic Curve: RFC-6637
+    /// Elliptic Curve: RFC 9580 [formerly in RFC 6637]
     ECDH = 18,
-    /// ECDSA: RFC-6637
+    /// ECDSA: RFC 9580 [formerly in RFC 6637]
     ECDSA = 19,
     /// DEPRECATED: Elgamal (Encrypt and Sign)
     Elgamal = 20,

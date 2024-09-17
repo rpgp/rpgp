@@ -6,7 +6,12 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Data Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.7>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-dat>
+///
+/// "This packet is obsolete. An implementation MUST NOT create this packet.
+/// An implementation SHOULD reject such a packet and stop processing the message.
+/// If an implementation chooses to process the packet anyway, it MUST return a clear warning
+/// that a non-integrity-protected packet has been processed."
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedData {
     packet_version: Version,

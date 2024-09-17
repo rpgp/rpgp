@@ -6,7 +6,16 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Modification Detection Code Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.14>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#version-one-seipd>
+///
+/// Also see <https://www.rfc-editor.org/rfc/rfc9580.html#name-terminology-changes>:
+///
+/// "Modification Detection Code" or "MDC" was originally described as a distinct packet
+/// (Packet Type ID 19), and its corresponding flag in the Features signature subpacket
+/// (Section 5.2.3.32) was known as "Modification Detection".
+/// It is now described as an intrinsic part of v1 SEIPD (Section 5.13.1), and the same
+/// corresponding flag is known as "Version 1 Symmetrically Encrypted and Integrity Protected
+/// Data packet".
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub struct ModDetectionCode {
     packet_version: Version,

@@ -26,7 +26,7 @@ pub struct SignedPublicKey {
 }
 
 /// Parse a transferable keys from the given packets.
-/// Ref: <https://tools.ietf.org/html/rfc4880.html#section-11.1>
+/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-transferable-public-keys>
 pub struct SignedPublicKeyParser<
     I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,
 > {
@@ -67,7 +67,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedPublicKeyPar
 
 impl crate::composed::Deserializable for SignedPublicKey {
     /// Parse a transferable key from packets.
-    /// Ref: <https://tools.ietf.org/html/rfc4880.html#section-11.1>
+    /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-transferable-public-keys>
     fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {

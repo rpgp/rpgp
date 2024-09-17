@@ -17,7 +17,7 @@ fn to_owned(mref: MpiRef<'_>) -> Mpi {
     mref.to_owned()
 }
 
-/// Ref: https://tools.ietf.org/html/rfc6637#section-9
+/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ec>
 fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     let (i, curve) = map_opt(
         // a one-octet size of the following field
@@ -34,7 +34,7 @@ fn ecdsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
-/// https://tools.ietf.org/html/draft-koch-eddsa-for-openpgp-00#section-4
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed>
 fn eddsa_legacy(i: &[u8]) -> IResult<&[u8], PublicParams> {
     let (i, curve) = map_opt(
         // a one-octet size of the following field
@@ -65,7 +65,7 @@ fn ed25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
-/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x>
 fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
     // 32 bytes of public key
     let (i, p) = nom::bytes::complete::take(32u8)(i)?;
@@ -77,7 +77,7 @@ fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
-/// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4>
 fn x448(i: &[u8]) -> IResult<&[u8], PublicParams> {
     // 56 bytes of public key
     let (i, p) = nom::bytes::complete::take(56u8)(i)?;
@@ -89,7 +89,7 @@ fn x448(i: &[u8]) -> IResult<&[u8], PublicParams> {
     ))
 }
 
-/// Ref: https://tools.ietf.org/html/rfc6637#section-9
+/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ecd>
 fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
     map(
         tuple((
@@ -272,7 +272,7 @@ fn public_key_parser_v2_v3(
 }
 
 /// Parse a public key packet (Tag 6)
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.5.1.1
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-packet-type-id-6
 #[allow(clippy::type_complexity)]
 pub(crate) fn parse(
     i: &[u8],

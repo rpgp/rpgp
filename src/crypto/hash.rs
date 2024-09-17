@@ -9,7 +9,7 @@ use sha1_checked::{CollisionResult, Sha1};
 use crate::errors::{Error, Result};
 
 /// Available hash algorithms.
-/// Ref: <https://tools.ietf.org/html/rfc4880.html#section-9.4>
+/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-hash-algorithms>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive, Hash)]
 #[repr(u8)]
 pub enum HashAlgorithm {

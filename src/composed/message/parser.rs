@@ -136,7 +136,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
             }
             Tag::Marker => {
                 // Marker Packets are ignored
-                // see https://tools.ietf.org/html/rfc4880#section-5.8
+                // see https://www.rfc-editor.org/rfc/rfc9580.html#marker-packet
             }
             Tag::Padding => {
                 // Padding Packets are ignored
@@ -161,7 +161,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for MessageParser<I> {
 
 impl Deserializable for Message {
     /// Parse a composed message.
-    /// Ref: <https://tools.ietf.org/html/rfc4880#section-11.3>
+    /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages>
     fn from_packets<'a, I: Iterator<Item = Result<Packet>> + 'a>(
         packets: std::iter::Peekable<I>,
     ) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {

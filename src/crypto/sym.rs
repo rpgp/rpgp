@@ -19,10 +19,10 @@ macro_rules! decrypt {
         let mut mode = BufDecryptor::<$mode>::new_from_slices($key, $iv)?;
         mode.decrypt($prefix);
 
-        // We do not do "quick check" here.
-        // See "Security Considerations" section
-        // in <https://tools.ietf.org/html/rfc4880#page-84>
-        // and paper <https://eprint.iacr.org/2005/033>
+        // We do not do use "quick check" here.
+        // See the "Security Considerations" section
+        // in <https://www.rfc-editor.org/rfc/rfc9580.html#name-risks-of-a-quick-check-orac>
+        // and the paper <https://eprint.iacr.org/2005/033>
         // for details.
 
         if $resync {
@@ -65,7 +65,8 @@ macro_rules! encrypt_regular {
     }};
 }
 
-/// Available [symmetric key algorithms](https://tools.ietf.org/html/rfc4880#section-9.2).
+/// Available symmetric key algorithms.
+/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-algorithms>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 pub enum SymmetricKeyAlgorithm {
