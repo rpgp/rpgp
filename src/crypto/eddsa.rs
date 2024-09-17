@@ -89,7 +89,10 @@ pub fn generate_key<R: Rng + CryptoRng>(
 ) -> (PublicParams, PlainSecretParams) {
     let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
     rng.fill_bytes(&mut *bytes);
+
     let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);
+    drop(bytes); // we're done with this slice, zeroize it
+
     let public = ed25519_dalek::VerifyingKey::from(&secret);
 
     match mode {
@@ -101,7 +104,6 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
             // secret key
             let p = Mpi::from_raw_slice(&secret.to_bytes());
-            bytes.zeroize();
 
             (
                 PublicParams::EdDSALegacy {

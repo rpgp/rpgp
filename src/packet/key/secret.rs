@@ -11,8 +11,8 @@ use crate::{
         SubpacketData,
     },
     types::{
-        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyRepr,
-        SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
+        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyRepr, SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
     },
 };
 
@@ -60,7 +60,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         R: rand::Rng + rand::CryptoRng,
         P: FnOnce() -> String,
     {
-        let s2k = crate::types::S2kParams::new_default(rng);
+        let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
     }
 
@@ -271,10 +271,13 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                 }
                 SecretKeyRepr::DSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
                 SecretKeyRepr::ECDH(_) => {
-                    bail!("ECDH can not be used to for signing operations")
+                    bail!("ECDH can not be used for signing operations")
                 }
                 SecretKeyRepr::X25519(_) => {
-                    bail!("X25519 can not be used to for signing operations")
+                    bail!("X25519 can not be used for signing operations")
+                }
+                SecretKeyRepr::X448(_) => {
+                    bail!("X448 can not be used for signing operations")
                 }
                 SecretKeyRepr::EdDSA(ref priv_key) => {
                     priv_key.sign(hash, data, self.public_params())
@@ -425,8 +428,13 @@ impl PublicKeyTrait for SecretKey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -472,8 +480,13 @@ impl PublicKeyTrait for SecretSubkey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -519,8 +532,13 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
         self.details.verify_signature(hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.details.encrypt(rng, plain)
+    fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.details.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -571,8 +589,10 @@ impl SecretKey {
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet.
     ///
-    /// This function uses the default S2K locking mechanism
-    /// (`Cfb` with iterated and salted derivation of the password).
+    /// This function uses the default S2K locking mechanism for the key version:
+    ///
+    /// - for V6 keys: `Aead` with `Argon2` derivation,
+    /// - for V4 keys: `Cfb` with iterated and salted derivation of the password.
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
@@ -656,15 +676,16 @@ mod tests {
 
     use crate::crypto::hash::HashAlgorithm;
     use crate::packet::{PublicKey, SecretKey};
-    use crate::types::{KeyVersion, SecretKeyTrait, Version};
+    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait, Version};
 
     #[test]
-    fn secret_key_protection() {
+    #[ignore] // slow in debug mode (argon2)
+    fn secret_key_protection_v4() {
         const DATA: &[u8] = &[0x23, 0x05];
         let key_type = crate::KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let (public_params, secret_params) = key_type.generate_with_rng(&mut rng).unwrap();
+        let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
         let mut alice_sec = SecretKey::new(
             PublicKey::new(
@@ -682,7 +703,7 @@ mod tests {
         alice_sec
             .set_password_with_s2k(
                 || "password".to_string(),
-                crate::types::S2kParams::new_default(&mut rng),
+                crate::types::S2kParams::new_default(&mut rng, KeyVersion::V4),
             )
             .unwrap();
 
@@ -719,6 +740,22 @@ mod tests {
         // signing with the right password should succeed
         assert!(alice_sec
             .create_signature(|| "foo".to_string(), HashAlgorithm::default(), DATA)
+            .is_ok());
+
+        // remove the password protection again
+        alice_sec.remove_password(|| "foo".to_string()).unwrap();
+
+        // set password protection with v6 s2k defaults (AEAD+Argon2)
+        alice_sec
+            .set_password_with_s2k(
+                || "bar".to_string(),
+                S2kParams::new_default(&mut rng, KeyVersion::V6),
+            )
+            .unwrap();
+
+        // signing with the right password should succeed
+        assert!(alice_sec
+            .create_signature(|| "bar".to_string(), HashAlgorithm::default(), DATA)
             .is_ok());
     }
 }

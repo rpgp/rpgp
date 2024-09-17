@@ -12,7 +12,8 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
+    SignatureBytes, Tag,
 };
 use crate::{armor, ArmorOptions};
 
@@ -170,8 +171,13 @@ impl PublicKeyTrait for SignedPublicKey {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.primary_key.encrypt(rng, plain)
+    fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.primary_key.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
@@ -275,8 +281,13 @@ impl PublicKeyTrait for SignedPublicSubKey {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.key.encrypt(rng, plain)
+    fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.key.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {

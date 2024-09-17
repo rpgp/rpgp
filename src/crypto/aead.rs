@@ -1,7 +1,8 @@
-use aes::{Aes128, Aes256};
+use aes::{Aes128, Aes192, Aes256};
+use aes_gcm::aead::consts::U12;
 use aes_gcm::{
     aead::{AeadInPlace, KeyInit},
-    Aes128Gcm, Aes256Gcm, Key as GcmKey, Nonce as GcmNonce, Tag as GcmTag,
+    Aes128Gcm, Aes256Gcm, AesGcm, Key as GcmKey, Nonce as GcmNonce, Tag as GcmTag,
 };
 use eax::{Eax, Key as EaxKey, Nonce as EaxNonce, Tag as EaxTag};
 use generic_array::{
@@ -11,12 +12,15 @@ use generic_array::{
 use num_enum::{FromPrimitive, IntoPrimitive};
 use ocb3::{Nonce as Ocb3Nonce, Ocb3, Tag as OcbTag};
 
+use super::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 
-use super::sym::SymmetricKeyAlgorithm;
-
 type Aes128Ocb3 = Ocb3<Aes128, U15, U16>;
+type Aes192Ocb3 = Ocb3<Aes192, U15, U16>;
 type Aes256Ocb3 = Ocb3<Aes256, U15, U16>;
+
+/// AES-GCM with a 192-bit key and 96-bit nonce.
+pub type Aes192Gcm = AesGcm<Aes192, U12>;
 
 /// Available AEAD algorithms.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
@@ -95,6 +99,15 @@ impl AeadAlgorithm {
                     .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
                     .map_err(|_| Error::Gcm)?;
             }
+            (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Gcm) => {
+                let key = GcmKey::<Aes192Gcm>::from_slice(&key[..24]);
+                let cipher = Aes192Gcm::new(key);
+                let nonce = GcmNonce::from_slice(nonce);
+                let tag = GcmTag::from_slice(auth_tag);
+                cipher
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
+                    .map_err(|_| Error::Gcm)?;
+            }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
                 let cipher = Aes256Gcm::new(key);
@@ -107,6 +120,15 @@ impl AeadAlgorithm {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes128>::from_slice(&key[..16]);
                 let cipher = Eax::<Aes128>::new(key);
+                let nonce = EaxNonce::from_slice(nonce);
+                let tag = EaxTag::from_slice(auth_tag);
+                cipher
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
+                    .map_err(|_| Error::Eax)?;
+            }
+            (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Eax) => {
+                let key = EaxKey::<Aes192>::from_slice(&key[..24]);
+                let cipher = Eax::<Aes192>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 let tag = EaxTag::from_slice(auth_tag);
                 cipher
@@ -126,6 +148,15 @@ impl AeadAlgorithm {
                 let key = GenericArray::from_slice(&key[..16]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes128Ocb3::new(key);
+                let tag = OcbTag::from_slice(auth_tag);
+                cipher
+                    .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
+                    .map_err(|_| Error::Ocb)?
+            }
+            (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
+                let key = GenericArray::from_slice(&key[..24]);
+                let nonce = Ocb3Nonce::from_slice(nonce);
+                let cipher = Aes192Ocb3::new(key);
                 let tag = OcbTag::from_slice(auth_tag);
                 cipher
                     .decrypt_in_place_detached(nonce, associated_data, buffer, tag)
@@ -164,6 +195,14 @@ impl AeadAlgorithm {
                     .encrypt_in_place_detached(nonce, associated_data, buffer)
                     .map_err(|_| Error::Gcm)?
             }
+            (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Gcm) => {
+                let key = GcmKey::<Aes192Gcm>::from_slice(&key[..24]);
+                let cipher = Aes192Gcm::new(key);
+                let nonce = GcmNonce::from_slice(nonce);
+                cipher
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
+                    .map_err(|_| Error::Gcm)?
+            }
             (SymmetricKeyAlgorithm::AES256, AeadAlgorithm::Gcm) => {
                 let key = GcmKey::<Aes256Gcm>::from_slice(&key[..32]);
                 let cipher = Aes256Gcm::new(key);
@@ -175,6 +214,14 @@ impl AeadAlgorithm {
             (SymmetricKeyAlgorithm::AES128, AeadAlgorithm::Eax) => {
                 let key = EaxKey::<Aes128>::from_slice(&key[..16]);
                 let cipher = Eax::<Aes128>::new(key);
+                let nonce = EaxNonce::from_slice(nonce);
+                cipher
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
+                    .map_err(|_| Error::Eax)?
+            }
+            (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Eax) => {
+                let key = EaxKey::<Aes192>::from_slice(&key[..24]);
+                let cipher = Eax::<Aes192>::new(key);
                 let nonce = EaxNonce::from_slice(nonce);
                 cipher
                     .encrypt_in_place_detached(nonce, associated_data, buffer)
@@ -192,6 +239,14 @@ impl AeadAlgorithm {
                 let key = GenericArray::from_slice(&key[..16]);
                 let nonce = Ocb3Nonce::from_slice(nonce);
                 let cipher = Aes128Ocb3::new(key);
+                cipher
+                    .encrypt_in_place_detached(nonce, associated_data, buffer)
+                    .map_err(|_| Error::Ocb)?
+            }
+            (SymmetricKeyAlgorithm::AES192, AeadAlgorithm::Ocb) => {
+                let key = GenericArray::from_slice(&key[..24]);
+                let nonce = Ocb3Nonce::from_slice(nonce);
+                let cipher = Aes192Ocb3::new(key);
                 cipher
                     .encrypt_in_place_detached(nonce, associated_data, buffer)
                     .map_err(|_| Error::Ocb)?

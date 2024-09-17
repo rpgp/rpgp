@@ -5,12 +5,12 @@ use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
 use crate::{
-    crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{self, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{
-        Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SignatureBytes, Tag, Version,
+        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SignatureBytes, Tag, Version,
     },
 };
 
@@ -130,6 +130,32 @@ impl PubKeyInner {
                 algorithm,
                 version,
             );
+        }
+
+        // "Ed25519Legacy and Curve25519Legacy are used only in version 4 keys [..].
+        // Implementations MUST NOT accept [..] version 6 key material using the deprecated OIDs."
+        //
+        // See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.2-6
+        if version != KeyVersion::V4 {
+            if matches!(
+                public_params,
+                PublicParams::ECDH {
+                    curve: ECCCurve::Curve25519,
+                    ..
+                }
+            ) {
+                bail!(
+                    "ECDH over Curve25519 is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+
+            if matches!(public_params, PublicParams::EdDSALegacy { .. }) {
+                bail!(
+                    "EdDSALegacy is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
         }
 
         Ok(Self {
@@ -427,7 +453,10 @@ impl PublicKeyTrait for PubKeyInner {
                 sig.try_into()?,
             ),
             PublicParams::X25519 { .. } => {
-                unimplemented_err!("verify X25519");
+                bail!("X25519 can not be used for verify operations");
+            }
+            PublicParams::X448 { .. } => {
+                bail!("X448 can not be used for verify operations");
             }
             PublicParams::ECDSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
@@ -440,7 +469,12 @@ impl PublicKeyTrait for PubKeyInner {
                 ref alg_sym,
                 ..
             } => {
-                unimplemented_err!("verify ECDH: {:?} {:?} {:?}", curve, hash, alg_sym);
+                bail!(
+                    "ECDH ({:?} {:?} {:?}) can not be used for verify operations",
+                    curve,
+                    hash,
+                    alg_sym
+                );
             }
             PublicParams::Elgamal { .. } => {
                 unimplemented_err!("verify Elgamal");
@@ -466,17 +500,23 @@ impl PublicKeyTrait for PubKeyInner {
                 )
             }
             PublicParams::Unknown { .. } => {
-                unimplemented_err!("verify unknown");
+                unimplemented_err!("PublicParams::Unknown can not be used for verify operations");
             }
         }
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        let res = match self.public_params {
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        mut rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        match self.public_params {
             PublicParams::RSA { ref n, ref e } => {
                 crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
             }
-            PublicParams::EdDSALegacy { .. } => bail!("EdDSA is only used for signing"),
+            PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
+            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
             PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
             PublicParams::ECDH {
                 ref curve,
@@ -492,17 +532,52 @@ impl PublicKeyTrait for PubKeyInner {
                 p.as_bytes(),
                 plain,
             ),
+            PublicParams::X25519 { ref public } => {
+                let (sym_alg, plain) = match typ {
+                    EskType::V6 => (None, plain),
+                    EskType::V3_4 => {
+                        ensure!(!plain.is_empty(), "plain may not be empty");
+
+                        (
+                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                            &plain[1..],           // strip symmetric algorithm
+                        )
+                    }
+                };
+
+                let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, *public, plain)?;
+
+                Ok(PkeskBytes::X25519 {
+                    ephemeral,
+                    session_key,
+                    sym_alg,
+                })
+            }
+            PublicParams::X448 { ref public } => {
+                let (sym_alg, plain) = match typ {
+                    EskType::V6 => (None, plain),
+                    EskType::V3_4 => {
+                        ensure!(!plain.is_empty(), "plain may not be empty");
+
+                        (
+                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                            &plain[1..],           // strip symmetric algorithm
+                        )
+                    }
+                };
+
+                let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
+
+                Ok(PkeskBytes::X448 {
+                    ephemeral,
+                    session_key,
+                    sym_alg,
+                })
+            }
             PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
             PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
             PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
-            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
-            PublicParams::X25519 { .. } => unimplemented_err!("X25519"),
-        }?;
-
-        Ok(res
-            .iter()
-            .map(|v| Mpi::from_raw_slice(&v[..]))
-            .collect::<Vec<_>>())
+        }
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -561,8 +636,13 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
@@ -608,8 +688,13 @@ impl PublicKeyTrait for PublicSubkey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain)
+    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {

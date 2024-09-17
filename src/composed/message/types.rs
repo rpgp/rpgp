@@ -12,6 +12,7 @@ use crate::composed::message::decrypt::*;
 use crate::composed::shared::Deserializable;
 use crate::composed::signed_key::SignedSecretKey;
 use crate::composed::StandaloneSignature;
+use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
@@ -23,7 +24,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
+    CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
     StringToKey, Tag,
 };
 
@@ -192,7 +193,7 @@ impl Edata {
         debug!("decrypting protected = {:?}", protected);
 
         match key {
-            PlainSessionKey::V4 { sym_alg, key } => {
+            PlainSessionKey::V3_4 { sym_alg, ref key } => {
                 ensure!(
                     sym_alg != SymmetricKeyAlgorithm::Plaintext,
                     "session key algorithm cannot be plaintext"
@@ -205,7 +206,7 @@ impl Edata {
                             Some(1),
                             "Version mismatch between key and integrity packet"
                         );
-                        let data = p.decrypt(&key, Some(sym_alg))?;
+                        let data = p.decrypt(key, Some(sym_alg))?;
                         Self::process_decrypted(&data[..])
                     }
                     Self::SymEncryptedData(p) => {
@@ -215,7 +216,7 @@ impl Edata {
                             "Version mismatch between key and integrity packet"
                         );
                         let mut data = p.data().to_vec();
-                        let res = sym_alg.decrypt(&key, &mut data)?;
+                        let res = sym_alg.decrypt(key, &mut data)?;
                         Self::process_decrypted(res)
                     }
                 }
@@ -233,7 +234,7 @@ impl Edata {
                     bail!("invalid packet combination");
                 }
             },
-            PlainSessionKey::V6 { key } => match self {
+            PlainSessionKey::V6 { ref key } => match self {
                 Self::SymEncryptedProtectedData(p) => {
                     ensure_eq!(
                         self.version(),
@@ -241,7 +242,7 @@ impl Edata {
                         "Version mismatch between key and integrity packet"
                     );
 
-                    let decrypted_packets = p.decrypt(&key, None)?;
+                    let decrypted_packets = p.decrypt(key, None)?;
                     Self::process_decrypted(&decrypted_packets[..])
                 }
                 Self::SymEncryptedData(_) => {
@@ -332,8 +333,8 @@ impl Message {
         }
     }
 
-    /// Encrypt the message to the list of passed in public keys.
-    pub fn encrypt_to_keys<R: CryptoRng + Rng>(
+    /// Encrypt the message in SEIPDv1 format to a list of public keys `pkeys`.
+    pub fn encrypt_to_keys_seipdv1<R: CryptoRng + Rng>(
         &self,
         mut rng: R,
         alg: SymmetricKeyAlgorithm,
@@ -346,7 +347,7 @@ impl Message {
         let esk = pkeys
             .iter()
             .map(|pkey| {
-                let pkes = PublicKeyEncryptedSessionKey::from_session_key(
+                let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
                     &mut rng,
                     &session_key,
                     alg,
@@ -357,11 +358,40 @@ impl Message {
             .collect::<Result<_>>()?;
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(&mut rng, esk, alg, session_key)
+        self.encrypt_symmetric_seipdv1(&mut rng, esk, alg, &session_key)
     }
 
-    /// Encrypt the message using the given password.
-    pub fn encrypt_with_password<R, F>(
+    /// Encrypt the message in SEIPDv2 format to a list of public keys `pkeys`.
+    pub fn encrypt_to_keys_seipdv2<R: CryptoRng + Rng>(
+        &self,
+        mut rng: R,
+        alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        pkeys: &[&impl PublicKeyTrait],
+    ) -> Result<Self> {
+        // 1. Generate a session key.
+        let session_key = alg.new_session_key(&mut rng);
+
+        // 2. Encrypt (pub) the session key, to each PublicKey.
+        let esk = pkeys
+            .iter()
+            .map(|pkey| {
+                let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+                    &mut rng,
+                    &session_key,
+                    pkey,
+                )?;
+                Ok(Esk::PublicKeyEncryptedSessionKey(pkes))
+            })
+            .collect::<Result<_>>()?;
+
+        // 3. Encrypt (sym) the data using the session key.
+        self.encrypt_symmetric_seipdv2(&mut rng, esk, alg, aead, chunk_size, &session_key)
+    }
+
+    /// Encrypt the message in SEIPDv1 format to a password `msg_pw`.
+    pub fn encrypt_with_password_seipdv1<R, F>(
         &self,
         mut rng: R,
         s2k: StringToKey,
@@ -376,7 +406,7 @@ impl Message {
         let session_key = alg.new_session_key(&mut rng);
 
         // 2. Encrypt (sym) the session key using the provided password.
-        let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt(
+        let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v4(
             msg_pw,
             &session_key,
             s2k,
@@ -384,23 +414,82 @@ impl Message {
         )?);
 
         // 3. Encrypt (sym) the data using the session key.
-        self.encrypt_symmetric(rng, vec![skesk], alg, session_key)
+        self.encrypt_symmetric_seipdv1(rng, vec![skesk], alg, &session_key)
     }
 
-    /// Symmetrically encrypts oneself using the provided `session_key`.
-    fn encrypt_symmetric<R: CryptoRng + Rng>(
+    /// Encrypt the message in SEIPDv2 format to a password `msg_pw`.
+    pub fn encrypt_with_password_seipdv2<R, F>(
+        &self,
+        mut rng: R,
+        s2k: StringToKey,
+        alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        msg_pw: F,
+    ) -> Result<Self>
+    where
+        R: Rng + CryptoRng,
+        F: FnOnce() -> String + Clone,
+    {
+        // 1. Generate a session key.
+        let session_key = alg.new_session_key(&mut rng);
+
+        // 2. Encrypt (sym) the session key using the provided password.
+        let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v6(
+            &mut rng,
+            msg_pw,
+            &session_key,
+            s2k,
+            alg,
+            aead,
+        )?);
+
+        // 3. Encrypt (sym) the data using the session key.
+        self.encrypt_symmetric_seipdv2(rng, vec![skesk], alg, aead, chunk_size, &session_key)
+    }
+
+    /// Symmetrically encrypt this Message in SEIPDv1 format using the provided `session_key`.
+    ///
+    /// This function assumes that it is only called with Esk that are legal to use with SEIPDv1.
+    fn encrypt_symmetric_seipdv1<R: CryptoRng + Rng>(
         &self,
         rng: R,
         esk: Vec<Esk>,
         alg: SymmetricKeyAlgorithm,
-        session_key: Vec<u8>,
+        session_key: &[u8],
     ) -> Result<Self> {
         let data = self.to_bytes()?;
 
-        let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_with_rng(
+        let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_seipdv1(
             rng,
             alg,
-            &session_key,
+            session_key,
+            &data,
+        )?);
+
+        Ok(Message::Encrypted { esk, edata })
+    }
+
+    /// Symmetrically encrypt this Message in SEIPDv2 format using the provided `session_key`.
+    ///
+    /// This function assumes that it is only called with Esk that are legal to use with SEIPDv2.
+    fn encrypt_symmetric_seipdv2<R: CryptoRng + Rng>(
+        &self,
+        rng: R,
+        esk: Vec<Esk>,
+        alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        session_key: &[u8],
+    ) -> Result<Self> {
+        let data = self.to_bytes()?;
+
+        let edata = Edata::SymEncryptedProtectedData(SymEncryptedProtectedData::encrypt_seipdv2(
+            rng,
+            alg,
+            aead,
+            chunk_size,
+            session_key,
             &data,
         )?);
 
@@ -421,6 +510,7 @@ impl Message {
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
+
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
             Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -544,20 +634,6 @@ impl Message {
         }
     }
 
-    /// Returns a list of [KeyId]s that the message is encrypted to. For non encrypted messages this list is empty.
-    pub fn get_recipients(&self) -> Vec<&KeyId> {
-        match self {
-            Message::Encrypted { esk, .. } => esk
-                .iter()
-                .filter_map(|e| match e {
-                    Esk::PublicKeyEncryptedSessionKey(k) => Some(k.id()),
-                    _ => None,
-                })
-                .collect(),
-            _ => Vec::new(),
-        }
-    }
-
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt<G>(&self, key_pw: G, keys: &[&SignedSecretKey]) -> Result<(Message, Vec<KeyId>)>
@@ -595,9 +671,9 @@ impl Message {
                                     .collect::<Vec<_>>()
                             );
 
-                            // find the key with the matching key id
+                            // find the matching key or subkey
 
-                            if &key.primary_key.key_id() == esk_packet.id() {
+                            if esk_packet.match_identity(&key.primary_key) {
                                 encoding_key = Some(&key.primary_key);
                             }
 
@@ -605,7 +681,7 @@ impl Message {
                                 encoding_subkey = key
                                     .secret_subkeys
                                     .iter()
-                                    .find(|&subkey| &subkey.key_id() == esk_packet.id());
+                                    .find(|&subkey| esk_packet.match_identity(&subkey));
                             }
 
                             if encoding_key.is_some() || encoding_subkey.is_some() {
@@ -624,16 +700,22 @@ impl Message {
 
                 let session_keys = valid_keys
                     .iter()
-                    .map(|(packet, encoding_key, encoding_subkey)| {
+                    .map(|(pkesk, encoding_key, encoding_subkey)| {
+                        let typ = match pkesk.version() {
+                            3 => EskType::V3_4,
+                            6 => EskType::V6,
+                            v => unimplemented_err!("Unexpected PKESK version {}", v),
+                        };
+
                         if let Some(ek) = encoding_key {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), packet.mpis())?,
+                                decrypt_session_key(ek, key_pw.clone(), pkesk.values()?, typ)?,
                             ))
                         } else if let Some(ek) = encoding_subkey {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), packet.mpis())?,
+                                decrypt_session_key(ek, key_pw.clone(), pkesk.values()?, typ)?,
                             ))
                         } else {
                             unreachable!("either a key or a subkey were found");
@@ -817,6 +899,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use std::fs;
+    use std::io::Cursor;
 
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
@@ -856,7 +939,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rsa_encryption() {
+    fn test_rsa_encryption_seipdv1() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
@@ -873,10 +956,10 @@ mod tests {
 
         // Encrypt and test that rng is the only source of randomness.
         let encrypted = compressed_msg
-            .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+            .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
             .unwrap();
         let encrypted2 = compressed_msg
-            .encrypt_to_keys(&mut rng2, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+            .encrypt_to_keys_seipdv1(&mut rng2, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
             .unwrap();
         assert_eq!(encrypted, encrypted2);
 
@@ -891,7 +974,54 @@ mod tests {
     }
 
     #[test]
-    fn test_x25519_encryption() {
+    fn test_rsa_encryption_seipdv2() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(100);
+        let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+
+        // Encrypt and test that rng is the only source of randomness.
+        let encrypted = compressed_msg
+            .encrypt_to_keys_seipdv2(
+                &mut rng,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Ocb,
+                0x06,
+                &[&pkey][..],
+            )
+            .unwrap();
+        let encrypted2 = compressed_msg
+            .encrypt_to_keys_seipdv2(
+                &mut rng2,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Ocb,
+                0x06,
+                &[&pkey][..],
+            )
+            .unwrap();
+        assert_eq!(encrypted, encrypted2);
+
+        let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+        fs::write("./message-rsa.asc", &armored).unwrap();
+
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+
+        let decrypted = parsed.decrypt(|| "test".into(), &[&skey]).unwrap().0;
+
+        assert_eq!(compressed_msg, decrypted);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv1() {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
         )
@@ -905,7 +1035,7 @@ mod tests {
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
         for _ in 0..1000 {
             let encrypted = compressed_msg
-                .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .unwrap();
 
             let armored = encrypted.to_armored_bytes(None.into()).unwrap();
@@ -920,7 +1050,45 @@ mod tests {
     }
 
     #[test]
-    fn test_password_encryption() {
+    fn test_x25519_encryption_seipdv2() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+
+        for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
+            for sym in [
+                SymmetricKeyAlgorithm::AES128,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES256,
+            ] {
+                for _ in 0..1000 {
+                    let encrypted = compressed_msg
+                        .encrypt_to_keys_seipdv2(&mut rng, sym, aead, 0x06, &[&pkey][..])
+                        .unwrap();
+
+                    let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+                    fs::write("./message-x25519.asc", &armored).unwrap();
+
+                    let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+
+                    let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
+
+                    assert_eq!(compressed_msg, decrypted);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv1() {
         let _ = pretty_env_logger::try_init();
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -931,7 +1099,7 @@ mod tests {
         let s2k = StringToKey::new_default(&mut rng);
 
         let encrypted = compressed_msg
-            .encrypt_with_password(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
+            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
                 "secret".into()
             })
             .unwrap();
@@ -944,6 +1112,41 @@ mod tests {
         let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
 
         assert_eq!(compressed_msg, decrypted);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2() {
+        let _ = pretty_env_logger::try_init();
+
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+
+        for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
+            for sym in [
+                SymmetricKeyAlgorithm::AES128,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES256,
+            ] {
+                let s2k = StringToKey::new_default(&mut rng);
+
+                let encrypted = compressed_msg
+                    .encrypt_with_password_seipdv2(&mut rng, s2k, sym, aead, 0x06, || {
+                        "secret".into()
+                    })
+                    .unwrap();
+
+                let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+                fs::write("./message-password.asc", &armored).unwrap();
+
+                let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+
+                let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
+
+                assert_eq!(compressed_msg, decrypted);
+            }
+        }
     }
 
     #[test]
@@ -1205,5 +1408,49 @@ mod tests {
         let msg = Message::from_bytes(&include_bytes!("../../../tests/quine.out")[..]).unwrap();
         assert!(msg.get_content().is_err());
         assert!(msg.verify(&pkey).is_err());
+    }
+
+    /// Decrypt an X25519-AEAD-OCB Encrypted Packet Sequence
+    ///
+    /// Test data from RFC 9580, see
+    /// https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-x25519-aead-ocb-encr
+    #[test]
+    fn test_v6_annex_a_8() {
+        // A.4. Sample v6 Secret Key (Transferable Secret Key)
+        let tsk = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xUsGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laMAGXKB
+exK+cH6NX1hs5hNhIB00TrJmosgv3mg1ditlsLfCsQYfGwoAAABCBYJjh3/jAwsJ
+BwUVCg4IDAIWAAKbAwIeCSIhBssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce6
+2azJBScJAgcCAAAAAK0oIBA+LX0ifsDm185Ecds2v8lwgyU2kCcUmKfvBXbAf6rh
+RYWzuQOwEn7E/aLwIwRaLsdry0+VcallHhSu4RN6HWaEQsiPlR4zxP/TP7mhfVEe
+7XWPxtnMUMtf15OyA51YBMdLBmOHf+MZAAAAIIaTJINn+eUBXbki+PSAld2nhJh/
+LVmFsS+60WyvXkQ1AE1gCk95TUR3XFeibg/u/tVY6a//1q0NWC1X+yui3O24wpsG
+GBsKAAAALAWCY4d/4wKbDCIhBssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce6
+2azJAAAAAAQBIKbpGG2dWTX8j+VjFM21J0hqWlEg+bdiojWnKfA5AQpWUWtnNwDE
+M0g12vYxoWM8Y81W+bHBw805I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUr
+k0mXubZvyl4GBg==
+-----END PGP PRIVATE KEY BLOCK-----";
+
+        let (ssk, _) =
+            SignedSecretKey::from_armor_single(io::Cursor::new(tsk)).expect("SSK from armor");
+
+        // A.8. Sample X25519-AEAD-OCB Decryption
+        let msg = "-----BEGIN PGP MESSAGE-----
+
+wV0GIQYSyD8ecG9jCP4VGkF3Q6HwM3kOk+mXhIjR2zeNqZMIhRmHzxjV8bU/gXzO
+WgBM85PMiVi93AZfJfhK9QmxfdNnZBjeo1VDeVZheQHgaVf7yopqR6W1FT6NOrfS
+aQIHAgZhZBZTW+CwcW1g4FKlbExAf56zaw76/prQoN+bAzxpohup69LA7JW/Vp0l
+yZnuSj3hcFj0DfqLTGgr4/u717J+sPWbtQBfgMfG9AOIwwrUBqsFE9zW+f1zdlYo
+bhF30A+IitsxxA==
+-----END PGP MESSAGE-----";
+
+        let (message, _) = Message::from_armor_single(Cursor::new(msg.as_bytes())).expect("ok");
+        let (dec, _) = message.decrypt(String::default, &[&ssk]).expect("decrypt");
+
+        let decrypted =
+            String::from_utf8(dec.get_literal().expect("literal").data().to_vec()).expect("utf8");
+
+        assert_eq!(&decrypted, "Hello, world!");
     }
 }

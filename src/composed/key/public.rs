@@ -8,8 +8,9 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
+use crate::types::PkeskBytes;
 use crate::types::{
-    Fingerprint, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait,
+    EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
     SignatureBytes,
 };
 
@@ -91,8 +92,13 @@ impl PublicKeyTrait for PublicKey {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.primary_key.encrypt(rng, plain)
+    fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.primary_key.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
@@ -187,8 +193,13 @@ impl PublicKeyTrait for PublicSubkey {
         self.key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(&self, rng: R, plain: &[u8]) -> Result<Vec<Mpi>> {
-        self.key.encrypt(rng, plain)
+    fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.key.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {

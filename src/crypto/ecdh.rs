@@ -9,6 +9,7 @@ use crate::crypto::{
     Decryptor, KeyParams,
 };
 use crate::errors::{Error, Result};
+use crate::types::PkeskBytes;
 use crate::types::{Mpi, PlainSecretParams, PublicParams};
 
 /// 20 octets representing "Anonymous Sender    ".
@@ -70,18 +71,23 @@ impl KeyParams for SecretKey {
     }
 }
 
+pub struct EncryptionFields<'a> {
+    pub public_point: &'a Mpi,
+
+    /// Encrypted and wrapped value, derived from the session key
+    pub encrypted_session_key: &'a [u8],
+
+    /// NOTE: The fingerprint isn't part of the "Algorithm-Specific Fields", but it is needed for session key derivation
+    pub fingerprint: &'a [u8],
+}
+
 impl Decryptor for SecretKey {
-    fn decrypt(&self, mpis: &[Mpi], fingerprint: &[u8]) -> Result<Vec<u8>> {
+    type EncryptionFields<'a> = EncryptionFields<'a>;
+
+    fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
         debug!("ECDH decrypt");
 
-        ensure_eq!(mpis.len(), 3);
-
-        let public_point = &mpis[0];
-
-        let encrypted_key_len: usize = mpis[1].first().map(|l| *l as usize).unwrap_or(0);
-
-        // encrypted and wrapped value derived from the session key
-        let encrypted_session_key = mpis[2].as_bytes();
+        let encrypted_key_len: usize = data.encrypted_session_key.len();
 
         let (curve, alg_sym, hash) = self.key_params();
 
@@ -92,11 +98,11 @@ impl Decryptor for SecretKey {
                     curve.secret_key_length(),
                     "invalid secret point"
                 );
-                ensure_eq!(public_point.len(), 33, "invalid public point"); // prefix "0x40" + 32 bytes = 33 bytes
+                ensure_eq!(data.public_point.len(), 33, "invalid public point"); // prefix "0x40" + 32 bytes = 33 bytes
 
                 let their_public = {
                     // public part of the ephemeral key (removes 0x40 prefix)
-                    let ephemeral_public_key = &public_point.as_bytes()[1..];
+                    let ephemeral_public_key = &data.public_point.as_bytes()[1..];
 
                     // create montgomery point
                     let mut ephemeral_public_key_arr = [0u8; 32];
@@ -124,14 +130,20 @@ impl Decryptor for SecretKey {
 
                 shared_secret.to_bytes().to_vec()
             }
-            SecretKey::P256 { secret, .. } => {
-                derive_shared_secret_decryption::<p256::NistP256>(public_point, secret, &curve, 65)?
-            }
-            SecretKey::P384 { secret, .. } => {
-                derive_shared_secret_decryption::<p384::NistP384>(public_point, secret, &curve, 97)?
-            }
+            SecretKey::P256 { secret, .. } => derive_shared_secret_decryption::<p256::NistP256>(
+                data.public_point,
+                secret,
+                &curve,
+                65,
+            )?,
+            SecretKey::P384 { secret, .. } => derive_shared_secret_decryption::<p384::NistP384>(
+                data.public_point,
+                secret,
+                &curve,
+                97,
+            )?,
             SecretKey::P521 { secret, .. } => derive_shared_secret_decryption::<p521::NistP521>(
-                public_point,
+                data.public_point,
                 secret,
                 &curve,
                 133,
@@ -141,10 +153,10 @@ impl Decryptor for SecretKey {
         // obtain the session key from the shared secret
         derive_session_key(
             &shared_secret,
-            encrypted_session_key,
+            data.encrypted_session_key,
             encrypted_key_len,
             &(curve, alg_sym, hash),
-            fingerprint,
+            data.fingerprint,
         )
     }
 }
@@ -409,7 +421,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     fingerprint: &[u8],
     q: &[u8],
     plain: &[u8],
-) -> Result<Vec<Vec<u8>>> {
+) -> Result<PkeskBytes> {
     debug!("ECDH encrypt");
 
     // Maximum length for `plain`:
@@ -468,11 +480,12 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let plain_padded = pad(plain);
 
     // Perform AES Key Wrap
-    let encrypted_key = aes_kw::wrap(&z, &plain_padded)?;
+    let encrypted_session_key = aes_kw::wrap(&z, &plain_padded)?;
 
-    let encrypted_key_len = vec![u8::try_from(encrypted_key.len())?];
-
-    Ok(vec![encoded_public, encrypted_key_len, encrypted_key])
+    Ok(PkeskBytes::Ecdh {
+        public_point: Mpi::from_raw_slice(&encoded_public),
+        encrypted_session_key,
+    })
 }
 
 /// Derive a shared secret in encryption, for a Rust Crypto curve.
@@ -536,7 +549,7 @@ mod tests {
                     let mut plain = vec![0u8; text_size];
                     rng.fill_bytes(&mut plain);
 
-                    let mpis = match pkey {
+                    let values = match pkey {
                         PublicParams::ECDH {
                             ref curve,
                             ref p,
@@ -555,10 +568,20 @@ mod tests {
                         _ => panic!("invalid key generated"),
                     };
 
-                    let mpis = mpis.into_iter().map(Into::into).collect::<Vec<Mpi>>();
-
-                    let decrypted = match skey.as_ref().as_repr(&pkey).unwrap() {
-                        SecretKeyRepr::ECDH(ref skey) => skey.decrypt(&mpis, &fingerprint).unwrap(),
+                    let decrypted = match (skey.as_ref().as_repr(&pkey).unwrap(), values) {
+                        (
+                            SecretKeyRepr::ECDH(ref skey),
+                            PkeskBytes::Ecdh {
+                                public_point,
+                                encrypted_session_key,
+                            },
+                        ) => skey
+                            .decrypt(EncryptionFields {
+                                public_point: &public_point,
+                                encrypted_session_key: &encrypted_session_key,
+                                fingerprint: &fingerprint,
+                            })
+                            .unwrap(),
                         _ => panic!("invalid key generated"),
                     };
 

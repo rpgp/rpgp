@@ -25,6 +25,7 @@ pub use self::s2k::*;
 pub use self::secret_key::*;
 pub use self::secret_key_repr::*;
 pub use self::user::*;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 
 /// An OpenPGP cryptographic signature.
 ///
@@ -103,4 +104,51 @@ impl From<Vec<u8>> for SignatureBytes {
     fn from(value: Vec<u8>) -> Self {
         SignatureBytes::Native(value)
     }
+}
+
+/// Select which type of encrypted session key data should be produced in an encryption step
+#[derive(Debug)]
+pub enum EskType {
+    /// V3 PKESK or V4 SKESK (these are used in RFC 4880 and 2440)
+    V3_4,
+
+    /// V6 PKESK or SKESK (introduced in RFC 9580)
+    V6,
+}
+
+/// Values comprising a Public Key Encrypted Session Key
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PkeskBytes {
+    Rsa {
+        mpi: Mpi,
+    },
+    Elgamal {
+        first: Mpi,
+        second: Mpi,
+    },
+    Ecdh {
+        public_point: Mpi,
+        encrypted_session_key: Vec<u8>,
+    },
+    X25519 {
+        /// Ephemeral X25519 public key (32 bytes).
+        ephemeral: [u8; 32],
+
+        /// Encrypted and wrapped session key.
+        session_key: Vec<u8>,
+
+        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X25519)
+        sym_alg: Option<SymmetricKeyAlgorithm>,
+    },
+    X448 {
+        /// Ephemeral X448 public key (56 bytes).
+        ephemeral: [u8; 56],
+
+        /// Encrypted and wrapped session key.
+        session_key: Vec<u8>,
+
+        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X448)
+        sym_alg: Option<SymmetricKeyAlgorithm>,
+    },
+    Other,
 }

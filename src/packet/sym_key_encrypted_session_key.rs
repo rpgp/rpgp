@@ -5,6 +5,7 @@ use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::map_res;
 use nom::number::streaming::be_u8;
+use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
 use crate::crypto::aead::AeadAlgorithm;
@@ -104,7 +105,7 @@ impl SymKeyEncryptedSessionKey {
                     .decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
 
                 let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
-                Ok(PlainSessionKey::V4 {
+                Ok(PlainSessionKey::V3_4 {
                     key: decrypted_key[1..].to_vec(),
                     sym_alg,
                 })
@@ -131,8 +132,6 @@ impl SymKeyEncryptedSessionKey {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
-                debug!("nonce: {}", hex::encode(iv));
 
                 // AEAD decrypt
                 aead.decrypt_in_place(
@@ -168,8 +167,6 @@ impl SymKeyEncryptedSessionKey {
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
                 let mut okm = [0u8; 42];
                 hk.expand(&info, &mut okm).expect("42");
-                debug!("info: {} - hkdf: {}", hex::encode(info), hex::encode(okm));
-                debug!("nonce: {}", hex::encode(iv));
 
                 // AEAD decrypt
                 aead.decrypt_in_place(
@@ -200,7 +197,10 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
-    pub fn encrypt<F>(
+    /// Encrypt a session key to a password as a Version 4 Symmetric Key Encrypted Session Key Packet
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-4-symmetric-key-enc>
+    pub fn encrypt_v4<F>(
         msg_pw: F,
         session_key: &[u8],
         s2k: StringToKey,
@@ -230,6 +230,55 @@ impl SymKeyEncryptedSessionKey {
             s2k,
             sym_algorithm: alg,
             encrypted_key: Some(encrypted_key),
+        })
+    }
+
+    /// Encrypt a session key to a password as a Version 6 Symmetric Key Encrypted Session Key Packet
+    ///
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-6-symmetric-key-enc>
+    pub fn encrypt_v6<F, R: CryptoRng + Rng>(
+        mut rng: R,
+        msg_pw: F,
+        session_key: &[u8],
+        s2k: StringToKey,
+        sym_algorithm: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+    ) -> Result<Self>
+    where
+        F: FnOnce() -> String + Clone,
+    {
+        // Initial key material is the s2k derived key.
+        let ikm = s2k.derive_key(&msg_pw(), sym_algorithm.key_size())?;
+        // No salt is used
+        let salt = None;
+
+        let info = [
+            Tag::SymKeyEncryptedSessionKey.encode(), // packet type
+            0x06,                                    // version
+            sym_algorithm.into(),
+            aead.into(),
+        ];
+
+        let hk = hkdf::Hkdf::<Sha256>::new(salt, &ikm);
+        let mut okm = [0u8; 42];
+        hk.expand(&info, &mut okm).expect("42");
+
+        let mut iv = vec![0; aead.iv_size()];
+        rng.fill_bytes(&mut iv);
+
+        // AEAD encrypt
+        let mut encrypted_key = session_key.to_vec();
+        let auth_tag =
+            aead.encrypt_in_place(&sym_algorithm, &okm, &iv, &info, &mut encrypted_key)?;
+
+        Ok(SymKeyEncryptedSessionKey::V6 {
+            packet_version: Default::default(),
+            sym_algorithm,
+            s2k,
+            aead,
+            iv,
+            auth_tag,
+            encrypted_key,
         })
     }
 }

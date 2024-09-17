@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use chrono::SubsecRound;
 use derive_builder::Builder;
-use rand::{thread_rng, CryptoRng, Rng};
+use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 
 use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
@@ -165,15 +165,12 @@ impl SecretKeyParamsBuilder {
 }
 
 impl SecretKeyParams {
-    pub fn generate(self) -> Result<SecretKey> {
-        let rng = thread_rng();
-        self.generate_with_rng(rng)
-    }
-
-    pub fn generate_with_rng<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
+    pub fn generate<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
         let passphrase = self.passphrase;
-        let s2k = self.s2k.unwrap_or_else(|| S2kParams::new_default(&mut rng));
-        let (public_params, secret_params) = self.key_type.generate_with_rng(&mut rng)?;
+        let s2k = self
+            .s2k
+            .unwrap_or_else(|| S2kParams::new_default(&mut rng, self.version));
+        let (public_params, secret_params) = self.key_type.generate(&mut rng)?;
         let mut primary_key = packet::SecretKey::new(
             packet::PublicKey::new(
                 self.packet_version,
@@ -218,8 +215,8 @@ impl SecretKeyParams {
                     let passphrase = subkey.passphrase;
                     let s2k = subkey
                         .s2k
-                        .unwrap_or_else(|| S2kParams::new_default(&mut rng));
-                    let (public_params, secret_params) = subkey.key_type.generate()?;
+                        .unwrap_or_else(|| S2kParams::new_default(&mut rng, subkey.version));
+                    let (public_params, secret_params) = subkey.key_type.generate(&mut rng)?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_certify(subkey.can_certify);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
@@ -266,6 +263,8 @@ pub enum KeyType {
     Ed25519,
     /// Encrypting with X25519
     X25519,
+    /// Encrypting with X448
+    X448,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -300,15 +299,11 @@ impl KeyType {
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
             KeyType::Ed25519 => PublicKeyAlgorithm::Ed25519,
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
+            KeyType::X448 => PublicKeyAlgorithm::X448,
         }
     }
 
-    pub fn generate(&self) -> Result<(PublicParams, types::SecretParams)> {
-        let rng = thread_rng();
-        self.generate_with_rng(rng)
-    }
-
-    pub fn generate_with_rng<R: Rng + CryptoRng>(
+    pub fn generate<R: Rng + CryptoRng>(
         &self,
         rng: R,
     ) -> Result<(PublicParams, types::SecretParams)> {
@@ -320,6 +315,7 @@ impl KeyType {
             KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
             KeyType::Ed25519 => eddsa::generate_key(rng, eddsa::Mode::Ed25519),
             KeyType::X25519 => x25519::generate_key(rng),
+            KeyType::X448 => crate::crypto::x448::generate_key(rng),
         };
 
         Ok((pub_params, types::SecretParams::Plain(plain)))
@@ -344,10 +340,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [
-            KeyVersion::V4,
-            // KeyVersion::V6 // TODO: we can't do RSA tests for V6 yet: v6 secret key material locking is missing
-        ] {
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
             println!("key version {:?}", key_version);
 
             for i in 0..50 {
@@ -397,7 +390,7 @@ mod tests {
             .build()
             .unwrap();
         let key_enc = key_params_enc
-            .generate_with_rng(&mut rng)
+            .generate(&mut rng)
             .expect("failed to generate secret key, encrypted");
 
         let key_params_plain = key_params
@@ -412,7 +405,7 @@ mod tests {
             .build()
             .unwrap();
         let key_plain = key_params_plain
-            .generate_with_rng(&mut rng)
+            .generate(&mut rng)
             .expect("failed to generate secret key");
 
         let signed_key_enc = key_enc
@@ -525,7 +518,7 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(&mut rng)
+            .generate(&mut rng)
             .expect("failed to generate secret key");
 
         let signed_key = key
@@ -632,7 +625,7 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(&mut rng)
+            .generate(&mut rng)
             .expect("failed to generate secret key");
 
         let signed_key = key
@@ -714,7 +707,7 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(&mut rng)
+            .generate(&mut rng)
             .expect("failed to generate secret key");
 
         let signed_key = key
@@ -850,7 +843,7 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate_with_rng(&mut rng)
+            .generate(&mut rng)
             .expect("failed to generate secret key");
 
         let signed_key = key

@@ -8,7 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
-use pgp::types::{Fingerprint, SignatureBytes};
+use pgp::types::{EskType, Fingerprint, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey};
@@ -62,8 +62,13 @@ impl PublicKeyTrait for FakeHsm {
         self.public_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: CryptoRng + Rng>(&self, rng: R, plain: &[u8]) -> pgp::errors::Result<Vec<Mpi>> {
-        self.public_key.encrypt(rng, plain)
+    fn encrypt<R: CryptoRng + Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> pgp::errors::Result<PkeskBytes> {
+        self.public_key.encrypt(rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {
@@ -161,15 +166,18 @@ impl SecretKeyTrait for FakeHsm {
 }
 
 impl FakeHsm {
-    pub fn decrypt(&self, mpis: &[Mpi]) -> pgp::errors::Result<(Vec<u8>, SymmetricKeyAlgorithm)> {
-        assert_eq!(
-            mpis.iter().map(|m| m.as_bytes()).collect::<Vec<_>>(),
-            self.decrypt_data.unwrap().0
-        );
+    pub fn decrypt(
+        &self,
+        values: &PkeskBytes,
+    ) -> pgp::errors::Result<(Vec<u8>, SymmetricKeyAlgorithm)> {
+        let decrypted_key = match (self.public_key.public_params(), values) {
+            (PublicParams::RSA { .. }, PkeskBytes::Rsa { mpi }) => {
+                // The test data in self.decrypt_data must match the parameters
+                // (this fake hsm just stores the answer for one request, and it's only legal to
+                // call it with the exact set of parameters we have stored)
+                assert_eq!(vec![mpi.as_bytes()], self.decrypt_data.unwrap().0);
 
-        let decrypted_key = match self.public_key.public_params() {
-            PublicParams::RSA { .. } => {
-                let _ciphertext = mpis[0].as_bytes();
+                let _ciphertext = mpi.as_bytes();
 
                 // XXX: imagine a smartcard decrypting `_ciphertext`, here
 
@@ -178,16 +186,31 @@ impl FakeHsm {
                 dec.to_vec()
             }
 
-            PublicParams::ECDH {
-                curve,
-                alg_sym,
-                hash,
-                ..
-            } => {
-                let ciphertext = mpis[0].as_bytes();
+            (
+                PublicParams::ECDH {
+                    curve,
+                    alg_sym,
+                    hash,
+                    ..
+                },
+                PkeskBytes::Ecdh {
+                    public_point,
+                    encrypted_session_key,
+                },
+            ) => {
+                // The test data in self.decrypt_data must match the parameters
+                // (this fake hsm just stores the answer for one request, and it's only legal to
+                // call it with the exact set of parameters we have stored)
+                assert_eq!(
+                    vec![
+                        public_point.as_bytes(),
+                        &[encrypted_session_key.len() as u8],
+                        encrypted_session_key
+                    ],
+                    self.decrypt_data.unwrap().0
+                );
 
-                // encrypted and wrapped value derived from the session key
-                let encrypted_session_key = mpis[2].as_bytes();
+                let ciphertext = public_point.as_bytes();
 
                 let _ciphertext = if *curve == ECCCurve::Curve25519 {
                     assert_eq!(
@@ -208,13 +231,10 @@ impl FakeHsm {
 
                 let shared_secret: [u8; 32] = dec.try_into().expect("must be [u8; 32]");
 
-                let encrypted_key_len: usize =
-                    mpis[1].first().copied().map(Into::into).unwrap_or(0);
-
                 let decrypted_key: Vec<u8> = pgp::crypto::ecdh::derive_session_key(
                     &shared_secret,
                     encrypted_session_key,
-                    encrypted_key_len,
+                    encrypted_session_key.len(),
                     &(curve.clone(), *alg_sym, *hash),
                     self.public_key.fingerprint().as_bytes(),
                 )?;
@@ -356,18 +376,18 @@ fn card_decrypt() {
             panic!("not encrypted");
         };
 
-        let mpis = if let Esk::PublicKeyEncryptedSessionKey(ref k) = esk[0] {
-            k.mpis()
+        let values = if let Esk::PublicKeyEncryptedSessionKey(ref k) = esk[0] {
+            k.values().expect("known PKESK version")
         } else {
             panic!("whoops")
         };
 
         let (session_key, session_key_algorithm) = hsm
-            .unlock(String::new, |priv_key| priv_key.decrypt(mpis))
+            .unlock(String::new, |priv_key| priv_key.decrypt(values))
             .unwrap();
 
         let decrypted = edata
-            .decrypt(pgp::PlainSessionKey::V4 {
+            .decrypt(pgp::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })

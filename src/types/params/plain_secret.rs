@@ -38,6 +38,7 @@ pub enum PlainSecretParams {
     EdDSALegacy(#[debug("..")] Mpi),
     Ed25519(#[debug("..")] [u8; 32]),
     X25519(#[debug("..")] [u8; 32]),
+    X448(#[debug("..")] [u8; 56]),
 }
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
@@ -59,6 +60,7 @@ pub enum PlainSecretParamsRef<'a> {
     EdDSALegacy(#[debug("..")] MpiRef<'a>),
     Ed25519(#[debug("..")] &'a [u8; 32]),
     X25519(#[debug("..")] &'a [u8; 32]),
+    X448(#[debug("..")] &'a [u8; 56]),
 }
 
 impl<'a> PlainSecretParamsRef<'a> {
@@ -77,6 +79,7 @@ impl<'a> PlainSecretParamsRef<'a> {
             PlainSecretParamsRef::EdDSALegacy(v) => PlainSecretParams::EdDSALegacy((*v).to_owned()),
             PlainSecretParamsRef::Ed25519(s) => PlainSecretParams::Ed25519((*s).to_owned()),
             PlainSecretParamsRef::X25519(s) => PlainSecretParams::X25519((*s).to_owned()),
+            PlainSecretParamsRef::X448(s) => PlainSecretParams::X448((*s).to_owned()),
         }
     }
 
@@ -111,6 +114,9 @@ impl<'a> PlainSecretParamsRef<'a> {
                 writer.write_all(&s[..])?;
             }
             PlainSecretParamsRef::X25519(s) => {
+                writer.write_all(&s[..])?;
+            }
+            PlainSecretParamsRef::X448(s) => {
                 writer.write_all(&s[..])?;
             }
         }
@@ -245,6 +251,11 @@ impl<'a> PlainSecretParamsRef<'a> {
                     secret: **d,
                 }))
             }
+            PlainSecretParamsRef::X448(d) => {
+                Ok(SecretKeyRepr::X448(crate::crypto::x448::SecretKey {
+                    secret: **d,
+                }))
+            }
             PlainSecretParamsRef::DSA(x) => Ok(SecretKeyRepr::DSA(crate::crypto::dsa::SecretKey {
                 x: x.into(),
             })),
@@ -329,6 +340,7 @@ impl PlainSecretParams {
             PlainSecretParams::EdDSALegacy(v) => PlainSecretParamsRef::EdDSALegacy(v.as_ref()),
             PlainSecretParams::Ed25519(s) => PlainSecretParamsRef::Ed25519(s),
             PlainSecretParams::X25519(s) => PlainSecretParamsRef::X25519(s),
+            PlainSecretParams::X448(s) => PlainSecretParamsRef::X448(s),
         }
     }
 
@@ -342,13 +354,21 @@ impl PlainSecretParams {
         let version = pub_key.version();
 
         match &s2k_params {
-            S2kParams::Unprotected => bail!("cannot encrypt to uprotected"),
+            S2kParams::Unprotected => bail!("cannot encrypt to unprotected"),
             S2kParams::Cfb { sym_alg, s2k, iv } => {
+                // An implementation MUST NOT create [..] any Secret Key packet where the S2K usage
+                // octet is not AEAD (253) and the S2K Specifier Type is Argon2.
+                ensure!(
+                    !matches!(s2k, StringToKey::Argon2 { .. }),
+                    "Argon2 not allowed with Cfb"
+                );
+
                 let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
                 let enc_data = match version {
-                    KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
-                    KeyVersion::V3 => unimplemented_err!("v3 encryption"),
-                    KeyVersion::V4 => {
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        unimplemented_err!("Encryption for V2/V3 keys is not available")
+                    }
+                    KeyVersion::V4 | KeyVersion::V6 => {
                         let mut data = Vec::new();
                         self.as_ref()
                             .to_writer_raw(&mut data)
@@ -360,7 +380,6 @@ impl PlainSecretParams {
                         data
                     }
                     KeyVersion::V5 => unimplemented_err!("v5 encryption"),
-                    KeyVersion::V6 => unimplemented_err!("v6 encryption"),
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
@@ -375,11 +394,10 @@ impl PlainSecretParams {
                 let key = s2k.derive_key(passphrase, sym_alg.key_size())?;
 
                 let enc_data = match version {
-                    KeyVersion::V2 => unsupported_err!("Encryption for V2 keys is not available"),
-                    KeyVersion::V3 => unimplemented_err!("v3 encryption"),
-                    KeyVersion::V4 => unimplemented_err!("v4 aead encryption"), // FIXME: implement
-                    KeyVersion::V5 => unimplemented_err!("v5 encryption"),
-                    KeyVersion::V6 => {
+                    KeyVersion::V2 | KeyVersion::V3 => {
+                        unimplemented_err!("Encryption for V2/V3 keys is not available")
+                    }
+                    KeyVersion::V4 | KeyVersion::V6 => {
                         let mut data = Vec::new();
                         self.as_ref()
                             .to_writer_raw(&mut data)
@@ -401,6 +419,7 @@ impl PlainSecretParams {
 
                         data
                     }
+                    KeyVersion::V5 => unimplemented_err!("v5 encryption"),
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
@@ -447,11 +466,15 @@ fn parse_secret_params(
         }
         PublicKeyAlgorithm::Ed25519 => {
             let (i, s) = nom::bytes::complete::take(32u8)(i)?;
-            Ok((i, PlainSecretParams::Ed25519(s.try_into().expect("foo"))))
+            Ok((i, PlainSecretParams::Ed25519(s.try_into().expect("32"))))
         }
         PublicKeyAlgorithm::X25519 => {
             let (i, s) = nom::bytes::complete::take(32u8)(i)?;
-            Ok((i, PlainSecretParams::X25519(s.try_into().expect("foo"))))
+            Ok((i, PlainSecretParams::X25519(s.try_into().expect("32"))))
+        }
+        PublicKeyAlgorithm::X448 => {
+            let (i, s) = nom::bytes::complete::take(56u8)(i)?;
+            Ok((i, PlainSecretParams::X448(s.try_into().expect("56"))))
         }
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
             nom::error::ErrorKind::Switch,

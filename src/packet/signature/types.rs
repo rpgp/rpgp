@@ -1022,7 +1022,7 @@ pub enum RevocationCode {
     /// User ID information is no longer valid (cert revocations)
     CertUserIdInvalid = 32,
 
-    /// Private Use range (from OpenGPG)
+    /// Private Use range (from OpenPGP)
     Private100 = 100,
     Private101 = 101,
     Private102 = 102,
