@@ -17,7 +17,10 @@ use crate::types::{
 };
 use crate::{armor, ArmorOptions};
 
-/// Represents a Public PGP key, which is signed and either received or ready to be transferred.
+/// A Public OpenPGP key ("Transferable Public Key"), complete with self-signatures (and optionally
+/// third party signatures). This format can be used to transfer a public key to other OpenPGP users.
+///
+/// An OpenPGP Transferable Public Key is also known as an OpenPGP certificate.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedPublicKey {
     pub primary_key: packet::PublicKey,
@@ -25,7 +28,7 @@ pub struct SignedPublicKey {
     pub public_subkeys: Vec<SignedPublicSubKey>,
 }
 
-/// Parse a transferable keys from the given packets.
+/// Parse transferable public keys from the given packets.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-transferable-public-keys>
 pub struct SignedPublicKeyParser<
     I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,

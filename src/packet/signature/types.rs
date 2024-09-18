@@ -224,6 +224,17 @@ impl Signature {
         hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
+
+        // Check that the high 16 bits of the hash from the signature packet match with the hash we
+        // just calculated.
+        //
+        // "When verifying a version 6 signature, an implementation MUST reject the signature if
+        // these octets do not match the first two octets of the computed hash."
+        //
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures)
+        //
+        // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
+        // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],

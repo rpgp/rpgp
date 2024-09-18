@@ -140,7 +140,9 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
             }
             Tag::Padding => {
                 // Padding Packets are ignored
-                // Technically these shouldn't appear in any location, but this seems good enough.
+                //
+                // "Such a packet MUST be ignored when received."
+                // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.14-2)
             }
             _ => {
                 return Some(Err(format_err!("unexpected packet {:?}", packet.tag())));

@@ -119,6 +119,8 @@ impl PubKeyInner {
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
+        // None of the ECC methods described in this document are allowed with deprecated version 3 keys.
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-11-2)
         if (version == KeyVersion::V2 || version == KeyVersion::V3)
             && !(algorithm == PublicKeyAlgorithm::RSA
                 || algorithm == PublicKeyAlgorithm::RSAEncrypt
