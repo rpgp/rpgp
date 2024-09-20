@@ -525,15 +525,29 @@ impl PublicKeyTrait for PubKeyInner {
                 hash,
                 alg_sym,
                 ref p,
-            } => crypto::ecdh::encrypt(
-                rng,
-                curve,
-                alg_sym,
-                hash,
-                self.fingerprint().as_bytes(),
-                p.as_bytes(),
-                plain,
-            ),
+            } => {
+                if self.version() == KeyVersion::V6 {
+                    // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
+                    // listed curve that announces a different KDF or KEK parameter.
+                    //
+                    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
+                    if curve.hash_algo()? != hash || curve.sym_algo()? != alg_sym {
+                        bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}",curve,
+                           hash,
+                            alg_sym);
+                    }
+                }
+
+                crypto::ecdh::encrypt(
+                    rng,
+                    curve,
+                    alg_sym,
+                    hash,
+                    self.fingerprint().as_bytes(),
+                    p.as_bytes(),
+                    plain,
+                )
+            }
             PublicParams::X25519 { ref public } => {
                 let (sym_alg, plain) = match typ {
                     EskType::V6 => (None, plain),

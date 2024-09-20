@@ -209,6 +209,17 @@ impl Signature {
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
         if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            // Salt size must match the expected length for the hash algorithm that is used
+            //
+            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+            ensure_eq!(
+                self.config.hash_alg.salt_len(),
+                Some(salt.len()),
+                "Illegal salt length {} for a V6 Signature using {:?}",
+                salt.len(),
+                self.config.hash_alg
+            );
+
             hasher.update(salt.as_ref())
         }
 

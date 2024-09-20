@@ -126,12 +126,18 @@ pub fn generate_key<R: Rng + CryptoRng>(
 pub fn verify(
     curve: &ECCCurve,
     public: &[u8],
-    _hash: HashAlgorithm,
+    hash: HashAlgorithm,
     hashed: &[u8],
     sig_bytes: &[u8],
 ) -> Result<()> {
     match *curve {
         ECCCurve::Ed25519 => {
+            ensure!(
+                hash.digest_size() * 8 >= 256,
+                "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
+                hash,
+            );
+
             let pk: ed25519_dalek::VerifyingKey = public.try_into()?;
             let sig = sig_bytes.try_into()?;
 

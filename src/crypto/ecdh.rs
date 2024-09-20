@@ -424,6 +424,16 @@ pub fn encrypt<R: CryptoRng + Rng>(
 ) -> Result<PkeskBytes> {
     debug!("ECDH encrypt");
 
+    // Implementations MUST NOT use MD5, SHA-1, or RIPEMD-160 as a hash function in an ECDH KDF.
+    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+    ensure!(
+        hash != HashAlgorithm::MD5
+            && hash != HashAlgorithm::SHA1
+            && hash != HashAlgorithm::RIPEMD160,
+        "{:?} is not a legal hash function for ECDH KDF",
+        hash
+    );
+
     // Maximum length for `plain`:
     // - padding increases the length (at least) to a length of the next multiple of 8.
     // - aes keywrap adds another 8 bytes

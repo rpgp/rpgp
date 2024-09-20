@@ -217,6 +217,27 @@ where
         }
     }
 
+    // Every subkey for a version 6 primary key MUST be a version 6 subkey.
+    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-10.1.1-5)
+    if primary_key.version() == KeyVersion::V6 {
+        for sub in &public_subkey_container {
+            if sub.version() != KeyVersion::V6 {
+                return Some(Err(crate::errors::Error::Message(format!(
+                    "Illegal public subkey {:?} in v6 key",
+                    sub.version()
+                ))));
+            }
+        }
+        for sub in &secret_subkey_container {
+            if sub.version() != KeyVersion::V6 {
+                return Some(Err(crate::errors::Error::Message(format!(
+                    "Illegal secret subkey {:?} in v6 key",
+                    sub.version()
+                ))));
+            }
+        }
+    }
+
     Some(Ok((
         primary_key,
         SignedKeyDetails::new(

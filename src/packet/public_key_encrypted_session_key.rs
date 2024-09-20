@@ -113,6 +113,12 @@ impl PublicKeyEncryptedSessionKey {
         session_key: &[u8],
         pkey: &impl PublicKeyTrait,
     ) -> Result<Self> {
+        // "An implementation MUST NOT generate ElGamal v6 PKESK packets."
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.4-6)
+        if pkey.algorithm() == PublicKeyAlgorithm::Elgamal {
+            bail!("ElGamal is not a legal encryption mechanism for v6 PKESK");
+        }
+
         // the session key, and a checksum (for some algorithms)
         let data =
             Self::prepare_session_key_for_encryption(None, session_key, pkey.public_params());

@@ -430,6 +430,18 @@ impl SignatureConfig {
                         bail!("Unknown critical subpacket {:?}", packet);
                     }
 
+                    // If the version octet does not match the signature version, the receiving
+                    // implementation MUST treat it as a malformed signature
+                    //
+                    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.35-3)
+                    if let SubpacketData::IssuerFingerprint(fp) = &packet.data {
+                        match (self.version(), fp.version()) {
+                            (SignatureVersion::V6, Some(KeyVersion::V6)) => {},
+                            (SignatureVersion::V4, Some(KeyVersion::V4)) => {},
+                            _ => bail!("IntendedRecipientFingerprint {:?} doesn't match signature version {:?}", fp, self.version())
+                        }
+                    }
+
                     packet.to_writer(&mut hashed_subpackets)?;
                 }
 
