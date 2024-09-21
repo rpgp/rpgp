@@ -54,7 +54,7 @@ pub enum S2kParams {
         #[debug("{}", hex::encode(iv))]
         iv: Vec<u8>,
     },
-    MaleableCfb {
+    MalleableCfb {
         sym_alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         #[debug("{}", hex::encode(iv))]
@@ -69,7 +69,7 @@ impl From<&S2kParams> for u8 {
             S2kParams::LegacyCfb { sym_alg, .. } => (*sym_alg).into(),
             S2kParams::Aead { .. } => 253,
             S2kParams::Cfb { .. } => 254,
-            S2kParams::MaleableCfb { .. } => 255,
+            S2kParams::MalleableCfb { .. } => 255,
         }
     }
 }

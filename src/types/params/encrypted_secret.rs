@@ -41,7 +41,7 @@ impl EncryptedSecretParams {
             S2kParams::Unprotected => unreachable!(),
             S2kParams::LegacyCfb { .. }
             | S2kParams::Aead { .. }
-            | S2kParams::MaleableCfb { .. } => {
+            | S2kParams::MalleableCfb { .. } => {
                 // 2 octets
                 self.data[self.data.len() - 2..].to_vec()
             }
@@ -68,7 +68,7 @@ impl EncryptedSecretParams {
         //
         // Ref: https://www.rfc-editor.org/rfc/rfc9580.html#section-3.7.2.1-10
         match &self.s2k_params {
-            S2kParams::Cfb { s2k, .. } | S2kParams::MaleableCfb { s2k, .. } => {
+            S2kParams::Cfb { s2k, .. } | S2kParams::MalleableCfb { s2k, .. } => {
                 if matches!(s2k, StringToKey::Argon2 { .. }) {
                     bail!(
                         "S2k method Argon2 is only allowed in combination with usage mode 'AEAD'"
@@ -177,7 +177,7 @@ impl EncryptedSecretParams {
                 }
                 PlainSecretParams::from_slice(plaintext, alg, params)
             }
-            S2kParams::MaleableCfb { sym_alg, s2k, iv } => {
+            S2kParams::MalleableCfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
 
                 // Decryption
@@ -238,7 +238,7 @@ impl EncryptedSecretParams {
                 s2k,
                 ref iv,
             }
-            | S2kParams::MaleableCfb {
+            | S2kParams::MalleableCfb {
                 sym_alg,
                 s2k,
                 ref iv,
