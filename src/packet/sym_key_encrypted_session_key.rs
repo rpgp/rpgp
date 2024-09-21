@@ -13,7 +13,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
-use crate::types::{s2k_parser, StringToKey, Tag, Version};
+use crate::types::{s2k_parser, SkeskVersion, StringToKey, Tag, Version};
 use crate::util::rest_len;
 use crate::PlainSessionKey;
 
@@ -84,17 +84,17 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
-    pub fn version(&self) -> u8 {
+    pub fn version(&self) -> SkeskVersion {
         // TODO: use enum
         match self {
-            Self::V4 { .. } => 4,
-            Self::V5 { .. } => 5,
-            Self::V6 { .. } => 6,
+            Self::V4 { .. } => SkeskVersion::V4,
+            Self::V5 { .. } => SkeskVersion::Other(5),
+            Self::V6 { .. } => SkeskVersion::V6,
         }
     }
 
     pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
-        debug!("decrypt session key V{}", self.version());
+        debug!("decrypt session key {:?}", self.version());
 
         let mut decrypted_key = self.encrypted_key().map(|v| v.to_vec()).unwrap_or_default();
 

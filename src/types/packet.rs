@@ -182,6 +182,26 @@ impl Default for KeyVersion {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[repr(u8)]
+pub enum PkeskVersion {
+    V3 = 3,
+    V6 = 6,
+
+    #[num_enum(catch_all)]
+    Other(u8),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[repr(u8)]
+pub enum SkeskVersion {
+    V4 = 4,
+    V6 = 6,
+
+    #[num_enum(catch_all)]
+    Other(u8),
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
