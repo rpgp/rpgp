@@ -8,7 +8,9 @@ use rand::{CryptoRng, Rng};
 use crate::crypto::hash::{HashAlgorithm, Hasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData};
+use crate::packet::{
+    Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
+};
 use crate::ser::Serialize;
 use crate::types::{Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, Tag};
 
@@ -412,6 +414,22 @@ impl SignatureConfig {
                 let mut hashed_subpackets = Vec::new();
                 for packet in &self.hashed_subpackets {
                     debug!("hashing {:#?}", packet);
+
+                    // If a subpacket is encountered that is marked critical but is unknown to the
+                    // evaluating implementation, the evaluator SHOULD consider the signature to be
+                    // in error.
+                    //
+                    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.7-6)
+                    if packet.is_critical && matches!(packet.typ(), SubpacketType::Other(_)) {
+                        // "[..] The purpose of the critical bit is to allow the signer to tell an
+                        // evaluator that it would prefer a new, unknown feature to generate an
+                        // error rather than being ignored."
+                        //
+                        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.7-8:)
+
+                        bail!("Unknown critical subpacket {:?}", packet);
+                    }
+
                     packet.to_writer(&mut hashed_subpackets)?;
                 }
 
