@@ -41,8 +41,8 @@ fn duration_from_timestamp(ts: u32) -> Option<Duration> {
     Duration::try_seconds(i64::from(ts))
 }
 
-/// Parse a signature creation time subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.4
+/// Parse a Signature Creation Time subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-creation-time
 fn signature_creation_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
@@ -51,8 +51,8 @@ fn signature_creation_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Parse an issuer subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.5
+/// Parse an Issuer Key ID subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-key-id
 fn issuer(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         map_res(complete(take(8u8)), KeyId::from_slice),
@@ -60,8 +60,8 @@ fn issuer(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Parse a key expiration time subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.6
+/// Parse a Key Expiration Time subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-expiration-time
 fn key_expiration(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
@@ -70,7 +70,7 @@ fn key_expiration(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Parse a preferred symmetric algorithms subpacket (for SEIPD v1)
+/// Parse a Preferred Symmetric Ciphers for v1 SEIPD subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#preferred-v1-seipd
 fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[SymmetricKeyAlgorithm; 8]> = body
@@ -81,8 +81,27 @@ fn pref_sym_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((&b""[..], SubpacketData::PreferredSymmetricAlgorithms(list)))
 }
 
-/// Parse a preferred hash algorithms subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.8
+/// Parse a Preferred AEAD Ciphersuites subpacket (for SEIPD v2)
+///
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-preferred-aead-ciphersuites
+fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+    if body.len() % 2 != 0 {
+        return Err(nom::Err::Error(crate::errors::Error::Message(format!(
+            "Illegal preferred aead subpacket len {} must be a multiple of 2",
+            body.len(),
+        ))));
+    }
+
+    let list: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]> = body
+        .chunks(2)
+        .map(|v| (SymmetricKeyAlgorithm::from(v[0]), AeadAlgorithm::from(v[1])))
+        .collect();
+
+    Ok((&b""[..], SubpacketData::PreferredAeadAlgorithms(list)))
+}
+
+/// Parse a Preferred Hash Algorithms subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-preferred-hash-algorithms
 fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[HashAlgorithm; 8]> = body
         .iter()
@@ -92,8 +111,8 @@ fn pref_hash_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((&b""[..], SubpacketData::PreferredHashAlgorithms(list)))
 }
 
-/// Parse a preferred compression algorithms subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.9
+/// Parse a Preferred Compression Algorithms subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-preferred-compression-algor
 fn pref_com_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     let list: SmallVec<[CompressionAlgorithm; 8]> = body
         .iter()
@@ -106,8 +125,8 @@ fn pref_com_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-/// Parse a signature expiration time subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.10
+/// Parse a Signature Expiration Time subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-expiration-time
 fn signature_expiration_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map_opt(
         // 4-octet time field
@@ -116,36 +135,36 @@ fn signature_expiration_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Parse a exportable certification subpacket.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.11
+/// Parse an Exportable Certification subpacket.
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-exportable-certification
 fn exportable_certification(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(complete(be_u8), |v| {
         SubpacketData::ExportableCertification(v == 1)
     })(i)
 }
 
-/// Parse a revocable subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.12
+/// Parse a Revocable subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-revocable
 fn revocable(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(complete(be_u8), |v| SubpacketData::Revocable(v == 1))(i)
 }
 
-/// Parse a trust signature subpacket.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.13
+/// Parse a Trust Signature subpacket.
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-trust-signature
 fn trust_signature(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(pair(be_u8, be_u8), |(depth, value)| {
         SubpacketData::TrustSignature(depth, value)
     })(i)
 }
 
-/// Parse a regular expression subpacket.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.14
+/// Parse a Regular Expression subpacket.
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-regular-expression
 fn regular_expression(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(map(rest, BString::from), SubpacketData::RegularExpression)(i)
 }
 
-/// Parse a revocation key subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.15
+/// Parse a Revocation Key subpacket (Deprecated)
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-revocation-key-deprecated
 fn revocation_key(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         tuple((
@@ -160,8 +179,8 @@ fn revocation_key(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Parse a notation data subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.16
+/// Parse a Notation Data subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-notation-data
 fn notation_data(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     // Flags
     let (i, readable) = map(be_u8, |v| v == 0x80)(i)?;
@@ -181,8 +200,8 @@ fn notation_data(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-/// Parse a key server preferences subpacket
-/// https://tools.ietf.org/html/rfc4880.html#section-5.2.3.17
+/// Parse a Key Server Preferences subpacket
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-key-server-preferences
 fn key_server_prefs(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((
         &b""[..],
@@ -190,30 +209,30 @@ fn key_server_prefs(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-/// Parse a preferred key server subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.18
+/// Parse a Preferred Key Server subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-preferred-key-server
 fn preferred_key_server(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(map_res(rest, str::from_utf8), |body| {
         SubpacketData::PreferredKeyServer(body.to_string())
     })(i)
 }
 
-/// Parse a primary user id subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.19
+/// Parse a Primary User ID subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-primary-user-id
 fn primary_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(be_u8, |a| SubpacketData::IsPrimary(a == 1))(i)
 }
 
-/// Parse a policy URI subpacket.
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.20
+/// Parse a Policy URI subpacket.
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-policy-uri
 fn policy_uri(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(map_res(rest, str::from_utf8), |body| {
         SubpacketData::PolicyURI(body.to_owned())
     })(i)
 }
 
-/// Parse a key flags subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.21
+/// Parse a Key Flags subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags
 fn key_flags(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((
         &b""[..],
@@ -221,22 +240,14 @@ fn key_flags(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     ))
 }
 
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.22
+/// Parse a Signer's User ID subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags
 fn signers_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((&[], SubpacketData::SignersUserID(BString::from(i))))
 }
 
-/// Parse a features subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.24
-fn features(body: &[u8]) -> IResult<&[u8], SubpacketData> {
-    Ok((
-        &b""[..],
-        SubpacketData::Features(SmallVec::from_slice(body)),
-    ))
-}
-
-/// Parse a revocation reason subpacket
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.23
+/// Parse a Reason for Revocation subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags
 fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         pair(map(be_u8, RevocationCode::from), map(rest, BString::from)),
@@ -244,7 +255,17 @@ fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.25
+/// Parse a Features subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-features
+fn features(body: &[u8]) -> IResult<&[u8], SubpacketData> {
+    Ok((
+        &b""[..],
+        SubpacketData::Features(SmallVec::from_slice(body)),
+    ))
+}
+
+/// Parse a Signature Target subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-target
 fn sig_target(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
         tuple((
@@ -258,15 +279,16 @@ fn sig_target(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     )(i)
 }
 
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3.26
+/// Parse an Embedded Signature subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-embedded-signature
 fn embedded_sig(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(parse(Version::New), |sig| {
         SubpacketData::EmbeddedSignature(Box::new(sig))
     })(i)
 }
 
-/// Parse an issuer subpacket
-/// Ref: https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.2.3.28
+/// Parse an Issuer Fingerprint subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-fingerprint
 fn issuer_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     let (i, version) = map(be_u8, KeyVersion::from)(i)?;
 
@@ -292,7 +314,8 @@ fn preferred_encryption_modes(body: &[u8]) -> IResult<&[u8], SubpacketData> {
     Ok((&b""[..], SubpacketData::PreferredEncryptionModes(list)))
 }
 
-/// Parse an intended recipient fingerprint subpacket
+/// Parse an Intended Recipient Fingerprint subpacket
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-intended-recipient-fingerpr
 fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     let (i, version) = map(be_u8, KeyVersion::from)(i)?;
 
@@ -309,25 +332,6 @@ fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     } else {
         Err(invalid_key_version(version))
     }
-}
-
-/// Parse a preferred aead subpacket (for SEIPD v2)
-///
-/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-preferred-aead-ciphersuites
-fn pref_aead_alg(body: &[u8]) -> IResult<&[u8], SubpacketData> {
-    if body.len() % 2 != 0 {
-        return Err(nom::Err::Error(crate::errors::Error::Message(format!(
-            "Illegal preferred aead subpacket len {} must be a multiple of 2",
-            body.len(),
-        ))));
-    }
-
-    let list: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]> = body
-        .chunks(2)
-        .map(|v| (SymmetricKeyAlgorithm::from(v[0]), AeadAlgorithm::from(v[1])))
-        .collect();
-
-    Ok((&b""[..], SubpacketData::PreferredAeadAlgorithms(list)))
 }
 
 fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8], Subpacket> {
@@ -431,7 +435,7 @@ fn actual_signature(
 }
 
 /// Parse a v2 or v3 signature packet
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.2
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-version-3-signature-packet-
 fn v3_parser(
     packet_version: Version,
     version: SignatureVersion,
@@ -488,8 +492,8 @@ fn v3_parser(
     }
 }
 
-/// Parse a v4 or v5 signature packet
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2.3
+/// Parse a v4 signature packet
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-versions-4-and-6-signature-
 fn v4_parser(
     packet_version: Version,
     version: SignatureVersion,
@@ -604,7 +608,7 @@ fn invalid_key_version(version: KeyVersion) -> nom::Err<crate::errors::Error> {
 }
 
 /// Parse a signature packet (Tag 2)
-/// Ref: https://tools.ietf.org/html/rfc4880.html#section-5.2
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2
 fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
     move |i: &[u8]| {
         let (i, version) = map(be_u8, SignatureVersion::from)(i)?;

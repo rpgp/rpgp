@@ -28,7 +28,7 @@ use crate::types::{
     StringToKey, Tag,
 };
 
-/// An [OpenPGP message](https://tools.ietf.org/html/rfc4880.html#section-11.3)
+/// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Message {
     Literal(LiteralData),
@@ -1363,7 +1363,7 @@ mod tests {
         // The literal data packet (which is in binary mode) contains the output of:
         // echo -en "foo\nbar\r\nbaz"
         //
-        // RFC 4880 mandates that the hash for signature type 0x01 has to be calculated over normalized line endings,
+        // RFC 9580 mandates that the hash for signature type 0x01 has to be calculated over normalized line endings,
         // so the hash for this message is calculated over "foo\r\nbar\r\nbaz".
         //
         // So it must also be verified against a hash digest over this normalized format.

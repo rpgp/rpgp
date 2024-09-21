@@ -20,7 +20,7 @@ use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribu
 use crate::util::{packet_length, write_packet_length};
 
 /// User Attribute Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.12>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-attribute-packet-type->
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum UserAttribute {
     Image {

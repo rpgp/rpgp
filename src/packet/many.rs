@@ -139,7 +139,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                 }
             }
             PacketLength::Partial(len) => {
-                // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-partial-body-lengths
                 // "An implementation MAY use Partial Body Lengths for data packets, be
                 // they literal, compressed, or encrypted [...]
                 // Partial Body Lengths MUST NOT be used for any other packet types"
@@ -157,7 +157,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                     )));
                 }
 
-                // https://datatracker.ietf.org/doc/html/rfc4880#section-4.2.2.4
+                // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
                 // "The first partial length MUST be at least 512 octets long."
                 if len < 512 {
                     self.done = true;
@@ -246,12 +246,13 @@ fn read_fixed<R: Read>(
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
-    use regex::Regex;
     use std::fs::File;
     use std::io::{BufReader, Seek, SeekFrom};
     use std::path::Path;
 
+    use regex::Regex;
+
+    use super::*;
     use crate::ser::Serialize;
 
     #[test]

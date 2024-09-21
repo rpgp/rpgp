@@ -1,12 +1,12 @@
 //! Signed Secret and Public Key
 //!
-//! Signed secret keys shall be used to sign and decrypt, where as public keys
+//! Signed secret keys shall be used to sign and decrypt, whereas public keys
 //! can verify and encrypt.
 //! Note that technically secret keys also can by definition derive a public key
-//! and hence themself perform verify and encrypt as a public key can.
+//! and hence themselves perform verify and encrypt as a public key can.
 //!
 //! [Key generation] is handled separately.
-//! For signing directly with an RFC4880 compliant internal hashing, see [signing and verifying based on packets].
+//! For signing directly with an RFC 9580 compliant internal hashing, see [signing and verifying based on packets].
 //!
 //! [Key generation]: super::key
 //! [signing and verifying based on packets]: crate::packet
@@ -53,7 +53,7 @@
 //!
 //! let passwd_fn = || String::new();
 //!
-//! // simulate a digest, make sure it is a compliant produce with RFC4880
+//! // simulate a digest, make sure it is a compliant produce with RFC 9580
 //! // i.e. depending on the version one needs a special suffix / prefix
 //! // and length encoding. The following is NOT compliant:
 //! use sha2::{Sha256, Digest};
@@ -89,7 +89,7 @@
 //!     vec![],
 //! );
 //!
-//! // sign and and write the package (the package written here is NOT rfc4880 compliant)
+//! // sign and and write the package (the package written here is NOT RFC 9580 compliant)
 //! let mut signature_bytes = Vec::with_capacity(1024);
 //!
 //! packet::write_packet(&mut signature_bytes, &signature)

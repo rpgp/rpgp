@@ -18,7 +18,7 @@ use crate::util::rest_len;
 use crate::PlainSessionKey;
 
 /// Symmetric-Key Encrypted Session Key Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.3>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum SymKeyEncryptedSessionKey {
     V4 {

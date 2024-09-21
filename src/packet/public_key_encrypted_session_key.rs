@@ -61,7 +61,7 @@ impl PublicKeyEncryptedSessionKey {
 
     /// Prepare the session key data for encryption in a PKESK.
     ///
-    /// See https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-encrypted-sessio
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-encrypted-sessio>
     fn prepare_session_key_for_encryption(
         alg: Option<SymmetricKeyAlgorithm>, // set for pkesk v3
         sk: &[u8],
@@ -148,7 +148,7 @@ impl PublicKeyEncryptedSessionKey {
     ///
     /// The Key ID may consist of all Zero-Bytes (if the PKESK was created for an anonymous recipient).
     ///
-    /// See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.1-3.2
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.1-3.2>
     pub fn id(&self) -> Result<&KeyId> {
         match self {
             Self::V3 { id, .. } => Ok(id),
@@ -160,7 +160,7 @@ impl PublicKeyEncryptedSessionKey {
     ///
     /// Additionally, the Fingerprint may be `None` (if the PKESK was created for an anonymous recipient).
     ///
-    /// See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.2-3.2
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.2-3.2>
     pub fn fingerprint(&self) -> Result<Option<&Fingerprint>> {
         match self {
             Self::V6 { fingerprint, .. } => Ok(fingerprint.as_ref()),
@@ -171,7 +171,7 @@ impl PublicKeyEncryptedSessionKey {
     /// The raw encrypted session key data inside this PKESK.
     /// This data is algorithm specific.
     ///
-    /// See https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-f
+    /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-f>
     /// and the following sections.
     pub fn values(&self) -> Result<&PkeskBytes> {
         match self {

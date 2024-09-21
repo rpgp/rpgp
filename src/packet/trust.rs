@@ -8,7 +8,8 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Trust Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.10>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-trust-packet-type-id-12>
+///
 /// Trust packets SHOULD NOT be emitted to output streams that are
 /// transferred to other users, and they SHOULD be ignored on any input
 /// other than local keyring files.

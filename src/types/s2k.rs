@@ -80,7 +80,7 @@ impl S2kParams {
     ///
     /// For v6 keys:
     /// - Ocb with AES256
-    /// - Argon2 derivation (with parameter choice (2) from https://www.rfc-editor.org/rfc/rfc9106#name-parameter-choice)
+    /// - Argon2 derivation (with parameter choice (2) from <https://www.rfc-editor.org/rfc/rfc9106#name-parameter-choice>)
     ///
     /// For v4 keys:
     /// - AES256
@@ -242,7 +242,7 @@ impl StringToKey {
     }
 
     /// String-To-Key methods are used to convert a given password string into a key.
-    /// Ref: <https://tools.ietf.org/html/rfc4880#section-3.7>
+    /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-string-to-key-s2k-specifier>
     pub fn derive_key(&self, passphrase: &str, key_size: usize) -> Result<Vec<u8>> {
         let key = match self {
             Self::Simple { hash_alg, .. }
@@ -270,7 +270,7 @@ impl StringToKey {
                         }
                         StringToKey::IteratedAndSalted { salt, count, .. } => {
                             /// Converts a coded iteration count into a decoded count.
-                            /// Ref: https://tools.ietf.org/html/rfc4880#section-3.7.1.3
+                            /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#section-3.7.1.3-3
                             fn decode_count(coded_count: u8) -> usize {
                                 ((16u32 + u32::from(coded_count & 15))
                                     << (u32::from(coded_count >> 4) + EXPBIAS))

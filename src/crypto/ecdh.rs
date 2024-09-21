@@ -198,7 +198,7 @@ where
 /// Obtain the OpenPGP session key for a DH shared secret.
 ///
 /// This helper function performs the key derivation and unwrapping steps
-/// described in <https://www.rfc-editor.org/rfc/rfc6637.html#section-8>
+/// described in <https://www.rfc-editor.org/rfc/rfc9580.html#name-ecdh-algorithm>
 pub fn derive_session_key(
     shared_secret: &[u8],
     encrypted_session_key: &[u8],
@@ -221,10 +221,10 @@ pub fn derive_session_key(
     let mut decrypted_key_padded = aes_kw::unwrap(&z, &encrypted_session_key_vec)?;
     // PKCS5-style unpadding (PKCS5 is PKCS7 with a blocksize of 8).
     //
-    // RFC 6637 describes the padding:
-    // a) "The result is padded using the method described in [PKCS5] to the 8-byte granularity."
+    // RFC 9580 describes the padding:
+    // a) "Then, the above values are padded to an 8-octet granularity using the method described in [RFC8018]."
     // b) "For example, assuming that an AES algorithm is used for the session key, the sender MAY
-    // use 21, 13, and 5 bytes of padding for AES-128, AES-192, and AES-256, respectively, to
+    // use 21, 13, and 5 octets of padding for AES-128, AES-192, and AES-256, respectively, to
     // provide the same number of octets, 40 total, as an input to the key wrapping method."
     //
     // So while the padding ensures that the length of the padded message is a multiple of 8, the
@@ -341,8 +341,8 @@ where
     ))
 }
 
-/// Build param for ECDH algorithm (as defined in RFC 6637)
-/// <https://tools.ietf.org/html/rfc6637#section-8>
+/// Build param for ECDH algorithm (as defined in RFC 9580)
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-ecdh-algorithm>
 pub fn build_ecdh_param(
     oid: &[u8],
     alg_sym: SymmetricKeyAlgorithm,
@@ -372,8 +372,8 @@ pub fn build_ecdh_param(
     values.concat()
 }
 
-/// Key Derivation Function for ECDH (as defined in RFC 6637).
-/// <https://tools.ietf.org/html/rfc6637#section-7>
+/// Key Derivation Function for ECDH (as defined in RFC 9580).
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-ecdh-algorithm>
 pub fn kdf(hash: HashAlgorithm, x: &[u8], length: usize, param: &[u8]) -> Result<Vec<u8>> {
     let prefix = vec![0, 0, 0, 1];
 

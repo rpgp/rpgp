@@ -16,7 +16,7 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.12>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SymEncryptedProtectedData {
     packet_version: Version,

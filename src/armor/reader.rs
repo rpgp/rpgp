@@ -6,7 +6,6 @@ use std::{fmt, io, str};
 use base64::engine::{general_purpose::STANDARD, Engine as _};
 use buffer_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
-
 use nom::branch::alt;
 use nom::bytes::streaming::{tag, take_until1};
 use nom::bytes::streaming::{take, take_until};
@@ -23,7 +22,7 @@ use crate::ser::Serialize;
 
 /// Armor block types.
 ///
-/// Both OpenPGP (RFC4880) and OpenSSL PEM armor types are included.
+/// Both OpenPGP (RFC 9580) and OpenSSL PEM armor types are included.
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum BlockType {
     /// PGP public key

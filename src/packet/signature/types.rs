@@ -24,7 +24,7 @@ use crate::types::{
 };
 
 /// Signature Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.2>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Signature {
     packet_version: Version,
@@ -94,8 +94,8 @@ impl Signature {
 
     /// Constructor for an OpenPGP v4 signature packet.
     ///
-    /// OpenPGP v4 signatures are typically used with OpenPGP v4 keys, as specified in RFC 4880
-    /// (and 2440).
+    /// OpenPGP v4 signatures are typically used with OpenPGP v4 keys, as specified in RFC 9580
+    /// (and formerly in 4880 and 2440).
     #[allow(clippy::too_many_arguments)]
     pub fn v4(
         packet_version: Version,

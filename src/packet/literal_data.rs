@@ -18,7 +18,7 @@ use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Literal Data Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.9>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct LiteralData {
     packet_version: Version,

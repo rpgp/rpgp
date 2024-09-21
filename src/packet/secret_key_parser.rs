@@ -96,8 +96,8 @@ fn private_key_parser_v2_v3(
     }
 }
 
-/// Parse a private key packet (Tag 5)
-/// Ref: https://tpools.ietf.org/html/rfc4880.html#section-5.5.1.3
+/// Parse a secret key packet (Tag 5)
+/// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-secret-key-packet-formats
 #[allow(clippy::type_complexity)]
 pub(crate) fn parse(
     i: &[u8],

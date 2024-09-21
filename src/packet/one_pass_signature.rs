@@ -14,7 +14,7 @@ use crate::ser::Serialize;
 use crate::types::{KeyId, Tag, Version};
 
 /// One-Pass Signature Packet
-/// <https://tools.ietf.org/html/rfc4880.html#section-5.4>
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t>
 ///
 /// A One-Pass Signature Packet acts as a companion to a Signature Packet. In modern OpenPGP
 /// messages, Ops and Signatures occur in pairs, bracketing the message payload.
