@@ -87,10 +87,19 @@ impl EncryptedSecretParams {
                         StringToKey::Argon2 { .. }
                         | StringToKey::IteratedAndSalted { .. }
                         | StringToKey::Salted { .. } => {
-                            // we'll allow these
+                            // we'll allow these, generally
                         }
                         _ => bail!("Version 6 keys may not use the weak S2k type {:?}", s2k),
                     }
+
+                    // Implementations MUST NOT decrypt a secret using MD5, SHA-1, or RIPEMD-160
+                    // as a hash function in an S2K KDF in a version 6 (or later) packet.
+                    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+                    ensure!(
+                        !s2k.known_weak_hash_algo(),
+                        "Weak hash algorithm in S2K not allowed for v6 {:?}",
+                        s2k
+                    )
                 }
                 _ => bail!("Version 6 keys may only be encrypted with S2k usage AEAD or CFB"),
             }

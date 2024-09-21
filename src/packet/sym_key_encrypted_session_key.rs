@@ -215,6 +215,14 @@ impl SymKeyEncryptedSessionKey {
             s2k
         );
 
+        // Implementations MUST NOT generate packets using MD5, SHA-1, or RIPEMD-160 as a hash function in an S2K KDF.
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+        ensure!(
+            !s2k.known_weak_hash_algo(),
+            "Weak hash algorithm in S2K not allowed for v6 {:?}",
+            s2k
+        );
+
         let key = s2k.derive_key(&msg_pw(), alg.key_size())?;
 
         let mut private_key = Vec::with_capacity(session_key.len());
@@ -247,6 +255,20 @@ impl SymKeyEncryptedSessionKey {
     where
         F: FnOnce() -> String + Clone,
     {
+        ensure!(
+            s2k.uses_salt(),
+            "Can not use an s2k algorithm without a salt: {:?}",
+            s2k
+        );
+
+        // Implementations MUST NOT generate packets using MD5, SHA-1, or RIPEMD-160 as a hash function in an S2K KDF.
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+        ensure!(
+            !s2k.known_weak_hash_algo(),
+            "Weak hash algorithm in S2K not allowed for v6 {:?}",
+            s2k
+        );
+
         // Initial key material is the s2k derived key.
         let ikm = s2k.derive_key(&msg_pw(), sym_algorithm.key_size())?;
         // No salt is used
