@@ -178,12 +178,12 @@ impl<'a> PlainSecretParamsRef<'a> {
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::ECDH(d) => match public_params {
-                PublicParams::ECDH {
+                PublicParams::ECDH(EcdhPublicParams::Known {
                     ref curve,
                     ref hash,
                     ref alg_sym,
                     ..
-                } => match curve {
+                }) => match curve {
                     ECCCurve::Curve25519 => {
                         const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
 
@@ -224,6 +224,9 @@ impl<'a> PlainSecretParamsRef<'a> {
                     }
                     _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
                 },
+                PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
+                    unsupported_err!("curve {:?} for ECDH", curve)
+                }
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::EdDSALegacy(d) => match public_params {

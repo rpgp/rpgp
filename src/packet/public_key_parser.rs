@@ -5,12 +5,14 @@ use nom::multi::length_data;
 use nom::number::streaming::{be_u16, be_u32, be_u8};
 use nom::sequence::{pair, tuple};
 
-use crate::crypto::ecc_curve::ecc_curve_from_oid;
+use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::IResult;
-use crate::types::{mpi, EcdsaPublicParams, KeyVersion, Mpi, MpiRef, PublicParams};
+use crate::types::{
+    mpi, EcdhPublicParams, EcdsaPublicParams, KeyVersion, Mpi, MpiRef, PublicParams,
+};
 
 #[inline]
 fn to_owned(mref: MpiRef<'_>) -> Mpi {
@@ -91,30 +93,46 @@ fn x448(i: &[u8]) -> IResult<&[u8], PublicParams> {
 
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ecd>
 fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    map(
-        tuple((
-            // a one-octet size of the following field
-            // octets representing a curve OID
-            map_opt(length_data(be_u8), ecc_curve_from_oid),
+    // a one-octet size of the following field
+    // octets representing a curve OID
+    let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
+
+    match curve {
+        ECCCurve::Curve25519 | ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 => {
             // MPI of an EC point representing a public key
-            mpi,
+            let (i, mpi) = mpi(i)?;
+
             // a one-octet size of the following fields
-            be_u8,
+            let (i, _len2) = be_u8(i)?;
+
             // a one-octet value 01, reserved for future extensions
-            tag(&[1][..]),
+            let (i, _tag) = tag(&[1][..])(i)?;
+
             // a one-octet hash function ID used with a KDF
-            map(be_u8, HashAlgorithm::from),
+            let (i, hash) = map(be_u8, HashAlgorithm::from)(i)?;
+
             // a one-octet algorithm ID for the symmetric algorithm used to wrap
             // the symmetric key used for the message encryption
-            map_res(be_u8, SymmetricKeyAlgorithm::try_from),
+            let (i, alg_sym) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+
+            Ok((
+                i,
+                PublicParams::ECDH(EcdhPublicParams::Known {
+                    curve,
+                    p: mpi.to_owned(),
+                    hash,
+                    alg_sym,
+                }),
+            ))
+        }
+        _ => Ok((
+            i,
+            PublicParams::ECDH(EcdhPublicParams::Unsupported {
+                curve,
+                opaque: vec![],
+            }),
         )),
-        |(curve, p, _len2, _tag, hash, alg_sym)| PublicParams::ECDH {
-            curve,
-            p: p.to_owned(),
-            hash,
-            alg_sym,
-        },
-    )(i)
+    }
 }
 
 fn elgamal(i: &[u8]) -> IResult<&[u8], PublicParams> {

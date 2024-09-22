@@ -12,44 +12,30 @@ use crate::types::{Mpi, MpiRef};
 /// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PublicParams {
-    RSA {
-        n: Mpi,
-        e: Mpi,
-    },
-    DSA {
-        p: Mpi,
-        q: Mpi,
-        g: Mpi,
-        y: Mpi,
-    },
+    RSA { n: Mpi, e: Mpi },
+    DSA { p: Mpi, q: Mpi, g: Mpi, y: Mpi },
     ECDSA(EcdsaPublicParams),
-    ECDH {
+    ECDH(EcdhPublicParams),
+    Elgamal { p: Mpi, g: Mpi, y: Mpi },
+    EdDSALegacy { curve: ECCCurve, q: Mpi },
+    Ed25519 { public: [u8; 32] },
+    X25519 { public: [u8; 32] },
+    X448 { public: [u8; 56] },
+    Unknown { data: Vec<u8> },
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum EcdhPublicParams {
+    /// ECDH public parameters for a curve that we know uses Mpi representation
+    Known {
         curve: ECCCurve,
         p: Mpi,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
     },
-    Elgamal {
-        p: Mpi,
-        g: Mpi,
-        y: Mpi,
-    },
-    EdDSALegacy {
-        curve: ECCCurve,
-        q: Mpi,
-    },
-    Ed25519 {
-        public: [u8; 32],
-    },
-    X25519 {
-        public: [u8; 32],
-    },
-    X448 {
-        public: [u8; 56],
-    },
-    Unknown {
-        data: Vec<u8>,
-    },
+
+    /// Public parameters for a curve that we don't know about (which might not use Mpi representation).
+    Unsupported { curve: ECCCurve, opaque: Vec<u8> },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -201,12 +187,12 @@ impl Serialize for PublicParams {
             PublicParams::ECDSA(params) => {
                 params.to_writer(writer)?;
             }
-            PublicParams::ECDH {
+            PublicParams::ECDH(EcdhPublicParams::Known {
                 ref curve,
                 ref p,
                 ref hash,
                 ref alg_sym,
-            } => {
+            }) => {
                 let oid = curve.oid();
                 writer.write_u8(oid.len().try_into()?)?;
                 writer.write_all(&oid)?;
@@ -217,6 +203,16 @@ impl Serialize for PublicParams {
                 writer.write_u8(0x01)?; // fixed tag
                 writer.write_u8((*hash).into())?;
                 writer.write_u8((*alg_sym).into())?;
+            }
+            PublicParams::ECDH(EcdhPublicParams::Unsupported {
+                ref curve,
+                ref opaque,
+            }) => {
+                let oid = curve.oid();
+                writer.write_u8(oid.len().try_into()?)?;
+                writer.write_all(&oid)?;
+
+                writer.write_all(opaque)?;
             }
             PublicParams::Elgamal {
                 ref p,

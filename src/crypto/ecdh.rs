@@ -9,8 +9,7 @@ use crate::crypto::{
     Decryptor, KeyParams,
 };
 use crate::errors::{Error, Result};
-use crate::types::PkeskBytes;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::types::{EcdhPublicParams, Mpi, PkeskBytes, PlainSecretParams, PublicParams};
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -296,12 +295,12 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let alg_sym = curve.sym_algo()?;
 
             Ok((
-                PublicParams::ECDH {
-                    curve,
+                PublicParams::ECDH(EcdhPublicParams::Known {
+                    curve: ECCCurve::Curve25519,
                     p: p.into(),
                     hash,
                     alg_sym,
-                },
+                }),
                 PlainSecretParams::ECDH(Mpi::from_raw(q)),
             ))
         }
@@ -331,12 +330,12 @@ where
     let public = secret.public_key();
 
     Ok((
-        PublicParams::ECDH {
+        PublicParams::ECDH(EcdhPublicParams::Known {
             curve: curve.clone(),
             p: Mpi::from_raw_slice(public.to_sec1_bytes().as_ref()),
             hash: curve.hash_algo()?,
             alg_sym: curve.sym_algo()?,
-        },
+        }),
         PlainSecretParams::ECDH(Mpi::from_raw_slice(secret.to_bytes().as_slice())),
     ))
 }
@@ -560,12 +559,12 @@ mod tests {
                     rng.fill_bytes(&mut plain);
 
                     let values = match pkey {
-                        PublicParams::ECDH {
+                        PublicParams::ECDH(EcdhPublicParams::Known {
                             ref curve,
                             ref p,
                             hash,
                             alg_sym,
-                        } => encrypt(
+                        }) => encrypt(
                             &mut rng,
                             curve,
                             alg_sym,

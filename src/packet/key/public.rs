@@ -4,6 +4,7 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
+use crate::types::EcdhPublicParams;
 use crate::{
     crypto::{self, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -141,10 +142,10 @@ impl PubKeyInner {
         if version != KeyVersion::V4 {
             if matches!(
                 public_params,
-                PublicParams::ECDH {
+                PublicParams::ECDH(EcdhPublicParams::Known {
                     curve: ECCCurve::Curve25519,
                     ..
-                }
+                })
             ) {
                 bail!(
                     "ECDH over Curve25519 is illegal for key version {}",
@@ -465,17 +466,23 @@ impl PublicKeyTrait for PubKeyInner {
 
                 crypto::ecdsa::verify(params, hash, hashed, sig)
             }
-            PublicParams::ECDH {
+            PublicParams::ECDH(EcdhPublicParams::Known {
                 ref curve,
                 ref hash,
                 ref alg_sym,
                 ..
-            } => {
+            }) => {
                 bail!(
                     "ECDH ({:?} {:?} {:?}) can not be used for verify operations",
                     curve,
                     hash,
                     alg_sym
+                );
+            }
+            PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
+                bail!(
+                    "ECDH (unsupported: {:?}) can not be used for verify operations",
+                    curve,
                 );
             }
             PublicParams::Elgamal { .. } => {
@@ -520,12 +527,12 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
             PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
             PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
-            PublicParams::ECDH {
+            PublicParams::ECDH(EcdhPublicParams::Known {
                 ref curve,
                 hash,
                 alg_sym,
                 ref p,
-            } => {
+            }) => {
                 if self.version() == KeyVersion::V6 {
                     // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
                     // listed curve that announces a different KDF or KEK parameter.
@@ -547,6 +554,9 @@ impl PublicKeyTrait for PubKeyInner {
                     p.as_bytes(),
                     plain,
                 )
+            }
+            PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
+                unsupported_err!("ECDH over curve {:?} is unsupported", curve)
             }
             PublicParams::X25519 { ref public } => {
                 let (sym_alg, plain) = match typ {
