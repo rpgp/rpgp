@@ -1,6 +1,6 @@
 use log::{debug, warn};
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
 use crate::types::{KeyVersion, PublicKeyTrait, SignedUser, SignedUserAttribute, Tag};
 use crate::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey};
@@ -214,6 +214,45 @@ where
                 }
             }
             _ => unreachable!(),
+        }
+    }
+
+    // Does peeking forward yield an error? If so, we consider this key to be broken.
+    // (This can happen e.g. when an unknown critical packet it encountered within a TPK/TSK)
+    if let Some(Err(e)) = packets.next_if(|peek| peek.is_err()) {
+        match e {
+            // "Unsupported" errors are by definition "soft", these packets are safe to skip silently
+            Error::Unsupported(_) => {}
+
+            _ => {
+                return Some(Err(format_err!(
+                    "error while parsing composed key: {:?}",
+                    e
+                )))
+            }
+        }
+    }
+
+    // TODO: consume any additional packets that aren't a primary key packet?
+
+    // Every subkey for a version 6 primary key MUST be a version 6 subkey.
+    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-10.1.1-5)
+    if primary_key.version() == KeyVersion::V6 {
+        for sub in &public_subkey_container {
+            if sub.version() != KeyVersion::V6 {
+                return Some(Err(crate::errors::Error::Message(format!(
+                    "Illegal public subkey {:?} in v6 key",
+                    sub.version()
+                ))));
+            }
+        }
+        for sub in &secret_subkey_container {
+            if sub.version() != KeyVersion::V6 {
+                return Some(Err(crate::errors::Error::Message(format!(
+                    "Illegal secret subkey {:?} in v6 key",
+                    sub.version()
+                ))));
+            }
         }
     }
 

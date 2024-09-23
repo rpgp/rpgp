@@ -1,6 +1,7 @@
+use std::io::{BufRead, Read};
+
 use buffer_redux::BufReader;
 use log::{debug, warn};
-use std::io::{BufRead, Read};
 
 use crate::armor::{self, BlockType};
 use crate::errors::{Error, Result};
@@ -175,6 +176,13 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
         }
         Ok(_) => Some(p),
         Err(e) => {
+            if let Error::Unsupported(e) = e {
+                // "Error::Unsupported" signals parser errors that we can safely ignore
+                // (e.g. packets with unsupported versions)
+                warn!("skipping unsupported packet: {p:?}");
+                debug!("error: {e:?}");
+                return None;
+            }
             if let Error::InvalidPacketContent(b) = &e {
                 let err: &Error = b; // unbox
                 if let Error::Unsupported(e) = err {

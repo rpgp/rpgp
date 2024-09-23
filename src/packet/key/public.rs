@@ -4,6 +4,7 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
+use crate::types::EcdhPublicParams;
 use crate::{
     crypto::{self, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -119,6 +120,8 @@ impl PubKeyInner {
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
+        // None of the ECC methods described in this document are allowed with deprecated version 3 keys.
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-11-2)
         if (version == KeyVersion::V2 || version == KeyVersion::V3)
             && !(algorithm == PublicKeyAlgorithm::RSA
                 || algorithm == PublicKeyAlgorithm::RSAEncrypt
@@ -139,10 +142,10 @@ impl PubKeyInner {
         if version != KeyVersion::V4 {
             if matches!(
                 public_params,
-                PublicParams::ECDH {
+                PublicParams::ECDH(EcdhPublicParams::Known {
                     curve: ECCCurve::Curve25519,
                     ..
-                }
+                })
             ) {
                 bail!(
                     "ECDH over Curve25519 is illegal for key version {}",
@@ -463,17 +466,23 @@ impl PublicKeyTrait for PubKeyInner {
 
                 crypto::ecdsa::verify(params, hash, hashed, sig)
             }
-            PublicParams::ECDH {
+            PublicParams::ECDH(EcdhPublicParams::Known {
                 ref curve,
                 ref hash,
                 ref alg_sym,
                 ..
-            } => {
+            }) => {
                 bail!(
                     "ECDH ({:?} {:?} {:?}) can not be used for verify operations",
                     curve,
                     hash,
                     alg_sym
+                );
+            }
+            PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
+                bail!(
+                    "ECDH (unsupported: {:?}) can not be used for verify operations",
+                    curve,
                 );
             }
             PublicParams::Elgamal { .. } => {
@@ -518,20 +527,37 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
             PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
             PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
-            PublicParams::ECDH {
+            PublicParams::ECDH(EcdhPublicParams::Known {
                 ref curve,
                 hash,
                 alg_sym,
                 ref p,
-            } => crypto::ecdh::encrypt(
-                rng,
-                curve,
-                alg_sym,
-                hash,
-                self.fingerprint().as_bytes(),
-                p.as_bytes(),
-                plain,
-            ),
+            }) => {
+                if self.version() == KeyVersion::V6 {
+                    // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
+                    // listed curve that announces a different KDF or KEK parameter.
+                    //
+                    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
+                    if curve.hash_algo()? != hash || curve.sym_algo()? != alg_sym {
+                        bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}",curve,
+                           hash,
+                            alg_sym);
+                    }
+                }
+
+                crypto::ecdh::encrypt(
+                    rng,
+                    curve,
+                    alg_sym,
+                    hash,
+                    self.fingerprint().as_bytes(),
+                    p.as_bytes(),
+                    plain,
+                )
+            }
+            PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
+                unsupported_err!("ECDH over curve {:?} is unsupported", curve)
+            }
             PublicParams::X25519 { ref public } => {
                 let (sym_alg, plain) = match typ {
                     EskType::V6 => (None, plain),

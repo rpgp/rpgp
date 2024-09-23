@@ -178,12 +178,12 @@ impl<'a> PlainSecretParamsRef<'a> {
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::ECDH(d) => match public_params {
-                PublicParams::ECDH {
+                PublicParams::ECDH(EcdhPublicParams::Known {
                     ref curve,
                     ref hash,
                     ref alg_sym,
                     ..
-                } => match curve {
+                }) => match curve {
                     ECCCurve::Curve25519 => {
                         const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
 
@@ -224,6 +224,9 @@ impl<'a> PlainSecretParamsRef<'a> {
                     }
                     _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
                 },
+                PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
+                    unsupported_err!("curve {:?} for ECDH", curve)
+                }
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::EdDSALegacy(d) => match public_params {
@@ -352,6 +355,23 @@ impl PlainSecretParams {
         secret_tag: Option<Tag>,
     ) -> Result<EncryptedSecretParams> {
         let version = pub_key.version();
+
+        // forbid weak hash algo in s2k
+
+        match &s2k_params {
+            S2kParams::Cfb { s2k, .. }
+            | S2kParams::Aead { s2k, .. }
+            | S2kParams::MalleableCfb { s2k, .. } => {
+                // Implementations MUST NOT generate packets using MD5, SHA-1, or RIPEMD-160 as a hash function in an S2K KDF.
+                // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+                ensure!(
+                    !s2k.known_weak_hash_algo(),
+                    "Weak hash algorithm in S2K not allowed for v6 {:?}",
+                    s2k
+                )
+            }
+            _ => {}
+        }
 
         match &s2k_params {
             S2kParams::Unprotected => bail!("cannot encrypt to unprotected"),

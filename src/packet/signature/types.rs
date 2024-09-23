@@ -20,7 +20,8 @@ use crate::packet::signature::SignatureConfig;
 use crate::packet::{PacketTrait, SignatureVersionSpecific};
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, Fingerprint, KeyId, PublicKeyTrait, SignatureBytes, Tag, Version,
+    self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SignatureBytes,
+    Tag, Version,
 };
 
 /// Signature Packet
@@ -195,11 +196,42 @@ impl Signature {
             || issuer_fps.iter().any(|&fp| fp == &key.fingerprint())
     }
 
+    /// Check alignment between signing key version and signature version.
+    ///
+    /// Version 6 signatures and version 6 keys are strongly linked:
+    /// - only a v6 key may produce a v6 signature
+    /// - a v6 key may only produce v6 signatures
+    fn check_signature_key_version_alignment(
+        key: &impl PublicKeyTrait,
+        config: &SignatureConfig,
+    ) -> Result<()> {
+        // Every signature made by a version 6 key MUST be a version 6 signature.
+        if key.version() == KeyVersion::V6 {
+            ensure_eq!(
+                config.version(),
+                SignatureVersion::V6,
+                "Non v6 signature by a v6 key is not allowed"
+            );
+        }
+
+        if config.version() == SignatureVersion::V6 {
+            ensure_eq!(
+                key.version(),
+                KeyVersion::V6,
+                "v6 signature by a non-v6 key is not allowed"
+            );
+        }
+
+        Ok(())
+    }
+
     /// Verify this signature.
     pub fn verify<R>(&self, key: &impl PublicKeyTrait, data: R) -> Result<()>
     where
         R: Read,
     {
+        Self::check_signature_key_version_alignment(&key, &self.config)?;
+
         ensure!(
             Self::match_identity(self, key),
             "verify: No matching issuer or issuer_fingerprint for Key ID: {:?}",
@@ -209,6 +241,17 @@ impl Signature {
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
         if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            // Salt size must match the expected length for the hash algorithm that is used
+            //
+            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+            ensure_eq!(
+                self.config.hash_alg.salt_len(),
+                Some(salt.len()),
+                "Illegal salt length {} for a V6 Signature using {:?}",
+                salt.len(),
+                self.config.hash_alg
+            );
+
             hasher.update(salt.as_ref())
         }
 
@@ -224,6 +267,17 @@ impl Signature {
         hasher.update(&self.config.trailer(len)?);
 
         let hash = &hasher.finish()[..];
+
+        // Check that the high 16 bits of the hash from the signature packet match with the hash we
+        // just calculated.
+        //
+        // "When verifying a version 6 signature, an implementation MUST reject the signature if
+        // these octets do not match the first two octets of the computed hash."
+        //
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures)
+        //
+        // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
+        // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
@@ -253,6 +307,8 @@ impl Signature {
     ) -> Result<()> {
         let key_id = signee.key_id();
         debug!("verifying certification {:?} {:#?}", key_id, self);
+
+        Self::check_signature_key_version_alignment(&signer, &self.config)?;
 
         ensure!(
             Self::match_identity(self, signer),
@@ -357,6 +413,8 @@ impl Signature {
             self, signer, signee, backsig
         );
 
+        Self::check_signature_key_version_alignment(&signer, &self.config)?;
+
         let mut hasher = self.config.hash_alg.new_hasher()?;
 
         if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
@@ -406,6 +464,8 @@ impl Signature {
     /// Verifies a direct key signature or a revocation.
     pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
         debug!("verifying key (revocation): {:#?} - {:#?}", self, key);
+
+        Self::check_signature_key_version_alignment(&key, &self.config)?;
 
         ensure!(
             Self::match_identity(self, key),

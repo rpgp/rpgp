@@ -130,7 +130,17 @@ pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
         Tag::Other(20) => {
             unimplemented_err!("GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported")
         }
-        Tag::Other(other) => unimplemented_err!("Unknown packet typ: {}", other),
+        Tag::Other(22..=39) => {
+            // a "hard" error that will bubble up and interrupt processing of compositions
+            return Err(Error::InvalidPacketContent(Box::new(Error::Message(
+                format!("Unassigned Critical Packet type {:?}", tag),
+            ))));
+        }
+        Tag::Other(40..=59) => {
+            // a "soft" error that will usually get ignored while processing packet streams
+            unsupported_err!("Unsupported but non-critical packet type: {:?}", tag)
+        }
+        Tag::Other(other) => unimplemented_err!("Unknown packet type: {}", other),
     };
 
     match res {

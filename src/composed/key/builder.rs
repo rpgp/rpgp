@@ -397,6 +397,7 @@ mod tests {
             .passphrase(None)
             .subkey(
                 SubkeyParamsBuilder::default()
+                    .version(version)
                     .key_type(KeyType::Rsa(2048))
                     .can_encrypt(true)
                     .build()

@@ -8,7 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
-use pgp::types::{EskType, Fingerprint, PkeskBytes, SignatureBytes};
+use pgp::types::{EcdhPublicParams, EskType, Fingerprint, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey};
@@ -187,12 +187,12 @@ impl FakeHsm {
             }
 
             (
-                PublicParams::ECDH {
+                PublicParams::ECDH(EcdhPublicParams::Known {
                     curve,
                     alg_sym,
                     hash,
                     ..
-                },
+                }),
                 PkeskBytes::Ecdh {
                     public_point,
                     encrypted_session_key,

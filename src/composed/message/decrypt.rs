@@ -4,7 +4,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{EskType, PkeskBytes, SecretKeyRepr, SecretKeyTrait};
+use crate::types::{EskType, PkeskBytes, SecretKeyRepr, SecretKeyTrait, SkeskVersion};
 
 /// Decrypts session key using secret key.
 pub fn decrypt_session_key<F, L>(
@@ -73,6 +73,18 @@ where
         packet_algorithm != SymmetricKeyAlgorithm::Plaintext,
         "SKESK packet encryption algorithm cannot be plaintext"
     );
+
+    // Implementations MUST NOT decrypt a secret using MD5, SHA-1, or RIPEMD-160 as a hash function
+    // in an S2K KDF in a version 6 (or later) packet.
+    //
+    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+    if packet.version() == SkeskVersion::V6 {
+        ensure!(
+            !packet.s2k().known_weak_hash_algo(),
+            "Weak hash algorithm in S2K not allowed for v6 {:?}",
+            packet.s2k()
+        )
+    }
 
     let key = packet
         .s2k()

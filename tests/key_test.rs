@@ -195,10 +195,10 @@ parse_dumps!(
     (
         test_parse_dumps_6,
         6,
-        17_677,
+        17_676,
         // - Elgamal verify
         1,
-        3322,
+        3323,
         21_000
     ),
     (

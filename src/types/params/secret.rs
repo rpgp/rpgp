@@ -43,6 +43,17 @@ impl SecretParams {
         params: &PublicParams,
     ) -> Result<Self> {
         let (_, params) = parse_secret_fields(key_ver, alg, params)(data)?;
+
+        // Version 6 secret keys may only use "S2K Usage" 0, 253 or 254
+        //
+        // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-3.7.2.1-8
+        if key_ver == KeyVersion::V6 && ![0, 253, 254].contains(&params.string_to_key_id()) {
+            bail!(
+                "Illegal S2K Usage setting {} for a V6 key",
+                params.string_to_key_id()
+            )
+        }
+
         Ok(params)
     }
 

@@ -26,7 +26,7 @@ pub struct SignedSecretKey {
     pub secret_subkeys: Vec<SignedSecretSubKey>,
 }
 
-/// Parse a transferable keys from the given packets.
+/// Parse OpenPGP secret keys ("Transferable Secret Keys") from the given packets.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-transferable-secret-keys>
 pub struct SignedSecretKeyParser<
     I: Sized + Iterator<Item = crate::errors::Result<crate::packet::Packet>>,

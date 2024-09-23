@@ -24,8 +24,8 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait,
-    StringToKey, Tag,
+    CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PkeskVersion, PublicKeyTrait,
+    SecretKeyTrait, StringToKey, Tag,
 };
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
@@ -702,9 +702,11 @@ impl Message {
                     .iter()
                     .map(|(pkesk, encoding_key, encoding_subkey)| {
                         let typ = match pkesk.version() {
-                            3 => EskType::V3_4,
-                            6 => EskType::V6,
-                            v => unimplemented_err!("Unexpected PKESK version {}", v),
+                            PkeskVersion::V3 => EskType::V3_4,
+                            PkeskVersion::V6 => EskType::V6,
+                            PkeskVersion::Other(v) => {
+                                unimplemented_err!("Unexpected PKESK version {}", v)
+                            }
                         };
 
                         if let Some(ek) = encoding_key {

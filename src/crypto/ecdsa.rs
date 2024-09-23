@@ -175,11 +175,28 @@ pub fn verify(
     hashed: &[u8],
     sig: &[Mpi],
 ) -> Result<()> {
+    // NOTE: the `None` case will run into an `unsupported_err`, below, so it's ok not to consider it here
     if let Some(field_size) = p.secret_key_length() {
         // Error out for size mismatches that would get rejected in ecdsa::hazmat::bits2field
         ensure!(
             hashed.len() >= field_size / 2,
             "Hash algorithm {:?} cannot be combined with key {:?}",
+            hash,
+            p
+        );
+
+        // RFC 9580:
+        // An ECDSA signature MUST use a hash algorithm with a digest size of at least the curve's "fsize" value [..]"
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.2-5)
+        let min_hash_len = match field_size {
+            // "[..] except in the case of NIST P-521, for which at least a 512-bit hash algorithm MUST be used"
+            521 => 512,
+
+            f => f,
+        };
+        ensure!(
+            hash.digest_size() * 8 >= min_hash_len,
+            "ECDSA signature: hash algorithm {:?} is too weak for key {:?}",
             hash,
             p
         );

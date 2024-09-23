@@ -366,3 +366,51 @@ fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use rand::{RngCore, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
+
+    use super::*;
+
+    #[test]
+    fn test_aead_message_sizes() {
+        // Test that AEAD encryption/decryption works for message sizes that span 0-2 chunks.
+
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+
+        // Chunk size parameter 0 means "chunks of 64 byte each"
+        const CHUNK_SIZE: u8 = 0;
+
+        const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES128;
+
+        let mut session_key = [0; 16];
+        rng.fill_bytes(&mut session_key);
+
+        // Iterate over message sizes from 0 bytes through all 1-chunk and 2-chunk lengths
+        // (ending with two chunks of a full 64 bytes)
+        for size in 0..=128 {
+            let mut message = vec![0; size];
+            rng.fill_bytes(&mut message);
+
+            for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
+                let enc = SymEncryptedProtectedData::encrypt_seipdv2(
+                    &mut rng,
+                    SYM_ALG,
+                    aead,
+                    CHUNK_SIZE,
+                    &session_key,
+                    &message,
+                )
+                .expect("encrypt");
+
+                let dec = enc.decrypt(&session_key, Some(SYM_ALG)).expect("decrypt");
+
+                assert_eq!(message, dec);
+            }
+        }
+    }
+}

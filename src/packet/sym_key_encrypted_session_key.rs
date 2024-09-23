@@ -13,7 +13,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
-use crate::types::{s2k_parser, StringToKey, Tag, Version};
+use crate::types::{s2k_parser, SkeskVersion, StringToKey, Tag, Version};
 use crate::util::rest_len;
 use crate::PlainSessionKey;
 
@@ -84,17 +84,17 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
-    pub fn version(&self) -> u8 {
+    pub fn version(&self) -> SkeskVersion {
         // TODO: use enum
         match self {
-            Self::V4 { .. } => 4,
-            Self::V5 { .. } => 5,
-            Self::V6 { .. } => 6,
+            Self::V4 { .. } => SkeskVersion::V4,
+            Self::V5 { .. } => SkeskVersion::Other(5),
+            Self::V6 { .. } => SkeskVersion::V6,
         }
     }
 
     pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
-        debug!("decrypt session key V{}", self.version());
+        debug!("decrypt session key {:?}", self.version());
 
         let mut decrypted_key = self.encrypted_key().map(|v| v.to_vec()).unwrap_or_default();
 
@@ -215,6 +215,14 @@ impl SymKeyEncryptedSessionKey {
             s2k
         );
 
+        // Implementations MUST NOT generate packets using MD5, SHA-1, or RIPEMD-160 as a hash function in an S2K KDF.
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+        ensure!(
+            !s2k.known_weak_hash_algo(),
+            "Weak hash algorithm in S2K not allowed for v6 {:?}",
+            s2k
+        );
+
         let key = s2k.derive_key(&msg_pw(), alg.key_size())?;
 
         let mut private_key = Vec::with_capacity(session_key.len());
@@ -247,6 +255,20 @@ impl SymKeyEncryptedSessionKey {
     where
         F: FnOnce() -> String + Clone,
     {
+        ensure!(
+            s2k.uses_salt(),
+            "Can not use an s2k algorithm without a salt: {:?}",
+            s2k
+        );
+
+        // Implementations MUST NOT generate packets using MD5, SHA-1, or RIPEMD-160 as a hash function in an S2K KDF.
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+        ensure!(
+            !s2k.known_weak_hash_algo(),
+            "Weak hash algorithm in S2K not allowed for v6 {:?}",
+            s2k
+        );
+
         // Initial key material is the s2k derived key.
         let ikm = s2k.derive_key(&msg_pw(), sym_algorithm.key_size())?;
         // No salt is used

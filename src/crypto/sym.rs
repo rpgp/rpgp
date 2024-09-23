@@ -229,7 +229,9 @@ impl SymmetricKeyAlgorithm {
 
         {
             match self {
-                SymmetricKeyAlgorithm::Plaintext => {}
+                SymmetricKeyAlgorithm::Plaintext => {
+                    bail!("'Plaintext' is not a legal cipher for encrypted data")
+                }
                 SymmetricKeyAlgorithm::IDEA => decrypt!(
                     Idea,
                     key,
@@ -350,7 +352,9 @@ impl SymmetricKeyAlgorithm {
         ciphertext: &mut [u8],
     ) -> Result<()> {
         match self {
-            SymmetricKeyAlgorithm::Plaintext => {}
+            SymmetricKeyAlgorithm::Plaintext => {
+                bail!("'Plaintext' is not a legal cipher for encrypted data")
+            }
             SymmetricKeyAlgorithm::IDEA => {
                 decrypt_regular!(Idea, key, iv_vec, ciphertext)
             }
@@ -488,7 +492,9 @@ impl SymmetricKeyAlgorithm {
 
         {
             match self {
-                SymmetricKeyAlgorithm::Plaintext => {}
+                SymmetricKeyAlgorithm::Plaintext => {
+                    bail!("'Plaintext' is not a legal cipher for encrypted data")
+                }
                 SymmetricKeyAlgorithm::IDEA => {
                     encrypt!(Idea, key, iv_vec, prefix, data, bs, resync)
                 }
@@ -540,7 +546,9 @@ impl SymmetricKeyAlgorithm {
     ) -> Result<()> {
         // TODO: actual cfb mode used in pgp
         match self {
-            SymmetricKeyAlgorithm::Plaintext => {}
+            SymmetricKeyAlgorithm::Plaintext => {
+                bail!("'Plaintext' is not a legal cipher for encrypted data")
+            }
             SymmetricKeyAlgorithm::IDEA => encrypt_regular!(Idea, key, iv_vec, plaintext),
             SymmetricKeyAlgorithm::TripleDES => {
                 encrypt_regular!(TdesEde3, key, iv_vec, plaintext);

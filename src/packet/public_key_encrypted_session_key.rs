@@ -15,8 +15,8 @@ use crate::errors::{IResult, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{
-    mpi, EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams, Tag,
-    Version,
+    mpi, EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
+    PublicParams, Tag, Version,
 };
 
 /// Public Key Encrypted Session Key Packet (PKESK)
@@ -113,6 +113,12 @@ impl PublicKeyEncryptedSessionKey {
         session_key: &[u8],
         pkey: &impl PublicKeyTrait,
     ) -> Result<Self> {
+        // "An implementation MUST NOT generate ElGamal v6 PKESK packets."
+        // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.1.4-6)
+        if pkey.algorithm() == PublicKeyAlgorithm::Elgamal {
+            bail!("ElGamal is not a legal encryption mechanism for v6 PKESK");
+        }
+
         // the session key, and a checksum (for some algorithms)
         let data =
             Self::prepare_session_key_for_encryption(None, session_key, pkey.public_params());
@@ -191,11 +197,11 @@ impl PublicKeyEncryptedSessionKey {
     }
 
     /// The version of this PKESK (currently "3" and "6" are expected values)
-    pub fn version(&self) -> u8 {
+    pub fn version(&self) -> PkeskVersion {
         match self {
-            Self::V3 { .. } => 3,
-            Self::V6 { .. } => 6,
-            Self::Other { version, .. } => *version,
+            Self::V3 { .. } => PkeskVersion::V3,
+            Self::V6 { .. } => PkeskVersion::V6,
+            Self::Other { version, .. } => PkeskVersion::Other(*version),
         }
     }
 }
@@ -372,7 +378,7 @@ fn parse(
 
 impl Serialize for PublicKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u8(self.version())?;
+        writer.write_u8(self.version().into())?;
 
         match self {
             PublicKeyEncryptedSessionKey::V3 { id, .. } => writer.write_all(id.as_ref())?,
@@ -454,7 +460,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 if let Some(sym_alg) = sym_alg {
                     ensure!(
                         matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
-                        "Inconsistent: X25519 SymmetricKeyAlgorithm is set for v{} PKESK",
+                        "Inconsistent: X25519 SymmetricKeyAlgorithm is set for {:?} PKESK",
                         self.version()
                     );
 
@@ -465,7 +471,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 } else {
                     ensure!(
                         matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
-                        "Inconsistent: X25519 SymmetricKeyAlgorithm is unset for v{} PKESK",
+                        "Inconsistent: X25519 SymmetricKeyAlgorithm is unset for {:?} PKESK",
                         self.version()
                     );
 
@@ -494,7 +500,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 if let Some(sym_alg) = sym_alg {
                     ensure!(
                         matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
-                        "Inconsistent: X448 SymmetricKeyAlgorithm is set for v{} PKESK",
+                        "Inconsistent: X448 SymmetricKeyAlgorithm is set for {:?} PKESK",
                         self.version()
                     );
 
@@ -505,7 +511,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 } else {
                     ensure!(
                         matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
-                        "Inconsistent: X448 SymmetricKeyAlgorithm is unset for v{} PKESK",
+                        "Inconsistent: X448 SymmetricKeyAlgorithm is unset for {:?} PKESK",
                         self.version()
                     );
 

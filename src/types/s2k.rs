@@ -54,7 +54,7 @@ pub enum S2kParams {
         #[debug("{}", hex::encode(iv))]
         iv: Vec<u8>,
     },
-    MaleableCfb {
+    MalleableCfb {
         sym_alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         #[debug("{}", hex::encode(iv))]
@@ -69,7 +69,7 @@ impl From<&S2kParams> for u8 {
             S2kParams::LegacyCfb { sym_alg, .. } => (*sym_alg).into(),
             S2kParams::Aead { .. } => 253,
             S2kParams::Cfb { .. } => 254,
-            S2kParams::MaleableCfb { .. } => 255,
+            S2kParams::MalleableCfb { .. } => 255,
         }
     }
 }
@@ -241,8 +241,31 @@ impl StringToKey {
         ]
     }
 
+    /// RFC 9580 limits the use of S2K KDF results that are based on MD5, SHA-1, or RIPEMD-160.
+    /// This function returns true for StringToKey configurations that use one of these hash algorithms.
+    pub(crate) fn known_weak_hash_algo(&self) -> bool {
+        match self {
+            Self::Simple { hash_alg }
+            | Self::Salted { hash_alg, .. }
+            | Self::IteratedAndSalted { hash_alg, .. } => {
+                hash_alg == &HashAlgorithm::MD5
+                    || hash_alg == &HashAlgorithm::SHA1
+                    || hash_alg == &HashAlgorithm::RIPEMD160
+            }
+
+            _ => false,
+        }
+    }
+
     /// String-To-Key methods are used to convert a given password string into a key.
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-string-to-key-s2k-specifier>
+    ///
+    /// Note that RFC 9580 specifies that:
+    ///
+    /// - Implementations MUST NOT generate packets using MD5, SHA-1, or RIPEMD-160 as a hash
+    ///   function in an S2K KDF.
+    /// - Implementations MUST NOT decrypt a secret using MD5, SHA-1, or RIPEMD-160 as a hash
+    ///   function in an S2K KDF in a version 6 (or later) packet.
     pub fn derive_key(&self, passphrase: &str, key_size: usize) -> Result<Vec<u8>> {
         let key = match self {
             Self::Simple { hash_alg, .. }
