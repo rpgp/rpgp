@@ -103,12 +103,12 @@ pub fn generate_key<R: Rng + CryptoRng>(
             q.extend_from_slice(&public.to_bytes());
 
             // secret key
-            let p = Mpi::from_raw_slice(&secret.to_bytes());
+            let p = Mpi::from_slice(&secret.to_bytes());
 
             (
                 PublicParams::EdDSALegacy {
                     curve: ECCCurve::Ed25519,
-                    q: q.into(),
+                    q: Mpi::from_raw(q),
                 },
                 PlainSecretParams::EdDSALegacy(p),
             )
