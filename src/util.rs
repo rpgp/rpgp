@@ -77,7 +77,7 @@ pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
     bytes
         .iter()
         .position(|b| b != &0)
-        .map_or(bytes, |offset| &bytes[offset..])
+        .map_or(&[], |offset| &bytes[offset..])
 }
 
 #[inline]
@@ -238,5 +238,12 @@ mod tests {
         let mut res = Vec::new();
         write_packet_length(12870, &mut res).unwrap();
         assert_eq!(hex::encode(res), "ff00003246");
+    }
+
+    #[test]
+    fn test_strip_leading_zeros_with_all_zeros() {
+        let buf = [0, 0, 0];
+        let stripped = strip_leading_zeros(&buf);
+        assert_eq!(stripped, &[]);
     }
 }

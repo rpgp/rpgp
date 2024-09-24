@@ -111,12 +111,12 @@ pub fn generate_key<R: Rng + CryptoRng>(
         ECCCurve::P256 => {
             let secret = p256::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
+            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P256 {
                     key: public,
-                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
+                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
                 }),
                 PlainSecretParams::ECDSA(secret),
             ))
@@ -125,12 +125,12 @@ pub fn generate_key<R: Rng + CryptoRng>(
         ECCCurve::P384 => {
             let secret = p384::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
+            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P384 {
                     key: public,
-                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
+                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
                 }),
                 PlainSecretParams::ECDSA(secret),
             ))
@@ -139,12 +139,12 @@ pub fn generate_key<R: Rng + CryptoRng>(
         ECCCurve::P521 => {
             let secret = p521::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
+            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P521 {
                     key: public,
-                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
+                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
                 }),
                 PlainSecretParams::ECDSA(secret),
             ))
@@ -153,12 +153,12 @@ pub fn generate_key<R: Rng + CryptoRng>(
         ECCCurve::Secp256k1 => {
             let secret = k256::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_raw_slice(secret.to_bytes().as_slice());
+            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
                     key: public,
-                    p: Mpi::from_raw_slice(public.to_encoded_point(false).as_bytes()),
+                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
                 }),
                 PlainSecretParams::ECDSA(secret),
             ))

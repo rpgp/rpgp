@@ -21,11 +21,12 @@ const MAX_EXTERN_MPI_BITS: u32 = 16384;
 ///
 /// ```rust
 /// use pgp::types::mpi;
+/// use pgp::types::MpiRef;
 ///
 /// // Decode the number `1`.
 /// assert_eq!(
 ///     mpi(&[0x00, 0x01, 0x01][..]).unwrap(),
-///     (&b""[..], (&[1][..]).into())
+///     (&b""[..], MpiRef::from_slice(&[1][..]))
 /// );
 /// ```
 pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
@@ -43,7 +44,7 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
             Err(needed) => Err(nom::Err::Incomplete(needed)),
             Ok(index) => {
                 let (rest, n) = number.take_split(index);
-                let n_stripped: MpiRef<'_> = strip_leading_zeros(n).into();
+                let n_stripped: MpiRef<'_> = MpiRef::from_slice(strip_leading_zeros(n));
 
                 Ok((rest, n_stripped))
             }
@@ -73,12 +74,8 @@ impl Mpi {
         Mpi(v)
     }
 
-    pub fn from_slice(slice: &[u8]) -> Self {
-        Mpi(slice.to_vec())
-    }
-
     /// Strips leading zeros.
-    pub fn from_raw_slice(raw: &[u8]) -> Self {
+    pub fn from_slice(raw: &[u8]) -> Self {
         Mpi(strip_leading_zeros(raw).to_vec())
     }
 
@@ -109,7 +106,7 @@ impl<'a> std::ops::Deref for MpiRef<'a> {
 
 impl<'a> MpiRef<'a> {
     pub fn from_slice(slice: &'a [u8]) -> Self {
-        MpiRef(slice)
+        MpiRef(strip_leading_zeros(slice))
     }
 
     pub fn to_owned(&self) -> Mpi {
@@ -122,19 +119,6 @@ impl<'a> MpiRef<'a> {
 
     pub fn as_bytes(&self) -> &[u8] {
         self.0
-    }
-
-    /// Strip trailing zeroes.
-    pub fn strip_trailing_zeroes(&self) -> Self {
-        let mut end = self.0.len();
-        for byte in self.0.iter().rev() {
-            if *byte == 0 {
-                end -= 1;
-            } else {
-                break;
-            }
-        }
-        MpiRef::from_slice(&self.0[..end])
     }
 }
 
@@ -152,24 +136,6 @@ impl<'a> Serialize for MpiRef<'a> {
         w.write_all(bytes)?;
 
         Ok(())
-    }
-}
-
-impl From<&[u8]> for Mpi {
-    fn from(other: &[u8]) -> Mpi {
-        Mpi::from_slice(other)
-    }
-}
-
-impl<'a> From<&'a [u8]> for MpiRef<'a> {
-    fn from(other: &'a [u8]) -> MpiRef<'a> {
-        MpiRef::from_slice(other)
-    }
-}
-
-impl From<Vec<u8>> for Mpi {
-    fn from(other: Vec<u8>) -> Mpi {
-        Mpi(other)
     }
 }
 
@@ -220,7 +186,7 @@ mod tests {
         // Decode the number `511` (`0x1FF` in hex).
         assert_eq!(
             mpi(&[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
-            (&b""[..], (&[0x01, 0xFF][..]).into())
+            (&b""[..], MpiRef::from_slice(&[0x01, 0xFF][..]))
         );
 
         // Decode the number `2^255 + 7`.
@@ -232,11 +198,12 @@ mod tests {
             .unwrap(),
             (
                 &b""[..],
-                (&[
-                    0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                    0, 0, 0, 0, 0, 0, 0x07
-                ][..])
-                    .into()
+                MpiRef::from_slice(
+                    &[
+                        0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, 0, 0, 0x07
+                    ][..]
+                )
             )
         );
     }
@@ -263,32 +230,5 @@ mod tests {
             assert_eq!(rest.len(), 0);
             assert_eq!(n_big, n_big2.into());
         }
-    }
-
-    #[test]
-    fn test_strip_trailing_zeroes() {
-        let bytes = [1, 2, 3, 4, 0];
-        assert_eq!(
-            MpiRef::from_slice(&bytes)
-                .strip_trailing_zeroes()
-                .as_bytes(),
-            &[1, 2, 3, 4],
-        );
-
-        let bytes = [0, 1, 2, 3, 4];
-        assert_eq!(
-            MpiRef::from_slice(&bytes)
-                .strip_trailing_zeroes()
-                .as_bytes(),
-            &[0, 1, 2, 3, 4],
-        );
-
-        let bytes = [1, 2, 0, 3, 4];
-        assert_eq!(
-            MpiRef::from_slice(&bytes)
-                .strip_trailing_zeroes()
-                .as_bytes(),
-            &[1, 2, 0, 3, 4],
-        );
     }
 }

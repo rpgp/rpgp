@@ -103,7 +103,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let data = key.encrypt(&mut rng, Pkcs1v15Encrypt, plaintext)?;
 
     Ok(PkeskBytes::Rsa {
-        mpi: Mpi::from_raw_slice(&data[..]),
+        mpi: Mpi::from_slice(&data[..]),
     })
 }
 
