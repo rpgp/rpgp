@@ -38,15 +38,11 @@
 
 > OpenPGP implemented in pure Rust, permissively licensed
 
-rPGP is a pure Rust implementation of OpenPGP, following the main RFC
+rPGP is a pure Rust implementation of OpenPGP.
 
-- [RFC9580]
+rPGP implements OpenPGP as specified in [RFC9580], including the commonly used v4 formats, as well as the latest v6 key formats and AEAD encryption mechanisms.
+All formats specified in the historical RFCs [RFC4880] and [RFC6637], such as v3 keys and signatures, are supported as well.
 
-Also see the historical RFCs
-
-- [RFC4880],
-- [RFC2440] and
-- [RFC6637]
 
 See [`IMPL_STATUS.md`](docs/IMPL_STATUS.md) for more details on the implemented PGP features.
 
@@ -111,7 +107,7 @@ public_key.verify_signature(HashAlgorithm::default(), &data[..], &new_signature)
 
 ## Current Status
 
-> Last updated *August 2024*
+> Last updated *September 2024*
 
 - Implementation Status: [IMPL_STATUS.md](docs/IMPL_STATUS.md)
 - Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
