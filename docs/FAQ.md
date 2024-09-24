@@ -1,14 +1,5 @@
 ## FAQs
 
-### Is rPGP aiming to support V6 keys as defined by the IETF OpenPGP working group? 
-
-Yes.  
-
-We aim to step-wise introduce support for the 
-[V6 IETF CryptoRefresh](https://datatracker.ietf.org/doc/draft-ietf-openpgp-crypto-refresh/) 
-during 2024. 
-
-
 ### Is rPGP considering adding support for Post Quantum Cryptography (PQC)? 
 
 Yes, it is tracked in [#356](https://github.com/rpgp/rpgp/issues/356). 
@@ -37,8 +28,7 @@ While we might not agree with, or not praise every detail of the V6 crypto refre
 we highly appreciate the work of the IETF OpenPGP WG and the contributors and stakeholders around it. 
 
 If [LibrePGP](https://librepgp.org/) evolves towards a multi-stakeholder community-driven specification, 
-we might consider partially supporting LibrePGP keys 
-after the work on supporting IETF OpenPGP V6 keys is done. 
+we might consider partially supporting LibrePGP keys and formats. 
 
 Helping to smoothly and securely move the many [Delta Chat](https://delta.chat) users of rPGP
 to V6 keys is sufficiently challenging for us without considering LibrePGP. 
