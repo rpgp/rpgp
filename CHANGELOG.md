@@ -2,7 +2,67 @@
 
 All notable changes to rpgp will be documented in this file.
 
-## [0.13.1](https://github.com/rpgp/rpgp/compare/v0.13.0..0.13.1) - 2024-06-30
+## [0.14.0](https://github.com/rpgp/rpgp/compare/v0.13.1..0.14.0) - 2024-09-25
+
+### ⛰️  Features
+
+- Improve more debug impls - ([3d73320](https://github.com/rpgp/rpgp/commit/3d73320131adb7660ee59b0d1261c4e429a3430b))
+- Password protection removal and setting for secret key packets - ([700cba2](https://github.com/rpgp/rpgp/commit/700cba275d22b04d3e3c52af44fa2a32a4f2d877))
+- Improve API of LiteralData to provide more flexibility - ([34728e0](https://github.com/rpgp/rpgp/commit/34728e09c81f4398df5d2c8bf633c5af05490dd8))
+- Rfc9580 keys - ([f09666c](https://github.com/rpgp/rpgp/commit/f09666ced322a895a3b7790be4575a94d52361f9))
+- Make `SignatureConfig::hash_signature_data` more flexible - ([c6d6b2c](https://github.com/rpgp/rpgp/commit/c6d6b2c0fae3b7ece11fa39c6ea6108b14bd5c68))
+- Rfc9580 encryption - ([5d3547a](https://github.com/rpgp/rpgp/commit/5d3547a4cdc791234b556541881fc1fe1db0aefe))
+
+### 🐛 Bug Fixes
+
+- Decrypted data must contain exactly one message - ([00ee8ee](https://github.com/rpgp/rpgp/commit/00ee8eed9bed2827c2c503ecd4b8e5e4d31d78be))
+- V6 ESK may only be combined with v2 SEIPD - ([5ec3578](https://github.com/rpgp/rpgp/commit/5ec3578344383c225cdf02b34e77af0a42129c5a))
+- Parameter ordering for set_password - ([39dd449](https://github.com/rpgp/rpgp/commit/39dd4494796970f37e04496d69679c31e4a14dd3))
+- Add special error message for packet 20  - ([49c8403](https://github.com/rpgp/rpgp/commit/49c840325f066a7f02b44ef27f8fac6f64476b76))
+- Revert to producing short padding for ecdh - ([7c94189](https://github.com/rpgp/rpgp/commit/7c941891ee01b2052b54b6d18f86eafc05a75d1c))
+- Parameter name - ([c9cdfaf](https://github.com/rpgp/rpgp/commit/c9cdfaf5bfc90eeb66b7d0d1092503be22dfb1bd))
+- Reject unknown critical subpackets while hashing for signature verification - ([b8b43a7](https://github.com/rpgp/rpgp/commit/b8b43a7635db785afb48f182c136e23de0168d71))
+- Implement various constraints that rfc 9580 mandates - ([5682b08](https://github.com/rpgp/rpgp/commit/5682b08f15221b9943ea46f93dd88ef268be3cf7))
+- Limit the use of S2K KDF with weak hash algorithms - ([cb26cfd](https://github.com/rpgp/rpgp/commit/cb26cfd0e8177c3071ea6959bee2f081dec67c6c))
+- When verifying signatures, check alignment between key version and signature version - ([b771b78](https://github.com/rpgp/rpgp/commit/b771b78d5bc830b8b95de2f96f307e86897074f1))
+- Message parser: drop esk packets with versions that are not aligned with the encrypted container - ([5b27240](https://github.com/rpgp/rpgp/commit/5b27240671b7644349710f293f10ef83d294b2c9))
+- Fail composed key parsing on hard errors during packet parsing - ([a9de958](https://github.com/rpgp/rpgp/commit/a9de958a89f08ff9a65f851a46a311db41b1ce55))
+
+### 🚜 Refactor
+
+- Remove bigger macros in favor of direct types - ([0b1d778](https://github.com/rpgp/rpgp/commit/0b1d7785ebcb14d2db282aaa5692bd762ca3e410))
+- Smaller refactors - ([8dcba01](https://github.com/rpgp/rpgp/commit/8dcba013244f414f5c9495ae6981d3c84af253f1))
+- Derive debug impls - ([d714064](https://github.com/rpgp/rpgp/commit/d7140645981350b616f2fc83c01c578b7579f843))
+- Remove unused Deserialize trait - ([b18f046](https://github.com/rpgp/rpgp/commit/b18f046eaf063181af9e012343f1e7d83b27cb27))
+- Cleanup and improve Mpi API - ([1803407](https://github.com/rpgp/rpgp/commit/180340740510294cbb7fd3e139ddd327d6207b3a))
+
+### 📚 Documentation
+
+- Update RFC links ([#414](https://github.com/rpgp/rpgp/issues/414)) - ([9473cf5](https://github.com/rpgp/rpgp/commit/9473cf55919c92bb430ad835f6f80663a3ebcaab))
+- Add/improve comments - ([73c89d0](https://github.com/rpgp/rpgp/commit/73c89d04459588aed68b03ac1e1d502edd4f6945))
+- Update text about implementation status ([#417](https://github.com/rpgp/rpgp/issues/417)) - ([92123ee](https://github.com/rpgp/rpgp/commit/92123eeaf6cc1a503838670826474fa48b13e5b2))
+
+### 🧪 Testing
+
+- Roundtrip ecdh test against rPGP 0.10 - ([1dd91ea](https://github.com/rpgp/rpgp/commit/1dd91ea673ee72758d62c218d16074c7fe3c6321))
+- Ignore another sks-dump test failure  - ([1c0cd84](https://github.com/rpgp/rpgp/commit/1c0cd8411d9b48d8dce814b3a9183da3d939ec98))
+- Rename "opengpg-interop" to "openpgp-interop" - ([f3292f7](https://github.com/rpgp/rpgp/commit/f3292f73ed2bca4b81916b8cd6deca290711152d))
+- Skip writing files by default ([#404](https://github.com/rpgp/rpgp/issues/404)) - ([6e51094](https://github.com/rpgp/rpgp/commit/6e51094fbee39d3a33020d8e3a5ee74b5de03d2a))
+- Add signature verification tests (RFC 9580 Annex A.6 and A.7) ([#409](https://github.com/rpgp/rpgp/issues/409)) - ([0439dd5](https://github.com/rpgp/rpgp/commit/0439dd5d23e5340115388cb023ded8ec1b6562cc))
+- Exercise SEIPDv2 encrypt/decrypt for a range of message sizes - ([f9c48dd](https://github.com/rpgp/rpgp/commit/f9c48dda2bd612ff14772316f61162fbfedb8446))
+
+### ⚙️ Miscellaneous Tasks
+
+- Rename PublicKeyAlgorithm::EdDSA to EdDSALegacy - ([d30ce26](https://github.com/rpgp/rpgp/commit/d30ce2632f6eceb38f192a1ee5a059d255703e21))
+- Rename PublicKeyTrait::to_writer_old into serialize_for_hashing - ([017be15](https://github.com/rpgp/rpgp/commit/017be1507bbd03d928a01b8a60016a941096bf76))
+- Bump MSRV to 1.75 - ([67551a8](https://github.com/rpgp/rpgp/commit/67551a8023de10c1a127b74ea97cbfaa5705f921))
+- Update push from master to main ([#386](https://github.com/rpgp/rpgp/issues/386)) - ([7b5f5b7](https://github.com/rpgp/rpgp/commit/7b5f5b7ca424a4caa94d1ce478a59a0a05b20a97))
+- Use write_u8 - ([882dcc3](https://github.com/rpgp/rpgp/commit/882dcc33d8b96e5727eb9358274dca2d5650eb19))
+- Add cargo deny check  - ([d4a7905](https://github.com/rpgp/rpgp/commit/d4a7905e27cdad69cf4be28c10c77043a2a3fdd4))
+- Add PkeskVersion, SkeskVersion types - ([bc79460](https://github.com/rpgp/rpgp/commit/bc794603224152370729a248aaf737008d7ab75e))
+- Rework ecdh public params to be able to represent opaque data - ([276768e](https://github.com/rpgp/rpgp/commit/276768eedd65d754f5d5c29e9fe260dad091b61c))
+
+## [0.13.1](https://github.com/rpgp/rpgp/compare/v0.13.0..v0.13.1) - 2024-06-30
 
 ### 🐛 Bug Fixes
 
@@ -12,6 +72,10 @@ All notable changes to rpgp will be documented in this file.
 
 - *(readme)* Fix the example - ([cd7a253](https://github.com/rpgp/rpgp/commit/cd7a2530e4fb8607609d3813a894addc6c6fbc77))
 - *(readme)* Some more example adjustments - ([99daf15](https://github.com/rpgp/rpgp/commit/99daf1551c7d732f1a1c9e83074af02c66cbd684))
+
+### ⚙️ Miscellaneous Tasks
+
+- *(pgp)* Release 0.13.1 - ([36023a4](https://github.com/rpgp/rpgp/commit/36023a447b2a1eda163da862e39ce252aed5c279))
 
 ## [0.13.0](https://github.com/rpgp/rpgp/compare/v0.12.0-alpha.3..v0.13.0) - 2024-06-17
 
