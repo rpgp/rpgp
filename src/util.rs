@@ -113,25 +113,15 @@ pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
     }
 }
 
-/// Write packet length, including the prefix.
+/// Write packet length, including the prefix for lengths larger or equal than 8384.
 pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
-    if len < 8384 {
-        // nothing
-    } else {
-        writer.write_u8(0xFF)?;
-    }
-
-    write_packet_len(len, writer)
-}
-
-/// Write the raw packet length.
-pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
     if len < 192 {
         writer.write_u8(len.try_into()?)?;
     } else if len < 8384 {
         writer.write_u8((((len - 192) / 256) + 192) as u8)?;
         writer.write_u8(((len - 192) % 256) as u8)?;
     } else {
+        writer.write_u8(0xFF)?;
         writer.write_u32::<BigEndian>(len as u32)?;
     }
 
@@ -229,7 +219,7 @@ mod tests {
     #[test]
     fn test_write_packet_len() {
         let mut res = Vec::new();
-        write_packet_len(1173, &mut res).unwrap();
+        write_packet_length(1173, &mut res).unwrap();
         assert_eq!(hex::encode(res), "c3d5");
     }
 
