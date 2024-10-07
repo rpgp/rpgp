@@ -4,11 +4,10 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::branch::alt;
 use nom::bytes::streaming::take_while1;
 use nom::character::is_alphanumeric;
 use nom::character::streaming::line_ending;
-use nom::combinator::{eof, map};
+use nom::combinator::map;
 use nom::multi::many0;
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::preceded;
@@ -134,10 +133,6 @@ pub fn write_packet_len(len: usize, writer: &mut impl io::Write) -> errors::Resu
     }
 
     Ok(())
-}
-
-pub fn end_of_line(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((eof, end_of_line))(input)
 }
 
 /// Return the length of the remaining input.
