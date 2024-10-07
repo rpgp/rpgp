@@ -4,11 +4,10 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::branch::alt;
 use nom::bytes::streaming::take_while1;
 use nom::character::is_alphanumeric;
 use nom::character::streaming::line_ending;
-use nom::combinator::{eof, map};
+use nom::combinator::map;
 use nom::multi::many0;
 use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::preceded;
@@ -83,9 +82,7 @@ pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
 #[inline]
 pub fn strip_leading_zeros_vec(bytes: &mut Vec<u8>) {
     if let Some(offset) = bytes.iter_mut().position(|b| b != &0) {
-        for i in 0..offset {
-            bytes.remove(i);
-        }
+        bytes.drain(..offset);
     }
 }
 
@@ -126,10 +123,6 @@ pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::R
     }
 
     Ok(())
-}
-
-pub fn end_of_line(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    alt((eof, end_of_line))(input)
 }
 
 /// Return the length of the remaining input.
@@ -235,5 +228,12 @@ mod tests {
         let buf = [0, 0, 0];
         let stripped = strip_leading_zeros(&buf);
         assert_eq!(stripped, &[]);
+    }
+
+    #[test]
+    fn test_strip_leading_zeros_vec() {
+        let mut vec = vec![0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        strip_leading_zeros_vec(&mut vec);
+        assert_eq!(vec, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
     }
 }
