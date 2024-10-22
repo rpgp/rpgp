@@ -458,6 +458,7 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
             }
+            #[cfg(feature = "x448")]
             PublicParams::X448 { .. } => {
                 bail!("X448 can not be used for verify operations");
             }
@@ -579,6 +580,7 @@ impl PublicKeyTrait for PubKeyInner {
                     sym_alg,
                 })
             }
+            #[cfg(feature = "x448")]
             PublicParams::X448 { ref public } => {
                 let (sym_alg, plain) = match typ {
                     EskType::V6 => (None, plain),

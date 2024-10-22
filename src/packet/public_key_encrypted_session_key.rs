@@ -79,7 +79,9 @@ impl PublicKeyEncryptedSessionKey {
 
         // Appended a checksum of the session key (except for X25519 and X448)
         match pp {
-            PublicParams::X25519 { .. } | PublicParams::X448 { .. } => {}
+            PublicParams::X25519 { .. } => {}
+            #[cfg(feature = "x448")]
+            PublicParams::X448 { .. } => {}
             _ => data.extend_from_slice(&checksum::calculate_simple(sk).to_be_bytes()),
         }
 
@@ -268,6 +270,7 @@ fn parse_esk<'i>(
                 },
             ))
         }
+        #[cfg(feature = "x448")]
         PublicKeyAlgorithm::X448 => {
             // 56 octets representing an ephemeral X448 public key.
             let (i, ephemeral_public) = nom::bytes::complete::take(56u8)(i)?;
@@ -489,6 +492,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
 
                 writer.write_all(session_key)?; // encrypted session key
             }
+            #[cfg(feature = "x448")]
             (
                 PublicKeyAlgorithm::X448,
                 PkeskBytes::X448 {
