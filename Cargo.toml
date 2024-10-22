@@ -20,7 +20,7 @@ rust-version = "1.75"
 [dependencies]
 aes = "^0.8"
 argon2 = "0.5"
-base64 = "0.21.7, < 0.23"
+base64 = ">=0.21.7, < 0.23"
 bitfield = "0.14"
 block-padding = "^0.3.2"
 blowfish = "^0.9"
@@ -45,7 +45,7 @@ iter-read = "1"
 log = "0.4.6"
 md-5 = { version = "^0.10.5", features = ["oid"] }
 nom = "^7.0"
-num_enum = "0.5.7, < 0.8"
+num_enum = ">=0.5.7, < 0.8"
 num-traits = "0.2.6"
 p256 = { version = "^0.13", features = ["ecdsa", "ecdh"] }
 p384 = { version = "^0.13", features = ["ecdsa"] }
