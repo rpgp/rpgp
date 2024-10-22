@@ -276,6 +276,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                 SecretKeyRepr::X25519(_) => {
                     bail!("X25519 can not be used for signing operations")
                 }
+                #[cfg(feature = "x448")]
                 SecretKeyRepr::X448(_) => {
                     bail!("X448 can not be used for signing operations")
                 }
