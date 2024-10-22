@@ -20,6 +20,7 @@ pub enum PublicParams {
     EdDSALegacy { curve: ECCCurve, q: Mpi },
     Ed25519 { public: [u8; 32] },
     X25519 { public: [u8; 32] },
+    #[cfg(feature = "x448")]
     X448 { public: [u8; 56] },
     Unknown { data: Vec<u8> },
 }
@@ -236,6 +237,7 @@ impl Serialize for PublicParams {
             PublicParams::X25519 { ref public } => {
                 writer.write_all(&public[..])?;
             }
+            #[cfg(feature = "x448")]
             PublicParams::X448 { ref public } => {
                 writer.write_all(&public[..])?;
             }

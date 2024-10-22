@@ -16,6 +16,7 @@ pub mod public_key;
 pub mod rsa;
 pub mod sym;
 pub mod x25519;
+#[cfg(feature = "x448")]
 pub mod x448;
 
 pub trait Decryptor {
