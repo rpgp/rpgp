@@ -52,35 +52,29 @@ pub enum BlockType {
 
 impl fmt::Display for BlockType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_string())
+        match self {
+            BlockType::PublicKey => f.write_str("PGP PUBLIC KEY BLOCK"),
+            BlockType::PrivateKey => f.write_str("PGP PRIVATE KEY BLOCK"),
+            BlockType::MultiPartMessage(x, y) => write!(f, "PGP MESSAGE, PART {x}/{y}"),
+            BlockType::Message => f.write_str("PGP MESSAGE"),
+            BlockType::Signature => f.write_str("PGP SIGNATURE"),
+            BlockType::File => f.write_str("PGP ARMORED FILE"),
+            BlockType::PublicKeyPKCS1(typ) => write!(f, "{typ} PUBLIC KEY"),
+            BlockType::PublicKeyPKCS8 => f.write_str("PUBLIC KEY"),
+            BlockType::PublicKeyOpenssh => f.write_str("OPENSSH PUBLIC KEY"),
+            BlockType::PrivateKeyPKCS1(typ) => write!(f, "{typ} PRIVATE KEY"),
+            BlockType::PrivateKeyPKCS8 => f.write_str("PRIVATE KEY"),
+            BlockType::PrivateKeyOpenssh => f.write_str("OPENSSH PRIVATE KEY"),
+            BlockType::CleartextMessage => f.write_str("PGP SIGNED MESSAGE"),
+        }
     }
 }
 
 impl Serialize for BlockType {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> Result<()> {
-        w.write_all(self.as_string().as_bytes())?;
+        write!(w, "{}", self)?;
 
         Ok(())
-    }
-}
-
-impl BlockType {
-    fn as_string(&self) -> String {
-        match self {
-            BlockType::PublicKey => "PGP PUBLIC KEY BLOCK".into(),
-            BlockType::PrivateKey => "PGP PRIVATE KEY BLOCK".into(),
-            BlockType::MultiPartMessage(x, y) => format!("PGP MESSAGE, PART {x}/{y}"),
-            BlockType::Message => "PGP MESSAGE".into(),
-            BlockType::Signature => "PGP SIGNATURE".into(),
-            BlockType::File => "PGP ARMORED FILE".into(),
-            BlockType::PublicKeyPKCS1(typ) => format!("{typ} PUBLIC KEY"),
-            BlockType::PublicKeyPKCS8 => "PUBLIC KEY".into(),
-            BlockType::PublicKeyOpenssh => "OPENSSH PUBLIC KEY".into(),
-            BlockType::PrivateKeyPKCS1(typ) => format!("{typ} PRIVATE KEY"),
-            BlockType::PrivateKeyPKCS8 => "PRIVATE KEY".into(),
-            BlockType::PrivateKeyOpenssh => "OPENSSH PRIVATE KEY".into(),
-            BlockType::CleartextMessage => "PGP SIGNED MESSAGE".into(),
-        }
     }
 }
 
