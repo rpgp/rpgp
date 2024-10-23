@@ -153,7 +153,7 @@ impl CleartextSignedMessage {
     /// Normalizes the text to the format that was hashed for the signature.
     /// The output is normalized to "\r\n" line endings.
     pub fn signed_text(&self) -> String {
-        let unescaped = dash_unescape(&self.csf_encoded_text);
+        let unescaped = dash_unescape_and_trim(&self.csf_encoded_text);
 
         let normalized: Vec<u8> = Normalized::new(unescaped.bytes(), LineBreak::Crlf).collect();
 
@@ -305,18 +305,35 @@ fn dash_escape(text: &str) -> String {
     out
 }
 
-/// Undo dash escaping of `text`.
+/// Undo dash escaping of `text`, and trim space/tabs at the end of lines.
 ///
-/// This implementation is implicitly agnostic between "\n" and "\r\n" line endings.
-fn dash_unescape(text: &str) -> String {
+/// This implementation can handle both "\n" and "\r\n" line endings.
+fn dash_unescape_and_trim(text: &str) -> String {
     let mut out = String::new();
+
     for line in text.split_inclusive('\n') {
-        // drop dash escapes if they exist
-        if let Some(stripped) = line.strip_prefix("- ") {
+        // break each line into "content" and "line ending"
+        let line_end_len = if line.ends_with("\r\n") {
+            2
+        } else if line.ends_with("\n") {
+            1
+        } else {
+            0
+        };
+        let (content, end) = line.split_at(line.len() - line_end_len);
+
+        // trim spaces/tabs from the end of line content
+        let trimmed = content.trim_end_matches([' ', '\t']);
+
+        // strip dash escapes if they exist
+        if let Some(stripped) = trimmed.strip_prefix("- ") {
             out += stripped;
         } else {
-            out += line;
+            out += trimmed;
         }
+
+        // output line ending
+        out += end;
     }
 
     out
@@ -361,7 +378,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::{Any, SignedSecretKey};
+    use crate::{Any, SignedPublicKey, SignedSecretKey};
 
     #[test]
     fn test_cleartext_openpgp_1() {
@@ -550,6 +567,26 @@ mod tests {
     }
 
     #[test]
+    fn test_dash_unescape_and_trim() {
+        let input = "From the grocery store we need:
+
+- - tofu\u{20}\u{20}
+- - vegetables\t
+- - noodles
+
+";
+        let expected = "From the grocery store we need:
+
+- tofu
+- vegetables
+- noodles
+
+";
+
+        assert_eq!(dash_unescape_and_trim(input), expected);
+    }
+
+    #[test]
     fn test_sign() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -577,5 +614,28 @@ mod tests {
         assert_eq!(msg.signed_text(), MSG);
 
         msg.verify(&key.public_key()).unwrap();
+    }
+
+    #[test]
+    fn test_verify_csf_puppet() {
+        // test data via https://github.com/rpgp/rpgp/issues/424
+
+        let msg_data = std::fs::read_to_string("./tests/unit-tests/csf-puppet/InRelease").unwrap();
+        let (Any::Cleartext(msg), headers) = Any::from_string(&msg_data).unwrap() else {
+            panic!("couldn't read msg")
+        };
+
+        // superficially look at message
+        assert_eq!(headers.len(), 0);
+        assert_eq!(msg.signatures().len(), 1);
+        roundtrip(&msg_data, &msg, &headers);
+
+        // validate signature
+        let cert_data =
+            std::fs::read_to_string("./tests/unit-tests/csf-puppet/DEB-GPG-KEY-puppet-20250406")
+                .unwrap();
+        let (cert, _) = SignedPublicKey::from_string(&cert_data).unwrap();
+
+        msg.verify(&cert).expect("verify");
     }
 }
