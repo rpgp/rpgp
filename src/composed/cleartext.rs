@@ -617,6 +617,14 @@ mod tests {
     }
 
     #[test]
+    fn test_load_big_csf() {
+        let msg_data = std::fs::read_to_string("./tests/unit-tests/csf-puppet/InRelease").unwrap();
+
+        // FIXME: this fails to read -> buffer_redux problem!?
+        let (_msg, _) = CleartextSignedMessage::from_armor(msg_data.as_bytes()).unwrap();
+    }
+
+    #[test]
     fn test_verify_csf_puppet() {
         // test data via https://github.com/rpgp/rpgp/issues/424
 
