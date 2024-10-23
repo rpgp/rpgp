@@ -170,6 +170,12 @@ jobs:
         target: ${{ matrix.target }}
         args: --benches
 
+    - name: check curve448
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --features unstable-curve448 --all --target ${{ matrix.target }}
+
     - name: tests
       uses: actions-rs/cargo@v1
       with:
