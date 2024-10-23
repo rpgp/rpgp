@@ -80,6 +80,7 @@ fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
 }
 
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4>
+#[cfg(feature = "x448")]
 fn x448(i: &[u8]) -> IResult<&[u8], PublicParams> {
     // 56 bytes of public key
     let (i, p) = nom::bytes::complete::take(56u8)(i)?;
@@ -200,7 +201,10 @@ pub fn parse_pub_fields(
         PublicKeyAlgorithm::Ed25519 => ed25519(i),
         PublicKeyAlgorithm::X25519 => x25519(i),
         PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
+        #[cfg(feature = "x448")]
         PublicKeyAlgorithm::X448 => x448(i),
+        #[cfg(not(feature = "x448"))]
+        PublicKeyAlgorithm::X448 => unknown(i, len),
 
         PublicKeyAlgorithm::DiffieHellman
         | PublicKeyAlgorithm::Private100

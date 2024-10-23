@@ -16,6 +16,7 @@ const MSG: &str = "hello world\n";
 // Test cases based on keys with new formats from RFC9580
 const CASES_9580: &[&str] = &[
     ("tests/rfc9580/v6-25519-annex-a-4"), // TSK from RFC 9580 Annex A.4 (Ed25519/X25519)
+    #[cfg(feature = "x448")]
     ("tests/rfc9580/v6-ed25519-x448"), // TSK using Ed25519/X448 (TODO: replace with Ed448/X448 once rPGP supports it)
     ("tests/rfc9580/v6-rsa"),          // TSK using RSA
     ("tests/rfc9580/v6-nistp"),        // TSK using NIST P-256

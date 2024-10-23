@@ -71,7 +71,7 @@ eax = "0.5.0"
 ocb3 = "0.1"
 aes-kw = { version = "0.2.1", features = ["std"] }
 derive_more = { version = "1.0.0-beta.6", features = ["debug"] }
-x448 = "0.6"
+x448 = { version = "0.6", optional = true }
 
 [dependencies.buffer-redux]
 version = "1.0.0"
@@ -125,6 +125,7 @@ nightly = ["rsa/nightly", "rand/nightly", "num-bigint/nightly"]
 profile = ["gperftools"]
 asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
+unstable-curve448 = ["x448"]
 
 [profile.bench]
 debug = 2
