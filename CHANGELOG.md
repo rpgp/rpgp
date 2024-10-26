@@ -2,6 +2,12 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## 0.15.0 - Unreleased
+
+### 🚜 Refactor
+
+- Move x448 work behind an `unstable-curve448` feature, off by default - ([#426](https://github.com/rpgp/rpgp/pull/426))
+
 ## [0.14.0](https://github.com/rpgp/rpgp/compare/v0.13.1..0.14.0) - 2024-09-25
 
 ### ⛰️  Features
