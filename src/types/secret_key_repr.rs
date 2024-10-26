@@ -18,7 +18,7 @@ pub enum SecretKeyRepr {
     ECDH(ecdh::SecretKey),
     EdDSA(eddsa::SecretKey),
     X25519(x25519::SecretKey),
-    #[cfg(feature = "x448")]
+    #[cfg(feature = "unstable-curve448")]
     X448(crate::crypto::x448::SecretKey),
 }
 
@@ -80,7 +80,7 @@ impl SecretKeyRepr {
                 };
             }
 
-            #[cfg(feature = "x448")]
+            #[cfg(feature = "unstable-curve448")]
             (
                 SecretKeyRepr::X448(ref priv_key),
                 PkeskBytes::X448 {
