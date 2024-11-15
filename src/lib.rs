@@ -25,6 +25,7 @@ pub mod base64;
 pub mod composed;
 pub mod crypto;
 pub mod errors;
+pub mod helper;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod packet;
