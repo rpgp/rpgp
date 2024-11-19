@@ -45,7 +45,7 @@ pub trait PublicKeyTrait: std::fmt::Debug {
         use crate::crypto::public_key::PublicKeyAlgorithm::*;
         matches!(
             self.algorithm(),
-            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSALegacy
+            RSA | RSASign | ElgamalSign | DSA | ECDSA | EdDSALegacy | Ed25519 | Ed448
         )
     }
 
@@ -54,7 +54,7 @@ pub trait PublicKeyTrait: std::fmt::Debug {
 
         matches!(
             self.algorithm(),
-            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal
+            RSA | RSAEncrypt | ECDH | DiffieHellman | Elgamal | X25519 | X448
         )
     }
 }
