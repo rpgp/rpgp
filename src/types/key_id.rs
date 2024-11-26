@@ -3,7 +3,7 @@ use std::fmt;
 use crate::errors::Result;
 
 /// Represents a Key ID.
-#[derive(Clone, Eq, PartialEq, derive_more::Debug)]
+#[derive(Clone, Hash, Eq, PartialEq, derive_more::Debug)]
 pub struct KeyId(#[debug("{}", hex::encode(_0))] [u8; 8]);
 
 impl AsRef<[u8]> for KeyId {
