@@ -105,6 +105,15 @@ let public_key = SignedPublicKey::from_string(&key_string).unwrap().0;
 public_key.verify_signature(HashAlgorithm::default(), &data[..], &new_signature).unwrap();
 ```
 
+## Experimental Cryptography
+
+Some cryptographic primitives are relatively new and under development.
+Those primitives are gated behind "unstable" features, so that they need to be explicitly enabled to make use of them.
+
+Currently, there is only one such feature:
+
+- The `unstable-curve448` enables public key encryption with the `x448` algorithm.
+
 ## Current Status
 
 > Last updated *September 2024*
