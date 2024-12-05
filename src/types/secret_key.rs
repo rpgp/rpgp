@@ -36,7 +36,7 @@ pub trait SecretKeyTrait: PublicKeyTrait {
     }
 }
 
-impl<'a, T: SecretKeyTrait> SecretKeyTrait for &'a T {
+impl<T: SecretKeyTrait> SecretKeyTrait for &T {
     type PublicKey = T::PublicKey;
     type Unlocked = T::Unlocked;
 
