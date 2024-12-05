@@ -59,7 +59,7 @@ pub trait PublicKeyTrait: std::fmt::Debug {
     }
 }
 
-impl<'a, T: PublicKeyTrait> PublicKeyTrait for &'a T {
+impl<T: PublicKeyTrait> PublicKeyTrait for &T {
     fn verify_signature(
         &self,
         hash: HashAlgorithm,
