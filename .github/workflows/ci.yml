@@ -12,7 +12,7 @@ concurrency:
 env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: -Dwarnings
-  RUST_NIGHTLY: nightly-2024-07-07
+  RUST_NIGHTLY: nightly-2024-12-04
 
 jobs:
   build_and_test_nix:

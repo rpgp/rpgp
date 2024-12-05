@@ -131,7 +131,7 @@ impl SymEncryptedProtectedData {
         // - plaintext length
         let plain_len = plaintext.len();
         // - number of chunks: plaintext length divided by chunk size, rounded up to the next integer
-        let num_chunks = (plain_len + chunk_size_expanded - 1) / chunk_size_expanded;
+        let num_chunks = plain_len.div_ceil(chunk_size_expanded);
         // - total output size: plaintext length + size of all authentication tags (one tag per chunk, plus one final tag)
         let out_len = plain_len + (num_chunks + 1) * aead.tag_size().unwrap_or_default();
 
@@ -260,7 +260,7 @@ impl SymEncryptedProtectedData {
                 };
                 let chunk_and_tag_len = chunk_size_expanded + aead_tag_size;
                 let main_len = main_chunks.len();
-                let num_chunks = (main_len + chunk_and_tag_len - 1) / chunk_and_tag_len;
+                let num_chunks = main_len.div_ceil(chunk_and_tag_len);
                 // - total output size: main_chunks length - size of one authentication tag per chunk
                 let out_len = main_len - num_chunks * aead_tag_size;
 
