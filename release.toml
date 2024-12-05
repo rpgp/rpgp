@@ -1,2 +1,2 @@
 pre-release-commit-message = "chore({{crate_name}}): release {{version}}"
-pre-release-hook = ["git", "cliff", "-o", "CHANGELOG.md", "--tag", "{{version}}" ]
+pre-release-hook = ["git", "cliff", "--prepend", "CHANGELOG.md", "--tag", "{{version}}", "--unreleased" ]
