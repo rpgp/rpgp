@@ -64,10 +64,10 @@ pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
 /// Returns the bit length of a given slice.
 #[inline]
 pub fn bit_size(val: &[u8]) -> usize {
-    if val.is_empty() {
-        0
+    if let Some(first_octet) = val.first() {
+        (val.len() * 8) - first_octet.leading_zeros() as usize
     } else {
-        (val.len() * 8) - val[0].leading_zeros() as usize
+        0
     }
 }
 
@@ -76,7 +76,8 @@ pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
     bytes
         .iter()
         .position(|b| b != &0)
-        .map_or(&[], |offset| &bytes[offset..])
+        .and_then(|offset| bytes.get(offset..))
+        .unwrap_or(&[])
 }
 
 #[inline]
