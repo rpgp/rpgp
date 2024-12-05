@@ -10,6 +10,7 @@ All notable changes to rpgp will be documented in this file.
 
 ### 🐛 Bug Fixes
 
+- Fix CVE-2024-53856: "Panics on Malformed Untrusted Input"
 - Make strip_leading_zeros_vec() work correctly - ([57e11c5](https://github.com/rpgp/rpgp/commit/57e11c5829c3cca5dd5eb424ef4f46eb61a32115))
 - Csf normalization for signing - ([8439a6d](https://github.com/rpgp/rpgp/commit/8439a6d0342d0e928b2aaaf810d4211f240e7442))
 - Extend is_signing_key() and is_encryption_key() for RFC 9580 algorithms ([#434](https://github.com/rpgp/rpgp/issues/434)) - ([a1d9d5c](https://github.com/rpgp/rpgp/commit/a1d9d5c554902c3af9e3086e262ef870de58716e))
@@ -828,5 +829,3 @@ All notable changes to rpgp will be documented in this file.
 ### Travis
 
 - Build on osx and linux - ([f8d235a](https://github.com/rpgp/rpgp/commit/f8d235a485b3e811b57240e24dab5c7bd8cc57f7))
-
-
