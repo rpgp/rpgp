@@ -16,6 +16,9 @@ use crate::types::KeyVersion;
 const EXPBIAS: u32 = 6;
 const DEFAULT_ITER_SALTED_COUNT: u8 = 224;
 
+/// Restriction for Argon2 memory usage (in KiB) to prevent OOM attacks
+const ARGON2_MEMORY_LIMIT_KIB: u32 = 2 * 1024 * 1024; // 2 ~mio KiB (== 2 GiB)
+
 /// The available s2k usages.
 ///
 /// Ref 3.7.2.1. Secret-Key Encryption
@@ -346,6 +349,23 @@ impl StringToKey {
                 // and m as described above, the required key size as the tag length T, 0x13 as the
                 // version v, and Argon2id as the type
 
+                // Limit the amount of CPU resources an Argon2 derivation may consume,
+                // to limit potential DoS attacks via e.g. one (or multiple) adversarial SKESKv6,
+                // especially if an application tries to decrypt without user interaction.
+                //
+                // Benchmark results (on a desktop machine in 2024), for reference:
+                // t = 16, p = 16, m = 8 GiB finished in 74.93s
+                // t = 16, p = 16, m = 2 GiB finished in 18.43s
+                // t = 16, p = 17, m = 2 GiB finished in 18.37s
+                // t = 32, p = 32, m = 2 GiB finished in 35.54s
+                // t = 128, p = 17, m = 2 GiB finished in 144.57
+                ensure!(
+                    *t <= 32 && *p <= 32,
+                    "unsupported settings t={}, p={} in argon s2k",
+                    t,
+                    p,
+                );
+
                 // The encoded memory size MUST be a value from 3+ceil(log_2(p)) to 31, such that
                 // the decoded memory size m is a value from 8*p to 2**31
                 let min_m = (*p as f32).log2().ceil() as u8;
@@ -358,6 +378,12 @@ impl StringToKey {
                 // Decoded memory size
                 // (Note that memory-hardness size is indicated in kibibytes (KiB), not octets.)
                 let m = 2u32.pow(*m_enc as u32);
+
+                ensure!(
+                    m <= ARGON2_MEMORY_LIMIT_KIB,
+                    "unsupported memory usage setting ({} KiB) for m in argon s2k",
+                    m
+                );
 
                 use argon2::{Algorithm, Argon2, Params, Version};
 
