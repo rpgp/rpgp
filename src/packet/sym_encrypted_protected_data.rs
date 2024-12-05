@@ -133,7 +133,7 @@ impl SymEncryptedProtectedData {
         // - number of chunks: plaintext length divided by chunk size, rounded up to the next integer
         let num_chunks = (plain_len + chunk_size_expanded - 1) / chunk_size_expanded;
         // - total output size: plaintext length + size of all authentication tags (one tag per chunk, plus one final tag)
-        let out_len = plain_len + (num_chunks + 1) * aead.tag_size();
+        let out_len = plain_len + (num_chunks + 1) * aead.tag_size().unwrap_or_default();
 
         let mut out = Vec::with_capacity(out_len);
 
@@ -244,22 +244,31 @@ impl SymEncryptedProtectedData {
                 let mut data = data.clone();
 
                 // There are n chunks, n auth tags + 1 final auth tag
-                let offset = data.len() - aead.tag_size();
+                let Some(aead_tag_size) = aead.tag_size() else {
+                    unsupported_err!("AEAD mode: {:?}", aead);
+                };
+                if data.len() < aead_tag_size {
+                    return Err(Error::InvalidInput);
+                }
+                let offset = data.len() - aead_tag_size;
                 let (main_chunks, final_auth_tag) = data.split_at_mut(offset);
 
                 // Calculate output size (for more efficient vector allocation):
                 // - number of chunks: main_chunks length divided by (chunk size + tag size), rounded up to the next integer
-                let chunk_and_tag_len = chunk_size_expanded + aead.tag_size();
+                let Some(aead_tag_size) = aead.tag_size() else {
+                    unsupported_err!("AEAD mode: {:?}", aead);
+                };
+                let chunk_and_tag_len = chunk_size_expanded + aead_tag_size;
                 let main_len = main_chunks.len();
                 let num_chunks = (main_len + chunk_and_tag_len - 1) / chunk_and_tag_len;
                 // - total output size: main_chunks length - size of one authentication tag per chunk
-                let out_len = main_len - num_chunks * aead.tag_size();
+                let out_len = main_len - num_chunks * aead_tag_size;
 
                 let mut out = Vec::with_capacity(out_len);
 
                 let mut chunk_index: u64 = 0;
-                for chunk in main_chunks.chunks_mut(chunk_size_expanded + aead.tag_size()) {
-                    let offset = chunk.len() - aead.tag_size();
+                for chunk in main_chunks.chunks_mut(chunk_size_expanded + aead_tag_size) {
+                    let offset = chunk.len() - aead_tag_size;
                     let (chunk, auth_tag) = chunk.split_at_mut(offset);
 
                     aead.decrypt_in_place(sym_alg, &message_key, &nonce, &info, auth_tag, chunk)?;

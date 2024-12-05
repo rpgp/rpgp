@@ -239,7 +239,9 @@ fn public_key_parser_v4_v6(
         let (i, pub_len) = if *key_ver == KeyVersion::V6 {
             // "scalar octet count for the following public key material"
             let (i, len) = be_u32(i)?;
-
+            if len == 0 {
+                return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+            }
             (i, Some(len as usize))
         } else {
             (i, None)
@@ -247,7 +249,15 @@ fn public_key_parser_v4_v6(
 
         // If we got a pub_len, we expect to consume this amount of data, and have `expected_rest`
         // left after `parse_pub_fields`
-        let expected_rest = pub_len.map(|len| i.len() - len);
+        let expected_rest = match pub_len {
+            Some(len) => {
+                if i.len() < len {
+                    return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+                }
+                Some(i.len() - len)
+            }
+            None => None,
+        };
 
         let (i, params) = parse_pub_fields(alg, pub_len)(i)?;
 

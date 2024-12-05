@@ -40,8 +40,10 @@ impl Decryptor for SecretKey {
 
         let shared_secret = {
             // create montgomery point
-            let their_public =
-                x448::PublicKey::from_bytes(&data.ephemeral_public_point).expect("56");
+            let Some(their_public) = x448::PublicKey::from_bytes(&data.ephemeral_public_point)
+            else {
+                bail!("x448: invalid public key");
+            };
 
             // private key of the recipient.
             let our_secret = x448::Secret::from(self.secret);
@@ -146,7 +148,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
     let (ephemeral_public, shared_secret) = {
         // create montgomery point
-        let their_public = x448::PublicKey::from_bytes(&recipient_public).expect("56");
+        let Some(their_public) = x448::PublicKey::from_bytes(&recipient_public) else {
+            bail!("x448: invalid public key");
+        };
 
         let mut ephemeral_secret_key_bytes = Zeroizing::new([0u8; 56]);
         rng.fill_bytes(&mut *ephemeral_secret_key_bytes);

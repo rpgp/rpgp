@@ -6,9 +6,7 @@ use chrono::{SubsecRound, Utc};
 use log::debug;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_parser, rest};
-use nom::multi::length_data;
 use nom::number::streaming::{be_u8, le_u16};
-use nom::sequence::pair;
 use rand::Rng;
 
 use crate::errors::{IResult, Result};
@@ -142,25 +140,31 @@ impl fmt::Display for UserAttribute {
 
 fn image(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
     move |i: &[u8]| {
-        map(
-            pair(
-                // little endian, for historical reasons..
-                length_data(map(le_u16, |l| l - 2)),
-                // the actual image is the rest
-                rest,
-            ),
-            |(header, img): (&[u8], &[u8])| UserAttribute::Image {
+        // little endian, for historical reasons..
+        let (i, len) = le_u16(i)?;
+        if len < 2 {
+            return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+        }
+        let (img, header) = take(len - 2)(i)?;
+
+        // the actual image is the rest
+        Ok((
+            &[][..],
+            UserAttribute::Image {
                 packet_version,
                 header: header.to_vec(),
                 data: img.to_vec(),
             },
-        )(i)
+        ))
     }
 }
 
 fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
     move |i: &[u8]| {
         let (i, len) = packet_length(i)?;
+        if len < 1 {
+            return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+        }
         let (i, typ) = be_u8(i)?;
         let (i, attr) = map_parser(take(len - 1), |i| match typ {
             1 => image(packet_version)(i),

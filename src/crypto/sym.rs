@@ -26,10 +26,7 @@ macro_rules! decrypt {
         // for details.
 
         if $resync {
-            unimplemented!("CFB resync is not here");
-        // debug!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
-        // let mut mode = Cfb::<$mode>::new_from_slices($key, &$prefix[2..$bs + 2])?;
-        // mode.decrypt($data);
+            unsupported_err!("CFB resync is disabled");
         } else {
             mode.decrypt($data);
         }
@@ -42,10 +39,7 @@ macro_rules! encrypt {
         mode.encrypt($prefix);
 
         if $resync {
-            unimplemented!("CFB resync is not here");
-        // debug!("resync {}", hex::encode(&$prefix[2..$bs + 2]));
-        // let mut mode = Cfb::<$mode>::new_var($key, &$prefix[2..$bs + 2])?;
-        // mode.encrypt($data);
+            unsupported_err!("CFB resync is disabled");
         } else {
             mode.encrypt($data);
         }

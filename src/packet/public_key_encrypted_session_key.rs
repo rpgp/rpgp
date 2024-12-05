@@ -243,6 +243,9 @@ fn parse_esk<'i>(
 
             // A one-octet size of the following fields.
             let (i, len) = be_u8(i)?;
+            if len == 0 {
+                return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+            }
 
             // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
             let (i, sym_alg) = if version == 3 {
@@ -271,6 +274,9 @@ fn parse_esk<'i>(
 
             // A one-octet size of the following fields.
             let (i, len) = be_u8(i)?;
+            if len == 0 {
+                return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+            }
 
             // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
             let (i, sym_alg) = if version == 3 {

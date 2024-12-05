@@ -26,7 +26,10 @@ block-padding = "^0.3.2"
 blowfish = "^0.9"
 byteorder = "^1.4"
 camellia = "^0.1"
-chrono = { version = "^0.4.23", default-features = false, features = ["clock", "std"] }
+chrono = { version = "^0.4.23", default-features = false, features = [
+    "clock",
+    "std",
+] }
 cast5 = "^0.11.0"
 cfb-mode = "^0.8.1"
 cipher = "^0.4"
@@ -53,7 +56,7 @@ p521 = { version = "^0.13", features = ["ecdsa", "ecdh"] }
 k256 = { version = "0.13", features = ["ecdsa"] }
 rand = "0.8"
 ripemd = { version = "^0.1.3", features = ["oid"] }
-rsa = { version = "0.9.0" }
+rsa = { version = "0.9.7" }
 sha1 = { version = "^0.10.5", features = ["oid"] }
 sha1-checked = { version = "0.10", features = ["zeroize"] }
 sha2 = { version = "^0.10.6", features = ["oid"] }

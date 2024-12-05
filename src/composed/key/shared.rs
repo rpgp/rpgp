@@ -16,7 +16,6 @@ use crate::types::{CompressionAlgorithm, KeyVersion, RevocationKey, SecretKeyTra
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
-    primary_user_id: UserId,
     user_ids: Vec<UserId>,
     user_attributes: Vec<UserAttribute>,
     keyflags: KeyFlags,
@@ -31,6 +30,32 @@ impl KeyDetails {
     #[allow(clippy::too_many_arguments)] // FIXME
     pub fn new(
         primary_user_id: UserId,
+        mut user_ids: Vec<UserId>,
+        user_attributes: Vec<UserAttribute>,
+        keyflags: KeyFlags,
+        preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
+        preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
+        preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+        preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
+        revocation_key: Option<RevocationKey>,
+    ) -> Self {
+        user_ids.insert(0, primary_user_id);
+
+        Self::new_direct(
+            user_ids,
+            user_attributes,
+            keyflags,
+            preferred_symmetric_algorithms,
+            preferred_hash_algorithms,
+            preferred_compression_algorithms,
+            preferred_aead_algorithms,
+            revocation_key,
+        )
+    }
+
+    /// The primary UserId (if any) is expected to be contained in `user_ids`
+    #[allow(clippy::too_many_arguments)] // FIXME
+    pub(crate) fn new_direct(
         user_ids: Vec<UserId>,
         user_attributes: Vec<UserAttribute>,
         keyflags: KeyFlags,
@@ -41,7 +66,6 @@ impl KeyDetails {
         revocation_key: Option<RevocationKey>,
     ) -> Self {
         KeyDetails {
-            primary_user_id,
             user_ids,
             user_attributes,
             keyflags,
@@ -72,9 +96,9 @@ impl KeyDetails {
 
         let mut users = vec![];
 
-        // primary user id
-        {
-            let id = self.primary_user_id;
+        // We consider the first entry in `user_ids` (if any) the primary user id
+        // FIXME: select primary like in signed_key/shared.rs:116? (and adjust the set of non-primaries below?)
+        if let Some(id) = self.user_ids.first() {
             let mut hashed_subpackets = vec![
                 Subpacket::regular(SubpacketData::IsPrimary(true)),
                 Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -118,7 +142,7 @@ impl KeyDetails {
 
             let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
 
-            users.push(id.into_signed(sig));
+            users.push(id.clone().into_signed(sig));
         }
 
         // other user ids
@@ -126,6 +150,7 @@ impl KeyDetails {
         users.extend(
             self.user_ids
                 .into_iter()
+                .skip(1) // The first User ID was handled above, as the primary user id
                 .map(|id| {
                     let hashed_subpackets = vec![
                         Subpacket::regular(SubpacketData::SignatureCreationTime(

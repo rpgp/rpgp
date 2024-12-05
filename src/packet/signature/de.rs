@@ -386,6 +386,9 @@ fn subpackets<'a>(i: &'a [u8]) -> IResult<&'a [u8], Vec<Subpacket>> {
     many0(complete(|i: &'a [u8]| {
         // the subpacket length (1, 2, or 5 octets)
         let (i, len) = packet_length(i)?;
+        if len == 0 {
+            return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+        }
         // the subpacket type (1 octet)
         let (i, typ) = map(be_u8, SubpacketType::from_u8)(i)?;
         map_parser(take(len - 1), move |b| subpacket(typ.0, typ.1, b))(i)

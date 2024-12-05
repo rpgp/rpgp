@@ -170,8 +170,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                         d.into(),
                         vec![p.into(), q.into()],
                     )?;
-                    secret_key.validate()?;
-                    Ok(SecretKeyRepr::RSA(crate::crypto::rsa::PrivateKey(
+                    Ok(SecretKeyRepr::RSA(crate::crypto::rsa::PrivateKey::from(
                         secret_key,
                     )))
                 }

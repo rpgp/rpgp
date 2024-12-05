@@ -271,7 +271,9 @@ impl StringToKey {
             Self::Simple { hash_alg, .. }
             | Self::Salted { hash_alg, .. }
             | Self::IteratedAndSalted { hash_alg, .. } => {
-                let digest_size = hash_alg.digest_size();
+                let Some(digest_size) = hash_alg.digest_size() else {
+                    bail!("invalid hash algorithm: {}", hash_alg);
+                };
                 let rounds = (key_size as f32 / digest_size as f32).ceil() as usize;
 
                 let mut key = vec![0u8; key_size];

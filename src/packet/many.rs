@@ -2,7 +2,6 @@ use std::io::{BufRead, Read};
 
 use buffer_redux::policy::MinBuffered;
 use buffer_redux::BufReader;
-use log::warn;
 
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
@@ -40,9 +39,8 @@ impl<R: Read> Iterator for PacketParser<R> {
         let buf = match self.reader.fill_buf() {
             Ok(buf) => buf,
             Err(err) => {
-                warn!("failed to read {:?}", err);
                 self.done = true;
-                return None;
+                return Some(Err(err.into()));
             }
         };
 
@@ -117,6 +115,9 @@ impl<R: Read> Iterator for PacketParser<R> {
                             return Some(Err(err.into()));
                         }
                     };
+                    if body.len() < len {
+                        return Some(Err(format_err!("invalid length encountered")));
+                    }
                     let res = single::body_parser(version, tag, &body[..len]);
                     self.reader.consume(len);
                     res
@@ -398,7 +399,7 @@ mod tests {
             match p {
                 Ok(pp) => Some(pp),
                 Err(err) => {
-                    warn!("skipping packet: {:?}", err);
+                    log::warn!("skipping packet: {:?}", err);
                     None
                 }
             }
