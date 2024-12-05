@@ -2,6 +2,35 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.14.1](https://github.com/rpgp/rpgp/compare/v0.14.0..0.14.1) - 2024-12-05
+
+### ⛰️  Features
+
+- Derive Hash for KeyId ([#437](https://github.com/rpgp/rpgp/issues/437)) - ([779b76d](https://github.com/rpgp/rpgp/commit/779b76d947fff2385c2c4483751168a183467384))
+
+### 🐛 Bug Fixes
+
+- Make strip_leading_zeros_vec() work correctly - ([57e11c5](https://github.com/rpgp/rpgp/commit/57e11c5829c3cca5dd5eb424ef4f46eb61a32115))
+- Csf normalization for signing - ([8439a6d](https://github.com/rpgp/rpgp/commit/8439a6d0342d0e928b2aaaf810d4211f240e7442))
+- Extend is_signing_key() and is_encryption_key() for RFC 9580 algorithms ([#434](https://github.com/rpgp/rpgp/issues/434)) - ([a1d9d5c](https://github.com/rpgp/rpgp/commit/a1d9d5c554902c3af9e3086e262ef870de58716e))
+- Enable the zeroize feature for argon2 and sha1-checked ([#440](https://github.com/rpgp/rpgp/issues/440)) - ([0c45660](https://github.com/rpgp/rpgp/commit/0c4566094380cff1627a2b0615e66b0a23919cf6))
+
+### 🚜 Refactor
+
+- Optimize `Display` implementation for `BlockType` - ([00b5027](https://github.com/rpgp/rpgp/commit/00b50273b16adbd0553b9a660259b1f220ba3d39))
+- Merge write_packet_len into write_packet_length  - ([33dcc83](https://github.com/rpgp/rpgp/commit/33dcc83ee35a11150eb21e4a891cdcff95e62f8a))
+
+### 🧪 Testing
+
+- Avoid writing to the crate source unnecessarily during tests ([#431](https://github.com/rpgp/rpgp/issues/431)) - ([3a1bb5c](https://github.com/rpgp/rpgp/commit/3a1bb5cb5ba88370a6966c7f5d4a48e2dd839001))
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused and erratic end_of_line() fn ([#421](https://github.com/rpgp/rpgp/issues/421)) - ([69ab41c](https://github.com/rpgp/rpgp/commit/69ab41c25bc376bfa9dc6f2d3d43e2a58998df3d))
+- Relax dependencies - ([c6662a3](https://github.com/rpgp/rpgp/commit/c6662a3156a51256c5bf860b6b81baf1fef93020))
+- Adjust allowed licenses to match what we're using ([#438](https://github.com/rpgp/rpgp/issues/438)) - ([910d9af](https://github.com/rpgp/rpgp/commit/910d9af85079fb0d0ad9ed9880f700882be16878))
+- Use prepend for changelog gen - ([7a60d1a](https://github.com/rpgp/rpgp/commit/7a60d1a1466a7209c3eef2e69295fc5f74b9e75b))
+
 ## [0.14.0](https://github.com/rpgp/rpgp/compare/v0.13.1..0.14.0) - 2024-09-25
 
 ### ⛰️  Features
