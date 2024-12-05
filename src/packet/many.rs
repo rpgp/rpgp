@@ -83,7 +83,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                             break;
                         }
                         Ok(r) => {
-                            body.extend_from_slice(&buf[..r]);
+                            body.extend_from_slice(buf.get(..r).unwrap_or(buf.as_slice()));
                             if body.len() >= MAX_CAPACITY {
                                 self.done = true;
                                 return Some(Err(format_err!("Indeterminate packet too large")));
@@ -115,10 +115,10 @@ impl<R: Read> Iterator for PacketParser<R> {
                             return Some(Err(err.into()));
                         }
                     };
-                    if body.len() < len {
+                    let Some(body_slice) = body.get(..len) else {
                         return Some(Err(format_err!("invalid length encountered")));
-                    }
-                    let res = single::body_parser(version, tag, &body[..len]);
+                    };
+                    let res = single::body_parser(version, tag, body_slice);
                     self.reader.consume(len);
                     res
                 } else {
@@ -258,7 +258,9 @@ fn read_fixed<R: Read>(
     }
 
     out.resize(out_len + len, 0u8);
-    reader.read_exact(&mut out[out_len..])?;
+    if let Some(ref mut out) = out.get_mut(out_len..) {
+        reader.read_exact(out)?;
+    }
 
     Ok(())
 }
