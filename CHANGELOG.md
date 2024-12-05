@@ -4,6 +4,10 @@ All notable changes to rpgp will be documented in this file.
 
 ## [0.14.2](https://github.com/rpgp/rpgp/compare/v0.14.1..0.14.2) - 2024-12-05
 
+### 🐛 Bug Fixes
+
+- Fix CVE-2024-53857 "Potential Resource Exhaustion when handling Untrusted Messages"
+
 ### 📚 Documentation
 
 - Update changelog - ([d9aef6a](https://github.com/rpgp/rpgp/commit/d9aef6a3f99bf796e7671ca276bf744d7ce4787e))
