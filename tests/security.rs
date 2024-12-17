@@ -202,6 +202,7 @@ fn rpg_021_signed_secret_key_encrypt_panic1() {
 }
 
 /// RPG-021
+#[cfg(feature = "unstable-curve448")]
 #[test]
 fn rpg_021_signed_secret_key_encrypt_panic2() {
     let bad_input: &[u8] = &[
