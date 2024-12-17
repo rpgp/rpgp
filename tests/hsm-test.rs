@@ -11,7 +11,7 @@ use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
 use pgp::types::{EcdhPublicParams, EskType, Fingerprint, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
-use pgp::{Message, SignedPublicKey};
+use pgp::{Message, SignedPublicKey, SignedSecretKey};
 use rand::{CryptoRng, Rng};
 
 #[derive(Debug, Clone)]
@@ -344,7 +344,7 @@ fn card_decrypt() {
 
         let key_file = File::open(keyfile).unwrap();
         let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
-        let key = x.next().unwrap().unwrap().into_secret();
+        let key: SignedSecretKey = x.next().unwrap().unwrap().try_into().unwrap();
 
         let pubkey: SignedPublicKey = key.into();
         let enc_subkey = &pubkey.public_subkeys.first().unwrap().key;
@@ -470,7 +470,7 @@ fn card_sign() {
 
         let key_file = File::open(keyfile).unwrap();
         let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
-        let key = x.next().unwrap().unwrap().into_secret();
+        let key: SignedSecretKey = x.next().unwrap().unwrap().try_into().unwrap();
 
         let pubkey: SignedPublicKey = key.into();
 

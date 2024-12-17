@@ -1196,7 +1196,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         parsed.verify().expect("invalid key");
 
         if unlock {
-            let sk = parsed.clone().into_secret();
+            let sk: SignedSecretKey = parsed.clone().try_into().unwrap();
             sk.unlock(|| "".to_string(), |_| Ok(()))
                 .expect("failed to unlock key");
 
