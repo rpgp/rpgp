@@ -1,0 +1,7 @@
+target
+corpus
+artifacts
+coverage
+
+# log files
+fuzz-*.log
