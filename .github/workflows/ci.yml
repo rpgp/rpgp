@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - nightly-2024-07-07
+          - nightly-2024-12-04
           - beta
           - stable
 
@@ -215,7 +215,7 @@ jobs:
     - name: Install stable
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.75
+        toolchain: 1.81
         target: ${{ matrix.target }}
         override: true
 
