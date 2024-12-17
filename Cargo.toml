@@ -15,7 +15,7 @@ categories = ["cryptography", "email"]
 exclude = ["tests/tests/*"]
 
 edition = "2021"
-rust-version = "1.75"
+rust-version = "1.81"
 
 [dependencies]
 aes = "^0.8"
