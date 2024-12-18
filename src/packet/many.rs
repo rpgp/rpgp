@@ -8,8 +8,6 @@ use crate::packet::packet_sum::Packet;
 use crate::packet::single;
 use crate::types::{PacketLength, Tag};
 
-const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
-
 const DEFAULT_CAPACITY: usize = 1024 * 16;
 const READER_POLICY: MinBuffered = MinBuffered(1024);
 
@@ -84,10 +82,6 @@ impl<R: Read> Iterator for PacketParser<R> {
                         }
                         Ok(r) => {
                             body.extend_from_slice(&buf[..r]);
-                            if body.len() >= MAX_CAPACITY {
-                                self.done = true;
-                                return Some(Err(format_err!("Indeterminate packet too large")));
-                            }
                         }
                         Err(err) => {
                             self.done = true;
@@ -122,10 +116,6 @@ impl<R: Read> Iterator for PacketParser<R> {
                     self.reader.consume(len);
                     res
                 } else {
-                    if len > MAX_CAPACITY {
-                        return Some(Err(format_err!("Fixed packet too large")));
-                    }
-
                     let mut buffer = vec![0u8; len];
                     if let Err(err) = self.reader.read_exact(&mut buffer) {
                         self.done = true;
@@ -170,17 +160,6 @@ impl<R: Read> Iterator for PacketParser<R> {
                         "Illegal first partial body length {} (shorter than 512 bytes)",
                         len,
                     )));
-                }
-
-                // NOTE: len can be at most 1GiB per partial block, so with the current
-                // MAX_CAPACITY setting, this comparison will never trigger.
-                //
-                // With a configurable/smaller limit, it could, though.
-                //
-                // (NOTE: we're rejecting "== MAX_CAPACITY" here as well, since this partial
-                // must be followed by more data to form a legal packet.)
-                if len >= MAX_CAPACITY {
-                    return Some(Err(format_err!("First partial of packet is too large")));
                 }
 
                 let mut body = vec![0u8; len];
@@ -252,10 +231,6 @@ fn read_fixed<R: Read>(
     out: &mut Vec<u8>,
 ) -> Result<()> {
     let out_len = out.len();
-
-    if out_len + len > MAX_CAPACITY {
-        return Err(format_err!("Packet too large"));
-    }
 
     out.resize(out_len + len, 0u8);
     reader.read_exact(&mut out[out_len..])?;
