@@ -48,7 +48,7 @@ impl PublicKey {
         Ok(Self(inner))
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn bind_primary_key<R: CryptoRng + Rng, F>(
         &self,
         rng: R,
         key: &impl SecretKeyTrait,
@@ -88,7 +88,7 @@ impl PublicSubkey {
         Ok(Self(inner))
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn bind_subkey<R: CryptoRng + Rng, F>(
         &self,
         rng: R,
         key: &impl SecretKeyTrait,
