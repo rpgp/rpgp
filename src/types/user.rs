@@ -39,7 +39,10 @@ impl SignedUser {
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
-            signature.verify_certification(key, Tag::UserId, &self.id)?;
+            if Signature::match_identity(signature, key) {
+                // We can (and should) only check self-signatures, here
+                signature.verify_certification(key, Tag::UserId, &self.id)?;
+            }
         }
 
         Ok(())
@@ -109,7 +112,10 @@ impl SignedUserAttribute {
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
         for signature in &self.signatures {
-            signature.verify_certification(key, Tag::UserAttribute, &self.attr)?;
+            if Signature::match_identity(signature, key) {
+                // We can (and should) only check self-signatures, here
+                signature.verify_certification(key, Tag::UserAttribute, &self.attr)?;
+            }
         }
 
         Ok(())
@@ -148,5 +154,36 @@ impl Serialize for SignedUserAttribute {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Deserializable, SignedPublicKey};
+
+    #[test]
+    /// SignedPublicKey::verify should not fail on third party User ID certifications
+    fn test_verify_ignores_third_party_sig() {
+        // Alice has a third party User ID certification
+        const ALICE: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+xjMEZ2XJeBYJKwYBBAHaRw8BAQdAE8TRtg2u7+FmKnWM340pc7vOxWDS/MA/cjVu
+pBFuLaPNBWFsaWNlwo8EEBYIADcCGQEFAmdlyXgCGwMICwkIBwoNDAsFFQoJCAsC
+FgIBJxYhBOPRPeq3601db0WyneKiB6KRHwGaAAoJEOKiB6KRHwGa+BcA/i+OZFLi
+g6xWAoXj41/g1kIFVm8RLfYgcHE/B17fI+NWAP9d/bnsePyZth7pjNrcIGK4koC+
+dHJoOKwtkwI7xSWACsK9BBMWCgBvBYJnZcmaCRAM+ckRhKDOUUcUAAAAAAAeACBz
+YWx0QG5vdGF0aW9ucy5zZXF1b2lhLXBncC5vcmeeQTvS9hWNSc7k/ZAMBM5YAQGW
+9OCylwH4vZLcOSU8CRYhBGQv0Lepp6IABopGEAz5yRGEoM5RAACgQAEAnkYVVL2W
+9fYA4i1mly1W9yA5m2CYMtDpb3aJ5fMgvc4BAN6pCVpRzdbIDP66J2Jj2nhTg/jy
+H7jJIG6RoZq2/v0LzjgEZ2XJeBIKKwYBBAGXVQEFAQEHQJuf4ZOjlkgUEXId9cAm
+pq77Hp7KRB78piUKKRvfyHteAwEIB8J4BBgWCAAgBQJnZcl4AhsMFiEE49E96rfr
+TV1vRbKd4qIHopEfAZoACgkQ4qIHopEfAZqsJwEAxkX531d/aXkWjeCxLiGukm1j
+JNN0jSXNnUr6S+1zP8QA/1bxZxOp5BoK3rdBUxScIyO2oeGCczggHCCHk0KnMqII
+=fPDT
+-----END PGP PUBLIC KEY BLOCK-----";
+
+        let (alice, _headers) = SignedPublicKey::from_string(ALICE).expect("can parse alice");
+
+        alice.verify().expect("verify should not error");
     }
 }
