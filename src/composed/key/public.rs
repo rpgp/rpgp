@@ -56,7 +56,7 @@ impl PublicKey {
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, sec_key, key_pw.clone()))
+            .map(|k| k.bind_subkey(&mut rng, sec_key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedPublicKey {
@@ -123,7 +123,7 @@ impl PublicSubkey {
         PublicSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F>(
+    pub fn bind_subkey<R, F>(
         self,
         mut rng: R,
         sec_key: &impl SecretKeyTrait,

@@ -47,12 +47,12 @@ impl SecretKey {
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, key_pw.clone()))
+            .map(|k| k.bind_subkey(&mut rng, &primary_key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
         let secret_subkeys = self
             .secret_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, key_pw.clone()))
+            .map(|k| k.bind_subkey(&mut rng, &primary_key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedSecretKey {
@@ -69,7 +69,7 @@ impl SecretSubkey {
         SecretSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F>(
+    pub fn bind_subkey<R, F>(
         self,
         mut rng: R,
         sec_key: &impl SecretKeyTrait,

@@ -126,7 +126,7 @@ impl SecretKey {
         self.0.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn bind_primary_key<R: CryptoRng + Rng, F>(
         &self,
         mut rng: R,
         key: &impl SecretKeyTrait,
@@ -176,7 +176,7 @@ impl SecretSubkey {
         self.0.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn bind_subkey<R: CryptoRng + Rng, F>(
         &self,
         mut rng: R,
         key: &impl SecretKeyTrait,

@@ -181,7 +181,7 @@ impl Signature {
     ///
     /// We also consider `key` a match for `sig` by default, if `sig` contains no issuer-related
     /// subpackets.
-    fn match_identity(sig: &Signature, key: &impl PublicKeyTrait) -> bool {
+    pub(crate) fn match_identity(sig: &Signature, key: &impl PublicKeyTrait) -> bool {
         let issuers = sig.issuer();
         let issuer_fps = sig.issuer_fingerprint();
 
