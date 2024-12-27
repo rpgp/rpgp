@@ -22,7 +22,9 @@
 #![allow(
     clippy::missing_const_for_fn,
     clippy::use_self,
-    clippy::needless_borrows_for_generic_args
+    clippy::needless_borrows_for_generic_args,
+    clippy::type_complexity,
+    clippy::incompatible_msrv
 )]
 // Enable backtraces for thiserror.
 #![cfg_attr(feature = "nightly", feature(error_generic_member_access))]

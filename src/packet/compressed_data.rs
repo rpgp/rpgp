@@ -23,7 +23,7 @@ pub enum Decompressor<R> {
     Bzip2,
 }
 
-impl<'a> Read for Decompressor<&'a [u8]> {
+impl Read for Decompressor<&[u8]> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         match self {
             Decompressor::Uncompressed(ref mut c) => c.read(into),

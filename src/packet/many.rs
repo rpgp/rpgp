@@ -2,7 +2,6 @@ use std::io::{BufRead, Read};
 
 use buffer_redux::policy::MinBuffered;
 use buffer_redux::BufReader;
-use log::warn;
 
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
@@ -40,9 +39,8 @@ impl<R: Read> Iterator for PacketParser<R> {
         let buf = match self.reader.fill_buf() {
             Ok(buf) => buf,
             Err(err) => {
-                warn!("failed to read {:?}", err);
                 self.done = true;
-                return None;
+                return Some(Err(err.into()));
             }
         };
 
@@ -117,10 +115,17 @@ impl<R: Read> Iterator for PacketParser<R> {
                             return Some(Err(err.into()));
                         }
                     };
+                    if body.len() < len {
+                        return Some(Err(format_err!("invalid length encountered")));
+                    }
                     let res = single::body_parser(version, tag, &body[..len]);
                     self.reader.consume(len);
                     res
                 } else {
+                    if len > MAX_CAPACITY {
+                        return Some(Err(format_err!("Fixed packet too large")));
+                    }
+
                     let mut buffer = vec![0u8; len];
                     if let Err(err) = self.reader.read_exact(&mut buffer) {
                         self.done = true;
@@ -165,6 +170,17 @@ impl<R: Read> Iterator for PacketParser<R> {
                         "Illegal first partial body length {} (shorter than 512 bytes)",
                         len,
                     )));
+                }
+
+                // NOTE: len can be at most 1GiB per partial block, so with the current
+                // MAX_CAPACITY setting, this comparison will never trigger.
+                //
+                // With a configurable/smaller limit, it could, though.
+                //
+                // (NOTE: we're rejecting "== MAX_CAPACITY" here as well, since this partial
+                // must be followed by more data to form a legal packet.)
+                if len >= MAX_CAPACITY {
+                    return Some(Err(format_err!("First partial of packet is too large")));
                 }
 
                 let mut body = vec![0u8; len];
@@ -236,6 +252,11 @@ fn read_fixed<R: Read>(
     out: &mut Vec<u8>,
 ) -> Result<()> {
     let out_len = out.len();
+
+    if out_len + len > MAX_CAPACITY {
+        return Err(format_err!("Packet too large"));
+    }
+
     out.resize(out_len + len, 0u8);
     reader.read_exact(&mut out[out_len..])?;
 
@@ -398,7 +419,7 @@ mod tests {
             match p {
                 Ok(pp) => Some(pp),
                 Err(err) => {
-                    warn!("skipping packet: {:?}", err);
+                    log::warn!("skipping packet: {:?}", err);
                     None
                 }
             }

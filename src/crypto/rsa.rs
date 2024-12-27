@@ -26,7 +26,7 @@ const MAX_KEY_SIZE: usize = 16384;
 
 /// Private Key for RSA.
 #[derive(derive_more::Debug, ZeroizeOnDrop)]
-pub struct PrivateKey(#[debug("..")] pub(crate) RsaPrivateKey);
+pub struct PrivateKey(#[debug("..")] RsaPrivateKey);
 
 impl Deref for PrivateKey {
     type Target = RsaPrivateKey;
@@ -85,6 +85,12 @@ impl Signer for PrivateKey {
         }?;
 
         Ok(vec![sig.to_vec()])
+    }
+}
+
+impl From<RsaPrivateKey> for PrivateKey {
+    fn from(key: RsaPrivateKey) -> Self {
+        Self(key)
     }
 }
 

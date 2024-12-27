@@ -1,0 +1,131 @@
+[package]
+name = "pgp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+rand = "0.8"
+# for non-deterministic simple PRNG
+rand_chacha = "0.3"
+# needed for a test case
+buffer-redux = { version = "1.0.0", default-features = false }
+
+
+[dependencies.pgp]
+path = ".."
+
+[profile.release]
+# enable overflow checks to catch integer overflow and underflow behavior
+# with this, the --debug profile is not needed for testing
+overflow-checks = true
+
+[[bin]]
+name = "1_message_from_bytes"
+path = "fuzz_targets/1_message_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "2_message_from_string"
+path = "fuzz_targets/2_message_from_string.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "3_message_from_armored"
+path = "fuzz_targets/3_message_from_armored.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "4_message_roundtrip_check"
+path = "fuzz_targets/4_message_roundtrip_check.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "5_message_decryption"
+path = "fuzz_targets/5_message_decryption.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "6_message_signing"
+path = "fuzz_targets/6_message_signing.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "7_signed_key_from_binary"
+path = "fuzz_targets/7_signed_key_from_binary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "8_signed_public_key_from_armored"
+path = "fuzz_targets/8_signed_public_key_from_armored.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "9_signed_public_key_from_binary"
+path = "fuzz_targets/9_signed_public_key_from_binary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "10_signed_secret_key_from_bytes"
+path = "fuzz_targets/10_signed_secret_key_from_bytes.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "11_cleartext_signed_message_from_armor"
+path = "fuzz_targets/11_cleartext_signed_message_from_armor.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "12_cleartext_signed_message_from_string"
+path = "fuzz_targets/12_cleartext_signed_message_from_string.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "13_signature_from_binary"
+path = "fuzz_targets/13_signature_from_binary.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "14_base64_decoder"
+path = "fuzz_targets/14_base64_decoder.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "15_dearmor_parser"
+path = "fuzz_targets/15_dearmor_parser.rs"
+test = false
+doc = false
+bench = false

@@ -96,14 +96,27 @@ fn parse_secret_fields(
             // Only for a version 6 packet where the secret key material is encrypted (that is,
             // where the previous octet is not zero), a 1-octet scalar octet count of the
             // cumulative length of all the following conditionally included S2K parameter fields.
-            map(be_u8, Some)(i)?
+            let (i, len) = be_u8(i)?;
+            if len == 0 {
+                return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+            }
+            (i, Some(len))
         } else {
             (i, None)
         };
 
         // expected length of the remaining data after consuming the conditionally included
         // s2k parameter fields
-        let after_s2k = s2k_len.map(|len| i.len() - len as usize);
+        let after_s2k = match s2k_len {
+            Some(len) => {
+                let len = len as usize;
+                if i.len() < len {
+                    return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+                }
+                Some(i.len() - len)
+            }
+            None => None,
+        };
 
         let (i, enc_params) = match s2k_usage {
             // 0 is no encryption

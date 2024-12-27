@@ -239,19 +239,19 @@ impl CleartextSignedMessage {
     ) -> Result<()> {
         // Header
         writer.write_all(HEADER_LINE.as_bytes())?;
-        writer.write_all(&[b'\n'])?;
+        writer.write_all(b"\n")?;
 
         // Hashes
         for hash in &self.hashes {
             writer.write_all(b"Hash: ")?;
             writer.write_all(hash.to_string().as_bytes())?;
-            writer.write_all(&[b'\n'])?;
+            writer.write_all(b"\n")?;
         }
-        writer.write_all(&[b'\n'])?;
+        writer.write_all(b"\n")?;
 
         // Cleartext body
         writer.write_all(self.csf_encoded_text.as_bytes())?;
-        writer.write_all(&[b'\n'])?;
+        writer.write_all(b"\n")?;
 
         armor::write(
             &self.signatures,
@@ -315,7 +315,7 @@ fn dash_unescape_and_trim(text: &str) -> String {
         // break each line into "content" and "line ending"
         let line_end_len = if line.ends_with("\r\n") {
             2
-        } else if line.ends_with("\n") {
+        } else if line.ends_with('\n') {
             1
         } else {
             0

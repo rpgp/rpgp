@@ -70,12 +70,12 @@ impl AeadAlgorithm {
     }
 
     /// Size of the authentication tag.
-    pub fn tag_size(&self) -> usize {
+    pub fn tag_size(&self) -> Option<usize> {
         match self {
-            Self::Eax => 16,
-            Self::Ocb => 16,
-            Self::Gcm => 16,
-            _ => 0,
+            Self::Eax => Some(16),
+            Self::Ocb => Some(16),
+            Self::Gcm => Some(16),
+            _ => None,
         }
     }
 

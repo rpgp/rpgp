@@ -132,8 +132,11 @@ pub fn verify(
 ) -> Result<()> {
     match *curve {
         ECCCurve::Ed25519 => {
+            let Some(digest_size) = hash.digest_size() else {
+                bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
+            };
             ensure!(
-                hash.digest_size() * 8 >= 256,
+                digest_size * 8 >= 256,
                 "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
                 hash,
             );

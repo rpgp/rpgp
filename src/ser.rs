@@ -15,13 +15,13 @@ pub trait Serialize {
     }
 }
 
-impl<'a, T: Serialize> Serialize for &'a T {
+impl<T: Serialize> Serialize for &T {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         (*self).to_writer(writer)
     }
 }
 
-impl<'a, T: Serialize> Serialize for &'a [T] {
+impl<T: Serialize> Serialize for &[T] {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         for x in self.iter() {
             (*x).to_writer(writer)?;

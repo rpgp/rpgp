@@ -140,6 +140,14 @@ impl EncryptedSecretParams {
             } => {
                 match s2k {
                     StringToKey::Argon2 { .. } | StringToKey::IteratedAndSalted { .. } => {
+                        let Some(tag_size) = aead_mode.tag_size() else {
+                            unsupported_err!("AEAD mode: {:?}", aead_mode);
+                        };
+
+                        if self.data.len() < tag_size {
+                            return Err(Error::InvalidInput);
+                        }
+
                         // derive key
                         let derived = s2k.derive_key(&pw(), 32)?;
 
@@ -151,8 +159,7 @@ impl EncryptedSecretParams {
                             s2k_usage_aead(&derived, secret_tag, pub_key, *sym_alg, *aead_mode)?;
 
                         // AEAD decrypt
-                        let (ciphertext, tag) =
-                            self.data.split_at(self.data.len() - aead_mode.tag_size());
+                        let (ciphertext, tag) = self.data.split_at(self.data.len() - tag_size);
 
                         let mut decrypt: Vec<_> = ciphertext.to_vec();
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, tag, &mut decrypt)?;

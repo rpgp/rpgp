@@ -63,7 +63,7 @@ pub enum PlainSecretParamsRef<'a> {
     X448(#[debug("..")] &'a [u8; 56]),
 }
 
-impl<'a> PlainSecretParamsRef<'a> {
+impl PlainSecretParamsRef<'_> {
     pub fn to_owned(&self) -> PlainSecretParams {
         match self {
             PlainSecretParamsRef::RSA { d, p, q, u } => PlainSecretParams::RSA {
@@ -170,8 +170,7 @@ impl<'a> PlainSecretParamsRef<'a> {
                         d.into(),
                         vec![p.into(), q.into()],
                     )?;
-                    secret_key.validate()?;
-                    Ok(SecretKeyRepr::RSA(crate::crypto::rsa::PrivateKey(
+                    Ok(SecretKeyRepr::RSA(crate::crypto::rsa::PrivateKey::from(
                         secret_key,
                     )))
                 }

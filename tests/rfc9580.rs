@@ -35,7 +35,7 @@ fn load_ssk(filename: &str) -> SignedSecretKey {
         pgp::composed::signed_key::from_reader_many(File::open(filename).unwrap()).expect("ok");
     let pos = iter.next().expect("some").expect("ok");
 
-    pos.into_secret()
+    pos.try_into().unwrap()
 }
 
 fn try_decrypt(keyfile: &str, msg_file: &str) {

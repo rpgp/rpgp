@@ -350,8 +350,12 @@ fn parse_v5(
         let (i, s2k) = s2k_parser(i)?;
         let (i, iv) = take(aead.iv_size())(i)?;
         let (i, l) = rest_len(i)?;
-        let (i, esk) = take(l - aead.tag_size())(i)?;
-        let (i, auth_tag) = take(aead.tag_size())(i)?;
+        let aead_tag_size = aead.tag_size().unwrap_or_default();
+        if l < aead_tag_size {
+            return Err(nom::Err::Error(Error::InvalidInput));
+        }
+        let (i, esk) = take(l - aead_tag_size)(i)?;
+        let (i, auth_tag) = take(aead_tag_size)(i)?;
 
         Ok((
             i,
@@ -379,8 +383,12 @@ fn parse_v6(
         let (i, s2k) = s2k_parser(i)?;
         let (i, iv) = take(aead.iv_size())(i)?;
         let (i, l) = rest_len(i)?;
-        let (i, esk) = take(l - aead.tag_size())(i)?;
-        let (i, auth_tag) = take(aead.tag_size())(i)?;
+        let aead_tag_size = aead.tag_size().unwrap_or_default();
+        if l < aead_tag_size {
+            return Err(nom::Err::Error(Error::InvalidInput));
+        }
+        let (i, esk) = take(l - aead_tag_size)(i)?;
+        let (i, auth_tag) = take(aead_tag_size)(i)?;
 
         Ok((
             i,

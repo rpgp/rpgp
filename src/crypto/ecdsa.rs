@@ -194,8 +194,11 @@ pub fn verify(
 
             f => f,
         };
+        let Some(digest_size) = hash.digest_size() else {
+            bail!("ECDSA signature: invalid hash algorithm: {:?}", hash);
+        };
         ensure!(
-            hash.digest_size() * 8 >= min_hash_len,
+            digest_size * 8 >= min_hash_len,
             "ECDSA signature: hash algorithm {:?} is too weak for key {:?}",
             hash,
             p

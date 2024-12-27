@@ -194,8 +194,8 @@ impl HashAlgorithm {
     }
 
     /// Returns the expected digest size for the given algorithm.
-    pub fn digest_size(self) -> usize {
-        match self {
+    pub fn digest_size(self) -> Option<usize> {
+        let size = match self {
             HashAlgorithm::MD5 => Md5::output_size(),
             HashAlgorithm::SHA1 => Sha1::output_size(),
             HashAlgorithm::RIPEMD160 => Ripemd160::output_size(),
@@ -205,7 +205,8 @@ impl HashAlgorithm {
             HashAlgorithm::SHA2_224 => sha2::Sha224::output_size(),
             HashAlgorithm::SHA3_256 => sha3::Sha3_256::output_size(),
             HashAlgorithm::SHA3_512 => sha3::Sha3_512::output_size(),
-            _ => 0,
-        }
+            _ => return None,
+        };
+        Some(size)
     }
 }

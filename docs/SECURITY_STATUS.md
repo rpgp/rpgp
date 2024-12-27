@@ -9,9 +9,20 @@ The used [`rsa`](https://crates.io/crates/rsa) crate is vulnerable to the Marvin
 
 ## Security Audits
 
-rPGP and its RSA dependency received an independent security audit and a security analysis.
+rPGP and its RSA dependency received two independent security audits and a security analysis.
 
-### 2024
+### 2024-12
+
+Audit ["Nlnet Security Evaluation rPGP"](https://github.com/rpgp/docs/blob/main/audits/NGI%20Core%20rPGP%20penetration%20test%20report%202024%201.0.pdf) by [Radically Open Security](https://www.radicallyopensecurity.com/).
+
+Two advisories were released about the findings of this audit:
+
+- ["Panics on Malformed Untrusted Input"](https://github.com/rpgp/rpgp/security/advisories/GHSA-9rmp-2568-59rv) CVE-2024-53856
+- ["Potential Resource Exhaustion when handling Untrusted Messages"](https://github.com/rpgp/rpgp/security/advisories/GHSA-4grw-m28r-q285) CVE-2024-53857
+
+The issues outlined in these advisories have been fixed.
+
+### 2024-03
 
 [Hardening Guaranteed End-to-End encryption based on a security analysis from ETH researchers](https://delta.chat/en/2024-03-25-crypto-analysis-securejoin)
 

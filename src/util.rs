@@ -174,7 +174,7 @@ impl<'a, A, B> TeeWriter<'a, A, B> {
     }
 }
 
-impl<'a, A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'a, A, B> {
+impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.a.write(buf);
         write_all(&mut self.b, buf)?;

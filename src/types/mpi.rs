@@ -96,7 +96,7 @@ impl std::ops::Deref for Mpi {
     }
 }
 
-impl<'a> std::ops::Deref for MpiRef<'a> {
+impl std::ops::Deref for MpiRef<'_> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
@@ -128,7 +128,7 @@ impl Serialize for Mpi {
     }
 }
 
-impl<'a> Serialize for MpiRef<'a> {
+impl Serialize for MpiRef<'_> {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
         let bytes = &self.0;
         let size = bit_size(bytes);

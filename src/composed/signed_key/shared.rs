@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 
 use chrono::Duration;
@@ -7,6 +8,7 @@ use smallvec::SmallVec;
 use crate::composed::key::KeyDetails;
 use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
 use crate::errors::Result;
+use crate::packet::KeyFlags;
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, SignedUser, SignedUserAttribute};
 use crate::{packet, ArmorOptions};
@@ -112,44 +114,58 @@ impl SignedKeyDetails {
     }
 
     pub fn as_unsigned(&self) -> KeyDetails {
-        let primary_user = self.users.iter().find(|u| u.is_primary()).map_or_else(
-            || self.users.first().expect("missing user ids"),
-            |user| user,
-        );
+        if let Some(primary_user) = self
+            .users
+            .iter()
+            .find(|u| u.is_primary())
+            .map_or_else(|| self.users.first(), Some)
+        {
+            let primary_sig = primary_user
+                .signatures
+                .first()
+                .expect("invalid primary user");
+            let keyflags = primary_sig.key_flags();
 
-        let primary_user_id = primary_user.id.clone();
-        let primary_sig = primary_user
-            .signatures
-            .first()
-            .expect("invalid primary user");
-        let keyflags = primary_sig.key_flags();
+            let preferred_symmetric_algorithms =
+                SmallVec::from_slice(primary_sig.preferred_symmetric_algs());
+            let preferred_hash_algorithms = SmallVec::from_slice(primary_sig.preferred_hash_algs());
+            let preferred_compression_algorithms =
+                SmallVec::from_slice(primary_sig.preferred_compression_algs());
+            let preferred_aead_algorithms = SmallVec::from_slice(primary_sig.preferred_aead_algs());
+            let revocation_key = primary_sig.revocation_key().cloned();
 
-        let preferred_symmetric_algorithms =
-            SmallVec::from_slice(primary_sig.preferred_symmetric_algs());
-        let preferred_hash_algorithms = SmallVec::from_slice(primary_sig.preferred_hash_algs());
-        let preferred_compression_algorithms =
-            SmallVec::from_slice(primary_sig.preferred_compression_algs());
-        let preferred_aead_algorithms = SmallVec::from_slice(primary_sig.preferred_aead_algs());
-        let revocation_key = primary_sig.revocation_key().cloned();
+            KeyDetails::new_direct(
+                self.users.iter().map(|u| u.id.clone()).collect(),
+                self.user_attributes
+                    .iter()
+                    .map(|a| a.attr.clone())
+                    .collect(),
+                keyflags,
+                preferred_symmetric_algorithms,
+                preferred_hash_algorithms,
+                preferred_compression_algorithms,
+                preferred_aead_algorithms,
+                revocation_key,
+            )
+        } else {
+            // We don't have metadata via a primary user id, so we return a very bare KeyDetails object
 
-        KeyDetails::new(
-            primary_user_id,
-            self.users
-                .iter()
-                .filter(|u| !u.is_primary())
-                .map(|u| u.id.clone())
-                .collect(),
-            self.user_attributes
-                .iter()
-                .map(|a| a.attr.clone())
-                .collect(),
-            keyflags,
-            preferred_symmetric_algorithms,
-            preferred_hash_algorithms,
-            preferred_compression_algorithms,
-            preferred_aead_algorithms,
-            revocation_key,
-        )
+            // TODO: we could check for information in a direct key signature and use that
+
+            KeyDetails::new_direct(
+                self.users.iter().map(|u| u.id.clone()).collect(),
+                self.user_attributes
+                    .iter()
+                    .map(|a| a.attr.clone())
+                    .collect(),
+                KeyFlags::default(),
+                vec![].into(),
+                vec![].into(),
+                vec![].into(),
+                vec![].into(),
+                None,
+            )
+        }
     }
 }
 
@@ -215,20 +231,22 @@ impl PublicOrSecret {
         }
     }
 
+    /// Returns secret key.
+    ///
     /// Panics if not a secret key.
+    #[deprecated(note = "Can panic. Users should use TryFrom trait instead.")]
     pub fn into_secret(self) -> SignedSecretKey {
-        match self {
-            PublicOrSecret::Public(_) => panic!("Can not convert a public into a secret key"),
-            PublicOrSecret::Secret(k) => k,
-        }
+        self.try_into()
+            .expect("Can not convert a public into a secret key")
     }
 
+    /// Returns public key.
+    ///
     /// Panics if not a public key.
+    #[deprecated(note = "Can panic. Users should use TryFrom trait instead.")]
     pub fn into_public(self) -> SignedPublicKey {
-        match self {
-            PublicOrSecret::Secret(_) => panic!("Can not convert a secret into a public key"),
-            PublicOrSecret::Public(k) => k,
-        }
+        self.try_into()
+            .expect("Can not convert a secret into a public key")
     }
 
     pub fn is_public(&self) -> bool {
@@ -242,6 +260,39 @@ impl PublicOrSecret {
         match self {
             PublicOrSecret::Secret(_) => true,
             PublicOrSecret::Public(_) => false,
+        }
+    }
+}
+
+/// Error returned when trying to convert `PublicOrSecret` key
+/// into the wrong type.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, thiserror::Error)]
+pub struct TryFromPublicOrSecretError;
+
+impl fmt::Display for TryFromPublicOrSecretError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attempt to convert PublicOrSecret key to the wrong type")
+    }
+}
+
+impl TryFrom<PublicOrSecret> for SignedPublicKey {
+    type Error = TryFromPublicOrSecretError;
+
+    fn try_from(public_or_secret: PublicOrSecret) -> Result<Self, Self::Error> {
+        match public_or_secret {
+            PublicOrSecret::Public(k) => Ok(k),
+            PublicOrSecret::Secret(_) => Err(TryFromPublicOrSecretError),
+        }
+    }
+}
+
+impl TryFrom<PublicOrSecret> for SignedSecretKey {
+    type Error = TryFromPublicOrSecretError;
+
+    fn try_from(public_or_secret: PublicOrSecret) -> Result<Self, Self::Error> {
+        match public_or_secret {
+            PublicOrSecret::Public(_) => Err(TryFromPublicOrSecretError),
+            PublicOrSecret::Secret(k) => Ok(k),
         }
     }
 }

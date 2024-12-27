@@ -19,7 +19,7 @@
   <!-- msrv -->
   <a href="https://img.shields.io/badge/rustc-1.75+-blue.svg?style=flat-square">
     <img src="https://img.shields.io/badge/rustc-1.75+-blue.svg?style=flat-square"
-      alt="MSRV 1.75" />
+      alt="MSRV 1.81" />
   </a>
 </div>
 
@@ -131,7 +131,7 @@ Checkout [FAQ.md](docs/FAQ.md).
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.75 or higher. In future minimally supported
+All crates in this repository support Rust 1.81 or higher. In future minimally supported
 version of Rust can be changed, but it will be done with a minor version bump.
 
 ## Funding
@@ -168,4 +168,4 @@ shall be dual licensed as above, without any additional terms or conditions.
 [`rsop`]: https://crates.io/crates/rsop/
 [`rpgpie`]: https://crates.io/crates/rpgpie
 [`rpm`]: https://crates.io/crates/rpm
-[`debian-packaging`]: https://crates.io/crates/debian-packaging 
+[`debian-packaging`]: https://crates.io/crates/debian-packaging
