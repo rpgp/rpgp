@@ -499,28 +499,55 @@ impl<R: BufRead> Read for Dearmor<R> {
     }
 }
 
-pub(crate) fn read_from_buf<B: BufRead, T, P: Fn(&[u8]) -> IResult<&[u8], T>>(
-    b: &mut B,
-    ctx: &str,
-    parser: P,
-) -> Result<T> {
-    let mut last_was_incomplete = false;
+pub(crate) fn read_from_buf<B: BufRead, T, P>(b: &mut B, ctx: &str, parser: P) -> Result<T>
+where
+    P: Fn(&[u8]) -> IResult<&[u8], T>,
+{
+    // Zero copy, single buffer
+    let buf = b.fill_buf()?;
+    if buf.is_empty() {
+        bail!("not enough bytes in buffer: {}", ctx);
+    }
+    match parser(buf) {
+        Ok((remaining, res)) => {
+            let consumed = buf.len() - remaining.len();
+            b.consume(consumed);
+            return Ok(res);
+        }
+        Err(nom::Err::Incomplete(_)) => {}
+        Err(err) => {
+            bail!("failed reading: {} {:?}", ctx, err);
+        }
+    };
+
+    // incomplete
+    let mut back_buffer = buf.to_vec();
+    let len = back_buffer.len();
+    b.consume(len);
+
+    let mut last_buffer_len;
+
     loop {
+        // Safety check to not consume too much
+        if back_buffer.len() >= 1024 * 1024 * 1024 {
+            bail!("input too large, can not decode more than 1GiB");
+        }
+
         let buf = b.fill_buf()?;
         if buf.is_empty() {
             bail!("not enough bytes in buffer: {}", ctx);
         }
-        match parser(buf) {
+        last_buffer_len = buf.len();
+        back_buffer.extend_from_slice(buf);
+
+        match parser(&back_buffer) {
             Ok((remaining, res)) => {
-                let consumed = buf.len() - remaining.len();
+                let consumed = last_buffer_len - remaining.len();
                 b.consume(consumed);
                 return Ok(res);
             }
             Err(nom::Err::Incomplete(_)) => {
-                if last_was_incomplete {
-                    bail!("failed reading: {}: not enough bytes", ctx);
-                }
-                last_was_incomplete = true;
+                b.consume(last_buffer_len);
                 continue;
             }
             Err(err) => {
