@@ -1,6 +1,7 @@
 use std::{io, iter};
 
 use buffer_redux::BufReader;
+use bytes::Bytes;
 
 use crate::armor::{self, BlockType};
 use crate::composed::signed_key::{
@@ -35,7 +36,7 @@ pub fn from_reader_many_buf<'a, R: io::BufRead + 'a>(
         let (keys, headers) = from_armor_many_buf(input)?;
         Ok((keys, Some(headers)))
     } else {
-        Ok((from_bytes_many(input), None))
+        Ok((from_bytes_many(input)?, None))
     }
 }
 
@@ -71,7 +72,7 @@ pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
         BlockType::PublicKey | BlockType::PrivateKey | BlockType::File => {
             let headers = dearmor.headers.clone(); // FIXME: avoid clone
                                                    // TODO: check that the result is what it actually said.
-            Ok((from_bytes_many(dearmor), headers))
+            Ok((from_bytes_many(dearmor)?, headers))
         }
         BlockType::Message
         | BlockType::MultiPartMessage(_, _)
@@ -92,15 +93,20 @@ pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
 
 /// Parses a list of secret and public keys from raw bytes.
 pub fn from_bytes_many<'a>(
-    bytes: impl io::Read + 'a,
-) -> Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a> {
-    let packets = PacketParser::new(bytes)
+    mut bytes: impl io::Read + 'a,
+) -> Result<Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>> {
+    // TODO: pass through
+    let mut body = Vec::new();
+    bytes.read_to_end(&mut body)?;
+    let body = Bytes::from(body);
+
+    let packets = PacketParser::new(body)
         .filter_map(crate::composed::shared::filter_parsed_packet_results)
         .peekable();
 
-    Box::new(PubPrivIterator {
+    Ok(Box::new(PubPrivIterator {
         inner: Some(packets),
-    })
+    }))
 }
 
 pub struct PubPrivIterator<I: Sized + Iterator<Item = Result<Packet>>> {

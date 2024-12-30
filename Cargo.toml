@@ -75,6 +75,8 @@ ocb3 = "0.1"
 aes-kw = { version = "0.2.1", features = ["std"] }
 derive_more = { version = "1.0.0-beta.6", features = ["debug"] }
 x448 = "0.6"
+bytes = "1.9.0"
+bytes-utils = "0.1.4"
 
 [dependencies.buffer-redux]
 version = "1.0.0"

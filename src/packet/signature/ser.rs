@@ -367,11 +367,15 @@ mod tests {
     use std::io::Read;
     use std::path::Path;
 
+    use bytes::Bytes;
+
     use super::*;
     use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {
-        let f = File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap();
+        let f: Bytes = std::fs::read(Path::new("./tests/openpgp/samplemsgs").join(name))
+            .unwrap()
+            .into();
 
         let packets: Vec<Packet> = PacketParser::new(f).collect::<Result<_>>().unwrap();
         let mut serialized = Vec::new();

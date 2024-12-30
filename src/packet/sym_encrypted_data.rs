@@ -1,5 +1,7 @@
 use std::io;
 
+use bytes::{Buf, Bytes};
+
 use crate::errors::Result;
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
@@ -16,7 +18,7 @@ use crate::types::{Tag, Version};
 pub struct SymEncryptedData {
     packet_version: Version,
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    data: Bytes,
 }
 
 impl SymEncryptedData {
@@ -24,7 +26,15 @@ impl SymEncryptedData {
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
         Ok(SymEncryptedData {
             packet_version,
-            data: input.to_vec(),
+            data: input.to_vec().into(),
+        })
+    }
+
+    /// Parses a `SymEncryptedData` packet from the given slice.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
+        Ok(SymEncryptedData {
+            packet_version,
+            data: input.copy_to_bytes(input.remaining()),
         })
     }
 

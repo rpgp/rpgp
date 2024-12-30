@@ -2,12 +2,8 @@ use std::io;
 
 use bstr::{BStr, BString};
 use byteorder::{BigEndian, WriteBytesExt};
+use bytes::{Buf, Bytes};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use nom::combinator::{map, map_opt, map_res, rest};
-use nom::multi::length_data;
-use nom::number::streaming::{be_u32, be_u8};
-use nom::sequence::tuple;
-use nom::IResult;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::errors::Result;
@@ -29,7 +25,7 @@ pub struct LiteralData {
     /// Raw data, stored normalized to CRLF line endings, to make signing and verification
     /// simpler.
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    data: Bytes,
 }
 
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
@@ -65,15 +61,43 @@ impl LiteralData {
             mode: DataMode::Binary,
             file_name: file_name.to_owned(),
             created: Utc::now().trunc_subsecs(0),
-            data: data.to_owned(),
+            data: data.to_vec().into(),
         }
     }
 
     /// Parses a `LiteralData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(packet_version)(input)?;
+        Self::from_buf(packet_version, input)
+    }
 
-        Ok(pk)
+    /// Parses a `LiteralData` packet from the given buf.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut data: B) -> Result<Self> {
+        ensure!(data.remaining() > 2, "invalid literal data packet");
+
+        // Mode
+        let mode = DataMode::from(data.get_u8());
+
+        // Name
+        let name_len = data.get_u8() as usize;
+        ensure!(data.remaining() >= name_len, "invalid literal data packet");
+        let mut name_vec = vec![0u8; name_len];
+        data.copy_to_slice(&mut name_vec);
+        let name = BString::new(name_vec);
+
+        // Created
+        ensure!(data.remaining() >= 4, "invalid literal data packet");
+        let created = Utc
+            .timestamp_opt(i64::from(data.get_u32()), 0)
+            .single()
+            .ok_or_else(|| format_err!("invalid created field"))?;
+
+        Ok(LiteralData {
+            packet_version,
+            mode,
+            created,
+            file_name: name.to_owned(),
+            data: data.copy_to_bytes(data.remaining()),
+        })
     }
 
     pub fn is_binary(&self) -> bool {
@@ -86,18 +110,18 @@ impl LiteralData {
 
     #[inline]
     /// Extracts data in to raw data
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn into_bytes(self) -> Bytes {
         self.data
     }
 
     #[inline]
     /// Extracts data as string, returning raw bytes as Err if not valid utf-8 string
-    pub fn try_into_string(self) -> Result<String, Vec<u8>> {
+    pub fn try_into_string(self) -> Result<String, Bytes> {
         match self.mode {
             DataMode::Binary => Err(self.data),
-            _ => match String::from_utf8(self.data) {
-                Ok(data) => Ok(data),
-                Err(error) => Err(error.into_bytes()),
+            _ => match std::str::from_utf8(&self.data) {
+                Ok(data) => Ok(data.to_string()),
+                Err(_error) => Err(self.data),
             },
         }
     }
@@ -135,26 +159,6 @@ impl Serialize for LiteralData {
     }
 }
 
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], LiteralData> {
-    move |i: &[u8]| {
-        map(
-            tuple((
-                map_res(be_u8, DataMode::try_from),
-                map(length_data(be_u8), BStr::new::<[u8]>),
-                map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
-                rest,
-            )),
-            |(mode, name, created, data)| LiteralData {
-                packet_version,
-                mode,
-                created,
-                file_name: name.to_owned(),
-                data: data.to_vec(),
-            },
-        )(i)
-    }
-}
-
 impl PacketTrait for LiteralData {
     fn packet_version(&self) -> Version {
         self.packet_version
@@ -171,5 +175,5 @@ fn test_utf8_literal() {
 
     let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
     let literal = LiteralData::from_str("", slogan);
-    assert!(String::from_utf8(literal.data).unwrap() == slogan);
+    assert!(std::str::from_utf8(&literal.data).unwrap() == slogan);
 }
