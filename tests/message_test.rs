@@ -99,7 +99,9 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
             let raw = match decrypted {
                 Message::Literal(data) => data,
                 Message::Compressed(data) => {
-                    let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
+                    let mut bytes = Vec::new();
+                    data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
+                    let m = Message::from_bytes(bytes.into()).unwrap();
 
                     // serialize and check we get the same thing
                     let serialized = m.to_armored_bytes(None.into()).unwrap();
@@ -262,7 +264,9 @@ fn msg_large_indeterminate_len() {
     let raw = match decrypted {
         Message::Literal(data) => data,
         Message::Compressed(data) => {
-            let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
+            let mut bytes = Vec::new();
+            data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
+            let m = Message::from_bytes(bytes.into()).unwrap();
 
             m.get_literal().unwrap().clone()
         }

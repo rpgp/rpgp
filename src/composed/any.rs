@@ -38,23 +38,35 @@ impl Any {
         match typ {
             // Standard PGP types
             BlockType::PublicKey => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let key = SignedPublicKey::from_bytes(dearmor)?;
+                let mut dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
+                // TODO: limited read to 1GiB
+                let mut bytes = Vec::new();
+                dearmor.read_to_end(&mut bytes)?;
+                let key = SignedPublicKey::from_bytes(bytes.into())?;
                 Ok((Self::PublicKey(key), headers))
             }
             BlockType::PrivateKey => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let key = SignedSecretKey::from_bytes(dearmor)?;
+                let mut dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
+                // TODO: limited read to 1GiB
+                let mut bytes = Vec::new();
+                dearmor.read_to_end(&mut bytes)?;
+                let key = SignedSecretKey::from_bytes(bytes.into())?;
                 Ok((Self::SecretKey(key), headers))
             }
             BlockType::Message => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let msg = Message::from_bytes(dearmor)?;
+                let mut dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
+                // TODO: limited read to 1GiB
+                let mut bytes = Vec::new();
+                dearmor.read_to_end(&mut bytes)?;
+                let msg = Message::from_bytes(bytes.into())?;
                 Ok((Self::Message(msg), headers))
             }
             BlockType::Signature => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
-                let sig = StandaloneSignature::from_bytes(dearmor)?;
+                let mut dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
+                // TODO: limited read to 1GiB
+                let mut bytes = Vec::new();
+                dearmor.read_to_end(&mut bytes)?;
+                let sig = StandaloneSignature::from_bytes(bytes.into())?;
                 Ok((Self::Signature(sig), headers))
             }
             BlockType::CleartextMessage => {

@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use pgp::{
     types::{PublicKeyTrait, SecretKeyTrait},
     Deserializable, Message,
@@ -27,7 +28,7 @@ fn rpg_019_message_decrypt_with_password_panic1() {
         227, 167, 167, 76, 69, 210, 69, 208, 210, 167, 167, 167, 227, 167, 167, 76, 69, 227, 167,
         167,
     ];
-    let message = Message::from_bytes(bad_input).unwrap();
+    let message = Message::from_bytes(Bytes::from_static(bad_input)).unwrap();
 
     // expected bug behavior
     // thread '<unnamed>' panicked at library/alloc/src/raw_vec.rs:545:5:
@@ -44,7 +45,7 @@ fn rpg_019_message_decrypt_with_password_panic2() {
         0xa7, 0xa7, 0x00, 0xa7, 0xa7, 0xd1, 0x22, 0xff, 0xff, 0xff, 0xa7, 0x26, 0xaf, 0x20, 0x4b,
         0xaf,
     ];
-    let message = Message::from_bytes(bad_input).unwrap();
+    let message = Message::from_bytes(Bytes::from_static(bad_input)).unwrap();
 
     // note that for this crash, the password does matter
     // expected bug behavior
@@ -61,7 +62,7 @@ fn rpg_016_message_parser_panic2() {
     // thread '<unnamed>' panicked at 'assertion failed: length > 0', src/packet/many.rs:140:17:
 
     let bad_input: &[u8] = &[0xb7];
-    let _ = Message::from_bytes(bad_input);
+    let _ = Message::from_bytes(Bytes::from_static(bad_input));
 }
 
 /// RPG-015
@@ -132,7 +133,7 @@ fn rpg_007_message_parser_panic1() {
     // expected behavior
     // [...] panicked at src/packet/many.rs:128:70:
     // range end index 1 out of range for slice of length 0
-    let _ = Message::from_bytes(bad_input);
+    let _ = Message::from_bytes(Bytes::from_static(bad_input));
 }
 
 /// RPG-007
@@ -154,7 +155,7 @@ fn rpg_007_message_from_armor_single_panic1() {
 #[test]
 fn rpg_017_signed_public_key_as_unsigned_panic1() {
     let bad_input: &[u8] = &[155, 4, 228, 4, 0, 4, 0];
-    let key = pgp::composed::SignedPublicKey::from_bytes(bad_input).unwrap();
+    let key = pgp::composed::SignedPublicKey::from_bytes(Bytes::from_static(bad_input)).unwrap();
     // expected bug behavior:
     // thread '<unnamed>' panicked at src/composed/signed_key/shared.rs:116:35:
     // missing user ids
@@ -181,7 +182,7 @@ fn rpg_021_signed_secret_key_encrypt_panic1() {
     // note, this is non-deterministic, but does not matter for reproduction
     let mut rng = rand::thread_rng();
 
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
+    let key = pgp::composed::SignedSecretKey::from_bytes(Bytes::from_static(bad_input)).unwrap();
 
     // expected bug behavior on --release:
     // thread '<unnamed>' panicked at [..]/rsa-0.9.6/src/algorithms/pkcs1v15.rs:51:39:
@@ -216,7 +217,7 @@ fn rpg_021_signed_secret_key_encrypt_panic2() {
     let dummy_plaintext = vec![0u8; 1];
     // note, this is non-deterministic, but does not matter for reproduction
     let mut rng = rand::thread_rng();
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
+    let key = pgp::composed::SignedSecretKey::from_bytes(Bytes::from_static(bad_input)).unwrap();
     // expected bug behavior:
     // thread '[..]' panicked at [..]/src/crypto/x448.rs:149:75:
     // 56
@@ -241,7 +242,7 @@ fn rpg_020_signed_secret_key_create_signature_panic1() {
 
     let dummy_data: &[u8] = &[0];
 
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
+    let key = pgp::composed::SignedSecretKey::from_bytes(Bytes::from_static(bad_input)).unwrap();
 
     // expected bug behavior:
     // thread '<unnamed>' panicked at [..]/num-bigint-dig-0.8.4/src/algorithms/sub.rs:75:5:
@@ -262,7 +263,7 @@ fn rpg_020_signed_secret_key_create_signature_panic2() {
         0x00, 0xff, 0x00,
     ];
     let dummy_data: &[u8] = &[0];
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
+    let key = pgp::composed::SignedSecretKey::from_bytes(Bytes::from_static(bad_input)).unwrap();
     // expected bug behavior for --debug:
     // thread [..] panicked at [..]/src/types/params/encrypted_secret.rs:155:48:
     // attempt to subtract with overflow
@@ -285,7 +286,7 @@ fn rpg_020_signed_secret_key_create_signature_oom_crash1() {
         0xff, 0xff, 0x80, 0x8f, 0x8f, 0x8f, 0x00, 0x01, 0x00, 0x00, 0x00, 0xaf, 0xf8, 0x1b, 0x1b,
     ];
     let dummy_data: &[u8] = &[0];
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
+    let key = pgp::composed::SignedSecretKey::from_bytes(Bytes::from_static(bad_input)).unwrap();
     // expected bug behavior:
     // memory allocation of 137438871552 bytes failed
     let _ = key.create_signature(
@@ -303,7 +304,7 @@ fn rpg_010_standalone_signature_subtract_with_overflow1() {
     // expected bug behavior
     // thread '<unnamed>' panicked at src/packet/user_attribute.rs:165:41:
     // attempt to subtract with overflow
-    let _ = pgp::composed::StandaloneSignature::from_bytes(bad_input);
+    let _ = pgp::composed::StandaloneSignature::from_bytes(Bytes::from_static(bad_input));
 }
 
 /// RPG-009
@@ -315,7 +316,7 @@ fn rpg_009_message_from_bytes_subtract_with_overflow1() {
     // expected bug behavior
     // thread '<unnamed>' panicked at src/packet/public_key_parser.rs:250:47:
     // attempt to subtract with overflow
-    let _ = Message::from_bytes(bad_input);
+    let _ = Message::from_bytes(Bytes::from_static(bad_input));
 }
 
 /// RPG-009
@@ -327,7 +328,7 @@ fn rpg_009_message_from_bytes_subtract_with_overflow2() {
     // expected bug behavior
     // thread '<unnamed>' panicked at src/packet/signature/de.rs:391:25:
     // attempt to subtract with overflow
-    let _ = Message::from_bytes(bad_input);
+    let _ = Message::from_bytes(Bytes::from_static(bad_input));
 }
 
 /// RPG-009
@@ -339,5 +340,5 @@ fn rpg_009_message_from_bytes_subtract_with_overflow3() {
     // expected bug behavior
     // thread '<unnamed>' panicked at src/types/params/secret.rs:106:47:
     // attempt to subtract with overflow
-    let _ = Message::from_bytes(bad_input);
+    let _ = Message::from_bytes(Bytes::from_static(bad_input));
 }

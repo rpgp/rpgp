@@ -64,7 +64,9 @@ struct DumpResult {
 fn test_parse_dump(i: usize, expected: DumpResult) {
     let _ = pretty_env_logger::try_init();
 
-    let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")));
+    let f = std::fs::read(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")))
+        .unwrap()
+        .into();
 
     let mut actual = DumpResult::default();
 
@@ -1253,7 +1255,7 @@ autocrypt_key!(
 #[test]
 fn test_invalid() {
     let v = (0..64).collect::<Vec<u8>>();
-    let k = SignedSecretKey::from_bytes(&v[..]);
+    let k = SignedSecretKey::from_bytes(v.into());
 
     assert!(k.is_err());
 }
@@ -1273,7 +1275,7 @@ fn test_handle_incomplete_packets_end() {
 
     // add overflow of "b60ed7"
     let raw = hex::decode(hex::encode(key.to_bytes().unwrap()) + "b60ed7").unwrap();
-    let key = SignedSecretKey::from_bytes(&raw[..]).expect("failed");
+    let key = SignedSecretKey::from_bytes(raw.into()).expect("failed");
     key.verify().expect("invalid key");
 }
 

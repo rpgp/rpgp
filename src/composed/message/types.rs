@@ -1,6 +1,7 @@
-use std::io;
+use std::io::{self, Read};
 
 use bstr::BStr;
+use bytes::{Bytes, BytesMut};
 use chrono::SubsecRound;
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
@@ -171,7 +172,7 @@ impl Edata {
 
     /// Transform decrypted data into a message.
     /// Bails if the packets contain no message or multiple messages.
-    fn process_decrypted(packet_data: &[u8]) -> Result<Message> {
+    fn process_decrypted(packet_data: Bytes) -> Result<Message> {
         let mut messages = Message::from_bytes_many(packet_data)?;
         // First message is the one we want to return
         let Some(message) = messages.next() else {
@@ -207,7 +208,7 @@ impl Edata {
                             "Version mismatch between key and integrity packet"
                         );
                         let data = p.decrypt(key, Some(sym_alg))?;
-                        Self::process_decrypted(&data[..])
+                        Self::process_decrypted(data.into())
                     }
                     Self::SymEncryptedData(p) => {
                         ensure_eq!(
@@ -215,9 +216,10 @@ impl Edata {
                             None,
                             "Version mismatch between key and integrity packet"
                         );
-                        let mut data = p.data().to_vec();
+                        let mut data = BytesMut::from(p.data());
                         let res = sym_alg.decrypt(key, &mut data)?;
-                        Self::process_decrypted(res)
+                        let bytes = Bytes::from(res.to_vec()); // TODO: avoid alloc
+                        Self::process_decrypted(bytes)
                     }
                 }
             }
@@ -243,7 +245,7 @@ impl Edata {
                     );
 
                     let decrypted_packets = p.decrypt(key, None)?;
-                    Self::process_decrypted(&decrypted_packets[..])
+                    Self::process_decrypted(decrypted_packets.into())
                 }
                 Self::SymEncryptedData(_) => {
                     bail!("invalid packet combination");
@@ -328,7 +330,13 @@ impl Message {
     /// Decompresses the data if compressed.
     pub fn decompress(self) -> Result<Self> {
         match self {
-            Message::Compressed(data) => Message::from_bytes(data.decompress()?),
+            Message::Compressed(data) => {
+                // TODO: limited read to 1GiB
+                let mut bytes = Vec::new();
+                data.decompress()?.read_to_end(&mut bytes)?;
+
+                Message::from_bytes(bytes.into())
+            }
             _ => Ok(self),
         }
     }
@@ -621,7 +629,11 @@ impl Message {
             }
             Message::Compressed(data) => {
                 if decompress {
-                    let msg = Message::from_bytes(data.decompress()?)?;
+                    // TODO: limited read to 1GiB
+                    let mut bytes = Vec::new();
+                    data.decompress()?.read_to_end(&mut bytes)?;
+
+                    let msg = Message::from_bytes(bytes.into())?;
                     msg.verify_internal(key, false)
                 } else {
                     bail!("Recursive decompression not allowed");
@@ -831,7 +843,12 @@ impl Message {
                 .map(|l| l.data().to_vec())),
             Message::Compressed(data) => {
                 if decompress {
-                    let msg = Message::from_bytes(data.decompress()?)?;
+                    // TODO: limited read to 1GiB
+                    let mut bytes = Vec::new();
+                    data.decompress()?.read_to_end(&mut bytes)?;
+
+                    let msg = Message::from_bytes(bytes.into())?;
+
                     msg.get_content_internal(false)
                 } else {
                     bail!("Recursive decompression not allowed");
@@ -1257,7 +1274,7 @@ mod tests {
                 print(data)
         */
 
-        let msg = Message::from_bytes(&msg_raw[..]).unwrap();
+        let msg = Message::from_bytes(Bytes::from_static(msg_raw)).unwrap();
 
         // Before the fix message eventually decrypted to
         //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
@@ -1477,7 +1494,8 @@ mod tests {
         .unwrap();
         let pkey = skey.public_key();
 
-        let msg = Message::from_bytes(&include_bytes!("../../../tests/quine.out")[..]).unwrap();
+        let msg = include_bytes!("../../../tests/quine.out");
+        let msg = Message::from_bytes(Bytes::from_static(msg)).unwrap();
         assert!(msg.get_content().is_err());
         assert!(msg.verify(&pkey).is_err());
     }
