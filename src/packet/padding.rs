@@ -62,6 +62,7 @@ impl PacketTrait for Padding {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -81,7 +82,8 @@ mod tests {
         assert_eq!(rest.len(), len);
 
         let full_packet =
-            single::body_parser_slice(version, tag, &rest[..len]).expect("body parse");
+            single::body_parser_bytes(version, tag, Bytes::from(rest[..len].to_vec()))
+                .expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
