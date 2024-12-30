@@ -83,6 +83,7 @@ num-bigint = { version = "0.8.4", features = ["rand", "i128", "u64_digit", "prim
 x25519-dalek = { version = "2.0.1", default-features = false, features = ["alloc", "precomputed-tables", "zeroize", "static_secrets"] }
 bytes = "1.9.0"
 bytes-utils = "0.1.4"
+memmap2 = { version = "0.9.5", optional = true }
 
 [dev-dependencies]
 glob = "0.3"
@@ -98,10 +99,11 @@ serde_json = "1.0"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
-default = []
+default = ["mmap"]
 asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 unstable-curve448 = ["dep:x448"]
+mmap = ["dep:memmap2"]
 
 [profile.bench]
 debug = 2

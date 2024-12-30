@@ -352,3 +352,19 @@ fn msg_literal_signature() {
 
     msg.verify(&pkey).unwrap();
 }
+
+#[test]
+#[cfg(feature = "mmap")]
+fn binary_msg_password() {
+    // encrypted README.md using gpg
+    let message = Message::from_file("./tests/binary_password.gpg").unwrap();
+    let decrypted = message
+        .decrypt_with_password(|| "1234".to_string())
+        .unwrap();
+    let decompressed = decrypted.decompress().unwrap();
+    let Message::Literal(l) = decompressed else {
+        panic!("unexpected message: {:?}", decompressed);
+    };
+
+    assert_eq!(l.file_name(), "README.md");
+}

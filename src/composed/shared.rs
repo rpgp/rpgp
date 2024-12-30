@@ -1,4 +1,5 @@
 use std::io::{BufRead, Read};
+use std::path::Path;
 
 use buffer_redux::BufReader;
 use bytes::Bytes;
@@ -99,6 +100,22 @@ pub trait Deserializable: Sized {
             .peekable();
 
         Ok(Self::from_packets(packets))
+    }
+
+    /// Parse a single binary encoded composition, using mmap.
+    #[cfg(feature = "mmap")]
+    fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let mut el = Self::from_file_many(path)?;
+        el.next().ok_or(Error::NoMatchingPacket)?
+    }
+
+    /// Ready binary packets from the given file, using mmap.
+    #[cfg(feature = "mmap")]
+    fn from_file_many<P: AsRef<Path>>(path: P) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
+        let file = std::fs::File::open(path)?;
+        let map = unsafe { memmap2::Mmap::map(&file)? };
+        let bytes = Bytes::from_owner(map);
+        Self::from_bytes_many(bytes)
     }
 
     /// Turn a list of packets into a usable representation.

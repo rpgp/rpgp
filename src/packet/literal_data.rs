@@ -1,6 +1,6 @@
 use std::io;
 
-use bstr::{BStr, BString};
+use bstr::{BStr, BString, ByteSlice};
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::{Buf, Bytes};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
@@ -98,6 +98,10 @@ impl LiteralData {
             file_name: name.to_owned(),
             data: data.copy_to_bytes(data.remaining()),
         })
+    }
+
+    pub fn file_name(&self) -> &BStr {
+        self.file_name.as_bstr()
     }
 
     pub fn is_binary(&self) -> bool {
