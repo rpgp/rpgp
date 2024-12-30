@@ -1,138 +1,79 @@
-use std::io::{BufRead, Read};
-
-use buffer_redux::policy::MinBuffered;
-use buffer_redux::BufReader;
+use bytes::{Buf, Bytes};
+use bytes_utils::SegmentedBuf;
 
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
 use crate::packet::single;
 use crate::types::{PacketLength, Tag};
-use crate::MAX_BUFFER_SIZE;
 
-const DEFAULT_CAPACITY: usize = 1024 * 16;
-const READER_POLICY: MinBuffered = MinBuffered(1024);
-
-pub struct PacketParser<R> {
-    reader: BufReader<R, MinBuffered>,
-    /// Remember if we are done.
-    done: bool,
+pub struct PacketParser {
+    /// The reader that gets advanced through the original source
+    reader: Bytes,
+    /// Are we done?
+    is_done: bool,
 }
 
-impl<R: Read> PacketParser<R> {
-    pub fn new(inner: R) -> Self {
+impl PacketParser {
+    pub fn new(source: Bytes) -> Self {
         PacketParser {
-            reader: BufReader::with_capacity(DEFAULT_CAPACITY, inner).set_policy(READER_POLICY),
-            done: false,
+            reader: source,
+            is_done: false,
         }
     }
 }
 
-impl<R: Read> Iterator for PacketParser<R> {
+impl Iterator for PacketParser {
     type Item = Result<Packet>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.done {
+        if self.is_done {
             return None;
         }
 
-        let buf = match self.reader.fill_buf() {
-            Ok(buf) => buf,
-            Err(err) => {
-                self.done = true;
-                return Some(Err(err.into()));
-            }
-        };
-
-        // No more data to read
-        if buf.is_empty() {
-            self.done = true;
+        if !self.reader.has_remaining() {
+            self.is_done = true;
             return None;
         }
 
-        let buf_len = buf.len();
-
-        let (version, tag, packet_length) = match single::parser(buf) {
+        let buf_len = self.reader.len();
+        let (version, tag, packet_length) = match single::parser(&self.reader) {
             Ok((rest, v)) => {
                 let rest_len = rest.len();
                 let read = buf_len - rest_len;
-                self.reader.consume(read);
+                self.reader.advance(read);
                 v
             }
             Err(nom::Err::Incomplete(_)) => {
                 // If incomplete, we are not getting a full header,
                 // minimum input size is checked above.
-                self.done = true;
+                self.is_done = true;
                 return Some(Err(Error::PacketIncomplete));
             }
             Err(err) => {
-                self.done = true;
+                self.is_done = true;
                 return Some(Err(err.into()));
             }
         };
 
         match packet_length {
             PacketLength::Indeterminate => {
-                let mut body = Vec::new();
-                let mut buf = [0u8; 1024];
-
-                loop {
-                    // limited read_to_end
-                    match self.reader.read(&mut buf) {
-                        Ok(0) => {
-                            break;
-                        }
-                        Ok(r) => {
-                            body.extend_from_slice(&buf[..r]);
-                            if body.len() >= MAX_BUFFER_SIZE {
-                                self.done = true;
-                                return Some(Err(format_err!("Indeterminate packet too large")));
-                            }
-                        }
-                        Err(err) => {
-                            self.done = true;
-                            return Some(Err(err.into()));
-                        }
+                match single::body_parser_slice(version, tag, &self.reader) {
+                    Ok(packet) => {
+                        self.reader.advance(self.reader.len());
+                        Some(Ok(packet))
                     }
-                }
-
-                match single::body_parser(version, tag, &body) {
-                    Ok(packet) => Some(Ok(packet)),
                     Err(err) => {
-                        self.done = true;
+                        self.is_done = true;
                         Some(Err(err))
                     }
                 }
             }
             PacketLength::Fixed(len) => {
-                let res = if len <= self.reader.policy().0 {
-                    // small enough to reuse our internal buffer
-                    self.reader.make_room();
-                    let body = match self.reader.fill_buf() {
-                        Ok(body) => body,
-                        Err(err) => {
-                            self.done = true;
-                            return Some(Err(err.into()));
-                        }
-                    };
-                    if body.len() < len {
-                        return Some(Err(format_err!("invalid length encountered")));
-                    }
-                    let res = single::body_parser(version, tag, &body[..len]);
-                    self.reader.consume(len);
-                    res
-                } else {
-                    if len > MAX_BUFFER_SIZE {
-                        return Some(Err(format_err!("Fixed packet too large")));
-                    }
-
-                    let mut buffer = vec![0u8; len];
-                    if let Err(err) = self.reader.read_exact(&mut buffer) {
-                        self.done = true;
-                        return Some(Err(err.into()));
-                    };
-                    single::body_parser(version, tag, &buffer)
-                };
-
+                if self.reader.len() < len {
+                    return Some(Err(format_err!("invalid length encountered")));
+                }
+                let res = single::body_parser_slice(version, tag, &self.reader[..len]);
+                self.reader.advance(len);
                 match res {
                     Ok(p) => Some(Ok(p)),
                     Err(Error::Incomplete(_)) => {
@@ -154,7 +95,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                         | Tag::SymEncryptedData
                         | Tag::SymEncryptedProtectedData
                 ) {
-                    self.done = true;
+                    self.is_done = true;
                     return Some(Err(format_err!(
                         "Partial body length is not allowed for packet type {:?}",
                         tag
@@ -164,79 +105,60 @@ impl<R: Read> Iterator for PacketParser<R> {
                 // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
                 // "The first partial length MUST be at least 512 octets long."
                 if len < 512 {
-                    self.done = true;
+                    self.is_done = true;
                     return Some(Err(format_err!(
                         "Illegal first partial body length {} (shorter than 512 bytes)",
                         len,
                     )));
                 }
 
-                // NOTE: len can be at most 1GiB per partial block, so with the current
-                // MAX_BUFFER_SIZE setting, this comparison will never trigger.
-                //
-                // With a configurable/smaller limit, it could, though.
-                //
-                // (NOTE: we're rejecting "== MAX_BUFFER_SIZE" here as well, since this partial
-                // must be followed by more data to form a legal packet.)
-                if len >= MAX_BUFFER_SIZE {
-                    return Some(Err(format_err!("First partial of packet is too large")));
-                }
-
-                let mut body = vec![0u8; len];
-                if let Err(err) = self.reader.read_exact(&mut body) {
-                    self.done = true;
-                    return Some(Err(err.into()));
-                };
+                let mut body = SegmentedBuf::new();
+                body.push(self.reader.copy_to_bytes(len));
 
                 // Read n partials + 1 final fixed
                 loop {
-                    self.reader.make_room();
-                    let buf = match self.reader.fill_buf() {
-                        Ok(buf) => buf,
-                        Err(err) => {
-                            self.done = true;
-                            return Some(Err(err.into()));
-                        }
-                    };
-                    match single::read_packet_len(buf) {
+                    match single::read_packet_len(&self.reader) {
                         Ok((rest, PacketLength::Partial(len))) => {
-                            let read = buf.len() - rest.len();
-                            self.reader.consume(read);
+                            let read = self.reader.len() - rest.len();
+                            self.reader.advance(read);
 
-                            if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
-                                self.done = true;
-                                return Some(Err(err));
+                            if self.reader.len() < len {
+                                self.is_done = true;
+                                return Some(Err(format_err!("invalid packet length detected")));
                             }
+
+                            body.push(self.reader.copy_to_bytes(len));
                         }
                         Ok((rest, PacketLength::Fixed(len))) => {
-                            let read = buf.len() - rest.len();
-                            self.reader.consume(read);
+                            let read = self.reader.len() - rest.len();
+                            self.reader.advance(read);
 
-                            if let Err(err) = read_fixed(&mut self.reader, len, &mut body) {
-                                self.done = true;
-                                return Some(Err(err));
+                            if self.reader.len() < len {
+                                self.is_done = true;
+                                return Some(Err(format_err!("invalid packet length detected")));
                             }
+                            body.push(self.reader.copy_to_bytes(len));
                             break;
                         }
                         Ok((_, PacketLength::Indeterminate)) => {
-                            self.done = true;
+                            self.is_done = true;
                             return Some(Err(Error::InvalidInput));
                         }
                         Err(err) => {
-                            self.done = true;
+                            self.is_done = true;
                             return Some(Err(err.into()));
                         }
                     }
                 }
 
-                match single::body_parser(version, tag, &body) {
+                match single::body_parser_buf(version, tag, body) {
                     Ok(res) => Some(Ok(res)),
                     Err(Error::Incomplete(_)) => {
                         // not bailing, we are just skipping incomplete bodies
                         Some(Err(Error::PacketIncomplete))
                     }
                     Err(err) => {
-                        self.done = true;
+                        self.is_done = true;
                         Some(Err(err))
                     }
                 }
@@ -245,29 +167,12 @@ impl<R: Read> Iterator for PacketParser<R> {
     }
 }
 
-fn read_fixed<R: Read>(
-    reader: &mut BufReader<R, MinBuffered>,
-    len: usize,
-    out: &mut Vec<u8>,
-) -> Result<()> {
-    let out_len = out.len();
-
-    if out_len + len > MAX_BUFFER_SIZE {
-        return Err(format_err!("Packet too large"));
-    }
-
-    out.resize(out_len + len, 0u8);
-    reader.read_exact(&mut out[out_len..])?;
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
     use std::fs::File;
-    use std::io::{BufReader, Seek, SeekFrom};
+    use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
     use std::path::Path;
 
     use regex::Regex;
@@ -331,7 +236,7 @@ mod tests {
 
         let path = format!("./tests/tests/sks-dump/{dump}.pgp");
         let p = Path::new(&path);
-        let file = File::open(p).unwrap();
+        let file: Bytes = std::fs::read(p).unwrap().into();
 
         let mut bytes = File::open(p).unwrap();
 
@@ -366,7 +271,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         let p = Path::new("./tests/tests/sks-dump/0000.pgp");
-        let file = File::open(p).unwrap();
+        let file: Bytes = std::fs::read(p).unwrap().into();
 
         // list of expected tags
         // this file is built by
@@ -411,8 +316,8 @@ mod tests {
     fn incomplete_packet_parser() {
         let _ = pretty_env_logger::try_init();
 
-        let bytes: [u8; 1] = [0x97];
-        let parser = PacketParser::new(&bytes[..]);
+        let bytes = Bytes::from_static(&[0x97]);
+        let parser = PacketParser::new(bytes);
         let mut packets = parser.filter_map(|p| {
             // for now we are skipping any packets that we failed to parse
             match p {

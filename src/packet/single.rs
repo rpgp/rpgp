@@ -1,6 +1,7 @@
 // comes from inside somewhere of nom
 #![allow(clippy::useless_let_if_seq)]
 
+use bytes::Buf;
 use log::warn;
 use nom::bits;
 use nom::branch::alt;
@@ -101,7 +102,7 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     Ok((i, head))
 }
 
-pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
+pub fn body_parser_slice(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
             PublicKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
@@ -148,6 +149,37 @@ pub fn body_parser(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
         Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
         Err(err) => {
             warn!("invalid packet: {:?} {:?}\n{}", err, tag, hex::encode(body));
+            Err(Error::InvalidPacketContent(Box::new(err)))
+        }
+    }
+}
+
+/// Parses the body for partial packets
+pub fn body_parser_buf<B: Buf + std::fmt::Debug>(
+    ver: Version,
+    tag: Tag,
+    mut body: B,
+) -> Result<Packet> {
+    let res: Result<Packet> = match tag {
+        Tag::CompressedData => CompressedData::from_buf(ver, &mut body).map(Into::into),
+        Tag::SymEncryptedData => SymEncryptedData::from_buf(ver, &mut body).map(Into::into),
+        Tag::LiteralData => LiteralData::from_buf(ver, &mut body).map(Into::into),
+        Tag::SymEncryptedProtectedData => {
+            SymEncryptedProtectedData::from_buf(ver, &mut body).map(Into::into)
+        }
+        _ => {
+            // a "hard" error that will bubble up and interrupt processing of compositions
+            return Err(Error::InvalidPacketContent(Box::new(Error::Message(
+                format!("invalid packet type with partical length {:?}", tag),
+            ))));
+        }
+    };
+
+    match res {
+        Ok(res) => Ok(res),
+        Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
+        Err(err) => {
+            warn!("invalid packet: {:?} {:?}\n{:?}", err, tag, body);
             Err(Error::InvalidPacketContent(Box::new(err)))
         }
     }

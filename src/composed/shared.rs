@@ -1,6 +1,7 @@
 use std::io::{BufRead, Read};
 
 use buffer_redux::BufReader;
+use bytes::Bytes;
 use log::{debug, warn};
 
 use crate::armor::{self, BlockType};
@@ -10,7 +11,7 @@ use crate::packet::{Packet, PacketParser};
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
     fn from_bytes(bytes: impl Read) -> Result<Self> {
-        let mut el = Self::from_bytes_many(bytes);
+        let mut el = Self::from_bytes_many(bytes)?;
         el.next().ok_or(Error::NoMatchingPacket)?
     }
 
@@ -74,7 +75,7 @@ pub trait Deserializable: Sized {
                 if !Self::matches_block_type(typ) {
                     bail!("unexpected block type: {}", typ);
                 }
-                Ok((Self::from_bytes_many(dearmor), headers))
+                Ok((Self::from_bytes_many(dearmor)?, headers))
             }
             BlockType::PublicKeyPKCS1(_)
             | BlockType::PublicKeyPKCS8
@@ -88,10 +89,19 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a list of compositions in raw byte format.
-    fn from_bytes_many<'a>(bytes: impl Read + 'a) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
-        let packets = PacketParser::new(bytes).filter_map(filter_parsed_packet_results);
+    fn from_bytes_many<'a>(
+        mut bytes: impl Read + 'a,
+    ) -> Result<Box<dyn Iterator<Item = Result<Self>> + 'a>> {
+        // TODO: pass through
+        let mut body = Vec::new();
+        bytes.read_to_end(&mut body)?;
+        let body = Bytes::from(body);
 
-        Self::from_packets(packets.peekable())
+        let packets = PacketParser::new(body)
+            .filter_map(crate::composed::shared::filter_parsed_packet_results)
+            .peekable();
+
+        Ok(Self::from_packets(packets))
     }
 
     /// Turn a list of packets into a usable representation.
@@ -152,7 +162,7 @@ pub trait Deserializable: Sized {
             let (keys, headers) = Self::from_armor_many_buf(input)?;
             Ok((keys, Some(headers)))
         } else {
-            Ok((Self::from_bytes_many(input), None))
+            Ok((Self::from_bytes_many(input)?, None))
         }
     }
 }

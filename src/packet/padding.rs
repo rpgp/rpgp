@@ -80,7 +80,8 @@ mod tests {
         };
         assert_eq!(rest.len(), len);
 
-        let full_packet = single::body_parser(version, tag, &rest[..len]).expect("body parse");
+        let full_packet =
+            single::body_parser_slice(version, tag, &rest[..len]).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);

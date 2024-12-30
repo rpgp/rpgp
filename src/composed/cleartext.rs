@@ -210,7 +210,7 @@ impl CleartextSignedMessage {
 
         ensure_eq!(typ, BlockType::Signature, "invalid block type");
 
-        let signatures = StandaloneSignature::from_bytes_many(&mut dearmor);
+        let signatures = StandaloneSignature::from_bytes_many(&mut dearmor)?;
         let signatures = signatures.collect::<Result<_>>()?;
 
         let (_, headers, _, b) = dearmor.into_parts();

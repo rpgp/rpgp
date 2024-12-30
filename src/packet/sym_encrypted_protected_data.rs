@@ -1,16 +1,14 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use nom::bytes::streaming::take;
-use nom::combinator::map_res;
-use nom::number::streaming::be_u8;
+use bytes::{Buf, Bytes};
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 use zeroize::Zeroizing;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, IResult, Result};
+use crate::errors::{Error, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
@@ -27,7 +25,7 @@ pub struct SymEncryptedProtectedData {
 pub enum Data {
     V1 {
         #[debug("{}", hex::encode(data))]
-        data: Vec<u8>,
+        data: Bytes,
     },
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
@@ -36,15 +34,48 @@ pub enum Data {
         #[debug("{}", hex::encode(salt))]
         salt: [u8; 32],
         #[debug("{}", hex::encode(data))]
-        data: Vec<u8>,
+        data: Bytes,
     },
 }
 
 impl SymEncryptedProtectedData {
     /// Parses a `SymEncryptedProtectedData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        ensure!(input.len() > 1, "invalid input length");
-        let (_, data) = parse()(input)?;
+        Self::from_buf(packet_version, input)
+    }
+
+    /// Parses a `SymEncryptedProtectedData` packet from the given buf.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut data: B) -> Result<Self> {
+        ensure!(data.remaining() > 1, "invalid input length");
+
+        let version = data.get_u8();
+        let data = match version {
+            0x01 => Data::V1 {
+                data: data.copy_to_bytes(data.remaining()),
+            },
+            0x02 => {
+                ensure!(data.remaining() >= 3 + 32, "invalid input length");
+                let sym_alg = SymmetricKeyAlgorithm::from(data.get_u8());
+                let aead = AeadAlgorithm::from(data.get_u8());
+                let chunk_size = data.get_u8();
+                let mut salt = [0u8; 32];
+                data.copy_to_slice(&mut salt);
+
+                Data::V2 {
+                    sym_alg,
+                    aead,
+                    chunk_size,
+                    salt,
+                    data: data.copy_to_bytes(data.remaining()),
+                }
+            }
+            _ => {
+                return Err(format_err!(
+                    "unknown SymEncryptedProtectedData version {}",
+                    version
+                ))
+            }
+        };
 
         Ok(SymEncryptedProtectedData {
             data,
@@ -63,7 +94,7 @@ impl SymEncryptedProtectedData {
 
         Ok(SymEncryptedProtectedData {
             packet_version: Default::default(),
-            data: Data::V1 { data },
+            data: Data::V1 { data: data.into() },
         })
     }
 
@@ -182,7 +213,7 @@ impl SymEncryptedProtectedData {
                 aead,
                 chunk_size,
                 salt,
-                data: out,
+                data: out.into(),
             },
         })
     }
@@ -213,7 +244,7 @@ impl SymEncryptedProtectedData {
     ) -> Result<Vec<u8>> {
         match &self.data {
             Data::V1 { data } => {
-                let mut data = data.clone();
+                let mut data = data.to_vec();
                 let res = sym_alg
                     .expect("v1")
                     .decrypt_protected(session_key, &mut data)?;
@@ -241,7 +272,7 @@ impl SymEncryptedProtectedData {
                 let (info, message_key, mut nonce) =
                     Self::aead_setup(*sym_alg, *aead, *chunk_size, &salt[..], ikm)?;
 
-                let mut data = data.clone();
+                let mut data = data.to_vec();
 
                 // There are n chunks, n auth tags + 1 final auth tag
                 let Some(aead_tag_size) = aead.tag_size() else {
@@ -344,36 +375,6 @@ impl PacketTrait for SymEncryptedProtectedData {
 
 fn expand_chunk_size(s: u8) -> u32 {
     1u32 << (s as u32 + 6)
-}
-
-fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
-    move |i: &[u8]| {
-        let (i, version) = be_u8(i)?;
-        match version {
-            0x01 => Ok((&[][..], Data::V1 { data: i.to_vec() })),
-            0x02 => {
-                let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
-                let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
-                let (i, chunk_size) = be_u8(i)?;
-                let (i, salt) = take(32usize)(i)?;
-
-                Ok((
-                    &[][..],
-                    Data::V2 {
-                        sym_alg,
-                        aead,
-                        chunk_size,
-                        salt: salt.try_into().expect("size checked"),
-                        data: i.to_vec(),
-                    },
-                ))
-            }
-            _ => Err(nom::Err::Error(Error::Unsupported(format!(
-                "unknown SymEncryptedProtectedData version {}",
-                version
-            )))),
-        }
-    }
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 use std::io::{self, Read};
 
 use byteorder::WriteBytesExt;
+use bytes::{Buf, Bytes};
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 
 use crate::errors::Result;
@@ -13,7 +14,7 @@ pub struct CompressedData {
     packet_version: Version,
     compression_algorithm: CompressionAlgorithm,
     #[debug("{}", hex::encode(compressed_data))]
-    compressed_data: Vec<u8>,
+    compressed_data: Bytes,
 }
 
 pub enum Decompressor<R> {
@@ -43,7 +44,19 @@ impl CompressedData {
         Ok(CompressedData {
             packet_version,
             compression_algorithm: alg,
-            compressed_data: input[1..].to_vec(),
+            compressed_data: Bytes::from(input[1..].to_vec()),
+        })
+    }
+
+    /// Parses a `CompressedData` packet from the given `Buf`.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
+        ensure!(input.remaining() > 1, "input too short");
+
+        let alg = CompressionAlgorithm::from(input.get_u8());
+        Ok(CompressedData {
+            packet_version,
+            compression_algorithm: alg,
+            compressed_data: input.copy_to_bytes(input.remaining()),
         })
     }
 
@@ -51,7 +64,7 @@ impl CompressedData {
         CompressedData {
             packet_version: Default::default(),
             compression_algorithm: alg,
-            compressed_data: data,
+            compressed_data: Bytes::from(data),
         }
     }
 

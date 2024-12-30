@@ -172,7 +172,7 @@ impl Edata {
     /// Transform decrypted data into a message.
     /// Bails if the packets contain no message or multiple messages.
     fn process_decrypted(packet_data: &[u8]) -> Result<Message> {
-        let mut messages = Message::from_bytes_many(packet_data);
+        let mut messages = Message::from_bytes_many(packet_data)?;
         // First message is the one we want to return
         let Some(message) = messages.next() else {
             bail!("no valid message found");
