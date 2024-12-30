@@ -77,6 +77,7 @@ derive_more = { version = "1.0.0-beta.6", features = ["debug"] }
 x448 = "0.6"
 bytes = "1.9.0"
 bytes-utils = "0.1.4"
+memmap2 = { version = "0.9.5", optional = true }
 
 [dependencies.buffer-redux]
 version = "1.0.0"
@@ -125,11 +126,12 @@ serde_json = "^1.0"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
-default = []
+default = ["mmap"]
 nightly = ["rsa/nightly", "rand/nightly", "num-bigint/nightly"]
 profile = ["gperftools"]
 asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
+mmap = ["dep:memmap2"]
 
 [profile.bench]
 debug = 2
