@@ -4,6 +4,7 @@ use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
 use cfb_mode::cipher::{AsyncStreamCipher, KeyIvInit};
 use cfb_mode::{BufDecryptor, BufEncryptor, Decryptor, Encryptor};
+use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut};
 use des::TdesEde3;
 use idea::Idea;
 use log::debug;
@@ -14,49 +15,53 @@ use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
 
-macro_rules! decrypt {
-    ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        let mut mode = BufDecryptor::<$mode>::new_from_slices($key, $iv)?;
-        mode.decrypt($prefix);
+fn decrypt<MODE>(
+    key: &[u8],
+    iv: &[u8],
+    prefix: &mut [u8],
+    data: &mut [u8],
+    resync: bool,
+) -> Result<()>
+where
+    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufDecryptor<MODE>: KeyIvInit,
+{
+    let mut mode = BufDecryptor::<MODE>::new_from_slices(key, iv)?;
+    mode.decrypt(prefix);
 
-        // We do not do use "quick check" here.
-        // See the "Security Considerations" section
-        // in <https://www.rfc-editor.org/rfc/rfc9580.html#name-risks-of-a-quick-check-orac>
-        // and the paper <https://eprint.iacr.org/2005/033>
-        // for details.
+    // We do not do use "quick check" here.
+    // See the "Security Considerations" section
+    // in <https://www.rfc-editor.org/rfc/rfc9580.html#name-risks-of-a-quick-check-orac>
+    // and the paper <https://eprint.iacr.org/2005/033>
+    // for details.
 
-        if $resync {
-            unsupported_err!("CFB resync is disabled");
-        } else {
-            mode.decrypt($data);
-        }
-    }};
+    if resync {
+        unsupported_err!("CFB resync is disabled");
+    }
+    mode.decrypt(data);
+    Ok(())
 }
 
-macro_rules! encrypt {
-    ($mode:ident, $key:expr, $iv:expr, $prefix:expr, $data:expr, $bs:expr, $resync:expr) => {{
-        let mut mode = BufEncryptor::<$mode>::new_from_slices($key, $iv)?;
-        mode.encrypt($prefix);
+fn encrypt<MODE>(
+    key: &[u8],
+    iv: &[u8],
+    prefix: &mut [u8],
+    data: &mut [u8],
+    resync: bool,
+) -> Result<()>
+where
+    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufEncryptor<MODE>: KeyIvInit,
+{
+    let mut mode = BufEncryptor::<MODE>::new_from_slices(key, iv)?;
+    mode.encrypt(prefix);
 
-        if $resync {
-            unsupported_err!("CFB resync is disabled");
-        } else {
-            mode.encrypt($data);
-        }
-    }};
-}
-
-macro_rules! decrypt_regular {
-    ($mode:ident, $key:expr, $iv:expr, $ciphertext:expr) => {{
-        let mode = Decryptor::<$mode>::new_from_slices($key, $iv)?;
-        mode.decrypt($ciphertext);
-    }};
-}
-macro_rules! encrypt_regular {
-    ($mode:ident, $key:expr, $iv:expr, $plaintext:expr) => {{
-        let mode = Encryptor::<$mode>::new_from_slices($key, $iv)?;
-        mode.encrypt($plaintext);
-    }};
+    if resync {
+        unsupported_err!("CFB resync is disabled");
+    } else {
+        mode.encrypt(data);
+    }
+    Ok(())
 }
 
 /// Available symmetric key algorithms.
@@ -237,108 +242,39 @@ impl SymmetricKeyAlgorithm {
             SymmetricKeyAlgorithm::Plaintext => {
                 bail!("'Plaintext' is not a legal cipher for encrypted data")
             }
-            SymmetricKeyAlgorithm::IDEA => decrypt!(
-                Idea,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-
-            SymmetricKeyAlgorithm::TripleDES => {
-                decrypt!(
-                    TdesEde3,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                );
+            SymmetricKeyAlgorithm::IDEA => {
+                decrypt::<Idea>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
             }
-            SymmetricKeyAlgorithm::CAST5 => decrypt!(
-                Cast5,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::Blowfish => decrypt!(
-                Blowfish,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::AES128 => decrypt!(
-                Aes128,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::AES192 => decrypt!(
-                Aes192,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::AES256 => decrypt!(
-                Aes256,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::Twofish => decrypt!(
-                Twofish,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::Camellia128 => decrypt!(
-                Camellia128,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::Camellia192 => decrypt!(
-                Camellia192,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
-            SymmetricKeyAlgorithm::Camellia256 => decrypt!(
-                Camellia256,
-                key,
-                iv_vec,
-                encrypted_prefix,
-                encrypted_data,
-                bs,
-                resync
-            ),
+            SymmetricKeyAlgorithm::TripleDES => {
+                decrypt::<TdesEde3>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::CAST5 => {
+                decrypt::<Cast5>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::Blowfish => {
+                decrypt::<Blowfish>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::AES128 => {
+                decrypt::<Aes128>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                decrypt::<Aes192>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                decrypt::<Aes256>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::Twofish => {
+                decrypt::<Twofish>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::Camellia128 => {
+                decrypt::<Camellia128>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::Camellia192 => {
+                decrypt::<Camellia192>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+            }
+            SymmetricKeyAlgorithm::Camellia256 => {
+                decrypt::<Camellia256>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?
+            }
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
             }
@@ -360,35 +296,37 @@ impl SymmetricKeyAlgorithm {
                 bail!("'Plaintext' is not a legal cipher for encrypted data")
             }
             SymmetricKeyAlgorithm::IDEA => {
-                decrypt_regular!(Idea, key, iv_vec, ciphertext)
+                Decryptor::<Idea>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::TripleDES => {
-                decrypt_regular!(TdesEde3, key, iv_vec, ciphertext);
+                Decryptor::<TdesEde3>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
-            SymmetricKeyAlgorithm::CAST5 => decrypt_regular!(Cast5, key, iv_vec, ciphertext),
+            SymmetricKeyAlgorithm::CAST5 => {
+                Decryptor::<Cast5>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
+            }
             SymmetricKeyAlgorithm::Blowfish => {
-                decrypt_regular!(Blowfish, key, iv_vec, ciphertext)
+                Decryptor::<Blowfish>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::AES128 => {
-                decrypt_regular!(Aes128, key, iv_vec, ciphertext)
+                Decryptor::<Aes128>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::AES192 => {
-                decrypt_regular!(Aes192, key, iv_vec, ciphertext)
+                Decryptor::<Aes192>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::AES256 => {
-                decrypt_regular!(Aes256, key, iv_vec, ciphertext)
+                Decryptor::<Aes256>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::Twofish => {
-                decrypt_regular!(Twofish, key, iv_vec, ciphertext)
+                Decryptor::<Twofish>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::Camellia128 => {
-                decrypt_regular!(Camellia128, key, iv_vec, ciphertext)
+                Decryptor::<Camellia128>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::Camellia192 => {
-                decrypt_regular!(Camellia192, key, iv_vec, ciphertext)
+                Decryptor::<Camellia192>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::Camellia256 => {
-                decrypt_regular!(Camellia256, key, iv_vec, ciphertext)
+                Decryptor::<Camellia256>::new_from_slices(key, iv_vec)?.decrypt(ciphertext);
             }
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
@@ -500,37 +438,37 @@ impl SymmetricKeyAlgorithm {
                     bail!("'Plaintext' is not a legal cipher for encrypted data")
                 }
                 SymmetricKeyAlgorithm::IDEA => {
-                    encrypt!(Idea, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Idea>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::TripleDES => {
-                    encrypt!(TdesEde3, key, iv_vec, prefix, data, bs, resync);
+                    encrypt::<TdesEde3>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::CAST5 => {
-                    encrypt!(Cast5, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Cast5>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::Blowfish => {
-                    encrypt!(Blowfish, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Blowfish>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::AES128 => {
-                    encrypt!(Aes128, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Aes128>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::AES192 => {
-                    encrypt!(Aes192, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Aes192>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::AES256 => {
-                    encrypt!(Aes256, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Aes256>(key, iv_vec, prefix, data, resync)?
                 }
                 SymmetricKeyAlgorithm::Twofish => {
-                    encrypt!(Twofish, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Twofish>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::Camellia128 => {
-                    encrypt!(Camellia128, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Camellia128>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::Camellia192 => {
-                    encrypt!(Camellia192, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Camellia192>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::Camellia256 => {
-                    encrypt!(Camellia256, key, iv_vec, prefix, data, bs, resync)
+                    encrypt::<Camellia256>(key, iv_vec, prefix, data, resync)?;
                 }
                 SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                     bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
@@ -548,31 +486,42 @@ impl SymmetricKeyAlgorithm {
         iv_vec: &[u8],
         plaintext: &mut [u8],
     ) -> Result<()> {
-        // TODO: actual cfb mode used in pgp
         match self {
             SymmetricKeyAlgorithm::Plaintext => {
                 bail!("'Plaintext' is not a legal cipher for encrypted data")
             }
-            SymmetricKeyAlgorithm::IDEA => encrypt_regular!(Idea, key, iv_vec, plaintext),
+            SymmetricKeyAlgorithm::IDEA => {
+                Encryptor::<Idea>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
+            }
             SymmetricKeyAlgorithm::TripleDES => {
-                encrypt_regular!(TdesEde3, key, iv_vec, plaintext);
+                Encryptor::<TdesEde3>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
             }
-            SymmetricKeyAlgorithm::CAST5 => encrypt_regular!(Cast5, key, iv_vec, plaintext),
+            SymmetricKeyAlgorithm::CAST5 => {
+                Encryptor::<Cast5>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
+            }
             SymmetricKeyAlgorithm::Blowfish => {
-                encrypt_regular!(Blowfish, key, iv_vec, plaintext)
+                Encryptor::<Blowfish>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
             }
-            SymmetricKeyAlgorithm::AES128 => encrypt_regular!(Aes128, key, iv_vec, plaintext),
-            SymmetricKeyAlgorithm::AES192 => encrypt_regular!(Aes192, key, iv_vec, plaintext),
-            SymmetricKeyAlgorithm::AES256 => encrypt_regular!(Aes256, key, iv_vec, plaintext),
-            SymmetricKeyAlgorithm::Twofish => encrypt_regular!(Twofish, key, iv_vec, plaintext),
+            SymmetricKeyAlgorithm::AES128 => {
+                Encryptor::<Aes128>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                Encryptor::<Aes192>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                Encryptor::<Aes256>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
+            }
+            SymmetricKeyAlgorithm::Twofish => {
+                Encryptor::<Twofish>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
+            }
             SymmetricKeyAlgorithm::Camellia128 => {
-                encrypt_regular!(Camellia128, key, iv_vec, plaintext)
+                Encryptor::<Camellia128>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
             }
             SymmetricKeyAlgorithm::Camellia192 => {
-                encrypt_regular!(Camellia192, key, iv_vec, plaintext)
+                Encryptor::<Camellia192>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
             }
             SymmetricKeyAlgorithm::Camellia256 => {
-                encrypt_regular!(Camellia256, key, iv_vec, plaintext)
+                Encryptor::<Camellia256>::new_from_slices(key, iv_vec)?.encrypt(plaintext);
             }
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
