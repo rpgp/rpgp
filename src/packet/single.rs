@@ -1,7 +1,7 @@
 // comes from inside somewhere of nom
 #![allow(clippy::useless_let_if_seq)]
 
-use bytes::Buf;
+use bytes::{Buf, Bytes};
 use log::warn;
 use nom::bits;
 use nom::branch::alt;
@@ -102,32 +102,32 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     Ok((i, head))
 }
 
-pub fn body_parser_slice(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> {
+pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Packet> {
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
-            PublicKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
+            PublicKeyEncryptedSessionKey::from_slice(ver, &body).map(Into::into)
         }
-        Tag::Signature => Signature::from_slice(ver, body).map(Into::into),
+        Tag::Signature => Signature::from_slice(ver, &body).map(Into::into),
         Tag::SymKeyEncryptedSessionKey => {
-            SymKeyEncryptedSessionKey::from_slice(ver, body).map(Into::into)
+            SymKeyEncryptedSessionKey::from_slice(ver, &body).map(Into::into)
         }
-        Tag::OnePassSignature => OnePassSignature::from_slice(ver, body).map(Into::into),
-        Tag::SecretKey => SecretKey::from_slice(ver, body).map(Into::into),
-        Tag::PublicKey => PublicKey::from_slice(ver, body).map(Into::into),
-        Tag::SecretSubkey => SecretSubkey::from_slice(ver, body).map(Into::into),
-        Tag::CompressedData => CompressedData::from_slice(ver, body).map(Into::into),
-        Tag::SymEncryptedData => SymEncryptedData::from_slice(ver, body).map(Into::into),
-        Tag::Marker => Marker::from_slice(ver, body).map(Into::into),
-        Tag::LiteralData => LiteralData::from_slice(ver, body).map(Into::into),
-        Tag::Trust => Trust::from_slice(ver, body).map(Into::into),
-        Tag::UserId => UserId::from_slice(ver, body).map(Into::into),
-        Tag::PublicSubkey => PublicSubkey::from_slice(ver, body).map(Into::into),
-        Tag::UserAttribute => UserAttribute::from_slice(ver, body).map(Into::into),
+        Tag::OnePassSignature => OnePassSignature::from_slice(ver, &body).map(Into::into),
+        Tag::SecretKey => SecretKey::from_slice(ver, &body).map(Into::into),
+        Tag::PublicKey => PublicKey::from_slice(ver, &body).map(Into::into),
+        Tag::SecretSubkey => SecretSubkey::from_slice(ver, &body).map(Into::into),
+        Tag::CompressedData => CompressedData::from_buf(ver, &mut body).map(Into::into),
+        Tag::SymEncryptedData => SymEncryptedData::from_buf(ver, &mut body).map(Into::into),
+        Tag::Marker => Marker::from_slice(ver, &body).map(Into::into),
+        Tag::LiteralData => LiteralData::from_buf(ver, &mut body).map(Into::into),
+        Tag::Trust => Trust::from_slice(ver, &body).map(Into::into),
+        Tag::UserId => UserId::from_slice(ver, &body).map(Into::into),
+        Tag::PublicSubkey => PublicSubkey::from_slice(ver, &body).map(Into::into),
+        Tag::UserAttribute => UserAttribute::from_slice(ver, &body).map(Into::into),
         Tag::SymEncryptedProtectedData => {
-            SymEncryptedProtectedData::from_slice(ver, body).map(Into::into)
+            SymEncryptedProtectedData::from_buf(ver, &mut body).map(Into::into)
         }
-        Tag::ModDetectionCode => ModDetectionCode::from_slice(ver, body).map(Into::into),
-        Tag::Padding => Padding::from_slice(ver, body).map(Into::into),
+        Tag::ModDetectionCode => ModDetectionCode::from_slice(ver, &body).map(Into::into),
+        Tag::Padding => Padding::from_slice(ver, &body).map(Into::into),
         Tag::Other(20) => {
             unimplemented_err!("GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported")
         }
@@ -148,7 +148,12 @@ pub fn body_parser_slice(ver: Version, tag: Tag, body: &[u8]) -> Result<Packet> 
         Ok(res) => Ok(res),
         Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
         Err(err) => {
-            warn!("invalid packet: {:?} {:?}\n{}", err, tag, hex::encode(body));
+            warn!(
+                "invalid packet: {:?} {:?}\n{}",
+                err,
+                tag,
+                hex::encode(&body)
+            );
             Err(Error::InvalidPacketContent(Box::new(err)))
         }
     }

@@ -57,7 +57,7 @@ impl Iterator for PacketParser {
 
         match dbg!(packet_length) {
             PacketLength::Indeterminate => {
-                match single::body_parser_slice(version, tag, &self.reader) {
+                match single::body_parser_bytes(version, tag, self.reader.clone()) {
                     Ok(packet) => {
                         self.reader.advance(self.reader.remaining());
                         Some(Ok(packet))
@@ -76,8 +76,8 @@ impl Iterator for PacketParser {
                         self.reader.remaining()
                     )));
                 }
-                let res = single::body_parser_slice(version, tag, &self.reader[..len]);
-                self.reader.advance(len);
+                let packet_bytes = self.reader.copy_to_bytes(len);
+                let res = single::body_parser_bytes(version, tag, packet_bytes);
                 match res {
                     Ok(p) => Some(Ok(p)),
                     Err(Error::Incomplete(_)) => {

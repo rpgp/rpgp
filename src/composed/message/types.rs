@@ -83,6 +83,7 @@ where
     let out_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(true)
         .open(&out_path)?;
     let mut out_file = BufWriter::new(out_file);
 
