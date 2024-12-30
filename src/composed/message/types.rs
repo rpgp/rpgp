@@ -216,10 +216,10 @@ impl Edata {
                             None,
                             "Version mismatch between key and integrity packet"
                         );
-                        let mut data = BytesMut::from(p.data());
-                        let res = sym_alg.decrypt(key, &mut data)?;
-                        let bytes = Bytes::from(res.to_vec()); // TODO: avoid alloc
-                        Self::process_decrypted(bytes)
+                        let mut prefix = BytesMut::from(p.data());
+                        let mut data = prefix.split_off(sym_alg.cfb_prefix_size());
+                        sym_alg.decrypt(key, &mut prefix, &mut data)?;
+                        Self::process_decrypted(data.freeze())
                     }
                 }
             }

@@ -244,11 +244,11 @@ impl SymEncryptedProtectedData {
     ) -> Result<Vec<u8>> {
         match &self.data {
             Data::V1 { data } => {
-                let mut data = data.to_vec();
-                let res = sym_alg
-                    .expect("v1")
-                    .decrypt_protected(session_key, &mut data)?;
-                Ok(res.to_vec())
+                let sym_alg = sym_alg.expect("v1");
+                let mut prefix = data[..sym_alg.cfb_prefix_size()].to_vec();
+                let mut ciphertext = data[sym_alg.cfb_prefix_size()..].to_vec();
+                sym_alg.decrypt_protected(session_key, &mut prefix, &mut ciphertext)?;
+                Ok(ciphertext)
             }
             Data::V2 {
                 sym_alg,

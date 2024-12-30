@@ -124,6 +124,10 @@ impl SymmetricKeyAlgorithm {
         }
     }
 
+    pub(crate) fn cfb_prefix_size(&self) -> usize {
+        self.block_size() + 2
+    }
+
     /// The size of a single block in bytes.
     /// Based on <https://github.com/gpg/libgcrypt/blob/master/cipher>
     pub const fn key_size(self) -> usize {
@@ -149,16 +153,24 @@ impl SymmetricKeyAlgorithm {
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode. Does
     /// resynchronization.
-    pub fn decrypt<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
+    pub fn decrypt(self, key: &[u8], prefix: &mut [u8], ciphertext: &mut [u8]) -> Result<()> {
         debug!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
-        Ok(self.decrypt_with_iv(key, &iv_vec, ciphertext, true)?.1)
+        self.decrypt_with_iv(key, &iv_vec, prefix, ciphertext, true)?;
+        Ok(())
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
     /// Uses an IV of all zeroes, as specified in the openpgp cfb mode.
     /// Does not do resynchronization.
-    pub fn decrypt_protected<'a>(self, key: &[u8], ciphertext: &'a mut [u8]) -> Result<&'a [u8]> {
+    ///
+    /// The result will be in `ciphertext`.
+    pub fn decrypt_protected(
+        self,
+        key: &[u8],
+        prefix: &mut [u8],
+        ciphertext: &mut Vec<u8>,
+    ) -> Result<()> {
         #[inline]
         fn calculate_sha1_unchecked<I, T>(data: I) -> [u8; 20]
         where
@@ -177,22 +189,22 @@ impl SymmetricKeyAlgorithm {
         debug!("protected decrypt");
 
         let iv_vec = vec![0u8; self.block_size()];
-        let (prefix, res) = self.decrypt_with_iv(key, &iv_vec, ciphertext, false)?;
+        self.decrypt_with_iv(key, &iv_vec, prefix, ciphertext, false)?;
 
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
         const MDC_LEN: usize = 22;
-        let (data, mdc) = res.split_at(res.len() - MDC_LEN);
+        let mdc = ciphertext.split_off(ciphertext.len() - MDC_LEN);
 
         // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
-        let sha1 = calculate_sha1_unchecked([prefix, data, &mdc[0..2]]);
+        let sha1 = calculate_sha1_unchecked([prefix, &ciphertext[..], &mdc[0..2]]);
         if mdc[0] != 0xD3 || // Invalid MDC tag
            mdc[1] != 0x14 || // Invalid MDC length
            mdc[2..] != sha1[..]
         {
-            Err(Error::MdcError)
-        } else {
-            Ok(data)
+            return Err(Error::MdcError);
         }
+
+        Ok(())
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
@@ -213,128 +225,126 @@ impl SymmetricKeyAlgorithm {
         self,
         key: &[u8],
         iv_vec: &[u8],
-        ciphertext: &'a mut [u8],
+        encrypted_prefix: &mut [u8],
+        encrypted_data: &mut [u8],
         resync: bool,
-    ) -> Result<(&'a [u8], &'a [u8])> {
+    ) -> Result<()> {
         let bs = self.block_size();
+        let ciphertext_len = encrypted_prefix.len() + encrypted_data.len();
+        ensure!(bs + 2 < ciphertext_len, "invalid ciphertext");
 
-        ensure!(bs + 2 < ciphertext.len(), "invalid ciphertext");
-        let (encrypted_prefix, encrypted_data) = ciphertext.split_at_mut(bs + 2);
+        match self {
+            SymmetricKeyAlgorithm::Plaintext => {
+                bail!("'Plaintext' is not a legal cipher for encrypted data")
+            }
+            SymmetricKeyAlgorithm::IDEA => decrypt!(
+                Idea,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
 
-        {
-            match self {
-                SymmetricKeyAlgorithm::Plaintext => {
-                    bail!("'Plaintext' is not a legal cipher for encrypted data")
-                }
-                SymmetricKeyAlgorithm::IDEA => decrypt!(
-                    Idea,
+            SymmetricKeyAlgorithm::TripleDES => {
+                decrypt!(
+                    TdesEde3,
                     key,
                     iv_vec,
                     encrypted_prefix,
                     encrypted_data,
                     bs,
                     resync
-                ),
-
-                SymmetricKeyAlgorithm::TripleDES => {
-                    decrypt!(
-                        TdesEde3,
-                        key,
-                        iv_vec,
-                        encrypted_prefix,
-                        encrypted_data,
-                        bs,
-                        resync
-                    );
-                }
-                SymmetricKeyAlgorithm::CAST5 => decrypt!(
-                    Cast5,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::Blowfish => decrypt!(
-                    Blowfish,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::AES128 => decrypt!(
-                    Aes128,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::AES192 => decrypt!(
-                    Aes192,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::AES256 => decrypt!(
-                    Aes256,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::Twofish => decrypt!(
-                    Twofish,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::Camellia128 => decrypt!(
-                    Camellia128,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::Camellia192 => decrypt!(
-                    Camellia192,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::Camellia256 => decrypt!(
-                    Camellia256,
-                    key,
-                    iv_vec,
-                    encrypted_prefix,
-                    encrypted_data,
-                    bs,
-                    resync
-                ),
-                SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
-                    unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
-                }
+                );
+            }
+            SymmetricKeyAlgorithm::CAST5 => decrypt!(
+                Cast5,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::Blowfish => decrypt!(
+                Blowfish,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::AES128 => decrypt!(
+                Aes128,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::AES192 => decrypt!(
+                Aes192,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::AES256 => decrypt!(
+                Aes256,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::Twofish => decrypt!(
+                Twofish,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::Camellia128 => decrypt!(
+                Camellia128,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::Camellia192 => decrypt!(
+                Camellia192,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::Camellia256 => decrypt!(
+                Camellia256,
+                key,
+                iv_vec,
+                encrypted_prefix,
+                encrypted_data,
+                bs,
+                resync
+            ),
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
             }
         }
 
-        Ok((encrypted_prefix, encrypted_data))
+        Ok(())
     }
 
     /// Decrypt the data using CFB mode, without padding. Overwrites the input.
@@ -600,7 +610,10 @@ mod tests {
                     let mut ciphertext = $alg.encrypt_protected(&mut rng, &key, &data).unwrap();
                     assert_ne!(data, ciphertext);
 
-                    let plaintext = $alg.decrypt_protected(&key, &mut ciphertext).unwrap();
+                    let mut plaintext = ciphertext.split_off($alg.cfb_prefix_size());
+                    let mut prefix = ciphertext;
+                    $alg.decrypt_protected(&key, &mut prefix, &mut plaintext)
+                        .unwrap();
                     assert_eq!(data, plaintext);
                 }
 
@@ -635,9 +648,10 @@ mod tests {
     #[test]
     pub fn decrypt_without_enough_ciphertext() {
         let key: [u8; 0] = [];
+        let mut prefix: [u8; 0] = [];
         let mut cipher_text: [u8; 0] = [];
         assert!(SymmetricKeyAlgorithm::AES128
-            .decrypt(&key, &mut cipher_text)
+            .decrypt(&key, &mut prefix, &mut cipher_text)
             .is_err());
     }
 }
