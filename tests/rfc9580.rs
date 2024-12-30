@@ -1,5 +1,6 @@
 use std::fs::File;
 
+use bytes::Bytes;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 use pgp::packet::LiteralData;
@@ -100,7 +101,7 @@ fn rfc9580_seipdv1_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
+        let lit = LiteralData::from_bytes("".into(), Bytes::from_static(MSG.as_bytes()));
         let msg = Message::Literal(lit);
 
         // SEIPDv1 encrypt/decrypt roundtrip
@@ -128,7 +129,7 @@ fn rfc9580_seipdv2_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
+        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes().into());
         let msg = Message::Literal(lit);
 
         // SEIPDv2 encrypt/decrypt roundtrip
@@ -177,7 +178,7 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         let spk = SignedPublicKey::from(ssk.clone());
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
+        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes().into());
         let msg = Message::Literal(lit);
 
         // roundtrip sign+verify inline msg

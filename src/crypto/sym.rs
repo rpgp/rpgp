@@ -202,9 +202,10 @@ impl SymmetricKeyAlgorithm {
 
         // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
         let sha1 = calculate_sha1_unchecked([prefix, &ciphertext[..], &mdc[0..2]]);
-        if mdc[0] != 0xD3 || // Invalid MDC tag
-           mdc[1] != 0x14 || // Invalid MDC length
-           mdc[2..] != sha1[..]
+        dbg!(&mdc);
+        if dbg!(mdc[0] != 0xD3) || // Invalid MDC tag
+           dbg!(mdc[1] != 0x14) || // Invalid MDC length
+            dbg!(mdc[2..] != sha1[..])
         {
             return Err(Error::MdcError);
         }
@@ -414,6 +415,161 @@ impl SymmetricKeyAlgorithm {
         Ok(ciphertext)
     }
 
+    pub fn encrypted_protected_len(&self, plaintext_len: usize) -> usize {
+        // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+        let mdc_len = 22;
+        self.block_size() + 2 + plaintext_len + mdc_len
+    }
+
+    pub fn encrypt_protected_stream<R, I, O>(
+        self,
+        rng: R,
+        key: &[u8],
+        plaintext: I,
+        ciphertext: O,
+    ) -> Result<()>
+    where
+        R: Rng + CryptoRng,
+        I: std::io::Read,
+        O: std::io::Write,
+    {
+        match self {
+            SymmetricKeyAlgorithm::Plaintext => {
+                bail!("'Plaintext' is not a legal cipher for encrypted data")
+            }
+            SymmetricKeyAlgorithm::IDEA => {
+                self.encrypt_protected_stream_inner::<Idea, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::TripleDES => {
+                self.encrypt_protected_stream_inner::<TdesEde3, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::CAST5 => {
+                self.encrypt_protected_stream_inner::<Cast5, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::Blowfish => {
+                self.encrypt_protected_stream_inner::<Blowfish, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::AES128 => {
+                self.encrypt_protected_stream_inner::<Aes128, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                self.encrypt_protected_stream_inner::<Aes192, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                self.encrypt_protected_stream_inner::<Aes256, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::Twofish => {
+                self.encrypt_protected_stream_inner::<Twofish, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::Camellia128 => {
+                self.encrypt_protected_stream_inner::<Camellia128, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::Camellia192 => {
+                self.encrypt_protected_stream_inner::<Camellia192, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::Camellia256 => {
+                self.encrypt_protected_stream_inner::<Camellia256, R, I, O>(
+                    rng, key, plaintext, ciphertext,
+                )?;
+            }
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
+            }
+        }
+
+        Ok(())
+    }
+
+    fn encrypt_protected_stream_inner<M, R, I, O>(
+        self,
+        mut rng: R,
+        key: &[u8],
+        mut plaintext: I,
+        mut ciphertext: O,
+    ) -> Result<()>
+    where
+        M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+        BufEncryptor<M>: KeyIvInit,
+        R: Rng + CryptoRng,
+        I: std::io::Read,
+        O: std::io::Write,
+    {
+        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
+        use sha1::{Digest, Sha1};
+
+        debug!("protected encrypt stream");
+
+        let bs = self.block_size();
+        let mut prefix = vec![0u8; bs + 2];
+
+        // prefix
+        rng.fill_bytes(&mut prefix[..bs]);
+
+        // add quick check
+        prefix[bs] = prefix[bs - 2];
+        prefix[bs + 1] = prefix[bs - 1];
+
+        // checksum over unencrypted data
+        let mut hasher = Sha1::default();
+
+        // IV is all zeroes
+        let iv_vec = vec![0u8; bs];
+
+        let mut encryptor = BufEncryptor::<M>::new_from_slices(key, &iv_vec)?;
+
+        // Prefix
+        hasher.update(&prefix);
+        encryptor.encrypt(&mut prefix);
+        ciphertext.write_all(&prefix)?;
+
+        let mut buffer = vec![0u8; 1024 * bs];
+        loop {
+            let read = plaintext.read(&mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+            encryptor.encrypt(&mut buffer[..read]);
+            ciphertext.write_all(&buffer[..read])?;
+        }
+
+        // mdc header
+        let mdc_header = [0xD3, 0x14];
+        hasher.update(&mdc_header);
+
+        let mut mdc = [0u8; 22];
+        mdc[..2].copy_from_slice(&mdc_header);
+
+        // mdc body
+        let checksum = &hasher.finalize()[..20];
+        mdc[2..22].copy_from_slice(checksum);
+
+        encryptor.encrypt(&mut mdc[..22]);
+        ciphertext.write_all(&mdc[..22])?;
+
+        Ok(())
+    }
+
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
     ///
     /// OpenPGP CFB mode uses an initialization vector (IV) of all zeros, and
@@ -556,8 +712,21 @@ mod tests {
                     let data = (0..i).map(|_| rng.gen()).collect::<Vec<_>>();
                     let key = (0..$alg.key_size()).map(|_| rng.gen()).collect::<Vec<_>>();
 
+                    let mut rng = ChaCha8Rng::seed_from_u64(8);
                     let mut ciphertext = $alg.encrypt_protected(&mut rng, &key, &data).unwrap();
                     assert_ne!(data, ciphertext);
+
+                    {
+                        let mut input = std::io::Cursor::new(&data);
+                        let len = $alg.encrypted_protected_len(data.len());
+                        assert_eq!(len, ciphertext.len());
+                        let mut output = Vec::new();
+                        let mut rng = ChaCha8Rng::seed_from_u64(8);
+                        $alg.encrypt_protected_stream(&mut rng, &key, &mut input, &mut output)
+                            .unwrap();
+                        assert_eq!(output.len(), len);
+                        assert_eq!(ciphertext, output);
+                    }
 
                     let mut plaintext = ciphertext.split_off($alg.cfb_prefix_size());
                     let mut prefix = ciphertext;

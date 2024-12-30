@@ -31,6 +31,9 @@
 #[macro_use]
 extern crate pretty_assertions;
 
+// Reexport as used in the public api
+pub use bytes;
+
 // public so it can be used in doc test
 #[macro_use]
 pub mod util;

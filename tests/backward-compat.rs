@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 
@@ -103,7 +104,7 @@ fn encrypt_rpgp_cur(msg: &[u8], keyfile: &str) -> String {
 
     let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-    let lit = pgp::packet::LiteralData::from_bytes((&[]).into(), msg);
+    let lit = pgp::packet::LiteralData::from_bytes((&[]).into(), Bytes::from(msg.to_vec()));
     let msg = pgp::Message::Literal(lit);
 
     let (ssk, _headers) =

@@ -1,8 +1,9 @@
-use std::io::{self, Read};
+use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::path::Path;
 
-use bstr::BStr;
+use bstr::{BStr, BString};
 use bytes::{Bytes, BytesMut};
-use chrono::SubsecRound;
+use chrono::{SubsecRound, Utc};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use log::{debug, warn};
@@ -18,7 +19,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
-    write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
+    write_packet, CompressedData, DataMode, LiteralData, OnePassSignature, Packet,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType,
     SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
     SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
@@ -26,7 +27,7 @@ use crate::packet::{
 use crate::ser::Serialize;
 use crate::types::{
     CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PkeskVersion, PublicKeyTrait,
-    SecretKeyTrait, StringToKey, Tag,
+    SecretKeyTrait, StringToKey, Tag, Version,
 };
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
@@ -46,6 +47,104 @@ pub enum Message {
         esk: Vec<Esk>,
         edata: Edata,
     },
+}
+
+/// Compresses and encrypts the provided file, into the new location.
+pub fn compress_encrypt_with_password_seipdv1<R, P, Q, F>(
+    mut rng: R,
+    in_path: P,
+    out_path: Q,
+    compression: CompressionAlgorithm,
+    s2k: StringToKey,
+    sym_alg: SymmetricKeyAlgorithm,
+    msg_pw: F,
+) -> Result<()>
+where
+    R: Rng + CryptoRng,
+    F: FnOnce() -> String + Clone,
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    let in_path = in_path.as_ref();
+    let in_file = std::fs::File::open(&in_path)?;
+    let in_meta = in_file.metadata()?;
+    let in_file_size = in_meta.len();
+    let Some(in_file_name) = in_path.file_name() else {
+        bail!("{}: is not a vaild input file", in_path.display());
+    };
+    let mut in_file = BufReader::new(in_file);
+
+    let out_path: &Path = out_path.as_ref();
+    if let Some(parent) = out_path.parent() {
+        println!("creating {}", parent.display());
+        std::fs::create_dir_all(parent)?;
+    }
+    println!("opening {}", out_path.display());
+    let out_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&out_path)?;
+    let mut out_file = BufWriter::new(out_file);
+
+    println!("encrypting");
+
+    // Encryption
+    // 1. Generate a session key.
+    let session_key = sym_alg.new_session_key(&mut rng);
+    // 2. Encrypt (sym) the session key using the provided password.
+    let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v4(
+        msg_pw,
+        &session_key,
+        s2k,
+        sym_alg,
+    )?);
+
+    // Write ESK
+    skesk.to_writer(&mut out_file)?;
+
+    // Data::V1
+    let packet_version = Version::New;
+
+    // Inner packet: Literal Data
+    let in_file_size = usize::try_from(in_file_size)?;
+    let inner_packet_tag = Tag::LiteralData;
+
+    let mode = DataMode::Binary;
+    let file_name: BString = in_file_name.as_encoded_bytes().into();
+    let created: u32 = Utc::now().trunc_subsecs(0).timestamp().try_into()?;
+    let mut literal_data_prefix = vec![0u8; 6 + file_name.len()];
+    literal_data_prefix[0] = mode.into();
+    literal_data_prefix[1] = file_name.len().try_into()?;
+    literal_data_prefix[2..2 + file_name.len()].copy_from_slice(&file_name);
+    literal_data_prefix[2 + file_name.len()..].copy_from_slice(&created.to_be_bytes());
+
+    let inner_packet_len = literal_data_prefix.len() + in_file_size;
+    let mut prefix = Vec::new();
+    packet_version.write_header(&mut prefix, inner_packet_tag.into(), inner_packet_len)?;
+    let inner_header_len = prefix.len();
+
+    prefix.extend(literal_data_prefix);
+
+    // we encrypt the packet header and the actual data
+    let enc_file_size = sym_alg.encrypted_protected_len(inner_header_len + inner_packet_len);
+
+    // Outer packet: SymEncryptedProtectedData
+    let outer_packet_len = 1 + enc_file_size;
+    let outer_packet_tag = Tag::SymEncryptedProtectedData;
+    packet_version.write_header(&mut out_file, outer_packet_tag.into(), outer_packet_len)?;
+    out_file.write_all(&[0x01])?; // Data::V1
+
+    sym_alg.encrypt_protected_stream(
+        &mut rng,
+        &session_key,
+        prefix.chain(&mut in_file),
+        &mut out_file,
+    )?;
+
+    // Compress
+    // TODO
+
+    Ok(())
 }
 
 /// Encrypted Session Key
@@ -295,7 +394,10 @@ impl Message {
     }
 
     pub fn new_literal_bytes(file_name: impl AsRef<BStr>, data: &[u8]) -> Self {
-        Message::Literal(LiteralData::from_bytes(file_name.as_ref(), data))
+        Message::Literal(LiteralData::from_bytes(
+            file_name.as_ref(),
+            Bytes::from(data.to_vec()),
+        ))
     }
 
     /// Compresses the message.

@@ -35,7 +35,7 @@ impl Iterator for PacketParser {
             return None;
         }
 
-        let buf_len = self.reader.len();
+        let buf_len = self.reader.remaining();
         let (version, tag, packet_length) = match single::parser(&self.reader) {
             Ok((rest, v)) => {
                 let rest_len = rest.len();
@@ -55,11 +55,11 @@ impl Iterator for PacketParser {
             }
         };
 
-        match packet_length {
+        match dbg!(packet_length) {
             PacketLength::Indeterminate => {
                 match single::body_parser_slice(version, tag, &self.reader) {
                     Ok(packet) => {
-                        self.reader.advance(self.reader.len());
+                        self.reader.advance(self.reader.remaining());
                         Some(Ok(packet))
                     }
                     Err(err) => {
@@ -69,8 +69,12 @@ impl Iterator for PacketParser {
                 }
             }
             PacketLength::Fixed(len) => {
-                if self.reader.len() < len {
-                    return Some(Err(format_err!("invalid length encountered")));
+                if self.reader.remaining() < len {
+                    return Some(Err(format_err!(
+                        "invalid length encountered: wanted {}, but only {} available",
+                        len,
+                        self.reader.remaining()
+                    )));
                 }
                 let res = single::body_parser_slice(version, tag, &self.reader[..len]);
                 self.reader.advance(len);
@@ -119,10 +123,10 @@ impl Iterator for PacketParser {
                 loop {
                     match single::read_packet_len(&self.reader) {
                         Ok((rest, PacketLength::Partial(len))) => {
-                            let read = self.reader.len() - rest.len();
+                            let read = self.reader.remaining() - rest.len();
                             self.reader.advance(read);
 
-                            if self.reader.len() < len {
+                            if self.reader.remaining() < len {
                                 self.is_done = true;
                                 return Some(Err(format_err!("invalid packet length detected")));
                             }
@@ -130,10 +134,10 @@ impl Iterator for PacketParser {
                             body.push(self.reader.copy_to_bytes(len));
                         }
                         Ok((rest, PacketLength::Fixed(len))) => {
-                            let read = self.reader.len() - rest.len();
+                            let read = self.reader.remaining() - rest.len();
                             self.reader.advance(read);
 
-                            if self.reader.len() < len {
+                            if self.reader.remaining() < len {
                                 self.is_done = true;
                                 return Some(Err(format_err!("invalid packet length detected")));
                             }

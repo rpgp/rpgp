@@ -147,6 +147,33 @@ impl Version {
 
         Ok(())
     }
+
+    /// Length of the header, in bytes.
+    pub fn header_len(self, len: usize) -> usize {
+        match self {
+            Version::Old => {
+                if len < 256 {
+                    // one octet
+                    2
+                } else if len < 65536 {
+                    // two octets
+                    3
+                } else {
+                    // four octets
+                    5
+                }
+            }
+            Version::New => {
+                if len < 192 {
+                    2
+                } else if len < 8384 {
+                    3
+                } else {
+                    6
+                }
+            }
+        }
+    }
 }
 
 // TODO: find a better place for this
