@@ -6,6 +6,7 @@ use crate::errors::Result;
 use crate::packet::{write_packet, Signature, UserAttribute, UserId};
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, Tag};
+use crate::util::write_packet_length_len;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedUser {
@@ -74,6 +75,17 @@ impl Serialize for SignedUser {
         }
 
         Ok(())
+    }
+    fn write_len(&self) -> usize {
+        let id_len = self.id.write_len();
+        let mut sum = write_packet_length_len(id_len);
+        sum += id_len;
+        for sig in &self.signatures {
+            let sig_len = sig.write_len();
+            sum += write_packet_length_len(sig_len);
+            sum += sig_len;
+        }
+        sum
     }
 }
 
@@ -148,5 +160,17 @@ impl Serialize for SignedUserAttribute {
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let attr_len = self.attr.write_len();
+        let mut sum = write_packet_length_len(attr_len);
+        sum += attr_len;
+        for sig in &self.signatures {
+            let sig_len = sig.write_len();
+            sum += write_packet_length_len(sig_len);
+            sum += sig_len;
+        }
+        sum
     }
 }

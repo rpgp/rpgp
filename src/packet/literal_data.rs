@@ -161,6 +161,13 @@ impl Serialize for LiteralData {
 
         Ok(())
     }
+    fn write_len(&self) -> usize {
+        let mut sum = 1 + 1;
+        sum += self.file_name.len();
+        sum += 4;
+        sum += self.data.len();
+        sum
+    }
 }
 
 impl PacketTrait for LiteralData {

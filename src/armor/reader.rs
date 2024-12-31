@@ -76,6 +76,12 @@ impl Serialize for BlockType {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        // allocates, but this is tiny, should be fine
+        let x = self.to_string();
+        x.as_bytes().len()
+    }
 }
 
 /// OpenSSL PKCS#1 PEM armor types

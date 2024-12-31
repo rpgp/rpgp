@@ -521,6 +521,38 @@ impl Serialize for StringToKey {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        match self {
+            Self::Simple { .. } => {
+                sum += 1 + 1;
+            }
+            Self::Salted { salt, .. } => {
+                sum += 1 + 1;
+                sum += salt.len();
+            }
+            Self::IteratedAndSalted { salt, .. } => {
+                sum += 1 + 1;
+                sum += salt.len();
+                sum += 1;
+            }
+            Self::Argon2 { salt, .. } => {
+                sum += 1;
+                sum += salt.len();
+                sum += 3;
+            }
+
+            Self::Reserved { unknown, .. }
+            | Self::Private { unknown, .. }
+            | Self::Other { unknown, .. } => {
+                sum += 1;
+                sum += unknown.len();
+            }
+        }
+
+        sum
+    }
 }
 
 #[cfg(test)]

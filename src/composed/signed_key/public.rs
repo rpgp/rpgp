@@ -15,6 +15,7 @@ use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
     SignatureBytes, Tag,
 };
+use crate::util::write_packet_length_len;
 use crate::{armor, ArmorOptions};
 
 /// A Public OpenPGP key ("Transferable Public Key"), complete with self-signatures (and optionally
@@ -226,6 +227,15 @@ impl Serialize for SignedPublicKey {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.primary_key.write_len();
+        let mut sum = write_packet_length_len(key_len);
+        sum += key_len;
+        sum += self.details.write_len();
+        sum += self.public_subkeys.write_len();
+        sum
+    }
 }
 
 /// Represents a Public PGP SubKey.
@@ -335,6 +345,18 @@ impl Serialize for SignedPublicSubKey {
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.key.write_len();
+        let mut sum = write_packet_length_len(key_len);
+        sum += key_len;
+        for sig in &self.signatures {
+            let sig_len = sig.write_len();
+            sum += write_packet_length_len(sig_len);
+            sum += sig_len;
+        }
+        sum
     }
 }
 

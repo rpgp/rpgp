@@ -48,6 +48,10 @@ impl Serialize for Padding {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        self.data.len()
+    }
 }
 
 impl PacketTrait for Padding {

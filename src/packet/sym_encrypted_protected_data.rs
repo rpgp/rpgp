@@ -361,6 +361,18 @@ impl Serialize for SymEncryptedProtectedData {
         }
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        match &self.data {
+            Data::V1 { data } => 1 + data.len(),
+            Data::V2 { salt, data, .. } => {
+                let mut sum = 1 + 1 + 1 + 1;
+                sum += salt.len();
+                sum += data.len();
+                sum
+            }
+        }
+    }
 }
 
 impl PacketTrait for SymEncryptedProtectedData {

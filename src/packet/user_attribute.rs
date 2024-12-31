@@ -15,7 +15,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Version};
-use crate::util::{packet_length, write_packet_length};
+use crate::util::{packet_length, write_packet_length, write_packet_length_len};
 
 /// User Attribute Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-attribute-packet-type->
@@ -206,6 +206,13 @@ impl Serialize for UserAttribute {
             }
         }
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let packet_len = self.packet_len();
+        let mut sum = write_packet_length_len(packet_len);
+        sum += packet_len;
+        sum
     }
 }
 

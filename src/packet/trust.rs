@@ -31,6 +31,10 @@ impl Serialize for Trust {
     fn to_writer<W: io::Write>(&self, _writer: &mut W) -> Result<()> {
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        0
+    }
 }
 
 impl PacketTrait for Trust {

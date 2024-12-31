@@ -77,6 +77,13 @@ impl SecretParams {
             SecretParams::Encrypted(k) => k.to_writer(writer, version),
         }
     }
+
+    pub fn write_len(&self, version: KeyVersion) -> usize {
+        match self {
+            SecretParams::Plain(k) => k.write_len(version),
+            SecretParams::Encrypted(k) => k.write_len(version),
+        }
+    }
 }
 
 /// Parse possibly encrypted private fields of a key.

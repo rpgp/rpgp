@@ -44,6 +44,10 @@ impl Serialize for ModDetectionCode {
         writer.write_all(&self.hash[..])?;
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        self.hash.len()
+    }
 }
 
 impl PacketTrait for ModDetectionCode {

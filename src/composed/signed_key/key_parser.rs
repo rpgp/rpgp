@@ -55,7 +55,11 @@ where
             return Some(Err(err));
         }
     };
-    debug!("primary key: {:?}", primary_key.key_id());
+    debug!(
+        "primary key: {:?} (Version: {:?})",
+        primary_key.key_id(),
+        primary_key.version()
+    );
 
     // -- Zero or more revocation signatures
     // -- followed by zero or more direct signatures in V4 keys

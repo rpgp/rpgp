@@ -182,6 +182,27 @@ impl Serialize for OnePassSignature {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 1 + 1 + 1 + 1;
+
+        // salt, if v6
+        if let OpsVersionSpecific::V6 { salt, .. } = &self.version_specific {
+            sum += 1;
+            sum += salt.len();
+        }
+
+        match &self.version_specific {
+            OpsVersionSpecific::V3 { key_id } => {
+                sum += key_id.as_ref().len();
+            }
+            OpsVersionSpecific::V6 { fingerprint, .. } => {
+                sum += fingerprint.len();
+            }
+        }
+        sum += 1;
+        sum
+    }
 }
 
 impl PacketTrait for OnePassSignature {

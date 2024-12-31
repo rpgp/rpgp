@@ -101,6 +101,10 @@ impl Serialize for UserId {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        self.id.len()
+    }
 }
 
 impl fmt::Display for UserId {

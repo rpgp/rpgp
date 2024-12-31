@@ -99,6 +99,10 @@ impl Serialize for CompressedData {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        1 + self.compressed_data.len()
+    }
 }
 
 impl PacketTrait for CompressedData {
