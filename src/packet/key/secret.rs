@@ -385,17 +385,32 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> crate::ser::Serialize for Secret
         self.secret_params.to_writer(writer, self.version())?;
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let details_len = crate::ser::Serialize::write_len(&self.details);
+        let secret_params_len = self.secret_params.write_len(self.version());
+
+        details_len + secret_params_len
+    }
 }
 
 impl crate::ser::Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         crate::ser::Serialize::to_writer(&self.0, writer)
     }
+
+    fn write_len(&self) -> usize {
+        crate::ser::Serialize::write_len(&self.0)
+    }
 }
 
 impl crate::ser::Serialize for SecretSubkey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         crate::ser::Serialize::to_writer(&self.0, writer)
+    }
+
+    fn write_len(&self) -> usize {
+        crate::ser::Serialize::write_len(&self.0)
     }
 }
 

@@ -1,5 +1,6 @@
 use bytes::{Buf, Bytes};
 use bytes_utils::SegmentedBuf;
+use log::debug;
 
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
@@ -55,7 +56,12 @@ impl Iterator for PacketParser {
             }
         };
 
-        match dbg!(packet_length) {
+        debug!(
+            "parsed packet: {:?}: {:?}: {:?}",
+            version, tag, packet_length
+        );
+
+        match packet_length {
             PacketLength::Indeterminate => {
                 match single::body_parser_bytes(version, tag, self.reader.clone()) {
                     Ok(packet) => {

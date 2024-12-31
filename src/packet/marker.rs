@@ -33,6 +33,10 @@ impl Serialize for Marker {
         writer.write_all(&PGP[..])?;
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        PGP.len()
+    }
 }
 
 impl PacketTrait for Marker {

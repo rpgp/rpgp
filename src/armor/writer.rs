@@ -154,6 +154,9 @@ mod tests {
             w.write_all(&self.content).unwrap();
             Ok(())
         }
+        fn write_len(&self) -> usize {
+            self.content.len()
+        }
     }
 
     impl TestSource {

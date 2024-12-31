@@ -4,6 +4,7 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
+use crate::ser::Serialize;
 use crate::types::EcdhPublicParams;
 use crate::{
     crypto::{self, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
@@ -199,22 +200,36 @@ impl PubKeyInner {
         Ok(())
     }
 
+    fn writer_len_v2_v3(&self) -> usize {
+        let mut sum = 4 + 2 + 1;
+        sum += self.public_params.write_len();
+        sum
+    }
+
     fn to_writer_v4_v6<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp().try_into()?)?;
         writer.write_u8(self.algorithm.into())?;
 
-        let mut public_params = vec![];
-        self.public_params.to_writer(&mut public_params)?;
-
         if self.version == KeyVersion::V6 {
-            writer.write_u32::<BigEndian>(public_params.len().try_into()?)?;
+            writer.write_u32::<BigEndian>(self.public_params.write_len().try_into()?)?;
         }
 
-        writer.write_all(&public_params)?;
+        self.public_params.to_writer(writer)?;
 
         Ok(())
+    }
+
+    fn writer_len_v4_v6(&self) -> usize {
+        let mut sum = 4 + 1;
+
+        if self.version == KeyVersion::V6 {
+            sum += 4;
+        }
+        sum += self.public_params.write_len();
+
+        sum
     }
 
     fn sign<R: CryptoRng + Rng, F>(
@@ -250,11 +265,19 @@ impl crate::ser::Serialize for PublicKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         crate::ser::Serialize::to_writer(&self.0, writer)
     }
+
+    fn write_len(&self) -> usize {
+        self.0.write_len()
+    }
 }
 
 impl crate::ser::Serialize for PublicSubkey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         crate::ser::Serialize::to_writer(&self.0, writer)
+    }
+
+    fn write_len(&self) -> usize {
+        self.0.write_len()
     }
 }
 
@@ -270,6 +293,19 @@ impl crate::ser::Serialize for PubKeyInner {
                 unimplemented_err!("Unsupported key version {}", v)
             }
         }
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 1;
+        sum += match self.version {
+            KeyVersion::V2 | KeyVersion::V3 => self.writer_len_v2_v3(),
+            KeyVersion::V4 | KeyVersion::V6 => self.writer_len_v4_v6(),
+            KeyVersion::V5 => panic!("V5 keys"),
+            KeyVersion::Other(v) => {
+                panic!("Unsupported key version {}", v)
+            }
+        };
+        sum
     }
 }
 
@@ -611,8 +647,7 @@ impl PublicKeyTrait for PubKeyInner {
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
         use crate::ser::Serialize;
 
-        let mut key_buf = Vec::new();
-        self.to_writer(&mut key_buf)?;
+        let key_len = self.write_len();
 
         // old style packet header for the key
         match self.version() {
@@ -620,7 +655,7 @@ impl PublicKeyTrait for PubKeyInner {
                 // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
                 // followed by a two-octet length of the key, and then the body of the key packet.
                 writer.write_u8(0x99)?;
-                writer.write_u16::<BigEndian>(key_buf.len().try_into()?)?;
+                writer.write_u16::<BigEndian>(key_len.try_into()?)?;
             }
 
             KeyVersion::V6 => {
@@ -630,13 +665,13 @@ impl PublicKeyTrait for PubKeyInner {
                 // then octet 0x9B, followed by a four-octet length of the key,
                 // and then the body of the key packet.
                 writer.write_u8(0x9b)?;
-                writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
+                writer.write_u32::<BigEndian>(key_len.try_into()?)?;
             }
 
             v => unimplemented_err!("key version {:?}", v),
         }
 
-        writer.write_all(&key_buf)?;
+        self.to_writer(writer)?;
 
         Ok(())
     }

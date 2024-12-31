@@ -26,6 +26,7 @@ pub use self::secret_key::*;
 pub use self::secret_key_repr::*;
 pub use self::user::*;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::ser::Serialize;
 
 /// An OpenPGP cryptographic signature.
 ///
@@ -65,6 +66,13 @@ impl SignatureBytes {
         }
 
         Ok(())
+    }
+
+    pub(crate) fn write_len(&self) -> usize {
+        match self {
+            SignatureBytes::Mpis(mpis) => mpis.write_len(),
+            SignatureBytes::Native(sig) => sig.len(),
+        }
     }
 }
 

@@ -6,6 +6,7 @@ use crate::packet::{Packet, Signature};
 use crate::ser::Serialize;
 use crate::types::PublicKeyTrait;
 use crate::types::Tag;
+use crate::util::write_packet_length_len;
 use crate::{armor, ArmorOptions};
 
 /// Standalone signature as defined by the cleartext framework.
@@ -55,6 +56,12 @@ impl StandaloneSignature {
 impl Serialize for StandaloneSignature {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         crate::packet::write_packet(writer, &self.signature)
+    }
+    fn write_len(&self) -> usize {
+        let len = self.signature.write_len();
+        let mut sum = write_packet_length_len(len);
+        sum += len;
+        sum
     }
 }
 

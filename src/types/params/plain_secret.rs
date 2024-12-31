@@ -128,6 +128,27 @@ impl PlainSecretParamsRef<'_> {
         Ok(())
     }
 
+    fn write_len_raw(&self) -> usize {
+        match self {
+            PlainSecretParamsRef::RSA { d, p, q, u } => {
+                let mut sum = 0;
+                sum += d.write_len();
+                sum += p.write_len();
+                sum += q.write_len();
+                sum += u.write_len();
+                sum
+            }
+            PlainSecretParamsRef::DSA(x) => x.write_len(),
+            PlainSecretParamsRef::ECDSA(x) => x.write_len(),
+            PlainSecretParamsRef::ECDH(x) => x.write_len(),
+            PlainSecretParamsRef::Elgamal(d) => d.write_len(),
+            PlainSecretParamsRef::EdDSALegacy(x) => x.write_len(),
+            PlainSecretParamsRef::Ed25519(s) => s.len(),
+            PlainSecretParamsRef::X25519(s) => s.len(),
+            PlainSecretParamsRef::X448(s) => s.len(),
+        }
+    }
+
     pub fn compare_checksum_simple(&self, other: Option<&[u8]>) -> Result<()> {
         if let Some(other) = other {
             let mut hasher = checksum::SimpleChecksum::default();
@@ -151,7 +172,7 @@ impl PlainSecretParamsRef<'_> {
 
     /// Uses sha1_checked
     pub fn checksum_sha1(&self) -> Result<[u8; 20]> {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(self.write_len_raw());
         self.to_writer_raw(&mut buf).expect("known write target");
         checksum::calculate_sha1([&buf])
     }
@@ -394,7 +415,7 @@ impl PlainSecretParams {
                         unimplemented_err!("Encryption for V2/V3 keys is not available")
                     }
                     KeyVersion::V4 | KeyVersion::V6 => {
-                        let mut data = Vec::new();
+                        let mut data = Vec::with_capacity(self.as_ref().write_len_raw());
                         self.as_ref()
                             .to_writer_raw(&mut data)
                             .expect("preallocated vector");
@@ -423,7 +444,7 @@ impl PlainSecretParams {
                         unimplemented_err!("Encryption for V2/V3 keys is not available")
                     }
                     KeyVersion::V4 | KeyVersion::V6 => {
-                        let mut data = Vec::new();
+                        let mut data = Vec::with_capacity(self.as_ref().write_len_raw());
                         self.as_ref()
                             .to_writer_raw(&mut data)
                             .expect("preallocated vector");
@@ -472,6 +493,16 @@ impl PlainSecretParams {
         }
 
         Ok(())
+    }
+
+    pub fn write_len(&self, version: KeyVersion) -> usize {
+        let mut sum = 1;
+        sum += self.as_ref().write_len_raw();
+        if version == KeyVersion::V3 || version == KeyVersion::V4 {
+            // checksum
+            sum += 2;
+        }
+        sum
     }
 }
 

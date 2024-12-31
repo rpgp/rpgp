@@ -125,6 +125,16 @@ pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::R
     Ok(())
 }
 
+pub fn write_packet_length_len(len: usize) -> usize {
+    if len < 192 {
+        1
+    } else if len < 8384 {
+        2
+    } else {
+        1 + 4
+    }
+}
+
 /// Return the length of the remaining input.
 // Adapted from https://github.com/Geal/nom/pull/684
 #[inline]

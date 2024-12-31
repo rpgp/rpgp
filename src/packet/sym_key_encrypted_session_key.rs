@@ -431,16 +431,17 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 encrypted_key,
             } => {
                 writer.write_u8(0x05)?;
-                let mut first_buf = vec![u8::from(*sym_algorithm), u8::from(*aead)];
+                let s2k_len = s2k.write_len();
+                let first_len = 1 + 1 + 1 + s2k_len + iv.len();
 
-                let mut buf = Vec::new();
-                s2k.to_writer(&mut buf)?;
-                first_buf.push(buf.len().try_into()?);
-                first_buf.extend(buf);
-                first_buf.extend_from_slice(iv);
+                // length
+                writer.write_u8(first_len.try_into()?)?;
 
-                writer.write_u8(first_buf.len().try_into()?)?;
-                writer.write_all(&first_buf)?;
+                writer.write_u8((*sym_algorithm).into())?;
+                writer.write_u8((*aead).into())?;
+                writer.write_u8(s2k_len.try_into()?)?;
+                s2k.to_writer(writer)?;
+                writer.write_all(iv)?;
 
                 writer.write_all(encrypted_key)?;
                 writer.write_all(auth_tag)?;
@@ -455,22 +456,76 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 encrypted_key,
             } => {
                 writer.write_u8(0x06)?;
-                let mut first_buf = vec![u8::from(*sym_algorithm), u8::from(*aead)];
 
-                let mut buf = Vec::new();
-                s2k.to_writer(&mut buf)?;
-                first_buf.push(buf.len().try_into()?);
-                first_buf.extend(buf);
-                first_buf.extend_from_slice(iv);
+                let s2k_len = s2k.write_len();
+                let first_len = 1 + 1 + 1 + s2k_len + iv.len();
 
-                writer.write_u8(first_buf.len().try_into()?)?;
-                writer.write_all(&first_buf)?;
+                // length
+                writer.write_u8(first_len.try_into()?)?;
+
+                writer.write_u8((*sym_algorithm).into())?;
+                writer.write_u8((*aead).into())?;
+                writer.write_u8(s2k_len.try_into()?)?;
+                s2k.to_writer(writer)?;
+                writer.write_all(iv)?;
 
                 writer.write_all(encrypted_key)?;
                 writer.write_all(auth_tag)?;
             }
         }
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        match self {
+            SymKeyEncryptedSessionKey::V4 {
+                s2k, encrypted_key, ..
+            } => {
+                sum += 1 + 1;
+                sum += s2k.write_len();
+                if let Some(ref key) = encrypted_key {
+                    sum += key.len();
+                }
+            }
+            SymKeyEncryptedSessionKey::V5 {
+                s2k,
+                iv,
+                auth_tag,
+                encrypted_key,
+                ..
+            } => {
+                sum += 1;
+                sum += 1 + 1;
+
+                sum += s2k.write_len();
+                sum += 1;
+                sum += iv.len();
+
+                sum += 1;
+                sum += encrypted_key.len();
+                sum += auth_tag.len();
+            }
+            SymKeyEncryptedSessionKey::V6 {
+                s2k,
+                iv,
+                auth_tag,
+                encrypted_key,
+                ..
+            } => {
+                sum += 1;
+                sum += 1 + 1;
+
+                sum += s2k.write_len();
+                sum += 1;
+                sum += iv.len();
+
+                sum += 1;
+                sum += encrypted_key.len();
+                sum += auth_tag.len();
+            }
+        }
+        sum
     }
 }
 

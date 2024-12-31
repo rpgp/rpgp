@@ -285,4 +285,43 @@ impl EncryptedSecretParams {
 
         Ok(())
     }
+
+    pub(crate) fn write_len(&self, version: KeyVersion) -> usize {
+        let mut sum = 1;
+        match &self.s2k_params {
+            S2kParams::Unprotected => {
+                panic!("encrypted secret params should not have an unencrypted identifier")
+            }
+            S2kParams::LegacyCfb { ref iv, .. } => {
+                sum += iv.len();
+            }
+            S2kParams::Aead { s2k, ref nonce, .. } => {
+                sum += 1 + 1;
+
+                if version == KeyVersion::V6 {
+                    sum += 1;
+                }
+                sum += s2k.write_len();
+                sum += nonce.len();
+            }
+            S2kParams::Cfb { s2k, ref iv, .. } | S2kParams::MalleableCfb { s2k, ref iv, .. } => {
+                sum += 1;
+                if version == KeyVersion::V6 && matches!(self.s2k_params, S2kParams::Cfb { .. }) {
+                    sum += 1;
+                }
+
+                sum += s2k.write_len();
+                sum += iv.len();
+            }
+        }
+
+        if self.s2k_params != S2kParams::Unprotected {
+            if version == KeyVersion::V6 {
+                sum += 1;
+            }
+        }
+
+        sum += self.data.len();
+        sum
+    }
 }

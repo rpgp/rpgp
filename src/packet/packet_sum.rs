@@ -11,6 +11,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
+use crate::util::write_packet_length_len;
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)] // TODO: fix me
@@ -130,6 +131,33 @@ impl Serialize for Packet {
             Packet::Padding(p) => write_packet(writer, &p),
         }
     }
+
+    fn write_len(&self) -> usize {
+        let len = match self {
+            Packet::CompressedData(p) => p.write_len(),
+            Packet::PublicKey(p) => p.write_len(),
+            Packet::PublicSubkey(p) => p.write_len(),
+            Packet::SecretKey(p) => p.write_len(),
+            Packet::SecretSubkey(p) => p.write_len(),
+            Packet::LiteralData(p) => p.write_len(),
+            Packet::Marker(p) => p.write_len(),
+            Packet::ModDetectionCode(p) => p.write_len(),
+            Packet::OnePassSignature(p) => p.write_len(),
+            Packet::PublicKeyEncryptedSessionKey(p) => p.write_len(),
+            Packet::Signature(p) => p.write_len(),
+            Packet::SymEncryptedData(p) => p.write_len(),
+            Packet::SymEncryptedProtectedData(p) => p.write_len(),
+            Packet::SymKeyEncryptedSessionKey(p) => p.write_len(),
+            Packet::Trust(p) => p.write_len(),
+            Packet::UserAttribute(p) => p.write_len(),
+            Packet::UserId(p) => p.write_len(),
+            Packet::Padding(p) => p.write_len(),
+        };
+
+        let mut sum = write_packet_length_len(len);
+        sum += len;
+        sum
+    }
 }
 
 pub trait PacketTrait: Serialize {
@@ -149,20 +177,19 @@ impl<'a, T: 'a + PacketTrait> PacketTrait for &'a T {
 
 pub fn write_packet(writer: &mut impl io::Write, packet: &impl PacketTrait) -> Result<()> {
     let packet_version = packet.packet_version();
-    let mut buf = Vec::new();
-    packet.to_writer(&mut buf)?;
+    let packet_len = packet.write_len();
     debug!(
         "write_packet {:?} {:?} (len: {})",
         &packet_version,
         packet.tag(),
-        buf.len()
+        packet_len,
     );
 
     // header
-    packet_version.write_header(writer, packet.tag().into(), buf.len())?;
+    packet_version.write_header(writer, packet.tag().into(), packet_len)?;
 
     // the actual packet body
-    writer.write_all(&buf)?;
+    packet.to_writer(writer)?;
 
     Ok(())
 }

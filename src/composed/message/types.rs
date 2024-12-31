@@ -29,6 +29,7 @@ use crate::types::{
     CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PkeskVersion, PublicKeyTrait,
     SecretKeyTrait, StringToKey, Tag, Version,
 };
+use crate::util::write_packet_length_len;
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -165,6 +166,16 @@ impl Serialize for Esk {
             Esk::SymKeyEncryptedSessionKey(k) => write_packet(writer, k),
         }
     }
+
+    fn write_len(&self) -> usize {
+        let len = match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.write_len(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.write_len(),
+        };
+        let mut sum = write_packet_length_len(len);
+        sum += len;
+        sum
+    }
 }
 
 impl_try_from_into!(
@@ -218,6 +229,16 @@ impl Serialize for Edata {
             Edata::SymEncryptedData(d) => write_packet(writer, d),
             Edata::SymEncryptedProtectedData(d) => write_packet(writer, d),
         }
+    }
+
+    fn write_len(&self) -> usize {
+        let len = match self {
+            Edata::SymEncryptedData(d) => d.write_len(),
+            Edata::SymEncryptedProtectedData(d) => d.write_len(),
+        };
+        let mut sum = write_packet_length_len(len);
+        sum += len;
+        sum
     }
 }
 
@@ -384,6 +405,52 @@ impl Serialize for Message {
                 edata.to_writer(writer)?;
 
                 Ok(())
+            }
+        }
+    }
+    fn write_len(&self) -> usize {
+        match self {
+            Message::Literal(data) => {
+                let len = data.write_len();
+                let mut sum = write_packet_length_len(len);
+                sum += len;
+                sum
+            }
+            Message::Compressed(data) => {
+                let len = data.write_len();
+                let mut sum = write_packet_length_len(len);
+                sum += len;
+                sum
+            }
+            Message::Signed {
+                message,
+                one_pass_signature,
+                signature,
+                ..
+            } => {
+                let mut sum = 0;
+                if let Some(ops) = one_pass_signature {
+                    let len = ops.write_len();
+                    sum += write_packet_length_len(len);
+                    sum += len;
+                }
+                if let Some(message) = message {
+                    sum += message.write_len();
+                }
+
+                let len = signature.write_len();
+                sum += write_packet_length_len(len);
+                sum += len;
+
+                sum
+            }
+            Message::Encrypted { esk, edata, .. } => {
+                let mut sum = 0;
+                for e in esk {
+                    sum += e.write_len();
+                }
+                sum += edata.write_len();
+                sum
             }
         }
     }

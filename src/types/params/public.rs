@@ -188,6 +188,38 @@ impl Serialize for EcdsaPublicParams {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let oid = match self {
+            EcdsaPublicParams::P256 { .. } => ECCCurve::P256.oid(),
+            EcdsaPublicParams::P384 { .. } => ECCCurve::P384.oid(),
+            EcdsaPublicParams::P521 { .. } => ECCCurve::P521.oid(),
+            EcdsaPublicParams::Secp256k1 { .. } => ECCCurve::Secp256k1.oid(),
+            EcdsaPublicParams::Unsupported { curve, .. } => curve.oid(),
+        };
+
+        let mut sum = 1;
+        sum += oid.len();
+
+        match self {
+            EcdsaPublicParams::P256 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::P384 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::P521 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::Secp256k1 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::Unsupported { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+        }
+        sum
+    }
 }
 
 impl Serialize for PublicParams {
@@ -270,5 +302,79 @@ impl Serialize for PublicParams {
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        match self {
+            PublicParams::RSA { ref n, ref e } => {
+                sum += n.write_len();
+                sum += e.write_len();
+            }
+            PublicParams::DSA {
+                ref p,
+                ref q,
+                ref g,
+                ref y,
+            } => {
+                sum += p.write_len();
+                sum += q.write_len();
+                sum += g.write_len();
+                sum += y.write_len();
+            }
+            PublicParams::ECDSA(params) => {
+                sum += params.write_len();
+            }
+            PublicParams::ECDH(EcdhPublicParams::Known {
+                ref curve, ref p, ..
+            }) => {
+                let oid = curve.oid();
+                sum += 1;
+                sum += oid.len();
+
+                sum += p.write_len();
+
+                sum += 1 + 1 + 1 + 1;
+            }
+            PublicParams::ECDH(EcdhPublicParams::Unsupported {
+                ref curve,
+                ref opaque,
+            }) => {
+                let oid = curve.oid();
+                sum += 1;
+                sum += oid.len();
+
+                sum += opaque.len();
+            }
+            PublicParams::Elgamal {
+                ref p,
+                ref g,
+                ref y,
+            } => {
+                sum += p.write_len();
+                sum += g.write_len();
+                sum += y.write_len();
+            }
+            PublicParams::EdDSALegacy { ref curve, ref q } => {
+                let oid = curve.oid();
+                sum += 1;
+                sum += oid.len();
+
+                sum += q.write_len();
+            }
+            PublicParams::Ed25519 { ref public } => {
+                sum += public.len();
+            }
+            PublicParams::X25519 { ref public } => {
+                sum += public.len();
+            }
+            PublicParams::X448 { ref public } => {
+                sum += public.len();
+            }
+            PublicParams::Unknown { ref data } => {
+                sum += data.len();
+            }
+        }
+        sum
     }
 }

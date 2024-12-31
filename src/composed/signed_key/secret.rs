@@ -15,6 +15,7 @@ use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
     SecretKeyRepr, SecretKeyTrait, SignatureBytes, Tag,
 };
+use crate::util::write_packet_length_len;
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
@@ -180,6 +181,16 @@ impl Serialize for SignedSecretKey {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.primary_key.write_len();
+        let mut sum = write_packet_length_len(key_len);
+        sum += key_len;
+        sum += self.details.write_len();
+        sum += self.public_subkeys.write_len();
+        sum += self.secret_subkeys.write_len();
+        sum
+    }
 }
 
 impl SecretKeyTrait for SignedSecretKey {
@@ -323,6 +334,18 @@ impl Serialize for SignedSecretSubKey {
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.key.write_len();
+        let mut sum = write_packet_length_len(key_len);
+        sum += key_len;
+        for sig in &self.signatures {
+            let sig_len = sig.write_len();
+            sum += write_packet_length_len(sig_len);
+            sum += sig_len;
+        }
+        sum
     }
 }
 

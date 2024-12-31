@@ -126,6 +126,9 @@ impl Serialize for Mpi {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
         MpiRef(&self.0).to_writer(w)
     }
+    fn write_len(&self) -> usize {
+        MpiRef(&self.0).write_len()
+    }
 }
 
 impl Serialize for MpiRef<'_> {
@@ -136,6 +139,10 @@ impl Serialize for MpiRef<'_> {
         w.write_all(bytes)?;
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        2 + self.0.len()
     }
 }
 

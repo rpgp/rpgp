@@ -11,6 +11,7 @@ use crate::errors::Result;
 use crate::packet::KeyFlags;
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, SignedUser, SignedUserAttribute};
+use crate::util::write_packet_length_len;
 use crate::{packet, ArmorOptions};
 
 /// Shared details between secret and public keys.
@@ -189,6 +190,30 @@ impl Serialize for SignedKeyDetails {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        for sig in &self.revocation_signatures {
+            let len = sig.write_len();
+            sum += write_packet_length_len(len);
+            sum += len;
+        }
+
+        for sig in &self.direct_signatures {
+            let len = sig.write_len();
+            sum += write_packet_length_len(len);
+            sum += len;
+        }
+
+        for user in &self.users {
+            sum += user.write_len();
+        }
+
+        for attr in &self.user_attributes {
+            sum += attr.write_len();
+        }
+        sum
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -302,6 +327,13 @@ impl Serialize for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_writer(writer),
             PublicOrSecret::Secret(k) => k.to_writer(writer),
+        }
+    }
+
+    fn write_len(&self) -> usize {
+        match self {
+            PublicOrSecret::Public(k) => k.write_len(),
+            PublicOrSecret::Secret(k) => k.write_len(),
         }
     }
 }
