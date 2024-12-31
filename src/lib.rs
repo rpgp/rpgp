@@ -10,13 +10,13 @@
 //! [packet based signing and verifying]: crate::packet
 
 #![cfg_attr(not(feature = "mmap"), forbid(unsafe_code))]
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
 #![deny(
     clippy::all,
     clippy::style,
     clippy::perf,
     clippy::complexity,
     clippy::correctness,
-    clippy::unwrap_used,
     rust_2018_idioms
 )]
 #![allow(

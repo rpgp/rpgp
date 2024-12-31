@@ -118,7 +118,7 @@ where
 
     let inner_packet_len = literal_data_prefix.len() + in_file_size;
     let mut prefix = Vec::new();
-    packet_version.write_header(&mut prefix, inner_packet_tag.into(), inner_packet_len)?;
+    packet_version.write_header(&mut prefix, inner_packet_tag, inner_packet_len)?;
     let inner_header_len = prefix.len();
 
     prefix.extend(literal_data_prefix);
@@ -129,7 +129,7 @@ where
     // Outer packet: SymEncryptedProtectedData
     let outer_packet_len = 1 + enc_file_size;
     let outer_packet_tag = Tag::SymEncryptedProtectedData;
-    packet_version.write_header(&mut out_file, outer_packet_tag.into(), outer_packet_len)?;
+    packet_version.write_header(&mut out_file, outer_packet_tag, outer_packet_len)?;
     out_file.write_all(&[0x01])?; // Data::V1
 
     sym_alg.encrypt_protected_stream(
