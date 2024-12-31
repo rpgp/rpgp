@@ -315,10 +315,8 @@ impl EncryptedSecretParams {
             }
         }
 
-        if self.s2k_params != S2kParams::Unprotected {
-            if version == KeyVersion::V6 {
-                sum += 1;
-            }
+        if self.s2k_params != S2kParams::Unprotected && version == KeyVersion::V6 {
+            sum += 1;
         }
 
         sum += self.data.len();

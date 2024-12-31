@@ -175,7 +175,7 @@ impl Builder {
                     let mut prefix = Vec::new();
                     literal_data_header.packet_version.write_header(
                         &mut prefix,
-                        Tag::LiteralData.into(),
+                        Tag::LiteralData,
                         literal_data_packet_len,
                     )?;
                     literal_data_header.to_writer(&mut prefix)?;
@@ -195,7 +195,7 @@ impl Builder {
                     // Write the outer packet header
                     Version::New.write_header(
                         &mut out,
-                        Tag::SymEncryptedProtectedData.into(),
+                        Tag::SymEncryptedProtectedData,
                         outer_packet_len,
                     )?;
                     config.to_writer(&mut out)?;

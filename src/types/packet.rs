@@ -239,21 +239,21 @@ mod tests {
     fn test_write_header() {
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::UserAttribute.into(), 12875)
+            .write_header(&mut buf, Tag::UserAttribute, 12875)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "d1ff0000324b");
 
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::Signature.into(), 302)
+            .write_header(&mut buf, Tag::Signature, 302)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06e");
 
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::Signature.into(), 303)
+            .write_header(&mut buf, Tag::Signature, 303)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06f");
