@@ -77,18 +77,14 @@ where
 
     let out_path: &Path = out_path.as_ref();
     if let Some(parent) = out_path.parent() {
-        println!("creating {}", parent.display());
         std::fs::create_dir_all(parent)?;
     }
-    println!("opening {}", out_path.display());
     let out_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .truncate(true)
         .open(&out_path)?;
     let mut out_file = BufWriter::new(out_file);
-
-    println!("encrypting");
 
     // Encryption
     // 1. Generate a session key.
@@ -273,7 +269,7 @@ impl Edata {
     pub fn data(&self) -> &[u8] {
         match self {
             Edata::SymEncryptedData(d) => d.data(),
-            Edata::SymEncryptedProtectedData(d) => d.data_as_slice(),
+            Edata::SymEncryptedProtectedData(d) => d.data().as_ref(),
         }
     }
 

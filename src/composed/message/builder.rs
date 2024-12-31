@@ -1,14 +1,22 @@
-use std::io::BufWriter;
+use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
+use bstr::BString;
 use bytes::Bytes;
+use chrono::{SubsecRound, Utc};
+use log::debug;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{PublicKeyEncryptedSessionKey, SymKeyEncryptedSessionKey};
-use crate::types::{CompressionAlgorithm, PublicKeyTrait, StringToKey};
+use crate::packet::{
+    DataMode, LiteralDataHeader, PublicKeyEncryptedSessionKey, SymEncryptedProtectedDataConfig,
+    SymKeyEncryptedSessionKey,
+};
+use crate::ser::Serialize;
+use crate::types::{CompressionAlgorithm, PublicKeyTrait, StringToKey, Tag, Version};
+use crate::Esk;
 
 pub struct Builder {
     source: Source,
@@ -17,7 +25,7 @@ pub struct Builder {
 }
 
 enum Source {
-    Bytes(Bytes),
+    Bytes { name: BString, bytes: Bytes },
     File(PathBuf),
 }
 
@@ -44,9 +52,12 @@ impl Builder {
         }
     }
 
-    pub fn from_bytes(bytes: impl Into<Bytes>) -> Self {
+    pub fn from_bytes(name: impl Into<BString>, bytes: impl Into<Bytes>) -> Self {
         Self {
-            source: Source::Bytes(bytes.into()),
+            source: Source::Bytes {
+                name: name.into(),
+                bytes: bytes.into(),
+            },
             compression: CompressionAlgorithm::Uncompressed,
             encryption: Encryption::None,
         }
@@ -127,7 +138,112 @@ impl Builder {
         R: Rng + CryptoRng,
         W: std::io::Write,
     {
-        todo!()
+        // TODO: handle compression
+
+        fn encrypt<R: Rng + CryptoRng, W: std::io::Write>(
+            rng: R,
+            reader: impl BufRead,
+            file_name: BString,
+            in_size: usize,
+            encryption: Encryption,
+            mut out: W,
+        ) -> Result<()> {
+            match encryption {
+                Encryption::None => {
+                    todo!();
+                }
+                Encryption::PasswordSeipdV1 {
+                    session_key,
+                    esk,
+                    sym_alg,
+                } => {
+                    // Write out esk
+                    let esk = Esk::SymKeyEncryptedSessionKey(esk);
+                    esk.to_writer(&mut out)?;
+
+                    // Construct Literal Data Packet (inner)
+                    let literal_data_header = LiteralDataHeader {
+                        packet_version: Version::New,
+                        mode: DataMode::Binary,
+                        file_name,
+                        created: Utc::now().trunc_subsecs(0),
+                    };
+
+                    let literal_data_header_len = literal_data_header.write_len();
+                    let literal_data_packet_len = literal_data_header_len + in_size;
+                    // the prefix to encrypt to make a Literal Data Packet
+                    let mut prefix = Vec::new();
+                    literal_data_header.packet_version.write_header(
+                        &mut prefix,
+                        Tag::LiteralData.into(),
+                        literal_data_packet_len,
+                    )?;
+                    literal_data_header.to_writer(&mut prefix)?;
+
+                    // calculate expected encrypted file size
+                    let enc_file_size = sym_alg.encrypted_protected_len(prefix.len() + in_size);
+
+                    // chain the prefix to the input reader
+                    let to_encode = prefix.chain(reader);
+
+                    // Construct SEPD Packet (outer)
+                    let config = SymEncryptedProtectedDataConfig::V1;
+
+                    let outer_header_len = config.write_len();
+                    let outer_packet_len = outer_header_len + enc_file_size;
+
+                    // Write the outer packet header
+                    Version::New.write_header(
+                        &mut out,
+                        Tag::SymEncryptedProtectedData.into(),
+                        outer_packet_len,
+                    )?;
+                    config.to_writer(&mut out)?;
+                    sym_alg.encrypt_protected_stream(rng, &session_key, to_encode, &mut out)?;
+                }
+                Encryption::KeysSeipdV1 {
+                    sym_alg,
+                    session_key,
+                    esk,
+                } => {
+                    todo!()
+                }
+            }
+            Ok(())
+        }
+
+        match self.source {
+            Source::Bytes { name, bytes } => {
+                debug!("sourcing bytes {}: {} bytes", name, bytes.len());
+                use bytes::Buf;
+                let len = bytes.len();
+                encrypt(&mut rng, bytes.reader(), name, len, self.encryption, out)?;
+            }
+            Source::File(path) => {
+                let in_file = std::fs::File::open(&path)?;
+                let in_meta = in_file.metadata()?;
+                let in_file_size = usize::try_from(in_meta.len())?;
+
+                let Some(in_file_name) = path.file_name() else {
+                    bail!("{}: is not a vaild input file", path.display());
+                };
+                let file_name: BString = in_file_name.as_encoded_bytes().into();
+
+                debug!("sourcing file {}: {} bytes", file_name, in_file_size);
+
+                let in_file = BufReader::new(in_file);
+
+                encrypt(
+                    &mut rng,
+                    in_file,
+                    file_name,
+                    in_file_size,
+                    self.encryption,
+                    out,
+                )?;
+            }
+        }
+        Ok(())
     }
 
     pub fn to_file<R, P>(self, rng: R, out_path: P) -> Result<()>
@@ -136,6 +252,7 @@ impl Builder {
         P: AsRef<Path>,
     {
         let out_path: &Path = out_path.as_ref();
+        debug!("writing to file: {}", out_path.display());
         if let Some(parent) = out_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -148,6 +265,62 @@ impl Builder {
 
         self.to_writer(rng, &mut out_file)?;
 
+        out_file.flush()?;
+
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
+
+    use crate::crypto::sym::SymmetricKeyAlgorithm;
+    use crate::{Deserializable, Message};
+
+    #[test]
+    fn binary_message_roundtrip_password_seipdv1() {
+        let _ = pretty_env_logger::try_init();
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let plaintext_file = dir.path().join("plaintext.txt");
+        let encrypted_file = dir.path().join("encrypted.cool");
+
+        // Generate a file
+        let file_size = 1024 * 14 + 8;
+        let mut buf = vec![0u8; file_size];
+        rng.fill(&mut buf[..]);
+        std::fs::write(&plaintext_file, &buf).unwrap();
+
+        // encrypt it
+        let s2k = crate::types::StringToKey::new_default(&mut rng);
+
+        let builder = Builder::from_file(&plaintext_file)
+            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
+                "hello world".to_string()
+            })
+            .unwrap();
+
+        builder.to_file(&mut rng, &encrypted_file).unwrap();
+
+        // decrypt it
+        let encrypted_file_data = std::fs::read(&encrypted_file).unwrap();
+        let message = Message::from_bytes(encrypted_file_data.into()).unwrap();
+        dbg!(&message);
+        let decrypted = message
+            .decrypt_with_password(|| "hello world".to_string())
+            .unwrap();
+
+        let Message::Literal(l) = decrypted else {
+            panic!("unexpected message: {:?}", decrypted);
+        };
+
+        assert_eq!(l.file_name(), "plaintext.txt");
+        assert_eq!(l.data(), &buf);
     }
 }

@@ -17,15 +17,19 @@ use crate::types::{Tag, Version};
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct LiteralData {
-    packet_version: Version,
-    mode: DataMode,
-    /// The filename, may contain non utf-8 bytes
-    file_name: BString,
-    created: DateTime<Utc>,
+    header: LiteralDataHeader,
     /// Raw data, stored normalized to CRLF line endings, to make signing and verification
     /// simpler.
     #[debug("{}", hex::encode(data))]
     data: Bytes,
+}
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+pub struct LiteralDataHeader {
+    pub packet_version: Version,
+    pub mode: DataMode,
+    /// The filename, may contain non utf-8 bytes
+    pub file_name: BString,
+    pub created: DateTime<Utc>,
 }
 
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
@@ -46,10 +50,12 @@ impl LiteralData {
         let data = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
 
         LiteralData {
-            packet_version: Version::New,
-            mode: DataMode::Utf8,
-            file_name: file_name.into(),
-            created: Utc::now().trunc_subsecs(0),
+            header: LiteralDataHeader {
+                packet_version: Version::New,
+                mode: DataMode::Utf8,
+                file_name: file_name.into(),
+                created: Utc::now().trunc_subsecs(0),
+            },
             data,
         }
     }
@@ -57,10 +63,12 @@ impl LiteralData {
     /// Creates a literal data packet from the given bytes.
     pub fn from_bytes(file_name: &BStr, data: Bytes) -> Self {
         LiteralData {
-            packet_version: Version::New,
-            mode: DataMode::Binary,
-            file_name: file_name.to_owned(),
-            created: Utc::now().trunc_subsecs(0),
+            header: LiteralDataHeader {
+                packet_version: Version::New,
+                mode: DataMode::Binary,
+                file_name: file_name.to_owned(),
+                created: Utc::now().trunc_subsecs(0),
+            },
             data: data.to_vec().into(),
         }
     }
@@ -92,20 +100,22 @@ impl LiteralData {
             .ok_or_else(|| format_err!("invalid created field"))?;
 
         Ok(LiteralData {
-            packet_version,
-            mode,
-            created,
-            file_name: name.to_owned(),
+            header: LiteralDataHeader {
+                packet_version,
+                mode,
+                created,
+                file_name: name.to_owned(),
+            },
             data: data.copy_to_bytes(data.remaining()),
         })
     }
 
     pub fn file_name(&self) -> &BStr {
-        self.file_name.as_bstr()
+        self.header.file_name.as_bstr()
     }
 
     pub fn is_binary(&self) -> bool {
-        matches!(self.mode, DataMode::Binary)
+        matches!(self.header.mode, DataMode::Binary)
     }
 
     pub fn data(&self) -> &[u8] {
@@ -121,7 +131,7 @@ impl LiteralData {
     #[inline]
     /// Extracts data as string, returning raw bytes as Err if not valid utf-8 string
     pub fn try_into_string(self) -> Result<String, Bytes> {
-        match self.mode {
+        match self.header.mode {
             DataMode::Binary => Err(self.data),
             _ => match std::str::from_utf8(&self.data) {
                 Ok(data) => Ok(data.to_string()),
@@ -133,7 +143,7 @@ impl LiteralData {
     /// Convert the data to a UTF-8 string, if appropriate for the type.
     /// Returns `None` if `mode` is `Binary`, or the data is not valid UTF-8.
     pub fn to_string(&self) -> Option<String> {
-        match self.mode {
+        match self.header.mode {
             DataMode::Binary => None,
             _ => std::str::from_utf8(&self.data).map(str::to_owned).ok(),
         }
@@ -147,14 +157,27 @@ impl AsRef<[u8]> for LiteralData {
     }
 }
 
-impl Serialize for LiteralData {
+impl Serialize for LiteralDataHeader {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let name = &self.file_name;
         writer.write_u8(self.mode.into())?;
         writer.write_u8(name.len().try_into()?)?;
         writer.write_all(name)?;
         writer.write_u32::<BigEndian>(self.created.timestamp().try_into()?)?;
+        Ok(())
+    }
 
+    fn write_len(&self) -> usize {
+        let mut sum = 1 + 1;
+        sum += self.file_name.len();
+        sum += 4;
+        sum
+    }
+}
+
+impl Serialize for LiteralData {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.header.to_writer(writer)?;
         // Line endings are stored internally normalized, so we do not need to worry
         // about changing them here.
         writer.write_all(&self.data)?;
@@ -162,9 +185,7 @@ impl Serialize for LiteralData {
         Ok(())
     }
     fn write_len(&self) -> usize {
-        let mut sum = 1 + 1;
-        sum += self.file_name.len();
-        sum += 4;
+        let mut sum = self.header.write_len();
         sum += self.data.len();
         sum
     }
@@ -172,7 +193,7 @@ impl Serialize for LiteralData {
 
 impl PacketTrait for LiteralData {
     fn packet_version(&self) -> Version {
-        self.packet_version
+        self.header.packet_version
     }
 
     fn tag(&self) -> Tag {

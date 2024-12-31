@@ -186,7 +186,7 @@ pub fn write_packet(writer: &mut impl io::Write, packet: &impl PacketTrait) -> R
     );
 
     // header
-    packet_version.write_header(writer, packet.tag().into(), packet_len)?;
+    packet_version.write_header(writer, packet.tag(), packet_len)?;
 
     // the actual packet body
     packet.to_writer(writer)?;

@@ -112,9 +112,9 @@ pub enum Version {
 }
 
 impl Version {
-    pub fn write_header(self, writer: &mut impl io::Write, tag: u8, len: usize) -> Result<()> {
-        debug!("write_header {:?} {} {}", self, tag, len);
-
+    pub fn write_header(self, writer: &mut impl io::Write, tag: Tag, len: usize) -> Result<()> {
+        debug!("write_header {:?} {:?} {}", self, tag, len);
+        let tag: u8 = tag.into();
         match self {
             Version::Old => {
                 if len < 256 {

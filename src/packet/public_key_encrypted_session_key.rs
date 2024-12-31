@@ -661,7 +661,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 // the symmetric algorithm ID is not encrypted [for X448].
                 //
                 // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
-                if let Some(sym_alg) = sym_alg {
+                if sym_alg.is_some() {
                     assert!(
                         matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
                         "Inconsistent: X448 SymmetricKeyAlgorithm is set for {:?} PKESK",
