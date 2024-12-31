@@ -202,10 +202,9 @@ impl SymmetricKeyAlgorithm {
 
         // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
         let sha1 = calculate_sha1_unchecked([prefix, &ciphertext[..], &mdc[0..2]]);
-        dbg!(&mdc);
-        if dbg!(mdc[0] != 0xD3) || // Invalid MDC tag
-           dbg!(mdc[1] != 0x14) || // Invalid MDC length
-            dbg!(mdc[2..] != sha1[..])
+        if mdc[0] != 0xD3 || // Invalid MDC tag
+           mdc[1] != 0x14 || // Invalid MDC length
+            mdc[2..] != sha1[..]
         {
             return Err(Error::MdcError);
         }
