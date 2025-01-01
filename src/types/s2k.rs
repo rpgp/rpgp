@@ -144,49 +144,49 @@ impl From<u8> for S2kUsage {
 }
 
 #[derive(derive_more::Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum StringToKey {
-    // Type ID 0
-    Simple {
-        hash_alg: HashAlgorithm,
-    },
-
-    // Type ID 1
+    /// Type ID 0
+    Simple { hash_alg: HashAlgorithm },
+    /// Type ID 1
     Salted {
         hash_alg: HashAlgorithm,
         #[debug("{}", hex::encode(salt))]
         salt: [u8; 8],
     },
-
-    // Type ID 2
+    /// Type ID 2
+    #[cfg_attr(test, proptest(skip))] // doesn't roundtrip
     Reserved {
         #[debug("{}", hex::encode(unknown))]
         unknown: Vec<u8>,
     },
-
-    // Type ID 3
+    /// Type ID 3
     IteratedAndSalted {
         hash_alg: HashAlgorithm,
         #[debug("{}", hex::encode(salt))]
         salt: [u8; 8],
         count: u8,
     },
-
-    // Type ID 4
+    /// Type ID 4
     Argon2 {
         #[debug("{}", hex::encode(salt))]
         salt: [u8; 16],
-        t: u8,     // one-octet number of passes t
-        p: u8,     // one-octet degree of parallelism p
-        m_enc: u8, // one-octet encoded_m, specifying the exponent of the memory size
+        /// one-octet number of passes t
+        t: u8,
+        /// one-octet degree of parallelism p
+        p: u8,
+        /// one-octet encoded_m, specifying the exponent of the memory size
+        m_enc: u8,
     },
-
-    // Private/Experimental S2K: 100-110
+    /// Private/Experimental S2K: 100-110
+    #[cfg_attr(test, proptest(skip))] // doesn't roundtrip
     Private {
         typ: u8,
         #[debug("{}", hex::encode(unknown))]
         unknown: Vec<u8>,
     },
-
+    /// Unknown S2K types
+    #[cfg_attr(test, proptest(skip))] // doesn't roundtrip
     Other {
         typ: u8,
         #[debug("{}", hex::encode(unknown))]
@@ -420,65 +420,65 @@ impl StringToKey {
 
         Ok(len)
     }
-}
 
-pub fn s2k_parser(i: &[u8]) -> IResult<&[u8], StringToKey> {
-    let (i, typ) = be_u8(i)?;
+    pub fn from_slice(i: &[u8]) -> IResult<&[u8], StringToKey> {
+        let (i, typ) = be_u8(i)?;
 
-    match typ {
-        0 => {
-            let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
+        match typ {
+            0 => {
+                let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
 
-            Ok((i, StringToKey::Simple { hash_alg }))
-        }
-        1 => {
-            let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
-            let (i, salt) = map(take(8usize), |v: &[u8]| {
-                v.try_into().expect("should never fail")
-            })(i)?;
+                Ok((i, StringToKey::Simple { hash_alg }))
+            }
+            1 => {
+                let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
+                let (i, salt) = map(take(8usize), |v: &[u8]| {
+                    v.try_into().expect("should never fail")
+                })(i)?;
 
-            Ok((i, StringToKey::Salted { hash_alg, salt }))
-        }
-        2 => {
-            let (i, unknown) = map(rest, Into::into)(i)?;
+                Ok((i, StringToKey::Salted { hash_alg, salt }))
+            }
+            2 => {
+                let (i, unknown) = map(rest, Into::into)(i)?;
 
-            Ok((i, StringToKey::Reserved { unknown }))
-        }
-        3 => {
-            let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
-            let (i, salt) = map(take(8usize), |v: &[u8]| {
-                v.try_into().expect("should never fail")
-            })(i)?;
-            let (i, count) = be_u8(i)?;
+                Ok((i, StringToKey::Reserved { unknown }))
+            }
+            3 => {
+                let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
+                let (i, salt) = map(take(8usize), |v: &[u8]| {
+                    v.try_into().expect("should never fail")
+                })(i)?;
+                let (i, count) = be_u8(i)?;
 
-            Ok((
-                i,
-                StringToKey::IteratedAndSalted {
-                    hash_alg,
-                    salt,
-                    count,
-                },
-            ))
-        }
-        4 => {
-            let (i, salt) = map(take(16usize), |v: &[u8]| {
-                v.try_into().expect("should never fail")
-            })(i)?;
-            let (i, t) = be_u8(i)?;
-            let (i, p) = be_u8(i)?;
-            let (i, m_enc) = be_u8(i)?;
+                Ok((
+                    i,
+                    StringToKey::IteratedAndSalted {
+                        hash_alg,
+                        salt,
+                        count,
+                    },
+                ))
+            }
+            4 => {
+                let (i, salt) = map(take(16usize), |v: &[u8]| {
+                    v.try_into().expect("should never fail")
+                })(i)?;
+                let (i, t) = be_u8(i)?;
+                let (i, p) = be_u8(i)?;
+                let (i, m_enc) = be_u8(i)?;
 
-            Ok((i, StringToKey::Argon2 { salt, t, p, m_enc }))
-        }
+                Ok((i, StringToKey::Argon2 { salt, t, p, m_enc }))
+            }
 
-        100..=110 => {
-            let (i, unknown) = map(rest, Into::into)(i)?;
-            Ok((i, StringToKey::Private { typ, unknown }))
-        }
+            100..=110 => {
+                let (i, unknown) = map(rest, Into::into)(i)?;
+                Ok((i, StringToKey::Private { typ, unknown }))
+            }
 
-        _ => {
-            let (i, unknown) = map(rest, Into::into)(i)?;
-            Ok((i, StringToKey::Other { typ, unknown }))
+            _ => {
+                let (i, unknown) = map(rest, Into::into)(i)?;
+                Ok((i, StringToKey::Other { typ, unknown }))
+            }
         }
     }
 }
@@ -557,6 +557,7 @@ impl Serialize for StringToKey {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
     use rand::distributions::{Alphanumeric, DistString};
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
@@ -770,5 +771,24 @@ mod tests {
             .replace('\r', "\n");
 
         assert_eq!(armored, orig_armored);
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(s2k: StringToKey) {
+            let mut buf = Vec::new();
+            s2k.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), s2k.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(s2k: StringToKey) {
+            let mut buf = Vec::new();
+            s2k.to_writer(&mut buf).unwrap();
+            let (rest, new_s2k) = StringToKey::from_slice(&buf).unwrap();
+            assert_eq!(s2k, new_s2k);
+            assert!(rest.is_empty());
+        }
     }
 }

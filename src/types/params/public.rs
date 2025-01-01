@@ -9,6 +9,9 @@ use crate::errors::Result;
 use crate::ser::Serialize;
 use crate::types::{Mpi, MpiRef};
 
+#[cfg(test)]
+use crate::crypto::public_key::PublicKeyAlgorithm;
+
 /// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PublicParams {
@@ -48,7 +51,22 @@ pub enum PublicParams {
     },
 }
 
+#[cfg(test)]
+pub fn public_params_gen(
+    params: PublicKeyAlgorithm,
+) -> impl proptest::prelude::Strategy<Value = PublicParams> {
+    use proptest::prelude::*;
+
+    match params {
+        PublicKeyAlgorithm::RSA => {
+            prop::arbitrary::any::<(Mpi, Mpi)>().prop_map(|(n, e)| PublicParams::RSA { n, e })
+        }
+        _ => todo!(),
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdhPublicParams {
     /// ECDH public parameters for a curve that we know uses Mpi representation
     Known {
@@ -63,23 +81,28 @@ pub enum EcdhPublicParams {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdsaPublicParams {
     P256 {
+        #[cfg_attr(test, proptest(strategy = "p256_pub_gen()"))]
         key: p256::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
     P384 {
+        #[cfg_attr(test, proptest(strategy = "p384_pub_gen()"))]
         key: p384::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
     P521 {
+        #[cfg_attr(test, proptest(strategy = "p521_pub_gen()"))]
         key: p521::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
     Secp256k1 {
+        #[cfg_attr(test, proptest(strategy = "k256_pub_gen()"))]
         key: k256::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
@@ -88,6 +111,43 @@ pub enum EcdsaPublicParams {
         curve: ECCCurve,
         p: Mpi,
     },
+}
+
+#[cfg(test)]
+proptest::prop_compose! {
+    fn p256_pub_gen()(seed: u64) -> p256::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        p256::SecretKey::random(&mut rng).public_key()
+    }
+}
+#[cfg(test)]
+proptest::prop_compose! {
+    fn p384_pub_gen()(seed: u64) -> p384::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        p384::SecretKey::random(&mut rng).public_key()
+    }
+}
+#[cfg(test)]
+proptest::prop_compose! {
+    fn p521_pub_gen()(seed: u64) -> p521::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        p521::SecretKey::random(&mut rng).public_key()
+    }
+}
+#[cfg(test)]
+proptest::prop_compose! {
+    fn k256_pub_gen()(seed: u64) -> k256::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        k256::SecretKey::random(&mut rng).public_key()
+    }
 }
 
 impl EcdsaPublicParams {

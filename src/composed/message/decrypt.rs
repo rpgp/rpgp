@@ -91,7 +91,7 @@ where
         .derive_key(&msg_pw(), packet_algorithm.key_size())?;
 
     debug!("derived key: {}", hex::encode(&key));
-    if packet.encrypted_key().is_none() {
+    if packet.encrypted_key().is_empty() {
         // There is no encrypted session key.
         //
         // S2K-derived key is the session key.

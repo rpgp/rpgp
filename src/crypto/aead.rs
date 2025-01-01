@@ -24,6 +24,7 @@ pub type Aes192Gcm = AesGcm<Aes192, U12>;
 
 /// Available AEAD algorithms.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum AeadAlgorithm {
     /// None
@@ -45,7 +46,7 @@ pub enum AeadAlgorithm {
     Private110 = 110,
 
     #[num_enum(catch_all)]
-    Other(u8),
+    Other(#[cfg_attr(test, proptest(strategy = "110u8.."))] u8),
 }
 
 impl AeadAlgorithm {

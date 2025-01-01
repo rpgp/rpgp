@@ -151,7 +151,7 @@ fn parse_secret_fields(
                     (i, None)
                 };
 
-                let (i, s2k) = s2k_parser(i)?;
+                let (i, s2k) = StringToKey::from_slice(i)?;
 
                 // if we got a length field (in v6), check that it contained a consistent value
                 if let Some(len) = len {
@@ -186,7 +186,7 @@ fn parse_secret_fields(
                     (i, None)
                 };
 
-                let (i, s2k) = s2k_parser(i)?;
+                let (i, s2k) = StringToKey::from_slice(i)?;
 
                 // if we got a length field (in v6), check that it contained a consistent value
                 if let Some(len) = len {
@@ -210,7 +210,7 @@ fn parse_secret_fields(
             }
             S2kUsage::MalleableCfb => {
                 let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
-                let (i, s2k) = s2k_parser(i)?;
+                let (i, s2k) = StringToKey::from_slice(i)?;
                 let (i, iv) = take(sym_alg.block_size())(i)?;
                 (
                     i,

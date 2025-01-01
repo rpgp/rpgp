@@ -15,9 +15,18 @@ use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, 
 /// User ID Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-id-packet-type-id-13>
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct UserId {
     packet_version: Version,
+    #[cfg_attr(test, proptest(strategy = "id_gen()"))]
     id: BString,
+}
+
+#[cfg(test)]
+proptest::prop_compose! {
+    fn id_gen()(id in "[a-zA-Z]+") -> BString {
+        BString::from(id)
+    }
 }
 
 impl UserId {
@@ -127,6 +136,7 @@ impl PacketTrait for UserId {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
@@ -190,5 +200,23 @@ mod tests {
         third_signed
             .verify_third_party(&alice_pub, &signer_pub)
             .expect("self signature verification failed");
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(user_id: UserId) {
+            let mut buf = Vec::new();
+            user_id.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), user_id.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(user_id: UserId) {
+            let mut buf = Vec::new();
+            user_id.to_writer(&mut buf).unwrap();
+            let new_user_id = UserId::from_slice(user_id.packet_version, &buf).unwrap();
+            assert_eq!(user_id, new_user_id);
+        }
     }
 }

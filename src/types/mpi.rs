@@ -55,7 +55,20 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
 /// Represents an owned MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
 #[derive(Default, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
-pub struct Mpi(#[debug("{}", hex::encode(_0))] Vec<u8>);
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct Mpi(
+    #[debug("{}", hex::encode(_0))]
+    #[cfg_attr(test, proptest(strategy = "mpi_gen()"))]
+    Vec<u8>,
+);
+
+#[cfg(test)]
+proptest::prop_compose! {
+    fn mpi_gen()(mut v in proptest::collection::vec(0u8..255, 1..500)) -> Vec<u8> {
+        strip_leading_zeros_vec(&mut v);
+        v
+    }
+}
 
 /// Represents a borrowed MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.

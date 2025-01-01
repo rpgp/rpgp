@@ -20,6 +20,7 @@ use crate::util::{packet_length, write_packet_length, write_packet_length_len};
 /// User Attribute Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-attribute-packet-type->
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum UserAttribute {
     Image {
         packet_version: Version,
@@ -53,9 +54,13 @@ impl UserAttribute {
 
     pub fn packet_len(&self) -> usize {
         match self {
-            UserAttribute::Image { ref data, .. } => {
-                // typ + image header + data length
-                1 + 16 + data.len()
+            UserAttribute::Image {
+                ref data,
+                ref header,
+                ..
+            } => {
+                // typ + image header + header length + data length
+                1 + header.len() + 2 + data.len()
             }
             UserAttribute::Unknown { ref data, .. } => {
                 // typ + data length
@@ -174,16 +179,12 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttrib
                 data: data.to_vec(),
             })(i),
         })(i)?;
-        Ok((i, {
-            debug!("attr with len {}", len);
-            attr
-        }))
+        Ok((i, attr))
     }
 }
 
 impl Serialize for UserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        debug!("write_packet_len {}", self.packet_len());
         write_packet_length(self.packet_len(), writer)?;
 
         match self {
@@ -226,5 +227,30 @@ impl PacketTrait for UserAttribute {
 
     fn tag(&self) -> Tag {
         Tag::UserAttribute
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn write_len(attr: UserAttribute) {
+            let mut buf = Vec::new();
+            attr.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), attr.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(attr: UserAttribute) {
+            let mut buf = Vec::new();
+            attr.to_writer(&mut buf).unwrap();
+            let new_attr = UserAttribute::from_slice(attr.packet_version(), &buf).unwrap();
+            assert_eq!(attr, new_attr);
+        }
     }
 }

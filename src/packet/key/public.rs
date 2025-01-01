@@ -17,10 +17,59 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicKey(PubKeyInner);
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct PublicKey(#[cfg_attr(test, proptest(strategy = "pub_key_inner_gen()"))] PubKeyInner);
+
+#[cfg(test)]
+fn pub_key_inner_gen() -> impl proptest::prelude::Strategy<Value = PubKeyInner> {
+    use chrono::TimeZone;
+    use proptest::prelude::*;
+
+    //
+    // version: KeyVersion,
+    prop::arbitrary::any::<(Version, KeyVersion, PublicKeyAlgorithm, u32, u16)>()
+        .prop_flat_map(
+            |(packet_version, version, algorithm, created_at, expiration)| {
+                let created_at = chrono::Utc
+                    .timestamp_opt(created_at as i64, 0)
+                    .single()
+                    .expect("invalid time");
+                let expiration = if version == KeyVersion::V2 || version == KeyVersion::V3 {
+                    Some(expiration)
+                } else {
+                    None
+                };
+
+                let public_params = crate::types::public_params_gen(algorithm);
+
+                (
+                    Just(packet_version),
+                    Just(version),
+                    Just(algorithm),
+                    Just(created_at),
+                    Just(expiration),
+                    public_params,
+                )
+            },
+        )
+        .prop_map(
+            |(packet_version, version, algorithm, created_at, expiration, public_params)| {
+                PubKeyInner::new(
+                    packet_version,
+                    version,
+                    algorithm,
+                    created_at,
+                    expiration,
+                    public_params,
+                )
+                .unwrap()
+            },
+        )
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicSubkey(PubKeyInner);
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct PublicSubkey(#[cfg_attr(test, proptest(strategy = "pub_key_inner_gen()"))] PubKeyInner);
 
 impl PublicKey {
     /// Create a new `PublicKey` packet from underlying parameters.
@@ -103,7 +152,8 @@ impl PublicSubkey {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-struct PubKeyInner {
+#[doc(hidden)] // must leak for proptest to work
+pub struct PubKeyInner {
     packet_version: Version,
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
@@ -790,5 +840,47 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn expiration(&self) -> Option<u16> {
         PublicKeyTrait::expiration(&self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::packet::PacketTrait;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn public_key_write_len(packet: PublicKey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+
+        #[test]
+        fn public_key_packet_roundtrip(packet: PublicKey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = PublicKey::from_slice(packet.packet_version(), &buf).unwrap();
+            prop_assert_eq!(packet, new_packet);
+        }
+
+        #[test]
+        fn public_sub_key_write_len(packet: PublicSubkey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+
+        #[test]
+        fn public_sub_key_packet_roundtrip(packet: PublicSubkey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = PublicSubkey::from_slice(packet.packet_version(), &buf).unwrap();
+            prop_assert_eq!(packet, new_packet);
+        }
     }
 }

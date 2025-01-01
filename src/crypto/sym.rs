@@ -67,6 +67,7 @@ where
 /// Available symmetric key algorithms.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-algorithms>
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
@@ -97,7 +98,7 @@ pub enum SymmetricKeyAlgorithm {
     Private10 = 110,
 
     #[num_enum(catch_all)]
-    Other(u8),
+    Other(#[cfg_attr(test, proptest(strategy = "110u8.."))] u8),
 }
 
 impl Default for SymmetricKeyAlgorithm {

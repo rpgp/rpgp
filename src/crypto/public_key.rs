@@ -1,13 +1,16 @@
 use num_enum::{FromPrimitive, IntoPrimitive};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum PublicKeyAlgorithm {
     /// RSA (Encrypt and Sign)
     RSA = 1,
     /// DEPRECATED: RSA (Encrypt-Only)
+    #[cfg_attr(test, proptest(skip))]
     RSAEncrypt = 2,
     /// DEPRECATED: RSA (Sign-Only)
+    #[cfg_attr(test, proptest(skip))]
     RSASign = 3,
     /// Elgamal (Sign-Only)
     ElgamalSign = 16,
@@ -34,18 +37,30 @@ pub enum PublicKeyAlgorithm {
     Ed448 = 28,
 
     /// Private experimental range (from OpenPGP)
+    #[cfg_attr(test, proptest(skip))]
     Private100 = 100,
+    #[cfg_attr(test, proptest(skip))]
     Private101 = 101,
+    #[cfg_attr(test, proptest(skip))]
     Private102 = 102,
+    #[cfg_attr(test, proptest(skip))]
     Private103 = 103,
+    #[cfg_attr(test, proptest(skip))]
     Private104 = 104,
+    #[cfg_attr(test, proptest(skip))]
     Private105 = 105,
+    #[cfg_attr(test, proptest(skip))]
     Private106 = 106,
+    #[cfg_attr(test, proptest(skip))]
     Private107 = 107,
+    #[cfg_attr(test, proptest(skip))]
     Private108 = 108,
+    #[cfg_attr(test, proptest(skip))]
     Private109 = 109,
+    #[cfg_attr(test, proptest(skip))]
     Private110 = 110,
 
     #[num_enum(catch_all)]
+    #[cfg_attr(test, proptest(skip))]
     Unknown(u8),
 }

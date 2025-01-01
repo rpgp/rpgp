@@ -3,6 +3,7 @@ use std::path::Path;
 
 use bstr::{BStr, BString};
 use bytes::{Bytes, BytesMut};
+use bzip2::write::BzEncoder;
 use chrono::{SubsecRound, Utc};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
@@ -482,7 +483,11 @@ impl Message {
                 self.to_writer(&mut enc)?;
                 enc.finish()?
             }
-            CompressionAlgorithm::BZip2 => unimplemented_err!("BZip2"),
+            CompressionAlgorithm::BZip2 => {
+                let mut enc = BzEncoder::new(Vec::new(), bzip2::Compression::default());
+                self.to_writer(&mut enc)?;
+                enc.finish()?
+            }
             CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => {
                 unsupported_err!("CompressionAlgorithm {} is unsupported", u8::from(alg))
             }

@@ -13,30 +13,27 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
-use crate::types::{s2k_parser, SkeskVersion, StringToKey, Tag, Version};
+use crate::types::{SkeskVersion, StringToKey, Tag, Version};
 use crate::util::rest_len;
 use crate::PlainSessionKey;
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SymKeyEncryptedSessionKey {
     V4 {
         packet_version: Version,
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
-        #[debug("{:?}", encrypted_key.as_ref().map(hex::encode))]
-        encrypted_key: Option<Vec<u8>>,
+        #[debug("{}", hex::encode(encrypted_key))]
+        encrypted_key: Vec<u8>,
     },
     V5 {
         packet_version: Version,
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
-        aead: AeadAlgorithm,
-        #[debug("{}", hex::encode(iv))]
-        iv: Vec<u8>,
-        #[debug("{}", hex::encode(auth_tag))]
-        auth_tag: Vec<u8>,
+        aead: AeadProps,
         #[debug("{}", hex::encode(encrypted_key))]
         encrypted_key: Vec<u8>,
     },
@@ -44,14 +41,61 @@ pub enum SymKeyEncryptedSessionKey {
         packet_version: Version,
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
-        aead: AeadAlgorithm,
-        #[debug("{}", hex::encode(iv))]
-        iv: Vec<u8>,
-        #[debug("{}", hex::encode(auth_tag))]
-        auth_tag: Vec<u8>,
+        aead: AeadProps,
         #[debug("{}", hex::encode(encrypted_key))]
         encrypted_key: Vec<u8>,
     },
+}
+
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub enum AeadProps {
+    Eax {
+        #[debug("{}", hex::encode(iv))]
+        iv: [u8; 16],
+        #[debug("{}", hex::encode(auth_tag))]
+        auth_tag: [u8; 16],
+    },
+    Ocb {
+        #[debug("{}", hex::encode(iv))]
+        iv: [u8; 15],
+        #[debug("{}", hex::encode(auth_tag))]
+        auth_tag: [u8; 16],
+    },
+    Gcm {
+        #[debug("{}", hex::encode(iv))]
+        iv: [u8; 12],
+        #[debug("{}", hex::encode(auth_tag))]
+        auth_tag: [u8; 16],
+    },
+}
+
+impl From<&AeadProps> for AeadAlgorithm {
+    fn from(value: &AeadProps) -> Self {
+        match value {
+            AeadProps::Eax { .. } => AeadAlgorithm::Eax,
+            AeadProps::Gcm { .. } => AeadAlgorithm::Gcm,
+            AeadProps::Ocb { .. } => AeadAlgorithm::Ocb,
+        }
+    }
+}
+
+impl AeadProps {
+    fn iv(&self) -> &[u8] {
+        match self {
+            AeadProps::Eax { iv, .. } => iv,
+            AeadProps::Ocb { iv, .. } => iv,
+            AeadProps::Gcm { iv, .. } => iv,
+        }
+    }
+
+    fn auth_tag(&self) -> &[u8] {
+        match self {
+            AeadProps::Eax { auth_tag, .. } => auth_tag,
+            AeadProps::Ocb { auth_tag, .. } => auth_tag,
+            AeadProps::Gcm { auth_tag, .. } => auth_tag,
+        }
+    }
 }
 
 impl SymKeyEncryptedSessionKey {
@@ -96,7 +140,7 @@ impl SymKeyEncryptedSessionKey {
     pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
         debug!("decrypt session key {:?}", self.version());
 
-        let mut decrypted_key = self.encrypted_key().map(|v| v.to_vec()).unwrap_or_default();
+        let mut decrypted_key = self.encrypted_key().to_vec();
 
         match self {
             Self::V4 { sym_algorithm, .. } => {
@@ -111,22 +155,21 @@ impl SymKeyEncryptedSessionKey {
                 })
             }
             Self::V5 {
-                iv,
                 sym_algorithm,
                 aead,
-                auth_tag,
                 ..
             } => {
                 // Initial key material is the s2k derived key.
                 let ikm = key;
                 // No salt is used
                 let salt = None;
+                let alg = AeadAlgorithm::from(aead);
 
                 let info = [
                     Tag::SymKeyEncryptedSessionKey.encode(), // packet type
                     0x05,                                    // version
                     (*sym_algorithm).into(),
-                    (*aead).into(),
+                    alg.into(),
                 ];
 
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
@@ -134,34 +177,33 @@ impl SymKeyEncryptedSessionKey {
                 hk.expand(&info, &mut okm).expect("42");
 
                 // AEAD decrypt
-                aead.decrypt_in_place(
+                alg.decrypt_in_place(
                     sym_algorithm,
                     &okm,
-                    iv,
+                    aead.iv(),
                     &info,
-                    auth_tag,
+                    aead.auth_tag(),
                     &mut decrypted_key,
                 )?;
 
                 Ok(PlainSessionKey::V5 { key: decrypted_key })
             }
             Self::V6 {
-                iv,
                 sym_algorithm,
                 aead,
-                auth_tag,
                 ..
             } => {
                 // Initial key material is the s2k derived key.
                 let ikm = key;
                 // No salt is used
                 let salt = None;
+                let alg = AeadAlgorithm::from(aead);
 
                 let info = [
                     Tag::SymKeyEncryptedSessionKey.encode(), // packet type
                     0x06,                                    // version
                     (*sym_algorithm).into(),
-                    (*aead).into(),
+                    alg.into(),
                 ];
 
                 let hk = hkdf::Hkdf::<Sha256>::new(salt, ikm);
@@ -169,12 +211,12 @@ impl SymKeyEncryptedSessionKey {
                 hk.expand(&info, &mut okm).expect("42");
 
                 // AEAD decrypt
-                aead.decrypt_in_place(
+                alg.decrypt_in_place(
                     sym_algorithm,
                     &okm,
-                    iv,
+                    aead.iv(),
                     &info,
-                    auth_tag,
+                    aead.auth_tag(),
                     &mut decrypted_key,
                 )?;
 
@@ -183,17 +225,17 @@ impl SymKeyEncryptedSessionKey {
         }
     }
 
-    pub fn encrypted_key(&self) -> Option<&[u8]> {
+    pub fn encrypted_key(&self) -> &[u8] {
         match self {
             Self::V4 {
                 ref encrypted_key, ..
-            } => encrypted_key.as_ref().map(|s| &s[..]),
+            } => encrypted_key,
             Self::V5 {
                 ref encrypted_key, ..
-            } => Some(encrypted_key),
+            } => encrypted_key,
             Self::V6 {
                 ref encrypted_key, ..
-            } => Some(encrypted_key),
+            } => encrypted_key,
         }
     }
 
@@ -237,7 +279,7 @@ impl SymKeyEncryptedSessionKey {
             packet_version: Default::default(),
             s2k,
             sym_algorithm: alg,
-            encrypted_key: Some(encrypted_key),
+            encrypted_key,
         })
     }
 
@@ -293,13 +335,29 @@ impl SymKeyEncryptedSessionKey {
         let auth_tag =
             aead.encrypt_in_place(&sym_algorithm, &okm, &iv, &info, &mut encrypted_key)?;
 
+        let aead = match aead {
+            AeadAlgorithm::Eax => AeadProps::Eax {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            AeadAlgorithm::Ocb => AeadProps::Ocb {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            AeadAlgorithm::Gcm => AeadProps::Gcm {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            _ => {
+                unimplemented_err!("AEAD {:?}", aead);
+            }
+        };
+
         Ok(SymKeyEncryptedSessionKey::V6 {
             packet_version: Default::default(),
             sym_algorithm,
             s2k,
             aead,
-            iv,
-            auth_tag,
             encrypted_key,
         })
     }
@@ -325,15 +383,15 @@ fn parse_v4(
 ) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
     move |i: &[u8]| {
         let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
-        let (i, s2k) = s2k_parser(i)?;
-        let encrypted_key = if i.is_empty() { None } else { Some(i.to_vec()) };
+        let (i, s2k) = StringToKey::from_slice(i)?;
+
         Ok((
             &[][..],
             SymKeyEncryptedSessionKey::V4 {
                 packet_version,
                 sym_algorithm: sym_alg,
                 s2k,
-                encrypted_key,
+                encrypted_key: i.to_vec(),
             },
         ))
     }
@@ -346,16 +404,40 @@ fn parse_v5(
         let (i, _count) = be_u8(i)?;
         let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
         let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
-        let (i, _s2k_len) = be_u8(i)?;
-        let (i, s2k) = s2k_parser(i)?;
+        let (i, s2k_len) = be_u8(i)?;
+        let (i, s2k_data) = take(s2k_len)(i)?;
+        let (_, s2k) = StringToKey::from_slice(s2k_data)?;
         let (i, iv) = take(aead.iv_size())(i)?;
         let (i, l) = rest_len(i)?;
         let aead_tag_size = aead.tag_size().unwrap_or_default();
+
         if l < aead_tag_size {
             return Err(nom::Err::Error(Error::InvalidInput));
         }
-        let (i, esk) = take(l - aead_tag_size)(i)?;
+        let esk_size = l - aead_tag_size;
+        let (i, esk) = take(esk_size)(i)?;
         let (i, auth_tag) = take(aead_tag_size)(i)?;
+
+        let aead = match aead {
+            AeadAlgorithm::Eax => AeadProps::Eax {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            AeadAlgorithm::Ocb => AeadProps::Ocb {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            AeadAlgorithm::Gcm => AeadProps::Gcm {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            _ => {
+                return Err(nom::Err::Error(Error::Message(format!(
+                    "unsupported aead algorithm for v5: {:?}",
+                    aead
+                ))));
+            }
+        };
 
         Ok((
             i,
@@ -363,8 +445,6 @@ fn parse_v5(
                 packet_version,
                 sym_algorithm: sym_alg,
                 aead,
-                iv: iv.to_vec(),
-                auth_tag: auth_tag.to_vec(),
                 s2k,
                 encrypted_key: esk.to_vec(),
             },
@@ -379,8 +459,9 @@ fn parse_v6(
         let (i, _count) = be_u8(i)?;
         let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
         let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
-        let (i, _s2k_len) = be_u8(i)?;
-        let (i, s2k) = s2k_parser(i)?;
+        let (i, s2k_len) = be_u8(i)?;
+        let (i, s2k_data) = take(s2k_len)(i)?;
+        let (_, s2k) = StringToKey::from_slice(s2k_data)?;
         let (i, iv) = take(aead.iv_size())(i)?;
         let (i, l) = rest_len(i)?;
         let aead_tag_size = aead.tag_size().unwrap_or_default();
@@ -390,14 +471,33 @@ fn parse_v6(
         let (i, esk) = take(l - aead_tag_size)(i)?;
         let (i, auth_tag) = take(aead_tag_size)(i)?;
 
+        let aead = match aead {
+            AeadAlgorithm::Eax => AeadProps::Eax {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            AeadAlgorithm::Ocb => AeadProps::Ocb {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            AeadAlgorithm::Gcm => AeadProps::Gcm {
+                iv: iv.try_into().expect("checked"),
+                auth_tag: auth_tag.try_into().expect("checked"),
+            },
+            _ => {
+                return Err(nom::Err::Error(Error::Message(format!(
+                    "unsupported aead algorithm for v5: {:?}",
+                    aead
+                ))));
+            }
+        };
+
         Ok((
             i,
             SymKeyEncryptedSessionKey::V6 {
                 packet_version,
                 sym_algorithm: sym_alg,
                 aead,
-                iv: iv.to_vec(),
-                auth_tag: auth_tag.to_vec(),
                 s2k,
                 encrypted_key: esk.to_vec(),
             },
@@ -417,60 +517,54 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 writer.write_u8(0x04)?;
                 writer.write_u8((*sym_algorithm).into())?;
                 s2k.to_writer(writer)?;
-                if let Some(ref key) = encrypted_key {
-                    writer.write_all(key)?;
-                }
+                writer.write_all(encrypted_key)?;
             }
             SymKeyEncryptedSessionKey::V5 {
                 packet_version: _,
                 sym_algorithm,
                 s2k,
                 aead,
-                iv,
-                auth_tag,
                 encrypted_key,
             } => {
                 writer.write_u8(0x05)?;
                 let s2k_len = s2k.write_len();
-                let first_len = 1 + 1 + 1 + s2k_len + iv.len();
+                let first_len = 1 + 1 + 1 + s2k_len + aead.iv().len();
 
                 // length
                 writer.write_u8(first_len.try_into()?)?;
 
                 writer.write_u8((*sym_algorithm).into())?;
-                writer.write_u8((*aead).into())?;
+                writer.write_u8(AeadAlgorithm::from(aead).into())?;
                 writer.write_u8(s2k_len.try_into()?)?;
                 s2k.to_writer(writer)?;
-                writer.write_all(iv)?;
+                writer.write_all(aead.iv())?;
 
                 writer.write_all(encrypted_key)?;
-                writer.write_all(auth_tag)?;
+                writer.write_all(aead.auth_tag())?;
             }
             SymKeyEncryptedSessionKey::V6 {
                 packet_version: _,
                 sym_algorithm,
                 s2k,
                 aead,
-                iv,
-                auth_tag,
                 encrypted_key,
             } => {
                 writer.write_u8(0x06)?;
 
                 let s2k_len = s2k.write_len();
-                let first_len = 1 + 1 + 1 + s2k_len + iv.len();
+                let first_len = 1 + 1 + 1 + s2k_len + aead.iv().len();
 
                 // length
                 writer.write_u8(first_len.try_into()?)?;
 
                 writer.write_u8((*sym_algorithm).into())?;
-                writer.write_u8((*aead).into())?;
+                writer.write_u8(AeadAlgorithm::from(aead).into())?;
                 writer.write_u8(s2k_len.try_into()?)?;
                 s2k.to_writer(writer)?;
-                writer.write_all(iv)?;
+                writer.write_all(aead.iv())?;
 
                 writer.write_all(encrypted_key)?;
-                writer.write_all(auth_tag)?;
+                writer.write_all(aead.auth_tag())?;
             }
         }
         Ok(())
@@ -484,15 +578,12 @@ impl Serialize for SymKeyEncryptedSessionKey {
             } => {
                 sum += 1 + 1;
                 sum += s2k.write_len();
-                if let Some(ref key) = encrypted_key {
-                    sum += key.len();
-                }
+                sum += encrypted_key.len();
             }
             SymKeyEncryptedSessionKey::V5 {
                 s2k,
-                iv,
-                auth_tag,
                 encrypted_key,
+                aead,
                 ..
             } => {
                 sum += 1;
@@ -500,16 +591,15 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 sum += s2k.write_len();
                 sum += 1;
-                sum += iv.len();
+                sum += aead.iv().len();
 
                 sum += 1;
                 sum += encrypted_key.len();
-                sum += auth_tag.len();
+                sum += aead.auth_tag().len();
             }
             SymKeyEncryptedSessionKey::V6 {
                 s2k,
-                iv,
-                auth_tag,
+                aead,
                 encrypted_key,
                 ..
             } => {
@@ -518,11 +608,11 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 sum += s2k.write_len();
                 sum += 1;
-                sum += iv.len();
+                sum += aead.iv().len();
 
                 sum += 1;
                 sum += encrypted_key.len();
-                sum += auth_tag.len();
+                sum += aead.auth_tag().len();
             }
         }
         sum
@@ -540,5 +630,30 @@ impl PacketTrait for SymKeyEncryptedSessionKey {
 
     fn tag(&self) -> Tag {
         Tag::SymKeyEncryptedSessionKey
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn write_len(packet: SymKeyEncryptedSessionKey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), packet.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(packet: SymKeyEncryptedSessionKey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = SymKeyEncryptedSessionKey::from_slice(packet.packet_version(), &buf).unwrap();
+            assert_eq!(packet, new_packet);
+        }
     }
 }
