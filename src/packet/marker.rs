@@ -11,6 +11,7 @@ const PGP: [u8; 3] = [0x50, 0x47, 0x50];
 /// Marker Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-marker-packet-type-id-10>
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Marker {
     packet_version: Version,
 }
@@ -46,5 +47,30 @@ impl PacketTrait for Marker {
 
     fn tag(&self) -> Tag {
         Tag::Marker
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn write_len(marker: Marker) {
+            let mut buf = Vec::new();
+            marker.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), marker.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(marker: Marker) {
+            let mut buf = Vec::new();
+            marker.to_writer(&mut buf).unwrap();
+            let new_marker = Marker::from_slice(marker.packet_version, &buf).unwrap();
+            assert_eq!(marker, new_marker);
+        }
     }
 }

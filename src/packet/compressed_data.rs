@@ -2,6 +2,7 @@ use std::io::{self, Read};
 
 use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes};
+use bzip2::read::BzDecoder;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 
 use crate::errors::Result;
@@ -10,18 +11,28 @@ use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, Tag, Version};
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct CompressedData {
     packet_version: Version,
     compression_algorithm: CompressionAlgorithm,
     #[debug("{}", hex::encode(compressed_data))]
+    #[cfg_attr(test, proptest(strategy = "compressed_data_gen()"))]
     compressed_data: Bytes,
+}
+
+#[cfg(test)]
+proptest::prop_compose! {
+    fn compressed_data_gen()(source: Vec<u8>) -> Bytes {
+        // TODO: actually compress
+        source.into()
+    }
 }
 
 pub enum Decompressor<R> {
     Uncompressed(R),
     Zip(DeflateDecoder<R>),
     Zlib(ZlibDecoder<R>),
-    Bzip2,
+    Bzip2(BzDecoder<R>),
 }
 
 impl Read for Decompressor<&[u8]> {
@@ -30,7 +41,7 @@ impl Read for Decompressor<&[u8]> {
             Decompressor::Uncompressed(ref mut c) => c.read(into),
             Decompressor::Zip(ref mut c) => c.read(into),
             Decompressor::Zlib(ref mut c) => c.read(into),
-            Decompressor::Bzip2 => unimplemented!("bzip2"),
+            Decompressor::Bzip2(ref mut c) => c.read(into),
         }
     }
 }
@@ -38,19 +49,12 @@ impl Read for Decompressor<&[u8]> {
 impl CompressedData {
     /// Parses a `CompressedData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        ensure!(input.len() > 1, "input too short");
-
-        let alg = CompressionAlgorithm::from(input[0]);
-        Ok(CompressedData {
-            packet_version,
-            compression_algorithm: alg,
-            compressed_data: Bytes::from(input[1..].to_vec()),
-        })
+        Self::from_buf(packet_version, input)
     }
 
     /// Parses a `CompressedData` packet from the given `Buf`.
     pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
-        ensure!(input.remaining() > 1, "input too short");
+        ensure!(input.has_remaining(), "input too short");
 
         let alg = CompressionAlgorithm::from(input.get_u8());
         Ok(CompressedData {
@@ -79,7 +83,9 @@ impl CompressedData {
             CompressionAlgorithm::ZLIB => Ok(Decompressor::Zlib(ZlibDecoder::new(
                 &self.compressed_data[..],
             ))),
-            CompressionAlgorithm::BZip2 => unimplemented_err!("BZip2"),
+            CompressionAlgorithm::BZip2 => Ok(Decompressor::Bzip2(BzDecoder::new(
+                &self.compressed_data[..],
+            ))),
             CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => unsupported_err!(
                 "CompressionAlgorithm {} is unsupported",
                 u8::from(self.compression_algorithm)
@@ -112,5 +118,30 @@ impl PacketTrait for CompressedData {
 
     fn tag(&self) -> Tag {
         Tag::CompressedData
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn write_len(packet: CompressedData) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), packet.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(packet: CompressedData) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = CompressedData::from_slice(packet.packet_version(), &buf).unwrap();
+            assert_eq!(packet, new_packet);
+        }
     }
 }

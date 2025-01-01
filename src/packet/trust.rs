@@ -14,6 +14,7 @@ use crate::types::{Tag, Version};
 /// transferred to other users, and they SHOULD be ignored on any input
 /// other than local keyring files.
 #[derive(Debug, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Trust {
     packet_version: Version,
 }
@@ -44,5 +45,29 @@ impl PacketTrait for Trust {
 
     fn tag(&self) -> Tag {
         Tag::Trust
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn write_len(trust: Trust) {
+            let mut buf = Vec::new();
+            trust.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), trust.write_len());
+        }
+
+        #[test]
+        fn packet_roundtrip(trust: Trust) {
+            let mut buf = Vec::new();
+            trust.to_writer(&mut buf).unwrap();
+            let new_trust = Trust::from_slice(trust.packet_version, &buf).unwrap();
+            assert_eq!(trust, new_trust);
+        }
     }
 }

@@ -103,6 +103,7 @@ impl Tag {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Version {
     /// Old Packet Format ("Legacy packet format")
     Old = 0,
@@ -178,6 +179,7 @@ impl Version {
 
 // TODO: find a better place for this
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum KeyVersion {
     V2 = 2,
@@ -231,9 +233,9 @@ pub enum SkeskVersion {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use super::*;
+
+    use proptest::prelude::*;
 
     #[test]
     fn test_write_header() {
@@ -257,5 +259,14 @@ mod tests {
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06f");
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(version: Version, len: usize) {
+            let mut buf = Vec::new();
+            version.write_header(&mut buf, Tag::Signature, len).unwrap();
+            assert_eq!(buf.len(), version.header_len(len));
+        }
     }
 }
