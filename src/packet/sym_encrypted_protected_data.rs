@@ -1,54 +1,81 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use nom::bytes::streaming::take;
-use nom::combinator::map_res;
-use nom::number::streaming::be_u8;
+use bytes::{Buf, Bytes};
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 use zeroize::Zeroizing;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, IResult, Result};
+use crate::errors::{Error, Result};
 use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedProtectedData {
     packet_version: Version,
-    data: Data,
+    config: Config,
+    #[debug("{}", hex::encode(data))]
+    data: Bytes,
 }
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
-pub enum Data {
-    V1 {
-        #[debug("{}", hex::encode(data))]
-        data: Vec<u8>,
-    },
+pub enum Config {
+    V1,
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: u8,
         #[debug("{}", hex::encode(salt))]
         salt: [u8; 32],
-        #[debug("{}", hex::encode(data))]
-        data: Vec<u8>,
     },
 }
 
 impl SymEncryptedProtectedData {
     /// Parses a `SymEncryptedProtectedData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        ensure!(input.len() > 1, "invalid input length");
-        let (_, data) = parse()(input)?;
+        Self::from_buf(packet_version, input)
+    }
+
+    /// Parses a `SymEncryptedProtectedData` packet from the given buf.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut data: B) -> Result<Self> {
+        ensure!(data.remaining() > 1, "invalid input length");
+
+        let version = data.get_u8();
+        let config = match version {
+            0x01 => Config::V1,
+            0x02 => {
+                ensure!(data.remaining() >= 3 + 32, "invalid input length");
+                let sym_alg = SymmetricKeyAlgorithm::from(data.get_u8());
+                let aead = AeadAlgorithm::from(data.get_u8());
+                let chunk_size = data.get_u8();
+                let mut salt = [0u8; 32];
+                data.copy_to_slice(&mut salt);
+
+                Config::V2 {
+                    sym_alg,
+                    aead,
+                    chunk_size,
+                    salt,
+                }
+            }
+            _ => {
+                return Err(format_err!(
+                    "unknown SymEncryptedProtectedData version {}",
+                    version
+                ))
+            }
+        };
+        let data = data.copy_to_bytes(data.remaining());
 
         Ok(SymEncryptedProtectedData {
-            data,
             packet_version,
+            config,
+            data,
         })
     }
 
@@ -63,7 +90,8 @@ impl SymEncryptedProtectedData {
 
         Ok(SymEncryptedProtectedData {
             packet_version: Default::default(),
-            data: Data::V1 { data },
+            config: Config::V1,
+            data: data.into(),
         })
     }
 
@@ -177,31 +205,24 @@ impl SymEncryptedProtectedData {
 
         Ok(SymEncryptedProtectedData {
             packet_version: Default::default(),
-            data: Data::V2 {
+            config: Config::V2 {
                 sym_alg,
                 aead,
                 chunk_size,
                 salt,
-                data: out,
             },
+            data: out.into(),
         })
     }
 
-    pub fn data(&self) -> &Data {
+    pub fn data(&self) -> &Bytes {
         &self.data
     }
 
-    pub fn data_as_slice(&self) -> &[u8] {
-        match &self.data {
-            Data::V1 { data } => data,
-            Data::V2 { data, .. } => data,
-        }
-    }
-
     pub fn version(&self) -> usize {
-        match self.data {
-            Data::V1 { .. } => 1,
-            Data::V2 { .. } => 2,
+        match self.config {
+            Config::V1 { .. } => 1,
+            Config::V2 { .. } => 2,
         }
     }
 
@@ -211,20 +232,19 @@ impl SymEncryptedProtectedData {
         session_key: &[u8],
         sym_alg: Option<SymmetricKeyAlgorithm>,
     ) -> Result<Vec<u8>> {
-        match &self.data {
-            Data::V1 { data } => {
-                let mut data = data.clone();
-                let res = sym_alg
-                    .expect("v1")
-                    .decrypt_protected(session_key, &mut data)?;
-                Ok(res.to_vec())
+        match &self.config {
+            Config::V1 => {
+                let sym_alg = sym_alg.expect("v1");
+                let mut prefix = self.data[..sym_alg.cfb_prefix_size()].to_vec();
+                let mut ciphertext = self.data[sym_alg.cfb_prefix_size()..].to_vec();
+                sym_alg.decrypt_protected(session_key, &mut prefix, &mut ciphertext)?;
+                Ok(ciphertext)
             }
-            Data::V2 {
+            Config::V2 {
                 sym_alg,
                 aead,
                 chunk_size,
                 salt,
-                data,
             } => {
                 ensure_eq!(
                     session_key.len(),
@@ -241,7 +261,7 @@ impl SymEncryptedProtectedData {
                 let (info, message_key, mut nonce) =
                     Self::aead_setup(*sym_alg, *aead, *chunk_size, &salt[..], ikm)?;
 
-                let mut data = data.clone();
+                let mut data = self.data.to_vec();
 
                 // There are n chunks, n auth tags + 1 final auth tag
                 let Some(aead_tag_size) = aead.tag_size() else {
@@ -306,29 +326,50 @@ impl SymEncryptedProtectedData {
     }
 }
 
-impl Serialize for SymEncryptedProtectedData {
+impl Serialize for Config {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        match &self.data {
-            Data::V1 { data } => {
+        match self {
+            Config::V1 => {
                 writer.write_u8(0x01)?;
-                writer.write_all(data)?;
             }
-            Data::V2 {
+            Config::V2 {
                 sym_alg,
                 aead,
                 chunk_size,
                 salt,
-                data,
             } => {
                 writer.write_u8(0x02)?;
                 writer.write_u8((*sym_alg).into())?;
                 writer.write_u8((*aead).into())?;
                 writer.write_u8(*chunk_size)?;
                 writer.write_all(salt)?;
-                writer.write_all(data)?;
             }
         }
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        match self {
+            Config::V1 => 1,
+            Config::V2 { salt, .. } => {
+                let mut sum = 1 + 1 + 1 + 1;
+                sum += salt.len();
+                sum
+            }
+        }
+    }
+}
+impl Serialize for SymEncryptedProtectedData {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.config.to_writer(writer)?;
+        writer.write_all(&self.data)?;
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = self.config.write_len();
+        sum += self.data.len();
+        sum
     }
 }
 
@@ -344,36 +385,6 @@ impl PacketTrait for SymEncryptedProtectedData {
 
 fn expand_chunk_size(s: u8) -> u32 {
     1u32 << (s as u32 + 6)
-}
-
-fn parse() -> impl Fn(&[u8]) -> IResult<&[u8], Data> {
-    move |i: &[u8]| {
-        let (i, version) = be_u8(i)?;
-        match version {
-            0x01 => Ok((&[][..], Data::V1 { data: i.to_vec() })),
-            0x02 => {
-                let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
-                let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
-                let (i, chunk_size) = be_u8(i)?;
-                let (i, salt) = take(32usize)(i)?;
-
-                Ok((
-                    &[][..],
-                    Data::V2 {
-                        sym_alg,
-                        aead,
-                        chunk_size,
-                        salt: salt.try_into().expect("size checked"),
-                        data: i.to_vec(),
-                    },
-                ))
-            }
-            _ => Err(nom::Err::Error(Error::Unsupported(format!(
-                "unknown SymEncryptedProtectedData version {}",
-                version
-            )))),
-        }
-    }
 }
 
 #[cfg(test)]

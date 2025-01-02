@@ -1,5 +1,6 @@
 use std::fs::File;
 
+use bytes::Bytes;
 use criterion::{black_box, criterion_group, Criterion};
 use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
 use pgp::crypto::ecc_curve::ECCCurve;
@@ -25,9 +26,9 @@ fn bench_key(c: &mut Criterion) {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
             .sign(&mut rng, || "".into())
             .unwrap();
-        let bytes = key.to_bytes().unwrap();
+        let bytes: Bytes = key.to_bytes().unwrap().into();
 
-        b.iter(|| black_box(SignedSecretKey::from_bytes(&bytes[..]).unwrap()))
+        b.iter(|| black_box(SignedSecretKey::from_bytes(bytes.clone()).unwrap()))
     });
 
     g.bench_function("parse_armored_rsa", |b| {

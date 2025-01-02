@@ -103,6 +103,7 @@ impl Tag {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, TryFromPrimitive)]
 #[repr(u8)]
 #[derive(Default)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Version {
     /// Old Packet Format ("Legacy packet format")
     Old = 0,
@@ -112,9 +113,9 @@ pub enum Version {
 }
 
 impl Version {
-    pub fn write_header(self, writer: &mut impl io::Write, tag: u8, len: usize) -> Result<()> {
-        debug!("write_header {:?} {} {}", self, tag, len);
-
+    pub fn write_header(self, writer: &mut impl io::Write, tag: Tag, len: usize) -> Result<()> {
+        debug!("write_header {:?} {:?} {}", self, tag, len);
+        let tag: u8 = tag.into();
         match self {
             Version::Old => {
                 if len < 256 {
@@ -147,10 +148,38 @@ impl Version {
 
         Ok(())
     }
+
+    /// Length of the header, in bytes.
+    pub fn header_len(self, len: usize) -> usize {
+        match self {
+            Version::Old => {
+                if len < 256 {
+                    // one octet
+                    2
+                } else if len < 65536 {
+                    // two octets
+                    3
+                } else {
+                    // four octets
+                    5
+                }
+            }
+            Version::New => {
+                if len < 192 {
+                    2
+                } else if len < 8384 {
+                    3
+                } else {
+                    6
+                }
+            }
+        }
+    }
 }
 
 // TODO: find a better place for this
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum KeyVersion {
     V2 = 2,
@@ -204,31 +233,40 @@ pub enum SkeskVersion {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use super::*;
+
+    use proptest::prelude::*;
 
     #[test]
     fn test_write_header() {
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::UserAttribute.into(), 12875)
+            .write_header(&mut buf, Tag::UserAttribute, 12875)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "d1ff0000324b");
 
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::Signature.into(), 302)
+            .write_header(&mut buf, Tag::Signature, 302)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06e");
 
         let mut buf = Vec::new();
         Version::New
-            .write_header(&mut buf, Tag::Signature.into(), 303)
+            .write_header(&mut buf, Tag::Signature, 303)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06f");
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(version: Version, len: usize) {
+            let mut buf = Vec::new();
+            version.write_header(&mut buf, Tag::Signature, len).unwrap();
+            assert_eq!(buf.len(), version.header_len(len));
+        }
     }
 }

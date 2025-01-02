@@ -11,6 +11,7 @@ use crate::types::{Tag, Version};
 ///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-padding-packet-type-id-21>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Padding {
     packet_version: Version,
     /// Random data.
@@ -48,6 +49,10 @@ impl Serialize for Padding {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        self.data.len()
+    }
 }
 
 impl PacketTrait for Padding {
@@ -62,6 +67,8 @@ impl PacketTrait for Padding {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
+    use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -80,7 +87,9 @@ mod tests {
         };
         assert_eq!(rest.len(), len);
 
-        let full_packet = single::body_parser(version, tag, &rest[..len]).expect("body parse");
+        let full_packet =
+            single::body_parser_bytes(version, tag, Bytes::from(rest[..len].to_vec()))
+                .expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
@@ -103,5 +112,23 @@ mod tests {
 
         let encoded = packet.to_bytes().expect("encode");
         assert_eq!(encoded, packet.data);
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(padding: Padding) {
+            let mut buf = Vec::new();
+            padding.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), padding.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(padding: Padding) {
+            let mut buf = Vec::new();
+            padding.to_writer(&mut buf).unwrap();
+            let new_padding = Padding::from_slice(padding.packet_version, &buf).unwrap();
+            assert_eq!(padding, new_padding);
+        }
     }
 }

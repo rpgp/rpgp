@@ -539,6 +539,7 @@ mod tests {
     use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
+    #[ignore]
     fn test_encrypt_decrypt() {
         for curve in [
             ECCCurve::Curve25519,

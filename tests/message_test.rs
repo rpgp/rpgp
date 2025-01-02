@@ -99,7 +99,9 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
             let raw = match decrypted {
                 Message::Literal(data) => data,
                 Message::Compressed(data) => {
-                    let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
+                    let mut bytes = Vec::new();
+                    data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
+                    let m = Message::from_bytes(bytes.into()).unwrap();
 
                     // serialize and check we get the same thing
                     let serialized = m.to_armored_bytes(None.into()).unwrap();
@@ -262,7 +264,9 @@ fn msg_large_indeterminate_len() {
     let raw = match decrypted {
         Message::Literal(data) => data,
         Message::Compressed(data) => {
-            let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
+            let mut bytes = Vec::new();
+            data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
+            let m = Message::from_bytes(bytes.into()).unwrap();
 
             m.get_literal().unwrap().clone()
         }
@@ -347,4 +351,71 @@ fn msg_literal_signature() {
     let (msg, _) = Message::from_armor_single(&mut msg_file).expect("failed to parse message");
 
     msg.verify(&pkey).unwrap();
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn binary_msg_password() {
+    // encrypted README.md using gpg
+    let message = Message::from_file("./tests/binary_password.gpg").unwrap();
+    let decrypted = message
+        .decrypt_with_password(|| "1234".to_string())
+        .unwrap();
+    let decompressed = decrypted.decompress().unwrap();
+    let Message::Literal(l) = decompressed else {
+        panic!("unexpected message: {:?}", decompressed);
+    };
+
+    assert_eq!(l.file_name(), "README.md");
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn binary_message_roundtrip_password_seipdv1() {
+    use pgp::compress_encrypt_with_password_seipdv1;
+    use pgp::crypto::sym::SymmetricKeyAlgorithm;
+    use pgp::types::CompressionAlgorithm;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha20Rng;
+
+    let dir = tempfile::tempdir().unwrap();
+    let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+    let plaintext_file = dir.path().join("plaintext.txt");
+    let encrypted_file = dir.path().join("encrypted.cool");
+
+    // Generate a file
+    let file_size = 23; //1024 * 14 + 8;
+    let mut buf = vec![0u8; file_size];
+    rng.fill(&mut buf[..]);
+    std::fs::write(&plaintext_file, &buf).unwrap();
+
+    // encrypt it
+    let s2k = pgp::types::StringToKey::new_default(&mut rng);
+    compress_encrypt_with_password_seipdv1(
+        &mut rng,
+        &plaintext_file,
+        &encrypted_file,
+        CompressionAlgorithm::Uncompressed,
+        s2k,
+        SymmetricKeyAlgorithm::AES128,
+        || "hello world".to_string(),
+    )
+    .unwrap();
+
+    // TODO: streaming
+
+    // decrypt it
+    let message = Message::from_file(&encrypted_file).unwrap();
+    dbg!(&message);
+    let decrypted = message
+        .decrypt_with_password(|| "hello world".to_string())
+        .unwrap();
+
+    let Message::Literal(l) = decrypted else {
+        panic!("unexpected message: {:?}", decrypted);
+    };
+
+    assert_eq!(l.file_name(), "plaintext.txt");
+    assert_eq!(l.data(), &buf);
 }

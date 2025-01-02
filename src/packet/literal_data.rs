@@ -1,13 +1,9 @@
 use std::io;
 
-use bstr::{BStr, BString};
+use bstr::{BStr, BString, ByteSlice};
 use byteorder::{BigEndian, WriteBytesExt};
+use bytes::{Buf, Bytes};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
-use nom::combinator::{map, map_opt, map_res, rest};
-use nom::multi::length_data;
-use nom::number::streaming::{be_u32, be_u8};
-use nom::sequence::tuple;
-use nom::IResult;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::errors::Result;
@@ -21,15 +17,19 @@ use crate::types::{Tag, Version};
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct LiteralData {
-    packet_version: Version,
-    mode: DataMode,
-    /// The filename, may contain non utf-8 bytes
-    file_name: BString,
-    created: DateTime<Utc>,
+    header: LiteralDataHeader,
     /// Raw data, stored normalized to CRLF line endings, to make signing and verification
     /// simpler.
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    data: Bytes,
+}
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+pub struct LiteralDataHeader {
+    pub packet_version: Version,
+    pub mode: DataMode,
+    /// The filename, may contain non utf-8 bytes
+    pub file_name: BString,
+    pub created: DateTime<Utc>,
 }
 
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
@@ -50,34 +50,72 @@ impl LiteralData {
         let data = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
 
         LiteralData {
-            packet_version: Version::New,
-            mode: DataMode::Utf8,
-            file_name: file_name.into(),
-            created: Utc::now().trunc_subsecs(0),
+            header: LiteralDataHeader {
+                packet_version: Version::New,
+                mode: DataMode::Utf8,
+                file_name: file_name.into(),
+                created: Utc::now().trunc_subsecs(0),
+            },
             data,
         }
     }
 
     /// Creates a literal data packet from the given bytes.
-    pub fn from_bytes(file_name: &BStr, data: &[u8]) -> Self {
+    pub fn from_bytes(file_name: &BStr, data: Bytes) -> Self {
         LiteralData {
-            packet_version: Version::New,
-            mode: DataMode::Binary,
-            file_name: file_name.to_owned(),
-            created: Utc::now().trunc_subsecs(0),
-            data: data.to_owned(),
+            header: LiteralDataHeader {
+                packet_version: Version::New,
+                mode: DataMode::Binary,
+                file_name: file_name.to_owned(),
+                created: Utc::now().trunc_subsecs(0),
+            },
+            data: data.to_vec().into(),
         }
     }
 
     /// Parses a `LiteralData` packet from the given slice.
     pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(packet_version)(input)?;
+        Self::from_buf(packet_version, input)
+    }
 
-        Ok(pk)
+    /// Parses a `LiteralData` packet from the given buf.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut data: B) -> Result<Self> {
+        ensure!(data.remaining() > 2, "invalid literal data packet");
+
+        // Mode
+        let mode = DataMode::from(data.get_u8());
+
+        // Name
+        let name_len = data.get_u8() as usize;
+        ensure!(data.remaining() >= name_len, "invalid literal data packet");
+        let mut name_vec = vec![0u8; name_len];
+        data.copy_to_slice(&mut name_vec);
+        let name = BString::new(name_vec);
+
+        // Created
+        ensure!(data.remaining() >= 4, "invalid literal data packet");
+        let created = Utc
+            .timestamp_opt(i64::from(data.get_u32()), 0)
+            .single()
+            .ok_or_else(|| format_err!("invalid created field"))?;
+
+        Ok(LiteralData {
+            header: LiteralDataHeader {
+                packet_version,
+                mode,
+                created,
+                file_name: name.to_owned(),
+            },
+            data: data.copy_to_bytes(data.remaining()),
+        })
+    }
+
+    pub fn file_name(&self) -> &BStr {
+        self.header.file_name.as_bstr()
     }
 
     pub fn is_binary(&self) -> bool {
-        matches!(self.mode, DataMode::Binary)
+        matches!(self.header.mode, DataMode::Binary)
     }
 
     pub fn data(&self) -> &[u8] {
@@ -86,18 +124,18 @@ impl LiteralData {
 
     #[inline]
     /// Extracts data in to raw data
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub fn into_bytes(self) -> Bytes {
         self.data
     }
 
     #[inline]
     /// Extracts data as string, returning raw bytes as Err if not valid utf-8 string
-    pub fn try_into_string(self) -> Result<String, Vec<u8>> {
-        match self.mode {
+    pub fn try_into_string(self) -> Result<String, Bytes> {
+        match self.header.mode {
             DataMode::Binary => Err(self.data),
-            _ => match String::from_utf8(self.data) {
-                Ok(data) => Ok(data),
-                Err(error) => Err(error.into_bytes()),
+            _ => match std::str::from_utf8(&self.data) {
+                Ok(data) => Ok(data.to_string()),
+                Err(_error) => Err(self.data),
             },
         }
     }
@@ -105,7 +143,7 @@ impl LiteralData {
     /// Convert the data to a UTF-8 string, if appropriate for the type.
     /// Returns `None` if `mode` is `Binary`, or the data is not valid UTF-8.
     pub fn to_string(&self) -> Option<String> {
-        match self.mode {
+        match self.header.mode {
             DataMode::Binary => None,
             _ => std::str::from_utf8(&self.data).map(str::to_owned).ok(),
         }
@@ -119,45 +157,43 @@ impl AsRef<[u8]> for LiteralData {
     }
 }
 
-impl Serialize for LiteralData {
+impl Serialize for LiteralDataHeader {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let name = &self.file_name;
         writer.write_u8(self.mode.into())?;
         writer.write_u8(name.len().try_into()?)?;
         writer.write_all(name)?;
         writer.write_u32::<BigEndian>(self.created.timestamp().try_into()?)?;
+        Ok(())
+    }
 
+    fn write_len(&self) -> usize {
+        let mut sum = 1 + 1;
+        sum += self.file_name.len();
+        sum += 4;
+        sum
+    }
+}
+
+impl Serialize for LiteralData {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.header.to_writer(writer)?;
         // Line endings are stored internally normalized, so we do not need to worry
         // about changing them here.
         writer.write_all(&self.data)?;
 
         Ok(())
     }
-}
-
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], LiteralData> {
-    move |i: &[u8]| {
-        map(
-            tuple((
-                map_res(be_u8, DataMode::try_from),
-                map(length_data(be_u8), BStr::new::<[u8]>),
-                map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
-                rest,
-            )),
-            |(mode, name, created, data)| LiteralData {
-                packet_version,
-                mode,
-                created,
-                file_name: name.to_owned(),
-                data: data.to_vec(),
-            },
-        )(i)
+    fn write_len(&self) -> usize {
+        let mut sum = self.header.write_len();
+        sum += self.data.len();
+        sum
     }
 }
 
 impl PacketTrait for LiteralData {
     fn packet_version(&self) -> Version {
-        self.packet_version
+        self.header.packet_version
     }
 
     fn tag(&self) -> Tag {
@@ -171,5 +207,5 @@ fn test_utf8_literal() {
 
     let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
     let literal = LiteralData::from_str("", slogan);
-    assert!(String::from_utf8(literal.data).unwrap() == slogan);
+    assert!(std::str::from_utf8(&literal.data).unwrap() == slogan);
 }

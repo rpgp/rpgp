@@ -62,11 +62,13 @@ struct DumpResult {
 fn test_parse_dump(i: usize, expected: DumpResult) {
     let _ = pretty_env_logger::try_init();
 
-    let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")));
+    let f = std::fs::read(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")))
+        .unwrap()
+        .into();
 
     let mut actual = DumpResult::default();
 
-    for (j, key) in SignedPublicKey::from_bytes_many(f).enumerate() {
+    for (j, key) in SignedPublicKey::from_bytes_many(f).unwrap().enumerate() {
         if j % 1000 == 0 {
             println!("key {}: {}", i, j);
         }
@@ -833,7 +835,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
 fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let pk = from_bytes_many(f);
+    let pk = from_bytes_many(f).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         if verify {
@@ -1251,7 +1253,7 @@ autocrypt_key!(
 #[test]
 fn test_invalid() {
     let v = (0..64).collect::<Vec<u8>>();
-    let k = SignedSecretKey::from_bytes(&v[..]);
+    let k = SignedSecretKey::from_bytes(v.into());
 
     assert!(k.is_err());
 }
@@ -1271,7 +1273,7 @@ fn test_handle_incomplete_packets_end() {
 
     // add overflow of "b60ed7"
     let raw = hex::decode(hex::encode(key.to_bytes().unwrap()) + "b60ed7").unwrap();
-    let key = SignedSecretKey::from_bytes(&raw[..]).expect("failed");
+    let key = SignedSecretKey::from_bytes(raw.into()).expect("failed");
     key.verify().expect("invalid key");
 }
 

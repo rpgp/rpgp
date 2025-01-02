@@ -9,14 +9,14 @@
 //! [signing and verifying with external hashing]: crate::composed::signed_key
 //! [packet based signing and verifying]: crate::packet
 
-#![forbid(unsafe_code)]
+#![cfg_attr(not(feature = "mmap"), forbid(unsafe_code))]
+#![cfg_attr(not(test), deny(clippy::unwrap_used))]
 #![deny(
     clippy::all,
     clippy::style,
     clippy::perf,
     clippy::complexity,
     clippy::correctness,
-    clippy::unwrap_used,
     rust_2018_idioms
 )]
 #![allow(
@@ -32,6 +32,9 @@
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
+
+// Reexport as used in the public api
+pub use bytes;
 
 // public so it can be used in doc test
 #[macro_use]

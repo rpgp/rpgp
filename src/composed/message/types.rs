@@ -1,7 +1,10 @@
-use std::io;
+use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::path::Path;
 
-use bstr::BStr;
-use chrono::SubsecRound;
+use bstr::{BStr, BString};
+use bytes::{Bytes, BytesMut};
+use bzip2::write::BzEncoder;
+use chrono::{SubsecRound, Utc};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
 use flate2::Compression;
 use log::{debug, warn};
@@ -17,7 +20,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
-    write_packet, CompressedData, LiteralData, OnePassSignature, Packet,
+    write_packet, CompressedData, DataMode, LiteralData, OnePassSignature, Packet,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType,
     SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
     SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
@@ -25,8 +28,9 @@ use crate::packet::{
 use crate::ser::Serialize;
 use crate::types::{
     CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PkeskVersion, PublicKeyTrait,
-    SecretKeyTrait, StringToKey, Tag,
+    SecretKeyTrait, StringToKey, Tag, Version,
 };
+use crate::util::write_packet_length_len;
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,6 +51,101 @@ pub enum Message {
     },
 }
 
+/// Compresses and encrypts the provided file, into the new location.
+pub fn compress_encrypt_with_password_seipdv1<R, P, Q, F>(
+    mut rng: R,
+    in_path: P,
+    out_path: Q,
+    compression: CompressionAlgorithm,
+    s2k: StringToKey,
+    sym_alg: SymmetricKeyAlgorithm,
+    msg_pw: F,
+) -> Result<()>
+where
+    R: Rng + CryptoRng,
+    F: FnOnce() -> String + Clone,
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    let in_path = in_path.as_ref();
+    let in_file = std::fs::File::open(&in_path)?;
+    let in_meta = in_file.metadata()?;
+    let in_file_size = in_meta.len();
+    let Some(in_file_name) = in_path.file_name() else {
+        bail!("{}: is not a vaild input file", in_path.display());
+    };
+    let mut in_file = BufReader::new(in_file);
+
+    let out_path: &Path = out_path.as_ref();
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let out_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&out_path)?;
+    let mut out_file = BufWriter::new(out_file);
+
+    // Encryption
+    // 1. Generate a session key.
+    let session_key = sym_alg.new_session_key(&mut rng);
+    // 2. Encrypt (sym) the session key using the provided password.
+    let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v4(
+        msg_pw,
+        &session_key,
+        s2k,
+        sym_alg,
+    )?);
+
+    // Write ESK
+    skesk.to_writer(&mut out_file)?;
+
+    // Data::V1
+    let packet_version = Version::New;
+
+    // Inner packet: Literal Data
+    let in_file_size = usize::try_from(in_file_size)?;
+    let inner_packet_tag = Tag::LiteralData;
+
+    let mode = DataMode::Binary;
+    let file_name: BString = in_file_name.as_encoded_bytes().into();
+    let created: u32 = Utc::now().trunc_subsecs(0).timestamp().try_into()?;
+    let mut literal_data_prefix = vec![0u8; 6 + file_name.len()];
+    literal_data_prefix[0] = mode.into();
+    literal_data_prefix[1] = file_name.len().try_into()?;
+    literal_data_prefix[2..2 + file_name.len()].copy_from_slice(&file_name);
+    literal_data_prefix[2 + file_name.len()..].copy_from_slice(&created.to_be_bytes());
+
+    let inner_packet_len = literal_data_prefix.len() + in_file_size;
+    let mut prefix = Vec::new();
+    packet_version.write_header(&mut prefix, inner_packet_tag, inner_packet_len)?;
+    let inner_header_len = prefix.len();
+
+    prefix.extend(literal_data_prefix);
+
+    // we encrypt the packet header and the actual data
+    let enc_file_size = sym_alg.encrypted_protected_len(inner_header_len + inner_packet_len);
+
+    // Outer packet: SymEncryptedProtectedData
+    let outer_packet_len = 1 + enc_file_size;
+    let outer_packet_tag = Tag::SymEncryptedProtectedData;
+    packet_version.write_header(&mut out_file, outer_packet_tag, outer_packet_len)?;
+    out_file.write_all(&[0x01])?; // Data::V1
+
+    sym_alg.encrypt_protected_stream(
+        &mut rng,
+        &session_key,
+        prefix.chain(&mut in_file),
+        &mut out_file,
+    )?;
+
+    // Compress
+    // TODO
+
+    Ok(())
+}
+
 /// Encrypted Session Key
 ///
 /// Public-Key Encrypted Session Key Packet |
@@ -63,6 +162,16 @@ impl Serialize for Esk {
             Esk::PublicKeyEncryptedSessionKey(k) => write_packet(writer, k),
             Esk::SymKeyEncryptedSessionKey(k) => write_packet(writer, k),
         }
+    }
+
+    fn write_len(&self) -> usize {
+        let len = match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.write_len(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.write_len(),
+        };
+        let mut sum = write_packet_length_len(len);
+        sum += len;
+        sum
     }
 }
 
@@ -118,6 +227,16 @@ impl Serialize for Edata {
             Edata::SymEncryptedProtectedData(d) => write_packet(writer, d),
         }
     }
+
+    fn write_len(&self) -> usize {
+        let len = match self {
+            Edata::SymEncryptedData(d) => d.write_len(),
+            Edata::SymEncryptedProtectedData(d) => d.write_len(),
+        };
+        let mut sum = write_packet_length_len(len);
+        sum += len;
+        sum
+    }
 }
 
 impl_try_from_into!(
@@ -151,7 +270,7 @@ impl Edata {
     pub fn data(&self) -> &[u8] {
         match self {
             Edata::SymEncryptedData(d) => d.data(),
-            Edata::SymEncryptedProtectedData(d) => d.data_as_slice(),
+            Edata::SymEncryptedProtectedData(d) => d.data().as_ref(),
         }
     }
 
@@ -171,8 +290,8 @@ impl Edata {
 
     /// Transform decrypted data into a message.
     /// Bails if the packets contain no message or multiple messages.
-    fn process_decrypted(packet_data: &[u8]) -> Result<Message> {
-        let mut messages = Message::from_bytes_many(packet_data);
+    fn process_decrypted(packet_data: Bytes) -> Result<Message> {
+        let mut messages = Message::from_bytes_many(packet_data)?;
         // First message is the one we want to return
         let Some(message) = messages.next() else {
             bail!("no valid message found");
@@ -207,7 +326,7 @@ impl Edata {
                             "Version mismatch between key and integrity packet"
                         );
                         let data = p.decrypt(key, Some(sym_alg))?;
-                        Self::process_decrypted(&data[..])
+                        Self::process_decrypted(data.into())
                     }
                     Self::SymEncryptedData(p) => {
                         ensure_eq!(
@@ -215,9 +334,10 @@ impl Edata {
                             None,
                             "Version mismatch between key and integrity packet"
                         );
-                        let mut data = p.data().to_vec();
-                        let res = sym_alg.decrypt(key, &mut data)?;
-                        Self::process_decrypted(res)
+                        let mut prefix = BytesMut::from(p.data());
+                        let mut data = prefix.split_off(sym_alg.cfb_prefix_size());
+                        sym_alg.decrypt(key, &mut prefix, &mut data)?;
+                        Self::process_decrypted(data.freeze())
                     }
                 }
             }
@@ -243,7 +363,7 @@ impl Edata {
                     );
 
                     let decrypted_packets = p.decrypt(key, None)?;
-                    Self::process_decrypted(&decrypted_packets[..])
+                    Self::process_decrypted(decrypted_packets.into())
                 }
                 Self::SymEncryptedData(_) => {
                     bail!("invalid packet combination");
@@ -285,6 +405,52 @@ impl Serialize for Message {
             }
         }
     }
+    fn write_len(&self) -> usize {
+        match self {
+            Message::Literal(data) => {
+                let len = data.write_len();
+                let mut sum = write_packet_length_len(len);
+                sum += len;
+                sum
+            }
+            Message::Compressed(data) => {
+                let len = data.write_len();
+                let mut sum = write_packet_length_len(len);
+                sum += len;
+                sum
+            }
+            Message::Signed {
+                message,
+                one_pass_signature,
+                signature,
+                ..
+            } => {
+                let mut sum = 0;
+                if let Some(ops) = one_pass_signature {
+                    let len = ops.write_len();
+                    sum += write_packet_length_len(len);
+                    sum += len;
+                }
+                if let Some(message) = message {
+                    sum += message.write_len();
+                }
+
+                let len = signature.write_len();
+                sum += write_packet_length_len(len);
+                sum += len;
+
+                sum
+            }
+            Message::Encrypted { esk, edata, .. } => {
+                let mut sum = 0;
+                for e in esk {
+                    sum += e.write_len();
+                }
+                sum += edata.write_len();
+                sum
+            }
+        }
+    }
 }
 
 impl Message {
@@ -293,7 +459,10 @@ impl Message {
     }
 
     pub fn new_literal_bytes(file_name: impl AsRef<BStr>, data: &[u8]) -> Self {
-        Message::Literal(LiteralData::from_bytes(file_name.as_ref(), data))
+        Message::Literal(LiteralData::from_bytes(
+            file_name.as_ref(),
+            Bytes::from(data.to_vec()),
+        ))
     }
 
     /// Compresses the message.
@@ -314,7 +483,11 @@ impl Message {
                 self.to_writer(&mut enc)?;
                 enc.finish()?
             }
-            CompressionAlgorithm::BZip2 => unimplemented_err!("BZip2"),
+            CompressionAlgorithm::BZip2 => {
+                let mut enc = BzEncoder::new(Vec::new(), bzip2::Compression::default());
+                self.to_writer(&mut enc)?;
+                enc.finish()?
+            }
             CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => {
                 unsupported_err!("CompressionAlgorithm {} is unsupported", u8::from(alg))
             }
@@ -328,7 +501,13 @@ impl Message {
     /// Decompresses the data if compressed.
     pub fn decompress(self) -> Result<Self> {
         match self {
-            Message::Compressed(data) => Message::from_bytes(data.decompress()?),
+            Message::Compressed(data) => {
+                // TODO: limited read to 1GiB
+                let mut bytes = Vec::new();
+                data.decompress()?.read_to_end(&mut bytes)?;
+
+                Message::from_bytes(bytes.into())
+            }
             _ => Ok(self),
         }
     }
@@ -621,7 +800,11 @@ impl Message {
             }
             Message::Compressed(data) => {
                 if decompress {
-                    let msg = Message::from_bytes(data.decompress()?)?;
+                    // TODO: limited read to 1GiB
+                    let mut bytes = Vec::new();
+                    data.decompress()?.read_to_end(&mut bytes)?;
+
+                    let msg = Message::from_bytes(bytes.into())?;
                     msg.verify_internal(key, false)
                 } else {
                     bail!("Recursive decompression not allowed");
@@ -831,7 +1014,12 @@ impl Message {
                 .map(|l| l.data().to_vec())),
             Message::Compressed(data) => {
                 if decompress {
-                    let msg = Message::from_bytes(data.decompress()?)?;
+                    // TODO: limited read to 1GiB
+                    let mut bytes = Vec::new();
+                    data.decompress()?.read_to_end(&mut bytes)?;
+
+                    let msg = Message::from_bytes(bytes.into())?;
+
                     msg.get_content_internal(false)
                 } else {
                     bail!("Recursive decompression not allowed");
@@ -1188,7 +1376,7 @@ mod tests {
                 print(data)
         */
 
-        let msg = Message::from_bytes(&msg_raw[..]).unwrap();
+        let msg = Message::from_bytes(Bytes::from_static(msg_raw)).unwrap();
 
         // Before the fix message eventually decrypted to
         //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
@@ -1408,7 +1596,8 @@ mod tests {
         .unwrap();
         let pkey = skey.public_key();
 
-        let msg = Message::from_bytes(&include_bytes!("../../../tests/quine.out")[..]).unwrap();
+        let msg = include_bytes!("../../../tests/quine.out");
+        let msg = Message::from_bytes(Bytes::from_static(msg)).unwrap();
         assert!(msg.get_content().is_err());
         assert!(msg.verify(&pkey).is_err());
     }

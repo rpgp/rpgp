@@ -9,6 +9,9 @@ use crate::errors::Result;
 use crate::ser::Serialize;
 use crate::types::{Mpi, MpiRef};
 
+#[cfg(test)]
+use crate::crypto::public_key::PublicKeyAlgorithm;
+
 /// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PublicParams {
@@ -24,7 +27,22 @@ pub enum PublicParams {
     Unknown { data: Vec<u8> },
 }
 
+#[cfg(test)]
+pub fn public_params_gen(
+    params: PublicKeyAlgorithm,
+) -> impl proptest::prelude::Strategy<Value = PublicParams> {
+    use proptest::prelude::*;
+
+    match params {
+        PublicKeyAlgorithm::RSA => {
+            prop::arbitrary::any::<(Mpi, Mpi)>().prop_map(|(n, e)| PublicParams::RSA { n, e })
+        }
+        _ => todo!(),
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdhPublicParams {
     /// ECDH public parameters for a curve that we know uses Mpi representation
     Known {
@@ -39,23 +57,28 @@ pub enum EcdhPublicParams {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdsaPublicParams {
     P256 {
+        #[cfg_attr(test, proptest(strategy = "p256_pub_gen()"))]
         key: p256::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
     P384 {
+        #[cfg_attr(test, proptest(strategy = "p384_pub_gen()"))]
         key: p384::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
     P521 {
+        #[cfg_attr(test, proptest(strategy = "p521_pub_gen()"))]
         key: p521::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
     },
     Secp256k1 {
+        #[cfg_attr(test, proptest(strategy = "k256_pub_gen()"))]
         key: k256::PublicKey,
         /// Stores the original Mpi, to ensure we keep the padding around.
         p: Mpi,
@@ -64,6 +87,43 @@ pub enum EcdsaPublicParams {
         curve: ECCCurve,
         p: Mpi,
     },
+}
+
+#[cfg(test)]
+proptest::prop_compose! {
+    fn p256_pub_gen()(seed: u64) -> p256::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        p256::SecretKey::random(&mut rng).public_key()
+    }
+}
+#[cfg(test)]
+proptest::prop_compose! {
+    fn p384_pub_gen()(seed: u64) -> p384::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        p384::SecretKey::random(&mut rng).public_key()
+    }
+}
+#[cfg(test)]
+proptest::prop_compose! {
+    fn p521_pub_gen()(seed: u64) -> p521::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        p521::SecretKey::random(&mut rng).public_key()
+    }
+}
+#[cfg(test)]
+proptest::prop_compose! {
+    fn k256_pub_gen()(seed: u64) -> k256::PublicKey {
+        use rand::SeedableRng;
+
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+        k256::SecretKey::random(&mut rng).public_key()
+    }
 }
 
 impl EcdsaPublicParams {
@@ -164,6 +224,38 @@ impl Serialize for EcdsaPublicParams {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let oid = match self {
+            EcdsaPublicParams::P256 { .. } => ECCCurve::P256.oid(),
+            EcdsaPublicParams::P384 { .. } => ECCCurve::P384.oid(),
+            EcdsaPublicParams::P521 { .. } => ECCCurve::P521.oid(),
+            EcdsaPublicParams::Secp256k1 { .. } => ECCCurve::Secp256k1.oid(),
+            EcdsaPublicParams::Unsupported { curve, .. } => curve.oid(),
+        };
+
+        let mut sum = 1;
+        sum += oid.len();
+
+        match self {
+            EcdsaPublicParams::P256 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::P384 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::P521 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::Secp256k1 { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+            EcdsaPublicParams::Unsupported { p, .. } => {
+                sum += p.as_ref().write_len();
+            }
+        }
+        sum
+    }
 }
 
 impl Serialize for PublicParams {
@@ -245,5 +337,79 @@ impl Serialize for PublicParams {
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        match self {
+            PublicParams::RSA { ref n, ref e } => {
+                sum += n.write_len();
+                sum += e.write_len();
+            }
+            PublicParams::DSA {
+                ref p,
+                ref q,
+                ref g,
+                ref y,
+            } => {
+                sum += p.write_len();
+                sum += q.write_len();
+                sum += g.write_len();
+                sum += y.write_len();
+            }
+            PublicParams::ECDSA(params) => {
+                sum += params.write_len();
+            }
+            PublicParams::ECDH(EcdhPublicParams::Known {
+                ref curve, ref p, ..
+            }) => {
+                let oid = curve.oid();
+                sum += 1;
+                sum += oid.len();
+
+                sum += p.write_len();
+
+                sum += 1 + 1 + 1 + 1;
+            }
+            PublicParams::ECDH(EcdhPublicParams::Unsupported {
+                ref curve,
+                ref opaque,
+            }) => {
+                let oid = curve.oid();
+                sum += 1;
+                sum += oid.len();
+
+                sum += opaque.len();
+            }
+            PublicParams::Elgamal {
+                ref p,
+                ref g,
+                ref y,
+            } => {
+                sum += p.write_len();
+                sum += g.write_len();
+                sum += y.write_len();
+            }
+            PublicParams::EdDSALegacy { ref curve, ref q } => {
+                let oid = curve.oid();
+                sum += 1;
+                sum += oid.len();
+
+                sum += q.write_len();
+            }
+            PublicParams::Ed25519 { ref public } => {
+                sum += public.len();
+            }
+            PublicParams::X25519 { ref public } => {
+                sum += public.len();
+            }
+            PublicParams::X448 { ref public } => {
+                sum += public.len();
+            }
+            PublicParams::Unknown { ref data } => {
+                sum += data.len();
+            }
+        }
+        sum
     }
 }

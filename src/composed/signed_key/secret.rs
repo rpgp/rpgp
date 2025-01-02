@@ -15,6 +15,7 @@ use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
     SecretKeyRepr, SecretKeyTrait, SignatureBytes, Tag,
 };
+use crate::util::write_packet_length_len;
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
@@ -180,6 +181,16 @@ impl Serialize for SignedSecretKey {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.primary_key.write_len();
+        let mut sum = write_packet_length_len(key_len);
+        sum += key_len;
+        sum += self.details.write_len();
+        sum += self.public_subkeys.write_len();
+        sum += self.secret_subkeys.write_len();
+        sum
+    }
 }
 
 impl SecretKeyTrait for SignedSecretKey {
@@ -324,6 +335,18 @@ impl Serialize for SignedSecretSubKey {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.key.write_len();
+        let mut sum = write_packet_length_len(key_len);
+        sum += key_len;
+        for sig in &self.signatures {
+            let sig_len = sig.write_len();
+            sum += write_packet_length_len(sig_len);
+            sum += sig_len;
+        }
+        sum
+    }
 }
 
 impl SecretKeyTrait for SignedSecretSubKey {
@@ -439,6 +462,7 @@ impl From<SignedSecretSubKey> for SignedPublicSubKey {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use bytes::Bytes;
     use packet::LiteralData;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
@@ -474,7 +498,7 @@ k0mXubZvyl4GBg==
 
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
+        let lit = LiteralData::from_bytes("".into(), Bytes::from_static(b"Hello world"));
         let msg = Message::Literal(lit);
 
         let pri = ssk.primary_key;
@@ -522,7 +546,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
+        let lit = LiteralData::from_bytes("".into(), Bytes::from_static(b"Hello world"));
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let msg = Message::Literal(lit).sign(
@@ -542,7 +566,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
     fn secret_key_protection_v6() -> Result<()> {
         let _ = pretty_env_logger::try_init();
 
-        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
+        let lit = LiteralData::from_bytes("".into(), Bytes::from_static(b"Hello world"));
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;

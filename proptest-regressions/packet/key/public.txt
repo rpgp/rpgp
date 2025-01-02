@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e044a8e4790042363cd31495277fe077b28843bc6ca4ad090cfd3863525e7df9 # shrinks to packet = PublicSubkey(PubKeyInner { packet_version: Old, version: V2, algorithm: RSA, created_at: 1970-01-01T00:00:00Z, expiration: None, public_params: Elgamal { p: Mpi(), g: Mpi(), y: Mpi(8af6879059bb1d7911de) } })
+cc b9ca470b625ccbddb905b802f24c3934e1c9242e552d828ec620d7502b775786 # shrinks to packet = PublicSubkey(PubKeyInner { packet_version: Old, version: V2, algorithm: RSA, created_at: 1970-01-01T00:00:00Z, expiration: None, public_params: Elgamal { p: Mpi(af8e1079b1c0a1), g: Mpi(2492620d6812ddd1d0a17a50b616), y: Mpi(aa1e1817231e901fd8316ff5d936de2ba5c355af42b5490f4c43957020320aacef09f1d55d04e6cc42ff20e0cdeb3596c6660ef2600ca10bc8b78ed09b553d87ae6ab218981acee249a8c6650c42acdb2e247426) } })
+cc 4bdf2e65cc9a158f20f6e145c9eccc8b75238bcf142fd1c850359cc80b4a644b # shrinks to packet = PublicKey(PubKeyInner { packet_version: Old, version: V2, algorithm: RSA, created_at: 1970-01-01T00:00:00Z, expiration: None, public_params: RSA { n: Mpi(), e: Mpi() } })
+cc 57ae1069b7155ca9b3a98191c0674eb6020e3780f10f9af58a6f3249d031fa97 # shrinks to packet = PublicKey(PubKeyInner { packet_version: Old, version: Other(0), algorithm: RSA, created_at: 1970-01-01T00:00:00Z, expiration: None, public_params: RSA { n: Mpi(), e: Mpi() } })

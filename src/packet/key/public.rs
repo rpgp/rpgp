@@ -4,6 +4,7 @@ use md5::Md5;
 use rand::Rng;
 use sha1_checked::{Digest, Sha1};
 
+use crate::ser::Serialize;
 use crate::types::EcdhPublicParams;
 use crate::{
     crypto::{self, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
@@ -16,10 +17,59 @@ use crate::{
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicKey(PubKeyInner);
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct PublicKey(#[cfg_attr(test, proptest(strategy = "pub_key_inner_gen()"))] PubKeyInner);
+
+#[cfg(test)]
+fn pub_key_inner_gen() -> impl proptest::prelude::Strategy<Value = PubKeyInner> {
+    use chrono::TimeZone;
+    use proptest::prelude::*;
+
+    //
+    // version: KeyVersion,
+    prop::arbitrary::any::<(Version, KeyVersion, PublicKeyAlgorithm, u32, u16)>()
+        .prop_flat_map(
+            |(packet_version, version, algorithm, created_at, expiration)| {
+                let created_at = chrono::Utc
+                    .timestamp_opt(created_at as i64, 0)
+                    .single()
+                    .expect("invalid time");
+                let expiration = if version == KeyVersion::V2 || version == KeyVersion::V3 {
+                    Some(expiration)
+                } else {
+                    None
+                };
+
+                let public_params = crate::types::public_params_gen(algorithm);
+
+                (
+                    Just(packet_version),
+                    Just(version),
+                    Just(algorithm),
+                    Just(created_at),
+                    Just(expiration),
+                    public_params,
+                )
+            },
+        )
+        .prop_map(
+            |(packet_version, version, algorithm, created_at, expiration, public_params)| {
+                PubKeyInner::new(
+                    packet_version,
+                    version,
+                    algorithm,
+                    created_at,
+                    expiration,
+                    public_params,
+                )
+                .unwrap()
+            },
+        )
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicSubkey(PubKeyInner);
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct PublicSubkey(#[cfg_attr(test, proptest(strategy = "pub_key_inner_gen()"))] PubKeyInner);
 
 impl PublicKey {
     /// Create a new `PublicKey` packet from underlying parameters.
@@ -102,7 +152,8 @@ impl PublicSubkey {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-struct PubKeyInner {
+#[doc(hidden)] // must leak for proptest to work
+pub struct PubKeyInner {
     packet_version: Version,
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
@@ -199,22 +250,36 @@ impl PubKeyInner {
         Ok(())
     }
 
+    fn writer_len_v2_v3(&self) -> usize {
+        let mut sum = 4 + 2 + 1;
+        sum += self.public_params.write_len();
+        sum
+    }
+
     fn to_writer_v4_v6<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp().try_into()?)?;
         writer.write_u8(self.algorithm.into())?;
 
-        let mut public_params = vec![];
-        self.public_params.to_writer(&mut public_params)?;
-
         if self.version == KeyVersion::V6 {
-            writer.write_u32::<BigEndian>(public_params.len().try_into()?)?;
+            writer.write_u32::<BigEndian>(self.public_params.write_len().try_into()?)?;
         }
 
-        writer.write_all(&public_params)?;
+        self.public_params.to_writer(writer)?;
 
         Ok(())
+    }
+
+    fn writer_len_v4_v6(&self) -> usize {
+        let mut sum = 4 + 1;
+
+        if self.version == KeyVersion::V6 {
+            sum += 4;
+        }
+        sum += self.public_params.write_len();
+
+        sum
     }
 
     fn sign<R: CryptoRng + Rng, F>(
@@ -250,11 +315,19 @@ impl crate::ser::Serialize for PublicKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         crate::ser::Serialize::to_writer(&self.0, writer)
     }
+
+    fn write_len(&self) -> usize {
+        self.0.write_len()
+    }
 }
 
 impl crate::ser::Serialize for PublicSubkey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         crate::ser::Serialize::to_writer(&self.0, writer)
+    }
+
+    fn write_len(&self) -> usize {
+        self.0.write_len()
     }
 }
 
@@ -270,6 +343,19 @@ impl crate::ser::Serialize for PubKeyInner {
                 unimplemented_err!("Unsupported key version {}", v)
             }
         }
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 1;
+        sum += match self.version {
+            KeyVersion::V2 | KeyVersion::V3 => self.writer_len_v2_v3(),
+            KeyVersion::V4 | KeyVersion::V6 => self.writer_len_v4_v6(),
+            KeyVersion::V5 => panic!("V5 keys"),
+            KeyVersion::Other(v) => {
+                panic!("Unsupported key version {}", v)
+            }
+        };
+        sum
     }
 }
 
@@ -609,8 +695,7 @@ impl PublicKeyTrait for PubKeyInner {
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
         use crate::ser::Serialize;
 
-        let mut key_buf = Vec::new();
-        self.to_writer(&mut key_buf)?;
+        let key_len = self.write_len();
 
         // old style packet header for the key
         match self.version() {
@@ -618,7 +703,7 @@ impl PublicKeyTrait for PubKeyInner {
                 // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
                 // followed by a two-octet length of the key, and then the body of the key packet.
                 writer.write_u8(0x99)?;
-                writer.write_u16::<BigEndian>(key_buf.len().try_into()?)?;
+                writer.write_u16::<BigEndian>(key_len.try_into()?)?;
             }
 
             KeyVersion::V6 => {
@@ -628,13 +713,13 @@ impl PublicKeyTrait for PubKeyInner {
                 // then octet 0x9B, followed by a four-octet length of the key,
                 // and then the body of the key packet.
                 writer.write_u8(0x9b)?;
-                writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
+                writer.write_u32::<BigEndian>(key_len.try_into()?)?;
             }
 
             v => unimplemented_err!("key version {:?}", v),
         }
 
-        writer.write_all(&key_buf)?;
+        self.to_writer(writer)?;
 
         Ok(())
     }
@@ -753,5 +838,47 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn expiration(&self) -> Option<u16> {
         PublicKeyTrait::expiration(&self.0)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::packet::PacketTrait;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn public_key_write_len(packet: PublicKey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+
+        #[test]
+        fn public_key_packet_roundtrip(packet: PublicKey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = PublicKey::from_slice(packet.packet_version(), &buf).unwrap();
+            prop_assert_eq!(packet, new_packet);
+        }
+
+        #[test]
+        fn public_sub_key_write_len(packet: PublicSubkey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+
+        #[test]
+        fn public_sub_key_packet_roundtrip(packet: PublicSubkey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = PublicSubkey::from_slice(packet.packet_version(), &buf).unwrap();
+            prop_assert_eq!(packet, new_packet);
+        }
     }
 }
