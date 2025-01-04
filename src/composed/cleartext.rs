@@ -14,7 +14,7 @@ use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
-use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
+use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE};
 
 /// Implementation of a Cleartext Signed Message.
 ///
@@ -164,32 +164,33 @@ impl CleartextSignedMessage {
 
     /// Parse from an arbitrary reader, containing the text of the message.
     pub fn from_armor<R: Read>(bytes: R) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(BufReader::new(bytes))
+        Self::from_armor_buf(BufReader::new(bytes), MAX_BUFFER_SIZE)
     }
 
     /// Parse from string, containing the text of the message.
     pub fn from_string(input: &str) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(input.as_bytes())
+        Self::from_armor_buf(input.as_bytes(), MAX_BUFFER_SIZE)
     }
 
     /// Parse from a buffered reader, containing the text of the message.
-    pub fn from_armor_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
+    pub fn from_armor_buf<R: BufRead>(mut b: R, limit: usize) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
         // Headers
         let (typ, headers, has_leading_data) =
-            read_from_buf(&mut b, "cleartext header", header_parser)?;
+            read_from_buf(&mut b, "cleartext header", limit, header_parser)?;
         ensure_eq!(typ, BlockType::CleartextMessage, "unexpected block type");
         ensure!(
             !has_leading_data,
             "must not have leading data for a cleartext message"
         );
 
-        Self::from_armor_after_header(b, headers)
+        Self::from_armor_after_header(b, headers, limit)
     }
 
     pub fn from_armor_after_header<R: BufRead>(
         mut b: R,
         headers: Headers,
+        limit: usize,
     ) -> Result<(Self, Headers)> {
         let hashes = validate_headers(headers)?;
 
@@ -200,7 +201,7 @@ impl CleartextSignedMessage {
         let b = std::io::Cursor::new(prefix).chain(b);
 
         // Signatures
-        let mut dearmor = armor::Dearmor::new(b);
+        let mut dearmor = armor::Dearmor::with_limit(b, limit);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
         let typ = dearmor

@@ -58,3 +58,6 @@ pub use self::packet::Signature;
 
 /// The version of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Default maxium size that gets bufffered.
+pub const MAX_BUFFER_SIZE: usize = 1024 * 1024 * 1024;

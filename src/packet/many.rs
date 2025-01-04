@@ -7,8 +7,7 @@ use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
 use crate::packet::single;
 use crate::types::{PacketLength, Tag};
-
-const MAX_CAPACITY: usize = 1024 * 1024 * 1024;
+use crate::MAX_BUFFER_SIZE;
 
 const DEFAULT_CAPACITY: usize = 1024 * 16;
 const READER_POLICY: MinBuffered = MinBuffered(1024);
@@ -84,7 +83,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                         }
                         Ok(r) => {
                             body.extend_from_slice(&buf[..r]);
-                            if body.len() >= MAX_CAPACITY {
+                            if body.len() >= MAX_BUFFER_SIZE {
                                 self.done = true;
                                 return Some(Err(format_err!("Indeterminate packet too large")));
                             }
@@ -122,7 +121,7 @@ impl<R: Read> Iterator for PacketParser<R> {
                     self.reader.consume(len);
                     res
                 } else {
-                    if len > MAX_CAPACITY {
+                    if len > MAX_BUFFER_SIZE {
                         return Some(Err(format_err!("Fixed packet too large")));
                     }
 
@@ -173,13 +172,13 @@ impl<R: Read> Iterator for PacketParser<R> {
                 }
 
                 // NOTE: len can be at most 1GiB per partial block, so with the current
-                // MAX_CAPACITY setting, this comparison will never trigger.
+                // MAX_BUFFER_SIZE setting, this comparison will never trigger.
                 //
                 // With a configurable/smaller limit, it could, though.
                 //
-                // (NOTE: we're rejecting "== MAX_CAPACITY" here as well, since this partial
+                // (NOTE: we're rejecting "== MAX_BUFFER_SIZE" here as well, since this partial
                 // must be followed by more data to form a legal packet.)
-                if len >= MAX_CAPACITY {
+                if len >= MAX_BUFFER_SIZE {
                     return Some(Err(format_err!("First partial of packet is too large")));
                 }
 
@@ -253,7 +252,7 @@ fn read_fixed<R: Read>(
 ) -> Result<()> {
     let out_len = out.len();
 
-    if out_len + len > MAX_CAPACITY {
+    if out_len + len > MAX_BUFFER_SIZE {
         return Err(format_err!("Packet too large"));
     }
 

@@ -331,6 +331,8 @@ pub struct Dearmor<R: BufRead> {
     /// current state
     current_part: Part<R>,
     crc: crc24::Crc24Hasher,
+    /// maxiumum buffer limit
+    max_buffer_limit: usize,
 }
 
 /// Internal indicator, where in the parsing phase we are
@@ -345,13 +347,20 @@ enum Part<R: BufRead> {
 }
 
 impl<R: BufRead> Dearmor<R> {
+    /// Creates a new `Dearmor`, with the default limit of 1GiB.
     pub fn new(input: R) -> Self {
+        Self::with_limit(input, 1024 * 1024 * 1024)
+    }
+
+    /// Creates a new `Dearmor` with the provided maximum buffer size.
+    pub fn with_limit(input: R, limit: usize) -> Self {
         Dearmor {
             typ: None,
             headers: BTreeMap::new(),
             checksum: None,
             current_part: Part::Header(input),
             crc: Default::default(),
+            max_buffer_limit: limit,
         }
     }
 
@@ -370,30 +379,38 @@ impl<R: BufRead> Dearmor<R> {
         (typ, headers, checksum, b)
     }
 
+    /// The current maximum buffer limit.
+    pub fn max_buffer_limit(&self) -> usize {
+        self.max_buffer_limit
+    }
+
     pub fn read_only_header(mut self) -> Result<(BlockType, Headers, bool, R)> {
         let header = std::mem::replace(&mut self.current_part, Part::Temp);
         if let Part::Header(mut b) = header {
-            let (typ, headers, leading) = Self::read_header_internal(&mut b)?;
+            let (typ, headers, leading) =
+                Self::read_header_internal(&mut b, self.max_buffer_limit)?;
             return Ok((typ, headers, leading, b));
         }
 
         bail!("invalid state, cannot read header");
     }
 
-    pub fn after_header(typ: BlockType, headers: Headers, input: R) -> Self {
+    pub fn after_header(typ: BlockType, headers: Headers, input: R, limit: usize) -> Self {
         Self {
             typ: Some(typ),
             headers,
             checksum: None,
             current_part: Part::Body(Base64Decoder::new(Base64Reader::new(input))),
             crc: Default::default(),
+            max_buffer_limit: limit,
         }
     }
 
     pub fn read_header(&mut self) -> Result<()> {
         let header = std::mem::replace(&mut self.current_part, Part::Temp);
         if let Part::Header(mut b) = header {
-            let (typ, headers, _has_leading_data) = Self::read_header_internal(&mut b)?;
+            let (typ, headers, _has_leading_data) =
+                Self::read_header_internal(&mut b, self.max_buffer_limit)?;
             self.typ = Some(typ);
             self.headers = headers;
             self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
@@ -403,8 +420,8 @@ impl<R: BufRead> Dearmor<R> {
         bail!("invalid state, cannot read header");
     }
 
-    fn read_header_internal(b: &mut R) -> Result<(BlockType, Headers, bool)> {
-        let (typ, headers, leading) = read_from_buf(b, "armor header", header_parser)?;
+    fn read_header_internal(b: &mut R, limit: usize) -> Result<(BlockType, Headers, bool)> {
+        let (typ, headers, leading) = read_from_buf(b, "armor header", limit, header_parser)?;
         Ok((typ, headers, leading))
     }
 
@@ -423,7 +440,8 @@ impl<R: BufRead> Dearmor<R> {
     }
 
     fn read_footer(&mut self, mut b: BufReader<R>) -> Result<()> {
-        let (checksum, footer_typ) = read_from_buf(&mut b, "armor footer", footer_parser)?;
+        let (checksum, footer_typ) =
+            read_from_buf(&mut b, "armor footer", self.max_buffer_limit, footer_parser)?;
         if let Some(ref header_typ) = self.typ {
             if header_typ != &footer_typ {
                 self.current_part = Part::Done(b);
@@ -456,8 +474,9 @@ impl<R: BufRead> Read for Dearmor<R> {
             let current_part = std::mem::replace(&mut self.current_part, Part::Temp);
             match current_part {
                 Part::Header(mut b) => {
-                    let (typ, headers, _leading) = Self::read_header_internal(&mut b)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    let (typ, headers, _leading) =
+                        Self::read_header_internal(&mut b, self.max_buffer_limit)
+                            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
                     self.typ = Some(typ);
                     self.headers = headers;
                     self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
@@ -499,7 +518,12 @@ impl<R: BufRead> Read for Dearmor<R> {
     }
 }
 
-pub(crate) fn read_from_buf<B: BufRead, T, P>(b: &mut B, ctx: &str, parser: P) -> Result<T>
+pub(crate) fn read_from_buf<B: BufRead, T, P>(
+    b: &mut B,
+    ctx: &str,
+    limit: usize,
+    parser: P,
+) -> Result<T>
 where
     P: Fn(&[u8]) -> IResult<&[u8], T>,
 {
@@ -529,8 +553,8 @@ where
 
     loop {
         // Safety check to not consume too much
-        if back_buffer.len() >= 1024 * 1024 * 1024 {
-            bail!("input too large, can not decode more than 1GiB");
+        if back_buffer.len() >= limit {
+            bail!("input too large");
         }
 
         let buf = b.fill_buf()?;
