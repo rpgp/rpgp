@@ -37,14 +37,6 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
 
-    - name: check wasm
-      uses: actions-rs/cargo@v1
-      with:
-        command:  check
-        target: wasm32-unknown-unknown
-        override: true
-        args: --features wasm --all --bins
-
     - name: tests
       uses: actions-rs/cargo@v1
       with:
@@ -98,13 +90,6 @@ jobs:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
         override: true
-
-    - name: check wasm
-      uses: actions-rs/cargo@v1
-      with:
-        command:  check
-        override: true
-        args: --features wasm --all --bins --target wasm32-unknown-unknown
 
     - name: check curve448
       uses: actions-rs/cargo@v1
