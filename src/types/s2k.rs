@@ -687,54 +687,56 @@ mod tests {
         }
     }
 
+    // "These messages are the literal data "Hello, world!" encrypted using AES-128 with various AEADs
     #[test]
-    fn aead_skesk_msg() {
+    fn test_aead_skesk_msg_gcm() {
+        aead_skesk_msg("./tests/unit-tests/aead/gcm.msg");
+    }
+    #[test]
+    fn test_aead_skesk_msg_eax() {
+        aead_skesk_msg("./tests/unit-tests/aead/eax.msg");
+    }
+    #[test]
+    fn test_aead_skesk_msg_ocb() {
+        aead_skesk_msg("./tests/unit-tests/aead/ocb.msg");
+    }
+
+    /// Tests decrypting messages
+    fn aead_skesk_msg(filename: &str) {
         let _ = pretty_env_logger::try_init();
-
-        // Tests decrypting messages
-        //
-        // "These messages are the literal data "Hello, world!" encrypted using AES-128 with various AEADs
-
-        const MSGS: &[&str] = &[
-            "./tests/unit-tests/aead/gcm.msg",
-            "./tests/unit-tests/aead/eax.msg",
-            "./tests/unit-tests/aead/ocb.msg",
-        ];
 
         use crate::{composed::Deserializable, Message};
 
-        for filename in MSGS {
-            println!("reading {}", filename);
-            let raw_file = std::fs::File::open(filename).expect("file open");
-            let (msg, header) = Message::from_armor_single(raw_file).expect("parse");
+        println!("reading {}", filename);
+        let raw_file = std::fs::File::open(filename).expect("file open");
+        let (msg, header) = Message::from_armor_single(raw_file).expect("parse");
 
-            let decrypted = msg
-                .decrypt_with_password(|| "password".to_string())
-                .expect("decrypt");
+        let decrypted = msg
+            .decrypt_with_password(|| "password".to_string())
+            .expect("decrypt");
 
-            let Message::Literal(data) = decrypted else {
-                panic!("expected literal data")
-            };
+        let Message::Literal(data) = decrypted else {
+            panic!("expected literal data")
+        };
 
-            assert_eq!(data.data(), b"Hello, world!");
+        assert_eq!(data.data(), b"Hello, world!");
 
-            // roundtrip
-            let armored = msg
-                .to_armored_string(ArmorOptions {
-                    headers: Some(&header),
-                    include_checksum: false, // No checksum on v6
-                })
-                .expect("encode");
+        // roundtrip
+        let armored = msg
+            .to_armored_string(ArmorOptions {
+                headers: Some(&header),
+                include_checksum: false, // No checksum on v6
+            })
+            .expect("encode");
 
-            let orig_armored = std::fs::read_to_string(filename).expect("file read");
+        let orig_armored = std::fs::read_to_string(filename).expect("file read");
 
-            let orig_armored = orig_armored.replace("\r\n", "\n").replace('\r', "\n");
-            let armored = armored
-                .to_string()
-                .replace("\r\n", "\n")
-                .replace('\r', "\n");
+        let orig_armored = orig_armored.replace("\r\n", "\n").replace('\r', "\n");
+        let armored = armored
+            .to_string()
+            .replace("\r\n", "\n")
+            .replace('\r', "\n");
 
-            assert_eq!(armored, orig_armored);
-        }
+        assert_eq!(armored, orig_armored);
     }
 }

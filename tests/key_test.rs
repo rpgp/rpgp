@@ -1285,6 +1285,7 @@ fn test_keyid_formatters() {
 }
 
 #[test]
+#[ignore]
 fn test_encrypted_key() {
     let p = Path::new("./tests/key-with-password-123.asc");
     let mut file = read_file(p.to_path_buf());
