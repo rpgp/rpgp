@@ -328,10 +328,10 @@ pub struct Dearmor<R: BufRead> {
     pub headers: Headers,
     /// Optional crc checksum
     pub checksum: Option<u64>,
-    /// current state
+    /// Current state
     current_part: Part<R>,
     crc: crc24::Crc24Hasher,
-    /// maxiumum buffer limit
+    /// Maximum buffer limit
     max_buffer_limit: usize,
 }
 
