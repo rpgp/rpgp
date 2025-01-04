@@ -31,6 +31,8 @@ use pgp::types::{
 };
 use pgp::{armor, types::PublicKeyTrait};
 use rand::thread_rng;
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
 use rsa::{
     traits::{PrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
@@ -1286,6 +1288,7 @@ fn test_keyid_formatters() {
 fn test_encrypted_key() {
     let p = Path::new("./tests/key-with-password-123.asc");
     let mut file = read_file(p.to_path_buf());
+    let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
     let mut buf = vec![];
     file.read_to_end(&mut buf).unwrap();
@@ -1296,16 +1299,14 @@ fn test_encrypted_key() {
     let unsigned_pubkey = key.public_key();
 
     // Incorrect password results in InvalidInput error.
-    assert!(matches!(
-        unsigned_pubkey
-            .clone()
-            .sign(&mut thread_rng(), &key, || "".into())
-            .err()
-            .unwrap(),
-        pgp::errors::Error::InvalidInput
-    ));
+    let res = unsigned_pubkey
+        .clone()
+        .sign(&mut rng, &key, || "".into())
+        .err()
+        .unwrap();
 
+    assert!(matches!(res, pgp::errors::Error::InvalidInput));
     let _signed_key = unsigned_pubkey
-        .sign(&mut thread_rng(), &key, || "123".into())
+        .sign(&mut rng, &key, || "123".into())
         .unwrap();
 }

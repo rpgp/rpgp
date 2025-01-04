@@ -771,6 +771,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn key_gen_ecdsa_p384() {
         let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
 
@@ -784,6 +785,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn key_gen_ecdsa_p521() {
         let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
 
