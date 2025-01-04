@@ -12,17 +12,40 @@ use crate::types::{Mpi, MpiRef};
 /// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PublicParams {
-    RSA { n: Mpi, e: Mpi },
-    DSA { p: Mpi, q: Mpi, g: Mpi, y: Mpi },
+    RSA {
+        n: Mpi,
+        e: Mpi,
+    },
+    DSA {
+        p: Mpi,
+        q: Mpi,
+        g: Mpi,
+        y: Mpi,
+    },
     ECDSA(EcdsaPublicParams),
     ECDH(EcdhPublicParams),
-    Elgamal { p: Mpi, g: Mpi, y: Mpi },
-    EdDSALegacy { curve: ECCCurve, q: Mpi },
-    Ed25519 { public: [u8; 32] },
-    X25519 { public: [u8; 32] },
+    Elgamal {
+        p: Mpi,
+        g: Mpi,
+        y: Mpi,
+    },
+    EdDSALegacy {
+        curve: ECCCurve,
+        q: Mpi,
+    },
+    Ed25519 {
+        public: [u8; 32],
+    },
+    X25519 {
+        public: [u8; 32],
+    },
     #[cfg(feature = "unstable-curve448")]
-    X448 { public: [u8; 56] },
-    Unknown { data: Vec<u8> },
+    X448 {
+        public: [u8; 56],
+    },
+    Unknown {
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
