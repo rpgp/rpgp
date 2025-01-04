@@ -23,7 +23,6 @@ jobs:
         os: [ubuntu-latest, macOS-latest]
         rust:
           - nightly-2024-12-04
-          - beta
           - stable
 
     steps:
@@ -100,7 +99,6 @@ jobs:
         os: [windows-latest]
         rust:
           - nightly-2024-07-07
-          - beta
           - stable
         target:
           - x86_64-pc-windows-gnu
@@ -199,7 +197,6 @@ jobs:
       matrix:
         rust:
           - nightly-2024-07-07
-          - beta
           - stable
 
     steps:
