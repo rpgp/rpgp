@@ -37,12 +37,6 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
 
-    - name: check
-      uses: actions-rs/cargo@v1
-      with:
-        command: check
-        args: --all --bins --tests
-
     - name: check wasm
       uses: actions-rs/cargo@v1
       with:
@@ -104,13 +98,6 @@ jobs:
         toolchain: ${{ matrix.rust }}
         target: ${{ matrix.target }}
         override: true
-
-    - uses: msys2/setup-msys2@v2
-    - name: check
-      uses: actions-rs/cargo@v1
-      with:
-        command: check
-        args: --all --bins --tests --target ${{ matrix.target }}
 
     - name: check wasm
       uses: actions-rs/cargo@v1
@@ -234,7 +221,7 @@ jobs:
     - uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        args: --all-features --all-targets
+        args: --all-features --all-targets --tests --bins --examples --benches
 
   codespell:
     runs-on: ubuntu-latest
