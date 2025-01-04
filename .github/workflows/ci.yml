@@ -220,8 +220,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: check minimal version
-        uses: actions/checkout@master
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@master
+      - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: ${{ env.RUST_NIGHTLY }}
