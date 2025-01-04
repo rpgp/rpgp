@@ -6,11 +6,6 @@ use std::io::{BufRead, Read};
 use buffer_redux::BufReader;
 use chrono::SubsecRound;
 use log::debug;
-use nom::branch::alt;
-use nom::bytes::streaming::take_until1;
-use nom::character::streaming::line_ending;
-use nom::combinator::{complete, map_res};
-use nom::IResult;
 
 use crate::armor::{self, header_parser, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
@@ -19,7 +14,7 @@ use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
-use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature};
+use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE};
 
 /// Implementation of a Cleartext Signed Message.
 ///
@@ -169,42 +164,44 @@ impl CleartextSignedMessage {
 
     /// Parse from an arbitrary reader, containing the text of the message.
     pub fn from_armor<R: Read>(bytes: R) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(BufReader::new(bytes))
+        Self::from_armor_buf(BufReader::new(bytes), MAX_BUFFER_SIZE)
     }
 
     /// Parse from string, containing the text of the message.
     pub fn from_string(input: &str) -> Result<(Self, Headers)> {
-        Self::from_armor_buf(input.as_bytes())
+        Self::from_armor_buf(input.as_bytes(), MAX_BUFFER_SIZE)
     }
 
     /// Parse from a buffered reader, containing the text of the message.
-    pub fn from_armor_buf<R: BufRead>(mut b: R) -> Result<(Self, Headers)> {
+    pub fn from_armor_buf<R: BufRead>(mut b: R, limit: usize) -> Result<(Self, Headers)> {
         debug!("parsing cleartext message");
         // Headers
         let (typ, headers, has_leading_data) =
-            read_from_buf(&mut b, "cleartext header", header_parser)?;
+            read_from_buf(&mut b, "cleartext header", limit, header_parser)?;
         ensure_eq!(typ, BlockType::CleartextMessage, "unexpected block type");
         ensure!(
             !has_leading_data,
             "must not have leading data for a cleartext message"
         );
 
-        Self::from_armor_after_header(b, headers)
+        Self::from_armor_after_header(b, headers, limit)
     }
 
     pub fn from_armor_after_header<R: BufRead>(
         mut b: R,
         headers: Headers,
+        limit: usize,
     ) -> Result<(Self, Headers)> {
         let hashes = validate_headers(headers)?;
 
         debug!("Found Hash headers: {:?}", hashes);
 
         // Cleartext Body
-        let csf_encoded_text = read_from_buf(&mut b, "cleartext body", cleartext_body)?;
+        let (csf_encoded_text, prefix) = read_cleartext_body(&mut b)?;
+        let b = std::io::Cursor::new(prefix).chain(b);
 
         // Signatures
-        let mut dearmor = armor::Dearmor::new(b);
+        let mut dearmor = armor::Dearmor::with_limit(b, limit);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
         let typ = dearmor
@@ -353,21 +350,29 @@ fn has_rest<R: BufRead>(mut b: R) -> Result<bool> {
 
 const HEADER_LINE: &str = "-----BEGIN PGP SIGNED MESSAGE-----";
 
-fn to_string(b: &[u8]) -> std::result::Result<String, std::str::Utf8Error> {
-    std::str::from_utf8(b).map(|s| s.to_string())
-}
+fn read_cleartext_body<B: BufRead>(b: &mut B) -> Result<(String, String)> {
+    let mut out = String::new();
 
-fn cleartext_body(i: &[u8]) -> IResult<&[u8], String> {
-    let (i, lines) = map_res(
-        alt((
-            complete(take_until1("\r\n-----")),
-            complete(take_until1("\n-----")),
-        )),
-        to_string,
-    )(i)?;
-    let (i, _) = line_ending(i)?;
+    loop {
+        let read = b.read_line(&mut out)?;
+        // early end
+        if read == 0 {
+            bail!("unexpected early end");
+        }
 
-    Ok((i, lines))
+        // Look at the last line
+        if let Some(pos) = out.rfind("\n-----") {
+            // found our end
+            let rest = out.split_off(pos + 1);
+            // remove trailing line break
+            if let Some(pos) = out.rfind("\r\n") {
+                out.truncate(pos);
+            } else {
+                out.truncate(out.len() - 1);
+            }
+            return Ok((out, rest));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -535,14 +540,16 @@ mod tests {
 
     #[test]
     fn test_cleartext_body() {
+        let mut data = std::io::Cursor::new(b"-- hello\n--world\n-----bla");
         assert_eq!(
-            cleartext_body(b"-- hello\n--world\n-----bla").unwrap(),
-            (&b"-----bla"[..], "-- hello\n--world".to_string())
+            read_cleartext_body(&mut data).unwrap(),
+            ("-- hello\n--world".to_string(), "-----bla".to_string()),
         );
 
+        let mut data = std::io::Cursor::new(b"-- hello\r\n--world\r\n-----bla");
         assert_eq!(
-            cleartext_body(b"-- hello\r\n--world\r\n-----bla").unwrap(),
-            (&b"-----bla"[..], "-- hello\r\n--world".to_string())
+            read_cleartext_body(&mut data).unwrap(),
+            ("-- hello\r\n--world".to_string(), "-----bla".to_string()),
         );
     }
 
@@ -614,6 +621,14 @@ mod tests {
         assert_eq!(msg.signed_text(), MSG);
 
         msg.verify(&key.public_key()).unwrap();
+    }
+
+    #[test]
+    fn test_load_big_csf() {
+        let msg_data = std::fs::read_to_string("./tests/unit-tests/csf-puppet/InRelease").unwrap();
+
+        // FIXME: this fails to read -> buffer_redux problem!?
+        let (_msg, _) = CleartextSignedMessage::from_armor(msg_data.as_bytes()).unwrap();
     }
 
     #[test]

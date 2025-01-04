@@ -33,27 +33,27 @@ impl Any {
     /// Parse armored ascii data.
     pub fn from_armor_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
         let dearmor = armor::Dearmor::new(input);
+        let limit = dearmor.max_buffer_limit();
         let (typ, headers, has_leading_data, rest) = dearmor.read_only_header()?;
-
         match typ {
             // Standard PGP types
             BlockType::PublicKey => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest);
+                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
                 let key = SignedPublicKey::from_bytes(dearmor)?;
                 Ok((Self::PublicKey(key), headers))
             }
             BlockType::PrivateKey => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest);
+                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
                 let key = SignedSecretKey::from_bytes(dearmor)?;
                 Ok((Self::SecretKey(key), headers))
             }
             BlockType::Message => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest);
+                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
                 let msg = Message::from_bytes(dearmor)?;
                 Ok((Self::Message(msg), headers))
             }
             BlockType::Signature => {
-                let dearmor = Dearmor::after_header(typ, headers.clone(), rest);
+                let dearmor = Dearmor::after_header(typ, headers.clone(), rest, limit);
                 let sig = StandaloneSignature::from_bytes(dearmor)?;
                 Ok((Self::Signature(sig), headers))
             }
@@ -63,7 +63,7 @@ impl Any {
                     "must not have leading data for a cleartext message"
                 );
                 let (sig, headers) =
-                    CleartextSignedMessage::from_armor_after_header(rest, headers)?;
+                    CleartextSignedMessage::from_armor_after_header(rest, headers, limit)?;
                 Ok((Self::Cleartext(sig), headers))
             }
             _ => unimplemented_err!("unsupported block type: {}", typ),
