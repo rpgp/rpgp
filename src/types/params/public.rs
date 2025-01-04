@@ -12,16 +12,40 @@ use crate::types::{Mpi, MpiRef};
 /// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PublicParams {
-    RSA { n: Mpi, e: Mpi },
-    DSA { p: Mpi, q: Mpi, g: Mpi, y: Mpi },
+    RSA {
+        n: Mpi,
+        e: Mpi,
+    },
+    DSA {
+        p: Mpi,
+        q: Mpi,
+        g: Mpi,
+        y: Mpi,
+    },
     ECDSA(EcdsaPublicParams),
     ECDH(EcdhPublicParams),
-    Elgamal { p: Mpi, g: Mpi, y: Mpi },
-    EdDSALegacy { curve: ECCCurve, q: Mpi },
-    Ed25519 { public: [u8; 32] },
-    X25519 { public: [u8; 32] },
-    X448 { public: [u8; 56] },
-    Unknown { data: Vec<u8> },
+    Elgamal {
+        p: Mpi,
+        g: Mpi,
+        y: Mpi,
+    },
+    EdDSALegacy {
+        curve: ECCCurve,
+        q: Mpi,
+    },
+    Ed25519 {
+        public: [u8; 32],
+    },
+    X25519 {
+        public: [u8; 32],
+    },
+    #[cfg(feature = "unstable-curve448")]
+    X448 {
+        public: [u8; 56],
+    },
+    Unknown {
+        data: Vec<u8>,
+    },
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -236,6 +260,7 @@ impl Serialize for PublicParams {
             PublicParams::X25519 { ref public } => {
                 writer.write_all(&public[..])?;
             }
+            #[cfg(feature = "unstable-curve448")]
             PublicParams::X448 { ref public } => {
                 writer.write_all(&public[..])?;
             }

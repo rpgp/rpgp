@@ -38,6 +38,7 @@ pub enum PlainSecretParams {
     EdDSALegacy(#[debug("..")] Mpi),
     Ed25519(#[debug("..")] [u8; 32]),
     X25519(#[debug("..")] [u8; 32]),
+    #[cfg(feature = "unstable-curve448")]
     X448(#[debug("..")] [u8; 56]),
 }
 
@@ -60,6 +61,7 @@ pub enum PlainSecretParamsRef<'a> {
     EdDSALegacy(#[debug("..")] MpiRef<'a>),
     Ed25519(#[debug("..")] &'a [u8; 32]),
     X25519(#[debug("..")] &'a [u8; 32]),
+    #[cfg(feature = "unstable-curve448")]
     X448(#[debug("..")] &'a [u8; 56]),
 }
 
@@ -79,6 +81,7 @@ impl PlainSecretParamsRef<'_> {
             PlainSecretParamsRef::EdDSALegacy(v) => PlainSecretParams::EdDSALegacy((*v).to_owned()),
             PlainSecretParamsRef::Ed25519(s) => PlainSecretParams::Ed25519((*s).to_owned()),
             PlainSecretParamsRef::X25519(s) => PlainSecretParams::X25519((*s).to_owned()),
+            #[cfg(feature = "unstable-curve448")]
             PlainSecretParamsRef::X448(s) => PlainSecretParams::X448((*s).to_owned()),
         }
     }
@@ -116,6 +119,7 @@ impl PlainSecretParamsRef<'_> {
             PlainSecretParamsRef::X25519(s) => {
                 writer.write_all(&s[..])?;
             }
+            #[cfg(feature = "unstable-curve448")]
             PlainSecretParamsRef::X448(s) => {
                 writer.write_all(&s[..])?;
             }
@@ -253,6 +257,7 @@ impl PlainSecretParamsRef<'_> {
                     secret: **d,
                 }))
             }
+            #[cfg(feature = "unstable-curve448")]
             PlainSecretParamsRef::X448(d) => {
                 Ok(SecretKeyRepr::X448(crate::crypto::x448::SecretKey {
                     secret: **d,
@@ -342,6 +347,7 @@ impl PlainSecretParams {
             PlainSecretParams::EdDSALegacy(v) => PlainSecretParamsRef::EdDSALegacy(v.as_ref()),
             PlainSecretParams::Ed25519(s) => PlainSecretParamsRef::Ed25519(s),
             PlainSecretParams::X25519(s) => PlainSecretParamsRef::X25519(s),
+            #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(s) => PlainSecretParamsRef::X448(s),
         }
     }
@@ -491,6 +497,7 @@ fn parse_secret_params(
             let (i, s) = nom::bytes::complete::take(32u8)(i)?;
             Ok((i, PlainSecretParams::X25519(s.try_into().expect("32"))))
         }
+        #[cfg(feature = "unstable-curve448")]
         PublicKeyAlgorithm::X448 => {
             let (i, s) = nom::bytes::complete::take(56u8)(i)?;
             Ok((i, PlainSecretParams::X448(s.try_into().expect("56"))))
