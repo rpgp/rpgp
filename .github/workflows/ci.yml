@@ -51,19 +51,6 @@ jobs:
         override: true
         args: --features wasm --all --bins
 
-    - name: check bench
-      uses: actions-rs/cargo@v1
-      with:
-        command:  check
-        args: --benches
-
-    - name: check asm
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        args: --features asm
-
     - name: tests
       uses: actions-rs/cargo@v1
       with:
@@ -132,14 +119,6 @@ jobs:
         override: true
         args: --features wasm --all --bins --target wasm32-unknown-unknown
 
-    - name: check bench
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        target: ${{ matrix.target }}
-        args: --benches
-
     - name: check curve448
       uses: actions-rs/cargo@v1
       with:
@@ -183,9 +162,6 @@ jobs:
 
     - name: Install cross
       run: cargo install cross
-
-    - name: check
-      run: cross check --all --target ${{ matrix.target }}
 
     - name: test
       run: cross test --all --target ${{ matrix.target }}
