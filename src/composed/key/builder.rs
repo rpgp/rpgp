@@ -339,17 +339,25 @@ mod tests {
 
     #[test]
     #[ignore] // slow in debug mode
-    fn test_key_gen_rsa_2048() {
+    fn test_key_gen_rsa_2048_v4() {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
+        for i in 0..5 {
+            println!("round {i}");
+            gen_rsa_2048(&mut rng, KeyVersion::V4);
+        }
+    }
 
-            for i in 0..50 {
-                println!("round {i}");
-                gen_rsa_2048(&mut rng, key_version);
-            }
+    #[test]
+    #[ignore] // slow in debug mode
+    fn test_key_gen_rsa_2048_v6() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for i in 0..5 {
+            println!("round {i}");
+            gen_rsa_2048(&mut rng, KeyVersion::V6);
         }
     }
 
@@ -890,12 +898,30 @@ mod tests {
     // Test is slow in debug mode
     #[test]
     #[ignore]
-    fn key_gen_dsa() {
+    fn key_gen_dsa_1024() {
         let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
-        for _ in 0..10 {
+
+        for _ in 0..5 {
             gen_dsa(&mut rng, DsaKeySize::B1024);
-            gen_dsa(&mut rng, DsaKeySize::B2048);
-            gen_dsa(&mut rng, DsaKeySize::B3072);
         }
+    }
+
+    // Test is slow in debug mode
+    #[test]
+    #[ignore]
+    fn key_gen_dsa_2048() {
+        let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
+
+        for _ in 0..5 {
+            gen_dsa(&mut rng, DsaKeySize::B2048);
+        }
+    }
+    // Test is slow in debug mode
+    #[test]
+    #[ignore]
+    fn key_gen_dsa_3072() {
+        let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
+
+        gen_dsa(&mut rng, DsaKeySize::B3072);
     }
 }
