@@ -25,23 +25,70 @@ fn pub_key_inner_gen() -> impl proptest::prelude::Strategy<Value = PubKeyInner> 
     use chrono::TimeZone;
     use proptest::prelude::*;
 
-    //
-    // version: KeyVersion,
-    prop::arbitrary::any::<(Version, KeyVersion, PublicKeyAlgorithm, u32, u16)>()
+    fn v3_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![Just(PublicKeyAlgorithm::RSA),].boxed()
+    }
+    fn v4_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![
+            Just(PublicKeyAlgorithm::RSA),
+            Just(PublicKeyAlgorithm::DSA),
+            Just(PublicKeyAlgorithm::ECDSA),
+            Just(PublicKeyAlgorithm::ECDH),
+            Just(PublicKeyAlgorithm::Elgamal),
+            Just(PublicKeyAlgorithm::EdDSALegacy),
+            Just(PublicKeyAlgorithm::Ed25519),
+            Just(PublicKeyAlgorithm::X25519),
+            Just(PublicKeyAlgorithm::X448),
+        ]
+        .boxed()
+    }
+    fn v6_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![
+            Just(PublicKeyAlgorithm::RSA),
+            Just(PublicKeyAlgorithm::DSA),
+            Just(PublicKeyAlgorithm::ECDSA),
+            Just(PublicKeyAlgorithm::Elgamal),
+            Just(PublicKeyAlgorithm::Ed25519),
+            Just(PublicKeyAlgorithm::X25519),
+            Just(PublicKeyAlgorithm::X448),
+        ]
+        .boxed()
+    }
+
+    prop::arbitrary::any::<(Version, KeyVersion, u32, u16)>()
+        .prop_flat_map(|(packet_version, version, created_at, expiration)| {
+            let created_at = chrono::Utc
+                .timestamp_opt(created_at as i64, 0)
+                .single()
+                .expect("invalid time");
+            match version {
+                KeyVersion::V2 | KeyVersion::V3 => (
+                    Just(packet_version),
+                    Just(version),
+                    Just(created_at),
+                    Just(Some(expiration)),
+                    v3_alg(),
+                ),
+                KeyVersion::V4 => (
+                    Just(packet_version),
+                    Just(version),
+                    Just(created_at),
+                    Just(None),
+                    v4_alg(),
+                ),
+                KeyVersion::V5 | KeyVersion::V6 => (
+                    Just(packet_version),
+                    Just(version),
+                    Just(created_at),
+                    Just(None),
+                    v6_alg(),
+                ),
+                KeyVersion::Other(_) => unimplemented!(),
+            }
+        })
         .prop_flat_map(
-            |(packet_version, version, algorithm, created_at, expiration)| {
-                let created_at = chrono::Utc
-                    .timestamp_opt(created_at as i64, 0)
-                    .single()
-                    .expect("invalid time");
-                let expiration = if version == KeyVersion::V2 || version == KeyVersion::V3 {
-                    Some(expiration)
-                } else {
-                    None
-                };
-
+            |(packet_version, version, created_at, expiration, algorithm)| {
                 let public_params = crate::types::public_params_gen(algorithm);
-
                 (
                     Just(packet_version),
                     Just(version),
@@ -854,7 +901,7 @@ mod tests {
         #[test]
         fn public_key_write_len(packet: PublicKey) {
             let mut buf = Vec::new();
-            packet.to_writer(&mut buf).unwrap();
+            packet.to_writer(&mut buf)?;
             prop_assert_eq!(buf.len(), packet.write_len());
         }
 
@@ -862,15 +909,15 @@ mod tests {
         #[test]
         fn public_key_packet_roundtrip(packet: PublicKey) {
             let mut buf = Vec::new();
-            packet.to_writer(&mut buf).unwrap();
-            let new_packet = PublicKey::from_slice(packet.packet_version(), &buf).unwrap();
+            packet.to_writer(&mut buf)?;
+            let new_packet = PublicKey::from_slice(packet.packet_version(), &buf)?;
             prop_assert_eq!(packet, new_packet);
         }
 
         #[test]
         fn public_sub_key_write_len(packet: PublicSubkey) {
             let mut buf = Vec::new();
-            packet.to_writer(&mut buf).unwrap();
+            packet.to_writer(&mut buf)?;
             prop_assert_eq!(buf.len(), packet.write_len());
         }
 
@@ -878,8 +925,8 @@ mod tests {
         #[test]
         fn public_sub_key_packet_roundtrip(packet: PublicSubkey) {
             let mut buf = Vec::new();
-            packet.to_writer(&mut buf).unwrap();
-            let new_packet = PublicSubkey::from_slice(packet.packet_version(), &buf).unwrap();
+            packet.to_writer(&mut buf)?;
+            let new_packet = PublicSubkey::from_slice(packet.packet_version(), &buf)?;
             prop_assert_eq!(packet, new_packet);
         }
     }

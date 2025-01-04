@@ -185,10 +185,12 @@ pub enum KeyVersion {
     V2 = 2,
     V3 = 3,
     V4 = 4,
+    #[cfg_attr(test, proptest(skip))] // mostly not implemented
     V5 = 5,
     V6 = 6,
 
     #[num_enum(catch_all)]
+    #[cfg_attr(test, proptest(skip))]
     Other(u8),
 }
 

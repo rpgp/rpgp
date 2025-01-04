@@ -7,10 +7,8 @@ pub enum PublicKeyAlgorithm {
     /// RSA (Encrypt and Sign)
     RSA = 1,
     /// DEPRECATED: RSA (Encrypt-Only)
-    #[cfg_attr(test, proptest(skip))]
     RSAEncrypt = 2,
     /// DEPRECATED: RSA (Sign-Only)
-    #[cfg_attr(test, proptest(skip))]
     RSASign = 3,
     /// Elgamal (Sign-Only)
     ElgamalSign = 16,

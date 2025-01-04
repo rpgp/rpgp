@@ -54,14 +54,41 @@ pub enum PublicParams {
 #[cfg(test)]
 pub fn public_params_gen(
     params: PublicKeyAlgorithm,
-) -> impl proptest::prelude::Strategy<Value = PublicParams> {
+) -> proptest::prelude::BoxedStrategy<PublicParams> {
     use proptest::prelude::*;
 
     match params {
-        PublicKeyAlgorithm::RSA => {
-            prop::arbitrary::any::<(Mpi, Mpi)>().prop_map(|(n, e)| PublicParams::RSA { n, e })
+        PublicKeyAlgorithm::RSA => prop::arbitrary::any::<(Mpi, Mpi)>()
+            .prop_map(|(n, e)| PublicParams::RSA { n, e })
+            .boxed(),
+        PublicKeyAlgorithm::DSA => prop::arbitrary::any::<(Mpi, Mpi, Mpi, Mpi)>()
+            .prop_map(|(p, q, g, y)| PublicParams::DSA { p, q, g, y })
+            .boxed(),
+        PublicKeyAlgorithm::ECDSA => prop::arbitrary::any::<EcdsaPublicParams>()
+            .prop_map(PublicParams::ECDSA)
+            .boxed(),
+        PublicKeyAlgorithm::ECDH => prop::arbitrary::any::<EcdhPublicParams>()
+            .prop_map(PublicParams::ECDH)
+            .boxed(),
+        PublicKeyAlgorithm::Elgamal => prop::arbitrary::any::<(Mpi, Mpi, Mpi)>()
+            .boxed()
+            .prop_map(|(p, g, y)| PublicParams::Elgamal { p, g, y })
+            .boxed(),
+        PublicKeyAlgorithm::EdDSALegacy => prop::arbitrary::any::<(ECCCurve, Mpi)>()
+            .prop_map(|(curve, q)| PublicParams::EdDSALegacy { curve, q })
+            .boxed(),
+        PublicKeyAlgorithm::Ed25519 => prop::arbitrary::any::<[u8; 32]>()
+            .prop_map(|public| PublicParams::Ed25519 { public })
+            .boxed(),
+        PublicKeyAlgorithm::X25519 => prop::arbitrary::any::<[u8; 32]>()
+            .prop_map(|public| PublicParams::X25519 { public })
+            .boxed(),
+        PublicKeyAlgorithm::X448 => prop::arbitrary::any::<[u8; 56]>()
+            .prop_map(|public| PublicParams::X448 { public })
+            .boxed(),
+        _ => {
+            unimplemented!()
         }
-        _ => todo!(),
     }
 }
 
