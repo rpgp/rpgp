@@ -44,13 +44,6 @@ jobs:
         command: check
         args: --all --bins --tests
 
-    - name: check nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        args: --features nightly --all --bins --examples --tests
-
     - name: check wasm
       uses: actions-rs/cargo@v1
       with:
@@ -78,13 +71,6 @@ jobs:
         command: test
         args: --all
 
-    - name: nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all  --features nightly
-
     - name: asm
       uses: actions-rs/cargo@v1
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
@@ -97,13 +83,6 @@ jobs:
       with:
         command: test
         args: --all --release -- --ignored
-
-    - name: nightly ignored
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all --features nightly --release -- --ignored
 
     - name: asm ignored
       uses: actions-rs/cargo@v1
@@ -148,13 +127,6 @@ jobs:
         command: check
         args: --all --bins --tests --target ${{ matrix.target }}
 
-    - name: check nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        args: --features nightly --all --bins --examples --tests --target ${{ matrix.target }}
-
     - name: check wasm
       uses: actions-rs/cargo@v1
       with:
@@ -182,25 +154,11 @@ jobs:
         command: test
         args: --all  --target ${{ matrix.target }}
 
-    - name: nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all  --features nightly --target ${{ matrix.target }}
-
     - name: tests ignored
       uses: actions-rs/cargo@v1
       with:
         command: test
         args: --all  --target ${{ matrix.target }} --release -- --ignored
-
-    - name: nightly ignored
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all  --features nightly --target ${{ matrix.target }} --release -- --ignored
 
   cross:
     name: Cross compile

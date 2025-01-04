@@ -36,13 +36,8 @@ pub enum Error {
     RSAError(rsa::errors::Error),
     #[error("elliptic error: {0:?}")]
     EllipticCurve(#[from] elliptic_curve::Error),
-    #[error("io error: {source:?}")]
-    IOError {
-        #[from]
-        source: std::io::Error,
-        #[cfg(feature = "nightly")]
-        backtrace: std::backtrace::Backtrace,
-    },
+    #[error("io error: {0:?}")]
+    IOError(#[from] std::io::Error),
     #[error("missing packets")]
     MissingPackets,
     #[error("invalid key length")]

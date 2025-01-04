@@ -217,18 +217,4 @@ fn bench_message(c: &mut Criterion) {
     }
 }
 
-#[cfg(feature = "profile")]
-fn profiled() -> Criterion {
-    Criterion::default().with_profiler(super::profiler::GProfiler)
-}
-
-#[cfg(not(feature = "profile"))]
-fn profiled() -> Criterion {
-    Criterion::default()
-}
-
-criterion_group!(
-    name = benches;
-    config = profiled();
-    targets = bench_message
-);
+criterion_group!(benches, bench_message);

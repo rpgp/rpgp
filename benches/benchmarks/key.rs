@@ -98,18 +98,4 @@ fn bench_key(c: &mut Criterion) {
     g.finish();
 }
 
-#[cfg(feature = "profile")]
-fn profiled() -> Criterion {
-    Criterion::default().with_profiler(super::profiler::GProfiler)
-}
-
-#[cfg(not(feature = "profile"))]
-fn profiled() -> Criterion {
-    Criterion::default()
-}
-
-criterion_group!(
-    name = benches;
-    config = profiled();
-    targets = bench_key
-);
+criterion_group!(benches, bench_key);

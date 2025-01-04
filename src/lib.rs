@@ -26,8 +26,6 @@
     clippy::type_complexity,
     clippy::incompatible_msrv
 )]
-// Enable backtraces for thiserror.
-#![cfg_attr(feature = "nightly", feature(error_generic_member_access))]
 
 #[cfg(test)]
 #[macro_use]
