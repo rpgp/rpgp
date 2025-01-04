@@ -21,7 +21,7 @@ rust-version = "1.81"
 aes = "^0.8"
 argon2 = { version = "0.5", features = ["zeroize"] }
 base64 = ">=0.21.7, < 0.23"
-bitfield = "0.14"
+bitfield = "0.17"
 block-padding = "^0.3.2"
 blowfish = "^0.9"
 byteorder = "^1.4"
@@ -63,7 +63,7 @@ sha2 = { version = "^0.10.6", features = ["oid"] }
 sha3 = { version = "^0.10.5", features = ["oid"] }
 signature = "2.0.0"
 smallvec = "1.8.0"
-thiserror = "1.0.30"
+thiserror = "2.0"
 twofish = "^0.7"
 zeroize = { version = "1.5", features = ["zeroize_derive"] }
 getrandom = { version = "0.2", optional = true }
