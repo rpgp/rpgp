@@ -1052,8 +1052,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_x25519_encryption_seipdv2() {
+    fn x25519_encryption_seipdv2(aead: AeadAlgorithm, sym: SymmetricKeyAlgorithm) {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
         )
@@ -1066,28 +1065,65 @@ mod tests {
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
-        for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
-            for sym in [
-                SymmetricKeyAlgorithm::AES128,
-                SymmetricKeyAlgorithm::AES192,
-                SymmetricKeyAlgorithm::AES256,
-            ] {
-                for _ in 0..1000 {
-                    let encrypted = compressed_msg
-                        .encrypt_to_keys_seipdv2(&mut rng, sym, aead, 0x06, &[&pkey][..])
-                        .unwrap();
+        for _ in 0..1000 {
+            let encrypted = compressed_msg
+                .encrypt_to_keys_seipdv2(&mut rng, sym, aead, 0x06, &[&pkey][..])
+                .unwrap();
 
-                    let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-                    // fs::write("./message-x25519.asc", &armored).unwrap();
+            let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+            // fs::write("./message-x25519.asc", &armored).unwrap();
 
-                    let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+            let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-                    let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
+            let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
 
-                    assert_eq!(compressed_msg, decrypted);
-                }
-            }
+            assert_eq!(compressed_msg, decrypted);
         }
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_ocb_aes128() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Ocb, SymmetricKeyAlgorithm::AES128);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_eax_aes128() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Eax, SymmetricKeyAlgorithm::AES128);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_gcm_aes128() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES128);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_ocb_aes192() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Ocb, SymmetricKeyAlgorithm::AES192);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_eax_aes192() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Eax, SymmetricKeyAlgorithm::AES192);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_gcm_aes192() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES192);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_ocb_aes256() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Ocb, SymmetricKeyAlgorithm::AES256);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_eax_aes256() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Eax, SymmetricKeyAlgorithm::AES256);
+    }
+
+    #[test]
+    fn test_x25519_encryption_seipdv2_gcm_aes256() {
+        x25519_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES256);
     }
 
     #[test]
@@ -1117,39 +1153,72 @@ mod tests {
         assert_eq!(compressed_msg, decrypted);
     }
 
-    #[test]
-    fn test_password_encryption_seipdv2() {
+    fn password_encryption_seipdv2(aead: AeadAlgorithm, sym: SymmetricKeyAlgorithm) {
         let _ = pretty_env_logger::try_init();
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        let s2k = StringToKey::new_default(&mut rng);
 
-        for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
-            for sym in [
-                SymmetricKeyAlgorithm::AES128,
-                SymmetricKeyAlgorithm::AES192,
-                SymmetricKeyAlgorithm::AES256,
-            ] {
-                let s2k = StringToKey::new_default(&mut rng);
+        let encrypted = compressed_msg
+            .encrypt_with_password_seipdv2(&mut rng, s2k, sym, aead, 0x06, || "secret".into())
+            .unwrap();
 
-                let encrypted = compressed_msg
-                    .encrypt_with_password_seipdv2(&mut rng, s2k, sym, aead, 0x06, || {
-                        "secret".into()
-                    })
-                    .unwrap();
+        let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+        // fs::write("./message-password.asc", &armored).unwrap();
 
-                let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-                // fs::write("./message-password.asc", &armored).unwrap();
+        let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-                let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+        let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
 
-                let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
+        assert_eq!(compressed_msg, decrypted);
+    }
 
-                assert_eq!(compressed_msg, decrypted);
-            }
-        }
+    #[test]
+    fn test_password_encryption_seipdv2_ocb_aes128() {
+        password_encryption_seipdv2(AeadAlgorithm::Ocb, SymmetricKeyAlgorithm::AES128);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_eax_aes128() {
+        password_encryption_seipdv2(AeadAlgorithm::Eax, SymmetricKeyAlgorithm::AES128);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_gcm_aes128() {
+        password_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES128);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_ocb_aes192() {
+        password_encryption_seipdv2(AeadAlgorithm::Ocb, SymmetricKeyAlgorithm::AES192);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_eax_aes192() {
+        password_encryption_seipdv2(AeadAlgorithm::Eax, SymmetricKeyAlgorithm::AES192);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_gcm_aes192() {
+        password_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES192);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_ocb_aes256() {
+        password_encryption_seipdv2(AeadAlgorithm::Ocb, SymmetricKeyAlgorithm::AES256);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_eax_aes256() {
+        password_encryption_seipdv2(AeadAlgorithm::Eax, SymmetricKeyAlgorithm::AES256);
+    }
+
+    #[test]
+    fn test_password_encryption_seipdv2_gcm_aes256() {
+        password_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES256);
     }
 
     #[test]

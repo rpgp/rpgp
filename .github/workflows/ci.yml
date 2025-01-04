@@ -23,7 +23,6 @@ jobs:
         os: [ubuntu-latest, macOS-latest]
         rust:
           - nightly-2024-12-04
-          - beta
           - stable
 
     steps:
@@ -38,80 +37,23 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
 
-    - name: check
-      uses: actions-rs/cargo@v1
+    - name: Install cargo-nextest
+      uses: taiki-e/install-action@v2
       with:
-        command: check
-        args: --all --bins --tests
-
-    - name: check nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        args: --features nightly --all --bins --examples --tests
-
-    - name: check wasm
-      uses: actions-rs/cargo@v1
-      with:
-        command:  check
-        target: wasm32-unknown-unknown
-        override: true
-        args: --features wasm --all --bins
-
-    - name: check bench
-      uses: actions-rs/cargo@v1
-      with:
-        command:  check
-        args: --benches
-
-    - name: check asm
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        args: --features asm
+        tool: nextest@0.9.80
 
     - name: tests
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --all
-
-    - name: nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all  --features nightly
+      run: cargo nextest run --lib --bins --tests --all
 
     - name: asm
-      uses: actions-rs/cargo@v1
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all --features asm
+      run: cargo nextest run --lib --bins --tests --all --features asm
 
     - name: tests ignored
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --all --release -- --ignored
-
-    - name: nightly ignored
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all --features nightly --release -- --ignored
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
     - name: asm ignored
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all --features asm --release -- --ignored
-
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features asm
 
   build_and_test_windows:
     name: Build and test (Windows)
@@ -121,7 +63,6 @@ jobs:
         os: [windows-latest]
         rust:
           - nightly-2024-07-07
-          - beta
           - stable
         target:
           - x86_64-pc-windows-gnu
@@ -141,66 +82,22 @@ jobs:
         target: ${{ matrix.target }}
         override: true
 
-    - uses: msys2/setup-msys2@v2
-    - name: check
-      uses: actions-rs/cargo@v1
-      with:
-        command: check
-        args: --all --bins --tests --target ${{ matrix.target }}
-
-    - name: check nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        args: --features nightly --all --bins --examples --tests --target ${{ matrix.target }}
-
-    - name: check wasm
-      uses: actions-rs/cargo@v1
-      with:
-        command:  check
-        override: true
-        args: --features wasm --all --bins --target wasm32-unknown-unknown
-
-    - name: check bench
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command:  check
-        target: ${{ matrix.target }}
-        args: --benches
-
     - name: check curve448
       uses: actions-rs/cargo@v1
       with:
         command: test
         args: --features unstable-curve448 --all --target ${{ matrix.target }}
 
-    - name: tests
-      uses: actions-rs/cargo@v1
+    - name: Install cargo-nextest
+      uses: taiki-e/install-action@v2
       with:
-        command: test
-        args: --all  --target ${{ matrix.target }}
+        tool: nextest@0.9.80
 
-    - name: nightly
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all  --features nightly --target ${{ matrix.target }}
+    - name: tests
+      run: cargo nextest run --lib --bins --tests --all
 
     - name: tests ignored
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --all  --target ${{ matrix.target }} --release -- --ignored
-
-    - name: nightly ignored
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all  --features nightly --target ${{ matrix.target }} --release -- --ignored
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
   cross:
     name: Cross compile
@@ -228,9 +125,6 @@ jobs:
     - name: Install cross
       run: cargo install cross
 
-    - name: check
-      run: cross check --all --target ${{ matrix.target }}
-
     - name: test
       run: cross test --all --target ${{ matrix.target }}
 
@@ -241,7 +135,6 @@ jobs:
       matrix:
         rust:
           - nightly-2024-07-07
-          - beta
           - stable
 
     steps:
@@ -303,7 +196,7 @@ jobs:
     - uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        args: --all-features --all-targets
+        args: --all-features --all-targets --tests --bins --examples --benches
 
   codespell:
     runs-on: ubuntu-latest

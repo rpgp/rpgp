@@ -59,12 +59,4 @@ fn bench_s2k(c: &mut Criterion) {
     group.finish();
 }
 
-fn profiled() -> Criterion {
-    Criterion::default()
-}
-
-criterion_group!(
-    name = benches;
-    config = profiled();
-    targets = bench_s2k
-);
+criterion_group!(benches, bench_s2k);
