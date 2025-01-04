@@ -37,32 +37,23 @@ jobs:
         toolchain: ${{ matrix.rust }}
         override: true
 
-    - name: tests
-      uses: actions-rs/cargo@v1
+    - name: Install cargo-nextest
+      uses: taiki-e/install-action@v2
       with:
-        command: test
-        args: --all
+        tool: nextest@0.9.80
+
+    - name: tests
+      run: cargo nextest run --lib --bins --tests --all
 
     - name: asm
-      uses: actions-rs/cargo@v1
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all --features asm
+      run: cargo nextest run --lib --bins --tests --all --features asm
 
     - name: tests ignored
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --all --release -- --ignored
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
     - name: asm ignored
-      uses: actions-rs/cargo@v1
-      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
-      with:
-        command: test
-        args: --all --features asm --release -- --ignored
-
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features asm
 
   build_and_test_windows:
     name: Build and test (Windows)
@@ -97,17 +88,16 @@ jobs:
         command: test
         args: --features unstable-curve448 --all --target ${{ matrix.target }}
 
-    - name: tests
-      uses: actions-rs/cargo@v1
+    - name: Install cargo-nextest
+      uses: taiki-e/install-action@v2
       with:
-        command: test
-        args: --all  --target ${{ matrix.target }}
+        tool: nextest@0.9.80
+
+    - name: tests
+      run: cargo nextest run --lib --bins --tests --all
 
     - name: tests ignored
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --all  --target ${{ matrix.target }} --release -- --ignored
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
   cross:
     name: Cross compile
