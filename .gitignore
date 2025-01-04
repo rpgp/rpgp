@@ -1,6 +1,5 @@
 /target/
 **/*.rs.bk
-Cargo.lock
 ios_simulator_app
 *.h
 pgp-ffi/build-stamp

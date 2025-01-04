@@ -215,3 +215,17 @@ jobs:
           arguments: --workspace --all-features
           command: check
           command-arguments: "-Dwarnings"
+
+  minimal_versions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.RUST_NIGHTLY }}
+          override: true
+      - name: check minimal version
+        run: rm Cargo.lock && cargo check -Z direct-minimal-versions --all
