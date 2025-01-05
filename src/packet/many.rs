@@ -303,11 +303,13 @@ mod tests {
                 // skip certain packages we are not (yet) parsing
                 offset != "1193538" && // invalid mpi
                 offset != "5053086" && // invalid mpi
+                offset != "6844449" && // RSA public exponent too large
                 offset != "9758352" && // TODO: unclear why this sig fails to parse
                 offset != "9797527" && // TODO: unclear why this sig fails to parse
                 offset != "24798372" && // TODO: unclear why this public sub key fails to parse
                 offset != "24810682" && // bad attribute size
-                offset != "38544535" // bad attribute size
+                offset != "38544535" && // bad attribute size
+                offset != "38521947" // RSA public exponent too large
             });
 
         let actual_tags = PacketParser::new(file).filter(|p| p.is_ok());
@@ -315,7 +317,7 @@ mod tests {
             let e = e.as_ref().unwrap();
             let packet = packet.unwrap();
 
-            // println!("\n-- checking: {:?} {}", packet.tag(), e);
+            println!("\n-- checking: {:?} {}", packet.tag(), e);
 
             let tag: Tag = u8::into(tag.parse().unwrap());
             assert_eq!(tag, packet.tag(), "mismatch in packet {:?} ({})", p, e);

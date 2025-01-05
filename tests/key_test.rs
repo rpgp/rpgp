@@ -74,7 +74,14 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
             println!("key {}: {}", i, j);
         }
         actual.total_count += 1;
-        let key = key.as_ref().expect("failed to parse key");
+        let key = match key {
+            Ok(ref key) => key,
+            Err(err) => {
+                warn!("parsing failed: {}:{}: {:?}", i, j, err);
+                actual.err_count += 1;
+                continue;
+            }
+        };
 
         // roundtrip
         {
@@ -140,41 +147,42 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_704,
-        1, // Hash::Other(4)
+        17_702,
+        // Hash::Other(4)
+        1,
         3294,
-        20_999
+        20_997
     ),
     (
         test_parse_dumps_1,
         1,
-        17_542,
+        17_540,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3450,
-        21_000
+        3451,
+        20_999
     ),
     (
         test_parse_dumps_2,
         2,
-        17_583,
+        17_580,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3411,
-        20_999
+        3412,
+        20_997
     ),
     (
         test_parse_dumps_3,
         3,
-        17_651,
+        17_646,
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3341,
-        20_998
+        3343,
+        20_995
     ),
     (
         test_parse_dumps_4,
@@ -182,8 +190,8 @@ parse_dumps!(
         17_583,
         // - Elgamal verify
         2,
-        3414,
-        20_999
+        3412,
+        20_997
     ),
     (
         test_parse_dumps_5,
@@ -198,30 +206,30 @@ parse_dumps!(
     (
         test_parse_dumps_6,
         6,
-        17_676,
+        17_671,
         // - Elgamal verify
         1,
-        3323,
-        21_000
+        3324,
+        20_996
     ),
     (
         test_parse_dumps_7,
         7,
-        17_688,
+        17_686,
         // - Elgamal verify
         3,
-        3309,
-        21_000
+        3310,
+        20_999
     ),
     (
         test_parse_dumps_8,
         8,
-        17_693,
+        17_692,
         // - Hash::Other(5)
         // - Elgamal verify
         6,
         3301,
-        21_000
+        20_999
     ),
     (
         test_parse_dumps_9,
