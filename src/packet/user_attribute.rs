@@ -31,8 +31,10 @@ pub enum UserAttribute {
     },
     Unknown {
         packet_version: Version,
+        #[cfg_attr(test, proptest(filter = "|t| *t != 1u8"))]
         typ: u8,
         #[debug("{}", hex::encode(data))]
+        #[cfg_attr(test, proptest(filter = "|d| !d.is_empty()"))]
         data: Vec<u8>,
     },
 }

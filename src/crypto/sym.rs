@@ -71,6 +71,7 @@ where
 #[repr(u8)]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
+    #[cfg_attr(test, proptest(skip))]
     Plaintext = 0,
     /// IDEA
     IDEA = 1,
@@ -98,7 +99,7 @@ pub enum SymmetricKeyAlgorithm {
     Private10 = 110,
 
     #[num_enum(catch_all)]
-    Other(#[cfg_attr(test, proptest(strategy = "110u8.."))] u8),
+    Other(#[cfg_attr(test, proptest(strategy = "111u8.."))] u8),
 }
 
 impl Default for SymmetricKeyAlgorithm {

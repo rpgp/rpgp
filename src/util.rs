@@ -81,8 +81,11 @@ pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
 
 #[inline]
 pub fn strip_leading_zeros_vec(bytes: &mut Vec<u8>) {
-    if let Some(offset) = bytes.iter_mut().position(|b| b != &0) {
+    if let Some(offset) = bytes.iter().position(|b| b != &0) {
         bytes.drain(..offset);
+    } else {
+        // no non 0 element found
+        bytes.clear();
     }
 }
 
@@ -235,9 +238,9 @@ mod tests {
 
     #[test]
     fn test_strip_leading_zeros_with_all_zeros() {
-        let buf = [0, 0, 0];
-        let stripped = strip_leading_zeros(&buf);
-        assert_eq!(stripped, &[]);
+        let buf = [0u8, 0u8, 0u8];
+        let stripped: &[u8] = strip_leading_zeros(&buf[..]);
+        assert!(stripped.is_empty());
     }
 
     #[test]
@@ -245,5 +248,13 @@ mod tests {
         let mut vec = vec![0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         strip_leading_zeros_vec(&mut vec);
         assert_eq!(vec, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+
+        let mut vec = vec![0];
+        strip_leading_zeros_vec(&mut vec);
+        assert!(vec.is_empty());
+
+        let mut vec = vec![1, 2, 0, 3, 0];
+        strip_leading_zeros_vec(&mut vec);
+        assert_eq!(vec, vec![1, 2, 0, 3, 0]);
     }
 }

@@ -1,5 +1,4 @@
 use ecdsa::SigningKey;
-use elliptic_curve::sec1::ToEncodedPoint;
 use p521::NistP521;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
@@ -114,10 +113,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P256 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
+                PublicParams::ECDSA(EcdsaPublicParams::P256 { key: public }),
                 PlainSecretParams::ECDSA(secret),
             ))
         }
@@ -128,10 +124,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P384 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
+                PublicParams::ECDSA(EcdsaPublicParams::P384 { key: public }),
                 PlainSecretParams::ECDSA(secret),
             ))
         }
@@ -142,10 +135,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P521 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
+                PublicParams::ECDSA(EcdsaPublicParams::P521 { key: public }),
                 PlainSecretParams::ECDSA(secret),
             ))
         }
@@ -156,10 +146,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
+                PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 { key: public }),
                 PlainSecretParams::ECDSA(secret),
             ))
         }

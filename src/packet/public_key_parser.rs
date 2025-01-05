@@ -12,6 +12,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::IResult;
 use crate::types::{
     mpi, EcdhPublicParams, EcdsaPublicParams, KeyVersion, Mpi, MpiRef, PublicParams,
+    RsaPublicParams,
 };
 
 #[inline]
@@ -93,7 +94,7 @@ fn x448(i: &[u8]) -> IResult<&[u8], PublicParams> {
 }
 
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ecd>
-fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
+fn ecdh(i: &[u8], len: Option<usize>) -> IResult<&[u8], PublicParams> {
     // a one-octet size of the following field
     // octets representing a curve OID
     let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
@@ -101,7 +102,7 @@ fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
     match curve {
         ECCCurve::Curve25519 | ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 => {
             // MPI of an EC point representing a public key
-            let (i, mpi) = mpi(i)?;
+            let (i, p) = mpi(i)?;
 
             // a one-octet size of the following fields
             let (i, _len2) = be_u8(i)?;
@@ -116,23 +117,24 @@ fn ecdh(i: &[u8]) -> IResult<&[u8], PublicParams> {
             // the symmetric key used for the message encryption
             let (i, alg_sym) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
 
+            let params = EcdhPublicParams::try_from_mpi(p, curve, hash, alg_sym)?;
+            Ok((i, PublicParams::ECDH(params)))
+        }
+        _ => {
+            let (i, data) = if let Some(pub_len) = len {
+                let (i, data) = take(pub_len)(i)?;
+                (i, data.to_vec())
+            } else {
+                (i, vec![])
+            };
             Ok((
                 i,
-                PublicParams::ECDH(EcdhPublicParams::Known {
+                PublicParams::ECDH(EcdhPublicParams::Unsupported {
                     curve,
-                    p: mpi.to_owned(),
-                    hash,
-                    alg_sym,
+                    opaque: data,
                 }),
             ))
         }
-        _ => Ok((
-            i,
-            PublicParams::ECDH(EcdhPublicParams::Unsupported {
-                curve,
-                opaque: vec![],
-            }),
-        )),
     }
 }
 
@@ -163,8 +165,8 @@ fn dsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
 }
 
 fn rsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    map(pair(map(mpi, to_owned), map(mpi, to_owned)), |(n, e)| {
-        PublicParams::RSA { n, e }
+    map_res(pair(map(mpi, to_owned), map(mpi, to_owned)), |(n, e)| {
+        RsaPublicParams::try_from_mpi(n.as_ref(), e.as_ref()).map(PublicParams::RSA)
     })(i)
 }
 
@@ -194,7 +196,7 @@ pub fn parse_pub_fields(
         }
         PublicKeyAlgorithm::DSA => dsa(i),
         PublicKeyAlgorithm::ECDSA => ecdsa(i),
-        PublicKeyAlgorithm::ECDH => ecdh(i),
+        PublicKeyAlgorithm::ECDH => ecdh(i, len),
         PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => elgamal(i),
         PublicKeyAlgorithm::EdDSALegacy => eddsa_legacy(i),
 

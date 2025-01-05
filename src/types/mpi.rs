@@ -58,7 +58,10 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Mpi(
     #[debug("{}", hex::encode(_0))]
-    #[cfg_attr(test, proptest(strategy = "mpi_gen()"))]
+    #[cfg_attr(
+        test,
+        proptest(strategy = "mpi_gen()", filter = "|mpi| !mpi.is_empty()")
+    )]
     Vec<u8>,
 );
 

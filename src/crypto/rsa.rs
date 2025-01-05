@@ -3,7 +3,6 @@ use std::ops::Deref;
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
 use num_bigint::traits::ModInverse;
-use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use ripemd::Ripemd160;
 use rsa::pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey};
@@ -22,7 +21,7 @@ use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
 use crate::errors::Result;
 use crate::types::{Mpi, PkeskBytes, PlainSecretParams, PublicParams};
 
-const MAX_KEY_SIZE: usize = 16384;
+pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
 /// Private Key for RSA.
 #[derive(derive_more::Debug, ZeroizeOnDrop)]
@@ -97,15 +96,9 @@ impl From<RsaPrivateKey> for PrivateKey {
 /// RSA encryption using PKCS1v15 padding.
 pub fn encrypt<R: CryptoRng + Rng>(
     mut rng: R,
-    n: &[u8],
-    e: &[u8],
+    key: &RsaPublicKey,
     plaintext: &[u8],
 ) -> Result<PkeskBytes> {
-    let key = RsaPublicKey::new_with_max_size(
-        BigUint::from_bytes_be(n),
-        BigUint::from_bytes_be(e),
-        MAX_KEY_SIZE,
-    )?;
     let data = key.encrypt(&mut rng, Pkcs1v15Encrypt, plaintext)?;
 
     Ok(PkeskBytes::Rsa {
@@ -130,10 +123,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
         .expect("invalid prime");
 
     Ok((
-        PublicParams::RSA {
-            n: key.n().into(),
-            e: key.e().into(),
-        },
+        PublicParams::RSA(key.to_public_key().into()),
         PlainSecretParams::RSA {
             d: key.d().into(),
             p: p.into(),
@@ -143,11 +133,11 @@ pub fn generate_key<R: Rng + CryptoRng>(
     ))
 }
 
-fn verify_int<D>(key: RsaPublicKey, hashed: &[u8], signature: &RsaSignature) -> Result<()>
+fn verify_int<D>(key: &RsaPublicKey, hashed: &[u8], signature: &RsaSignature) -> Result<()>
 where
     D: Digest + AssociatedOid,
 {
-    VerifyingKey::<D>::new(key)
+    VerifyingKey::<D>::new(key.clone())
         .verify_prehash(hashed, signature)
         .map_err(Into::into)
 }
@@ -163,18 +153,11 @@ where
 
 /// Verify a RSA, PKCS1v15 padded signature.
 pub fn verify(
-    n: &[u8],
-    e: &[u8],
+    key: &rsa::RsaPublicKey,
     hash: HashAlgorithm,
     hashed: &[u8],
     signature: &[u8],
 ) -> Result<()> {
-    let key = RsaPublicKey::new_with_max_size(
-        BigUint::from_bytes_be(n),
-        BigUint::from_bytes_be(e),
-        MAX_KEY_SIZE,
-    )?;
-
     let signature = if signature.len() < key.size() {
         // RSA short signatures are allowed by PGP, but not by the RSA crate.
         // So we pad out the signature if we encounter a short one.

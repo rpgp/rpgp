@@ -277,13 +277,6 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let secret = StaticSecret::from(*secret_key_bytes);
             let public = PublicKey::from(&secret);
 
-            // public key
-            let p_raw = public.to_bytes();
-
-            let mut p = Vec::with_capacity(33);
-            p.push(0x40);
-            p.extend_from_slice(&p_raw);
-
             // secret key
             // Clamp, as `to_bytes` does not clamp.
             let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
@@ -295,9 +288,8 @@ pub fn generate_key<R: Rng + CryptoRng>(
             let alg_sym = curve.sym_algo()?;
 
             Ok((
-                PublicParams::ECDH(EcdhPublicParams::Known {
-                    curve: ECCCurve::Curve25519,
-                    p: Mpi::from_raw(p),
+                PublicParams::ECDH(EcdhPublicParams::Curve25519 {
+                    p: public,
                     hash,
                     alg_sym,
                 }),
@@ -305,34 +297,51 @@ pub fn generate_key<R: Rng + CryptoRng>(
             ))
         }
 
-        ECCCurve::P256 => keygen::<p256::NistP256, R>(rng, curve),
-
-        ECCCurve::P384 => keygen::<p384::NistP384, R>(rng, curve),
-
-        ECCCurve::P521 => keygen::<p521::NistP521, R>(rng, curve),
-
+        ECCCurve::P256 => keygen_p256(rng),
+        ECCCurve::P384 => keygen_p384(rng),
+        ECCCurve::P521 => keygen_p521(rng),
         _ => unsupported_err!("curve {:?} for ECDH", curve),
     }
 }
 
-/// Generate an ECDH key based on a Rust Crypto curve
-fn keygen<C, R: Rng + CryptoRng>(
-    mut rng: R,
-    curve: &ECCCurve,
-) -> Result<(PublicParams, PlainSecretParams)>
-where
-    C: elliptic_curve::CurveArithmetic + elliptic_curve::point::PointCompression,
-    elliptic_curve::FieldBytesSize<C>: elliptic_curve::sec1::ModulusSize,
-    elliptic_curve::AffinePoint<C>:
-        elliptic_curve::sec1::FromEncodedPoint<C> + elliptic_curve::sec1::ToEncodedPoint<C>,
-{
-    let secret = elliptic_curve::SecretKey::<C>::random(&mut rng);
+fn keygen_p256<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSecretParams)> {
+    let curve = ECCCurve::P256;
+    let secret = elliptic_curve::SecretKey::<p256::NistP256>::random(&mut rng);
     let public = secret.public_key();
 
     Ok((
-        PublicParams::ECDH(EcdhPublicParams::Known {
-            curve: curve.clone(),
-            p: Mpi::from_slice(public.to_sec1_bytes().as_ref()),
+        PublicParams::ECDH(EcdhPublicParams::P256 {
+            p: public,
+            hash: curve.hash_algo()?,
+            alg_sym: curve.sym_algo()?,
+        }),
+        PlainSecretParams::ECDH(Mpi::from_slice(secret.to_bytes().as_slice())),
+    ))
+}
+
+fn keygen_p384<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSecretParams)> {
+    let curve = ECCCurve::P384;
+    let secret = elliptic_curve::SecretKey::<p384::NistP384>::random(&mut rng);
+    let public = secret.public_key();
+
+    Ok((
+        PublicParams::ECDH(EcdhPublicParams::P384 {
+            p: public,
+            hash: curve.hash_algo()?,
+            alg_sym: curve.sym_algo()?,
+        }),
+        PlainSecretParams::ECDH(Mpi::from_slice(secret.to_bytes().as_slice())),
+    ))
+}
+
+fn keygen_p521<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSecretParams)> {
+    let curve = ECCCurve::P521;
+    let secret = elliptic_curve::SecretKey::<p521::NistP521>::random(&mut rng);
+    let public = secret.public_key();
+
+    Ok((
+        PublicParams::ECDH(EcdhPublicParams::P521 {
+            p: public,
             hash: curve.hash_algo()?,
             alg_sym: curve.sym_algo()?,
         }),
@@ -414,24 +423,11 @@ fn pad(plain: &[u8]) -> Vec<u8> {
 /// ECDH encryption.
 pub fn encrypt<R: CryptoRng + Rng>(
     mut rng: R,
-    curve: &ECCCurve,
-    alg_sym: SymmetricKeyAlgorithm,
-    hash: HashAlgorithm,
+    params: &EcdhPublicParams,
     fingerprint: &[u8],
-    q: &[u8],
     plain: &[u8],
 ) -> Result<PkeskBytes> {
     debug!("ECDH encrypt");
-
-    // Implementations MUST NOT use MD5, SHA-1, or RIPEMD-160 as a hash function in an ECDH KDF.
-    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
-    ensure!(
-        hash != HashAlgorithm::MD5
-            && hash != HashAlgorithm::SHA1
-            && hash != HashAlgorithm::RIPEMD160,
-        "{:?} is not a legal hash function for ECDH KDF",
-        hash
-    );
 
     // Maximum length for `plain`:
     // - padding increases the length (at least) to a length of the next multiple of 8.
@@ -444,21 +440,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
         MAX_SIZE
     );
 
-    let (encoded_public, shared_secret) = match curve {
-        ECCCurve::Curve25519 => {
-            ensure_eq!(q.len(), 33, "invalid public key");
-
-            let their_public = {
-                // public part of the ephemeral key (removes 0x40 prefix)
-                let public_key = &q[1..];
-
-                // create montgomery point
-                let mut public_key_arr = [0u8; 32];
-                public_key_arr[..].copy_from_slice(public_key);
-
-                x25519_dalek::PublicKey::from(public_key_arr)
-            };
-
+    let (encoded_public, shared_secret, hash, alg_sym) = match params {
+        EcdhPublicParams::Curve25519 { p, hash, alg_sym } => {
+            let their_public = p;
             let mut our_secret_key_bytes =
                 Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
             rng.fill_bytes(&mut *our_secret_key_bytes);
@@ -472,18 +456,42 @@ pub fn encrypt<R: CryptoRng + Rng>(
             encoded_public.push(0x40);
             encoded_public.extend(x25519_dalek::PublicKey::from(&our_secret).as_bytes().iter());
 
-            (encoded_public, shared_secret.as_bytes().to_vec())
+            (
+                encoded_public,
+                shared_secret.as_bytes().to_vec(),
+                hash,
+                alg_sym,
+            )
         }
-        ECCCurve::P256 => derive_shared_secret_encryption::<p256::NistP256, R>(rng, q)?,
-        ECCCurve::P384 => derive_shared_secret_encryption::<p384::NistP384, R>(rng, q)?,
-        ECCCurve::P521 => derive_shared_secret_encryption::<p521::NistP521, R>(rng, q)?,
-        _ => unsupported_err!("curve {:?} for ECDH", curve),
+        EcdhPublicParams::P256 { p, hash, alg_sym } => {
+            let (public, secret) = derive_shared_secret_encryption::<p256::NistP256, R>(rng, p)?;
+            (public, secret, hash, alg_sym)
+        }
+        EcdhPublicParams::P384 { p, hash, alg_sym } => {
+            let (public, secret) = derive_shared_secret_encryption::<p384::NistP384, R>(rng, p)?;
+            (public, secret, hash, alg_sym)
+        }
+        EcdhPublicParams::P521 { p, hash, alg_sym } => {
+            let (public, secret) = derive_shared_secret_encryption::<p521::NistP521, R>(rng, p)?;
+            (public, secret, hash, alg_sym)
+        }
+        _ => unsupported_err!("{:?} for ECDH", params),
     };
 
-    let param = build_ecdh_param(&curve.oid(), alg_sym, hash, fingerprint);
+    // Implementations MUST NOT use MD5, SHA-1, or RIPEMD-160 as a hash function in an ECDH KDF.
+    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
+    ensure!(
+        *hash != HashAlgorithm::MD5
+            && *hash != HashAlgorithm::SHA1
+            && *hash != HashAlgorithm::RIPEMD160,
+        "{:?} is not a legal hash function for ECDH KDF",
+        hash
+    );
+
+    let param = build_ecdh_param(&params.curve().oid(), *alg_sym, *hash, fingerprint);
 
     // Perform key derivation
-    let z = kdf(hash, &shared_secret, alg_sym.key_size(), &param)?;
+    let z = kdf(*hash, &shared_secret, alg_sym.key_size(), &param)?;
 
     // Pad plaintext
     let plain_padded = pad(plain);
@@ -501,7 +509,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 /// Returns a pair of `(our_public key, shared_secret)`.
 fn derive_shared_secret_encryption<C, R: CryptoRng + Rng>(
     mut rng: R,
-    q: &[u8],
+    their_public: &elliptic_curve::PublicKey<C>,
 ) -> Result<(Vec<u8>, Vec<u8>)>
 where
     C: elliptic_curve::CurveArithmetic + elliptic_curve::point::PointCompression,
@@ -509,7 +517,6 @@ where
     elliptic_curve::AffinePoint<C>:
         elliptic_curve::sec1::FromEncodedPoint<C> + elliptic_curve::sec1::ToEncodedPoint<C>,
 {
-    let their_public = elliptic_curve::PublicKey::<C>::from_sec1_bytes(q)?;
     let our_secret = elliptic_curve::ecdh::EphemeralSecret::<C>::random(&mut rng);
 
     // derive shared secret
@@ -560,21 +567,9 @@ mod tests {
                     rng.fill_bytes(&mut plain);
 
                     let values = match pkey {
-                        PublicParams::ECDH(EcdhPublicParams::Known {
-                            ref curve,
-                            ref p,
-                            hash,
-                            alg_sym,
-                        }) => encrypt(
-                            &mut rng,
-                            curve,
-                            alg_sym,
-                            hash,
-                            &fingerprint,
-                            p.as_bytes(),
-                            &plain[..],
-                        )
-                        .unwrap(),
+                        PublicParams::ECDH(ref params) => {
+                            encrypt(&mut rng, params, &fingerprint, &plain[..]).unwrap()
+                        }
                         _ => panic!("invalid key generated"),
                     };
 
@@ -603,6 +598,8 @@ mod tests {
 
     #[test]
     fn test_decrypt_padding() {
+        let _ = pretty_env_logger::try_init();
+
         let (decrypt_key, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/unit-tests/padding/alice.key").unwrap(),
         )

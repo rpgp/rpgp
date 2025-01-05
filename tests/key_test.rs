@@ -11,7 +11,6 @@ use std::path::Path;
 
 use buffer_redux::BufReader;
 use chrono::{DateTime, Utc};
-use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
@@ -357,12 +356,9 @@ fn test_parse_details() {
     assert_eq!(pk.algorithm(), PublicKeyAlgorithm::RSA);
 
     match pk.public_params() {
-        PublicParams::RSA { n, e } => {
-            assert_eq!(n, &primary_n);
-            assert_eq!(
-                BigUint::from_bytes_be(e.as_bytes()).to_u64().unwrap(),
-                0x0001_0001
-            );
+        PublicParams::RSA(public_params) => {
+            assert_eq!(Mpi::from(public_params.key.n().clone()), primary_n);
+            assert_eq!(public_params.key.e().to_u64().unwrap(), 0x0001_0001);
         }
         _ => panic!("wrong public params: {:?}", pk.public_params()),
     }

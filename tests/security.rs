@@ -240,18 +240,19 @@ fn rpg_020_signed_secret_key_create_signature_panic1() {
         151, 3, 255, 251, 255, 63, 39, 254, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4,
     ];
 
-    let dummy_data: &[u8] = &[0];
+    // let dummy_data: &[u8] = &[0];
 
-    let key = pgp::composed::SignedSecretKey::from_bytes(Bytes::from_static(bad_input)).unwrap();
+    let res = pgp::composed::SignedSecretKey::from_bytes(Bytes::from_static(bad_input));
+    assert!(res.is_err()); // validation now happens earlier
 
-    // expected bug behavior:
-    // thread '<unnamed>' panicked at [..]/num-bigint-dig-0.8.4/src/algorithms/sub.rs:75:5:
-    // Cannot subtract b from a because b is larger than a.
-    let _ = key.create_signature(
-        || "pw".into(),
-        pgp::crypto::hash::HashAlgorithm::SHA2_256,
-        dummy_data,
-    );
+    // // expected bug behavior:
+    // // thread '<unnamed>' panicked at [..]/num-bigint-dig-0.8.4/src/algorithms/sub.rs:75:5:
+    // // Cannot subtract b from a because b is larger than a.
+    // let _ = key.create_signature(
+    //     || "pw".into(),
+    //     pgp::crypto::hash::HashAlgorithm::SHA2_256,
+    //     dummy_data,
+    // );
 }
 
 /// RPG-020

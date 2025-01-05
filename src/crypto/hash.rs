@@ -14,6 +14,7 @@ use crate::errors::{Error, Result};
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum HashAlgorithm {
+    #[cfg_attr(test, proptest(skip))]
     None = 0,
     MD5 = 1,
     SHA1 = 2,
@@ -30,7 +31,7 @@ pub enum HashAlgorithm {
     Private10 = 110,
 
     #[num_enum(catch_all)]
-    Other(#[cfg_attr(test, proptest(strategy = "110u8.."))] u8),
+    Other(#[cfg_attr(test, proptest(strategy = "111u8.."))] u8),
 }
 
 impl Default for HashAlgorithm {

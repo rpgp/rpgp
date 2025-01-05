@@ -5,6 +5,7 @@ use byteorder::{BigEndian, ByteOrder};
 use hkdf::Hkdf;
 use nom::combinator::map;
 use nom::sequence::tuple;
+use rsa::traits::PublicKeyParts;
 use rsa::RsaPrivateKey;
 use sha2::Sha256;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -145,6 +146,7 @@ impl PlainSecretParamsRef<'_> {
             PlainSecretParamsRef::EdDSALegacy(x) => x.write_len(),
             PlainSecretParamsRef::Ed25519(s) => s.len(),
             PlainSecretParamsRef::X25519(s) => s.len(),
+            #[cfg(feature = "unstable-curve448")]
             PlainSecretParamsRef::X448(s) => s.len(),
         }
     }
@@ -188,10 +190,10 @@ impl PlainSecretParamsRef<'_> {
     pub fn as_repr(&self, public_params: &PublicParams) -> Result<SecretKeyRepr> {
         match self {
             PlainSecretParamsRef::RSA { d, p, q, .. } => match public_params {
-                PublicParams::RSA { ref n, ref e } => {
+                PublicParams::RSA(public_params) => {
                     let secret_key = RsaPrivateKey::from_components(
-                        n.into(),
-                        e.into(),
+                        public_params.key.n().clone(),
+                        public_params.key.e().clone(),
                         d.into(),
                         vec![p.into(), q.into()],
                     )?;
@@ -202,52 +204,44 @@ impl PlainSecretParamsRef<'_> {
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::ECDH(d) => match public_params {
-                PublicParams::ECDH(EcdhPublicParams::Known {
-                    ref curve,
-                    ref hash,
-                    ref alg_sym,
-                    ..
-                }) => match curve {
-                    ECCCurve::Curve25519 => {
-                        const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
+                PublicParams::ECDH(EcdhPublicParams::Curve25519 { hash, alg_sym, .. }) => {
+                    const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
 
-                        Ok(SecretKeyRepr::ECDH(
-                            crate::crypto::ecdh::SecretKey::Curve25519 {
-                                secret: Self::pad_key::<SIZE>(d)?,
-                                hash: *hash,
-                                alg_sym: *alg_sym,
-                            },
-                        ))
-                    }
-                    ECCCurve::P256 => {
-                        const SIZE: usize = ECCCurve::P256.secret_key_length();
-
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P256 {
+                    Ok(SecretKeyRepr::ECDH(
+                        crate::crypto::ecdh::SecretKey::Curve25519 {
                             secret: Self::pad_key::<SIZE>(d)?,
                             hash: *hash,
                             alg_sym: *alg_sym,
-                        }))
-                    }
-                    ECCCurve::P384 => {
-                        const SIZE: usize = ECCCurve::P384.secret_key_length();
+                        },
+                    ))
+                }
+                PublicParams::ECDH(EcdhPublicParams::P256 { hash, alg_sym, .. }) => {
+                    const SIZE: usize = ECCCurve::P256.secret_key_length();
 
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P384 {
-                            secret: Self::pad_key::<SIZE>(d)?,
-                            hash: *hash,
-                            alg_sym: *alg_sym,
-                        }))
-                    }
-                    ECCCurve::P521 => {
-                        const SIZE: usize = ECCCurve::P521.secret_key_length();
+                    Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P256 {
+                        secret: Self::pad_key::<SIZE>(d)?,
+                        hash: *hash,
+                        alg_sym: *alg_sym,
+                    }))
+                }
+                PublicParams::ECDH(EcdhPublicParams::P384 { hash, alg_sym, .. }) => {
+                    const SIZE: usize = ECCCurve::P384.secret_key_length();
 
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P521 {
-                            secret: Self::pad_key::<SIZE>(d)?,
-                            hash: *hash,
-                            alg_sym: *alg_sym,
-                        }))
-                    }
-                    _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
-                },
+                    Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P384 {
+                        secret: Self::pad_key::<SIZE>(d)?,
+                        hash: *hash,
+                        alg_sym: *alg_sym,
+                    }))
+                }
+                PublicParams::ECDH(EcdhPublicParams::P521 { hash, alg_sym, .. }) => {
+                    const SIZE: usize = ECCCurve::P521.secret_key_length();
+
+                    Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P521 {
+                        secret: Self::pad_key::<SIZE>(d)?,
+                        hash: *hash,
+                        alg_sym: *alg_sym,
+                    }))
+                }
                 PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
                     unsupported_err!("curve {:?} for ECDH", curve)
                 }

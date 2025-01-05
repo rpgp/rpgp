@@ -181,12 +181,7 @@ impl FakeHsm {
             }
 
             (
-                PublicParams::ECDH(EcdhPublicParams::Known {
-                    curve,
-                    alg_sym,
-                    hash,
-                    ..
-                }),
+                PublicParams::ECDH(params),
                 PkeskBytes::Ecdh {
                     public_point,
                     encrypted_session_key,
@@ -206,7 +201,7 @@ impl FakeHsm {
 
                 let ciphertext = public_point.as_bytes();
 
-                let _ciphertext = if *curve == ECCCurve::Curve25519 {
+                let _ciphertext = if params.curve() == ECCCurve::Curve25519 {
                     assert_eq!(
                         ciphertext[0], 0x40,
                         "Unexpected shape of Cv25519 encrypted data"
@@ -225,11 +220,20 @@ impl FakeHsm {
 
                 let shared_secret: [u8; 32] = dec.try_into().expect("must be [u8; 32]");
 
+                let (hash, alg_sym) = match params {
+                    EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
+                    | EcdhPublicParams::P256 { hash, alg_sym, .. }
+                    | EcdhPublicParams::P384 { hash, alg_sym, .. }
+                    | EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Unsupported { .. } => {
+                        panic!("unsupported params: {:?}", params);
+                    }
+                };
                 let decrypted_key: Vec<u8> = pgp::crypto::ecdh::derive_session_key(
                     &shared_secret,
                     encrypted_session_key,
                     encrypted_session_key.len(),
-                    &(curve.clone(), *alg_sym, *hash),
+                    &(params.curve(), *alg_sym, *hash),
                     self.public_key.fingerprint().as_bytes(),
                 )?;
 
