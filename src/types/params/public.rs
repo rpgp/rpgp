@@ -27,12 +27,9 @@ pub enum PublicParams {
         g: Mpi,
         y: Mpi,
     },
-    EdDSALegacy {
-        curve: ECCCurve,
-        q: Mpi,
-    },
+    EdDSALegacy(EddsaLegacyPublicParams),
     Ed25519 {
-        public: [u8; 32],
+        public: ed25519_dalek::VerifyingKey,
     },
     X25519 {
         public: [u8; 32],
@@ -140,6 +137,91 @@ impl Serialize for RsaPublicParams {
 
         let mut sum = n.write_len();
         sum += e.write_len();
+        sum
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub enum EddsaLegacyPublicParams {
+    Ed25519 {
+        #[cfg_attr(test, proptest(strategy = "tests::ed25519_pub_gen()"))]
+        key: ed25519_dalek::VerifyingKey,
+    },
+    #[cfg_attr(test, proptest(skip))]
+    Unsupported { curve: ECCCurve, mpi: Mpi },
+}
+
+impl EddsaLegacyPublicParams {
+    pub fn try_from_mpi(curve: ECCCurve, mpi: MpiRef<'_>) -> Result<Self> {
+        match curve {
+            ECCCurve::Ed25519 => {
+                ensure_eq!(mpi.len(), 33, "invalid Q (len)");
+                ensure_eq!(mpi[0], 0x40, "invalid Q (prefix)");
+                let public = &mpi[1..];
+
+                let key: ed25519_dalek::VerifyingKey = public.try_into()?;
+                Ok(Self::Ed25519 { key })
+            }
+            _ => Ok(Self::Unsupported {
+                curve,
+                mpi: mpi.to_owned(),
+            }),
+        }
+    }
+
+    pub fn curve(&self) -> ECCCurve {
+        match self {
+            Self::Ed25519 { .. } => ECCCurve::Ed25519,
+            Self::Unsupported { curve, .. } => curve.clone(),
+        }
+    }
+}
+
+impl Serialize for EddsaLegacyPublicParams {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            Self::Ed25519 { key } => {
+                let oid = ECCCurve::Ed25519.oid();
+                writer.write_u8(oid.len().try_into()?)?;
+                writer.write_all(&oid)?;
+                let mut mpi = Vec::with_capacity(33);
+                mpi.push(0x40);
+                mpi.extend_from_slice(key.as_bytes());
+                let mpi = MpiRef::from_slice(&mpi);
+                mpi.to_writer(writer)?;
+            }
+            Self::Unsupported { curve, mpi } => {
+                let oid = curve.oid();
+                writer.write_u8(oid.len().try_into()?)?;
+                writer.write_all(&oid)?;
+
+                mpi.to_writer(writer)?;
+            }
+        }
+        Ok(())
+    }
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        match self {
+            Self::Ed25519 { key } => {
+                let oid = ECCCurve::Ed25519.oid();
+                sum += 1;
+                sum += oid.len();
+
+                let mut mpi = Vec::with_capacity(33);
+                mpi.push(0x40);
+                mpi.extend_from_slice(key.as_bytes());
+                let mpi = MpiRef::from_slice(&mpi);
+                sum += mpi.write_len();
+            }
+            Self::Unsupported { curve, mpi } => {
+                let oid = curve.oid();
+                sum += 1;
+                sum += oid.len();
+                sum += mpi.write_len();
+            }
+        }
         sum
     }
 }
@@ -493,15 +575,11 @@ impl Serialize for PublicParams {
                 g.to_writer(writer)?;
                 y.to_writer(writer)?;
             }
-            PublicParams::EdDSALegacy { ref curve, ref q } => {
-                let oid = curve.oid();
-                writer.write_u8(oid.len().try_into()?)?;
-                writer.write_all(&oid)?;
-
-                q.to_writer(writer)?;
+            PublicParams::EdDSALegacy(params) => {
+                params.to_writer(writer)?;
             }
             PublicParams::Ed25519 { ref public } => {
-                writer.write_all(&public[..])?;
+                writer.write_all(&public.as_bytes()[..])?;
             }
             PublicParams::X25519 { ref public } => {
                 writer.write_all(&public[..])?;
@@ -542,15 +620,11 @@ impl Serialize for PublicParams {
                 sum += g.write_len();
                 sum += y.write_len();
             }
-            PublicParams::EdDSALegacy { ref curve, ref q } => {
-                let oid = curve.oid();
-                sum += 1;
-                sum += oid.len();
-
-                sum += q.write_len();
+            PublicParams::EdDSALegacy(params) => {
+                sum += params.write_len();
             }
             PublicParams::Ed25519 { ref public } => {
-                sum += public.len();
+                sum += public.as_bytes().len();
             }
             PublicParams::X25519 { ref public } => {
                 sum += public.len();
@@ -598,6 +672,13 @@ mod tests {
             let components = dsa::Components::generate(&mut rng, dsa::KeySize::DSA_2048_256);
             let signing_key = dsa::SigningKey::generate(&mut rng, components);
             signing_key.verifying_key().clone()
+        }
+    }
+
+    proptest::prop_compose! {
+        pub fn ed25519_pub_gen()(bytes: [u8; 32]) -> ed25519_dalek::VerifyingKey {
+            let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);
+            ed25519_dalek::VerifyingKey::from(&secret)
         }
     }
 
@@ -691,10 +772,10 @@ mod tests {
                 .boxed()
                 .prop_map(|(p, g, y)| PublicParams::Elgamal { p, g, y })
                 .boxed(),
-            PublicKeyAlgorithm::EdDSALegacy => prop::arbitrary::any::<(ECCCurve, Mpi)>()
-                .prop_map(|(curve, q)| PublicParams::EdDSALegacy { curve, q })
+            PublicKeyAlgorithm::EdDSALegacy => prop::arbitrary::any::<EddsaLegacyPublicParams>()
+                .prop_map(PublicParams::EdDSALegacy)
                 .boxed(),
-            PublicKeyAlgorithm::Ed25519 => prop::arbitrary::any::<[u8; 32]>()
+            PublicKeyAlgorithm::Ed25519 => ed25519_pub_gen()
                 .prop_map(|public| PublicParams::Ed25519 { public })
                 .boxed(),
             PublicKeyAlgorithm::X25519 => prop::arbitrary::any::<[u8; 32]>()

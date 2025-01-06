@@ -6,7 +6,7 @@ use rsa::traits::PublicKeyParts;
 use sha1_checked::{Digest, Sha1};
 
 use crate::ser::Serialize;
-use crate::types::EcdhPublicParams;
+use crate::types::{EcdhPublicParams, EddsaLegacyPublicParams};
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -468,35 +468,34 @@ impl PublicKeyTrait for PubKeyInner {
                 ensure_eq!(sig.len(), 1, "invalid signature");
                 crypto::rsa::verify(&params.key, hash, hashed, sig[0].as_bytes())
             }
-            PublicParams::EdDSALegacy { ref curve, ref q } => {
-                let sig: &[Mpi] = sig.try_into()?;
+            PublicParams::EdDSALegacy(ref params) => {
+                match params {
+                    EddsaLegacyPublicParams::Ed25519 { ref key } => {
+                        let sig: &[Mpi] = sig.try_into()?;
 
-                ensure_eq!(sig.len(), 2);
+                        ensure_eq!(sig.len(), 2);
 
-                let r = sig[0].as_bytes();
-                let s = sig[1].as_bytes();
+                        let r = sig[0].as_bytes();
+                        let s = sig[1].as_bytes();
 
-                ensure!(r.len() < 33, "invalid R (len)");
-                ensure!(s.len() < 33, "invalid S (len)");
-                ensure_eq!(q.len(), 33, "invalid Q (len)");
-                ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
+                        ensure!(r.len() < 33, "invalid R (len)");
+                        ensure!(s.len() < 33, "invalid S (len)");
 
-                let public = &q[1..];
+                        let mut sig_bytes = vec![0u8; 64];
+                        // add padding if the values were encoded short
+                        sig_bytes[(32 - r.len())..32].copy_from_slice(r);
+                        sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
 
-                let mut sig_bytes = vec![0u8; 64];
-                // add padding if the values were encoded short
-                sig_bytes[(32 - r.len())..32].copy_from_slice(r);
-                sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
-
-                crypto::eddsa::verify(curve, public, hash, hashed, &sig_bytes)
+                        crypto::eddsa::verify(key, hash, hashed, &sig_bytes)
+                    }
+                    EddsaLegacyPublicParams::Unsupported { curve, .. } => {
+                        unsupported_err!("curve {:?} for EdDSA", curve.to_string());
+                    }
+                }
             }
-            PublicParams::Ed25519 { ref public } => crypto::eddsa::verify(
-                &crypto::ecc_curve::ECCCurve::Ed25519,
-                public,
-                hash,
-                hashed,
-                sig.try_into()?,
-            ),
+            PublicParams::Ed25519 { ref public } => {
+                crypto::eddsa::verify(public, hash, hashed, sig.try_into()?)
+            }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
             }

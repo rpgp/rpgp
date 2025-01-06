@@ -11,8 +11,8 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::IResult;
 use crate::types::{
-    mpi, DsaPublicParams, EcdhPublicParams, EcdsaPublicParams, KeyVersion, Mpi, MpiRef,
-    PublicParams, RsaPublicParams,
+    mpi, DsaPublicParams, EcdhPublicParams, EcdsaPublicParams, EddsaLegacyPublicParams, KeyVersion,
+    Mpi, MpiRef, PublicParams, RsaPublicParams,
 };
 
 #[inline]
@@ -47,13 +47,9 @@ fn eddsa_legacy(i: &[u8]) -> IResult<&[u8], PublicParams> {
     )(i)?;
     // MPI of an EC point representing a public key
     let (i, q) = mpi(i)?;
-    Ok((
-        i,
-        PublicParams::EdDSALegacy {
-            curve,
-            q: q.to_owned(),
-        },
-    ))
+    let res = EddsaLegacyPublicParams::try_from_mpi(curve, q).map(PublicParams::EdDSALegacy)?;
+
+    Ok((i, res))
 }
 
 /// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed2

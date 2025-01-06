@@ -16,11 +16,10 @@ use rand::{CryptoRng, Rng};
 use signature::{Signer as _, Verifier};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::types::{EddsaLegacyPublicParams, Mpi, PlainSecretParams, PublicParams};
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
 /// between curve Ed25519 and Ed448 (TODO: not yet implemented)
@@ -53,20 +52,16 @@ impl Signer for SecretKey {
         digest: &[u8],
         pub_params: &PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        let curve = match pub_params {
-            PublicParams::EdDSALegacy { curve, q } => {
-                ensure_eq!(q.len(), 33, "invalid Q (len)");
-                ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
-
-                curve
+        match pub_params {
+            PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. })
+            | PublicParams::Ed25519 { .. } => {}
+            PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported { curve, .. }) => {
+                unsupported_err!("curve {} for EdDSA", curve);
             }
-            PublicParams::Ed25519 { .. } => &ECCCurve::Ed25519,
-            _ => bail!("invalid public params"),
+            _ => {
+                bail!("invalid public params")
+            }
         };
-
-        if curve != &ECCCurve::Ed25519 {
-            unsupported_err!("curve {:?} for EdDSA", curve.to_string());
-        }
 
         let key = ed25519_dalek::SigningKey::from_bytes(&self.secret);
 
@@ -97,26 +92,16 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
     match mode {
         Mode::EdDSALegacy => {
-            // public key
-            let mut q = Vec::with_capacity(33);
-            q.push(0x40);
-            q.extend_from_slice(&public.to_bytes());
-
             // secret key
             let p = Mpi::from_slice(&secret.to_bytes());
 
             (
-                PublicParams::EdDSALegacy {
-                    curve: ECCCurve::Ed25519,
-                    q: Mpi::from_raw(q),
-                },
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key: public }),
                 PlainSecretParams::EdDSALegacy(p),
             )
         }
         Mode::Ed25519 => (
-            PublicParams::Ed25519 {
-                public: public.to_bytes(),
-            },
+            PublicParams::Ed25519 { public },
             PlainSecretParams::Ed25519(secret.to_bytes()),
         ),
     }
@@ -124,28 +109,21 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
 /// Verify an EdDSA signature.
 pub fn verify(
-    curve: &ECCCurve,
-    public: &[u8],
+    key: &ed25519_dalek::VerifyingKey,
     hash: HashAlgorithm,
     hashed: &[u8],
     sig_bytes: &[u8],
 ) -> Result<()> {
-    match *curve {
-        ECCCurve::Ed25519 => {
-            let Some(digest_size) = hash.digest_size() else {
-                bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
-            };
-            ensure!(
-                digest_size * 8 >= 256,
-                "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
-                hash,
-            );
+    let Some(digest_size) = hash.digest_size() else {
+        bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
+    };
+    ensure!(
+        digest_size * 8 >= 256,
+        "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
+        hash,
+    );
 
-            let pk: ed25519_dalek::VerifyingKey = public.try_into()?;
-            let sig = sig_bytes.try_into()?;
+    let sig = sig_bytes.try_into()?;
 
-            Ok(pk.verify(hashed, &sig)?)
-        }
-        _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-    }
+    Ok(key.verify(hashed, &sig)?)
 }

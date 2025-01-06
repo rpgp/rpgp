@@ -248,17 +248,19 @@ impl PlainSecretParamsRef<'_> {
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::EdDSALegacy(d) => match public_params {
-                PublicParams::EdDSALegacy { ref curve, .. } => match *curve {
-                    ECCCurve::Ed25519 => {
-                        const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }) => {
+                    const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
 
-                        Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
-                            oid: curve.oid(),
-                            secret: Self::pad_key::<SIZE>(d)?,
-                        }))
-                    }
-                    _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-                },
+                    Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
+                        oid: ECCCurve::Ed25519.oid(),
+                        secret: Self::pad_key::<SIZE>(d)?,
+                    }))
+                }
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
+                    curve, ..
+                }) => {
+                    unsupported_err!("curve {:?} for EdDSA", curve.to_string());
+                }
                 _ => unreachable!("inconsistent key state"),
             },
             PlainSecretParamsRef::Ed25519(d) => {
