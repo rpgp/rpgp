@@ -258,7 +258,7 @@ mod tests {
 
         fn arbitrary() -> Self::Strategy {
             any::<PublicKeyAlgorithm>()
-                .prop_flat_map(|alg| Self::arbitrary_with(alg))
+                .prop_flat_map(Self::arbitrary_with)
                 .boxed()
         }
 

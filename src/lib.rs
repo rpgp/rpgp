@@ -11,13 +11,7 @@
 
 #![cfg_attr(not(feature = "mmap"), forbid(unsafe_code))]
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
-#![allow(
-    clippy::missing_const_for_fn,
-    clippy::use_self,
-    clippy::needless_borrows_for_generic_args,
-    clippy::type_complexity,
-    clippy::incompatible_msrv
-)]
+#![allow(clippy::missing_const_for_fn, clippy::type_complexity)]
 
 #[cfg(test)]
 #[macro_use]

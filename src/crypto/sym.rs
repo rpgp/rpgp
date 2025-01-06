@@ -556,7 +556,7 @@ impl SymmetricKeyAlgorithm {
 
         // mdc header
         let mdc_header = [0xD3, 0x14];
-        hasher.update(&mdc_header);
+        hasher.update(mdc_header);
 
         let mut mdc = [0u8; 22];
         mdc[..2].copy_from_slice(&mdc_header);

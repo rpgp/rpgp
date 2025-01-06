@@ -387,7 +387,7 @@ impl PublicKeyTrait for PubKeyInner {
                 let mut h = sha2::Sha256::new();
 
                 // a.1) 0x9B (1 octet)
-                h.update(&[0x9B]);
+                h.update([0x9B]);
 
                 // a.2) four-octet scalar octet count of (b)-(f)
                 let total_len: u32 = 1 + 4 + 1 + 4 + pp.len() as u32;
@@ -395,14 +395,14 @@ impl PublicKeyTrait for PubKeyInner {
                     .expect("write to hasher");
 
                 // b) version number = 6 (1 octet);
-                h.update(&[0x06]);
+                h.update([0x06]);
 
                 // c) timestamp of key creation (4 octets);
                 h.write_u32::<BigEndian>(self.created_at.timestamp() as u32)
                     .expect("write to hasher");
 
                 // d) algorithm (1 octet);
-                h.update(&[self.algorithm.into()]);
+                h.update([self.algorithm.into()]);
 
                 // e) four-octet scalar octet count for the following key material;
                 h.write_u32::<BigEndian>(pp.len() as u32)

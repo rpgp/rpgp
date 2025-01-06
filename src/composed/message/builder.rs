@@ -257,7 +257,7 @@ impl Builder {
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&out_path)?;
+            .open(out_path)?;
         let mut out_file = BufWriter::new(out_file);
 
         self.to_writer(rng, &mut out_file)?;

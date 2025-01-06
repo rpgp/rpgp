@@ -68,7 +68,7 @@ where
     Q: AsRef<Path>,
 {
     let in_path = in_path.as_ref();
-    let in_file = std::fs::File::open(&in_path)?;
+    let in_file = std::fs::File::open(in_path)?;
     let in_meta = in_file.metadata()?;
     let in_file_size = in_meta.len();
     let Some(in_file_name) = in_path.file_name() else {
@@ -84,7 +84,7 @@ where
         .create(true)
         .write(true)
         .truncate(true)
-        .open(&out_path)?;
+        .open(out_path)?;
     let mut out_file = BufWriter::new(out_file);
 
     // Encryption
