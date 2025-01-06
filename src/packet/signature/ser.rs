@@ -169,7 +169,7 @@ impl Subpacket {
         Ok(())
     }
 
-    fn body_len(&self) -> Result<usize> {
+    fn body_len(&self) -> usize {
         let len = match &self.data {
             SubpacketData::SignatureCreationTime(_) => 4,
             SubpacketData::SignatureExpirationTime(_) => 4,
@@ -212,7 +212,7 @@ impl Subpacket {
             SubpacketData::SignatureTarget(_, _, hash) => 2 + hash.len(),
         };
 
-        Ok(len)
+        len
     }
 
     pub fn typ(&self) -> SubpacketType {
@@ -258,7 +258,7 @@ impl Subpacket {
 
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_length(1 + self.body_len()?, writer)?;
+        write_packet_length(1 + self.body_len(), writer)?;
         writer.write_u8(self.typ().as_u8(self.is_critical))?;
         self.body_to_writer(writer)?;
 
@@ -266,7 +266,7 @@ impl Serialize for Subpacket {
     }
 
     fn write_len(&self) -> usize {
-        let body_len = self.body_len().unwrap();
+        let body_len = self.body_len();
         let mut sum = write_packet_length_len(1 + body_len);
         sum += 1;
         sum += body_len;

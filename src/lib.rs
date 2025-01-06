@@ -11,14 +11,6 @@
 
 #![cfg_attr(not(feature = "mmap"), forbid(unsafe_code))]
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
-#![deny(
-    clippy::all,
-    clippy::style,
-    clippy::perf,
-    clippy::complexity,
-    clippy::correctness,
-    rust_2018_idioms
-)]
 #![allow(
     clippy::missing_const_for_fn,
     clippy::use_self,

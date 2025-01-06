@@ -29,6 +29,7 @@ enum Source {
     File(PathBuf),
 }
 
+#[allow(dead_code)]
 enum Encryption {
     None,
     PasswordSeipdV1 {
@@ -201,11 +202,7 @@ impl Builder {
                     config.to_writer(&mut out)?;
                     sym_alg.encrypt_protected_stream(rng, &session_key, to_encode, &mut out)?;
                 }
-                Encryption::KeysSeipdV1 {
-                    sym_alg,
-                    session_key,
-                    esk,
-                } => {
+                Encryption::KeysSeipdV1 { .. } => {
                     todo!()
                 }
             }

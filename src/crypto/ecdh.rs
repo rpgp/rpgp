@@ -449,7 +449,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
             let our_secret = StaticSecret::from(*our_secret_key_bytes);
 
             // derive shared secret
-            let shared_secret = our_secret.diffie_hellman(&their_public);
+            let shared_secret = our_secret.diffie_hellman(their_public);
 
             // Encode public point: prefix with 0x40
             let mut encoded_public = Vec::with_capacity(33);
@@ -520,7 +520,7 @@ where
     let our_secret = elliptic_curve::ecdh::EphemeralSecret::<C>::random(&mut rng);
 
     // derive shared secret
-    let shared_secret = our_secret.diffie_hellman(&their_public);
+    let shared_secret = our_secret.diffie_hellman(their_public);
 
     // encode our public key
     let our_public = elliptic_curve::PublicKey::<C>::from(&our_secret);

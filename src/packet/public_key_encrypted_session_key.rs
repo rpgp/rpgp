@@ -194,7 +194,7 @@ impl PublicKeyEncryptedSessionKey {
     pub fn algorithm(&self) -> Result<PublicKeyAlgorithm> {
         match self {
             Self::V3 { pk_algo, .. } | Self::V6 { pk_algo, .. } => Ok(*pk_algo),
-            _ => bail!("PublicKeyAlgorithm unknown for {:?}", self),
+            Self::Other { .. } => bail!("PublicKeyAlgorithm unknown for {:?}", self),
         }
     }
 
@@ -389,9 +389,16 @@ impl Serialize for PublicKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_u8(self.version().into())?;
 
-        match self {
-            PublicKeyEncryptedSessionKey::V3 { id, .. } => writer.write_all(id.as_ref())?,
-            PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } => {
+        let algorithm = match self {
+            PublicKeyEncryptedSessionKey::V3 { id, pk_algo, .. } => {
+                writer.write_all(id.as_ref())?;
+                *pk_algo
+            }
+            PublicKeyEncryptedSessionKey::V6 {
+                fingerprint,
+                pk_algo,
+                ..
+            } => {
                 // A one-octet size of the following two fields.
                 // This size may be zero, if the key version number field and the fingerprint field
                 // are omitted for an "anonymous recipient" (see Section 5.1.8).
@@ -415,11 +422,11 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                     }
                     _ => writer.write_u8(0)?,
                 }
+                *pk_algo
             }
             PublicKeyEncryptedSessionKey::Other { .. } => todo!(),
-        }
+        };
 
-        let algorithm = self.algorithm()?;
         writer.write_u8(algorithm.into())?;
 
         match (algorithm, self.values()?) {
@@ -544,11 +551,22 @@ impl Serialize for PublicKeyEncryptedSessionKey {
     fn write_len(&self) -> usize {
         let mut sum = 1;
 
-        match self {
-            PublicKeyEncryptedSessionKey::V3 { id, .. } => {
+        let (algorithm, values) = match self {
+            PublicKeyEncryptedSessionKey::V3 {
+                id,
+                pk_algo,
+                values,
+                ..
+            } => {
                 sum += id.as_ref().len();
+                (*pk_algo, values)
             }
-            PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } => {
+            PublicKeyEncryptedSessionKey::V6 {
+                fingerprint,
+                pk_algo,
+                values,
+                ..
+            } => {
                 // A one-octet size of the following two fields.
                 // This size may be zero, if the key version number field and the fingerprint field
                 // are omitted for an "anonymous recipient" (see Section 5.1.8).
@@ -575,14 +593,14 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                         sum += 1;
                     }
                 }
+                (*pk_algo, values)
             }
             PublicKeyEncryptedSessionKey::Other { .. } => todo!(),
-        }
+        };
 
-        let algorithm = self.algorithm().unwrap();
         sum += 1;
 
-        match (algorithm, self.values().unwrap()) {
+        match (algorithm, values) {
             (
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSASign

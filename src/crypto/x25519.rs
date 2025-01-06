@@ -150,7 +150,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
         let our_secret = StaticSecret::from(*ephemeral_secret_key_bytes);
 
         // derive shared secret
-        let shared_secret = our_secret.diffie_hellman(&recipient_public);
+        let shared_secret = our_secret.diffie_hellman(recipient_public);
 
         // Encode public point
         let ephemeral_public = x25519_dalek::PublicKey::from(&our_secret);

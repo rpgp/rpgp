@@ -56,7 +56,7 @@ pub fn compress_encrypt_with_password_seipdv1<R, P, Q, F>(
     mut rng: R,
     in_path: P,
     out_path: Q,
-    compression: CompressionAlgorithm,
+    _compression: CompressionAlgorithm,
     s2k: StringToKey,
     sym_alg: SymmetricKeyAlgorithm,
     msg_pw: F,

@@ -78,7 +78,7 @@ impl Serialize for EcdhPublicParams {
                 Some((hash, alg_sym))
             }
             Self::Unsupported { opaque, .. } => {
-                writer.write_all(&opaque)?;
+                writer.write_all(opaque)?;
                 None
             }
         };
