@@ -7,7 +7,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{aes_kw, Decryptor, KeyParams};
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams};
+use crate::types::{PlainSecretParams, PublicParams, X25519PublicParams};
 
 /// Secret key for X25519
 #[derive(Clone, derive_more::Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
@@ -93,7 +93,7 @@ pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecre
     let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
 
     (
-        PublicParams::X25519 { public },
+        PublicParams::X25519(X25519PublicParams { key: public }),
         PlainSecretParams::X25519(q_raw),
     )
 }
@@ -248,7 +248,7 @@ mod tests {
 
         let (pkey, skey) = generate_key(&mut rng);
 
-        let PublicParams::X25519 { ref public } = pkey else {
+        let PublicParams::X25519(ref params) = pkey else {
             panic!("invalid key generated")
         };
         let SecretKeyRepr::X25519(ref secret) = skey.as_ref().as_repr(&pkey).unwrap() else {
@@ -263,11 +263,11 @@ mod tests {
                 let mut plain = vec![0u8; text_size];
                 rng.fill_bytes(&mut plain);
 
-                let (ephemeral, enc_sk) = encrypt(&mut rng, public, &plain[..]).unwrap();
+                let (ephemeral, enc_sk) = encrypt(&mut rng, &params.key, &plain[..]).unwrap();
 
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
-                    recipient_public: public.to_bytes(),
+                    recipient_public: params.key.to_bytes(),
                     encrypted_session_key: enc_sk.deref(),
                 };
 

@@ -11,6 +11,7 @@ pub enum PublicKeyAlgorithm {
     /// DEPRECATED: RSA (Sign-Only)
     RSASign = 3,
     /// Elgamal (Sign-Only)
+    #[cfg_attr(test, proptest(skip))]
     ElgamalSign = 16,
     /// DSA (Digital Signature Algorithm)
     DSA = 17,
@@ -19,19 +20,22 @@ pub enum PublicKeyAlgorithm {
     /// ECDSA: RFC 9580 [formerly in RFC 6637]
     ECDSA = 19,
     /// DEPRECATED: Elgamal (Encrypt and Sign)
+    #[cfg_attr(test, proptest(skip))]
     Elgamal = 20,
     /// Reserved for Diffie-Hellman (X9.42, as defined for IETF-S/MIME)
+    #[cfg_attr(test, proptest(skip))]
     DiffieHellman = 21,
     /// EdDSA legacy format [deprecated in RFC 9580, superseded by Ed25519 (27)]
     EdDSALegacy = 22,
-
     /// X25519 [RFC 9580]
     X25519 = 25,
     /// X448 [RFC 9580]
+    #[cfg_attr(test, proptest(skip))]
     X448 = 26,
     /// Ed25519 [RFC 9580]
     Ed25519 = 27,
     /// Ed448 [RFC 9580]
+    #[cfg_attr(test, proptest(skip))]
     Ed448 = 28,
 
     /// Private experimental range (from OpenPGP)

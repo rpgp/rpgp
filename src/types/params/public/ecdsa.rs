@@ -2,11 +2,14 @@ use std::io;
 
 use byteorder::WriteBytesExt;
 use elliptic_curve::sec1::ToEncodedPoint;
+use nom::combinator::map_opt;
+use nom::multi::length_data;
+use nom::number::streaming::be_u8;
 
-use crate::crypto::ecc_curve::ECCCurve;
-use crate::errors::Result;
+use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
+use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiRef};
+use crate::types::{mpi, Mpi, MpiRef};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -32,7 +35,22 @@ pub enum EcdsaPublicParams {
 }
 
 impl EcdsaPublicParams {
-    pub fn try_from_mpi(p: MpiRef<'_>, curve: ECCCurve) -> Result<Self> {
+    /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ec>
+    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
+        let (i, curve) = map_opt(
+            // a one-octet size of the following field
+            length_data(be_u8),
+            // octets representing a curve OID
+            ecc_curve_from_oid,
+        )(i)?;
+
+        // MPI of an EC point representing a public key
+        let (i, p) = mpi(i)?;
+        let params = EcdsaPublicParams::try_from_mpi(p, curve)?;
+        Ok((i, params))
+    }
+
+    fn try_from_mpi(p: MpiRef<'_>, curve: ECCCurve) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
                 ensure!(p.len() <= 65, "invalid public key length");
@@ -161,6 +179,9 @@ impl Serialize for EcdsaPublicParams {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
     use rand::SeedableRng;
 
     proptest::prop_compose! {
@@ -188,6 +209,24 @@ mod tests {
         pub fn k256_pub_gen()(seed: u64) -> k256::PublicKey {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
             k256::SecretKey::random(&mut rng).public_key()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn params_write_len(params: EcdsaPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            prop_assert_eq!(buf.len(), params.write_len());
+        }
+
+        #[test]
+        fn params_roundtrip(params: EcdsaPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            let (i, new_params) = EcdsaPublicParams::try_from_slice(&buf)?;
+            assert!(i.is_empty());
+            prop_assert_eq!(params, new_params);
         }
     }
 }

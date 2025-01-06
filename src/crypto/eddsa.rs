@@ -19,7 +19,9 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{EddsaLegacyPublicParams, Mpi, PlainSecretParams, PublicParams};
+use crate::types::{
+    Ed25519PublicParams, EddsaLegacyPublicParams, Mpi, PlainSecretParams, PublicParams,
+};
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
 /// between curve Ed25519 and Ed448 (TODO: not yet implemented)
@@ -101,7 +103,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
             )
         }
         Mode::Ed25519 => (
-            PublicParams::Ed25519 { public },
+            PublicParams::Ed25519(Ed25519PublicParams { key: public }),
             PlainSecretParams::Ed25519(secret.to_bytes()),
         ),
     }

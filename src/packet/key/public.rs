@@ -19,15 +19,11 @@ use crate::{
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct PublicKey(
-    #[cfg_attr(test, proptest(strategy = "tests::pub_key_inner_gen()"))] PubKeyInner,
-);
+pub struct PublicKey(PubKeyInner);
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct PublicSubkey(
-    #[cfg_attr(test, proptest(strategy = "tests::pub_key_inner_gen()"))] PubKeyInner,
-);
+pub struct PublicSubkey(PubKeyInner);
 
 impl PublicKey {
     /// Create a new `PublicKey` packet from underlying parameters.
@@ -493,8 +489,8 @@ impl PublicKeyTrait for PubKeyInner {
                     }
                 }
             }
-            PublicParams::Ed25519 { ref public } => {
-                crypto::eddsa::verify(public, hash, hashed, sig.try_into()?)
+            PublicParams::Ed25519(ref params) => {
+                crypto::eddsa::verify(&params.key, hash, hashed, sig.try_into()?)
             }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
@@ -575,7 +571,7 @@ impl PublicKeyTrait for PubKeyInner {
                     crypto::ecdh::encrypt(rng, params, self.fingerprint().as_bytes(), plain)
                 }
             },
-            PublicParams::X25519 { ref public } => {
+            PublicParams::X25519(ref params) => {
                 let (sym_alg, plain) = match typ {
                     EskType::V6 => (None, plain),
                     EskType::V3_4 => {
@@ -588,7 +584,8 @@ impl PublicKeyTrait for PubKeyInner {
                     }
                 };
 
-                let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, &*public, plain)?;
+                let (ephemeral, session_key) =
+                    crypto::x25519::encrypt(&mut rng, &params.key, plain)?;
 
                 Ok(PkeskBytes::X25519 {
                     ephemeral,
@@ -777,100 +774,111 @@ impl PublicKeyTrait for PublicSubkey {
 mod tests {
     use super::*;
 
-    use crate::packet::PacketTrait;
+    use chrono::TimeZone;
     use proptest::prelude::*;
 
-    pub fn pub_key_inner_gen() -> impl proptest::prelude::Strategy<Value = PubKeyInner> {
-        use chrono::TimeZone;
-        use proptest::prelude::*;
+    use crate::packet::PacketTrait;
 
-        fn v3_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
-            prop_oneof![Just(PublicKeyAlgorithm::RSA),].boxed()
-        }
-        fn v4_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
-            prop_oneof![
-                Just(PublicKeyAlgorithm::RSA),
-                Just(PublicKeyAlgorithm::DSA),
-                Just(PublicKeyAlgorithm::ECDSA),
-                Just(PublicKeyAlgorithm::ECDH),
-                Just(PublicKeyAlgorithm::Elgamal),
-                Just(PublicKeyAlgorithm::EdDSALegacy),
-                Just(PublicKeyAlgorithm::Ed25519),
-                Just(PublicKeyAlgorithm::X25519),
-            ]
-            .boxed()
-        }
-        fn v6_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
-            prop_oneof![
-                Just(PublicKeyAlgorithm::RSA),
-                Just(PublicKeyAlgorithm::DSA),
-                Just(PublicKeyAlgorithm::ECDSA),
-                Just(PublicKeyAlgorithm::Elgamal),
-                Just(PublicKeyAlgorithm::Ed25519),
-                Just(PublicKeyAlgorithm::X25519),
-                // cfg is not working here
-                // Just(PublicKeyAlgorithm::X448),
-            ]
-            .boxed()
-        }
+    fn v3_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![Just(PublicKeyAlgorithm::RSA),].boxed()
+    }
+    fn v4_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![
+            Just(PublicKeyAlgorithm::RSA),
+            Just(PublicKeyAlgorithm::DSA),
+            Just(PublicKeyAlgorithm::ECDSA),
+            Just(PublicKeyAlgorithm::ECDH),
+            Just(PublicKeyAlgorithm::Elgamal),
+            Just(PublicKeyAlgorithm::EdDSALegacy),
+            Just(PublicKeyAlgorithm::Ed25519),
+            Just(PublicKeyAlgorithm::X25519),
+        ]
+        .boxed()
+    }
+    fn v6_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![
+            Just(PublicKeyAlgorithm::RSA),
+            Just(PublicKeyAlgorithm::DSA),
+            Just(PublicKeyAlgorithm::ECDSA),
+            Just(PublicKeyAlgorithm::Elgamal),
+            Just(PublicKeyAlgorithm::Ed25519),
+            Just(PublicKeyAlgorithm::X25519),
+            // cfg is not working here
+            // Just(PublicKeyAlgorithm::X448),
+        ]
+        .boxed()
+    }
 
-        prop::arbitrary::any::<(Version, KeyVersion, u32, u16)>()
-            .prop_flat_map(|(packet_version, version, created_at, expiration)| {
-                let created_at = chrono::Utc
-                    .timestamp_opt(created_at as i64, 0)
-                    .single()
-                    .expect("invalid time");
-                match version {
-                    KeyVersion::V2 | KeyVersion::V3 => (
-                        Just(packet_version),
-                        Just(version),
-                        Just(created_at),
-                        Just(Some(expiration)),
-                        v3_alg(),
-                    ),
-                    KeyVersion::V4 => (
-                        Just(packet_version),
-                        Just(version),
-                        Just(created_at),
-                        Just(None),
-                        v4_alg(),
-                    ),
-                    KeyVersion::V5 | KeyVersion::V6 => (
-                        Just(packet_version),
-                        Just(version),
-                        Just(created_at),
-                        Just(None),
-                        v6_alg(),
-                    ),
-                    KeyVersion::Other(_) => unimplemented!(),
-                }
-            })
-            .prop_flat_map(
-                |(packet_version, version, created_at, expiration, algorithm)| {
-                    let public_params = crate::types::public_params_gen(algorithm);
-                    (
-                        Just(packet_version),
-                        Just(version),
-                        Just(algorithm),
-                        Just(created_at),
-                        Just(expiration),
-                        public_params,
-                    )
-                },
-            )
-            .prop_map(
-                |(packet_version, version, algorithm, created_at, expiration, public_params)| {
-                    PubKeyInner::new(
+    impl Arbitrary for PubKeyInner {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<PubKeyInner>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<(Version, KeyVersion, u32, u16)>()
+                .prop_flat_map(|(packet_version, version, created_at, expiration)| {
+                    let created_at = chrono::Utc
+                        .timestamp_opt(created_at as i64, 0)
+                        .single()
+                        .expect("invalid time");
+                    match version {
+                        KeyVersion::V2 | KeyVersion::V3 => (
+                            Just(packet_version),
+                            Just(version),
+                            Just(created_at),
+                            Just(Some(expiration)),
+                            v3_alg(),
+                        ),
+                        KeyVersion::V4 => (
+                            Just(packet_version),
+                            Just(version),
+                            Just(created_at),
+                            Just(None),
+                            v4_alg(),
+                        ),
+                        KeyVersion::V5 | KeyVersion::V6 => (
+                            Just(packet_version),
+                            Just(version),
+                            Just(created_at),
+                            Just(None),
+                            v6_alg(),
+                        ),
+                        KeyVersion::Other(_) => unimplemented!(),
+                    }
+                })
+                .prop_flat_map(
+                    |(packet_version, version, created_at, expiration, algorithm)| {
+                        (
+                            Just(packet_version),
+                            Just(version),
+                            Just(algorithm),
+                            Just(created_at),
+                            Just(expiration),
+                            any_with::<PublicParams>(algorithm),
+                        )
+                    },
+                )
+                .prop_map(
+                    |(
                         packet_version,
                         version,
                         algorithm,
                         created_at,
                         expiration,
                         public_params,
-                    )
-                    .unwrap()
-                },
-            )
+                    )| {
+                        PubKeyInner::new(
+                            packet_version,
+                            version,
+                            algorithm,
+                            created_at,
+                            expiration,
+                            public_params,
+                        )
+                        .unwrap()
+                    },
+                )
+                .boxed()
+        }
     }
 
     proptest! {

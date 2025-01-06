@@ -1,11 +1,14 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
+use nom::combinator::map_opt;
+use nom::multi::length_data;
+use nom::number::streaming::be_u8;
 
-use crate::crypto::ecc_curve::ECCCurve;
-use crate::errors::Result;
+use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
+use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiRef};
+use crate::types::{mpi, Mpi, MpiRef};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -19,7 +22,22 @@ pub enum EddsaLegacyPublicParams {
 }
 
 impl EddsaLegacyPublicParams {
-    pub fn try_from_mpi(curve: ECCCurve, mpi: MpiRef<'_>) -> Result<Self> {
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed>
+    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
+        let (i, curve) = map_opt(
+            // a one-octet size of the following field
+            length_data(be_u8),
+            // octets representing a curve OID
+            ecc_curve_from_oid,
+        )(i)?;
+        // MPI of an EC point representing a public key
+        let (i, q) = mpi(i)?;
+        let res = Self::try_from_mpi(curve, q)?;
+
+        Ok((i, res))
+    }
+
+    fn try_from_mpi(curve: ECCCurve, mpi: MpiRef<'_>) -> Result<Self> {
         match curve {
             ECCCurve::Ed25519 => {
                 ensure_eq!(mpi.len(), 33, "invalid Q (len)");
@@ -94,10 +112,31 @@ impl Serialize for EddsaLegacyPublicParams {
 
 #[cfg(test)]
 pub(super) mod tests {
+    use super::*;
+    use proptest::prelude::*;
+
     proptest::prop_compose! {
         pub fn ed25519_pub_gen()(bytes: [u8; 32]) -> ed25519_dalek::VerifyingKey {
             let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);
             ed25519_dalek::VerifyingKey::from(&secret)
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn params_write_len(params: EddsaLegacyPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            prop_assert_eq!(buf.len(), params.write_len());
+        }
+
+        #[test]
+        fn params_roundtrip(params: EddsaLegacyPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            let (i, new_params) = EddsaLegacyPublicParams::try_from_slice(&buf)?;
+            assert!(i.is_empty());
+            prop_assert_eq!(params, new_params);
         }
     }
 }

@@ -3,9 +3,9 @@ use std::io;
 use num_bigint::BigUint;
 use rsa::traits::PublicKeyParts;
 
-use crate::errors::Result;
+use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiRef};
+use crate::types::{mpi, Mpi, MpiRef};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -15,7 +15,15 @@ pub struct RsaPublicParams {
 }
 
 impl RsaPublicParams {
-    pub fn try_from_mpi(n: MpiRef<'_>, e: MpiRef<'_>) -> Result<Self> {
+    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
+        let (i, n) = mpi(i)?;
+        let (i, e) = mpi(i)?;
+
+        let params = RsaPublicParams::try_from_mpi(n, e)?;
+        Ok((i, params))
+    }
+
+    fn try_from_mpi(n: MpiRef<'_>, e: MpiRef<'_>) -> Result<Self> {
         let key = rsa::RsaPublicKey::new_with_max_size(
             BigUint::from_bytes_be(n.as_bytes()),
             BigUint::from_bytes_be(e.as_bytes()),
@@ -53,12 +61,35 @@ impl Serialize for RsaPublicParams {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
     use rand::SeedableRng;
 
-    proptest::prop_compose! {
+    prop_compose! {
         pub fn rsa_pub_gen()(seed: u64) -> rsa::RsaPublicKey {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-            rsa::RsaPrivateKey::new(&mut rng, 1024).unwrap().to_public_key()
+            rsa::RsaPrivateKey::new(&mut rng, 512).unwrap().to_public_key()
+        }
+    }
+
+    proptest! {
+        #[test]
+        #[ignore]
+        fn params_write_len(params: RsaPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            prop_assert_eq!(buf.len(), params.write_len());
+        }
+
+        #[test]
+        #[ignore]
+        fn params_roundtrip(params: RsaPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            let (i, new_params) = RsaPublicParams::try_from_slice(&buf)?;
+            assert!(i.is_empty());
+            prop_assert_eq!(params, new_params);
         }
     }
 }

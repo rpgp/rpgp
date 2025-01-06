@@ -1,13 +1,17 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
+use nom::bytes::streaming::{tag, take};
+use nom::combinator::{map, map_opt, map_res};
+use nom::multi::length_data;
+use nom::number::streaming::be_u8;
 
-use crate::crypto::ecc_curve::ECCCurve;
+use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::{IResult, Result};
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiRef};
+use crate::types::{mpi, Mpi, MpiRef};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -147,7 +151,52 @@ impl EcdhPublicParams {
         }
     }
 
-    pub fn try_from_mpi(
+    /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ecd>
+    pub fn try_from_slice(i: &[u8], len: Option<usize>) -> IResult<&[u8], Self> {
+        // a one-octet size of the following field
+        // octets representing a curve OID
+        let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
+
+        match curve {
+            ECCCurve::Curve25519 | ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 => {
+                // MPI of an EC point representing a public key
+                let (i, p) = mpi(i)?;
+
+                // a one-octet size of the following fields
+                let (i, _len2) = be_u8(i)?;
+
+                // a one-octet value 01, reserved for future extensions
+                let (i, _tag) = tag(&[1][..])(i)?;
+
+                // a one-octet hash function ID used with a KDF
+                let (i, hash) = map(be_u8, HashAlgorithm::from)(i)?;
+
+                // a one-octet algorithm ID for the symmetric algorithm used to wrap
+                // the symmetric key used for the message encryption
+                let (i, alg_sym) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+
+                let params = Self::try_from_mpi(p, curve, hash, alg_sym)?;
+                Ok((i, params))
+            }
+            _ => {
+                let (i, data) = if let Some(pub_len) = len {
+                    let (i, data) = take(pub_len)(i)?;
+                    (i, data.to_vec())
+                } else {
+                    (i, vec![])
+                };
+                Ok((
+                    i,
+                    EcdhPublicParams::Unsupported {
+                        curve,
+                        opaque: data,
+                    },
+                ))
+            }
+        }
+    }
+
+    fn try_from_mpi(
         p: MpiRef<'_>,
         curve: ECCCurve,
         hash: HashAlgorithm,
@@ -190,6 +239,8 @@ pub(super) mod tests {
     use rand::RngCore;
     use rand::SeedableRng;
 
+    use proptest::prelude::*;
+
     proptest::prop_compose! {
         pub fn ecdh_curve25519_gen()(seed: u64) -> x25519_dalek::PublicKey {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
@@ -219,6 +270,24 @@ pub(super) mod tests {
         pub fn ecdh_p521_gen()(seed: u64) -> elliptic_curve::PublicKey<p521::NistP521> {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
             elliptic_curve::SecretKey::<p521::NistP521>::random(&mut rng).public_key()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn params_write_len(params: EcdhPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            prop_assert_eq!(buf.len(), params.write_len());
+        }
+
+        #[test]
+        fn params_roundtrip(params: EcdhPublicParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf)?;
+            let (i, new_params) = EcdhPublicParams::try_from_slice(&buf, None)?;
+            assert!(i.is_empty());
+            prop_assert_eq!(params, new_params);
         }
     }
 }

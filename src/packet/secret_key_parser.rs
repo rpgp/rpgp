@@ -5,7 +5,6 @@ use nom::sequence::tuple;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, IResult};
-use crate::packet::public_key_parser::parse_pub_fields;
 use crate::types::{KeyVersion, PublicParams, SecretParams};
 
 /// Parse the whole private key, both public and private fields.
@@ -16,7 +15,7 @@ fn parse_pub_priv_fields(
 ) -> impl Fn(&[u8]) -> IResult<&[u8], (PublicParams, SecretParams)> {
     move |i| {
         map_res(
-            tuple((parse_pub_fields(typ, pub_len), rest)),
+            tuple((PublicParams::try_from_slice(typ, pub_len), rest)),
             |(pub_params, v)| {
                 if let Some(pub_len) = pub_len {
                     // if we received a public key material length (from a v6 secret key packet),

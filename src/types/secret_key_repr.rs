@@ -57,7 +57,7 @@ impl SecretKeyRepr {
                 },
             ) => {
                 // Recipient public key (32 bytes)
-                let PublicParams::X25519 { public } = recipient.public_params() else {
+                let PublicParams::X25519(params) = recipient.public_params() else {
                     bail!(
                         "Unexpected recipient public_params {:?} for X25519",
                         recipient.public_params()
@@ -66,7 +66,7 @@ impl SecretKeyRepr {
 
                 let data = x25519::EncryptionFields {
                     ephemeral_public_point: ephemeral.to_owned(),
-                    recipient_public: public.to_bytes(),
+                    recipient_public: params.key.to_bytes(),
                     encrypted_session_key: session_key,
                 };
 
