@@ -1,4 +1,4 @@
-use dsa::{Components, Signature, SigningKey, VerifyingKey};
+use dsa::{Components, Signature, SigningKey};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::PrehashVerifier;
@@ -7,7 +7,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams};
+use crate::types::{DsaPublicParams, PlainSecretParams, PublicParams};
 
 pub use dsa::KeySize;
 
@@ -25,12 +25,10 @@ impl Signer for SecretKey {
         digest: &[u8],
         pub_params: &PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        let PublicParams::DSA { p, q, g, y } = pub_params else {
+        let PublicParams::DSA(DsaPublicParams { key }) = pub_params else {
             bail!("invalid public params");
         };
-        let components = Components::from_components(p.into(), q.into(), g.into())?;
-        let verifying_key = VerifyingKey::from_components(components, y.into())?;
-        let signing_key = SigningKey::from_components(verifying_key, self.x.clone())?;
+        let signing_key = SigningKey::from_components(key.clone(), self.x.clone())?;
 
         let signature = match hash_algorithm {
             HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
@@ -59,19 +57,9 @@ impl Signer for SecretKey {
 }
 
 /// Verify a DSA signature.
-pub fn verify(
-    p: BigUint,
-    q: BigUint,
-    g: BigUint,
-    y: BigUint,
-    hashed: &[u8],
-    r: BigUint,
-    s: BigUint,
-) -> Result<()> {
-    let components = Components::from_components(p, q, g)?;
-    let verifying_key = VerifyingKey::from_components(components, y)?;
+pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BigUint, s: BigUint) -> Result<()> {
+    let verifying_key = &params.key;
     let signature = Signature::from_components(r, s)?;
-
     verifying_key.verify_prehash(hashed, &signature)?;
 
     Ok(())
@@ -85,24 +73,19 @@ pub fn generate_key<R: Rng + CryptoRng>(
     let components = Components::generate(&mut rng, key_size);
     let signing_key = SigningKey::generate(&mut rng, components);
     let verifying_key = signing_key.verifying_key();
-    let p = verifying_key.components().p();
-    let q = verifying_key.components().q();
-    let g = verifying_key.components().g();
-    let y = verifying_key.y();
 
     let x = signing_key.x();
-    let public_params = PublicParams::DSA {
-        p: p.into(),
-        q: q.into(),
-        g: g.into(),
-        y: y.into(),
-    };
+    let public_params = PublicParams::DSA(DsaPublicParams {
+        key: verifying_key.clone(),
+    });
     let secret_params = PlainSecretParams::DSA(x.into());
     Ok((public_params, secret_params))
 }
 
 #[cfg(test)]
 mod test {
+    use crate::types::Mpi;
+
     use super::*;
 
     use num_traits::Num;
@@ -147,24 +130,26 @@ mod test {
              82F65CBDC4FAE93C2EA212390E54905A86E2223170B44EAA7DA5DD9FFCFB7F3B",
         );
 
+        let params = DsaPublicParams::try_from_mpi(
+            Mpi::from(p).as_ref(),
+            Mpi::from(q).as_ref(),
+            Mpi::from(g).as_ref(),
+            Mpi::from(y).as_ref(),
+        )
+        .unwrap();
+
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
                 let key = SecretKey { x: x.clone() };
-                let params = PublicParams::DSA {
-                    p: p.clone().into(),
-                    q: q.clone().into(),
-                    g: g.clone().into(),
-                    y: y.clone().into(),
-                };
+
                 let res = key
-                    .sign(hash_algorithm, &hashed, &params)
+                    .sign(hash_algorithm, &hashed, &PublicParams::DSA(params.clone()))
                     .expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
                 assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
-                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
-                    .expect("failed to verify");
+                verify(&params, &hashed, r, s).expect("failed to verify");
             };
 
         check(
@@ -281,24 +266,26 @@ mod test {
              74E04299F132026601638CB87AB79190D4A0986315DA8EEC6561C938996BEADF",
         );
 
+        let params = DsaPublicParams::try_from_mpi(
+            Mpi::from(p).as_ref(),
+            Mpi::from(q).as_ref(),
+            Mpi::from(g).as_ref(),
+            Mpi::from(y).as_ref(),
+        )
+        .unwrap();
+
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
                 let key = SecretKey { x: x.clone() };
-                let params = PublicParams::DSA {
-                    p: p.clone().into(),
-                    q: q.clone().into(),
-                    g: g.clone().into(),
-                    y: y.clone().into(),
-                };
+
                 let res = key
-                    .sign(hash_algorithm, &hashed, &params)
+                    .sign(hash_algorithm, &hashed, &PublicParams::DSA(params.clone()))
                     .expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
                 assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
-                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
-                    .expect("failed to verify");
+                verify(&params, &hashed, r, s).expect("failed to verify");
             };
 
         check(

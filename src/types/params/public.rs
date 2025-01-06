@@ -19,12 +19,7 @@ pub use tests::public_params_gen;
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum PublicParams {
     RSA(RsaPublicParams),
-    DSA {
-        p: Mpi,
-        q: Mpi,
-        g: Mpi,
-        y: Mpi,
-    },
+    DSA(DsaPublicParams),
     ECDSA(EcdsaPublicParams),
     ECDH(EcdhPublicParams),
     Elgamal {
@@ -49,6 +44,60 @@ pub enum PublicParams {
     Unknown {
         data: Vec<u8>,
     },
+}
+
+#[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct DsaPublicParams {
+    #[cfg_attr(test, proptest(strategy = "tests::dsa_pub_gen()"))]
+    pub key: dsa::VerifyingKey,
+}
+
+impl Eq for DsaPublicParams {}
+
+impl DsaPublicParams {
+    pub fn try_from_mpi(
+        p: MpiRef<'_>,
+        q: MpiRef<'_>,
+        g: MpiRef<'_>,
+        y: MpiRef<'_>,
+    ) -> Result<Self> {
+        let components = dsa::Components::from_components(p.into(), q.into(), g.into())?;
+        let key = dsa::VerifyingKey::from_components(components, y.into())?;
+
+        Ok(DsaPublicParams { key })
+    }
+}
+
+impl Serialize for DsaPublicParams {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        let c = self.key.components();
+        let p: Mpi = c.p().into();
+        p.to_writer(writer)?;
+        let q: Mpi = c.q().into();
+        q.to_writer(writer)?;
+        let g: Mpi = c.g().into();
+        g.to_writer(writer)?;
+        let y: Mpi = self.key.y().into();
+        y.to_writer(writer)?;
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+
+        let c = self.key.components();
+        let p: Mpi = c.p().into();
+        sum += p.write_len();
+        let q: Mpi = c.q().into();
+        sum += q.write_len();
+        let g: Mpi = c.g().into();
+        sum += g.write_len();
+        let y: Mpi = self.key.y().into();
+        sum += y.write_len();
+        sum
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -426,16 +475,8 @@ impl Serialize for PublicParams {
             PublicParams::RSA(params) => {
                 params.to_writer(writer)?;
             }
-            PublicParams::DSA {
-                ref p,
-                ref q,
-                ref g,
-                ref y,
-            } => {
-                p.to_writer(writer)?;
-                q.to_writer(writer)?;
-                g.to_writer(writer)?;
-                y.to_writer(writer)?;
+            PublicParams::DSA(params) => {
+                params.to_writer(writer)?;
             }
             PublicParams::ECDSA(params) => {
                 params.to_writer(writer)?;
@@ -483,16 +524,8 @@ impl Serialize for PublicParams {
             PublicParams::RSA(params) => {
                 sum += params.write_len();
             }
-            PublicParams::DSA {
-                ref p,
-                ref q,
-                ref g,
-                ref y,
-            } => {
-                sum += p.write_len();
-                sum += q.write_len();
-                sum += g.write_len();
-                sum += y.write_len();
+            PublicParams::DSA(params) => {
+                sum += params.write_len();
             }
             PublicParams::ECDSA(params) => {
                 sum += params.write_len();
@@ -556,6 +589,15 @@ mod tests {
         pub fn rsa_pub_gen()(seed: u64) -> rsa::RsaPublicKey {
             let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
             rsa::RsaPrivateKey::new(&mut rng, 1024).unwrap().to_public_key()
+        }
+    }
+
+    proptest::prop_compose! {
+        pub fn dsa_pub_gen()(seed: u64) -> dsa::VerifyingKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let components = dsa::Components::generate(&mut rng, dsa::KeySize::DSA_2048_256);
+            let signing_key = dsa::SigningKey::generate(&mut rng, components);
+            signing_key.verifying_key().clone()
         }
     }
 
@@ -636,8 +678,8 @@ mod tests {
             PublicKeyAlgorithm::RSA => prop::arbitrary::any::<RsaPublicParams>()
                 .prop_map(PublicParams::RSA)
                 .boxed(),
-            PublicKeyAlgorithm::DSA => prop::arbitrary::any::<(Mpi, Mpi, Mpi, Mpi)>()
-                .prop_map(|(p, q, g, y)| PublicParams::DSA { p, q, g, y })
+            PublicKeyAlgorithm::DSA => prop::arbitrary::any::<DsaPublicParams>()
+                .prop_map(PublicParams::DSA)
                 .boxed(),
             PublicKeyAlgorithm::ECDSA => prop::arbitrary::any::<EcdsaPublicParams>()
                 .prop_map(PublicParams::ECDSA)

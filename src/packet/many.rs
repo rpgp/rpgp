@@ -309,7 +309,9 @@ mod tests {
                 offset != "24798372" && // TODO: unclear why this public sub key fails to parse
                 offset != "24810682" && // bad attribute size
                 offset != "38544535" && // bad attribute size
-                offset != "38521947" // RSA public exponent too large
+                offset != "38521947" && // RSA public exponent too large
+                offset != "32162244" && // Invalid DSA key
+                offset != "43825283" // Invalid DSA key
             });
 
         let actual_tags = PacketParser::new(file).filter(|p| p.is_ok());
@@ -317,7 +319,7 @@ mod tests {
             let e = e.as_ref().unwrap();
             let packet = packet.unwrap();
 
-            println!("\n-- checking: {:?} {}", packet.tag(), e);
+            println!("-- checking: {:?} {}", packet.tag(), e);
 
             let tag: Tag = u8::into(tag.parse().unwrap());
             assert_eq!(tag, packet.tag(), "mismatch in packet {:?} ({})", p, e);

@@ -149,7 +149,7 @@ pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Pack
         Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
         Err(err) => {
             warn!(
-                "invalid packet: {:?} {:?}\n{}",
+                "invalid packet: {:#?} {:?}\n{}",
                 err,
                 tag,
                 hex::encode(&body)

@@ -11,8 +11,8 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::IResult;
 use crate::types::{
-    mpi, EcdhPublicParams, EcdsaPublicParams, KeyVersion, Mpi, MpiRef, PublicParams,
-    RsaPublicParams,
+    mpi, DsaPublicParams, EcdhPublicParams, EcdsaPublicParams, KeyVersion, Mpi, MpiRef,
+    PublicParams, RsaPublicParams,
 };
 
 #[inline]
@@ -153,14 +153,17 @@ fn elgamal(i: &[u8]) -> IResult<&[u8], PublicParams> {
 }
 
 fn dsa(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    map(
+    map_res(
         tuple((
             map(mpi, to_owned),
             map(mpi, to_owned),
             map(mpi, to_owned),
             map(mpi, to_owned),
         )),
-        |(p, q, g, y)| PublicParams::DSA { p, q, g, y },
+        |(p, q, g, y)| {
+            DsaPublicParams::try_from_mpi(p.as_ref(), q.as_ref(), g.as_ref(), y.as_ref())
+                .map(PublicParams::DSA)
+        },
     )(i)
 }
 

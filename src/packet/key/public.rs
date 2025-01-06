@@ -526,25 +526,11 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::Elgamal { .. } => {
                 unimplemented_err!("verify Elgamal");
             }
-            PublicParams::DSA {
-                ref p,
-                ref q,
-                ref g,
-                ref y,
-            } => {
+            PublicParams::DSA(ref params) => {
                 let sig: &[Mpi] = sig.try_into()?;
-
                 ensure_eq!(sig.len(), 2, "invalid signature");
 
-                crypto::dsa::verify(
-                    p.into(),
-                    q.into(),
-                    g.into(),
-                    y.into(),
-                    hashed,
-                    sig[0].clone().into(),
-                    sig[1].clone().into(),
-                )
+                crypto::dsa::verify(params, hashed, sig[0].clone().into(), sig[1].clone().into())
             }
             PublicParams::Unknown { .. } => {
                 unimplemented_err!("PublicParams::Unknown can not be used for verify operations");
