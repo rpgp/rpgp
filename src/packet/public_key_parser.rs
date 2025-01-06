@@ -68,12 +68,10 @@ fn ed25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
 fn x25519(i: &[u8]) -> IResult<&[u8], PublicParams> {
     // 32 bytes of public key
     let (i, p) = nom::bytes::complete::take(32u8)(i)?;
-    Ok((
-        i,
-        PublicParams::X25519 {
-            public: p.try_into().expect("we took 32 bytes"),
-        },
-    ))
+    let public_raw: [u8; 32] = p.try_into().expect("we took 32 bytes");
+    let public = x25519_dalek::PublicKey::from(public_raw);
+
+    Ok((i, PublicParams::X25519 { public }))
 }
 
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4>

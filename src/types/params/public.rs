@@ -32,7 +32,7 @@ pub enum PublicParams {
         public: ed25519_dalek::VerifyingKey,
     },
     X25519 {
-        public: [u8; 32],
+        public: x25519_dalek::PublicKey,
     },
     #[cfg(feature = "unstable-curve448")]
     X448 {
@@ -582,7 +582,7 @@ impl Serialize for PublicParams {
                 writer.write_all(&public.as_bytes()[..])?;
             }
             PublicParams::X25519 { ref public } => {
-                writer.write_all(&public[..])?;
+                writer.write_all(public.as_bytes())?;
             }
             #[cfg(feature = "unstable-curve448")]
             PublicParams::X448 { ref public } => {
@@ -627,7 +627,7 @@ impl Serialize for PublicParams {
                 sum += public.as_bytes().len();
             }
             PublicParams::X25519 { ref public } => {
-                sum += public.len();
+                sum += public.as_bytes().len();
             }
             #[cfg(feature = "unstable-curve448")]
             PublicParams::X448 { ref public } => {
@@ -778,7 +778,7 @@ mod tests {
             PublicKeyAlgorithm::Ed25519 => ed25519_pub_gen()
                 .prop_map(|public| PublicParams::Ed25519 { public })
                 .boxed(),
-            PublicKeyAlgorithm::X25519 => prop::arbitrary::any::<[u8; 32]>()
+            PublicKeyAlgorithm::X25519 => ecdh_curve25519_gen()
                 .prop_map(|public| PublicParams::X25519 { public })
                 .boxed(),
             #[cfg(feature = "unstable-curve448")]

@@ -588,7 +588,7 @@ impl PublicKeyTrait for PubKeyInner {
                     }
                 };
 
-                let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, *public, plain)?;
+                let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, &*public, plain)?;
 
                 Ok(PkeskBytes::X25519 {
                     ephemeral,

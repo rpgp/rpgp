@@ -66,7 +66,7 @@ impl SecretKeyRepr {
 
                 let data = x25519::EncryptionFields {
                     ephemeral_public_point: ephemeral.to_owned(),
-                    recipient_public: *public,
+                    recipient_public: public.to_bytes(),
                     encrypted_session_key: session_key,
                 };
 

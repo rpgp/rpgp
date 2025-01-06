@@ -86,7 +86,7 @@ pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecre
     rng.fill_bytes(&mut *secret_key_bytes);
 
     let secret = StaticSecret::from(*secret_key_bytes);
-    let public = PublicKey::from(&secret).to_bytes();
+    let public = PublicKey::from(&secret);
 
     // secret key
     // FIXME: is clamping needed here?
@@ -131,7 +131,7 @@ pub fn hkdf(
 /// Returns (ephemeral, encrypted session key)
 pub fn encrypt<R: CryptoRng + Rng>(
     mut rng: R,
-    recipient_public: [u8; 32],
+    recipient_public: &x25519_dalek::PublicKey,
     plain: &[u8],
 ) -> Result<([u8; 32], Vec<u8>)> {
     debug!("X25519 encrypt");
@@ -145,15 +145,12 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     let (ephemeral_public, shared_secret) = {
-        // create montgomery point
-        let their_public = x25519_dalek::PublicKey::from(recipient_public);
-
         let mut ephemeral_secret_key_bytes = Zeroizing::new([0u8; 32]);
         rng.fill_bytes(&mut *ephemeral_secret_key_bytes);
         let our_secret = StaticSecret::from(*ephemeral_secret_key_bytes);
 
         // derive shared secret
-        let shared_secret = our_secret.diffie_hellman(&their_public);
+        let shared_secret = our_secret.diffie_hellman(&recipient_public);
 
         // Encode public point
         let ephemeral_public = x25519_dalek::PublicKey::from(&our_secret);
@@ -164,7 +161,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // hkdf key derivation
     let okm = hkdf(
         ephemeral_public.as_bytes(),
-        &recipient_public,
+        recipient_public.as_bytes(),
         shared_secret.as_bytes(),
     )?;
 
@@ -251,7 +248,7 @@ mod tests {
 
         let (pkey, skey) = generate_key(&mut rng);
 
-        let PublicParams::X25519 { public } = pkey else {
+        let PublicParams::X25519 { ref public } = pkey else {
             panic!("invalid key generated")
         };
         let SecretKeyRepr::X25519(ref secret) = skey.as_ref().as_repr(&pkey).unwrap() else {
@@ -270,7 +267,7 @@ mod tests {
 
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
-                    recipient_public: public,
+                    recipient_public: public.to_bytes(),
                     encrypted_session_key: enc_sk.deref(),
                 };
 
