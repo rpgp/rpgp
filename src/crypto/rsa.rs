@@ -19,7 +19,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
 use crate::errors::Result;
-use crate::types::{Mpi, PkeskBytes, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
@@ -56,18 +56,15 @@ impl Decryptor for PrivateKey {
 }
 
 impl Signer for PrivateKey {
+    type PublicParams = RsaPublicParams;
+
     /// Sign using RSA, with PKCS1v15 padding.
     fn sign(
         &self,
         hash: HashAlgorithm,
         digest: &[u8],
-        pub_params: &PublicParams,
+        _pub_params: &Self::PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        ensure!(
-            matches!(pub_params, PublicParams::RSA { .. }),
-            "invalid public params"
-        );
-
         let sig = match hash {
             HashAlgorithm::None => return Err(format_err!("none")),
             HashAlgorithm::MD5 => sign_int::<Md5>(self.0.clone(), digest),

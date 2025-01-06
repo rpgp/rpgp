@@ -11,8 +11,9 @@ use crate::{
         SubpacketData,
     },
     types::{
-        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
-        SecretKeyRepr, SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes,
+        PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait, SecretParams, SignatureBytes,
+        Tag, Version,
     },
 };
 
@@ -265,11 +266,24 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
         self.unlock(key_pw, |priv_key| {
             debug!("unlocked key");
             let sig = match *priv_key {
-                SecretKeyRepr::RSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
-                SecretKeyRepr::ECDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.public_params())
+                SecretKeyRepr::RSA(ref priv_key) => {
+                    let PublicParams::RSA(params) = self.public_params() else {
+                        bail!("inconsistent key");
+                    };
+                    priv_key.sign(hash, data, params)
                 }
-                SecretKeyRepr::DSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
+                SecretKeyRepr::ECDSA(ref priv_key) => {
+                    let PublicParams::ECDSA(params) = self.public_params() else {
+                        bail!("inconsistent key");
+                    };
+                    priv_key.sign(hash, data, params)
+                }
+                SecretKeyRepr::DSA(ref priv_key) => {
+                    let PublicParams::DSA(params) = self.public_params() else {
+                        bail!("inconsistent key");
+                    };
+                    priv_key.sign(hash, data, params)
+                }
                 SecretKeyRepr::ECDH(_) => {
                     bail!("ECDH can not be used for signing operations")
                 }
@@ -281,7 +295,20 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                     bail!("X448 can not be used for signing operations")
                 }
                 SecretKeyRepr::EdDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.public_params())
+                    let key = match self.public_params() {
+                        PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key }) => key,
+                        PublicParams::Ed25519(params) => &params.key,
+                        PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
+                            curve,
+                            ..
+                        }) => {
+                            unsupported_err!("curve {} for EdDSA", curve);
+                        }
+                        _ => {
+                            bail!("invalid inconsistent key")
+                        }
+                    };
+                    priv_key.sign(hash, data, key)
                 }
             }?;
 

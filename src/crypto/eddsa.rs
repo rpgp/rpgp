@@ -48,23 +48,14 @@ pub struct SecretKey {
 }
 
 impl Signer for SecretKey {
+    type PublicParams = ed25519_dalek::VerifyingKey;
+
     fn sign(
         &self,
         _hash: HashAlgorithm,
         digest: &[u8],
-        pub_params: &PublicParams,
+        _key: &Self::PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        match pub_params {
-            PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. })
-            | PublicParams::Ed25519 { .. } => {}
-            PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported { curve, .. }) => {
-                unsupported_err!("curve {} for EdDSA", curve);
-            }
-            _ => {
-                bail!("invalid public params")
-            }
-        };
-
         let key = ed25519_dalek::SigningKey::from_bytes(&self.secret);
 
         let signature = key.sign(digest);

@@ -27,17 +27,13 @@ pub enum SecretKey {
 }
 
 impl Signer for SecretKey {
+    type PublicParams = EcdsaPublicParams;
     fn sign(
         &self,
         hash: HashAlgorithm,
         digest: &[u8],
-        pub_params: &PublicParams,
+        _pub_params: &Self::PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        ensure!(
-            matches!(pub_params, PublicParams::ECDSA(..)),
-            "invalid public params"
-        );
-
         if let Some(field_size) = self.secret_key_length() {
             // We require that the signing key length is matched by the hash digest length,
             // see https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.2-5

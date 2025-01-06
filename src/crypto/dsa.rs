@@ -19,16 +19,14 @@ pub struct SecretKey {
 }
 
 impl Signer for SecretKey {
+    type PublicParams = DsaPublicParams;
     fn sign(
         &self,
         hash_algorithm: HashAlgorithm,
         digest: &[u8],
-        pub_params: &PublicParams,
+        pub_params: &Self::PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        let PublicParams::DSA(DsaPublicParams { key }) = pub_params else {
-            bail!("invalid public params");
-        };
-        let signing_key = SigningKey::from_components(key.clone(), self.x.clone())?;
+        let signing_key = SigningKey::from_components(pub_params.key.clone(), self.x.clone())?;
 
         let signature = match hash_algorithm {
             HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
@@ -144,7 +142,7 @@ mod test {
                 let key = SecretKey { x: x.clone() };
 
                 let res = key
-                    .sign(hash_algorithm, &hashed, &PublicParams::DSA(params.clone()))
+                    .sign(hash_algorithm, &hashed, &params)
                     .expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
@@ -280,7 +278,7 @@ mod test {
                 let key = SecretKey { x: x.clone() };
 
                 let res = key
-                    .sign(hash_algorithm, &hashed, &PublicParams::DSA(params.clone()))
+                    .sign(hash_algorithm, &hashed, &params)
                     .expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();

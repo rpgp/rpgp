@@ -1,7 +1,6 @@
 //! # Cryptography module
 
 use self::hash::HashAlgorithm;
-use crate::types::PublicParams;
 
 pub mod aead;
 pub mod aes_kw;
@@ -26,12 +25,13 @@ pub trait Decryptor {
 }
 
 pub trait Signer {
-    // TODO: make pub_params type safe
+    type PublicParams;
+
     fn sign(
         &self,
         hash: HashAlgorithm,
         digest: &[u8],
-        pub_params: &PublicParams,
+        pub_params: &Self::PublicParams,
     ) -> crate::errors::Result<Vec<Vec<u8>>>;
 }
 
