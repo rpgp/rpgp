@@ -35,6 +35,7 @@ pub enum PublicParams {
         public: x25519_dalek::PublicKey,
     },
     #[cfg(feature = "unstable-curve448")]
+    // Can't store the x448 key because it doesn't even implement `Debug`..
     X448 {
         public: [u8; 56],
     },
@@ -50,6 +51,7 @@ pub struct DsaPublicParams {
     pub key: dsa::VerifyingKey,
 }
 
+// Missing currently, see https://github.com/RustCrypto/signatures/issues/881.
 impl Eq for DsaPublicParams {}
 
 impl DsaPublicParams {
