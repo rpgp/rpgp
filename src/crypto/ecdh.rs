@@ -90,7 +90,7 @@ impl From<&SecretKey> for EcdhPublicParams {
         let alg_sym = curve.sym_algo().expect("known algo");
         match value {
             SecretKey::Curve25519 { secret } => {
-                let secret: &StaticSecret = &*secret;
+                let secret: &StaticSecret = secret;
                 Self::Curve25519 {
                     p: PublicKey::from(secret),
                     hash,

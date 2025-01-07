@@ -14,8 +14,7 @@ use crate::types::{PlainSecretParams, PublicParams, SecretKeyRepr, X25519PublicP
 /// Secret key for X25519
 #[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey {
-    // #[debug("..")]
-    #[debug("{}", hex::encode(secret.as_bytes()))]
+    #[debug("..")]
     pub(crate) secret: StaticSecret,
 }
 

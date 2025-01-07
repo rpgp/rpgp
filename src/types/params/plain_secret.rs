@@ -111,7 +111,7 @@ impl PlainSecretParamsRef<'_> {
                         let raw = Self::pad_key::<SIZE>(d)?;
                         let arr =
                         generic_array::GenericArray::<u8, generic_array::typenum::U66>::from_slice(&raw[..]);
-                        let secret = elliptic_curve::SecretKey::<p521::NistP521>::from_bytes(&arr)?;
+                        let secret = elliptic_curve::SecretKey::<p521::NistP521>::from_bytes(arr)?;
 
                         Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P521 {
                             secret,
@@ -141,7 +141,7 @@ impl PlainSecretParamsRef<'_> {
                 _ => unreachable!("inconsistent key state: {:?}", public_params),
             },
             PlainSecretParamsRef::Ed25519(d) => {
-                let secret = ed25519_dalek::SigningKey::from_bytes(*d);
+                let secret = ed25519_dalek::SigningKey::from_bytes(d);
 
                 Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
                     secret,
@@ -385,7 +385,6 @@ impl PlainSecretParams {
         match &self.0 {
             SecretKeyRepr::RSA(key) => {
                 let d = key.d();
-                dbg!(&d);
                 let p = &key.primes()[0];
                 let q = &key.primes()[1];
                 let u = p
@@ -395,9 +394,7 @@ impl PlainSecretParams {
                     .to_biguint()
                     .expect("invalid prime");
 
-                let d = Mpi::from(d);
-                dbg!(&d);
-                d.to_writer(writer)?;
+                Mpi::from(d).to_writer(writer)?;
                 Mpi::from(p).to_writer(writer)?;
                 Mpi::from(q).to_writer(writer)?;
                 Mpi::from(u).to_writer(writer)?;
@@ -483,23 +480,18 @@ fn parse_secret_params(
 ) -> impl Fn(&[u8]) -> IResult<&[u8], PlainSecretParamsRef> {
     move |i: &[u8]| match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
-            dbg!(alg, i);
             let (i, d) = mpi(i)?;
-            dbg!(i, &d);
             let (i, p) = mpi(i)?;
-            dbg!(i, &p);
             let (i, q) = mpi(i)?;
-            dbg!(i, &q);
             let (i, u) = mpi(i)?;
-            dbg!(i, &u);
             let params = PlainSecretParamsRef::RSA { d, p, q, u };
             Ok((i, params))
         }
-        PublicKeyAlgorithm::DSA => map(mpi, |m| PlainSecretParamsRef::DSA(m))(i),
-        PublicKeyAlgorithm::Elgamal => map(mpi, |m| PlainSecretParamsRef::Elgamal(m))(i),
-        PublicKeyAlgorithm::ECDH => map(mpi, |m| PlainSecretParamsRef::ECDH(m))(i),
-        PublicKeyAlgorithm::ECDSA => map(mpi, |m| PlainSecretParamsRef::ECDSA(m))(i),
-        PublicKeyAlgorithm::EdDSALegacy => map(mpi, |m| PlainSecretParamsRef::EdDSALegacy(m))(i),
+        PublicKeyAlgorithm::DSA => map(mpi, PlainSecretParamsRef::DSA)(i),
+        PublicKeyAlgorithm::Elgamal => map(mpi, PlainSecretParamsRef::Elgamal)(i),
+        PublicKeyAlgorithm::ECDH => map(mpi, PlainSecretParamsRef::ECDH)(i),
+        PublicKeyAlgorithm::ECDSA => map(mpi, PlainSecretParamsRef::ECDSA)(i),
+        PublicKeyAlgorithm::EdDSALegacy => map(mpi, PlainSecretParamsRef::EdDSALegacy)(i),
         PublicKeyAlgorithm::Ed25519 => {
             let (i, s) = take(32u8)(i)?;
             Ok((i, PlainSecretParamsRef::Ed25519(s.try_into().expect("32"))))
@@ -622,7 +614,6 @@ mod tests {
             let mut buf = Vec::new();
             secret_params.to_writer(&mut buf, KeyVersion::V4)?;
             let public_params = PublicParams::try_from(&secret_params.0)?;
-            dbg!(&alg, &public_params);
             let new_params = PlainSecretParams::try_from_slice(&buf, alg, &public_params)?;
             prop_assert_eq!(secret_params, new_params);
         }

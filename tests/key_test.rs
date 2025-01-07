@@ -311,7 +311,7 @@ fn test_parse_openpgp_sample_rsa_private() {
 
                     let ciphertext = {
                         // TODO: fix this in rust-rsa
-                        let k: &RsaPrivateKey = &*k;
+                        let k: &RsaPrivateKey = k;
                         let k: RsaPrivateKey = k.clone();
                         let pk: RsaPublicKey = k.into();
                         pk.encrypt(
@@ -1155,7 +1155,7 @@ fn private_x25519_verify() {
         || "moon".to_string(),
         |_pub_params, k| {
             match k {
-                SecretKeyRepr::EdDSA(..) => {}
+                SecretKeyRepr::EdDSALegacy(..) => {}
                 _ => panic!("invalid key"),
             }
             Ok(())

@@ -14,6 +14,7 @@ use crate::types::*;
 /// A list of params that are used to represent the values of possibly encrypted key,
 /// from imports and exports.
 #[derive(Debug, Clone, PartialEq, Eq, ZeroizeOnDrop)]
+#[allow(clippy::large_enum_variant)]
 pub enum SecretParams {
     Plain(PlainSecretParams),
     Encrypted(EncryptedSecretParams),

@@ -11,6 +11,7 @@ use crate::{
 
 /// A flexible representation of what can be represented in an armor file.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Any {
     Cleartext(CleartextSignedMessage),
     PublicKey(SignedPublicKey),

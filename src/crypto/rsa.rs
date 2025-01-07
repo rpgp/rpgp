@@ -25,8 +25,9 @@ pub(crate) const MAX_KEY_SIZE: usize = 16384;
 #[derive(derive_more::Debug, ZeroizeOnDrop, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct PrivateKey(
-    // #[debug("..")]
-    #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))] RsaPrivateKey,
+    #[debug("..")]
+    #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
+    RsaPrivateKey,
 );
 
 impl From<&PrivateKey> for RsaPublicParams {
