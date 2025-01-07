@@ -13,13 +13,13 @@ use super::EcdhPublicParams;
 /// The version of the secret key that is actually exposed to users to do crypto operations.
 #[allow(clippy::large_enum_variant)] // FIXME
 #[derive(Debug, Clone, PartialEq, Eq, ZeroizeOnDrop)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SecretKeyRepr {
     RSA(rsa::PrivateKey),
     DSA(dsa::SecretKey),
     ECDSA(ecdsa::SecretKey),
     ECDH(ecdh::SecretKey),
     EdDSA(eddsa::SecretKey),
+    EdDSALegacy(eddsa::SecretKey),
     X25519(x25519::SecretKey),
     #[cfg(feature = "unstable-curve448")]
     X448(crate::crypto::x448::SecretKey),
@@ -187,6 +187,61 @@ impl SecretKeyRepr {
                 checksum::simple(checksum, &key)?;
 
                 Ok(PlainSessionKey::V6 { key })
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    use crate::crypto::public_key::PublicKeyAlgorithm;
+
+    impl Arbitrary for SecretKeyRepr {
+        type Parameters = PublicKeyAlgorithm;
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary() -> Self::Strategy {
+            any::<PublicKeyAlgorithm>()
+                .prop_flat_map(Self::arbitrary_with)
+                .boxed()
+        }
+
+        fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
+            match alg {
+                PublicKeyAlgorithm::RSA
+                | PublicKeyAlgorithm::RSAEncrypt
+                | PublicKeyAlgorithm::RSASign => any::<rsa::PrivateKey>()
+                    .prop_map(SecretKeyRepr::RSA)
+                    .boxed(),
+                PublicKeyAlgorithm::DSA => {
+                    any::<dsa::SecretKey>().prop_map(SecretKeyRepr::DSA).boxed()
+                }
+                PublicKeyAlgorithm::ECDSA => any::<ecdsa::SecretKey>()
+                    .prop_map(SecretKeyRepr::ECDSA)
+                    .boxed(),
+                PublicKeyAlgorithm::ECDH => any::<ecdh::SecretKey>()
+                    .prop_map(SecretKeyRepr::ECDH)
+                    .boxed(),
+                PublicKeyAlgorithm::EdDSALegacy => any::<eddsa::SecretKey>()
+                    .prop_map(SecretKeyRepr::EdDSALegacy)
+                    .boxed(),
+                PublicKeyAlgorithm::Ed25519 => any::<eddsa::SecretKey>()
+                    .prop_map(SecretKeyRepr::EdDSA)
+                    .boxed(),
+                PublicKeyAlgorithm::X25519 => any::<x25519::SecretKey>()
+                    .prop_map(SecretKeyRepr::X25519)
+                    .boxed(),
+                #[cfg(feature = "unstable-curve448")]
+                PublicKeyAlgorithm::X448 => any::<crate::crypto::x448::SecretKey>()
+                    .prop_map(SecretKeyRepr::X448)
+                    .boxed(),
+                _ => {
+                    unimplemented!("{:?}", alg)
+                }
             }
         }
     }

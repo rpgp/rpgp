@@ -283,8 +283,16 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                 }
                 SecretKeyRepr::EdDSA(ref priv_key) => {
                     let key = match pub_params {
-                        PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key }) => key,
                         PublicParams::Ed25519(params) => &params.key,
+                        _ => {
+                            bail!("invalid inconsistent key")
+                        }
+                    };
+                    priv_key.sign(hash, data, key)
+                }
+                SecretKeyRepr::EdDSALegacy(ref priv_key) => {
+                    let key = match pub_params {
+                        PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key }) => key,
                         PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
                             curve,
                             ..

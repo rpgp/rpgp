@@ -64,14 +64,21 @@ impl SecretParams {
 
     pub fn to_writer<W: io::Write>(&self, writer: &mut W, version: KeyVersion) -> Result<()> {
         match self {
-            SecretParams::Plain(k) => k.to_writer(writer, version),
+            SecretParams::Plain(k) => {
+                writer.write_all(&[k.string_to_key_id()])?;
+                k.to_writer(writer, version)
+            }
             SecretParams::Encrypted(k) => k.to_writer(writer, version),
         }
     }
 
     pub fn write_len(&self, version: KeyVersion) -> usize {
         match self {
-            SecretParams::Plain(k) => k.write_len(version),
+            SecretParams::Plain(k) => {
+                let mut sum = 1; // s2k usage unprotected
+                sum += k.write_len(version);
+                sum
+            }
             SecretParams::Encrypted(k) => k.write_len(version),
         }
     }

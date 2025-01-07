@@ -7,7 +7,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::types::EcdsaPublicParams;
 use crate::types::{Mpi, PlainSecretParams, PublicParams, SecretKeyRepr};
 
@@ -34,6 +34,7 @@ pub enum SecretKey {
         #[cfg_attr(test, proptest(strategy = "tests::key_k256_gen()"))]
         k256::SecretKey,
     ),
+    #[cfg_attr(test, proptest(skip))]
     Unsupported {
         /// The secret point.
         #[debug("..")]
@@ -41,6 +42,30 @@ pub enum SecretKey {
         #[zeroize(skip)]
         curve: ECCCurve,
     },
+}
+
+impl TryFrom<&SecretKey> for EcdsaPublicParams {
+    type Error = Error;
+
+    fn try_from(value: &SecretKey) -> std::result::Result<Self, Self::Error> {
+        match value {
+            SecretKey::P256(ref p) => Ok(EcdsaPublicParams::P256 {
+                key: p.public_key(),
+            }),
+            SecretKey::P384(ref p) => Ok(EcdsaPublicParams::P384 {
+                key: p.public_key(),
+            }),
+            SecretKey::P521(ref p) => Ok(EcdsaPublicParams::P521 {
+                key: p.public_key(),
+            }),
+            SecretKey::Secp256k1(ref p) => Ok(EcdsaPublicParams::Secp256k1 {
+                key: p.public_key(),
+            }),
+            SecretKey::Unsupported { ref curve, .. } => {
+                bail!("unsupported curve, cannot convert: {}", curve);
+            }
+        }
+    }
 }
 
 impl Signer for SecretKey {

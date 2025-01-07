@@ -48,6 +48,22 @@ pub struct SecretKey {
     pub secret: ed25519_dalek::SigningKey,
 }
 
+impl From<&SecretKey> for Ed25519PublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self {
+            key: value.secret.verifying_key(),
+        }
+    }
+}
+
+impl From<&SecretKey> for EddsaLegacyPublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self::Ed25519 {
+            key: value.secret.verifying_key(),
+        }
+    }
+}
+
 impl SecretKey {
     pub(crate) fn as_mpi(&self) -> Mpi {
         Mpi::from_slice(&self.secret.to_bytes())
@@ -91,7 +107,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
     match mode {
         Mode::EdDSALegacy => (
             PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key: public }),
-            PlainSecretParams(SecretKeyRepr::EdDSA(SecretKey { secret })),
+            PlainSecretParams(SecretKeyRepr::EdDSALegacy(SecretKey { secret })),
         ),
         Mode::Ed25519 => (
             PublicParams::Ed25519(Ed25519PublicParams { key: public }),

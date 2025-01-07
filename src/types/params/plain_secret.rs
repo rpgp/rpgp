@@ -3,8 +3,8 @@ use std::io;
 
 use byteorder::{BigEndian, ByteOrder};
 use hkdf::Hkdf;
+use nom::bytes::streaming::take;
 use nom::combinator::map;
-use nom::sequence::tuple;
 use num_bigint::ModInverse;
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 use rsa::RsaPrivateKey;
@@ -22,7 +22,6 @@ use crate::types::*;
 use crate::util::TeeWriter;
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct PlainSecretParams(pub SecretKeyRepr);
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
@@ -77,10 +76,13 @@ impl PlainSecretParamsRef<'_> {
                 match public_params {
                     PublicParams::ECDH(EcdhPublicParams::Curve25519 { .. }) => {
                         const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
+                        let rev: Vec<u8> = d.iter().rev().copied().collect();
+                        let secret_raw = Self::pad_key::<SIZE>(&rev)?;
+                        let secret = x25519_dalek::StaticSecret::from(secret_raw);
 
                         Ok(SecretKeyRepr::ECDH(
                             crate::crypto::ecdh::SecretKey::Curve25519 {
-                                secret: Self::pad_key::<SIZE>(d)?,
+                                secret: secret.into(),
                             },
                         ))
                     }
@@ -127,16 +129,16 @@ impl PlainSecretParamsRef<'_> {
                     let raw = Self::pad_key::<SIZE>(d)?;
                     let secret = ed25519_dalek::SigningKey::from_bytes(&raw);
 
-                    Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
-                        secret,
-                    }))
+                    Ok(SecretKeyRepr::EdDSALegacy(
+                        crate::crypto::eddsa::SecretKey { secret },
+                    ))
                 }
                 PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
                     curve, ..
                 }) => {
                     unsupported_err!("curve {:?} for EdDSA", curve.to_string());
                 }
-                _ => unreachable!("inconsistent key state"),
+                _ => unreachable!("inconsistent key state: {:?}", public_params),
             },
             PlainSecretParamsRef::Ed25519(d) => {
                 let secret = ed25519_dalek::SigningKey::from_bytes(*d);
@@ -338,8 +340,6 @@ impl PlainSecretParams {
     }
 
     pub fn to_writer<W: io::Write>(&self, writer: &mut W, version: KeyVersion) -> Result<()> {
-        writer.write_all(&[self.string_to_key_id()])?;
-
         let mut hasher = checksum::SimpleChecksum::default();
         {
             let mut tee = TeeWriter::new(&mut hasher, writer);
@@ -358,8 +358,7 @@ impl PlainSecretParams {
     }
 
     pub fn write_len(&self, version: KeyVersion) -> usize {
-        let mut sum = 1;
-        sum += self.write_len_raw();
+        let mut sum = self.write_len_raw();
         if version == KeyVersion::V3 || version == KeyVersion::V4 {
             // checksum
             sum += 2;
@@ -386,9 +385,9 @@ impl PlainSecretParams {
         match &self.0 {
             SecretKeyRepr::RSA(key) => {
                 let d = key.d();
+                dbg!(&d);
                 let p = &key.primes()[0];
                 let q = &key.primes()[1];
-
                 let u = p
                     .clone()
                     .mod_inverse(q)
@@ -396,7 +395,9 @@ impl PlainSecretParams {
                     .to_biguint()
                     .expect("invalid prime");
 
-                Mpi::from(d).to_writer(writer)?;
+                let d = Mpi::from(d);
+                dbg!(&d);
+                d.to_writer(writer)?;
                 Mpi::from(p).to_writer(writer)?;
                 Mpi::from(q).to_writer(writer)?;
                 Mpi::from(u).to_writer(writer)?;
@@ -414,17 +415,19 @@ impl PlainSecretParams {
                 x.to_writer(writer)?;
             }
             SecretKeyRepr::X25519(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?
+                let q = key.secret.to_bytes();
+                writer.write_all(&q)?;
             }
             SecretKeyRepr::EdDSA(key) => {
+                writer.write_all(key.secret.as_bytes().as_ref())?;
+            }
+            SecretKeyRepr::EdDSALegacy(key) => {
                 let x = key.as_mpi();
                 x.to_writer(writer)?;
             }
             #[cfg(feature = "unstable-curve448")]
             SecretKeyRepr::X448(key) => {
-                let x = key.as_mpi();
-                x.to_writer(writer)?;
+                writer.write_all(&key.secret)?;
             }
         }
 
@@ -437,7 +440,6 @@ impl PlainSecretParams {
                 let d = key.d();
                 let p = &key.primes()[0];
                 let q = &key.primes()[1];
-
                 let u = p
                     .clone()
                     .mod_inverse(q)
@@ -464,19 +466,14 @@ impl PlainSecretParams {
                 let x = key.as_mpi();
                 x.write_len()
             }
-            SecretKeyRepr::EdDSA(key) => {
+            SecretKeyRepr::EdDSA(_key) => 32,
+            SecretKeyRepr::EdDSALegacy(key) => {
                 let x = key.as_mpi();
                 x.write_len()
             }
-            SecretKeyRepr::X25519(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
+            SecretKeyRepr::X25519(_key) => 32,
             #[cfg(feature = "unstable-curve448")]
-            SecretKeyRepr::X448(key) => {
-                let x = key.as_mpi();
-                x.write_len()
-            }
+            SecretKeyRepr::X448(_key) => 56,
         }
     }
 }
@@ -486,9 +483,17 @@ fn parse_secret_params(
 ) -> impl Fn(&[u8]) -> IResult<&[u8], PlainSecretParamsRef> {
     move |i: &[u8]| match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
-            map(tuple((mpi, mpi, mpi, mpi)), |(d, p, q, u)| {
-                PlainSecretParamsRef::RSA { d, p, q, u }
-            })(i)
+            dbg!(alg, i);
+            let (i, d) = mpi(i)?;
+            dbg!(i, &d);
+            let (i, p) = mpi(i)?;
+            dbg!(i, &p);
+            let (i, q) = mpi(i)?;
+            dbg!(i, &q);
+            let (i, u) = mpi(i)?;
+            dbg!(i, &u);
+            let params = PlainSecretParamsRef::RSA { d, p, q, u };
+            Ok((i, params))
         }
         PublicKeyAlgorithm::DSA => map(mpi, |m| PlainSecretParamsRef::DSA(m))(i),
         PublicKeyAlgorithm::Elgamal => map(mpi, |m| PlainSecretParamsRef::Elgamal(m))(i),
@@ -496,16 +501,16 @@ fn parse_secret_params(
         PublicKeyAlgorithm::ECDSA => map(mpi, |m| PlainSecretParamsRef::ECDSA(m))(i),
         PublicKeyAlgorithm::EdDSALegacy => map(mpi, |m| PlainSecretParamsRef::EdDSALegacy(m))(i),
         PublicKeyAlgorithm::Ed25519 => {
-            let (i, s) = nom::bytes::complete::take(32u8)(i)?;
+            let (i, s) = take(32u8)(i)?;
             Ok((i, PlainSecretParamsRef::Ed25519(s.try_into().expect("32"))))
         }
         PublicKeyAlgorithm::X25519 => {
-            let (i, s) = nom::bytes::complete::take(32u8)(i)?;
+            let (i, s) = take(32u8)(i)?;
             Ok((i, PlainSecretParamsRef::X25519(s.try_into().expect("32"))))
         }
         #[cfg(feature = "unstable-curve448")]
         PublicKeyAlgorithm::X448 => {
-            let (i, s) = nom::bytes::complete::take(56u8)(i)?;
+            let (i, s) = take(56u8)(i)?;
             Ok((i, PlainSecretParamsRef::X448(s.try_into().expect("56"))))
         }
         _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
@@ -556,6 +561,23 @@ mod tests {
 
     use proptest::prelude::*;
 
+    impl Arbitrary for PlainSecretParams {
+        type Parameters = PublicKeyAlgorithm;
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary() -> Self::Strategy {
+            any::<PublicKeyAlgorithm>()
+                .prop_flat_map(Self::arbitrary_with)
+                .boxed()
+        }
+
+        fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
+            any_with::<SecretKeyRepr>(alg)
+                .prop_map(PlainSecretParams)
+                .boxed()
+        }
+    }
+
     proptest! {
         #[test]
         #[ignore]
@@ -581,14 +603,40 @@ mod tests {
             prop_assert_eq!(buf.len(), params.write_len(KeyVersion::V6));
         }
 
-        // #[test]
-        // #[ignore]
-        // fn params_roundtrip(params: PlainSecretParams) {
-        //     let mut buf = Vec::new();
-        //     params.to_writer(&mut buf, KeyVersion::V3)?;
-        //     let (i, new_params) = PlainSecretParams::try_from_slice(&buf, alg, public_params)?;
-        //     assert!(i.is_empty());
-        //     prop_assert_eq!(params, new_params);
-        // }
+        #[test]
+        #[ignore]
+        fn params_roundtrip_v3(
+            (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            secret_params.to_writer(&mut buf, KeyVersion::V3)?;
+            let public_params = PublicParams::try_from(&secret_params.0)?;
+            let new_params = PlainSecretParams::try_from_slice(&buf, alg, &public_params)?;
+            prop_assert_eq!(secret_params, new_params);
+        }
+        #[test]
+        #[ignore]
+        fn params_roundtrip_v4(
+            (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            secret_params.to_writer(&mut buf, KeyVersion::V4)?;
+            let public_params = PublicParams::try_from(&secret_params.0)?;
+            dbg!(&alg, &public_params);
+            let new_params = PlainSecretParams::try_from_slice(&buf, alg, &public_params)?;
+            prop_assert_eq!(secret_params, new_params);
+        }
+
+        #[test]
+        #[ignore]
+        fn params_roundtrip_v6(
+            (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            secret_params.to_writer(&mut buf, KeyVersion::V6)?;
+            let public_params = PublicParams::try_from(&secret_params.0)?;
+            let new_params = PlainSecretParams::try_from_slice(&buf, alg, &public_params)?;
+            prop_assert_eq!(secret_params, new_params);
+        }
     }
 }

@@ -200,9 +200,9 @@ impl<'a> From<&'a BigUint> for Mpi {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use super::*;
+
+    use proptest::prelude::*;
 
     #[test]
     fn test_mpi() {
@@ -252,6 +252,18 @@ mod tests {
             let (rest, n_big2) = mpi(&n_encoded).unwrap();
             assert_eq!(rest.len(), 0);
             assert_eq!(n_big, n_big2.into());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn mpi_roundtrip(m: Mpi) {
+            let mut buf = Vec::new();
+            m.to_writer(&mut buf)?;
+
+            let (i, m_back) = mpi(&buf)?;
+            prop_assert!(i.is_empty());
+            prop_assert_eq!(m.as_ref(), m_back);
         }
     }
 }

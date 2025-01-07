@@ -6,7 +6,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{aes_kw, Decryptor, KeyParams};
 use crate::errors::Result;
-use crate::types::{Mpi, PlainSecretParams, PublicParams, SecretKeyRepr};
+use crate::types::{PlainSecretParams, PublicParams, SecretKeyRepr};
 
 /// Secret key for X448
 #[derive(Clone, derive_more::Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
@@ -14,12 +14,6 @@ use crate::types::{Mpi, PlainSecretParams, PublicParams, SecretKeyRepr};
 pub struct SecretKey {
     #[debug("..")]
     pub(crate) secret: [u8; 56],
-}
-
-impl SecretKey {
-    pub(crate) fn as_mpi(&self) -> Mpi {
-        Mpi::from_slice(&self.secret)
-    }
 }
 
 impl KeyParams for SecretKey {

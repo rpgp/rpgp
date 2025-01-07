@@ -3,8 +3,9 @@ use std::io;
 use nom::bytes::streaming::take;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::{IResult, Result};
+use crate::errors::{Error, IResult, Result};
 use crate::ser::Serialize;
+use crate::types::SecretKeyRepr;
 
 mod dsa;
 mod ecdh;
@@ -43,6 +44,28 @@ pub enum PublicParams {
     Unknown {
         data: Vec<u8>,
     },
+}
+impl TryFrom<&SecretKeyRepr> for PublicParams {
+    type Error = Error;
+
+    fn try_from(secret: &SecretKeyRepr) -> Result<Self, Self::Error> {
+        match secret {
+            SecretKeyRepr::RSA(ref p) => Ok(Self::RSA(p.into())),
+            SecretKeyRepr::DSA(ref p) => Ok(Self::DSA(p.into())),
+            SecretKeyRepr::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
+            SecretKeyRepr::ECDH(ref p) => Ok(Self::ECDH(p.into())),
+            SecretKeyRepr::EdDSA(ref p) => Ok(Self::Ed25519(p.into())),
+            SecretKeyRepr::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
+            SecretKeyRepr::X25519(ref p) => Ok(Self::X25519(p.into())),
+            #[cfg(feature = "unstable-curve448")]
+            SecretKeyRepr::X448(ref p) => {
+                let secret = x448::Secret::from(p.secret); // does clamping
+                let public = *x448::PublicKey::from(&secret).as_bytes();
+
+                Ok(Self::X448 { public })
+            }
+        }
+    }
 }
 
 impl PublicParams {

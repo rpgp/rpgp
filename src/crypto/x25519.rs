@@ -9,20 +9,21 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{aes_kw, Decryptor, KeyParams};
 use crate::errors::Result;
-use crate::types::{Mpi, PlainSecretParams, PublicParams, SecretKeyRepr, X25519PublicParams};
+use crate::types::{PlainSecretParams, PublicParams, SecretKeyRepr, X25519PublicParams};
 
 /// Secret key for X25519
 #[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey {
-    #[debug("..")]
+    // #[debug("..")]
+    #[debug("{}", hex::encode(secret.as_bytes()))]
     pub(crate) secret: StaticSecret,
 }
 
-impl SecretKey {
-    pub(crate) fn as_mpi(&self) -> Mpi {
-        // FIXME: is clamping needed here?
-        let q_raw = curve25519_dalek::scalar::clamp_integer(self.secret.to_bytes());
-        Mpi::from_slice(&q_raw)
+impl From<&SecretKey> for X25519PublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self {
+            key: PublicKey::from(&value.secret),
+        }
     }
 }
 

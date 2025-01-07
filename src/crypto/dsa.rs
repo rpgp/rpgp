@@ -22,6 +22,14 @@ pub struct SecretKey {
     pub key: dsa::SigningKey,
 }
 
+impl From<&SecretKey> for DsaPublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self {
+            key: value.key.verifying_key().clone(),
+        }
+    }
+}
+
 impl Zeroize for SecretKey {
     fn zeroize(&mut self) {
         // TODO!!!!
