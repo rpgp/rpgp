@@ -65,6 +65,11 @@ impl From<&SecretKey> for EddsaLegacyPublicParams {
 }
 
 impl SecretKey {
+    pub(crate) fn try_from_bytes(raw_secret: [u8; 32]) -> Result<Self> {
+        let secret = ed25519_dalek::SigningKey::from(raw_secret);
+        Ok(Self { secret })
+    }
+
     pub(crate) fn as_mpi(&self) -> Mpi {
         Mpi::from_slice(&self.secret.to_bytes())
     }

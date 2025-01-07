@@ -34,9 +34,3 @@ pub trait Signer {
         pub_params: &Self::PublicParams,
     ) -> crate::errors::Result<Vec<Vec<u8>>>;
 }
-
-pub trait KeyParams {
-    type KeyParams;
-
-    fn key_params(&self) -> Self::KeyParams;
-}

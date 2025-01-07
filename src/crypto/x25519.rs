@@ -7,7 +7,7 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::{aes_kw, Decryptor, KeyParams};
+use crate::crypto::{aes_kw, Decryptor};
 use crate::errors::Result;
 use crate::types::{PlainSecretParams, PublicParams, SecretKeyRepr, X25519PublicParams};
 
@@ -34,10 +34,14 @@ impl PartialEq for SecretKey {
 
 impl Eq for SecretKey {}
 
-impl KeyParams for SecretKey {
-    type KeyParams = ();
-
-    fn key_params(&self) {}
+impl SecretKey {
+    pub(crate) fn try_from_slice(_pub_params: &X25519PublicParams, secret: &[u8]) -> Result<Self> {
+        let raw_secret: [u8; 32] = secret
+            .try_into()
+            .map_err(|_| format_err!("invalid secret key length for x25519"))?;
+        let secret = x25519_dalek::StaticSecret::from(raw_secret);
+        Ok(Self { secret })
+    }
 }
 
 pub struct EncryptionFields<'a> {

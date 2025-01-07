@@ -4,7 +4,7 @@ use rand::{CryptoRng, Rng};
 use sha2::Sha512;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::{aes_kw, Decryptor, KeyParams};
+use crate::crypto::{aes_kw, Decryptor};
 use crate::errors::Result;
 use crate::types::{PlainSecretParams, PublicParams, SecretKeyRepr};
 
@@ -16,10 +16,10 @@ pub struct SecretKey {
     pub(crate) secret: [u8; 56],
 }
 
-impl KeyParams for SecretKey {
-    type KeyParams = ();
-
-    fn key_params(&self) {}
+impl SecretKey {
+    pub(crate) fn try_from_bytes(secret: [u8; 56]) -> Result<Self> {
+        Ok(Self { secret })
+    }
 }
 
 pub struct EncryptionFields<'a> {

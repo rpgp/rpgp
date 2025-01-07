@@ -13,10 +13,10 @@ use signature::hazmat::{PrehashSigner, PrehashVerifier};
 use signature::SignatureEncoding;
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
+use crate::crypto::{hash::HashAlgorithm, Decryptor, Signer};
 use crate::errors::Result;
 use crate::types::{
-    Mpi, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams, SecretKeyRepr,
+    Mpi, MpiRef, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams, SecretKeyRepr,
 };
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
@@ -29,6 +29,24 @@ pub struct PrivateKey(
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
     RsaPrivateKey,
 );
+
+impl PrivateKey {
+    pub(crate) fn try_from_mpi(
+        pub_params: &RsaPublicParams,
+        d: MpiRef<'_>,
+        p: MpiRef<'_>,
+        q: MpiRef<'_>,
+        _u: MpiRef<'_>,
+    ) -> Result<Self> {
+        let secret_key = RsaPrivateKey::from_components(
+            pub_params.key.n().clone(),
+            pub_params.key.e().clone(),
+            d.into(),
+            vec![p.into(), q.into()],
+        )?;
+        Ok(Self(secret_key))
+    }
+}
 
 impl From<&PrivateKey> for RsaPublicParams {
     fn from(value: &PrivateKey) -> Self {
@@ -43,15 +61,6 @@ impl Deref for PrivateKey {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl KeyParams for PrivateKey {
-    type KeyParams = ();
-
-    #[allow(clippy::unused_unit)]
-    fn key_params(&self) -> Self::KeyParams {
-        ()
     }
 }
 

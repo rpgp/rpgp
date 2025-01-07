@@ -719,6 +719,8 @@ mod tests {
     #[test]
     #[ignore] // slow in debug mode (argon2)
     fn secret_key_protection_v4() {
+        let _ = pretty_env_logger::try_init();
+
         const DATA: &[u8] = &[0x23, 0x05];
         let key_type = crate::KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -792,8 +794,8 @@ mod tests {
             .unwrap();
 
         // signing with the right password should succeed
-        assert!(alice_sec
+        alice_sec
             .create_signature(|| "bar".to_string(), HashAlgorithm::default(), DATA)
-            .is_ok());
+            .expect("failed to sign");
     }
 }

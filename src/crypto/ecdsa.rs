@@ -9,7 +9,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::{Error, Result};
 use crate::types::EcdsaPublicParams;
-use crate::types::{Mpi, PlainSecretParams, PublicParams, SecretKeyRepr};
+use crate::types::{Mpi, MpiRef, PlainSecretParams, PublicParams, SecretKeyRepr};
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -63,6 +63,36 @@ impl TryFrom<&SecretKey> for EcdsaPublicParams {
             }),
             SecretKey::Unsupported { ref curve, .. } => {
                 bail!("unsupported curve, cannot convert: {}", curve);
+            }
+        }
+    }
+}
+
+impl SecretKey {
+    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: MpiRef<'_>) -> Result<Self> {
+        match pub_params {
+            EcdsaPublicParams::P256 { .. } => {
+                let secret = p256::SecretKey::from_slice(d.as_bytes())?;
+
+                Ok(SecretKey::P256(secret))
+            }
+            EcdsaPublicParams::P384 { .. } => {
+                let secret = p384::SecretKey::from_slice(d.as_bytes())?;
+
+                Ok(SecretKey::P384(secret))
+            }
+            EcdsaPublicParams::P521 { .. } => {
+                let secret = p521::SecretKey::from_slice(d.as_bytes())?;
+
+                Ok(SecretKey::P521(secret))
+            }
+            EcdsaPublicParams::Secp256k1 { .. } => {
+                let secret = k256::SecretKey::from_slice(d.as_bytes())?;
+
+                Ok(SecretKey::Secp256k1(secret))
+            }
+            EcdsaPublicParams::Unsupported { curve, .. } => {
+                unsupported_err!("curve {:?} for ECDSA", curve.to_string())
             }
         }
     }

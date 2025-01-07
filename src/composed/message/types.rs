@@ -1131,6 +1131,8 @@ mod tests {
 
     #[test]
     fn test_rsa_encryption_seipdv1() {
+        let _ = pretty_env_logger::try_init();
+
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),

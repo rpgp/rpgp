@@ -12,7 +12,8 @@ use crate::crypto::{
 };
 use crate::errors::{Error, Result};
 use crate::types::{
-    EcdhPublicParams, Mpi, PkeskBytes, PlainSecretParams, PublicParams, SecretKeyRepr,
+    pad_key, EcdhPublicParams, Mpi, MpiRef, PkeskBytes, PlainSecretParams, PublicParams,
+    SecretKeyRepr,
 };
 
 /// 20 octets representing "Anonymous Sender    ".
@@ -117,6 +118,49 @@ impl From<&SecretKey> for EcdhPublicParams {
 }
 
 impl SecretKey {
+    pub(crate) fn try_from_mpi(pub_params: &EcdhPublicParams, d: MpiRef<'_>) -> Result<Self> {
+        match pub_params {
+            EcdhPublicParams::Curve25519 { .. } => {
+                const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
+                let rev: Vec<u8> = d.iter().rev().copied().collect();
+                let secret_raw = pad_key::<SIZE>(&rev)?;
+                let secret = x25519_dalek::StaticSecret::from(secret_raw);
+
+                Ok(SecretKey::Curve25519 {
+                    secret: secret.into(),
+                })
+            }
+            EcdhPublicParams::P256 { .. } => {
+                const SIZE: usize = ECCCurve::P256.secret_key_length();
+                let raw = pad_key::<SIZE>(&d)?;
+                let secret = elliptic_curve::SecretKey::<p256::NistP256>::from_bytes(&raw.into())?;
+
+                Ok(SecretKey::P256 { secret })
+            }
+            EcdhPublicParams::P384 { .. } => {
+                const SIZE: usize = ECCCurve::P384.secret_key_length();
+                let raw = pad_key::<SIZE>(&d)?;
+                let secret = elliptic_curve::SecretKey::<p384::NistP384>::from_bytes(&raw.into())?;
+
+                Ok(SecretKey::P384 { secret })
+            }
+            EcdhPublicParams::P521 { .. } => {
+                const SIZE: usize = ECCCurve::P521.secret_key_length();
+                let raw = pad_key::<SIZE>(&d)?;
+                let arr =
+                    generic_array::GenericArray::<u8, generic_array::typenum::U66>::from_slice(
+                        &raw[..],
+                    );
+                let secret = elliptic_curve::SecretKey::<p521::NistP521>::from_bytes(arr)?;
+
+                Ok(SecretKey::P521 { secret })
+            }
+            EcdhPublicParams::Unsupported { ref curve, .. } => {
+                unsupported_err!("curve {:?} for ECDH", curve)
+            }
+        }
+    }
+
     pub(crate) fn as_mpi(&self) -> Mpi {
         match self {
             Self::Curve25519 { secret, .. } => {
