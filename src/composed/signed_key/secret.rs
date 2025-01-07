@@ -200,7 +200,7 @@ impl SecretKeyTrait for SignedSecretKey {
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
     {
         self.primary_key.unlock(pw, work)
     }
@@ -356,7 +356,7 @@ impl SecretKeyTrait for SignedSecretSubKey {
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
     {
         self.key.unlock(pw, work)
     }

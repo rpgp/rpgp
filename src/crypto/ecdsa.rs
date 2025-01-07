@@ -9,14 +9,31 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
 use crate::types::EcdsaPublicParams;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PlainSecretParams, PublicParams, SecretKeyRepr};
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SecretKey {
-    P256(#[debug("..")] p256::SecretKey),
-    P384(#[debug("..")] p384::SecretKey),
-    P521(#[debug("..")] p521::SecretKey),
-    Secp256k1(#[debug("..")] k256::SecretKey),
+    P256(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_p256_gen()"))]
+        p256::SecretKey,
+    ),
+    P384(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_p384_gen()"))]
+        p384::SecretKey,
+    ),
+    P521(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_p521_gen()"))]
+        p521::SecretKey,
+    ),
+    Secp256k1(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_k256_gen()"))]
+        k256::SecretKey,
+    ),
     Unsupported {
         /// The secret point.
         #[debug("..")]
@@ -96,6 +113,16 @@ impl SecretKey {
             Self::Unsupported { .. } => None,
         }
     }
+
+    pub(crate) fn as_mpi(&self) -> Mpi {
+        match self {
+            Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Unsupported { x, .. } => x.clone(),
+        }
+    }
 }
 /// Generate an ECDSA KeyPair.
 pub fn generate_key<R: Rng + CryptoRng>(
@@ -106,44 +133,40 @@ pub fn generate_key<R: Rng + CryptoRng>(
         ECCCurve::P256 => {
             let secret = p256::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P256 { key: public }),
-                PlainSecretParams::ECDSA(secret),
+                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::P256(secret))),
             ))
         }
 
         ECCCurve::P384 => {
             let secret = p384::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P384 { key: public }),
-                PlainSecretParams::ECDSA(secret),
+                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::P384(secret))),
             ))
         }
 
         ECCCurve::P521 => {
             let secret = p521::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P521 { key: public }),
-                PlainSecretParams::ECDSA(secret),
+                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::P521(secret))),
             ))
         }
 
         ECCCurve::Secp256k1 => {
             let secret = k256::SecretKey::random(&mut rng);
             let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 { key: public }),
-                PlainSecretParams::ECDSA(secret),
+                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::Secp256k1(secret))),
             ))
         }
 
@@ -277,6 +300,40 @@ pub fn verify(
         }
         EcdsaPublicParams::Unsupported { curve, .. } => {
             unsupported_err!("curve {:?} for ECDSA", curve.to_string())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use rand::SeedableRng;
+
+    prop_compose! {
+        pub fn key_p256_gen()(seed: u64) -> p256::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+             p256::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_p384_gen()(seed: u64) -> p384::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            p384::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_p521_gen()(seed: u64) -> p521::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            p521::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_k256_gen()(seed: u64) -> k256::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            k256::SecretKey::random(&mut rng)
         }
     }
 }

@@ -8,9 +8,12 @@ use crate::types::PkeskBytes;
 use crate::types::{EskType, PublicKeyTrait, PublicParams};
 use crate::PlainSessionKey;
 
+use super::EcdhPublicParams;
+
 /// The version of the secret key that is actually exposed to users to do crypto operations.
 #[allow(clippy::large_enum_variant)] // FIXME
-#[derive(Debug, ZeroizeOnDrop)]
+#[derive(Debug, Clone, PartialEq, Eq, ZeroizeOnDrop)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SecretKeyRepr {
     RSA(rsa::PrivateKey),
     DSA(dsa::SecretKey),
@@ -25,6 +28,7 @@ pub enum SecretKeyRepr {
 impl SecretKeyRepr {
     pub fn decrypt<P>(
         &self,
+        pub_params: &PublicParams,
         values: &PkeskBytes,
         typ: EskType,
         recipient: &P,
@@ -42,11 +46,30 @@ impl SecretKeyRepr {
                     public_point,
                     encrypted_session_key,
                 },
-            ) => priv_key.decrypt(ecdh::EncryptionFields {
-                public_point,
-                encrypted_session_key,
-                fingerprint: recipient.fingerprint().as_bytes(),
-            })?,
+            ) => {
+                let PublicParams::ECDH(params) = pub_params else {
+                    bail!("inconsistent key state");
+                };
+
+                let (hash, alg_sym) = match params {
+                    EcdhPublicParams::Curve25519 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::P256 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::P384 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Unsupported { curve, .. } => {
+                        unsupported_err!("curve {} is not supported", curve);
+                    }
+                };
+
+                priv_key.decrypt(ecdh::EncryptionFields {
+                    public_point,
+                    encrypted_session_key,
+                    fingerprint: recipient.fingerprint().as_bytes(),
+                    curve: params.curve(),
+                    hash: *hash,
+                    alg_sym: *alg_sym,
+                })?
+            }
 
             (
                 SecretKeyRepr::X25519(ref priv_key),

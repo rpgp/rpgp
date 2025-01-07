@@ -6,13 +6,20 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{aes_kw, Decryptor, KeyParams};
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams};
+use crate::types::{Mpi, PlainSecretParams, PublicParams, SecretKeyRepr};
 
 /// Secret key for X448
 #[derive(Clone, derive_more::Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct SecretKey {
     #[debug("..")]
     pub(crate) secret: [u8; 56],
+}
+
+impl SecretKey {
+    pub(crate) fn as_mpi(&self) -> Mpi {
+        Mpi::from_slice(&self.secret)
+    }
 }
 
 impl KeyParams for SecretKey {
@@ -94,7 +101,9 @@ pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecre
 
     (
         PublicParams::X448 { public },
-        PlainSecretParams::X448(*secret.as_bytes()),
+        PlainSecretParams(SecretKeyRepr::X448(SecretKey {
+            secret: *secret.as_bytes(),
+        })),
     )
 }
 
@@ -201,7 +210,7 @@ mod tests {
         let PublicParams::X448 { public } = pkey else {
             panic!("invalid key generated")
         };
-        let SecretKeyRepr::X448(ref secret) = skey.as_ref().as_repr(&pkey).unwrap() else {
+        let SecretKeyRepr::X448(ref secret) = skey.0 else {
             panic!("invalid key generated")
         };
 

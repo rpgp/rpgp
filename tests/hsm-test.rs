@@ -114,9 +114,10 @@ impl SecretKeyTrait for FakeHsm {
     fn unlock<F, G, T>(&self, _pw: F, work: G) -> pgp::errors::Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> pgp::errors::Result<T>,
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> pgp::errors::Result<T>,
     {
-        work(self)
+        let params = self.public_params();
+        work(params, self)
     }
 
     fn create_signature<F>(
@@ -233,7 +234,9 @@ impl FakeHsm {
                     &shared_secret,
                     encrypted_session_key,
                     encrypted_session_key.len(),
-                    &(params.curve(), *alg_sym, *hash),
+                    params.curve(),
+                    *hash,
+                    *alg_sym,
                     self.public_key.fingerprint().as_bytes(),
                 )?;
 
@@ -381,7 +384,9 @@ fn card_decrypt() {
         };
 
         let (session_key, session_key_algorithm) = hsm
-            .unlock(String::new, |priv_key| priv_key.decrypt(values))
+            .unlock(String::new, |_pub_params, priv_key| {
+                priv_key.decrypt(values)
+            })
             .unwrap();
 
         let decrypted = edata

@@ -1,7 +1,6 @@
 use aes_gcm::aead::rand_core::CryptoRng;
 use log::debug;
 use rand::Rng;
-use zeroize::Zeroize;
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
@@ -17,30 +16,19 @@ use crate::{
     },
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+#[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretKey(SecretKeyInner<PublicKey>);
 
-#[derive(Debug, PartialEq, Eq, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
+#[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretSubkey(SecretKeyInner<PublicSubkey>);
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 struct SecretKeyInner<D> {
+    #[zeroize(skip)]
     details: D,
     secret_params: SecretParams,
+    #[zeroize(skip)]
     tag: Tag,
-}
-
-impl<D> zeroize::Zeroize for SecretKeyInner<D> {
-    fn zeroize(&mut self) {
-        // details are not zeroed as they are public knowledge.
-        self.secret_params.zeroize();
-    }
-}
-
-impl<D> Drop for SecretKeyInner<D> {
-    fn drop(&mut self) {
-        self.zeroize()
-    }
 }
 
 impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
@@ -238,17 +226,16 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
     {
-        let decrypted = match self.secret_params {
-            SecretParams::Plain(ref k) => k.as_ref().as_repr(self.public_params()),
+        let pub_params = self.details.public_params();
+        match self.secret_params {
+            SecretParams::Plain(ref k) => work(pub_params, &k.0),
             SecretParams::Encrypted(ref k) => {
                 let plain = k.unlock(pw, &self.details, Some(self.tag))?;
-                plain.as_ref().as_repr(self.public_params())
+                work(pub_params, &plain.0)
             }
-        }?;
-
-        work(&decrypted)
+        }
     }
 
     fn create_signature<F>(
@@ -263,23 +250,23 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
         use crate::crypto::Signer;
 
         let mut signature: Option<SignatureBytes> = None;
-        self.unlock(key_pw, |priv_key| {
+        self.unlock(key_pw, |pub_params, priv_key| {
             debug!("unlocked key");
             let sig = match *priv_key {
                 SecretKeyRepr::RSA(ref priv_key) => {
-                    let PublicParams::RSA(params) = self.public_params() else {
+                    let PublicParams::RSA(params) = pub_params else {
                         bail!("inconsistent key");
                     };
                     priv_key.sign(hash, data, params)
                 }
                 SecretKeyRepr::ECDSA(ref priv_key) => {
-                    let PublicParams::ECDSA(params) = self.public_params() else {
+                    let PublicParams::ECDSA(params) = pub_params else {
                         bail!("inconsistent key");
                     };
                     priv_key.sign(hash, data, params)
                 }
                 SecretKeyRepr::DSA(ref priv_key) => {
-                    let PublicParams::DSA(params) = self.public_params() else {
+                    let PublicParams::DSA(params) = pub_params else {
                         bail!("inconsistent key");
                     };
                     priv_key.sign(hash, data, params)
@@ -295,7 +282,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                     bail!("X448 can not be used for signing operations")
                 }
                 SecretKeyRepr::EdDSA(ref priv_key) => {
-                    let key = match self.public_params() {
+                    let key = match pub_params {
                         PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key }) => key,
                         PublicParams::Ed25519(params) => &params.key,
                         PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
@@ -312,7 +299,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                 }
             }?;
 
-            match self.public_params() {
+            match pub_params {
                 PublicParams::Ed25519 { .. } => {
                     // native format
 
@@ -354,7 +341,7 @@ impl SecretKeyTrait for SecretKey {
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
     {
         SecretKeyTrait::unlock(&self.0, pw, work)
     }
@@ -383,7 +370,7 @@ impl SecretKeyTrait for SecretSubkey {
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
     {
         SecretKeyTrait::unlock(&self.0, pw, work)
     }

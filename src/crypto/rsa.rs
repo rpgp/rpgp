@@ -2,14 +2,10 @@ use std::ops::Deref;
 
 use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
-use num_bigint::traits::ModInverse;
 use rand::{CryptoRng, Rng};
 use ripemd::Ripemd160;
 use rsa::pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey};
-use rsa::{
-    traits::{PrivateKeyParts, PublicKeyParts},
-    RsaPrivateKey, RsaPublicKey,
-};
+use rsa::{traits::PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use sha1_checked::Sha1; // not used for hashing, just as a source of the OID
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};
@@ -19,13 +15,20 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, KeyParams, Signer};
 use crate::errors::Result;
-use crate::types::{Mpi, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams};
+use crate::types::{
+    Mpi, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams, SecretKeyRepr,
+};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
 /// Private Key for RSA.
-#[derive(derive_more::Debug, ZeroizeOnDrop)]
-pub struct PrivateKey(#[debug("..")] RsaPrivateKey);
+#[derive(derive_more::Debug, ZeroizeOnDrop, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct PrivateKey(
+    #[debug("..")]
+    #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
+    RsaPrivateKey,
+);
 
 impl Deref for PrivateKey {
     type Target = RsaPrivateKey;
@@ -110,23 +113,9 @@ pub fn generate_key<R: Rng + CryptoRng>(
 ) -> Result<(PublicParams, PlainSecretParams)> {
     let key = RsaPrivateKey::new(&mut rng, bit_size)?;
 
-    let p = &key.primes()[0];
-    let q = &key.primes()[1];
-    let u = p
-        .clone()
-        .mod_inverse(q)
-        .expect("invalid prime")
-        .to_biguint()
-        .expect("invalid prime");
-
     Ok((
         PublicParams::RSA(key.to_public_key().into()),
-        PlainSecretParams::RSA {
-            d: key.d().into(),
-            p: p.into(),
-            q: q.into(),
-            u: u.into(),
-        },
+        PlainSecretParams(SecretKeyRepr::RSA(PrivateKey(key))),
     ))
 }
 
@@ -181,4 +170,19 @@ pub fn verify(
         HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
     }
     .map_err(Into::into)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+    use rand::SeedableRng;
+
+    prop_compose! {
+        pub fn key_gen()(seed: u64) -> RsaPrivateKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            RsaPrivateKey::new(&mut rng, 512).unwrap()
+        }
+    }
 }

@@ -16,8 +16,7 @@ use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
 use pgp::crypto::ecdsa::SecretKey as ECDSASecretKey;
 use pgp::crypto::{
-    ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
-    sym::SymmetricKeyAlgorithm,
+    hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
 };
 use pgp::errors::Error;
 use pgp::packet::{
@@ -299,7 +298,7 @@ fn test_parse_openpgp_sample_rsa_private() {
 
     pkey.unlock(
         || "".to_string(),
-        |unlocked_key| {
+        |_pub_params, unlocked_key| {
             match unlocked_key {
                 SecretKeyRepr::RSA(k) => {
                     assert_eq!(k.d().bits(), 2044);
@@ -312,7 +311,8 @@ fn test_parse_openpgp_sample_rsa_private() {
 
                     let ciphertext = {
                         // TODO: fix this in rust-rsa
-                        let k: RsaPrivateKey = (*k).clone();
+                        let k: &RsaPrivateKey = &*k;
+                        let k: RsaPrivateKey = k.clone();
                         let pk: RsaPublicKey = k.into();
                         pk.encrypt(
                             &mut rng,
@@ -639,7 +639,7 @@ fn encrypted_private_key() {
 
     match pp {
         SecretParams::Plain(_) => panic!("should be encrypted"),
-        SecretParams::Encrypted(pp) => {
+        SecretParams::Encrypted(ref pp) => {
             let S2kParams::Cfb { sym_alg, s2k, iv } = pp.string_to_key_params() else {
                 panic!("unexpected s2k param: {:?}", pp);
             };
@@ -667,7 +667,7 @@ fn encrypted_private_key() {
 
     key.unlock(
         || "test".to_string(),
-        |k| {
+        |_pub_params, k| {
             info!("{:?}", k);
             match k {
                 SecretKeyRepr::RSA(k) => {
@@ -827,7 +827,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
             match parsed {
                 PublicOrSecret::Secret(sec) => {
-                    sec.unlock(|| pw.to_string(), |_| Ok(())).unwrap();
+                    sec.unlock(|| pw.to_string(), |_, _| Ok(())).unwrap();
                 }
                 PublicOrSecret::Public(_) => {
                     // Nothing todo
@@ -1075,7 +1075,7 @@ fn private_ecc1_verify() {
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
     sk.unlock(
         || "ecc".to_string(),
-        |k| {
+        |_pub_params, k| {
             match k {
                 SecretKeyRepr::ECDSA(ref inner_key) => {
                     assert!(matches!(inner_key, ECDSASecretKey::P256(_)));
@@ -1100,7 +1100,7 @@ fn private_ecc2_verify() {
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "098033880F54719F",);
     sk.unlock(
         || "ecc".to_string(),
-        |k| {
+        |_pub_params, k| {
             match k {
                 SecretKeyRepr::ECDSA(ref inner_key) => {
                     assert!(matches!(inner_key, ECDSASecretKey::P384(_)));
@@ -1128,7 +1128,7 @@ fn private_ecc3_verify() {
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "E15A9BB15A23A43F",);
     sk.unlock(
         || "ecc".to_string(),
-        |k| {
+        |_pub_params, k| {
             match k {
                 SecretKeyRepr::ECDSA(ref inner_key) => {
                     assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
@@ -1153,11 +1153,9 @@ fn private_x25519_verify() {
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
     sk.unlock(
         || "moon".to_string(),
-        |k| {
+        |_pub_params, k| {
             match k {
-                SecretKeyRepr::EdDSA(ref inner_key) => {
-                    assert_eq!(inner_key.oid, ECCCurve::Ed25519.oid());
-                }
+                SecretKeyRepr::EdDSA(..) => {}
                 _ => panic!("invalid key"),
             }
             Ok(())
@@ -1205,7 +1203,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
 
         if unlock {
             let sk: SignedSecretKey = parsed.clone().try_into().unwrap();
-            sk.unlock(|| "".to_string(), |_| Ok(()))
+            sk.unlock(|| "".to_string(), |_, _| Ok(()))
                 .expect("failed to unlock key");
 
             let pub_key = sk.public_key();

@@ -14,13 +14,14 @@
 
 use rand::{CryptoRng, Rng};
 use signature::{Signer as _, Verifier};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
 use crate::types::{
     Ed25519PublicParams, EddsaLegacyPublicParams, Mpi, PlainSecretParams, PublicParams,
+    SecretKeyRepr,
 };
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
@@ -38,13 +39,19 @@ pub enum Mode {
 }
 
 /// Secret key for EdDSA with Curve25519, the only combination we currently support.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct SecretKey {
     /// The secret point.
     #[debug("..")]
-    pub secret: [u8; 32],
-    #[debug("{}", hex::encode(oid))]
-    pub oid: Vec<u8>,
+    #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
+    pub secret: ed25519_dalek::SigningKey,
+}
+
+impl SecretKey {
+    pub(crate) fn as_mpi(&self) -> Mpi {
+        Mpi::from_slice(&self.secret.to_bytes())
+    }
 }
 
 impl Signer for SecretKey {
@@ -56,9 +63,7 @@ impl Signer for SecretKey {
         digest: &[u8],
         _key: &Self::PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        let key = ed25519_dalek::SigningKey::from_bytes(&self.secret);
-
-        let signature = key.sign(digest);
+        let signature = self.secret.sign(digest);
         let bytes = signature.to_bytes();
 
         let r = bytes[..32].to_vec();
@@ -84,18 +89,13 @@ pub fn generate_key<R: Rng + CryptoRng>(
     let public = ed25519_dalek::VerifyingKey::from(&secret);
 
     match mode {
-        Mode::EdDSALegacy => {
-            // secret key
-            let p = Mpi::from_slice(&secret.to_bytes());
-
-            (
-                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key: public }),
-                PlainSecretParams::EdDSALegacy(p),
-            )
-        }
+        Mode::EdDSALegacy => (
+            PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key: public }),
+            PlainSecretParams(SecretKeyRepr::EdDSA(SecretKey { secret })),
+        ),
         Mode::Ed25519 => (
             PublicParams::Ed25519(Ed25519PublicParams { key: public }),
-            PlainSecretParams::Ed25519(secret.to_bytes()),
+            PlainSecretParams(SecretKeyRepr::EdDSA(SecretKey { secret })),
         ),
     }
 }
@@ -119,4 +119,15 @@ pub fn verify(
     let sig = sig_bytes.try_into()?;
 
     Ok(key.verify(hashed, &sig)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    prop_compose! {
+        pub fn key_gen()(bytes: [u8; 32]) -> ed25519_dalek::SigningKey {
+            ed25519_dalek::SigningKey::from_bytes(&bytes)
+        }
+    }
 }

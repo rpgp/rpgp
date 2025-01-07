@@ -3,7 +3,7 @@ use std::io;
 use nom::bytes::streaming::take;
 use nom::combinator::{map, map_res, rest_len};
 use nom::number::streaming::be_u8;
-use zeroize::Zeroize;
+use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
@@ -13,19 +13,10 @@ use crate::types::*;
 
 /// A list of params that are used to represent the values of possibly encrypted key,
 /// from imports and exports.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, ZeroizeOnDrop)]
 pub enum SecretParams {
     Plain(PlainSecretParams),
     Encrypted(EncryptedSecretParams),
-}
-
-impl Zeroize for SecretParams {
-    fn zeroize(&mut self) {
-        match self {
-            SecretParams::Plain(p) => p.zeroize(),
-            SecretParams::Encrypted(_) => { /* encrypted params do not need zeroing */ }
-        }
-    }
 }
 
 impl SecretParams {
@@ -236,7 +227,7 @@ fn parse_secret_fields(
 
         let res = match s2k_usage {
             S2kUsage::Unprotected => {
-                let repr = PlainSecretParams::from_slice(data, alg, public_params)?;
+                let repr = PlainSecretParams::try_from_slice(data, alg, public_params)?;
                 SecretParams::Plain(repr)
             }
             _ => SecretParams::Encrypted(EncryptedSecretParams::new(data.to_vec(), enc_params)),

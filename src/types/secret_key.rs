@@ -12,7 +12,7 @@ pub trait SecretKeyTrait: PublicKeyTrait {
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>;
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>;
 
     fn create_signature<F>(
         &self,
@@ -43,7 +43,7 @@ impl<T: SecretKeyTrait> SecretKeyTrait for &T {
     fn unlock<F, G, S>(&self, pw: F, work: G) -> Result<S>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<S>,
+        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<S>,
     {
         (*self).unlock(pw, work)
     }

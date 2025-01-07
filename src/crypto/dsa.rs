@@ -1,22 +1,50 @@
+use std::ops::Deref;
+
 use dsa::{Components, Signature, SigningKey};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::PrehashVerifier;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{DsaPublicParams, PlainSecretParams, PublicParams};
+use crate::types::{DsaPublicParams, PlainSecretParams, PublicParams, SecretKeyRepr};
 
 pub use dsa::KeySize;
 
 /// Secret key for DSA.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct SecretKey {
     #[debug("..")]
-    pub x: BigUint,
+    #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
+    pub key: dsa::SigningKey,
 }
+
+impl Zeroize for SecretKey {
+    fn zeroize(&mut self) {
+        // TODO!!!!
+        // self.key.zeroize();
+    }
+}
+
+impl Drop for SecretKey {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl zeroize::ZeroizeOnDrop for SecretKey {}
+
+impl Deref for SecretKey {
+    type Target = dsa::SigningKey;
+    fn deref(&self) -> &Self::Target {
+        &self.key
+    }
+}
+
+impl Eq for SecretKey {}
 
 impl Signer for SecretKey {
     type PublicParams = DsaPublicParams;
@@ -24,10 +52,9 @@ impl Signer for SecretKey {
         &self,
         hash_algorithm: HashAlgorithm,
         digest: &[u8],
-        pub_params: &Self::PublicParams,
+        _pub_params: &Self::PublicParams,
     ) -> Result<Vec<Vec<u8>>> {
-        let signing_key = SigningKey::from_components(pub_params.key.clone(), self.x.clone())?;
-
+        let signing_key = &self.key;
         let signature = match hash_algorithm {
             HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
 
@@ -69,24 +96,26 @@ pub fn generate_key<R: Rng + CryptoRng>(
     key_size: KeySize,
 ) -> Result<(PublicParams, PlainSecretParams)> {
     let components = Components::generate(&mut rng, key_size);
+
     let signing_key = SigningKey::generate(&mut rng, components);
     let verifying_key = signing_key.verifying_key();
 
-    let x = signing_key.x();
     let public_params = PublicParams::DSA(DsaPublicParams {
         key: verifying_key.clone(),
     });
-    let secret_params = PlainSecretParams::DSA(x.into());
+    let secret_params = PlainSecretParams(SecretKeyRepr::DSA(SecretKey { key: signing_key }));
     Ok((public_params, secret_params))
 }
 
 #[cfg(test)]
-mod test {
-    use crate::types::Mpi;
-
+mod tests {
     use super::*;
 
     use num_traits::Num;
+    use proptest::prelude::*;
+    use rand::SeedableRng;
+
+    use crate::types::Mpi;
 
     fn hex_num(s: &str) -> BigUint {
         BigUint::from_str_radix(s, 16).expect("invalid hex")
@@ -139,7 +168,8 @@ mod test {
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
-                let key = SecretKey { x: x.clone() };
+                let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
+                let key = SecretKey { key };
 
                 let res = key
                     .sign(hash_algorithm, &hashed, &params)
@@ -275,7 +305,8 @@ mod test {
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
-                let key = SecretKey { x: x.clone() };
+                let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
+                let key = SecretKey { key };
 
                 let res = key
                     .sign(hash_algorithm, &hashed, &params)
@@ -356,5 +387,14 @@ mod test {
             hex_num("89EC4BB1400ECCFF8E7D9AA515CD1DE7803F2DAFF09693EE7FD1353E90A68307"),
             hex_num("C9F0BDABCC0D880BB137A994CC7F3980CE91CC10FAF529FC46565B15CEA854E1"),
         );
+    }
+
+    prop_compose! {
+        pub fn key_gen()(seed: u64) -> dsa::SigningKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            #[allow(deprecated)]
+            let components = Components::generate(&mut rng, KeySize::DSA_1024_160);
+            SigningKey::generate(&mut rng, components)
+        }
     }
 }

@@ -6,10 +6,12 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use super::hash::HashAlgorithm;
 use crate::crypto::{
     aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
-    Decryptor, KeyParams,
+    Decryptor,
 };
 use crate::errors::{Error, Result};
-use crate::types::{EcdhPublicParams, Mpi, PkeskBytes, PlainSecretParams, PublicParams};
+use crate::types::{
+    EcdhPublicParams, Mpi, PkeskBytes, PlainSecretParams, PublicParams, SecretKeyRepr,
+};
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -18,54 +20,48 @@ const ANON_SENDER: [u8; 20] = [
 ];
 
 /// Secret key for ECDH
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SecretKey {
     /// ECDH with Curve25519
     Curve25519 {
         /// The secret point.
         #[debug("..")]
         secret: [u8; ECCCurve::Curve25519.secret_key_length()],
-        hash: HashAlgorithm,
-        alg_sym: SymmetricKeyAlgorithm,
     },
 
     /// ECDH with Nist P256
     P256 {
         /// The secret point.
         #[debug("..")]
-        secret: [u8; ECCCurve::P256.secret_key_length()],
-        hash: HashAlgorithm,
-        alg_sym: SymmetricKeyAlgorithm,
+        #[cfg_attr(test, proptest(strategy = "tests::key_p256_gen()"))]
+        secret: p256::SecretKey,
     },
 
     /// ECDH with Nist P384
     P384 {
         /// The secret point.
         #[debug("..")]
-        secret: [u8; ECCCurve::P384.secret_key_length()],
-        hash: HashAlgorithm,
-        alg_sym: SymmetricKeyAlgorithm,
+        #[cfg_attr(test, proptest(strategy = "tests::key_p384_gen()"))]
+        secret: p384::SecretKey,
     },
 
     /// ECDH with Nist P521
     P521 {
         /// The secret point.
         #[debug("..")]
-        secret: [u8; ECCCurve::P521.secret_key_length()],
-        hash: HashAlgorithm,
-        alg_sym: SymmetricKeyAlgorithm,
+        #[cfg_attr(test, proptest(strategy = "tests::key_p521_gen()"))]
+        secret: p521::SecretKey,
     },
 }
 
-impl KeyParams for SecretKey {
-    type KeyParams = (ECCCurve, SymmetricKeyAlgorithm, HashAlgorithm);
-
-    fn key_params(&self) -> Self::KeyParams {
+impl SecretKey {
+    pub(crate) fn as_mpi(&self) -> Mpi {
         match self {
-            SecretKey::Curve25519 { hash, alg_sym, .. } => (ECCCurve::Curve25519, *alg_sym, *hash),
-            SecretKey::P256 { hash, alg_sym, .. } => (ECCCurve::P256, *alg_sym, *hash),
-            SecretKey::P384 { hash, alg_sym, .. } => (ECCCurve::P384, *alg_sym, *hash),
-            SecretKey::P521 { hash, alg_sym, .. } => (ECCCurve::P521, *alg_sym, *hash),
+            Self::Curve25519 { secret, .. } => Mpi::from_raw(secret.to_vec()),
+            Self::P256 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
+            Self::P384 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
+            Self::P521 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
         }
     }
 }
@@ -78,6 +74,10 @@ pub struct EncryptionFields<'a> {
 
     /// NOTE: The fingerprint isn't part of the "Algorithm-Specific Fields", but it is needed for session key derivation
     pub fingerprint: &'a [u8],
+
+    pub curve: ECCCurve,
+    pub hash: HashAlgorithm,
+    pub alg_sym: SymmetricKeyAlgorithm,
 }
 
 impl Decryptor for SecretKey {
@@ -87,8 +87,9 @@ impl Decryptor for SecretKey {
         debug!("ECDH decrypt");
 
         let encrypted_key_len: usize = data.encrypted_session_key.len();
-
-        let (curve, alg_sym, hash) = self.key_params();
+        let curve = data.curve;
+        let alg_sym = data.alg_sym;
+        let hash = data.hash;
 
         let shared_secret = match self {
             SecretKey::Curve25519 { secret, .. } => {
@@ -129,24 +130,15 @@ impl Decryptor for SecretKey {
 
                 shared_secret.to_bytes().to_vec()
             }
-            SecretKey::P256 { secret, .. } => derive_shared_secret_decryption::<p256::NistP256>(
-                data.public_point,
-                secret,
-                &curve,
-                65,
-            )?,
-            SecretKey::P384 { secret, .. } => derive_shared_secret_decryption::<p384::NistP384>(
-                data.public_point,
-                secret,
-                &curve,
-                97,
-            )?,
-            SecretKey::P521 { secret, .. } => derive_shared_secret_decryption::<p521::NistP521>(
-                data.public_point,
-                secret,
-                &curve,
-                133,
-            )?,
+            SecretKey::P256 { secret, .. } => {
+                derive_shared_secret_decryption::<p256::NistP256>(data.public_point, secret, 65)?
+            }
+            SecretKey::P384 { secret, .. } => {
+                derive_shared_secret_decryption::<p384::NistP384>(data.public_point, secret, 97)?
+            }
+            SecretKey::P521 { secret, .. } => {
+                derive_shared_secret_decryption::<p521::NistP521>(data.public_point, secret, 133)?
+            }
         };
 
         // obtain the session key from the shared secret
@@ -154,7 +146,9 @@ impl Decryptor for SecretKey {
             &shared_secret,
             data.encrypted_session_key,
             encrypted_key_len,
-            &(curve, alg_sym, hash),
+            curve,
+            hash,
+            alg_sym,
             data.fingerprint,
         )
     }
@@ -163,8 +157,7 @@ impl Decryptor for SecretKey {
 /// Derive a shared secret in decryption, for a Rust Crypto curve
 fn derive_shared_secret_decryption<C>(
     public_point: &Mpi,
-    secret: &[u8],
-    curve: &ECCCurve,
+    our_secret: &elliptic_curve::SecretKey<C>,
     pub_bytes: usize,
 ) -> Result<Vec<u8>>
 where
@@ -173,17 +166,10 @@ where
     elliptic_curve::AffinePoint<C>:
         elliptic_curve::sec1::FromEncodedPoint<C> + elliptic_curve::sec1::ToEncodedPoint<C>,
 {
-    ensure_eq!(
-        secret.len(),
-        curve.secret_key_length(),
-        "invalid secret point"
-    );
     ensure_eq!(public_point.len(), pub_bytes, "invalid public point");
 
     let ephemeral_public_key =
         elliptic_curve::PublicKey::<C>::from_sec1_bytes(public_point.as_bytes())?;
-
-    let our_secret = elliptic_curve::SecretKey::<C>::from_bytes(secret.into())?;
 
     // derive shared secret
     let shared_secret = elliptic_curve::ecdh::diffie_hellman(
@@ -202,15 +188,15 @@ pub fn derive_session_key(
     shared_secret: &[u8],
     encrypted_session_key: &[u8],
     encrypted_key_len: usize,
-    key_params: &<SecretKey as KeyParams>::KeyParams,
+    curve: ECCCurve,
+    hash: HashAlgorithm,
+    alg_sym: SymmetricKeyAlgorithm,
     fingerprint: &[u8],
 ) -> Result<Vec<u8>> {
-    let (curve, alg_sym, hash) = key_params;
-
-    let param = build_ecdh_param(&curve.oid(), *alg_sym, *hash, fingerprint);
+    let param = build_ecdh_param(&curve.oid(), alg_sym, hash, fingerprint);
 
     // Perform key derivation
-    let z = kdf(*hash, shared_secret, alg_sym.key_size(), &param)?;
+    let z = kdf(hash, shared_secret, alg_sym.key_size(), &param)?;
 
     // Perform AES Key Unwrap
     let mut encrypted_session_key_vec = vec![0; encrypted_key_len];
@@ -281,7 +267,6 @@ pub fn generate_key<R: Rng + CryptoRng>(
             // Clamp, as `to_bytes` does not clamp.
             let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
             // Big Endian
-            let q = q_raw.into_iter().rev().collect::<Vec<u8>>();
 
             let curve = ECCCurve::Curve25519;
             let hash = curve.hash_algo()?;
@@ -293,7 +278,11 @@ pub fn generate_key<R: Rng + CryptoRng>(
                     hash,
                     alg_sym,
                 }),
-                PlainSecretParams::ECDH(Mpi::from_raw(q)),
+                PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::Curve25519 {
+                    secret: q_raw,
+                    // hash,
+                    // alg_sym,
+                })),
             ))
         }
 
@@ -309,13 +298,16 @@ fn keygen_p256<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSec
     let secret = elliptic_curve::SecretKey::<p256::NistP256>::random(&mut rng);
     let public = secret.public_key();
 
+    let hash = curve.hash_algo()?;
+    let alg_sym = curve.sym_algo()?;
+
     Ok((
         PublicParams::ECDH(EcdhPublicParams::P256 {
             p: public,
-            hash: curve.hash_algo()?,
-            alg_sym: curve.sym_algo()?,
+            hash,
+            alg_sym,
         }),
-        PlainSecretParams::ECDH(Mpi::from_slice(secret.to_bytes().as_slice())),
+        PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::P256 { secret })),
     ))
 }
 
@@ -324,13 +316,15 @@ fn keygen_p384<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSec
     let secret = elliptic_curve::SecretKey::<p384::NistP384>::random(&mut rng);
     let public = secret.public_key();
 
+    let hash = curve.hash_algo()?;
+    let alg_sym = curve.sym_algo()?;
     Ok((
         PublicParams::ECDH(EcdhPublicParams::P384 {
             p: public,
-            hash: curve.hash_algo()?,
-            alg_sym: curve.sym_algo()?,
+            hash,
+            alg_sym,
         }),
-        PlainSecretParams::ECDH(Mpi::from_slice(secret.to_bytes().as_slice())),
+        PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::P384 { secret })),
     ))
 }
 
@@ -339,13 +333,15 @@ fn keygen_p521<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSec
     let secret = elliptic_curve::SecretKey::<p521::NistP521>::random(&mut rng);
     let public = secret.public_key();
 
+    let hash = curve.hash_algo()?;
+    let alg_sym = curve.sym_algo()?;
     Ok((
         PublicParams::ECDH(EcdhPublicParams::P521 {
             p: public,
-            hash: curve.hash_algo()?,
-            alg_sym: curve.sym_algo()?,
+            hash,
+            alg_sym,
         }),
-        PlainSecretParams::ECDH(Mpi::from_slice(secret.to_bytes().as_slice())),
+        PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::P521 { secret })),
     ))
 }
 
@@ -534,10 +530,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use std::fs;
 
+    use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
@@ -573,7 +568,7 @@ mod tests {
                         _ => panic!("invalid key generated"),
                     };
 
-                    let decrypted = match (skey.as_ref().as_repr(&pkey).unwrap(), values) {
+                    let decrypted = match (&skey.0, values) {
                         (
                             SecretKeyRepr::ECDH(ref skey),
                             PkeskBytes::Ecdh {
@@ -585,6 +580,9 @@ mod tests {
                                 public_point: &public_point,
                                 encrypted_session_key: &encrypted_session_key,
                                 fingerprint: &fingerprint,
+                                curve: curve.clone(),
+                                hash: curve.hash_algo().unwrap(),
+                                alg_sym: curve.sym_algo().unwrap(),
                             })
                             .unwrap(),
                         _ => panic!("invalid key generated"),
@@ -619,6 +617,34 @@ mod tests {
             let data = msg.get_literal().unwrap().data();
 
             assert_eq!(data, "hello\n".as_bytes());
+        }
+    }
+
+    prop_compose! {
+        pub fn key_p256_gen()(seed: u64) -> p256::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+             p256::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_p384_gen()(seed: u64) -> p384::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            p384::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_p521_gen()(seed: u64) -> p521::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            p521::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_k256_gen()(seed: u64) -> k256::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            k256::SecretKey::random(&mut rng)
         }
     }
 }

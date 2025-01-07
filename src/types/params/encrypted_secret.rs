@@ -3,18 +3,20 @@ use std::io::Write;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use digest::Digest;
+use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::checksum;
 use crate::errors::{Error, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
-#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
 pub struct EncryptedSecretParams {
     /// The encrypted data, including the checksum.
     #[debug("{}", hex::encode(data))]
     data: Vec<u8>,
     /// S2k Params
+    #[zeroize(skip)]
     s2k_params: S2kParams,
 }
 
@@ -130,7 +132,7 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::try_from_slice(plaintext, alg, params)
             }
             S2kParams::Aead {
                 sym_alg,
@@ -165,7 +167,7 @@ impl EncryptedSecretParams {
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, tag, &mut decrypt)?;
 
                         // "decrypt" now contains the decrypted key material
-                        PlainSecretParams::from_slice(&decrypt, alg, pub_key.public_params())
+                        PlainSecretParams::try_from_slice(&decrypt, alg, pub_key.public_params())
                     }
 
                     _ => bail!("S2K usage AEAD is not allowed with S2K type {:?}", s2k.id()),
@@ -191,7 +193,7 @@ impl EncryptedSecretParams {
                 if expected_sha1 != calculated_sha1 {
                     return Err(Error::InvalidInput);
                 }
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::try_from_slice(plaintext, alg, params)
             }
             S2kParams::MalleableCfb { sym_alg, s2k, iv } => {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
@@ -210,7 +212,7 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::try_from_slice(plaintext, alg, params)
             }
         }
     }
