@@ -4,7 +4,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{EskType, PkeskBytes, SecretKeyRepr, SecretKeyTrait, SkeskVersion};
+use crate::types::{EskType, PkeskBytes, PlainSecretParams, SecretKeyTrait, SkeskVersion};
 
 /// Decrypts session key using secret key.
 pub fn decrypt_session_key<F, L>(
@@ -15,7 +15,7 @@ pub fn decrypt_session_key<F, L>(
 ) -> Result<PlainSessionKey>
 where
     F: FnOnce() -> String,
-    L: SecretKeyTrait<Unlocked = SecretKeyRepr>,
+    L: SecretKeyTrait<Unlocked = PlainSecretParams>,
 {
     debug!("decrypt session key");
 

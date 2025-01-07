@@ -5,7 +5,6 @@ use nom::bytes::streaming::take;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, IResult, Result};
 use crate::ser::Serialize;
-use crate::types::SecretKeyRepr;
 
 mod dsa;
 mod ecdh;
@@ -24,6 +23,8 @@ pub use self::eddsa_legacy::EddsaLegacyPublicParams;
 pub use self::elgamal::ElgamalPublicParams;
 pub use self::rsa::RsaPublicParams;
 pub use self::x25519::X25519PublicParams;
+
+use super::PlainSecretParams;
 
 /// Represent the public parameters for the different algorithms.
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -45,20 +46,20 @@ pub enum PublicParams {
         data: Vec<u8>,
     },
 }
-impl TryFrom<&SecretKeyRepr> for PublicParams {
+impl TryFrom<&PlainSecretParams> for PublicParams {
     type Error = Error;
 
-    fn try_from(secret: &SecretKeyRepr) -> Result<Self, Self::Error> {
+    fn try_from(secret: &PlainSecretParams) -> Result<Self, Self::Error> {
         match secret {
-            SecretKeyRepr::RSA(ref p) => Ok(Self::RSA(p.into())),
-            SecretKeyRepr::DSA(ref p) => Ok(Self::DSA(p.into())),
-            SecretKeyRepr::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
-            SecretKeyRepr::ECDH(ref p) => Ok(Self::ECDH(p.into())),
-            SecretKeyRepr::EdDSA(ref p) => Ok(Self::Ed25519(p.into())),
-            SecretKeyRepr::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
-            SecretKeyRepr::X25519(ref p) => Ok(Self::X25519(p.into())),
+            PlainSecretParams::RSA(ref p) => Ok(Self::RSA(p.into())),
+            PlainSecretParams::DSA(ref p) => Ok(Self::DSA(p.into())),
+            PlainSecretParams::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
+            PlainSecretParams::ECDH(ref p) => Ok(Self::ECDH(p.into())),
+            PlainSecretParams::EdDSA(ref p) => Ok(Self::Ed25519(p.into())),
+            PlainSecretParams::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
+            PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
             #[cfg(feature = "unstable-curve448")]
-            SecretKeyRepr::X448(ref p) => {
+            PlainSecretParams::X448(ref p) => {
                 let secret = x448::Secret::from(p.secret); // does clamping
                 let public = *x448::PublicKey::from(&secret).as_bytes();
 

@@ -9,7 +9,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{aes_kw, Decryptor};
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams, SecretKeyRepr, X25519PublicParams};
+use crate::types::{PlainSecretParams, PublicParams, X25519PublicParams};
 
 /// Secret key for X25519
 #[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
@@ -112,7 +112,7 @@ pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecre
 
     (
         PublicParams::X25519(X25519PublicParams { key: public }),
-        PlainSecretParams(SecretKeyRepr::X25519(SecretKey { secret })),
+        PlainSecretParams::X25519(SecretKey { secret }),
     )
 }
 
@@ -200,7 +200,7 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::SecretKeyRepr;
+    use crate::types::PlainSecretParams;
 
     #[test]
     fn x25519_hkdf() {
@@ -270,7 +270,7 @@ mod tests {
         let PublicParams::X25519(ref params) = pkey else {
             panic!("invalid key generated")
         };
-        let SecretKeyRepr::X25519(ref secret) = skey.0 else {
+        let PlainSecretParams::X25519(ref secret) = skey else {
             panic!("invalid key generated")
         };
 

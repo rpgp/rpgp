@@ -9,7 +9,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::{Error, Result};
 use crate::types::EcdsaPublicParams;
-use crate::types::{Mpi, MpiRef, PlainSecretParams, PublicParams, SecretKeyRepr};
+use crate::types::{Mpi, MpiRef, PlainSecretParams, PublicParams};
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -191,7 +191,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P256 { key: public }),
-                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::P256(secret))),
+                PlainSecretParams::ECDSA(SecretKey::P256(secret)),
             ))
         }
 
@@ -201,7 +201,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P384 { key: public }),
-                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::P384(secret))),
+                PlainSecretParams::ECDSA(SecretKey::P384(secret)),
             ))
         }
 
@@ -211,7 +211,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::P521 { key: public }),
-                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::P521(secret))),
+                PlainSecretParams::ECDSA(SecretKey::P521(secret)),
             ))
         }
 
@@ -221,7 +221,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
             Ok((
                 PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 { key: public }),
-                PlainSecretParams(SecretKeyRepr::ECDSA(SecretKey::Secp256k1(secret))),
+                PlainSecretParams::ECDSA(SecretKey::Secp256k1(secret)),
             ))
         }
 

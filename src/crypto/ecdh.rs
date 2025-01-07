@@ -13,7 +13,6 @@ use crate::crypto::{
 use crate::errors::{Error, Result};
 use crate::types::{
     pad_key, EcdhPublicParams, Mpi, MpiRef, PkeskBytes, PlainSecretParams, PublicParams,
-    SecretKeyRepr,
 };
 
 /// 20 octets representing "Anonymous Sender    ".
@@ -378,9 +377,9 @@ pub fn generate_key<R: Rng + CryptoRng>(
                     hash,
                     alg_sym,
                 }),
-                PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::Curve25519 {
+                PlainSecretParams::ECDH(SecretKey::Curve25519 {
                     secret: Curve25519Wrapper(secret),
-                })),
+                }),
             ))
         }
 
@@ -405,7 +404,7 @@ fn keygen_p256<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSec
             hash,
             alg_sym,
         }),
-        PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::P256 { secret })),
+        PlainSecretParams::ECDH(SecretKey::P256 { secret }),
     ))
 }
 
@@ -422,7 +421,7 @@ fn keygen_p384<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSec
             hash,
             alg_sym,
         }),
-        PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::P384 { secret })),
+        PlainSecretParams::ECDH(SecretKey::P384 { secret }),
     ))
 }
 
@@ -439,7 +438,7 @@ fn keygen_p521<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSec
             hash,
             alg_sym,
         }),
-        PlainSecretParams(SecretKeyRepr::ECDH(SecretKey::P521 { secret })),
+        PlainSecretParams::ECDH(SecretKey::P521 { secret }),
     ))
 }
 
@@ -635,7 +634,7 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::SecretKeyRepr;
+    use crate::types::PlainSecretParams;
     use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
@@ -666,9 +665,9 @@ mod tests {
                         _ => panic!("invalid key generated"),
                     };
 
-                    let decrypted = match (&skey.0, values) {
+                    let decrypted = match (&skey, values) {
                         (
-                            SecretKeyRepr::ECDH(ref skey),
+                            PlainSecretParams::ECDH(ref skey),
                             PkeskBytes::Ecdh {
                                 public_point,
                                 encrypted_session_key,

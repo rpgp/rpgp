@@ -8,7 +8,6 @@ mod public_key;
 mod revocation_key;
 mod s2k;
 mod secret_key;
-mod secret_key_repr;
 mod user;
 
 use log::debug;
@@ -23,7 +22,7 @@ pub use self::public_key::*;
 pub use self::revocation_key::*;
 pub use self::s2k::*;
 pub use self::secret_key::*;
-pub use self::secret_key_repr::*;
+
 pub use self::user::*;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::ser::Serialize;

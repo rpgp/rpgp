@@ -12,8 +12,8 @@ use crate::errors::Result;
 use crate::packet::{self, write_packet, Packet, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
-    SecretKeyRepr, SecretKeyTrait, SignatureBytes, Tag,
+    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PlainSecretParams, PublicKeyTrait,
+    PublicParams, SecretKeyTrait, SignatureBytes, Tag,
 };
 use crate::util::write_packet_length_len;
 use crate::{armor, ArmorOptions, SignedPublicKey};
@@ -195,7 +195,7 @@ impl Serialize for SignedSecretKey {
 
 impl SecretKeyTrait for SignedSecretKey {
     type PublicKey = PublicKey;
-    type Unlocked = SecretKeyRepr;
+    type Unlocked = PlainSecretParams;
 
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
@@ -351,7 +351,7 @@ impl Serialize for SignedSecretSubKey {
 
 impl SecretKeyTrait for SignedSecretSubKey {
     type PublicKey = PublicSubkey;
-    type Unlocked = SecretKeyRepr;
+    type Unlocked = PlainSecretParams;
 
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where

@@ -23,9 +23,10 @@ use pgp::packet::{
     KeyFlags, Signature, SignatureType, Subpacket, SubpacketData, UserAttribute, UserId,
 };
 use pgp::ser::Serialize;
+use pgp::types::PlainSecretParams;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
-    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
+    CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyTrait,
+    SecretParams, SignedUser, StringToKey, Version,
 };
 use pgp::{armor, types::PublicKeyTrait};
 use rand::thread_rng;
@@ -300,7 +301,7 @@ fn test_parse_openpgp_sample_rsa_private() {
         || "".to_string(),
         |_pub_params, unlocked_key| {
             match unlocked_key {
-                SecretKeyRepr::RSA(k) => {
+                PlainSecretParams::RSA(k) => {
                     assert_eq!(k.d().bits(), 2044);
                     assert_eq!(k.primes()[0].bits(), 1024);
                     assert_eq!(k.primes()[1].bits(), 1024);
@@ -670,7 +671,7 @@ fn encrypted_private_key() {
         |_pub_params, k| {
             info!("{:?}", k);
             match k {
-                SecretKeyRepr::RSA(k) => {
+                PlainSecretParams::RSA(k) => {
                     assert_eq!(k.e().to_bytes_be(), hex::decode("010001").unwrap().to_vec());
                     assert_eq!(k.n().to_bytes_be(), hex::decode("9AF89C08A8EA84B5363268BAC8A06821194163CBCEEED2D921F5F3BDD192528911C7B1E515DCE8865409E161DBBBD8A4688C56C1E7DFCF639D9623E3175B1BCA86B1D12AE4E4FBF9A5B7D5493F468DA744F4ACFC4D13AD2D83398FFC20D7DF02DF82F3BC05F92EDC41B3C478638A053726586AAAC57E2B66C04F9775716A0C71").unwrap().to_vec());
                     assert_eq!(k.d().to_bytes_be(), hex::decode("33DE47E3421E1442CE9BFA9FA1ACC68D657594604FA7719CC91817F78D604B0DA38CD206D9D571621C589E3DF19CA2BB0C5F045EAC2C25AEB2BCE0D00E2E29538F8239F8A499EAF872497809E524A9EDA88E7ECEE78DF722E33DD62C9E204FE0F90DCF6F4247D1F7C8CE3BB3F0A4BAB23CFD95D41BC8A39C22C99D5BC38BC51D").unwrap().to_vec());
@@ -1077,7 +1078,7 @@ fn private_ecc1_verify() {
         || "ecc".to_string(),
         |_pub_params, k| {
             match k {
-                SecretKeyRepr::ECDSA(ref inner_key) => {
+                PlainSecretParams::ECDSA(ref inner_key) => {
                     assert!(matches!(inner_key, ECDSASecretKey::P256(_)));
                 }
                 _ => panic!("invalid key"),
@@ -1102,7 +1103,7 @@ fn private_ecc2_verify() {
         || "ecc".to_string(),
         |_pub_params, k| {
             match k {
-                SecretKeyRepr::ECDSA(ref inner_key) => {
+                PlainSecretParams::ECDSA(ref inner_key) => {
                     assert!(matches!(inner_key, ECDSASecretKey::P384(_)));
                 }
                 _ => panic!("invalid key"),
@@ -1130,7 +1131,7 @@ fn private_ecc3_verify() {
         || "ecc".to_string(),
         |_pub_params, k| {
             match k {
-                SecretKeyRepr::ECDSA(ref inner_key) => {
+                PlainSecretParams::ECDSA(ref inner_key) => {
                     assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
                 }
                 _ => panic!("invalid key"),
@@ -1155,7 +1156,7 @@ fn private_x25519_verify() {
         || "moon".to_string(),
         |_pub_params, k| {
             match k {
-                SecretKeyRepr::EdDSALegacy(..) => {}
+                PlainSecretParams::EdDSALegacy(..) => {}
                 _ => panic!("invalid key"),
             }
             Ok(())

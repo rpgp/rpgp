@@ -15,9 +15,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, Signer};
 use crate::errors::Result;
-use crate::types::{
-    Mpi, MpiRef, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams, SecretKeyRepr,
-};
+use crate::types::{Mpi, MpiRef, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
@@ -132,7 +130,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
 
     Ok((
         PublicParams::RSA(key.to_public_key().into()),
-        PlainSecretParams(SecretKeyRepr::RSA(PrivateKey(key))),
+        PlainSecretParams::RSA(PrivateKey(key)),
     ))
 }
 

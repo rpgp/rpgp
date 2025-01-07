@@ -21,7 +21,6 @@ use crate::crypto::Signer;
 use crate::errors::Result;
 use crate::types::{
     Ed25519PublicParams, EddsaLegacyPublicParams, Mpi, PlainSecretParams, PublicParams,
-    SecretKeyRepr,
 };
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
@@ -112,11 +111,11 @@ pub fn generate_key<R: Rng + CryptoRng>(
     match mode {
         Mode::EdDSALegacy => (
             PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key: public }),
-            PlainSecretParams(SecretKeyRepr::EdDSALegacy(SecretKey { secret })),
+            PlainSecretParams::EdDSALegacy(SecretKey { secret }),
         ),
         Mode::Ed25519 => (
             PublicParams::Ed25519(Ed25519PublicParams { key: public }),
-            PlainSecretParams(SecretKeyRepr::EdDSA(SecretKey { secret })),
+            PlainSecretParams::EdDSA(SecretKey { secret }),
         ),
     }
 }

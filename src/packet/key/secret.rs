@@ -11,8 +11,8 @@ use crate::{
     },
     types::{
         EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes,
-        PublicKeyTrait, PublicParams, SecretKeyRepr, SecretKeyTrait, SecretParams, SignatureBytes,
-        Tag, Version,
+        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        SignatureBytes, Tag, Version,
     },
 };
 
@@ -221,7 +221,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
     for SecretKeyInner<D>
 {
     type PublicKey = D;
-    type Unlocked = SecretKeyRepr;
+    type Unlocked = PlainSecretParams;
 
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
@@ -230,10 +230,10 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
     {
         let pub_params = self.details.public_params();
         match self.secret_params {
-            SecretParams::Plain(ref k) => work(pub_params, &k.0),
+            SecretParams::Plain(ref k) => work(pub_params, k),
             SecretParams::Encrypted(ref k) => {
                 let plain = k.unlock(pw, &self.details, Some(self.tag))?;
-                work(pub_params, &plain.0)
+                work(pub_params, &plain)
             }
         }
     }
@@ -253,35 +253,35 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
         self.unlock(key_pw, |pub_params, priv_key| {
             debug!("unlocked key");
             let sig = match *priv_key {
-                SecretKeyRepr::RSA(ref priv_key) => {
+                PlainSecretParams::RSA(ref priv_key) => {
                     let PublicParams::RSA(params) = pub_params else {
                         bail!("inconsistent key");
                     };
                     priv_key.sign(hash, data, params)
                 }
-                SecretKeyRepr::ECDSA(ref priv_key) => {
+                PlainSecretParams::ECDSA(ref priv_key) => {
                     let PublicParams::ECDSA(params) = pub_params else {
                         bail!("inconsistent key");
                     };
                     priv_key.sign(hash, data, params)
                 }
-                SecretKeyRepr::DSA(ref priv_key) => {
+                PlainSecretParams::DSA(ref priv_key) => {
                     let PublicParams::DSA(params) = pub_params else {
                         bail!("inconsistent key");
                     };
                     priv_key.sign(hash, data, params)
                 }
-                SecretKeyRepr::ECDH(_) => {
+                PlainSecretParams::ECDH(_) => {
                     bail!("ECDH can not be used for signing operations")
                 }
-                SecretKeyRepr::X25519(_) => {
+                PlainSecretParams::X25519(_) => {
                     bail!("X25519 can not be used for signing operations")
                 }
                 #[cfg(feature = "unstable-curve448")]
-                SecretKeyRepr::X448(_) => {
+                PlainSecretParams::X448(_) => {
                     bail!("X448 can not be used for signing operations")
                 }
-                SecretKeyRepr::EdDSA(ref priv_key) => {
+                PlainSecretParams::EdDSA(ref priv_key) => {
                     let key = match pub_params {
                         PublicParams::Ed25519(params) => &params.key,
                         _ => {
@@ -290,7 +290,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                     };
                     priv_key.sign(hash, data, key)
                 }
-                SecretKeyRepr::EdDSALegacy(ref priv_key) => {
+                PlainSecretParams::EdDSALegacy(ref priv_key) => {
                     let key = match pub_params {
                         PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key }) => key,
                         PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
@@ -344,7 +344,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
 
 impl SecretKeyTrait for SecretKey {
     type PublicKey = PublicKey;
-    type Unlocked = SecretKeyRepr;
+    type Unlocked = PlainSecretParams;
 
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
@@ -373,7 +373,7 @@ impl SecretKeyTrait for SecretKey {
 
 impl SecretKeyTrait for SecretSubkey {
     type PublicKey = PublicSubkey;
-    type Unlocked = SecretKeyRepr;
+    type Unlocked = PlainSecretParams;
 
     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where

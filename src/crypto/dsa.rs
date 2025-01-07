@@ -9,7 +9,7 @@ use zeroize::Zeroize;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{DsaPublicParams, MpiRef, PlainSecretParams, PublicParams, SecretKeyRepr};
+use crate::types::{DsaPublicParams, MpiRef, PlainSecretParams, PublicParams};
 
 pub use dsa::KeySize;
 
@@ -118,7 +118,7 @@ pub fn generate_key<R: Rng + CryptoRng>(
     let public_params = PublicParams::DSA(DsaPublicParams {
         key: verifying_key.clone(),
     });
-    let secret_params = PlainSecretParams(SecretKeyRepr::DSA(SecretKey { key: signing_key }));
+    let secret_params = PlainSecretParams::DSA(SecretKey { key: signing_key });
     Ok((public_params, secret_params))
 }
 

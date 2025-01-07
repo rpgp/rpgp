@@ -6,7 +6,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{aes_kw, Decryptor};
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams, SecretKeyRepr};
+use crate::types::{PlainSecretParams, PublicParams};
 
 /// Secret key for X448
 #[derive(Clone, derive_more::Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
@@ -95,9 +95,9 @@ pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecre
 
     (
         PublicParams::X448 { public },
-        PlainSecretParams(SecretKeyRepr::X448(SecretKey {
+        PlainSecretParams::X448(SecretKey {
             secret: *secret.as_bytes(),
-        })),
+        }),
     )
 }
 
@@ -193,7 +193,6 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::SecretKeyRepr;
 
     #[test]
     fn test_encrypt_decrypt() {
@@ -204,7 +203,7 @@ mod tests {
         let PublicParams::X448 { public } = pkey else {
             panic!("invalid key generated")
         };
-        let SecretKeyRepr::X448(ref secret) = skey.0 else {
+        let PlainSecretParams::X448(ref secret) = skey else {
             panic!("invalid key generated")
         };
 
