@@ -1181,7 +1181,7 @@ fn pub_x25519_little_verify() {
         "A586D1DD06BD97BC",
     );
     assert_eq!(pk.details.users.len(), 1);
-    assert_eq!(pk.details.users[0].id.id(), "Hi <hi@hel.lo>");
+    assert_eq!(pk.details.users[0].id.id(), b"Hi <hi@hel.lo>");
 }
 
 macro_rules! autocrypt_key {

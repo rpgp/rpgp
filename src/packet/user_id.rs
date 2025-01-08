@@ -1,9 +1,8 @@
 use std::{io, str};
 
-use aes_gcm::aead::rand_core::CryptoRng;
 use bytes::{Buf, Bytes};
 use chrono::{SubsecRound, Utc};
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 
 use crate::errors::Result;
 use crate::packet::{
@@ -19,25 +18,19 @@ use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, 
 #[display("User ID: \"{:?}\"", id)]
 pub struct UserId {
     packet_version: Version,
-    #[cfg_attr(test, proptest(strategy = "id_gen()"))]
+    #[cfg_attr(test, proptest(strategy = "tests::id_gen()"))]
     id: Bytes,
 }
 
-#[cfg(test)]
-proptest::prop_compose! {
-    fn id_gen()(id in "[a-zA-Z]+") -> Bytes {
-        Bytes::from(id)
-    }
-}
-
 impl UserId {
-    /// Parses a `UserId` packet from the given slice.
+    /// Parses a `UserId` packet from the given buffer.
     pub fn from_slice(packet_version: Version, mut input: impl Buf) -> Result<Self> {
         let len = input.remaining();
         let id = input.copy_to_bytes(len);
         Ok(UserId { packet_version, id })
     }
 
+    /// Creates a `UserId` from the given string.
     pub fn from_str(packet_version: Version, input: impl AsRef<str>) -> Self {
         UserId {
             packet_version,
@@ -45,11 +38,14 @@ impl UserId {
         }
     }
 
-    pub fn id(&self) -> &Bytes {
+    /// Returns the actual id.
+    ///
+    /// Should be valid UTF-8, but not guranteed, to be more compatible with existing data.
+    pub fn id(&self) -> &[u8] {
         &self.id
     }
 
-    /// Create a self-signature
+    /// Create a self-signature.
     pub fn sign<R, F>(&self, rng: R, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
@@ -58,7 +54,7 @@ impl UserId {
         self.sign_third_party(rng, key, key_pw, key)
     }
 
-    /// Create a third-party signature
+    /// Create a third-party signature.
     pub fn sign_third_party<R, F>(
         &self,
         mut rng: R,
@@ -128,15 +124,18 @@ impl PacketTrait for UserId {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::types::KeyVersion;
-    use crate::{packet, KeyType};
+    use crate::{packet, types::KeyVersion, KeyType};
+
+    prop_compose! {
+        pub fn id_gen()(id in "[a-zA-Z]+") -> Bytes {
+            Bytes::from(id)
+        }
+    }
 
     #[test]
     fn test_user_id_certification() {
@@ -201,7 +200,7 @@ mod tests {
         fn write_len(user_id: UserId) {
             let mut buf = Vec::new();
             user_id.to_writer(&mut buf).unwrap();
-            assert_eq!(buf.len(), user_id.write_len());
+            prop_assert_eq!(buf.len(), user_id.write_len());
         }
 
 
@@ -210,7 +209,7 @@ mod tests {
             let mut buf = Vec::new();
             user_id.to_writer(&mut buf).unwrap();
             let new_user_id = UserId::from_slice(user_id.packet_version, &mut &buf[..]).unwrap();
-            assert_eq!(user_id, new_user_id);
+            prop_assert_eq!(user_id, new_user_id);
         }
     }
 }
