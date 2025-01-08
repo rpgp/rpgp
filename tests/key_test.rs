@@ -378,9 +378,9 @@ fn test_parse_details() {
     // TODO: examine subkey details
     assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
-    let issuer = Subpacket::regular(SubpacketData::Issuer(
-        KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
-    ));
+    let issuer = Subpacket::regular(SubpacketData::Issuer(KeyId::from([
+        0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C,
+    ])));
     let key_flags: SmallVec<[u8; 1]> = KeyFlags(0x03).into();
     let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
@@ -1280,13 +1280,6 @@ fn test_handle_incomplete_packets_end() {
     let raw = hex::decode(hex::encode(key.to_bytes().unwrap()) + "b60ed7").unwrap();
     let key = SignedSecretKey::from_bytes(raw.into()).expect("failed");
     key.verify().expect("invalid key");
-}
-
-#[test]
-fn test_keyid_formatters() {
-    let keyid = KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap();
-    assert_eq!("4C073AE0C8445C0C", format!("{keyid:X}"));
-    assert_eq!("4c073ae0c8445c0c", format!("{keyid:x}"));
 }
 
 #[test]

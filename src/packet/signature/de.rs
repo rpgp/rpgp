@@ -54,10 +54,10 @@ fn signature_creation_time(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse an Issuer Key ID subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-issuer-key-id
 fn issuer(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    map(
-        map_res(complete(take(8u8)), KeyId::from_slice),
-        SubpacketData::Issuer,
-    )(i)
+    let (i, key_id_raw) = take(8u8)(i)?;
+    let key_id_raw: [u8; 8] = key_id_raw.try_into().expect("took 8");
+    let key_id = KeyId::from(key_id_raw);
+    Ok((i, SubpacketData::Issuer(key_id)))
 }
 
 /// Parse a Key Expiration Time subpacket
@@ -444,22 +444,23 @@ fn v3_parser(
     version: SignatureVersion,
 ) -> impl Fn(&[u8]) -> IResult<&[u8], Signature> {
     move |i: &[u8]| {
-        let (i, (_tag, typ, created, issuer, pub_alg, hash_alg, ls_hash)) = tuple((
-            // One-octet length of following hashed material. MUST be 5.
-            tag(&[5]),
-            // One-octet signature type.
-            map_res(be_u8, SignatureType::try_from),
-            // Four-octet creation time.
-            map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single()),
-            // Eight-octet Key ID of signer.
-            map_res(take(8usize), KeyId::from_slice),
-            // One-octet public-key algorithm.
-            map(be_u8, PublicKeyAlgorithm::from),
-            // One-octet hash algorithm.
-            map(be_u8, HashAlgorithm::from),
-            // Two-octet field holding left 16 bits of signed hash value.
-            take(2usize),
-        ))(i)?;
+        // One-octet length of following hashed material. MUST be 5.
+        let (i, _tag) = tag(&[5])(i)?;
+        // One-octet signature type.
+        let (i, typ) = map_res(be_u8, SignatureType::try_from)(i)?;
+        // Four-octet creation time.
+        let (i, created) = map_opt(be_u32, |v| Utc.timestamp_opt(i64::from(v), 0).single())(i)?;
+        // Eight-octet Key ID of signer.
+        let (i, key_id_raw) = take(8usize)(i)?;
+        let key_id_raw: [u8; 8] = key_id_raw.try_into().expect("took 8");
+        let issuer = KeyId::from(key_id_raw);
+        // One-octet public-key algorithm.
+        let (i, pub_alg) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
+        // One-octet hash algorithm.
+        let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
+        // Two-octet field holding left 16 bits of signed hash value.
+        let (i, ls_hash) = take(2usize)(i)?;
+
         // The SignatureBytes comprising the signature.
         let (i, sig) = actual_signature(&pub_alg)(i)?;
 

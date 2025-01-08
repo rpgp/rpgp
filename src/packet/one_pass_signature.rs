@@ -124,9 +124,15 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSig
 
         let (i, version_specific) = match version {
             3 => {
-                let (i, key_id) = map_res(take(8usize), KeyId::from_slice)(i)?;
+                let (i, key_id_raw) = take(8usize)(i)?;
+                let key_id_raw: [u8; 8] = key_id_raw.try_into().expect("took 8");
 
-                (i, OpsVersionSpecific::V3 { key_id })
+                (
+                    i,
+                    OpsVersionSpecific::V3 {
+                        key_id: key_id_raw.into(),
+                    },
+                )
             }
             6 => {
                 let (i, salt_len) = be_u8(i)?;

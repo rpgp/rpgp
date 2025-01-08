@@ -696,7 +696,7 @@ impl Message {
                 chrono::Utc::now().trunc_subsecs(0),
             )),
         ];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id.clone()))];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))];
 
         let (typ, signature) = match self {
             Message::Literal(ref l) => {
@@ -1643,8 +1643,7 @@ mod tests {
             .secret_subkeys
             .iter()
             .find(|key| {
-                key.key_id()
-                    == KeyId::from_slice(&[0x64, 0x35, 0x7E, 0xB6, 0xBB, 0x55, 0xDE, 0x12]).unwrap()
+                key.key_id() == KeyId::from([0x64, 0x35, 0x7E, 0xB6, 0xBB, 0x55, 0xDE, 0x12])
             })
             .unwrap();
 

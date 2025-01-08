@@ -425,8 +425,8 @@ impl PublicKeyTrait for PubKeyInner {
                 PublicParams::RSA(params) => {
                     let n: Mpi = params.key.n().into();
                     let offset = n.len() - 8;
-
-                    KeyId::from_slice(&n.as_bytes()[offset..]).expect("fixed size slice")
+                    let raw: [u8; 8] = n.as_bytes()[offset..].try_into().expect("fixed size");
+                    raw.into()
                 }
                 _ => panic!("invalid key constructed: {:?}", &self.public_params),
             },
@@ -434,15 +434,15 @@ impl PublicKeyTrait for PubKeyInner {
                 // Lower 64 bits
                 let f = self.fingerprint();
                 let offset = f.len() - 8;
-
-                KeyId::from_slice(&f.as_bytes()[offset..]).expect("fixed size slice")
+                let raw: [u8; 8] = f.as_bytes()[offset..].try_into().expect("fixed size");
+                raw.into()
             }
             KeyVersion::V5 => unimplemented!("V5 keys"),
             KeyVersion::V6 => {
                 // High 64 bits
                 let f = self.fingerprint();
-
-                KeyId::from_slice(&f.as_bytes()[0..8]).expect("fixed size slice")
+                let raw: [u8; 8] = f.as_bytes()[0..8].try_into().expect("fixed size");
+                raw.into()
             }
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }

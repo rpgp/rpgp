@@ -73,7 +73,7 @@ aes-gcm = "0.10.3"
 eax = "0.5.0"
 ocb3 = "0.1"
 aes-kw = { version = "0.2.1", features = ["std"] }
-derive_more = { version = "1.0.0-beta.6", features = ["debug"] }
+derive_more = { version = "1.0.0-beta.6", features = ["debug", "display"] }
 x448 = { version = "0.6", optional = true }
 buffer-redux = { version = "1.0.0", default-features = false}
 curve25519-dalek = { version = "4.1.3", default-features = false, features = ["alloc", "precomputed-tables", "zeroize"] }

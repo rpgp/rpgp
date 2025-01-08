@@ -2,7 +2,7 @@ use std::io;
 
 use byteorder::WriteBytesExt;
 use nom::bytes::streaming::take;
-use nom::combinator::{map, map_res};
+use nom::combinator::map;
 use nom::number::streaming::be_u8;
 use nom::sequence::pair;
 use rand::{CryptoRng, Rng};
@@ -319,7 +319,10 @@ fn parse(
 
         if version == 3 {
             // the key id this maps to
-            let (i, id) = map_res(take(8u8), KeyId::from_slice)(i)?;
+            let (i, key_id_raw) = take(8u8)(i)?;
+            let key_id_raw: [u8; 8] = key_id_raw.try_into().expect("took 8");
+            let key_id = KeyId::from(key_id_raw);
+
             // the public key algorithm
             let (i, pk_algo) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
 
@@ -330,7 +333,7 @@ fn parse(
                 i,
                 PublicKeyEncryptedSessionKey::V3 {
                     packet_version,
-                    id,
+                    id: key_id,
                     pk_algo,
                     values,
                 },
