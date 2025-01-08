@@ -1,6 +1,6 @@
 use std::str;
 
-use bstr::BString;
+use bytes::Bytes;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::{debug, warn};
 use nom::bytes::streaming::{tag, take};
@@ -160,7 +160,10 @@ fn trust_signature(i: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse a Regular Expression subpacket.
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-regular-expression
 fn regular_expression(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    map(map(rest, BString::from), SubpacketData::RegularExpression)(i)
+    map(
+        map(rest, |b: &[u8]| Bytes::from(b.to_vec())),
+        SubpacketData::RegularExpression,
+    )(i)
 }
 
 /// Parse a Revocation Key subpacket (Deprecated)
@@ -187,8 +190,8 @@ fn notation_data(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     let (i, _) = tag(&[0, 0, 0])(i)?;
     let (i, name_len) = be_u16(i)?;
     let (i, value_len) = be_u16(i)?;
-    let (i, name) = map(take(name_len), BString::from)(i)?;
-    let (i, value) = map(take(value_len), BString::from)(i)?;
+    let (i, name) = map(take(name_len), |b: &[u8]| Bytes::from(b.to_vec()))(i)?;
+    let (i, value) = map(take(value_len), |b: &[u8]| Bytes::from(b.to_vec()))(i)?;
 
     Ok((
         i,
@@ -243,14 +246,17 @@ fn key_flags(body: &[u8]) -> IResult<&[u8], SubpacketData> {
 /// Parse a Signer's User ID subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags
 fn signers_userid(i: &[u8]) -> IResult<&[u8], SubpacketData> {
-    Ok((&[], SubpacketData::SignersUserID(BString::from(i))))
+    Ok((&[], SubpacketData::SignersUserID(Bytes::from(i.to_vec()))))
 }
 
 /// Parse a Reason for Revocation subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags
 fn rev_reason(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     map(
-        pair(map(be_u8, RevocationCode::from), map(rest, BString::from)),
+        pair(
+            map(be_u8, RevocationCode::from),
+            map(rest, |b: &[u8]| Bytes::from(b.to_vec())),
+        ),
         |(code, reason)| SubpacketData::RevocationReason(code, reason),
     )(i)
 }

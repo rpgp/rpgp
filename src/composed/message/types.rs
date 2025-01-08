@@ -1,7 +1,6 @@
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-use bstr::{BStr, BString};
 use bytes::{Bytes, BytesMut};
 use bzip2::write::BzEncoder;
 use chrono::{SubsecRound, Utc};
@@ -109,7 +108,7 @@ where
     let inner_packet_tag = Tag::LiteralData;
 
     let mode = DataMode::Binary;
-    let file_name: BString = in_file_name.as_encoded_bytes().into();
+    let file_name: Bytes = in_file_name.as_encoded_bytes().to_vec().into();
     let created: u32 = Utc::now().trunc_subsecs(0).timestamp().try_into()?;
     let mut literal_data_prefix = vec![0u8; 6 + file_name.len()];
     literal_data_prefix[0] = mode.into();
@@ -454,13 +453,13 @@ impl Serialize for Message {
 }
 
 impl Message {
-    pub fn new_literal(file_name: impl AsRef<BStr>, data: &str) -> Self {
-        Message::Literal(LiteralData::from_str(file_name.as_ref(), data))
+    pub fn new_literal(file_name: impl Into<Bytes>, data: &str) -> Self {
+        Message::Literal(LiteralData::from_str(file_name, data))
     }
 
-    pub fn new_literal_bytes(file_name: impl AsRef<BStr>, data: &[u8]) -> Self {
+    pub fn new_literal_bytes(file_name: impl Into<Bytes>, data: &[u8]) -> Self {
         Message::Literal(LiteralData::from_bytes(
-            file_name.as_ref(),
+            file_name,
             Bytes::from(data.to_vec()),
         ))
     }

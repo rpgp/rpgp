@@ -1,7 +1,7 @@
-use std::{fmt, io, str};
+use std::{io, str};
 
 use aes_gcm::aead::rand_core::CryptoRng;
-use bstr::{BStr, BString};
+use bytes::{Buf, Bytes};
 use chrono::{SubsecRound, Utc};
 use rand::Rng;
 
@@ -14,39 +14,39 @@ use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, 
 
 /// User ID Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-id-packet-type-id-13>
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[display("User ID: \"{:?}\"", id)]
 pub struct UserId {
     packet_version: Version,
     #[cfg_attr(test, proptest(strategy = "id_gen()"))]
-    id: BString,
+    id: Bytes,
 }
 
 #[cfg(test)]
 proptest::prop_compose! {
-    fn id_gen()(id in "[a-zA-Z]+") -> BString {
-        BString::from(id)
+    fn id_gen()(id in "[a-zA-Z]+") -> Bytes {
+        Bytes::from(id)
     }
 }
 
 impl UserId {
     /// Parses a `UserId` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        Ok(UserId {
-            packet_version,
-            id: BString::from(input),
-        })
+    pub fn from_slice(packet_version: Version, mut input: impl Buf) -> Result<Self> {
+        let len = input.remaining();
+        let id = input.copy_to_bytes(len);
+        Ok(UserId { packet_version, id })
     }
 
-    pub fn from_str(packet_version: Version, input: &str) -> Self {
+    pub fn from_str(packet_version: Version, input: impl AsRef<str>) -> Self {
         UserId {
             packet_version,
-            id: BString::from(input),
+            id: input.as_ref().as_bytes().to_vec().into(),
         }
     }
 
-    pub fn id(&self) -> &BStr {
-        self.id.as_ref()
+    pub fn id(&self) -> &Bytes {
+        &self.id
     }
 
     /// Create a self-signature
@@ -113,12 +113,6 @@ impl Serialize for UserId {
 
     fn write_len(&self) -> usize {
         self.id.len()
-    }
-}
-
-impl fmt::Display for UserId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "User ID: \"{}\"", self.id)
     }
 }
 
@@ -215,7 +209,7 @@ mod tests {
         fn packet_roundtrip(user_id: UserId) {
             let mut buf = Vec::new();
             user_id.to_writer(&mut buf).unwrap();
-            let new_user_id = UserId::from_slice(user_id.packet_version, &buf).unwrap();
+            let new_user_id = UserId::from_slice(user_id.packet_version, &mut &buf[..]).unwrap();
             assert_eq!(user_id, new_user_id);
         }
     }

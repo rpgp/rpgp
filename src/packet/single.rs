@@ -120,7 +120,7 @@ pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Pack
         Tag::Marker => Marker::from_slice(ver, &body).map(Into::into),
         Tag::LiteralData => LiteralData::from_buf(ver, &mut body).map(Into::into),
         Tag::Trust => Trust::from_slice(ver, &body).map(Into::into),
-        Tag::UserId => UserId::from_slice(ver, &body).map(Into::into),
+        Tag::UserId => UserId::from_slice(ver, &mut body).map(Into::into),
         Tag::PublicSubkey => PublicSubkey::from_slice(ver, &body).map(Into::into),
         Tag::UserAttribute => UserAttribute::from_slice(ver, &body).map(Into::into),
         Tag::SymEncryptedProtectedData => {

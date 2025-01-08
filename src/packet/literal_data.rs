@@ -1,6 +1,5 @@
 use std::io;
 
-use bstr::{BStr, BString, ByteSlice};
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::{Buf, Bytes};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
@@ -28,7 +27,7 @@ pub struct LiteralDataHeader {
     pub packet_version: Version,
     pub mode: DataMode,
     /// The filename, may contain non utf-8 bytes
-    pub file_name: BString,
+    pub file_name: Bytes,
     pub created: DateTime<Utc>,
 }
 
@@ -46,7 +45,7 @@ pub enum DataMode {
 
 impl LiteralData {
     /// Creates a literal data packet from the given string. Normalizes line endings.
-    pub fn from_str(file_name: impl Into<BString>, raw_data: &str) -> Self {
+    pub fn from_str(file_name: impl Into<Bytes>, raw_data: &str) -> Self {
         let data = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
 
         LiteralData {
@@ -61,12 +60,12 @@ impl LiteralData {
     }
 
     /// Creates a literal data packet from the given bytes.
-    pub fn from_bytes(file_name: &BStr, data: Bytes) -> Self {
+    pub fn from_bytes(file_name: impl Into<Bytes>, data: Bytes) -> Self {
         LiteralData {
             header: LiteralDataHeader {
                 packet_version: Version::New,
                 mode: DataMode::Binary,
-                file_name: file_name.to_owned(),
+                file_name: file_name.into(),
                 created: Utc::now().trunc_subsecs(0),
             },
             data: data.to_vec().into(),
@@ -88,9 +87,7 @@ impl LiteralData {
         // Name
         let name_len = data.get_u8() as usize;
         ensure!(data.remaining() >= name_len, "invalid literal data packet");
-        let mut name_vec = vec![0u8; name_len];
-        data.copy_to_slice(&mut name_vec);
-        let name = BString::new(name_vec);
+        let name = data.copy_to_bytes(name_len);
 
         // Created
         ensure!(data.remaining() >= 4, "invalid literal data packet");
@@ -110,8 +107,8 @@ impl LiteralData {
         })
     }
 
-    pub fn file_name(&self) -> &BStr {
-        self.header.file_name.as_bstr()
+    pub fn file_name(&self) -> &Bytes {
+        &self.header.file_name
     }
 
     pub fn is_binary(&self) -> bool {

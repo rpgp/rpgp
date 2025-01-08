@@ -1,7 +1,6 @@
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-use bstr::BString;
 use bytes::Bytes;
 use chrono::{SubsecRound, Utc};
 use log::debug;
@@ -25,7 +24,7 @@ pub struct Builder {
 }
 
 enum Source {
-    Bytes { name: BString, bytes: Bytes },
+    Bytes { name: Bytes, bytes: Bytes },
     File(PathBuf),
 }
 
@@ -53,7 +52,7 @@ impl Builder {
         }
     }
 
-    pub fn from_bytes(name: impl Into<BString>, bytes: impl Into<Bytes>) -> Self {
+    pub fn from_bytes(name: impl Into<Bytes>, bytes: impl Into<Bytes>) -> Self {
         Self {
             source: Source::Bytes {
                 name: name.into(),
@@ -144,7 +143,7 @@ impl Builder {
         fn encrypt<R: Rng + CryptoRng, W: std::io::Write>(
             rng: R,
             reader: impl BufRead,
-            file_name: BString,
+            file_name: impl Into<Bytes>,
             in_size: usize,
             encryption: Encryption,
             mut out: W,
@@ -166,7 +165,7 @@ impl Builder {
                     let literal_data_header = LiteralDataHeader {
                         packet_version: Version::New,
                         mode: DataMode::Binary,
-                        file_name,
+                        file_name: file_name.into(),
                         created: Utc::now().trunc_subsecs(0),
                     };
 
@@ -211,7 +210,7 @@ impl Builder {
 
         match self.source {
             Source::Bytes { name, bytes } => {
-                debug!("sourcing bytes {}: {} bytes", name, bytes.len());
+                debug!("sourcing bytes {:?}: {} bytes", name, bytes.len());
                 use bytes::Buf;
                 let len = bytes.len();
                 encrypt(&mut rng, bytes.reader(), name, len, self.encryption, out)?;
@@ -224,9 +223,9 @@ impl Builder {
                 let Some(in_file_name) = path.file_name() else {
                     bail!("{}: is not a vaild input file", path.display());
                 };
-                let file_name: BString = in_file_name.as_encoded_bytes().into();
+                let file_name: Bytes = in_file_name.as_encoded_bytes().to_vec().into();
 
-                debug!("sourcing file {}: {} bytes", file_name, in_file_size);
+                debug!("sourcing file {:?}: {} bytes", file_name, in_file_size);
 
                 let in_file = BufReader::new(in_file);
 
