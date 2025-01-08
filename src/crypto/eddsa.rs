@@ -19,9 +19,7 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{
-    Ed25519PublicParams, EddsaLegacyPublicParams, Mpi, PlainSecretParams, PublicParams,
-};
+use crate::types::{Ed25519PublicParams, EddsaLegacyPublicParams, Mpi};
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
 /// between curve Ed25519 and Ed448 (TODO: not yet implemented)
@@ -64,6 +62,17 @@ impl From<&SecretKey> for EddsaLegacyPublicParams {
 }
 
 impl SecretKey {
+    /// Generate an EdDSA `SecretKey`.
+    ///
+    /// `mode` picks between supported EdDSA key formats and curves
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
+        rng.fill_bytes(&mut *bytes);
+        let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);
+
+        SecretKey { secret }
+    }
+
     pub(crate) fn try_from_bytes(raw_secret: [u8; 32]) -> Result<Self> {
         let secret = ed25519_dalek::SigningKey::from(raw_secret);
         Ok(Self { secret })
@@ -83,33 +92,6 @@ impl Signer for SecretKey {
         let s = bytes[32..].to_vec();
 
         Ok(vec![r, s])
-    }
-}
-
-/// Generate an EdDSA KeyPair.
-///
-/// `mode` picks between supported EdDSA key formats and curves
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    mode: Mode,
-) -> (PublicParams, PlainSecretParams) {
-    let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
-    rng.fill_bytes(&mut *bytes);
-
-    let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);
-    drop(bytes); // we're done with this slice, zeroize it
-
-    let public = ed25519_dalek::VerifyingKey::from(&secret);
-
-    match mode {
-        Mode::EdDSALegacy => (
-            PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key: public }),
-            PlainSecretParams::EdDSALegacy(SecretKey { secret }),
-        ),
-        Mode::Ed25519 => (
-            PublicParams::Ed25519(Ed25519PublicParams { key: public }),
-            PlainSecretParams::EdDSA(SecretKey { secret }),
-        ),
     }
 }
 

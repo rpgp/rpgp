@@ -9,7 +9,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::{Error, Result};
 use crate::types::EcdsaPublicParams;
-use crate::types::{Mpi, MpiRef, PlainSecretParams, PublicParams};
+use crate::types::{Mpi, MpiRef};
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -69,6 +69,29 @@ impl TryFrom<&SecretKey> for EcdsaPublicParams {
 }
 
 impl SecretKey {
+    /// Generate an ECDSA `SecretKey`.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
+        match curve {
+            ECCCurve::P256 => {
+                let secret = p256::SecretKey::random(&mut rng);
+                Ok(SecretKey::P256(secret))
+            }
+            ECCCurve::P384 => {
+                let secret = p384::SecretKey::random(&mut rng);
+                Ok(SecretKey::P384(secret))
+            }
+            ECCCurve::P521 => {
+                let secret = p521::SecretKey::random(&mut rng);
+                Ok(SecretKey::P521(secret))
+            }
+            ECCCurve::Secp256k1 => {
+                let secret = k256::SecretKey::random(&mut rng);
+                Ok(SecretKey::Secp256k1(secret))
+            }
+            _ => unsupported_err!("curve {:?} for ECDSA", curve),
+        }
+    }
+
     pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: MpiRef<'_>) -> Result<Self> {
         match pub_params {
             EcdsaPublicParams::P256 { .. } => {
@@ -171,55 +194,6 @@ impl SecretKey {
             Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
             Self::Unsupported { x, .. } => x.clone(),
         }
-    }
-}
-/// Generate an ECDSA KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    curve: &ECCCurve,
-) -> Result<(PublicParams, PlainSecretParams)> {
-    match curve {
-        ECCCurve::P256 => {
-            let secret = p256::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P256 { key: public }),
-                PlainSecretParams::ECDSA(SecretKey::P256(secret)),
-            ))
-        }
-
-        ECCCurve::P384 => {
-            let secret = p384::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P384 { key: public }),
-                PlainSecretParams::ECDSA(SecretKey::P384(secret)),
-            ))
-        }
-
-        ECCCurve::P521 => {
-            let secret = p521::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P521 { key: public }),
-                PlainSecretParams::ECDSA(SecretKey::P521(secret)),
-            ))
-        }
-
-        ECCCurve::Secp256k1 => {
-            let secret = k256::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 { key: public }),
-                PlainSecretParams::ECDSA(SecretKey::Secp256k1(secret)),
-            ))
-        }
-
-        _ => unsupported_err!("curve {:?} for ECDSA", curve),
     }
 }
 

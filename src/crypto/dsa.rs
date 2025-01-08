@@ -9,7 +9,7 @@ use zeroize::Zeroize;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{DsaPublicParams, MpiRef, PlainSecretParams, PublicParams};
+use crate::types::{DsaPublicParams, MpiRef};
 
 pub use dsa::KeySize;
 
@@ -59,6 +59,14 @@ impl SecretKey {
         let secret = dsa::SigningKey::from_components(pub_params.key.clone(), x.into())?;
         Ok(Self { key: secret })
     }
+
+    /// Generate a DSA `SecretKey`.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R, key_size: KeySize) -> Self {
+        let components = Components::generate(&mut rng, key_size);
+        let signing_key = SigningKey::generate(&mut rng, components);
+
+        SecretKey { key: signing_key }
+    }
 }
 
 impl Signer for SecretKey {
@@ -97,23 +105,6 @@ pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BigUint, s: BigUint) -
     verifying_key.verify_prehash(hashed, &signature)?;
 
     Ok(())
-}
-
-/// Generate a DSA KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    key_size: KeySize,
-) -> Result<(PublicParams, PlainSecretParams)> {
-    let components = Components::generate(&mut rng, key_size);
-
-    let signing_key = SigningKey::generate(&mut rng, components);
-    let verifying_key = signing_key.verifying_key();
-
-    let public_params = PublicParams::DSA(DsaPublicParams {
-        key: verifying_key.clone(),
-    });
-    let secret_params = PlainSecretParams::DSA(SecretKey { key: signing_key });
-    Ok((public_params, secret_params))
 }
 
 #[cfg(test)]

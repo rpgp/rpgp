@@ -25,7 +25,7 @@ use crate::PlainSessionKey;
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[allow(clippy::large_enum_variant)] // FIXME
 pub enum PlainSecretParams {
-    RSA(rsa::PrivateKey),
+    RSA(rsa::SecretKey),
     DSA(dsa::SecretKey),
     ECDSA(ecdsa::SecretKey),
     ECDH(ecdh::SecretKey),
@@ -74,7 +74,7 @@ impl PlainSecretParams {
                 let (i, q) = mpi(i)?;
                 let (i, u) = mpi(i)?;
 
-                let key = crate::crypto::rsa::PrivateKey::try_from_mpi(pub_params, d, p, q, u)?;
+                let key = crate::crypto::rsa::SecretKey::try_from_mpi(pub_params, d, p, q, u)?;
                 (i, Self::RSA(key))
             }
             (PublicKeyAlgorithm::DSA, PublicParams::DSA(pub_params)) => {
@@ -355,7 +355,7 @@ impl PlainSecretParams {
                 },
             ) => {
                 // Recipient public key (56 bytes)
-                let PublicParams::X448 { public } = recipient.public_params() else {
+                let PublicParams::X448(ref params) = recipient.public_params() else {
                     bail!(
                         "Unexpected recipient public_params {:?} for X448",
                         recipient.public_params()
@@ -364,7 +364,7 @@ impl PlainSecretParams {
 
                 let data = crate::crypto::x448::EncryptionFields {
                     ephemeral_public_point: ephemeral.to_owned(),
-                    recipient_public: *public,
+                    recipient_public: params.key,
                     encrypted_session_key: session_key,
                 };
 
@@ -623,7 +623,7 @@ mod tests {
             match alg {
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
-                | PublicKeyAlgorithm::RSASign => any::<rsa::PrivateKey>()
+                | PublicKeyAlgorithm::RSASign => any::<rsa::SecretKey>()
                     .prop_map(PlainSecretParams::RSA)
                     .boxed(),
                 PublicKeyAlgorithm::DSA => any::<dsa::SecretKey>()

@@ -14,6 +14,8 @@ mod eddsa_legacy;
 mod elgamal;
 mod rsa;
 mod x25519;
+#[cfg(feature = "unstable-curve448")]
+mod x448;
 
 pub use self::dsa::DsaPublicParams;
 pub use self::ecdh::EcdhPublicParams;
@@ -23,6 +25,8 @@ pub use self::eddsa_legacy::EddsaLegacyPublicParams;
 pub use self::elgamal::ElgamalPublicParams;
 pub use self::rsa::RsaPublicParams;
 pub use self::x25519::X25519PublicParams;
+#[cfg(feature = "unstable-curve448")]
+pub use self::x448::X448PublicParams;
 
 use super::PlainSecretParams;
 
@@ -38,10 +42,7 @@ pub enum PublicParams {
     Ed25519(Ed25519PublicParams),
     X25519(X25519PublicParams),
     #[cfg(feature = "unstable-curve448")]
-    // Can't store the x448 key because it doesn't even implement `Debug`..
-    X448 {
-        public: [u8; 56],
-    },
+    X448(X448PublicParams),
     Unknown {
         data: Vec<u8>,
     },
@@ -59,12 +60,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
             #[cfg(feature = "unstable-curve448")]
-            PlainSecretParams::X448(ref p) => {
-                let secret = x448::Secret::from(p.secret); // does clamping
-                let public = *x448::PublicKey::from(&secret).as_bytes();
-
-                Ok(Self::X448 { public })
-            }
+            PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
         }
     }
 }
@@ -112,7 +108,10 @@ impl PublicParams {
             }
             PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
             #[cfg(feature = "unstable-curve448")]
-            PublicKeyAlgorithm::X448 => x448(i),
+            PublicKeyAlgorithm::X448 => {
+                let (i, params) = X448PublicParams::try_from_slice(i)?;
+                Ok((i, PublicParams::X448(params)))
+            }
             #[cfg(not(feature = "unstable-curve448"))]
             PublicKeyAlgorithm::X448 => unknown(i, len),
 
@@ -131,18 +130,6 @@ impl PublicParams {
             | PublicKeyAlgorithm::Unknown(_) => unknown(i, len),
         }
     }
-}
-
-/// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4>
-#[cfg(feature = "unstable-curve448")]
-fn x448(i: &[u8]) -> IResult<&[u8], PublicParams> {
-    // 56 bytes of public key
-    let (i, p) = take(56u8)(i)?;
-    let params = PublicParams::X448 {
-        public: p.try_into().expect("we took 56 bytes"),
-    };
-
-    Ok((i, params))
 }
 
 fn unknown(i: &[u8], len: Option<usize>) -> IResult<&[u8], PublicParams> {
@@ -188,8 +175,8 @@ impl Serialize for PublicParams {
                 params.to_writer(writer)?;
             }
             #[cfg(feature = "unstable-curve448")]
-            PublicParams::X448 { ref public } => {
-                writer.write_all(&public[..])?;
+            PublicParams::X448(params) => {
+                params.to_writer(writer)?;
             }
             PublicParams::Unknown { ref data } => {
                 writer.write_all(data)?;
@@ -227,8 +214,8 @@ impl Serialize for PublicParams {
                 sum += params.write_len();
             }
             #[cfg(feature = "unstable-curve448")]
-            PublicParams::X448 { ref public } => {
-                sum += public.len();
+            PublicParams::X448(params) => {
+                sum += params.write_len();
             }
             PublicParams::Unknown { ref data } => {
                 sum += data.len();
@@ -316,8 +303,8 @@ mod tests {
                     .prop_map(PublicParams::X25519)
                     .boxed(),
                 #[cfg(feature = "unstable-curve448")]
-                PublicKeyAlgorithm::X448 => any::<[u8; 56]>()
-                    .prop_map(|public| PublicParams::X448 { public })
+                PublicKeyAlgorithm::X448 => any::<X448PublicParams>()
+                    .prop_map(PublicParams::X448)
                     .boxed(),
                 _ => {
                     unimplemented!("{:?}", args)

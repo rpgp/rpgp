@@ -14,7 +14,9 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa, x25519};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, UserAttribute, UserId};
-use crate::types::{self, CompressionAlgorithm, PublicParams, RevocationKey, S2kParams};
+use crate::types::{
+    self, CompressionAlgorithm, PlainSecretParams, PublicParams, RevocationKey, S2kParams,
+};
 
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
@@ -310,15 +312,57 @@ impl KeyType {
         rng: R,
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
-            KeyType::Rsa(bit_size) => rsa::generate_key(rng, *bit_size as usize)?,
-            KeyType::ECDH(curve) => ecdh::generate_key(rng, curve)?,
-            KeyType::EdDSALegacy => eddsa::generate_key(rng, eddsa::Mode::EdDSALegacy),
-            KeyType::ECDSA(curve) => ecdsa::generate_key(rng, curve)?,
-            KeyType::Dsa(key_size) => dsa::generate_key(rng, (*key_size).into())?,
-            KeyType::Ed25519 => eddsa::generate_key(rng, eddsa::Mode::Ed25519),
-            KeyType::X25519 => x25519::generate_key(rng),
+            KeyType::Rsa(bit_size) => {
+                let secret = rsa::SecretKey::generate(rng, *bit_size as usize)?;
+                let public_params = PublicParams::RSA((&secret).into());
+                let secret_params = PlainSecretParams::RSA(secret);
+                (public_params, secret_params)
+            }
+            KeyType::ECDH(curve) => {
+                let secret = ecdh::SecretKey::generate(rng, curve)?;
+                let public_params = PublicParams::ECDH((&secret).into());
+                let secret_params = PlainSecretParams::ECDH(secret);
+                (public_params, secret_params)
+            }
+            KeyType::EdDSALegacy => {
+                let secret = eddsa::SecretKey::generate(rng);
+                let public_params = PublicParams::EdDSALegacy((&secret).into());
+                let secret_params = PlainSecretParams::EdDSALegacy(secret);
+                (public_params, secret_params)
+            }
+            KeyType::ECDSA(curve) => {
+                let secret = ecdsa::SecretKey::generate(rng, curve)?;
+                let public_params = PublicParams::ECDSA(
+                    (&secret).try_into().expect("must not generate unuspported"),
+                );
+                let secret_params = PlainSecretParams::ECDSA(secret);
+                (public_params, secret_params)
+            }
+            KeyType::Dsa(key_size) => {
+                let secret = dsa::SecretKey::generate(rng, (*key_size).into());
+                let public_params = PublicParams::DSA((&secret).into());
+                let secret_params = PlainSecretParams::DSA(secret);
+                (public_params, secret_params)
+            }
+            KeyType::Ed25519 => {
+                let secret = eddsa::SecretKey::generate(rng);
+                let public_params = PublicParams::Ed25519((&secret).into());
+                let secret_params = PlainSecretParams::EdDSA(secret);
+                (public_params, secret_params)
+            }
+            KeyType::X25519 => {
+                let secret = x25519::SecretKey::generate(rng);
+                let public_params = PublicParams::X25519((&secret).into());
+                let secret_params = PlainSecretParams::X25519(secret);
+                (public_params, secret_params)
+            }
             #[cfg(feature = "unstable-curve448")]
-            KeyType::X448 => crate::crypto::x448::generate_key(rng),
+            KeyType::X448 => {
+                let secret = crate::crypto::x448::SecretKey::generate(rng);
+                let public_params = PublicParams::X448((&secret).into());
+                let secret_params = PlainSecretParams::X448(secret);
+                (public_params, secret_params)
+            }
         };
 
         Ok((pub_params, types::SecretParams::Plain(plain)))

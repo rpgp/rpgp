@@ -11,9 +11,7 @@ use crate::crypto::{
     Decryptor,
 };
 use crate::errors::{Error, Result};
-use crate::types::{
-    pad_key, EcdhPublicParams, Mpi, MpiRef, PkeskBytes, PlainSecretParams, PublicParams,
-};
+use crate::types::{pad_key, EcdhPublicParams, Mpi, MpiRef, PkeskBytes};
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -117,6 +115,38 @@ impl From<&SecretKey> for EcdhPublicParams {
 }
 
 impl SecretKey {
+    /// Generate an ECDH KeyPair.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
+        match curve {
+            ECCCurve::Curve25519 => {
+                let mut secret_key_bytes =
+                    Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
+                rng.fill_bytes(&mut *secret_key_bytes);
+
+                // Clamp, as `to_bytes` does not clamp.
+                let q_raw = curve25519_dalek::scalar::clamp_integer(*secret_key_bytes);
+                let secret = StaticSecret::from(q_raw);
+
+                Ok(SecretKey::Curve25519 {
+                    secret: Curve25519Wrapper(secret),
+                })
+            }
+            ECCCurve::P256 => {
+                let secret = p256::SecretKey::random(&mut rng);
+                Ok(SecretKey::P256 { secret })
+            }
+            ECCCurve::P384 => {
+                let secret = p384::SecretKey::random(&mut rng);
+                Ok(SecretKey::P384 { secret })
+            }
+            ECCCurve::P521 => {
+                let secret = p521::SecretKey::random(&mut rng);
+                Ok(SecretKey::P521 { secret })
+            }
+            _ => unsupported_err!("curve {:?} for ECDH", curve),
+        }
+    }
+
     pub(crate) fn try_from_mpi(pub_params: &EcdhPublicParams, d: MpiRef<'_>) -> Result<Self> {
         match pub_params {
             EcdhPublicParams::Curve25519 { .. } => {
@@ -351,97 +381,6 @@ pub fn derive_session_key(
     Ok(decrypted_key)
 }
 
-/// Generate an ECDH KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    curve: &ECCCurve,
-) -> Result<(PublicParams, PlainSecretParams)> {
-    match curve {
-        ECCCurve::Curve25519 => {
-            let mut secret_key_bytes =
-                Zeroizing::new([0u8; ECCCurve::Curve25519.secret_key_length()]);
-            rng.fill_bytes(&mut *secret_key_bytes);
-
-            // Clamp, as `to_bytes` does not clamp.
-            let q_raw = curve25519_dalek::scalar::clamp_integer(*secret_key_bytes);
-            let secret = StaticSecret::from(q_raw);
-            let public = PublicKey::from(&secret);
-
-            let curve = ECCCurve::Curve25519;
-            let hash = curve.hash_algo()?;
-            let alg_sym = curve.sym_algo()?;
-
-            Ok((
-                PublicParams::ECDH(EcdhPublicParams::Curve25519 {
-                    p: public,
-                    hash,
-                    alg_sym,
-                }),
-                PlainSecretParams::ECDH(SecretKey::Curve25519 {
-                    secret: Curve25519Wrapper(secret),
-                }),
-            ))
-        }
-
-        ECCCurve::P256 => keygen_p256(rng),
-        ECCCurve::P384 => keygen_p384(rng),
-        ECCCurve::P521 => keygen_p521(rng),
-        _ => unsupported_err!("curve {:?} for ECDH", curve),
-    }
-}
-
-fn keygen_p256<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSecretParams)> {
-    let curve = ECCCurve::P256;
-    let secret = elliptic_curve::SecretKey::<p256::NistP256>::random(&mut rng);
-    let public = secret.public_key();
-
-    let hash = curve.hash_algo()?;
-    let alg_sym = curve.sym_algo()?;
-
-    Ok((
-        PublicParams::ECDH(EcdhPublicParams::P256 {
-            p: public,
-            hash,
-            alg_sym,
-        }),
-        PlainSecretParams::ECDH(SecretKey::P256 { secret }),
-    ))
-}
-
-fn keygen_p384<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSecretParams)> {
-    let curve = ECCCurve::P384;
-    let secret = elliptic_curve::SecretKey::<p384::NistP384>::random(&mut rng);
-    let public = secret.public_key();
-
-    let hash = curve.hash_algo()?;
-    let alg_sym = curve.sym_algo()?;
-    Ok((
-        PublicParams::ECDH(EcdhPublicParams::P384 {
-            p: public,
-            hash,
-            alg_sym,
-        }),
-        PlainSecretParams::ECDH(SecretKey::P384 { secret }),
-    ))
-}
-
-fn keygen_p521<R: Rng + CryptoRng>(mut rng: R) -> Result<(PublicParams, PlainSecretParams)> {
-    let curve = ECCCurve::P521;
-    let secret = elliptic_curve::SecretKey::<p521::NistP521>::random(&mut rng);
-    let public = secret.public_key();
-
-    let hash = curve.hash_algo()?;
-    let alg_sym = curve.sym_algo()?;
-    Ok((
-        PublicParams::ECDH(EcdhPublicParams::P521 {
-            p: public,
-            hash,
-            alg_sym,
-        }),
-        PlainSecretParams::ECDH(SecretKey::P521 { secret }),
-    ))
-}
-
 /// Build param for ECDH algorithm (as defined in RFC 9580)
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-ecdh-algorithm>
 pub fn build_ecdh_param(
@@ -634,7 +573,6 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::PlainSecretParams;
     use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
@@ -648,7 +586,8 @@ mod tests {
         ] {
             let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-            let (pkey, skey) = generate_key(&mut rng, &curve).unwrap();
+            let skey = SecretKey::generate(&mut rng, &curve).unwrap();
+            let pub_params: EcdhPublicParams = (&skey).into();
 
             for text_size in 1..=239 {
                 for _i in 0..10 {
@@ -658,21 +597,13 @@ mod tests {
                     let mut plain = vec![0u8; text_size];
                     rng.fill_bytes(&mut plain);
 
-                    let values = match pkey {
-                        PublicParams::ECDH(ref params) => {
-                            encrypt(&mut rng, params, &fingerprint, &plain[..]).unwrap()
-                        }
-                        _ => panic!("invalid key generated"),
-                    };
+                    let values = encrypt(&mut rng, &pub_params, &fingerprint, &plain[..]).unwrap();
 
-                    let decrypted = match (&skey, values) {
-                        (
-                            PlainSecretParams::ECDH(ref skey),
-                            PkeskBytes::Ecdh {
-                                public_point,
-                                encrypted_session_key,
-                            },
-                        ) => skey
+                    let decrypted = match values {
+                        PkeskBytes::Ecdh {
+                            public_point,
+                            encrypted_session_key,
+                        } => skey
                             .decrypt(EncryptionFields {
                                 public_point: &public_point,
                                 encrypted_session_key: &encrypted_session_key,

@@ -15,20 +15,29 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, Signer};
 use crate::errors::Result;
-use crate::types::{Mpi, MpiRef, PkeskBytes, PlainSecretParams, PublicParams, RsaPublicParams};
+use crate::types::{Mpi, MpiRef, PkeskBytes, RsaPublicParams};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
 /// Private Key for RSA.
 #[derive(derive_more::Debug, ZeroizeOnDrop, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct PrivateKey(
+pub struct SecretKey(
     #[debug("..")]
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
     RsaPrivateKey,
 );
 
-impl PrivateKey {
+impl SecretKey {
+    /// Generate an RSA `SecretKey`.
+    ///
+    /// Errors on unsupported `bit_size`s.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R, bit_size: usize) -> Result<Self> {
+        let key = RsaPrivateKey::new(&mut rng, bit_size)?;
+
+        Ok(SecretKey(key))
+    }
+
     pub(crate) fn try_from_mpi(
         pub_params: &RsaPublicParams,
         d: MpiRef<'_>,
@@ -46,15 +55,15 @@ impl PrivateKey {
     }
 }
 
-impl From<&PrivateKey> for RsaPublicParams {
-    fn from(value: &PrivateKey) -> Self {
+impl From<&SecretKey> for RsaPublicParams {
+    fn from(value: &SecretKey) -> Self {
         RsaPublicParams {
             key: value.to_public_key(),
         }
     }
 }
 
-impl Deref for PrivateKey {
+impl Deref for SecretKey {
     type Target = RsaPrivateKey;
 
     fn deref(&self) -> &Self::Target {
@@ -62,7 +71,7 @@ impl Deref for PrivateKey {
     }
 }
 
-impl Decryptor for PrivateKey {
+impl Decryptor for SecretKey {
     type EncryptionFields<'a> = &'a Mpi;
 
     /// RSA decryption using PKCS1v15 padding.
@@ -73,7 +82,7 @@ impl Decryptor for PrivateKey {
     }
 }
 
-impl Signer for PrivateKey {
+impl Signer for SecretKey {
     /// Sign using RSA, with PKCS1v15 padding.
     fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
         let sig = match hash {
@@ -95,7 +104,7 @@ impl Signer for PrivateKey {
     }
 }
 
-impl From<RsaPrivateKey> for PrivateKey {
+impl From<RsaPrivateKey> for SecretKey {
     fn from(key: RsaPrivateKey) -> Self {
         Self(key)
     }
@@ -112,19 +121,6 @@ pub fn encrypt<R: CryptoRng + Rng>(
     Ok(PkeskBytes::Rsa {
         mpi: Mpi::from_slice(&data[..]),
     })
-}
-
-/// Generate an RSA KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    bit_size: usize,
-) -> Result<(PublicParams, PlainSecretParams)> {
-    let key = RsaPrivateKey::new(&mut rng, bit_size)?;
-
-    Ok((
-        PublicParams::RSA(key.to_public_key().into()),
-        PlainSecretParams::RSA(PrivateKey(key)),
-    ))
 }
 
 fn verify_int<D>(key: &RsaPublicKey, hashed: &[u8], signature: &RsaSignature) -> Result<()>

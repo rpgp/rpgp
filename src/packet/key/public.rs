@@ -593,7 +593,7 @@ impl PublicKeyTrait for PubKeyInner {
                 })
             }
             #[cfg(feature = "unstable-curve448")]
-            PublicParams::X448 { ref public } => {
+            PublicParams::X448(ref params) => {
                 let (sym_alg, plain) = match typ {
                     EskType::V6 => (None, plain),
                     EskType::V3_4 => {
@@ -606,7 +606,7 @@ impl PublicKeyTrait for PubKeyInner {
                     }
                 };
 
-                let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
+                let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, params, plain)?;
 
                 Ok(PkeskBytes::X448 {
                     ephemeral,

@@ -9,7 +9,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::{aes_kw, Decryptor};
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams, X25519PublicParams};
+use crate::types::X25519PublicParams;
 
 /// Secret key for X25519
 #[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
@@ -35,6 +35,15 @@ impl PartialEq for SecretKey {
 impl Eq for SecretKey {}
 
 impl SecretKey {
+    /// Generate an X25519 `SecretKey`.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
+        rng.fill_bytes(&mut *secret_key_bytes);
+
+        let secret = StaticSecret::from(*secret_key_bytes);
+        SecretKey { secret }
+    }
+
     pub(crate) fn try_from_slice(_pub_params: &X25519PublicParams, secret: &[u8]) -> Result<Self> {
         let raw_secret: [u8; 32] = secret
             .try_into()
@@ -100,20 +109,6 @@ pub fn derive_session_key(
     ensure!(!decrypted_key.is_empty(), "empty key is not valid");
 
     Ok(decrypted_key)
-}
-
-/// Generate an X25519 KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecretParams) {
-    let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
-    rng.fill_bytes(&mut *secret_key_bytes);
-
-    let secret = StaticSecret::from(*secret_key_bytes);
-    let public = PublicKey::from(&secret);
-
-    (
-        PublicParams::X25519(X25519PublicParams { key: public }),
-        PlainSecretParams::X25519(SecretKey { secret }),
-    )
 }
 
 /// HKDF for X25519
@@ -200,7 +195,6 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::PlainSecretParams;
 
     #[test]
     fn x25519_hkdf() {
@@ -264,15 +258,8 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
-
-        let (pkey, skey) = generate_key(&mut rng);
-
-        let PublicParams::X25519(ref params) = pkey else {
-            panic!("invalid key generated")
-        };
-        let PlainSecretParams::X25519(ref secret) = skey else {
-            panic!("invalid key generated")
-        };
+        let skey = SecretKey::generate(&mut rng);
+        let pub_params: X25519PublicParams = (&skey).into();
 
         for text_size in (8..=248).step_by(8) {
             for _i in 0..10 {
@@ -282,15 +269,15 @@ mod tests {
                 let mut plain = vec![0u8; text_size];
                 rng.fill_bytes(&mut plain);
 
-                let (ephemeral, enc_sk) = encrypt(&mut rng, &params.key, &plain[..]).unwrap();
+                let (ephemeral, enc_sk) = encrypt(&mut rng, &pub_params.key, &plain[..]).unwrap();
 
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
-                    recipient_public: params.key.to_bytes(),
+                    recipient_public: pub_params.key.to_bytes(),
                     encrypted_session_key: enc_sk.deref(),
                 };
 
-                let decrypted = secret.decrypt(data).unwrap();
+                let decrypted = skey.decrypt(data).unwrap();
 
                 assert_eq!(&plain[..], &decrypted[..]);
             }
