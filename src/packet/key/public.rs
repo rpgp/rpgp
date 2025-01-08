@@ -1,7 +1,6 @@
-use aes_gcm::aead::rand_core::CryptoRng;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use md5::Md5;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 use rsa::traits::PublicKeyParts;
 use sha1_checked::{Digest, Sha1};
 

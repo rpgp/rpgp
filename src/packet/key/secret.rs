@@ -1,6 +1,5 @@
-use aes_gcm::aead::rand_core::CryptoRng;
 use log::debug;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
@@ -254,22 +253,22 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
             debug!("unlocked key");
             let sig = match *priv_key {
                 PlainSecretParams::RSA(ref priv_key) => {
-                    let PublicParams::RSA(params) = pub_params else {
+                    let PublicParams::RSA(_) = pub_params else {
                         bail!("inconsistent key");
                     };
-                    priv_key.sign(hash, data, params)
+                    priv_key.sign(hash, data)
                 }
                 PlainSecretParams::ECDSA(ref priv_key) => {
-                    let PublicParams::ECDSA(params) = pub_params else {
+                    let PublicParams::ECDSA(_) = pub_params else {
                         bail!("inconsistent key");
                     };
-                    priv_key.sign(hash, data, params)
+                    priv_key.sign(hash, data)
                 }
                 PlainSecretParams::DSA(ref priv_key) => {
-                    let PublicParams::DSA(params) = pub_params else {
+                    let PublicParams::DSA(_) = pub_params else {
                         bail!("inconsistent key");
                     };
-                    priv_key.sign(hash, data, params)
+                    priv_key.sign(hash, data)
                 }
                 PlainSecretParams::ECDH(_) => {
                     bail!("ECDH can not be used for signing operations")
@@ -282,17 +281,14 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                     bail!("X448 can not be used for signing operations")
                 }
                 PlainSecretParams::EdDSA(ref priv_key) => {
-                    let key = match pub_params {
-                        PublicParams::Ed25519(params) => &params.key,
-                        _ => {
-                            bail!("invalid inconsistent key")
-                        }
+                    let PublicParams::Ed25519(_) = pub_params else {
+                        bail!("invalid inconsistent key");
                     };
-                    priv_key.sign(hash, data, key)
+                    priv_key.sign(hash, data)
                 }
                 PlainSecretParams::EdDSALegacy(ref priv_key) => {
-                    let key = match pub_params {
-                        PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { key }) => key,
+                    match pub_params {
+                        PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }) => {}
                         PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
                             curve,
                             ..
@@ -300,10 +296,10 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
                             unsupported_err!("curve {} for EdDSA", curve);
                         }
                         _ => {
-                            bail!("invalid inconsistent key")
+                            bail!("invalid inconsistent key");
                         }
-                    };
-                    priv_key.sign(hash, data, key)
+                    }
+                    priv_key.sign(hash, data)
                 }
             }?;
 

@@ -74,15 +74,8 @@ impl Decryptor for PrivateKey {
 }
 
 impl Signer for PrivateKey {
-    type PublicParams = RsaPublicParams;
-
     /// Sign using RSA, with PKCS1v15 padding.
-    fn sign(
-        &self,
-        hash: HashAlgorithm,
-        digest: &[u8],
-        _pub_params: &Self::PublicParams,
-    ) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
         let sig = match hash {
             HashAlgorithm::None => return Err(format_err!("none")),
             HashAlgorithm::MD5 => sign_int::<Md5>(self.0.clone(), digest),

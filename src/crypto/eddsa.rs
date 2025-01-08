@@ -75,14 +75,7 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    type PublicParams = ed25519_dalek::VerifyingKey;
-
-    fn sign(
-        &self,
-        _hash: HashAlgorithm,
-        digest: &[u8],
-        _key: &Self::PublicParams,
-    ) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, _hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
         let signature = self.secret.sign(digest);
         let bytes = signature.to_bytes();
 

@@ -25,12 +25,5 @@ pub trait Decryptor {
 }
 
 pub trait Signer {
-    type PublicParams;
-
-    fn sign(
-        &self,
-        hash: HashAlgorithm,
-        digest: &[u8],
-        pub_params: &Self::PublicParams,
-    ) -> crate::errors::Result<Vec<Vec<u8>>>;
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<Vec<Vec<u8>>>;
 }

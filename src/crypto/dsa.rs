@@ -19,7 +19,7 @@ pub use dsa::KeySize;
 pub struct SecretKey {
     #[debug("..")]
     #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
-    pub key: dsa::SigningKey,
+    key: dsa::SigningKey,
 }
 
 impl From<&SecretKey> for DsaPublicParams {
@@ -62,13 +62,7 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    type PublicParams = DsaPublicParams;
-    fn sign(
-        &self,
-        hash_algorithm: HashAlgorithm,
-        digest: &[u8],
-        _pub_params: &Self::PublicParams,
-    ) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash_algorithm: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
         let signing_key = &self.key;
         let signature = match hash_algorithm {
             HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
@@ -186,9 +180,7 @@ mod tests {
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let res = key
-                    .sign(hash_algorithm, &hashed, &params)
-                    .expect("failed to sign");
+                let res = key.sign(hash_algorithm, &hashed).expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
                 assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
@@ -323,9 +315,7 @@ mod tests {
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let res = key
-                    .sign(hash_algorithm, &hashed, &params)
-                    .expect("failed to sign");
+                let res = key.sign(hash_algorithm, &hashed).expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
                 assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
