@@ -26,6 +26,11 @@ pub trait BufParsing: Buf {
         ensure!(self.remaining() >= size, "need at least {} bytes", size);
         Ok(self.copy_to_bytes(size))
     }
+
+    fn rest(&mut self) -> Bytes {
+        let len = self.remaining();
+        self.copy_to_bytes(len)
+    }
 }
 
 impl<B: Buf> BufParsing for B {}

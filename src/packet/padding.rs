@@ -1,11 +1,16 @@
 use std::io;
 
+use bytes::{Buf, Bytes};
 use rand::{CryptoRng, RngCore};
 
 use crate::errors::Result;
 use crate::packet::PacketTrait;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
+
+#[cfg(test)]
+use proptest::prelude::*;
 
 /// Padding Packet
 ///
@@ -16,15 +21,18 @@ pub struct Padding {
     packet_version: Version,
     /// Random data.
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
+    data: Bytes,
 }
 
 impl Padding {
     /// Parses a `Padding` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
+        let data = input.rest();
+
         Ok(Padding {
             packet_version,
-            data: input.to_vec(),
+            data,
         })
     }
 
@@ -32,9 +40,10 @@ impl Padding {
     pub fn new<R: CryptoRng + RngCore>(mut rng: R, packet_version: Version, size: usize) -> Self {
         let mut data = vec![0u8; size];
         rng.fill_bytes(&mut data);
+
         Padding {
             packet_version,
-            data,
+            data: data.into(),
         }
     }
 
@@ -127,7 +136,7 @@ mod tests {
         fn packet_roundtrip(padding: Padding) {
             let mut buf = Vec::new();
             padding.to_writer(&mut buf).unwrap();
-            let new_padding = Padding::from_slice(padding.packet_version, &buf).unwrap();
+            let new_padding = Padding::from_buf(padding.packet_version, &mut &buf[..]).unwrap();
             assert_eq!(padding, new_padding);
         }
     }

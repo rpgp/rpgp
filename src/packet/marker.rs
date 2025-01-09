@@ -1,7 +1,10 @@
 use std::io;
 
+use bytes::Buf;
+
 use crate::errors::Result;
 use crate::packet::PacketTrait;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{Tag, Version};
 
@@ -18,8 +21,9 @@ pub struct Marker {
 
 impl Marker {
     /// Parses a `Marker` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        ensure_eq!(input, &PGP[..], "invalid input");
+    pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
+        let marker = input.take_array::<3>()?;
+        ensure_eq!(marker, PGP, "invalid input");
 
         Ok(Marker { packet_version })
     }
@@ -69,7 +73,7 @@ mod tests {
         fn packet_roundtrip(marker: Marker) {
             let mut buf = Vec::new();
             marker.to_writer(&mut buf).unwrap();
-            let new_marker = Marker::from_slice(marker.packet_version, &buf).unwrap();
+            let new_marker = Marker::from_buf(marker.packet_version, &mut &buf[..]).unwrap();
             assert_eq!(marker, new_marker);
         }
     }

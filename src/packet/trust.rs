@@ -1,5 +1,6 @@
 use std::io;
 
+use bytes::Buf;
 use log::warn;
 
 use crate::errors::Result;
@@ -21,7 +22,7 @@ pub struct Trust {
 
 impl Trust {
     /// Parses a `Trust` packet from the given slice.
-    pub fn from_slice(packet_version: Version, _: &[u8]) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_version: Version, _: B) -> Result<Self> {
         warn!("Trust packet detected, ignoring");
 
         Ok(Trust { packet_version })
@@ -56,18 +57,18 @@ mod tests {
 
     proptest! {
         #[test]
-        fn write_len(trust: Trust) {
+        fn write_len(packet: Trust) {
             let mut buf = Vec::new();
-            trust.to_writer(&mut buf).unwrap();
-            assert_eq!(buf.len(), trust.write_len());
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
         }
 
         #[test]
-        fn packet_roundtrip(trust: Trust) {
+        fn packet_roundtrip(packet: Trust) {
             let mut buf = Vec::new();
-            trust.to_writer(&mut buf).unwrap();
-            let new_trust = Trust::from_slice(trust.packet_version, &buf).unwrap();
-            assert_eq!(trust, new_trust);
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = Trust::from_buf(packet.packet_version, &mut &buf[..]).unwrap();
+            prop_assert_eq!(packet, new_packet);
         }
     }
 }

@@ -139,6 +139,8 @@ impl PkeskBytes {
 
 #[cfg(test)]
 mod tests {
+    use prop::collection;
+
     use super::*;
 
     impl Arbitrary for PkeskBytes {
@@ -163,25 +165,28 @@ mod tests {
                         .prop_map(|(first, second)| Self::Elgamal { first, second })
                         .boxed()
                 }
-                PublicKeyAlgorithm::ECDH => any::<(MpiBytes, Vec<u8>)>()
+                PublicKeyAlgorithm::ECDH => any::<MpiBytes>()
+                    .prop_flat_map(|a| (Just(a), collection::vec(0u8..255u8, 1..100)))
                     .prop_map(|(a, b)| Self::Ecdh {
                         public_point: a,
                         encrypted_session_key: b.into(),
                     })
                     .boxed(),
-                PublicKeyAlgorithm::X25519 => any::<([u8; 32], Vec<u8>, SymmetricKeyAlgorithm)>()
+                PublicKeyAlgorithm::X25519 => any::<([u8; 32], SymmetricKeyAlgorithm)>()
+                    .prop_flat_map(|(a, b)| (Just(a), Just(b), collection::vec(0u8..255u8, 1..100)))
                     .prop_map(move |(a, b, c)| Self::X25519 {
                         ephemeral: a,
-                        session_key: b.into(),
-                        sym_alg: (!is_v6).then_some(c),
+                        session_key: c.into(),
+                        sym_alg: (!is_v6).then_some(b),
                     })
                     .boxed(),
                 #[cfg(feature = "unstable-curve448")]
-                PublicKeyAlgorithm::X448 => any::<([u8; 56], Vec<u8>, SymmetricKeyAlgorithm)>()
+                PublicKeyAlgorithm::X448 => any::<([u8; 56], SymmetricKeyAlgorithm)>()
+                    .prop_flat_map(|(a, b)| (Just(a), Just(b), collection::vec(0u8..255u8, 1..100)))
                     .prop_map(move |(a, b, c)| Self::X448 {
                         ephemeral: a,
-                        session_key: b.into(),
-                        sym_alg: (!is_v6).then_some(c),
+                        session_key: c.into(),
+                        sym_alg: (!is_v6).then_some(b),
                     })
                     .boxed(),
                 _ => unreachable!("unsupported {:?}", alg),
