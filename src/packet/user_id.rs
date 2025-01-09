@@ -24,7 +24,7 @@ pub struct UserId {
 
 impl UserId {
     /// Parses a `UserId` packet from the given buffer.
-    pub fn from_slice(packet_version: Version, mut input: impl Buf) -> Result<Self> {
+    pub fn from_buf(packet_version: Version, mut input: impl Buf) -> Result<Self> {
         let len = input.remaining();
         let id = input.copy_to_bytes(len);
         Ok(UserId { packet_version, id })
@@ -208,7 +208,7 @@ mod tests {
         fn packet_roundtrip(user_id: UserId) {
             let mut buf = Vec::new();
             user_id.to_writer(&mut buf).unwrap();
-            let new_user_id = UserId::from_slice(user_id.packet_version, &mut &buf[..]).unwrap();
+            let new_user_id = UserId::from_buf(user_id.packet_version, &mut &buf[..]).unwrap();
             prop_assert_eq!(user_id, new_user_id);
         }
     }

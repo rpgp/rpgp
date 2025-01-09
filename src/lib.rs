@@ -37,6 +37,8 @@ pub mod packet;
 pub mod ser;
 pub mod types;
 
+mod parsing;
+
 // reexports for easier use
 #[allow(unused_imports)]
 pub use self::composed::key::*;

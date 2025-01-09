@@ -102,10 +102,11 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
     Ok((i, head))
 }
 
+// TODO: switch to Buf once fully converted
 pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Packet> {
     let res: Result<Packet> = match tag {
         Tag::PublicKeyEncryptedSessionKey => {
-            PublicKeyEncryptedSessionKey::from_slice(ver, &body).map(Into::into)
+            PublicKeyEncryptedSessionKey::from_buf(ver, &mut body).map(Into::into)
         }
         Tag::Signature => Signature::from_slice(ver, &body).map(Into::into),
         Tag::SymKeyEncryptedSessionKey => {
@@ -120,7 +121,7 @@ pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Pack
         Tag::Marker => Marker::from_slice(ver, &body).map(Into::into),
         Tag::LiteralData => LiteralData::from_buf(ver, &mut body).map(Into::into),
         Tag::Trust => Trust::from_slice(ver, &body).map(Into::into),
-        Tag::UserId => UserId::from_slice(ver, &mut body).map(Into::into),
+        Tag::UserId => UserId::from_buf(ver, &mut body).map(Into::into),
         Tag::PublicSubkey => PublicSubkey::from_slice(ver, &body).map(Into::into),
         Tag::UserAttribute => UserAttribute::from_slice(ver, &body).map(Into::into),
         Tag::SymEncryptedProtectedData => {
@@ -148,12 +149,7 @@ pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Pack
         Ok(res) => Ok(res),
         Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
         Err(err) => {
-            warn!(
-                "invalid packet: {:#?} {:?}\n{}",
-                err,
-                tag,
-                hex::encode(&body)
-            );
+            warn!("invalid packet: {:#?} {:?}\n{:?}", err, tag, body);
             Err(Error::InvalidPacketContent(Box::new(err)))
         }
     }
