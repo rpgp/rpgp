@@ -1,7 +1,6 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use bytes::Buf;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
@@ -10,10 +9,10 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::PacketTrait;
-use crate::parsing::{read_u8, take, take_array};
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    read_mpi, EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
+    EskType, Fingerprint, KeyId, KeyVersion, MpiBytes, PkeskBytes, PkeskVersion, PublicKeyTrait,
     PublicParams, Tag, Version,
 };
 
@@ -51,7 +50,7 @@ pub enum PublicKeyEncryptedSessionKey {
 
 impl PublicKeyEncryptedSessionKey {
     /// Parses a `PublicKeyEncryptedSessionKey` packet from the given slice.
-    pub fn from_buf<B: Buf>(version: Version, input: B) -> Result<Self> {
+    pub fn from_buf<B: bytes::Buf>(version: Version, input: B) -> Result<Self> {
         let pk = parse(version, input)?;
 
         Ok(pk)
@@ -206,17 +205,17 @@ impl PublicKeyEncryptedSessionKey {
     }
 }
 
-fn parse_esk<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<PkeskBytes> {
+fn parse_esk<B: bytes::Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<PkeskBytes> {
     match alg {
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSASign | PublicKeyAlgorithm::RSAEncrypt => {
-            let mpi = read_mpi(i)?;
+            let mpi = MpiBytes::from_buf(&mut i)?;
             Ok(PkeskBytes::Rsa {
                 mpi: mpi.to_owned(),
             })
         }
         PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
-            let first = read_mpi(&mut i)?;
-            let second = read_mpi(&mut i)?;
+            let first = MpiBytes::from_buf(&mut i)?;
+            let second = MpiBytes::from_buf(&mut i)?;
             Ok(PkeskBytes::Elgamal {
                 first: first.to_owned(),
                 second: second.to_owned(),
@@ -226,9 +225,9 @@ fn parse_esk<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<
             Ok(PkeskBytes::Other)
         }
         PublicKeyAlgorithm::ECDH => {
-            let a = read_mpi(&mut i)?;
-            let blen = read_u8(&mut i)?;
-            let b = take(blen.into(), &mut i)?;
+            let a = MpiBytes::from_buf(&mut i)?;
+            let blen = i.read_u8()?;
+            let b = i.read_take(blen.into())?;
 
             Ok(PkeskBytes::Ecdh {
                 public_point: a.to_owned(),
@@ -237,17 +236,17 @@ fn parse_esk<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<
         }
         PublicKeyAlgorithm::X25519 => {
             // 32 octets representing an ephemeral X25519 public key.
-            let ephemeral_public = take_array::<_, 32>(&mut i)?;
+            let ephemeral_public = i.take_array::<32>()?;
 
             // A one-octet size of the following fields.
-            let len = read_u8(&mut i)?;
+            let len = i.read_u8()?;
             if len == 0 {
                 return Err(crate::errors::Error::InvalidInput);
             }
 
             // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
             let sym_alg = if version == 3 {
-                let alg = SymmetricKeyAlgorithm::from(read_u8(&mut i)?);
+                let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
                 Some(alg)
             } else {
                 None
@@ -256,7 +255,7 @@ fn parse_esk<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<
             let skey_len = if version == 3 { len - 1 } else { len };
 
             // The encrypted session key.
-            let esk = take(skey_len.into(), i)?;
+            let esk = i.read_take(skey_len.into())?;
 
             Ok(PkeskBytes::X25519 {
                 ephemeral: ephemeral_public,
@@ -267,17 +266,17 @@ fn parse_esk<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<
         #[cfg(feature = "unstable-curve448")]
         PublicKeyAlgorithm::X448 => {
             // 56 octets representing an ephemeral X448 public key.
-            let ephemeral_public = take_array::<_, 56>(&mut i)?;
+            let ephemeral_public = i.take_array::<56>()?;
 
             // A one-octet size of the following fields.
-            let len = read_u8(&mut i)?;
+            let len = i.read_u8()?;
             if len == 0 {
                 return Err(crate::errors::Error::InvalidInput);
             }
 
             // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
             let sym_alg = if version == 3 {
-                let alg = SymmetricKeyAlgorithm::from(read_u8(&mut i)?);
+                let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
                 Some(alg)
             } else {
                 None
@@ -286,7 +285,7 @@ fn parse_esk<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<
             let skey_len = if version == 3 { len - 1 } else { len };
 
             // The encrypted session key.
-            let esk = take(skey_len.into(), &mut i)?;
+            let esk = i.read_take(skey_len.into())?;
 
             Ok(PkeskBytes::X448 {
                 ephemeral: ephemeral_public,
@@ -302,18 +301,18 @@ fn parse_esk<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<
 }
 
 /// Parses a Public-Key Encrypted Session Key Packets.
-fn parse<B: Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEncryptedSessionKey> {
+fn parse<B: bytes::Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEncryptedSessionKey> {
     // version, 3 and 6 are allowed
-    let version = read_u8(&mut i)?;
+    let version = i.read_u8()?;
 
     match version {
         3 => {
             // the key id this maps to
-            let key_id_raw = take_array::<_, 8>(&mut i)?;
+            let key_id_raw = i.take_array::<8>()?;
             let key_id = KeyId::from(key_id_raw);
 
             // the public key algorithm
-            let pk_algo = PublicKeyAlgorithm::from(read_u8(&mut i)?);
+            let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
             // key algorithm specific data
             let values = parse_esk(&pk_algo, version, &mut i)?;
@@ -329,18 +328,18 @@ fn parse<B: Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEncrypted
             // A one-octet size of the following two fields. This size may be zero,
             // if the key version number field and the fingerprint field are omitted
             // for an "anonymous recipient" (see Section 5.1.8).
-            let len = read_u8(&mut i)?;
+            let len = i.read_u8()?;
 
             let fingerprint = match len {
                 0 => None,
                 _ => {
                     // A one octet key version number.
-                    let v = KeyVersion::from(read_u8(&mut i)?);
+                    let v = i.read_u8().map(KeyVersion::from)?;
 
                     // The fingerprint of the public key or subkey to which the session key is encrypted.
                     // Note that the length N of the fingerprint for a version 4 key is 20 octets;
                     // for a version 6 key N is 32.
-                    let fp = take((len - 1).into(), &mut i)?;
+                    let fp = i.read_take((len - 1).into())?;
                     let fp = Fingerprint::new(v, &fp)?;
 
                     Some(fp)
@@ -348,7 +347,7 @@ fn parse<B: Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEncrypted
             };
 
             // A one-octet number giving the public-key algorithm used.
-            let pk_algo = PublicKeyAlgorithm::from(read_u8(&mut i)?);
+            let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
             // A series of values comprising the encrypted session key. This is algorithm-specific and described below.
             let values = parse_esk(&pk_algo, version, &mut i)?;

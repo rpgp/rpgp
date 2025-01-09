@@ -1,14 +1,14 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use nom::number::streaming::be_u16;
 use nom::{Err, InputIter, InputTake};
 use num_bigint::BigUint;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::errors::{self, Error, IResult};
-use crate::parsing::{read_be_u16, take};
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
@@ -54,38 +54,6 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
     }
 }
 
-/// Parse Multi Precision Integers
-/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-multiprecision-integers>
-///
-/// # Examples
-///
-/// ```rust
-/// use pgp::types::mpi;
-/// use pgp::types::MpiRef;
-///
-/// // Decode the number `1`.
-/// assert_eq!(
-///     mpi(&[0x00, 0x01, 0x01][..]).unwrap(),
-///     (&b""[..], MpiRef::from_slice(&[1][..]))
-/// );
-/// ```
-pub fn read_mpi<B: Buf>(mut i: B) -> crate::errors::Result<MpiBytes> {
-    let len = read_be_u16(&mut i)?;
-
-    let bits = u32::from(len);
-    let len_actual = (bits + 7) >> 3;
-
-    if len_actual > MAX_EXTERN_MPI_BITS {
-        return Err(Error::InvalidInput);
-    }
-
-    let n = take(len_actual.try_into()?, &mut i)?;
-    let n_stripped = strip_leading_zeros(&n);
-    let n_stripped = n.slice_ref(n_stripped);
-
-    Ok(MpiBytes(n_stripped))
-}
-
 /// Represents an owned MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
 // TODO: unify with MpiRef and Mpi
@@ -96,6 +64,24 @@ pub struct MpiBytes(#[debug("{}", hex::encode(_0))] Bytes);
 impl MpiBytes {
     pub fn to_owned(&self) -> Mpi {
         Mpi(self.0.to_vec())
+    }
+    /// Parse Multi Precision Integers
+    /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-multiprecision-integers>
+    pub fn from_buf<B: bytes::Buf>(mut i: B) -> crate::errors::Result<Self> {
+        let len = i.read_be_u16()?;
+
+        let bits = u32::from(len);
+        let len_actual = (bits + 7) >> 3;
+
+        if len_actual > MAX_EXTERN_MPI_BITS {
+            return Err(Error::InvalidInput);
+        }
+
+        let n = i.read_take(len_actual.try_into()?)?;
+        let n_stripped = strip_leading_zeros(&n);
+        let n_stripped = n.slice_ref(n_stripped);
+
+        Ok(MpiBytes(n_stripped))
     }
 }
 
