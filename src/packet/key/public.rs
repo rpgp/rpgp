@@ -588,7 +588,7 @@ impl PublicKeyTrait for PubKeyInner {
 
                 Ok(PkeskBytes::X25519 {
                     ephemeral,
-                    session_key,
+                    session_key: session_key.into(),
                     sym_alg,
                 })
             }

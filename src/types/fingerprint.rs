@@ -6,6 +6,7 @@ use crate::types::KeyVersion;
 /// OpenPGP fingerprints consist of two pieces of information:
 /// The key version, and binary data that represents the fingerprint itself.
 #[derive(Clone, Eq, Hash, PartialEq, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Fingerprint {
     #[debug("{}", hex::encode(_0))]
     V2([u8; 16]),
@@ -19,6 +20,7 @@ pub enum Fingerprint {
     V6([u8; 32]),
 
     #[debug("{}", hex::encode(_0))]
+    #[cfg_attr(test, proptest(skip))]
     /// Fingerprint with unknown key version
     Unknown(Box<[u8]>),
 }

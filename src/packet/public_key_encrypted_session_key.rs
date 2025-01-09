@@ -310,7 +310,10 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 }
                 *pk_algo
             }
-            PublicKeyEncryptedSessionKey::Other { .. } => todo!(),
+            PublicKeyEncryptedSessionKey::Other { version, .. } => {
+                writer.write_u8(*version)?;
+                return Ok(());
+            }
         };
 
         writer.write_u8(algorithm.into())?;
@@ -481,7 +484,10 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 }
                 (*pk_algo, values)
             }
-            PublicKeyEncryptedSessionKey::Other { .. } => todo!(),
+            PublicKeyEncryptedSessionKey::Other { .. } => {
+                sum += 1; // version
+                return sum;
+            }
         };
 
         sum += 1;
@@ -606,5 +612,84 @@ impl PacketTrait for PublicKeyEncryptedSessionKey {
     }
     fn tag(&self) -> Tag {
         Tag::PublicKeyEncryptedSessionKey
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use proptest::prelude::*;
+
+    impl Arbitrary for PublicKeyEncryptedSessionKey {
+        type Parameters = PublicKeyAlgorithm;
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary() -> Self::Strategy {
+            any::<PublicKeyAlgorithm>()
+                .prop_flat_map(Self::arbitrary_with)
+                .boxed()
+        }
+        fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                any_with::<PkeskBytes>((alg, false))
+                    .prop_flat_map(|values| { (any::<Version>(), any::<KeyId>(), Just(values)) })
+                    .prop_map(move |(packet_version, id, values)| {
+                        Self::V3 {
+                            packet_version,
+                            id,
+                            pk_algo: alg,
+                            values,
+                        }
+                    }),
+                any_with::<PkeskBytes>((alg, true))
+                    .prop_flat_map(|values| {
+                        (any::<Version>(), any::<Option<Fingerprint>>(), Just(values))
+                    })
+                    .prop_map(move |(packet_version, fingerprint, values)| {
+                        Self::V6 {
+                            packet_version,
+                            fingerprint,
+                            pk_algo: alg,
+                            values,
+                        }
+                    }),
+            ]
+            .boxed()
+        }
+    }
+
+    fn gen_alg() -> impl Strategy<Value = PublicKeyAlgorithm> {
+        use PublicKeyAlgorithm::*;
+        prop_oneof![
+            Just(RSA),
+            Just(RSAEncrypt),
+            Just(RSASign),
+            Just(Elgamal),
+            Just(ElgamalSign),
+            Just(ECDH),
+            Just(X25519),
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(
+            (_alg, packet) in gen_alg().prop_flat_map(|alg| (Just(alg), any_with::<PublicKeyEncryptedSessionKey>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+        #[test]
+        fn packet_roundtrip(
+            (_alg, packet) in gen_alg().prop_flat_map(|alg| (Just(alg), any_with::<PublicKeyEncryptedSessionKey>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = PublicKeyEncryptedSessionKey::from_buf(packet.packet_version(), &mut &buf[..]).unwrap();
+            prop_assert_eq!(packet, new_packet);
+        }
     }
 }

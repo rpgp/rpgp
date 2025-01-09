@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 242f4f7b946041b74626e7e1d7781380a46eccc9e727bd1d890c658583497bd9 # shrinks to packet = V3 { packet_version: Old, id: KeyId(0000000000000000), pk_algo: DSA, values: Rsa { mpi: MpiBytes(01) } }
+cc 64800b7f86a2c58bc8f5fb9973ba1d31d568476b80f6c3f449328efa48e1a537 # shrinks to packet = V3 { packet_version: Old, id: KeyId(0000000000000000), pk_algo: RSA, values: Ecdh { public_point: MpiBytes(01), encrypted_session_key: b"\xc8X\x8d\tHf#\xcc\xba\x84\x1a\x93F\xe1\xcc\xa8F\x89\x16\x8e\xd9p\xdbf9+\x82\x92\xd8|IA\x9e\x1b\xa3\xa1\x9a\x8a\xea6\x81\xb5\x0e\x1fC\xe9\xe8\xaa\xf0\x80\xd3?f\xbc\xad\xe4\xf3" } }
+cc 4aa7d22e6cf615fcf35cb6ea1ef3419d8f1a0635663bbac6e265a898edb85687 # shrinks to (_alg, packet) = (X25519, V6 { packet_version: Old, fingerprint: Some(00000000000000000000000000000000000000000000000000000000000000df), pk_algo: X25519, values: X25519 { ephemeral: [3, 5, 56, 132, 106, 58, 137, 106, 89, 167, 33, 78, 242, 29, 201, 104, 250, 186, 102, 92, 205, 46, 101, 116, 30, 156, 67, 70, 183, 105, 53, 28], session_key: b"\x19\x16D\n&yYr\x03pY.\xc4\x03\xd1\xe6\xdd\xa4\xaf'\x8eq\x85\x7f[\xbd\xcd\xc8\xfa\xda\x0f\"\x11@r#\xf0\x80\xf5\x16\x0e\xee\xff\x83&*B\x0c2\xbb\x91a\x1c\xb3\xf8\"\xf4\xf4\xf1%\x06\xe7\xb6\x8el\xfe\xcd]6R\xcc\x9a.\xf0rg%\xc6\x87\x13j\x82\xe7\x123\xa9\x02\x1b", sym_alg: Some(CAST5) } })
+cc 421ca7c373b2ac546fee94e8a252cc6353f0093bbddd379355af2b572e2ed989 # shrinks to (_alg, packet) = (RSAEncrypt, Other { packet_version: Old, version: 3 })

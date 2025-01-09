@@ -5,6 +5,7 @@
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.4>
 #[derive(Clone, Copy, Hash, Eq, PartialEq, derive_more::Debug, derive_more::Display)]
 #[display("{}", hex::encode(_0))]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct KeyId(#[debug("{}", hex::encode(_0))] [u8; 8]);
 
 impl AsRef<[u8]> for KeyId {

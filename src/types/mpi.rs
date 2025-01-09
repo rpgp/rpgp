@@ -11,6 +11,8 @@ use crate::errors::{self, Error, IResult};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
+#[cfg(test)]
+use proptest::prelude::*;
 
 /// Number of bits we accept when reading or writing MPIs.
 /// The value is the same as gnupgs.
@@ -59,7 +61,18 @@ pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
 // TODO: unify with MpiRef and Mpi
 // TODO: deal with zeroize
 #[derive(Default, Clone, PartialEq, Eq, derive_more::Debug)]
-pub struct MpiBytes(#[debug("{}", hex::encode(_0))] Bytes);
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub struct MpiBytes(
+    #[debug("{}", hex::encode(_0))]
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "mpi_gen().prop_map(Into::into)",
+            filter = "|mpi| !mpi.is_empty()"
+        )
+    )]
+    Bytes,
+);
 
 impl MpiBytes {
     pub fn to_owned(&self) -> Mpi {
@@ -253,8 +266,6 @@ impl<'a> From<&'a BigUint> for Mpi {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use proptest::prelude::*;
 
     #[test]
     fn test_mpi() {

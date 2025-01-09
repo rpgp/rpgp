@@ -7,6 +7,9 @@ use crate::parsing::BufParsing;
 
 use super::MpiBytes;
 
+#[cfg(test)]
+use proptest::prelude::*;
+
 /// Values comprising a Public Key Encrypted Session Key
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PkeskBytes {
@@ -24,20 +27,16 @@ pub enum PkeskBytes {
     X25519 {
         /// Ephemeral X25519 public key (32 bytes).
         ephemeral: [u8; 32],
-
         /// Encrypted and wrapped session key.
-        session_key: Vec<u8>,
-
+        session_key: Bytes,
         /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X25519)
         sym_alg: Option<SymmetricKeyAlgorithm>,
     },
     X448 {
         /// Ephemeral X448 public key (56 bytes).
         ephemeral: [u8; 56],
-
         /// Encrypted and wrapped session key.
         session_key: Bytes,
-
         /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X448)
         sym_alg: Option<SymmetricKeyAlgorithm>,
     },
@@ -97,7 +96,7 @@ impl PkeskBytes {
                 Ok(PkeskBytes::X25519 {
                     ephemeral: ephemeral_public,
                     sym_alg,
-                    session_key: esk.to_vec(),
+                    session_key: esk,
                 })
             }
             #[cfg(feature = "unstable-curve448")]
@@ -134,6 +133,59 @@ impl PkeskBytes {
             PublicKeyAlgorithm::X448 => Ok(PkeskBytes::Other),
             PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
             _ => unsupported_err!("unsupported algorithm for ESK"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    impl Arbitrary for PkeskBytes {
+        type Parameters = (PublicKeyAlgorithm, bool);
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary() -> Self::Strategy {
+            any::<(PublicKeyAlgorithm, bool)>()
+                .prop_flat_map(Self::arbitrary_with)
+                .boxed()
+        }
+
+        fn arbitrary_with((alg, is_v6): Self::Parameters) -> Self::Strategy {
+            match alg {
+                PublicKeyAlgorithm::RSA
+                | PublicKeyAlgorithm::RSAEncrypt
+                | PublicKeyAlgorithm::RSASign => {
+                    any::<MpiBytes>().prop_map(|mpi| Self::Rsa { mpi }).boxed()
+                }
+                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
+                    any::<(MpiBytes, MpiBytes)>()
+                        .prop_map(|(first, second)| Self::Elgamal { first, second })
+                        .boxed()
+                }
+                PublicKeyAlgorithm::ECDH => any::<(MpiBytes, Vec<u8>)>()
+                    .prop_map(|(a, b)| Self::Ecdh {
+                        public_point: a,
+                        encrypted_session_key: b.into(),
+                    })
+                    .boxed(),
+                PublicKeyAlgorithm::X25519 => any::<([u8; 32], Vec<u8>, SymmetricKeyAlgorithm)>()
+                    .prop_map(move |(a, b, c)| Self::X25519 {
+                        ephemeral: a,
+                        session_key: b.into(),
+                        sym_alg: (!is_v6).then_some(c),
+                    })
+                    .boxed(),
+                #[cfg(feature = "unstable-curve448")]
+                PublicKeyAlgorithm::X448 => any::<([u8; 56], Vec<u8>, SymmetricKeyAlgorithm)>()
+                    .prop_map(move |(a, b, c)| Self::X448 {
+                        ephemeral: a,
+                        session_key: b.into(),
+                        sym_alg: (!is_v6).then_some(c),
+                    })
+                    .boxed(),
+                _ => unreachable!("unsupported {:?}", alg),
+            }
         }
     }
 }
