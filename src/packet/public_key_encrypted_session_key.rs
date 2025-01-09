@@ -12,7 +12,7 @@ use crate::packet::PacketTrait;
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, MpiBytes, PkeskBytes, PkeskVersion, PublicKeyTrait,
+    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
     PublicParams, Tag, Version,
 };
 
@@ -205,101 +205,6 @@ impl PublicKeyEncryptedSessionKey {
     }
 }
 
-fn parse_esk<B: bytes::Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<PkeskBytes> {
-    match alg {
-        PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSASign | PublicKeyAlgorithm::RSAEncrypt => {
-            let mpi = MpiBytes::from_buf(&mut i)?;
-            Ok(PkeskBytes::Rsa {
-                mpi: mpi.to_owned(),
-            })
-        }
-        PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
-            let first = MpiBytes::from_buf(&mut i)?;
-            let second = MpiBytes::from_buf(&mut i)?;
-            Ok(PkeskBytes::Elgamal {
-                first: first.to_owned(),
-                second: second.to_owned(),
-            })
-        }
-        PublicKeyAlgorithm::ECDSA | PublicKeyAlgorithm::DSA | PublicKeyAlgorithm::DiffieHellman => {
-            Ok(PkeskBytes::Other)
-        }
-        PublicKeyAlgorithm::ECDH => {
-            let a = MpiBytes::from_buf(&mut i)?;
-            let blen = i.read_u8()?;
-            let b = i.read_take(blen.into())?;
-
-            Ok(PkeskBytes::Ecdh {
-                public_point: a.to_owned(),
-                encrypted_session_key: b.into(),
-            })
-        }
-        PublicKeyAlgorithm::X25519 => {
-            // 32 octets representing an ephemeral X25519 public key.
-            let ephemeral_public = i.take_array::<32>()?;
-
-            // A one-octet size of the following fields.
-            let len = i.read_u8()?;
-            if len == 0 {
-                return Err(crate::errors::Error::InvalidInput);
-            }
-
-            // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
-            let sym_alg = if version == 3 {
-                let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
-                Some(alg)
-            } else {
-                None
-            };
-
-            let skey_len = if version == 3 { len - 1 } else { len };
-
-            // The encrypted session key.
-            let esk = i.read_take(skey_len.into())?;
-
-            Ok(PkeskBytes::X25519 {
-                ephemeral: ephemeral_public,
-                sym_alg,
-                session_key: esk.to_vec(),
-            })
-        }
-        #[cfg(feature = "unstable-curve448")]
-        PublicKeyAlgorithm::X448 => {
-            // 56 octets representing an ephemeral X448 public key.
-            let ephemeral_public = i.take_array::<56>()?;
-
-            // A one-octet size of the following fields.
-            let len = i.read_u8()?;
-            if len == 0 {
-                return Err(crate::errors::Error::InvalidInput);
-            }
-
-            // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).
-            let sym_alg = if version == 3 {
-                let alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
-                Some(alg)
-            } else {
-                None
-            };
-
-            let skey_len = if version == 3 { len - 1 } else { len };
-
-            // The encrypted session key.
-            let esk = i.read_take(skey_len.into())?;
-
-            Ok(PkeskBytes::X448 {
-                ephemeral: ephemeral_public,
-                sym_alg,
-                session_key: esk.to_vec(),
-            })
-        }
-        #[cfg(not(feature = "unstable-curve448"))]
-        PublicKeyAlgorithm::X448 => Ok(PkeskBytes::Other),
-        PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
-        _ => unsupported_err!("unsupported algorithm for ESK"),
-    }
-}
-
 /// Parses a Public-Key Encrypted Session Key Packets.
 fn parse<B: bytes::Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEncryptedSessionKey> {
     // version, 3 and 6 are allowed
@@ -315,7 +220,7 @@ fn parse<B: bytes::Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEn
             let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
             // key algorithm specific data
-            let values = parse_esk(&pk_algo, version, &mut i)?;
+            let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
 
             Ok(PublicKeyEncryptedSessionKey::V3 {
                 packet_version,
@@ -349,8 +254,8 @@ fn parse<B: bytes::Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEn
             // A one-octet number giving the public-key algorithm used.
             let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
-            // A series of values comprising the encrypted session key. This is algorithm-specific and described below.
-            let values = parse_esk(&pk_algo, version, &mut i)?;
+            // A series of values comprising the encrypted session key. This is algorithm-specific.
+            let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
 
             Ok(PublicKeyEncryptedSessionKey::V6 {
                 packet_version,

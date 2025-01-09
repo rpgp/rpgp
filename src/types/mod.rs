@@ -4,6 +4,7 @@ mod key_id;
 mod mpi;
 mod packet;
 mod params;
+mod pkesk;
 mod public_key;
 mod revocation_key;
 mod s2k;
@@ -18,13 +19,13 @@ pub use self::key_id::*;
 pub use self::mpi::*;
 pub use self::packet::*;
 pub use self::params::*;
+pub use self::pkesk::PkeskBytes;
 pub use self::public_key::*;
 pub use self::revocation_key::*;
 pub use self::s2k::*;
 pub use self::secret_key::*;
 
 pub use self::user::*;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::ser::Serialize;
 
 /// An OpenPGP cryptographic signature.
@@ -121,41 +122,4 @@ pub enum EskType {
 
     /// V6 PKESK or SKESK (introduced in RFC 9580)
     V6,
-}
-
-/// Values comprising a Public Key Encrypted Session Key
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PkeskBytes {
-    Rsa {
-        mpi: Mpi,
-    },
-    Elgamal {
-        first: Mpi,
-        second: Mpi,
-    },
-    Ecdh {
-        public_point: Mpi,
-        encrypted_session_key: Vec<u8>,
-    },
-    X25519 {
-        /// Ephemeral X25519 public key (32 bytes).
-        ephemeral: [u8; 32],
-
-        /// Encrypted and wrapped session key.
-        session_key: Vec<u8>,
-
-        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X25519)
-        sym_alg: Option<SymmetricKeyAlgorithm>,
-    },
-    X448 {
-        /// Ephemeral X448 public key (56 bytes).
-        ephemeral: [u8; 56],
-
-        /// Encrypted and wrapped session key.
-        session_key: Vec<u8>,
-
-        /// Set for v3 PKESK only (the sym_alg is not encrypted with the session key for X448)
-        sym_alg: Option<SymmetricKeyAlgorithm>,
-    },
-    Other,
 }

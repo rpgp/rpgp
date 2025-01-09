@@ -11,7 +11,7 @@ use crate::crypto::{
     Decryptor,
 };
 use crate::errors::{Error, Result};
-use crate::types::{pad_key, EcdhPublicParams, Mpi, MpiRef, PkeskBytes};
+use crate::types::{pad_key, EcdhPublicParams, Mpi, MpiBytes, MpiRef, PkeskBytes};
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -532,8 +532,8 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let encrypted_session_key = aes_kw::wrap(&z, &plain_padded)?;
 
     Ok(PkeskBytes::Ecdh {
-        public_point: Mpi::from_slice(&encoded_public),
-        encrypted_session_key,
+        public_point: MpiBytes::from_slice(&encoded_public),
+        encrypted_session_key: encrypted_session_key.into(),
     })
 }
 
@@ -605,7 +605,7 @@ mod tests {
                             encrypted_session_key,
                         } => skey
                             .decrypt(EncryptionFields {
-                                public_point: &public_point,
+                                public_point: &public_point.to_owned(),
                                 encrypted_session_key: &encrypted_session_key,
                                 fingerprint: &fingerprint,
                                 curve: curve.clone(),

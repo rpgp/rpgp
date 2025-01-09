@@ -65,6 +65,11 @@ impl MpiBytes {
     pub fn to_owned(&self) -> Mpi {
         Mpi(self.0.to_vec())
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
     /// Parse Multi Precision Integers
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-multiprecision-integers>
     pub fn from_buf<B: bytes::Buf>(mut i: B) -> crate::errors::Result<Self> {
@@ -82,6 +87,11 @@ impl MpiBytes {
         let n_stripped = n.slice_ref(n_stripped);
 
         Ok(MpiBytes(n_stripped))
+    }
+
+    /// Strips leading zeros.
+    pub fn from_slice(raw: &[u8]) -> Self {
+        Self(strip_leading_zeros(raw).to_vec().into())
     }
 }
 
@@ -168,6 +178,15 @@ impl<'a> MpiRef<'a> {
 
     pub fn as_bytes(&self) -> &[u8] {
         self.0
+    }
+}
+
+impl Serialize for MpiBytes {
+    fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
+        MpiRef(&self.0).to_writer(w)
+    }
+    fn write_len(&self) -> usize {
+        MpiRef(&self.0).write_len()
     }
 }
 

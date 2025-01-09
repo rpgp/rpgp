@@ -15,7 +15,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, Signer};
 use crate::errors::Result;
-use crate::types::{Mpi, MpiRef, PkeskBytes, RsaPublicParams};
+use crate::types::{Mpi, MpiBytes, MpiRef, PkeskBytes, RsaPublicParams};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
@@ -119,7 +119,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let data = key.encrypt(&mut rng, Pkcs1v15Encrypt, plaintext)?;
 
     Ok(PkeskBytes::Rsa {
-        mpi: Mpi::from_slice(&data[..]),
+        mpi: MpiBytes::from_slice(&data[..]),
     })
 }
 

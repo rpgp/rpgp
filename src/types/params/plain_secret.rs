@@ -278,7 +278,7 @@ impl PlainSecretParams {
     {
         let decrypted_key = match (self, values) {
             (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
-                priv_key.decrypt(mpi)?
+                priv_key.decrypt(&mpi.to_owned())?
             }
             (PlainSecretParams::DSA(_), _) => bail!("DSA is only used for signing"),
             (PlainSecretParams::ECDSA(_), _) => bail!("ECDSA is only used for signing"),
@@ -304,7 +304,7 @@ impl PlainSecretParams {
                 };
 
                 priv_key.decrypt(ecdh::EncryptionFields {
-                    public_point,
+                    public_point: &public_point.to_owned(),
                     encrypted_session_key,
                     fingerprint: recipient.fingerprint().as_bytes(),
                     curve: params.curve(),
