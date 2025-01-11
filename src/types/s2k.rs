@@ -1,15 +1,14 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use nom::bytes::streaming::take;
-use nom::combinator::{map, rest};
-use nom::number::streaming::be_u8;
+use bytes::{Buf, Bytes};
 use rand::{CryptoRng, Rng};
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, IResult, Result};
+use crate::errors::{Error, Result};
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::KeyVersion;
 
@@ -42,26 +41,26 @@ pub enum S2kParams {
     LegacyCfb {
         sym_alg: SymmetricKeyAlgorithm,
         #[debug("{}", hex::encode(iv))]
-        iv: Vec<u8>,
+        iv: Bytes,
     },
     Aead {
         sym_alg: SymmetricKeyAlgorithm,
         aead_mode: AeadAlgorithm,
         s2k: StringToKey,
         #[debug("{}", hex::encode(nonce))]
-        nonce: Vec<u8>,
+        nonce: Bytes,
     },
     Cfb {
         sym_alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         #[debug("{}", hex::encode(iv))]
-        iv: Vec<u8>,
+        iv: Bytes,
     },
     MalleableCfb {
         sym_alg: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         #[debug("{}", hex::encode(iv))]
-        iv: Vec<u8>,
+        iv: Bytes,
     },
 }
 
@@ -112,7 +111,7 @@ impl S2kParams {
                         p: 4,
                         m_enc: 16, // 64 MiB
                     },
-                    nonce,
+                    nonce: nonce.into(),
                 }
             }
             _ => {
@@ -124,7 +123,7 @@ impl S2kParams {
                 Self::Cfb {
                     sym_alg,
                     s2k: StringToKey::new_default(rng),
-                    iv,
+                    iv: iv.into(),
                 }
             }
         }
@@ -158,7 +157,7 @@ pub enum StringToKey {
     #[cfg_attr(test, proptest(skip))] // doesn't roundtrip
     Reserved {
         #[debug("{}", hex::encode(unknown))]
-        unknown: Vec<u8>,
+        unknown: Bytes,
     },
     /// Type ID 3
     IteratedAndSalted {
@@ -183,14 +182,14 @@ pub enum StringToKey {
     Private {
         typ: u8,
         #[debug("{}", hex::encode(unknown))]
-        unknown: Vec<u8>,
+        unknown: Bytes,
     },
     /// Unknown S2K types
     #[cfg_attr(test, proptest(skip))] // doesn't roundtrip
     Other {
         typ: u8,
         #[debug("{}", hex::encode(unknown))]
-        unknown: Vec<u8>,
+        unknown: Bytes,
     },
 }
 
@@ -421,63 +420,52 @@ impl StringToKey {
         Ok(len)
     }
 
-    pub fn from_slice(i: &[u8]) -> IResult<&[u8], StringToKey> {
-        let (i, typ) = be_u8(i)?;
+    /// Parses the identifier from the given buffer.
+    pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
+        let typ = i.read_u8()?;
 
         match typ {
             0 => {
-                let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
+                let hash_alg = i.read_u8().map(HashAlgorithm::from)?;
 
-                Ok((i, StringToKey::Simple { hash_alg }))
+                Ok(StringToKey::Simple { hash_alg })
             }
             1 => {
-                let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
-                let (i, salt) = map(take(8usize), |v: &[u8]| {
-                    v.try_into().expect("should never fail")
-                })(i)?;
+                let hash_alg = i.read_u8().map(HashAlgorithm::from)?;
+                let salt = i.read_array::<8>()?;
 
-                Ok((i, StringToKey::Salted { hash_alg, salt }))
+                Ok(StringToKey::Salted { hash_alg, salt })
             }
             2 => {
-                let (i, unknown) = map(rest, Into::into)(i)?;
-
-                Ok((i, StringToKey::Reserved { unknown }))
+                let unknown = i.rest();
+                Ok(StringToKey::Reserved { unknown })
             }
             3 => {
-                let (i, hash_alg) = map(be_u8, HashAlgorithm::from)(i)?;
-                let (i, salt) = map(take(8usize), |v: &[u8]| {
-                    v.try_into().expect("should never fail")
-                })(i)?;
-                let (i, count) = be_u8(i)?;
+                let hash_alg = i.read_u8().map(HashAlgorithm::from)?;
+                let salt = i.read_array::<8>()?;
+                let count = i.read_u8()?;
 
-                Ok((
-                    i,
-                    StringToKey::IteratedAndSalted {
-                        hash_alg,
-                        salt,
-                        count,
-                    },
-                ))
+                Ok(StringToKey::IteratedAndSalted {
+                    hash_alg,
+                    salt,
+                    count,
+                })
             }
             4 => {
-                let (i, salt) = map(take(16usize), |v: &[u8]| {
-                    v.try_into().expect("should never fail")
-                })(i)?;
-                let (i, t) = be_u8(i)?;
-                let (i, p) = be_u8(i)?;
-                let (i, m_enc) = be_u8(i)?;
+                let salt = i.read_array::<16>()?;
+                let t = i.read_u8()?;
+                let p = i.read_u8()?;
+                let m_enc = i.read_u8()?;
 
-                Ok((i, StringToKey::Argon2 { salt, t, p, m_enc }))
+                Ok(StringToKey::Argon2 { salt, t, p, m_enc })
             }
-
             100..=110 => {
-                let (i, unknown) = map(rest, Into::into)(i)?;
-                Ok((i, StringToKey::Private { typ, unknown }))
+                let unknown = i.rest();
+                Ok(StringToKey::Private { typ, unknown })
             }
-
             _ => {
-                let (i, unknown) = map(rest, Into::into)(i)?;
-                Ok((i, StringToKey::Other { typ, unknown }))
+                let unknown = i.rest();
+                Ok(StringToKey::Other { typ, unknown })
             }
         }
     }
@@ -786,9 +774,8 @@ mod tests {
         fn packet_roundtrip(s2k: StringToKey) {
             let mut buf = Vec::new();
             s2k.to_writer(&mut buf).unwrap();
-            let (rest, new_s2k) = StringToKey::from_slice(&buf).unwrap();
+            let new_s2k = StringToKey::from_buf(&mut &buf[..]).unwrap();
             assert_eq!(s2k, new_s2k);
-            assert!(rest.is_empty());
         }
     }
 }

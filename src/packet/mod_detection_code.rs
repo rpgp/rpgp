@@ -31,7 +31,7 @@ pub struct ModDetectionCode {
 impl ModDetectionCode {
     /// Parses a `ModDetectionCode` packet from the given slice.
     pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
-        let hash = input.take_array::<20>()?;
+        let hash = input.read_array::<20>()?;
 
         Ok(ModDetectionCode {
             packet_version,

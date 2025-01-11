@@ -72,7 +72,7 @@ impl PkeskBytes {
             }
             PublicKeyAlgorithm::X25519 => {
                 // 32 octets representing an ephemeral X25519 public key.
-                let ephemeral_public = i.take_array::<32>()?;
+                let ephemeral_public = i.read_array::<32>()?;
 
                 // A one-octet size of the following fields.
                 let len = i.read_u8()?;
@@ -102,7 +102,7 @@ impl PkeskBytes {
             #[cfg(feature = "unstable-curve448")]
             PublicKeyAlgorithm::X448 => {
                 // 56 octets representing an ephemeral X448 public key.
-                let ephemeral_public = i.take_array::<56>()?;
+                let ephemeral_public = i.read_array::<56>()?;
 
                 // A one-octet size of the following fields.
                 let len = i.read_u8()?;

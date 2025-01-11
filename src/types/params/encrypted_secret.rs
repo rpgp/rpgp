@@ -2,6 +2,7 @@ use std::io;
 use std::io::Write;
 
 use byteorder::WriteBytesExt;
+use bytes::{Bytes, BytesMut};
 use digest::Digest;
 use zeroize::ZeroizeOnDrop;
 
@@ -10,18 +11,20 @@ use crate::errors::{Error, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
-#[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct EncryptedSecretParams {
     /// The encrypted data, including the checksum.
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    data: Bytes,
     /// S2k Params
-    #[zeroize(skip)]
     s2k_params: S2kParams,
 }
 
+// Fake impl, we don't need to zeroize, as everything is encrypted
+impl ZeroizeOnDrop for EncryptedSecretParams {}
+
 impl EncryptedSecretParams {
-    pub fn new(data: Vec<u8>, s2k_params: S2kParams) -> Self {
+    pub fn new(data: Bytes, s2k_params: S2kParams) -> Self {
         assert_ne!(s2k_params, S2kParams::Unprotected, "invalid string to key");
         EncryptedSecretParams { data, s2k_params }
     }
@@ -118,7 +121,7 @@ impl EncryptedSecretParams {
                 let key = md5::Md5::digest(pw());
 
                 // Decryption
-                let mut plaintext = self.data.clone();
+                let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
 
                 // Checksum
@@ -126,7 +129,7 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::try_from_slice(&plaintext, pub_key.version(), alg, params)
+                PlainSecretParams::try_from_buf(plaintext, pub_key.version(), alg, params)
             }
             S2kParams::Aead {
                 sym_alg,
@@ -161,8 +164,8 @@ impl EncryptedSecretParams {
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, tag, &mut decrypt)?;
 
                         // "decrypt" now contains the decrypted key material
-                        PlainSecretParams::try_from_slice_no_checksum(
-                            &decrypt,
+                        PlainSecretParams::try_from_buf_no_checksum(
+                            &mut &decrypt[..],
                             pub_key.version(),
                             alg,
                             pub_key.public_params(),
@@ -176,7 +179,7 @@ impl EncryptedSecretParams {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
 
                 // Decryption
-                let mut plaintext = self.data.clone();
+                let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
 
                 // Checksum
@@ -187,13 +190,14 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                let (plaintext, expected_sha1) = plaintext.split_at(self.data.len() - 20);
+                let (mut plaintext, expected_sha1) =
+                    plaintext.as_ref().split_at(self.data.len() - 20);
                 let calculated_sha1 = checksum::calculate_sha1([plaintext])?;
                 if expected_sha1 != calculated_sha1 {
                     return Err(Error::InvalidInput);
                 }
-                PlainSecretParams::try_from_slice_no_checksum(
-                    plaintext,
+                PlainSecretParams::try_from_buf_no_checksum(
+                    &mut plaintext,
                     pub_key.version(),
                     alg,
                     params,
@@ -203,13 +207,13 @@ impl EncryptedSecretParams {
                 let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
 
                 // Decryption
-                let mut plaintext = self.data.clone();
+                let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
                 if plaintext.len() < 2 {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::try_from_slice(&plaintext, pub_key.version(), alg, params)
+                PlainSecretParams::try_from_buf(plaintext, pub_key.version(), alg, params)
             }
         }
     }

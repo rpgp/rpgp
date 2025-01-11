@@ -3,8 +3,8 @@ use std::io;
 
 use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
+use bytes::Buf;
 use hkdf::Hkdf;
-use nom::bytes::streaming::take;
 use num_bigint::ModInverse;
 use sha2::Sha256;
 use zeroize::ZeroizeOnDrop;
@@ -14,7 +14,8 @@ use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, rsa, x25519, Decryptor};
-use crate::errors::{Error, Result};
+use crate::errors::Result;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::PkeskBytes;
 use crate::types::*;
@@ -46,106 +47,123 @@ pub(crate) fn pad_key<const SIZE: usize>(val: &[u8]) -> Result<[u8; SIZE]> {
 
 impl PlainSecretParams {
     /// Skips the checksum, because it already has been checked.
-    pub fn try_from_slice_no_checksum(
-        i: &[u8],
+    pub fn try_from_buf_no_checksum<B: Buf>(
+        mut i: B,
         _version: KeyVersion,
         alg: PublicKeyAlgorithm,
         public_params: &PublicParams,
     ) -> Result<Self> {
-        let (i, params) = Self::try_from_slice_inner(i, alg, public_params)?;
-        ensure!(i.is_empty(), "failed to process full secret key material");
+        let params = Self::try_from_buf_inner(&mut i, alg, public_params)?;
+        ensure!(
+            !i.has_remaining(),
+            "failed to process full secret key material"
+        );
         Ok(params)
     }
 
-    fn try_from_slice_inner<'a>(
-        i: &'a [u8],
+    fn try_from_buf_inner<B: Buf>(
+        mut i: B,
         alg: PublicKeyAlgorithm,
         public_params: &PublicParams,
-    ) -> Result<(&'a [u8], Self)> {
-        let (i, params) = match (alg, public_params) {
+    ) -> Result<Self> {
+        let params = match (alg, public_params) {
             (
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
                 | PublicKeyAlgorithm::RSASign,
                 PublicParams::RSA(pub_params),
             ) => {
-                let (i, d) = mpi(i)?;
-                let (i, p) = mpi(i)?;
-                let (i, q) = mpi(i)?;
-                let (i, u) = mpi(i)?;
+                let d = MpiBytes::from_buf(&mut i)?;
+                let p = MpiBytes::from_buf(&mut i)?;
+                let q = MpiBytes::from_buf(&mut i)?;
+                let u = MpiBytes::from_buf(&mut i)?;
 
-                let key = crate::crypto::rsa::SecretKey::try_from_mpi(pub_params, d, p, q, u)?;
-                (i, Self::RSA(key))
+                let key = crate::crypto::rsa::SecretKey::try_from_mpi(
+                    pub_params,
+                    d.to_owned().as_ref(),
+                    p.to_owned().as_ref(),
+                    q.to_owned().as_ref(),
+                    u.to_owned().as_ref(),
+                )?;
+                Self::RSA(key)
             }
             (PublicKeyAlgorithm::DSA, PublicParams::DSA(pub_params)) => {
-                let (i, secret) = mpi(i)?;
+                let secret = MpiBytes::from_buf(i)?;
 
-                let key = crate::crypto::dsa::SecretKey::try_from_mpi(pub_params, secret)?;
-                (i, Self::DSA(key))
+                let key = crate::crypto::dsa::SecretKey::try_from_mpi(
+                    pub_params,
+                    secret.to_owned().as_ref(),
+                )?;
+                Self::DSA(key)
             }
             (PublicKeyAlgorithm::Elgamal, PublicParams::Elgamal(_)) => {
                 // map(mpi, PlainSecretParamsRef::Elgamal)(i)
                 unsupported_err!("elgamal secret key material");
             }
             (PublicKeyAlgorithm::ECDH, PublicParams::ECDH(pub_params)) => {
-                let (i, secret) = mpi(i)?;
+                let secret = MpiBytes::from_buf(i)?;
 
-                let key = crate::crypto::ecdh::SecretKey::try_from_mpi(pub_params, secret)?;
-                (i, Self::ECDH(key))
+                let key = crate::crypto::ecdh::SecretKey::try_from_mpi(
+                    pub_params,
+                    secret.to_owned().as_ref(),
+                )?;
+                Self::ECDH(key)
             }
             (PublicKeyAlgorithm::ECDSA, PublicParams::ECDSA(pub_params)) => {
-                let (i, secret) = mpi(i)?;
+                let secret = MpiBytes::from_buf(i)?;
 
-                let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(pub_params, secret)?;
-                (i, Self::ECDSA(key))
+                let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(
+                    pub_params,
+                    secret.to_owned().as_ref(),
+                )?;
+                Self::ECDSA(key)
             }
             (PublicKeyAlgorithm::EdDSALegacy, PublicParams::EdDSALegacy(_pub_params)) => {
-                let (i, secret) = mpi(i)?;
+                let secret = MpiBytes::from_buf(i)?;
 
                 const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
-                let secret = pad_key::<SIZE>(secret.as_ref())?;
+                let secret = pad_key::<SIZE>(secret.as_bytes())?;
                 let key = crate::crypto::eddsa::SecretKey::try_from_bytes(secret)?;
-                (i, Self::EdDSALegacy(key))
+                Self::EdDSALegacy(key)
             }
             (PublicKeyAlgorithm::Ed25519, PublicParams::Ed25519(_pub_params)) => {
-                let (i, secret) = take::<_, _, Error>(32u8)(i)?;
-
-                let secret = secret.try_into().expect("take 32");
+                let secret = i.read_array::<32>()?;
                 let key = crate::crypto::eddsa::SecretKey::try_from_bytes(secret)?;
-                (i, Self::EdDSA(key))
+                Self::EdDSA(key)
             }
             (PublicKeyAlgorithm::X25519, PublicParams::X25519(pub_params)) => {
-                let (i, secret) = take::<_, _, Error>(32u8)(i)?;
-
-                let key = crate::crypto::x25519::SecretKey::try_from_slice(pub_params, secret)?;
-                (i, Self::X25519(key))
+                let secret = i.read_array::<32>()?;
+                let key = crate::crypto::x25519::SecretKey::try_from_array(pub_params, secret)?;
+                Self::X25519(key)
             }
             #[cfg(feature = "unstable-curve448")]
             (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
-                let (i, s) = take::<_, _, Error>(56u8)(i)?;
-                let s = s.try_into().expect("took 56");
+                let s = i.read_array::<56>()?;
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
-                (i, Self::X448(key))
+                Self::X448(key)
             }
             _ => {
                 bail!("inconsistent key state");
             }
         };
 
-        Ok((i, params))
+        Ok(params)
     }
 
-    pub fn try_from_slice(
-        i: &[u8],
+    pub fn try_from_buf<B: Buf>(
+        mut i: B,
         version: KeyVersion,
         alg: PublicKeyAlgorithm,
         public_params: &PublicParams,
     ) -> Result<Self> {
-        let (i, params) = Self::try_from_slice_inner(i, alg, public_params)?;
+        let params = Self::try_from_buf_inner(&mut i, alg, public_params)?;
         if version == KeyVersion::V3 || version == KeyVersion::V4 {
-            let (i, checksum) = take::<_, _, Error>(2u8)(i)?;
-            params.compare_checksum_simple(checksum)?;
-            ensure!(i.is_empty(), "failed to process full secret key material");
+            let checksum = i.read_array::<2>()?;
+            params.compare_checksum_simple(&checksum)?;
+            ensure!(
+                !i.has_remaining(),
+                "failed to process full secret key material"
+            );
         }
 
         Ok(params)
@@ -222,7 +240,7 @@ impl PlainSecretParams {
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
-                Ok(EncryptedSecretParams::new(enc_data, s2k_params))
+                Ok(EncryptedSecretParams::new(enc_data.into(), s2k_params))
             }
             S2kParams::Aead {
                 sym_alg,
@@ -260,7 +278,7 @@ impl PlainSecretParams {
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
-                Ok(EncryptedSecretParams::new(enc_data, s2k_params))
+                Ok(EncryptedSecretParams::new(enc_data.into(), s2k_params))
             }
             _ => unimplemented_err!("{:?} not implemented yet", s2k_params),
         }
@@ -688,7 +706,7 @@ mod tests {
             let mut buf = Vec::new();
             secret_params.to_writer(&mut buf, KeyVersion::V3)?;
             let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_slice(&buf, KeyVersion::V3, alg, &public_params)?;
+            let new_params = PlainSecretParams::try_from_buf(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
             prop_assert_eq!(secret_params, new_params);
         }
         #[test]
@@ -699,7 +717,7 @@ mod tests {
             let mut buf = Vec::new();
             secret_params.to_writer(&mut buf, KeyVersion::V4)?;
             let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_slice(&buf, KeyVersion::V4, alg, &public_params)?;
+            let new_params = PlainSecretParams::try_from_buf(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
             prop_assert_eq!(secret_params, new_params);
         }
 
@@ -711,7 +729,7 @@ mod tests {
             let mut buf = Vec::new();
             secret_params.to_writer(&mut buf, KeyVersion::V6)?;
             let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_slice(&buf, KeyVersion::V6, alg, &public_params)?;
+            let new_params = PlainSecretParams::try_from_buf(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
             prop_assert_eq!(secret_params, new_params);
         }
     }

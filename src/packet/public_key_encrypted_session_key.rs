@@ -49,11 +49,70 @@ pub enum PublicKeyEncryptedSessionKey {
 }
 
 impl PublicKeyEncryptedSessionKey {
-    /// Parses a `PublicKeyEncryptedSessionKey` packet from the given slice.
-    pub fn from_buf<B: bytes::Buf>(version: Version, input: B) -> Result<Self> {
-        let pk = parse(version, input)?;
+    /// Parses a `PublicKeyEncryptedSessionKey` packet from the given buffer.
+    pub fn from_buf<B: bytes::Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+        // version, 3 and 6 are allowed
+        let version = i.read_u8()?;
 
-        Ok(pk)
+        match version {
+            3 => {
+                // the key id this maps to
+                let key_id_raw = i.read_array::<8>()?;
+                let key_id = KeyId::from(key_id_raw);
+
+                // the public key algorithm
+                let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
+
+                // key algorithm specific data
+                let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
+
+                Ok(PublicKeyEncryptedSessionKey::V3 {
+                    packet_version,
+                    id: key_id,
+                    pk_algo,
+                    values,
+                })
+            }
+            6 => {
+                // A one-octet size of the following two fields. This size may be zero,
+                // if the key version number field and the fingerprint field are omitted
+                // for an "anonymous recipient" (see Section 5.1.8).
+                let len = i.read_u8()?;
+
+                let fingerprint = match len {
+                    0 => None,
+                    _ => {
+                        // A one octet key version number.
+                        let v = i.read_u8().map(KeyVersion::from)?;
+
+                        // The fingerprint of the public key or subkey to which the session key is encrypted.
+                        // Note that the length N of the fingerprint for a version 4 key is 20 octets;
+                        // for a version 6 key N is 32.
+                        let fp = i.read_take((len - 1).into())?;
+                        let fp = Fingerprint::new(v, &fp)?;
+
+                        Some(fp)
+                    }
+                };
+
+                // A one-octet number giving the public-key algorithm used.
+                let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
+
+                // A series of values comprising the encrypted session key. This is algorithm-specific.
+                let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
+
+                Ok(PublicKeyEncryptedSessionKey::V6 {
+                    packet_version,
+                    fingerprint,
+                    pk_algo,
+                    values,
+                })
+            }
+            _ => Ok(PublicKeyEncryptedSessionKey::Other {
+                packet_version,
+                version,
+            }),
+        }
     }
 
     /// Prepare the session key data for encryption in a PKESK.
@@ -202,72 +261,6 @@ impl PublicKeyEncryptedSessionKey {
             Self::V6 { .. } => PkeskVersion::V6,
             Self::Other { version, .. } => PkeskVersion::Other(*version),
         }
-    }
-}
-
-/// Parses a Public-Key Encrypted Session Key Packets.
-fn parse<B: bytes::Buf>(packet_version: Version, mut i: B) -> Result<PublicKeyEncryptedSessionKey> {
-    // version, 3 and 6 are allowed
-    let version = i.read_u8()?;
-
-    match version {
-        3 => {
-            // the key id this maps to
-            let key_id_raw = i.take_array::<8>()?;
-            let key_id = KeyId::from(key_id_raw);
-
-            // the public key algorithm
-            let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
-
-            // key algorithm specific data
-            let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
-
-            Ok(PublicKeyEncryptedSessionKey::V3 {
-                packet_version,
-                id: key_id,
-                pk_algo,
-                values,
-            })
-        }
-        6 => {
-            // A one-octet size of the following two fields. This size may be zero,
-            // if the key version number field and the fingerprint field are omitted
-            // for an "anonymous recipient" (see Section 5.1.8).
-            let len = i.read_u8()?;
-
-            let fingerprint = match len {
-                0 => None,
-                _ => {
-                    // A one octet key version number.
-                    let v = i.read_u8().map(KeyVersion::from)?;
-
-                    // The fingerprint of the public key or subkey to which the session key is encrypted.
-                    // Note that the length N of the fingerprint for a version 4 key is 20 octets;
-                    // for a version 6 key N is 32.
-                    let fp = i.read_take((len - 1).into())?;
-                    let fp = Fingerprint::new(v, &fp)?;
-
-                    Some(fp)
-                }
-            };
-
-            // A one-octet number giving the public-key algorithm used.
-            let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
-
-            // A series of values comprising the encrypted session key. This is algorithm-specific.
-            let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
-
-            Ok(PublicKeyEncryptedSessionKey::V6 {
-                packet_version,
-                fingerprint,
-                pk_algo,
-                values,
-            })
-        }
-        _ => Ok(PublicKeyEncryptedSessionKey::Other {
-            packet_version,
-            version,
-        }),
     }
 }
 

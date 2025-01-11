@@ -25,7 +25,7 @@ pub trait BufParsing: Buf {
         Ok(self.get_u32())
     }
 
-    fn take_array<const C: usize>(&mut self) -> Result<[u8; C]> {
+    fn read_array<const C: usize>(&mut self) -> Result<[u8; C]> {
         ensure!(
             self.remaining() >= C,
             "need at least {} bytes, got {}",

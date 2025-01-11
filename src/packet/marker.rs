@@ -22,7 +22,7 @@ pub struct Marker {
 impl Marker {
     /// Parses a `Marker` packet from the given slice.
     pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
-        let marker = input.take_array::<3>()?;
+        let marker = input.read_array::<3>()?;
         ensure_eq!(marker, PGP, "invalid input");
 
         Ok(Marker { packet_version })

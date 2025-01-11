@@ -44,11 +44,11 @@ impl SecretKey {
         SecretKey { secret }
     }
 
-    pub(crate) fn try_from_slice(_pub_params: &X25519PublicParams, secret: &[u8]) -> Result<Self> {
-        let raw_secret: [u8; 32] = secret
-            .try_into()
-            .map_err(|_| format_err!("invalid secret key length for x25519"))?;
-        let secret = x25519_dalek::StaticSecret::from(raw_secret);
+    pub(crate) fn try_from_array(
+        _pub_params: &X25519PublicParams,
+        secret: [u8; 32],
+    ) -> Result<Self> {
+        let secret = x25519_dalek::StaticSecret::from(secret);
         Ok(Self { secret })
     }
 }

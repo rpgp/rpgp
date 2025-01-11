@@ -1,21 +1,22 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
+use bytes::{Buf, Bytes};
 use log::debug;
-use nom::bytes::streaming::take;
-use nom::combinator::map_res;
-use nom::number::streaming::be_u8;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, IResult, Result};
+use crate::errors::{Error, Result};
 use crate::packet::PacketTrait;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{SkeskVersion, StringToKey, Tag, Version};
-use crate::util::rest_len;
 use crate::PlainSessionKey;
+
+#[cfg(test)]
+use proptest::prelude::*;
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>
@@ -27,7 +28,8 @@ pub enum SymKeyEncryptedSessionKey {
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         #[debug("{}", hex::encode(encrypted_key))]
-        encrypted_key: Vec<u8>,
+        #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
+        encrypted_key: Bytes,
     },
     V5 {
         packet_version: Version,
@@ -35,7 +37,8 @@ pub enum SymKeyEncryptedSessionKey {
         s2k: StringToKey,
         aead: AeadProps,
         #[debug("{}", hex::encode(encrypted_key))]
-        encrypted_key: Vec<u8>,
+        #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
+        encrypted_key: Bytes,
     },
     V6 {
         packet_version: Version,
@@ -43,7 +46,8 @@ pub enum SymKeyEncryptedSessionKey {
         s2k: StringToKey,
         aead: AeadProps,
         #[debug("{}", hex::encode(encrypted_key))]
-        encrypted_key: Vec<u8>,
+        #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
+        encrypted_key: Bytes,
     },
 }
 
@@ -99,11 +103,15 @@ impl AeadProps {
 }
 
 impl SymKeyEncryptedSessionKey {
-    /// Parses a `SymKeyEncryptedSessionKey` packet from the given slice.
-    pub fn from_slice(version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(version)(input)?;
-
-        Ok(pk)
+    /// Parses a `SymKeyEncryptedSessionKey` packet from the given buffer.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+        let version = i.read_u8()?;
+        match version {
+            4 => parse_v4(packet_version, i),
+            5 => parse_v5(packet_version, i),
+            6 => parse_v6(packet_version, i),
+            _ => unsupported_err!("SKESK version {}", version),
+        }
     }
 
     pub fn sym_algorithm(&self) -> SymmetricKeyAlgorithm {
@@ -279,7 +287,7 @@ impl SymKeyEncryptedSessionKey {
             packet_version: Default::default(),
             s2k,
             sym_algorithm: alg,
-            encrypted_key,
+            encrypted_key: encrypted_key.into(),
         })
     }
 
@@ -358,151 +366,105 @@ impl SymKeyEncryptedSessionKey {
             sym_algorithm,
             s2k,
             aead,
-            encrypted_key,
+            encrypted_key: encrypted_key.into(),
         })
     }
 }
 
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
-        let (i, version) = be_u8(i)?;
-        match version {
-            4 => parse_v4(packet_version)(i),
-            5 => parse_v5(packet_version)(i),
-            6 => parse_v6(packet_version)(i),
-            _ => Err(nom::Err::Error(Error::Unsupported(format!(
-                "Unsupported SKESK version {}",
-                version
-            )))),
-        }
-    }
+fn parse_v4<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+    let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
+    let s2k = StringToKey::from_buf(&mut i)?;
+
+    Ok(SymKeyEncryptedSessionKey::V4 {
+        packet_version,
+        sym_algorithm: sym_alg,
+        s2k,
+        encrypted_key: i.rest(),
+    })
 }
 
-fn parse_v4(
-    packet_version: Version,
-) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
-        let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
-        let (i, s2k) = StringToKey::from_slice(i)?;
+fn parse_v5<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+    let _count = i.read_u8()?;
+    let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
+    let aead = i.read_u8().map(AeadAlgorithm::from)?;
+    let s2k_len = i.read_u8()?;
+    let s2k_data = i.read_take(s2k_len.into())?;
+    let s2k = StringToKey::from_buf(s2k_data)?;
+    let iv = i.read_take(aead.iv_size())?;
+    let l = i.remaining();
+    let aead_tag_size = aead.tag_size().unwrap_or_default();
 
-        Ok((
-            &[][..],
-            SymKeyEncryptedSessionKey::V4 {
-                packet_version,
-                sym_algorithm: sym_alg,
-                s2k,
-                encrypted_key: i.to_vec(),
-            },
-        ))
+    if l < aead_tag_size {
+        return Err(Error::InvalidInput);
     }
+    let esk_size = l - aead_tag_size;
+    let esk = i.read_take(esk_size)?;
+    let auth_tag = i.read_take(aead_tag_size)?;
+
+    let aead = match aead {
+        AeadAlgorithm::Eax => AeadProps::Eax {
+            iv: iv.as_ref().try_into().expect("checked"),
+            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
+        },
+        AeadAlgorithm::Ocb => AeadProps::Ocb {
+            iv: iv.as_ref().try_into().expect("checked"),
+            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
+        },
+        AeadAlgorithm::Gcm => AeadProps::Gcm {
+            iv: iv.as_ref().try_into().expect("checked"),
+            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
+        },
+        _ => unsupported_err!("aead algorithm for v5: {:?}", aead),
+    };
+
+    Ok(SymKeyEncryptedSessionKey::V5 {
+        packet_version,
+        sym_algorithm: sym_alg,
+        aead,
+        s2k,
+        encrypted_key: esk,
+    })
 }
 
-fn parse_v5(
-    packet_version: Version,
-) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
-        let (i, _count) = be_u8(i)?;
-        let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
-        let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
-        let (i, s2k_len) = be_u8(i)?;
-        let (i, s2k_data) = take(s2k_len)(i)?;
-        let (_, s2k) = StringToKey::from_slice(s2k_data)?;
-        let (i, iv) = take(aead.iv_size())(i)?;
-        let (i, l) = rest_len(i)?;
-        let aead_tag_size = aead.tag_size().unwrap_or_default();
-
-        if l < aead_tag_size {
-            return Err(nom::Err::Error(Error::InvalidInput));
-        }
-        let esk_size = l - aead_tag_size;
-        let (i, esk) = take(esk_size)(i)?;
-        let (i, auth_tag) = take(aead_tag_size)(i)?;
-
-        let aead = match aead {
-            AeadAlgorithm::Eax => AeadProps::Eax {
-                iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
-            },
-            AeadAlgorithm::Ocb => AeadProps::Ocb {
-                iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
-            },
-            AeadAlgorithm::Gcm => AeadProps::Gcm {
-                iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
-            },
-            _ => {
-                return Err(nom::Err::Error(Error::Message(format!(
-                    "unsupported aead algorithm for v5: {:?}",
-                    aead
-                ))));
-            }
-        };
-
-        Ok((
-            i,
-            SymKeyEncryptedSessionKey::V5 {
-                packet_version,
-                sym_algorithm: sym_alg,
-                aead,
-                s2k,
-                encrypted_key: esk.to_vec(),
-            },
-        ))
+fn parse_v6<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+    let _count = i.read_u8()?;
+    let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
+    let aead = i.read_u8().map(AeadAlgorithm::from)?;
+    let s2k_len = i.read_u8()?;
+    let s2k_data = i.read_take(s2k_len.into())?;
+    let s2k = StringToKey::from_buf(s2k_data)?;
+    let iv = i.read_take(aead.iv_size())?;
+    let l = i.remaining();
+    let aead_tag_size = aead.tag_size().unwrap_or_default();
+    if l < aead_tag_size {
+        return Err(Error::InvalidInput);
     }
-}
+    let esk = i.read_take(l - aead_tag_size)?;
+    let auth_tag = i.read_take(aead_tag_size)?;
 
-fn parse_v6(
-    packet_version: Version,
-) -> impl Fn(&[u8]) -> IResult<&[u8], SymKeyEncryptedSessionKey> {
-    move |i: &[u8]| {
-        let (i, _count) = be_u8(i)?;
-        let (i, sym_alg) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
-        let (i, aead) = map_res(be_u8, AeadAlgorithm::try_from)(i)?;
-        let (i, s2k_len) = be_u8(i)?;
-        let (i, s2k_data) = take(s2k_len)(i)?;
-        let (_, s2k) = StringToKey::from_slice(s2k_data)?;
-        let (i, iv) = take(aead.iv_size())(i)?;
-        let (i, l) = rest_len(i)?;
-        let aead_tag_size = aead.tag_size().unwrap_or_default();
-        if l < aead_tag_size {
-            return Err(nom::Err::Error(Error::InvalidInput));
-        }
-        let (i, esk) = take(l - aead_tag_size)(i)?;
-        let (i, auth_tag) = take(aead_tag_size)(i)?;
+    let aead = match aead {
+        AeadAlgorithm::Eax => AeadProps::Eax {
+            iv: iv.as_ref().try_into().expect("checked"),
+            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
+        },
+        AeadAlgorithm::Ocb => AeadProps::Ocb {
+            iv: iv.as_ref().try_into().expect("checked"),
+            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
+        },
+        AeadAlgorithm::Gcm => AeadProps::Gcm {
+            iv: iv.as_ref().try_into().expect("checked"),
+            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
+        },
+        _ => unsupported_err!("aead algorithm for v6: {:?}", aead),
+    };
 
-        let aead = match aead {
-            AeadAlgorithm::Eax => AeadProps::Eax {
-                iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
-            },
-            AeadAlgorithm::Ocb => AeadProps::Ocb {
-                iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
-            },
-            AeadAlgorithm::Gcm => AeadProps::Gcm {
-                iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
-            },
-            _ => {
-                return Err(nom::Err::Error(Error::Message(format!(
-                    "unsupported aead algorithm for v5: {:?}",
-                    aead
-                ))));
-            }
-        };
-
-        Ok((
-            i,
-            SymKeyEncryptedSessionKey::V6 {
-                packet_version,
-                sym_algorithm: sym_alg,
-                aead,
-                s2k,
-                encrypted_key: esk.to_vec(),
-            },
-        ))
-    }
+    Ok(SymKeyEncryptedSessionKey::V6 {
+        packet_version,
+        sym_algorithm: sym_alg,
+        aead,
+        s2k,
+        encrypted_key: esk,
+    })
 }
 
 impl Serialize for SymKeyEncryptedSessionKey {
@@ -637,8 +599,6 @@ impl PacketTrait for SymKeyEncryptedSessionKey {
 mod tests {
     use super::*;
 
-    use proptest::prelude::*;
-
     proptest! {
         #[test]
         fn write_len(packet: SymKeyEncryptedSessionKey) {
@@ -652,7 +612,7 @@ mod tests {
         fn packet_roundtrip(packet: SymKeyEncryptedSessionKey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = SymKeyEncryptedSessionKey::from_slice(packet.packet_version(), &buf).unwrap();
+            let new_packet = SymKeyEncryptedSessionKey::from_buf(packet.packet_version(), &mut &buf[..]).unwrap();
             assert_eq!(packet, new_packet);
         }
     }
