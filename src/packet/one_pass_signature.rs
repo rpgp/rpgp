@@ -1,17 +1,19 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use nom::bytes::streaming::take;
-use nom::combinator::{map, map_res};
-use nom::number::streaming::be_u8;
+use bytes::{Buf, Bytes};
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
 use crate::packet::signature::SignatureType;
 use crate::packet::PacketTrait;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{KeyId, Tag, Version};
+
+#[cfg(test)]
+use proptest::prelude::*;
 
 /// One-Pass Signature Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t>
@@ -25,6 +27,7 @@ use crate::types::{KeyId, Tag, Version};
 /// and validating the cryptographic signature in the Signature Packet (which occurs after the
 /// message payload) after hashing is completed.
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct OnePassSignature {
     pub packet_version: Version,
     pub typ: SignatureType,
@@ -40,12 +43,14 @@ pub struct OnePassSignature {
 /// - A v6 OPS contains the v6 `fingerprint` of the signer, and the `salt` used in the corresponding
 ///   signature packet.
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum OpsVersionSpecific {
     V3 {
         key_id: KeyId,
     },
     V6 {
-        salt: Vec<u8>,
+        #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
+        salt: Bytes,
         fingerprint: [u8; 32],
     },
 }
@@ -60,11 +65,41 @@ impl OnePassSignature {
 }
 
 impl OnePassSignature {
-    /// Parses a `OnePassSignature` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(packet_version)(input)?;
+    /// Parses a `OnePassSignature` packet from the given buffer.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+        let version = i.read_u8()?;
+        let typ = i.read_u8().map(SignatureType::from)?;
+        let hash_algorithm = i.read_u8().map(HashAlgorithm::from)?;
+        let pub_algorithm = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
-        Ok(pk)
+        let version_specific = match version {
+            3 => {
+                let key_id_raw: [u8; 8] = i.read_array::<8>()?;
+
+                OpsVersionSpecific::V3 {
+                    key_id: key_id_raw.into(),
+                }
+            }
+            6 => {
+                let salt_len = i.read_u8()?;
+                let salt = i.read_take(salt_len.into())?;
+                let fingerprint = i.read_array::<32>()?;
+
+                OpsVersionSpecific::V6 { salt, fingerprint }
+            }
+            _ => unsupported_err!("Unsupported one pass signature packet version {version}"),
+        };
+
+        let last = i.read_u8()?;
+
+        Ok(OnePassSignature {
+            packet_version,
+            typ,
+            hash_algorithm,
+            pub_algorithm,
+            last,
+            version_specific,
+        })
     }
 
     /// Constructor for a v3 one pass signature packet.
@@ -110,56 +145,11 @@ impl OnePassSignature {
             hash_algorithm,
             pub_algorithm,
             last: 1,
-            version_specific: OpsVersionSpecific::V6 { salt, fingerprint },
+            version_specific: OpsVersionSpecific::V6 {
+                salt: salt.into(),
+                fingerprint,
+            },
         }
-    }
-}
-
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], OnePassSignature> {
-    move |i: &[u8]| {
-        let (i, version) = be_u8(i)?;
-        let (i, typ) = map_res(be_u8, SignatureType::try_from)(i)?;
-        let (i, hash_algorithm) = map(be_u8, HashAlgorithm::from)(i)?;
-        let (i, pub_algorithm) = map(be_u8, PublicKeyAlgorithm::from)(i)?;
-
-        let (i, version_specific) = match version {
-            3 => {
-                let (i, key_id_raw) = take(8usize)(i)?;
-                let key_id_raw: [u8; 8] = key_id_raw.try_into().expect("took 8");
-
-                (
-                    i,
-                    OpsVersionSpecific::V3 {
-                        key_id: key_id_raw.into(),
-                    },
-                )
-            }
-            6 => {
-                let (i, salt_len) = be_u8(i)?;
-                let (i, salt) = map(take(salt_len), |salt: &[u8]| salt.to_vec())(i)?;
-                let (i, fingerprint) = map_res(take(32usize), TryInto::try_into)(i)?;
-
-                (i, OpsVersionSpecific::V6 { salt, fingerprint })
-            }
-            _ => {
-                return Err(nom::Err::Error(crate::errors::Error::Unsupported(format!(
-                    "Unsupported one pass signature packet version {version}",
-                ))))
-            }
-        };
-
-        let (i, last) = be_u8(i)?;
-
-        let ops = OnePassSignature {
-            packet_version,
-            typ,
-            hash_algorithm,
-            pub_algorithm,
-            last,
-            version_specific,
-        };
-
-        Ok((i, ops))
     }
 }
 
@@ -218,5 +208,27 @@ impl PacketTrait for OnePassSignature {
 
     fn tag(&self) -> Tag {
         Tag::OnePassSignature
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn write_len(packet: OnePassSignature) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+        #[test]
+        fn packet_roundtrip(packet: OnePassSignature) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = OnePassSignature::from_buf(packet.packet_version, &mut &buf[..]).unwrap();
+            prop_assert_eq!(packet, new_packet);
+        }
     }
 }
