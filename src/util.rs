@@ -4,6 +4,7 @@ use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
+use bytes::Buf;
 use nom::bytes::streaming::take_while1;
 use nom::character::is_alphanumeric;
 use nom::character::streaming::line_ending;
@@ -13,7 +14,8 @@ use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::preceded;
 use nom::{error_position, Err, InputIter, InputLength, Slice};
 
-use crate::errors::{self, IResult};
+use crate::errors::{self, IResult, Result};
+use crate::parsing::BufParsing;
 
 #[inline]
 pub fn u8_as_usize(a: u8) -> usize {
@@ -100,7 +102,7 @@ where
     a
 }
 
-// Parse a packet length.
+/// Parse a packet length.
 pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
     let (i, olen) = be_u8(i)?;
     match olen {
@@ -110,6 +112,28 @@ pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
         192..=254 => map(be_u8, |a| ((olen as usize - 192) << 8) + 192 + a as usize)(i),
         // Five-Octet Lengths
         255 => map(be_u32, u32_as_usize)(i),
+    }
+}
+
+/// Parse a packet length.
+/// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.7>
+pub(crate) fn packet_length_buf<B: Buf>(mut i: B) -> Result<usize> {
+    let olen = i.read_u8()?;
+    match olen {
+        // One-Octet Lengths
+        0..=191 => Ok(olen as usize),
+        // Two-Octet Lengths
+        192..=254 => {
+            // subpacketLen = ((1st_octet - 192) << 8) + (2nd_octet) + 192
+            let a = i.read_u8()?;
+            let len = ((olen as usize - 192) << 8) + 192 + a as usize;
+            Ok(len)
+        }
+        // Five-Octet Lengths
+        255 => {
+            // subpacket length = [4-octet scalar starting at 2nd_octet]
+            i.read_be_u32().map(|len| len as usize)
+        }
     }
 }
 

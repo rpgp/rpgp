@@ -123,7 +123,7 @@ pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Pack
         Tag::Trust => Trust::from_buf(ver, &mut body).map(Into::into),
         Tag::UserId => UserId::from_buf(ver, &mut body).map(Into::into),
         Tag::PublicSubkey => PublicSubkey::from_slice(ver, &body).map(Into::into),
-        Tag::UserAttribute => UserAttribute::from_slice(ver, &body).map(Into::into),
+        Tag::UserAttribute => UserAttribute::from_buf(ver, &mut body).map(Into::into),
         Tag::SymEncryptedProtectedData => {
             SymEncryptedProtectedData::from_buf(ver, &mut body).map(Into::into)
         }
@@ -149,7 +149,12 @@ pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Pack
         Ok(res) => Ok(res),
         Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
         Err(err) => {
-            warn!("invalid packet: {:#?} {:?}\n{:?}", err, tag, body);
+            warn!(
+                "invalid packet: {:#?} {:?}\n{:?}",
+                err,
+                tag,
+                hex::encode(body)
+            );
             Err(Error::InvalidPacketContent(Box::new(err)))
         }
     }
@@ -183,5 +188,24 @@ pub fn body_parser_buf<B: Buf + std::fmt::Debug>(
             warn!("invalid packet: {:?} {:?}\n{:?}", err, tag, body);
             Err(Error::InvalidPacketContent(Box::new(err)))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_packet_length() {
+        // # off=5053201 ctb=d1 tag=17 hlen=6 plen=4973 new-ctb
+        // :attribute packet: [jpeg image of size 4951]
+        let packet_header_raw = hex::decode(b"d1ff0000136d").unwrap();
+        let (rest, (version, tag, len)) = parser(&packet_header_raw).unwrap();
+        dbg!(rest);
+        dbg!(&version, &tag, &len);
+
+        assert_eq!(version, Version::New);
+        assert_eq!(tag, Tag::UserAttribute);
+        assert_eq!(len, PacketLength::Fixed(4973));
     }
 }

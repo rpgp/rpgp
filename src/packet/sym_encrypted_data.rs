@@ -22,15 +22,7 @@ pub struct SymEncryptedData {
 }
 
 impl SymEncryptedData {
-    /// Parses a `SymEncryptedData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        Ok(SymEncryptedData {
-            packet_version,
-            data: input.to_vec().into(),
-        })
-    }
-
-    /// Parses a `SymEncryptedData` packet from the given slice.
+    /// Parses a `SymEncryptedData` packet from the given buffer.
     pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
         Ok(SymEncryptedData {
             packet_version,

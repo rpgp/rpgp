@@ -147,10 +147,10 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_700,
+        17_699,
         // Hash::Other(4)
         1,
-        3294,
+        3295,
         20_995
     ),
     (

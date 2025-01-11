@@ -1,73 +1,122 @@
-use std::{fmt, io};
+use std::io;
 
-use aes_gcm::aead::rand_core::CryptoRng;
 use byteorder::{LittleEndian, WriteBytesExt};
+use bytes::{Buf, Bytes};
 use chrono::{SubsecRound, Utc};
 use log::debug;
-use nom::bytes::streaming::take;
-use nom::combinator::{map, map_parser, rest};
-use nom::number::streaming::{be_u8, le_u16};
-use rand::Rng;
+use num_enum::{FromPrimitive, IntoPrimitive};
+use rand::{CryptoRng, Rng};
 
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
 use crate::packet::{
     PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
 };
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Version};
-use crate::util::{packet_length, write_packet_length, write_packet_length_len};
+use crate::util::{packet_length_buf, write_packet_length, write_packet_length_len};
+
+#[cfg(test)]
+use proptest::prelude::*;
+
+/// The type of a user attribute. Only `Image` is a known type currently
+#[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive, derive_more::Display)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[repr(u8)]
+pub enum UserAttributeType {
+    #[display("Image")]
+    Image = 0x01,
+    #[num_enum(catch_all)]
+    #[display("Unknown({:x})", 0)]
+    Unknown(#[cfg_attr(test, proptest(filter = "|i| *i != 1"))] u8),
+}
 
 /// User Attribute Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-attribute-packet-type->
-#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum UserAttribute {
+    #[display("User Attribute: Image (len: {})", data.len())]
     Image {
         packet_version: Version,
         #[debug("{}", hex::encode(header))]
-        header: Vec<u8>,
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "any::<Vec<u8>>().prop_map(Into::into)",
+                filter = "|d| !d.is_empty()"
+            )
+        )]
+        header: Bytes,
         #[debug("{}", hex::encode(data))]
-        data: Vec<u8>,
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "any::<Vec<u8>>().prop_map(Into::into)",
+                filter = "|d| !d.is_empty()"
+            )
+        )]
+        data: Bytes,
     },
+    #[display("User Attribute: {} (len: {})", typ, data.len())]
     Unknown {
         packet_version: Version,
-        #[cfg_attr(test, proptest(filter = "|t| *t != 1u8"))]
-        typ: u8,
+        #[cfg_attr(test, proptest(filter = "|t| *t != UserAttributeType::Image"))]
+        typ: UserAttributeType,
         #[debug("{}", hex::encode(data))]
-        #[cfg_attr(test, proptest(filter = "|d| !d.is_empty()"))]
-        data: Vec<u8>,
+        #[cfg_attr(
+            test,
+            proptest(
+                strategy = "any::<Vec<u8>>().prop_map(Into::into)",
+                filter = "|d| !d.is_empty()"
+            )
+        )]
+        data: Bytes,
     },
 }
 
 impl UserAttribute {
-    /// Parses a `UserAttribute` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, pk) = parse(packet_version)(input)?;
+    /// Parses a `UserAttribute` packet from the given buffer.
+    pub fn from_buf<B: Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+        let len = packet_length_buf(&mut i)?;
+        if len < 1 {
+            return Err(crate::errors::Error::InvalidInput);
+        }
 
-        Ok(pk)
-    }
+        let typ = i.read_u8().map(UserAttributeType::from)?;
 
-    pub fn to_u8(&self) -> u8 {
-        match *self {
-            UserAttribute::Image { .. } => 1,
-            UserAttribute::Unknown { typ, .. } => typ,
+        let mut body = i.read_take(len - 1)?;
+        match typ {
+            UserAttributeType::Image => {
+                // little endian, for historical reasons..
+                let len = body.read_le_u16()? as usize;
+                if len < 2 {
+                    return Err(crate::errors::Error::InvalidInput);
+                }
+
+                let header = body.copy_to_bytes(len - 2);
+                let data = body.rest();
+
+                // the actual image is the rest
+                Ok(UserAttribute::Image {
+                    packet_version,
+                    header,
+                    data,
+                })
+            }
+            UserAttributeType::Unknown(_) => Ok(UserAttribute::Unknown {
+                packet_version,
+                typ,
+                data: body.rest(),
+            }),
         }
     }
 
-    pub fn packet_len(&self) -> usize {
+    /// Returns typ of this user attribute.
+    pub fn typ(&self) -> UserAttributeType {
         match self {
-            UserAttribute::Image {
-                ref data,
-                ref header,
-                ..
-            } => {
-                // typ + image header + header length + data length
-                1 + header.len() + 2 + data.len()
-            }
-            UserAttribute::Unknown { ref data, .. } => {
-                // typ + data length
-                1 + data.len()
-            }
+            UserAttribute::Image { .. } => UserAttributeType::Image,
+            UserAttribute::Unknown { typ, .. } => *typ,
         }
     }
 
@@ -130,58 +179,22 @@ impl UserAttribute {
     pub fn into_signed(self, sig: Signature) -> SignedUserAttribute {
         SignedUserAttribute::new(self, vec![sig])
     }
-}
 
-impl fmt::Display for UserAttribute {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn packet_len(&self) -> usize {
         match self {
-            UserAttribute::Image { data, .. } => {
-                write!(f, "User Attribute: Image (len: {})", data.len())
-            }
-            UserAttribute::Unknown { typ, data, .. } => {
-                write!(f, "User Attribute: typ: {} (len: {})", typ, data.len())
-            }
-        }
-    }
-}
-
-fn image(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
-    move |i: &[u8]| {
-        // little endian, for historical reasons..
-        let (i, len) = le_u16(i)?;
-        if len < 2 {
-            return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
-        }
-        let (img, header) = take(len - 2)(i)?;
-
-        // the actual image is the rest
-        Ok((
-            &[][..],
             UserAttribute::Image {
-                packet_version,
-                header: header.to_vec(),
-                data: img.to_vec(),
-            },
-        ))
-    }
-}
-
-fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttribute> {
-    move |i: &[u8]| {
-        let (i, len) = packet_length(i)?;
-        if len < 1 {
-            return Err(nom::Err::Error(crate::errors::Error::InvalidInput));
+                ref data,
+                ref header,
+                ..
+            } => {
+                // typ + image header + header length + data length
+                1 + header.len() + 2 + data.len()
+            }
+            UserAttribute::Unknown { ref data, .. } => {
+                // typ + data length
+                1 + data.len()
+            }
         }
-        let (i, typ) = be_u8(i)?;
-        let (i, attr) = map_parser(take(len - 1), |i| match typ {
-            1 => image(packet_version)(i),
-            _ => map(rest, |data: &[u8]| UserAttribute::Unknown {
-                packet_version,
-                typ,
-                data: data.to_vec(),
-            })(i),
-        })(i)?;
-        Ok((i, attr))
     }
 }
 
@@ -204,7 +217,7 @@ impl Serialize for UserAttribute {
                 writer.write_all(data)?;
             }
             UserAttribute::Unknown { ref data, typ, .. } => {
-                writer.write_u8(*typ)?;
+                writer.write_u8((*typ).into())?;
                 writer.write_all(data)?;
             }
         }
@@ -236,8 +249,6 @@ impl PacketTrait for UserAttribute {
 mod tests {
     use super::*;
 
-    use proptest::prelude::*;
-
     proptest! {
         #[test]
         fn write_len(attr: UserAttribute) {
@@ -251,7 +262,7 @@ mod tests {
         fn packet_roundtrip(attr: UserAttribute) {
             let mut buf = Vec::new();
             attr.to_writer(&mut buf).unwrap();
-            let new_attr = UserAttribute::from_slice(attr.packet_version(), &buf).unwrap();
+            let new_attr = UserAttribute::from_buf(attr.packet_version(), &mut &buf[..]).unwrap();
             assert_eq!(attr, new_attr);
         }
     }
