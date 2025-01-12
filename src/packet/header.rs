@@ -8,7 +8,7 @@ use crate::types::{PacketLength, Tag, Version};
 /// Represents a packet header.
 ///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers>
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PacketHeader {
     Old {
         header: OldPacketHeader,
@@ -81,7 +81,7 @@ impl PacketHeader {
 
 /// Old format packet header ("Legacy format")
 #[bitfield(u8, order = msb)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct OldPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]
@@ -101,7 +101,7 @@ pub struct OldPacketHeader {
 ///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers>
 #[bitfield(u8, order = msb)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NewPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]

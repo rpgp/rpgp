@@ -448,7 +448,7 @@ mod tests {
     use bytes::Bytes;
 
     use super::*;
-    use crate::packet::{Packet, PacketParser};
+    use crate::packet::{Packet, PacketBody, PacketParser};
 
     fn test_roundtrip(name: &str) {
         let f: Bytes = std::fs::read(Path::new("./tests/openpgp/samplemsgs").join(name))
@@ -459,8 +459,8 @@ mod tests {
         let mut serialized = Vec::new();
 
         for p in &packets {
-            if let Packet::Signature(_) = p {
-                p.to_writer(&mut serialized).unwrap();
+            if let PacketBody::Signature(_) = p.body() {
+                p.body().to_writer(&mut serialized).unwrap();
             } else {
                 panic!("unexpected packet: {p:?}");
             };

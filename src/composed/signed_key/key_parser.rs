@@ -20,7 +20,7 @@ pub fn next<I, IKT>(
 >
 where
     I: Sized + Iterator<Item = Result<Packet>>,
-    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + PublicKeyTrait,
+    IKT: TryFrom<packet::PacketBody, Error = crate::errors::Error> + PublicKeyTrait,
 {
     let packets = packets.by_ref();
 
@@ -49,7 +49,9 @@ where
         Some(Err(e)) => return Some(Err(e)),
         None => return None,
     };
-    let primary_key: IKT = match next.try_into() {
+
+    let (_header, body) = next.into_parts();
+    let primary_key: IKT = match body.try_into() {
         Ok(key) => key,
         Err(err) => {
             return Some(Err(err));
@@ -73,7 +75,7 @@ where
         match packet {
             Ok(packet) => {
                 debug!("parsing signature {:?}", packet.tag());
-                let sig: Signature = err_opt!(packet.try_into());
+                let sig: Signature = err_opt!(packet.into_parts().1.try_into());
                 let typ = sig.typ();
 
                 if typ == SignatureType::KeyRevocation {
@@ -109,9 +111,11 @@ where
 
         let tag = packet.tag();
         debug!("  user data: {:?}", tag);
+        let (_header, body) = packet.into_parts();
+        // TODO: match on body
         match tag {
             Tag::UserId => {
-                let id: UserId = err_opt!(packet.try_into());
+                let id: UserId = err_opt!(body.try_into());
 
                 // --- zero or more signature packets
 
@@ -124,7 +128,7 @@ where
                         Ok(packet) => packet,
                         Err(e) => return Some(Err(e)),
                     };
-                    let sig: Signature = err_opt!(packet.try_into());
+                    let sig: Signature = err_opt!(packet.into_parts().1.try_into());
 
                     sigs.push(sig);
                 }
@@ -132,7 +136,7 @@ where
                 users.push(SignedUser::new(id, sigs));
             }
             Tag::UserAttribute => {
-                let attr: UserAttribute = err_opt!(packet.try_into());
+                let attr: UserAttribute = err_opt!(body.try_into());
 
                 // --- zero or more signature packets
 
@@ -144,7 +148,7 @@ where
                         Ok(packet) => packet,
                         Err(e) => return Some(Err(e)),
                     };
-                    let sig: Signature = err_opt!(packet.try_into());
+                    let sig: Signature = err_opt!(packet.into_parts().1.try_into());
 
                     sigs.push(sig);
                 }
@@ -181,16 +185,19 @@ where
             Err(e) => return Some(Err(e)),
         };
 
-        match packet.tag() {
+        // TODO: match on body
+        let tag = packet.tag();
+        let (_header, body) = packet.into_parts();
+        match tag {
             Tag::PublicSubkey => {
-                let subkey: packet::PublicSubkey = err_opt!(packet.try_into());
+                let subkey: packet::PublicSubkey = err_opt!(body.try_into());
                 let mut sigs = Vec::new();
                 while let Some(res) = packets.next_if(|packet| {
                     packet.is_ok() && packet.as_ref().expect("just checked").tag() == Tag::Signature
                 }) {
                     match res {
                         Ok(packet) => {
-                            let sig: Signature = err_opt!(packet.try_into());
+                            let sig: Signature = err_opt!(packet.into_parts().1.try_into());
                             sigs.push(sig);
                         }
                         Err(e) => return Some(Err(e)),
@@ -200,7 +207,7 @@ where
             }
             Tag::SecretSubkey => {
                 if parse_secrect_subkeys {
-                    let subkey: packet::SecretSubkey = err_opt!(packet.try_into());
+                    let subkey: packet::SecretSubkey = err_opt!(body.try_into());
                     let mut sigs = Vec::new();
                     while let Some(res) = packets.next_if(|packet| {
                         packet.is_ok()
@@ -208,7 +215,7 @@ where
                     }) {
                         match res {
                             Ok(packet) => {
-                                let sig: Signature = err_opt!(packet.try_into());
+                                let sig: Signature = err_opt!(packet.into_parts().1.try_into());
                                 sigs.push(sig);
                             }
                             Err(e) => return Some(Err(e)),

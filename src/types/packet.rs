@@ -8,18 +8,6 @@ use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 use crate::errors::Result;
 use crate::parsing::BufParsing;
 
-/// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
-/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-syntax>
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Packet {
-    /// Indicator if this is an old or new versioned packet
-    pub version: Version,
-    /// Denotes the type of data this packet holds
-    pub tag: Tag,
-    /// The raw bytes of the packet
-    pub body: Vec<u8>,
-}
-
 /// Represents the packet length.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PacketLength {

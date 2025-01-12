@@ -80,10 +80,9 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
-    use super::super::single;
     use super::*;
 
-    use crate::packet::{Packet, PacketHeader};
+    use crate::packet::{PacketBody, PacketHeader};
     use crate::types::PacketLength;
 
     #[test]
@@ -98,9 +97,9 @@ mod tests {
         assert_eq!(to_parse.remaining(), len);
         let rest = to_parse.rest();
         let full_packet =
-            single::body_parser_bytes(header.version(), header.tag(), rest).expect("body parse");
+            PacketBody::from_bytes(header.version(), header.tag(), rest).expect("body parse");
 
-        let Packet::Padding(ref packet) = full_packet else {
+        let PacketBody::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
         };
         assert_eq!(

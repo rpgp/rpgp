@@ -19,7 +19,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
-    write_packet, CompressedData, DataMode, LiteralData, OnePassSignature, Packet,
+    write_packet, CompressedData, DataMode, LiteralData, OnePassSignature, PacketBody,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType,
     SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
     SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
@@ -189,23 +189,23 @@ impl Esk {
     }
 }
 
-impl TryFrom<Packet> for Esk {
+impl TryFrom<PacketBody> for Esk {
     type Error = Error;
 
-    fn try_from(other: Packet) -> Result<Esk> {
+    fn try_from(other: PacketBody) -> Result<Esk> {
         match other {
-            Packet::PublicKeyEncryptedSessionKey(k) => Ok(Esk::PublicKeyEncryptedSessionKey(k)),
-            Packet::SymKeyEncryptedSessionKey(k) => Ok(Esk::SymKeyEncryptedSessionKey(k)),
+            PacketBody::PublicKeyEncryptedSessionKey(k) => Ok(Esk::PublicKeyEncryptedSessionKey(k)),
+            PacketBody::SymKeyEncryptedSessionKey(k) => Ok(Esk::SymKeyEncryptedSessionKey(k)),
             _ => Err(format_err!("not a valid edata packet: {:?}", other)),
         }
     }
 }
 
-impl From<Esk> for Packet {
-    fn from(other: Esk) -> Packet {
+impl From<Esk> for PacketBody {
+    fn from(other: Esk) -> PacketBody {
         match other {
-            Esk::PublicKeyEncryptedSessionKey(k) => Packet::PublicKeyEncryptedSessionKey(k),
-            Esk::SymKeyEncryptedSessionKey(k) => Packet::SymKeyEncryptedSessionKey(k),
+            Esk::PublicKeyEncryptedSessionKey(k) => PacketBody::PublicKeyEncryptedSessionKey(k),
+            Esk::SymKeyEncryptedSessionKey(k) => PacketBody::SymKeyEncryptedSessionKey(k),
         }
     }
 }
@@ -244,23 +244,23 @@ impl_try_from_into!(
     SymEncryptedProtectedData => SymEncryptedProtectedData
 );
 
-impl TryFrom<Packet> for Edata {
+impl TryFrom<PacketBody> for Edata {
     type Error = Error;
 
-    fn try_from(other: Packet) -> Result<Edata> {
+    fn try_from(other: PacketBody) -> Result<Edata> {
         match other {
-            Packet::SymEncryptedData(d) => Ok(Edata::SymEncryptedData(d)),
-            Packet::SymEncryptedProtectedData(d) => Ok(Edata::SymEncryptedProtectedData(d)),
+            PacketBody::SymEncryptedData(d) => Ok(Edata::SymEncryptedData(d)),
+            PacketBody::SymEncryptedProtectedData(d) => Ok(Edata::SymEncryptedProtectedData(d)),
             _ => Err(format_err!("not a valid edata packet: {:?}", other)),
         }
     }
 }
 
-impl From<Edata> for Packet {
-    fn from(other: Edata) -> Packet {
+impl From<Edata> for PacketBody {
+    fn from(other: Edata) -> PacketBody {
         match other {
-            Edata::SymEncryptedData(d) => Packet::SymEncryptedData(d),
-            Edata::SymEncryptedProtectedData(d) => Packet::SymEncryptedProtectedData(d),
+            Edata::SymEncryptedData(d) => PacketBody::SymEncryptedData(d),
+            Edata::SymEncryptedProtectedData(d) => PacketBody::SymEncryptedProtectedData(d),
         }
     }
 }

@@ -95,7 +95,13 @@ fn next<I: Iterator<Item = Result<Packet>>>(
 ) -> Option<Result<StandaloneSignature>> {
     match packets.by_ref().next() {
         Some(Ok(packet)) => match packet.tag() {
-            Tag::Signature => Some(packet.try_into().map(StandaloneSignature::new)),
+            Tag::Signature => Some(
+                packet
+                    .into_parts()
+                    .1
+                    .try_into()
+                    .map(StandaloneSignature::new),
+            ),
             _ => Some(Err(format_err!("unexpected packet {:?}", packet.tag()))),
         },
         Some(Err(e)) => Some(Err(e)),

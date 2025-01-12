@@ -14,7 +14,7 @@ use crate::types::{Tag, Version};
 /// Trust packets SHOULD NOT be emitted to output streams that are
 /// transferred to other users, and they SHOULD be ignored on any input
 /// other than local keyring files.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Trust {
     packet_version: Version,

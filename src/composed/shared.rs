@@ -7,7 +7,7 @@ use log::{debug, warn};
 
 use crate::armor::{self, BlockType};
 use crate::errors::{Error, Result};
-use crate::packet::{Packet, PacketParser};
+use crate::packet::{Packet, PacketBody, PacketParser};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
@@ -199,13 +199,15 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
     // FIXME: handle padding packets (skip)
     // FIXME: handle criticality of packets from 9580 (error, if unsupported)
 
-    match &p {
-        Ok(Packet::Marker(_m)) => {
-            debug!("skipping marker packet");
-            None
+    match p {
+        Ok(ref packet) => {
+            if let PacketBody::Marker(_) = packet.body() {
+                debug!("skipping marker packet");
+                return None;
+            }
+            Some(p)
         }
-        Ok(_) => Some(p),
-        Err(e) => {
+        Err(ref e) => {
             if let Error::Unsupported(e) = e {
                 // "Error::Unsupported" signals parser errors that we can safely ignore
                 // (e.g. packets with unsupported versions)
