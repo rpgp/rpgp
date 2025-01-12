@@ -1022,12 +1022,12 @@ pub enum SubpacketData {
     PreferredEncryptionModes(SmallVec<[AeadAlgorithm; 2]>),
     IntendedRecipientFingerprint(Fingerprint),
     PreferredAeadAlgorithms(SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>),
-    Experimental(u8, #[debug("{}", hex::encode(_1))] SmallVec<[u8; 2]>),
-    Other(u8, #[debug("{}", hex::encode(_1))] Vec<u8>),
+    Experimental(u8, #[debug("{}", hex::encode(_1))] Bytes),
+    Other(u8, #[debug("{}", hex::encode(_1))] Bytes),
     SignatureTarget(
         PublicKeyAlgorithm,
         HashAlgorithm,
-        #[debug("{}", hex::encode(_2))] Vec<u8>,
+        #[debug("{}", hex::encode(_2))] Bytes,
     ),
 }
 

@@ -105,7 +105,7 @@ pub fn parser(i: &[u8]) -> IResult<&[u8], (Version, Tag, PacketLength)> {
 // TODO: switch to Buf once fully converted
 pub fn body_parser_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Packet> {
     let res: Result<Packet> = match tag {
-        Tag::Signature => Signature::from_slice(ver, &body).map(Into::into),
+        Tag::Signature => Signature::from_buf(ver, &mut body).map(Into::into),
         Tag::OnePassSignature => OnePassSignature::from_buf(ver, &mut body).map(Into::into),
 
         Tag::SecretKey => SecretKey::from_slice(ver, &body).map(Into::into),

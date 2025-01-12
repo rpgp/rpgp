@@ -56,7 +56,6 @@ impl SignatureBytes {
             SignatureBytes::Mpis(mpis) => {
                 // the actual signature
                 for val in mpis {
-                    debug!("writing: {}", hex::encode(val));
                     val.to_writer(writer)?;
                 }
             }

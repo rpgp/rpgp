@@ -8,9 +8,7 @@ use bytes::Buf;
 use nom::bytes::streaming::take_while1;
 use nom::character::is_alphanumeric;
 use nom::character::streaming::line_ending;
-use nom::combinator::map;
 use nom::multi::many0;
-use nom::number::streaming::{be_u32, be_u8};
 use nom::sequence::preceded;
 use nom::{error_position, Err, InputIter, InputLength, Slice};
 
@@ -100,19 +98,6 @@ where
     let mut a = Default::default();
     <A as AsMut<[T]>>::as_mut(&mut a).clone_from_slice(slice);
     a
-}
-
-/// Parse a packet length.
-pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
-    let (i, olen) = be_u8(i)?;
-    match olen {
-        // One-Octet Lengths
-        0..=191 => Ok((i, olen as usize)),
-        // Two-Octet Lengths
-        192..=254 => map(be_u8, |a| ((olen as usize - 192) << 8) + 192 + a as usize)(i),
-        // Five-Octet Lengths
-        255 => map(be_u32, u32_as_usize)(i),
-    }
 }
 
 /// Parse a packet length.

@@ -2,6 +2,7 @@ use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::Duration;
+use log::debug;
 
 use crate::errors::Result;
 use crate::packet::signature::types::*;
@@ -47,6 +48,7 @@ impl Subpacket {
     }
 
     fn body_to_writer(&self, writer: &mut impl io::Write) -> Result<()> {
+        debug!("writing subpacket: {:?}", self.data);
         match &self.data {
             SubpacketData::SignatureCreationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp().try_into()?)?;
@@ -409,6 +411,7 @@ impl Signature {
 
         // salt, if v6
         if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            debug!("writing salt {} bytes", salt.len());
             writer.write_u8(salt.len().try_into()?)?;
             writer.write_all(salt)?;
         }
