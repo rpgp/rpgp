@@ -76,29 +76,29 @@ impl PacketTrait for Padding {
 
 #[cfg(test)]
 mod tests {
-    use bytes::Bytes;
     use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
     use super::super::single;
     use super::*;
-    use crate::packet::Packet;
+
+    use crate::packet::{Packet, PacketHeader};
     use crate::types::PacketLength;
 
     #[test]
     fn test_padding_roundtrip() {
         let packet_raw = hex::decode("d50ec5a293072991628147d72c8f86b7").expect("valid hex");
-        let (rest, (version, tag, plen)) = single::parser(&packet_raw).expect("parse");
+        let mut to_parse = &mut &packet_raw[..];
+        let header = PacketHeader::from_buf(&mut to_parse).expect("parse");
 
-        let PacketLength::Fixed(len) = plen else {
+        let PacketLength::Fixed(len) = header.packet_length() else {
             panic!("invalid parse result");
         };
-        assert_eq!(rest.len(), len);
-
+        assert_eq!(to_parse.remaining(), len);
+        let rest = to_parse.rest();
         let full_packet =
-            single::body_parser_bytes(version, tag, Bytes::from(rest[..len].to_vec()))
-                .expect("body parse");
+            single::body_parser_bytes(header.version(), header.tag(), rest).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);

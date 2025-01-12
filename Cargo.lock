@@ -159,6 +159,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f798d2d157e547aa99aab0967df39edd0b70307312b6f8bd2848e6abe40896e0"
 
 [[package]]
+name = "bitfields"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8650796917dd43bccbcdcfdb39fb124676d38ec66660e2d24e241270a469ef42"
+dependencies = [
+ "bitfields-impl",
+]
+
+[[package]]
+name = "bitfields-impl"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c40045b024f7baaac8f6b66dddfd6bbde958fab7d3b9e5bfc9c92889adfd00c7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.94",
+ "thiserror 2.0.9",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1515,6 +1536,7 @@ dependencies = [
  "argon2",
  "base64 0.22.1",
  "bitfield 0.17.0",
+ "bitfields",
  "block-padding",
  "blowfish",
  "buffer-redux",

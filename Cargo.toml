@@ -107,6 +107,7 @@ memmap2 = { version = "0.9.5", optional = true }
 bzip2 = { version = "0.5.0", default-features = false, features = [
     "libbz2-rs-sys",
 ] }
+bitfields = "0.12.3"
 
 [dev-dependencies]
 glob = "0.3"

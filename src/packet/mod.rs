@@ -66,6 +66,7 @@
 //!      .expect("Failed to validate signature");
 //! ```
 
+mod header;
 mod many;
 mod packet_sum;
 mod single;
@@ -90,6 +91,7 @@ mod public_key_parser;
 mod secret_key_parser;
 
 pub use self::compressed_data::*;
+pub use self::header::{NewPacketHeader, OldPacketHeader, PacketHeader};
 pub use self::key::*;
 pub use self::literal_data::*;
 pub use self::many::*;

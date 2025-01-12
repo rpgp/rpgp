@@ -1,10 +1,12 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
+use bytes::Buf;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::errors::Result;
+use crate::parsing::BufParsing;
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-syntax>
@@ -19,11 +21,35 @@ pub struct Packet {
 }
 
 /// Represents the packet length.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PacketLength {
     Fixed(usize),
     Indeterminate,
     Partial(usize),
+}
+
+impl PacketLength {
+    pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
+        let olen = i.read_u8()?;
+        let len = match olen {
+            // One-Octet Lengths
+            0..=191 => PacketLength::Fixed(olen.into()),
+            // Two-Octet Lengths
+            192..=223 => {
+                let a = i.read_u8()?;
+                let l = ((olen as usize - 192) << 8) + 192 + a as usize;
+                PacketLength::Fixed(l)
+            }
+            // Partial Body Lengths
+            224..=254 => PacketLength::Partial(1 << (olen as usize & 0x1F)),
+            // Five-Octet Lengths
+            255 => {
+                let len = i.read_be_u32()?;
+                PacketLength::Fixed(len.try_into()?)
+            }
+        };
+        Ok(len)
+    }
 }
 
 impl From<usize> for PacketLength {

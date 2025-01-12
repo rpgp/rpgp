@@ -4,7 +4,7 @@ use log::debug;
 
 use crate::errors::{Error, Result};
 use crate::packet::packet_sum::Packet;
-use crate::packet::single;
+use crate::packet::{single, PacketHeader};
 use crate::types::{PacketLength, Tag};
 
 pub struct PacketParser {
@@ -36,34 +36,20 @@ impl Iterator for PacketParser {
             return None;
         }
 
-        let buf_len = self.reader.remaining();
-        let (version, tag, packet_length) = match single::parser(&self.reader) {
-            Ok((rest, v)) => {
-                let rest_len = rest.len();
-                let read = buf_len - rest_len;
-                self.reader.advance(read);
-                v
-            }
-            Err(nom::Err::Incomplete(_)) => {
-                // If incomplete, we are not getting a full header,
-                // minimum input size is checked above.
-                self.is_done = true;
-                return Some(Err(Error::PacketIncomplete));
-            }
+        let header = match PacketHeader::from_buf(&mut self.reader) {
+            Ok(header) => header,
             Err(err) => {
                 self.is_done = true;
-                return Some(Err(err.into()));
+                return Some(Err(err));
             }
         };
 
-        debug!(
-            "parsed packet: {:?}: {:?}: {:?}",
-            version, tag, packet_length
-        );
+        debug!("parsed packet: {header:?}");
 
-        match packet_length {
+        match header.packet_length() {
             PacketLength::Indeterminate => {
-                match single::body_parser_bytes(version, tag, self.reader.clone()) {
+                match single::body_parser_bytes(header.version(), header.tag(), self.reader.clone())
+                {
                     Ok(packet) => {
                         self.reader.advance(self.reader.remaining());
                         Some(Ok(packet))
@@ -83,7 +69,7 @@ impl Iterator for PacketParser {
                     )));
                 }
                 let packet_bytes = self.reader.copy_to_bytes(len);
-                let res = single::body_parser_bytes(version, tag, packet_bytes);
+                let res = single::body_parser_bytes(header.version(), header.tag(), packet_bytes);
                 match res {
                     Ok(p) => Some(Ok(p)),
                     Err(Error::Incomplete(_)) => {
@@ -99,7 +85,7 @@ impl Iterator for PacketParser {
                 // they literal, compressed, or encrypted [...]
                 // Partial Body Lengths MUST NOT be used for any other packet types"
                 if !matches!(
-                    tag,
+                    header.tag(),
                     Tag::LiteralData
                         | Tag::CompressedData
                         | Tag::SymEncryptedData
@@ -108,7 +94,7 @@ impl Iterator for PacketParser {
                     self.is_done = true;
                     return Some(Err(format_err!(
                         "Partial body length is not allowed for packet type {:?}",
-                        tag
+                        header.tag()
                     )));
                 }
 
@@ -127,11 +113,8 @@ impl Iterator for PacketParser {
 
                 // Read n partials + 1 final fixed
                 loop {
-                    match single::read_packet_len(&self.reader) {
-                        Ok((rest, PacketLength::Partial(len))) => {
-                            let read = self.reader.remaining() - rest.len();
-                            self.reader.advance(read);
-
+                    match PacketLength::from_buf(&mut self.reader) {
+                        Ok(PacketLength::Partial(len)) => {
                             if self.reader.remaining() < len {
                                 self.is_done = true;
                                 return Some(Err(format_err!("invalid packet length detected")));
@@ -139,10 +122,7 @@ impl Iterator for PacketParser {
 
                             body.push(self.reader.copy_to_bytes(len));
                         }
-                        Ok((rest, PacketLength::Fixed(len))) => {
-                            let read = self.reader.remaining() - rest.len();
-                            self.reader.advance(read);
-
+                        Ok(PacketLength::Fixed(len)) => {
                             if self.reader.remaining() < len {
                                 self.is_done = true;
                                 return Some(Err(format_err!("invalid packet length detected")));
@@ -150,18 +130,18 @@ impl Iterator for PacketParser {
                             body.push(self.reader.copy_to_bytes(len));
                             break;
                         }
-                        Ok((_, PacketLength::Indeterminate)) => {
+                        Ok(PacketLength::Indeterminate) => {
                             self.is_done = true;
                             return Some(Err(Error::InvalidInput));
                         }
                         Err(err) => {
                             self.is_done = true;
-                            return Some(Err(err.into()));
+                            return Some(Err(err));
                         }
                     }
                 }
 
-                match single::body_parser_buf(version, tag, body) {
+                match single::body_parser_buf(header.version(), header.tag(), body) {
                     Ok(res) => Some(Ok(res)),
                     Err(Error::Incomplete(_)) => {
                         // not bailing, we are just skipping incomplete bodies

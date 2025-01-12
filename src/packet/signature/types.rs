@@ -1031,6 +1031,7 @@ pub enum SubpacketData {
     ),
 }
 
+// TODO: convert to use bitfields::bitfield
 bitfield! {
     #[derive(Default, PartialEq, Eq, Copy, Clone)]
     pub struct KeyFlags(u8);

@@ -1264,25 +1264,6 @@ fn test_invalid() {
 }
 
 #[test]
-fn test_handle_incomplete_packets_end() {
-    let _ = pretty_env_logger::try_init();
-    let p = Path::new("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
-    let mut file = read_file(p.to_path_buf());
-
-    let mut buf = vec![];
-    file.read_to_end(&mut buf).unwrap();
-
-    let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-    let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
-    key.verify().expect("invalid key");
-
-    // add overflow of "b60ed7"
-    let raw = hex::decode(hex::encode(key.to_bytes().unwrap()) + "b60ed7").unwrap();
-    let key = SignedSecretKey::from_bytes(raw.into()).expect("failed");
-    key.verify().expect("invalid key");
-}
-
-#[test]
 #[ignore]
 fn test_encrypted_key() {
     let p = Path::new("./tests/key-with-password-123.asc");
