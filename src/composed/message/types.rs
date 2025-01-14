@@ -19,15 +19,15 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
-    write_packet, CompressedData, DataMode, LiteralData, OnePassSignature, PacketBody,
+    CompressedData, DataMode, LiteralData, OnePassSignature, Packet, PacketTrait,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType,
     SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
     SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PkeskVersion, PublicKeyTrait,
-    SecretKeyTrait, StringToKey, Tag, Version,
+    CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
+    PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 use crate::util::write_packet_length_len;
 
@@ -101,7 +101,7 @@ where
     skesk.to_writer(&mut out_file)?;
 
     // Data::V1
-    let packet_version = Version::New;
+    let packet_version = PacketHeaderVersion::New;
 
     // Inner packet: Literal Data
     let in_file_size = usize::try_from(in_file_size)?;
@@ -158,19 +158,16 @@ pub enum Esk {
 impl Serialize for Esk {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
-            Esk::PublicKeyEncryptedSessionKey(k) => write_packet(writer, k),
-            Esk::SymKeyEncryptedSessionKey(k) => write_packet(writer, k),
+            Esk::PublicKeyEncryptedSessionKey(k) => k.to_writer_with_header(writer),
+            Esk::SymKeyEncryptedSessionKey(k) => k.to_writer_with_header(writer),
         }
     }
 
     fn write_len(&self) -> usize {
-        let len = match self {
-            Esk::PublicKeyEncryptedSessionKey(k) => k.write_len(),
-            Esk::SymKeyEncryptedSessionKey(k) => k.write_len(),
-        };
-        let mut sum = write_packet_length_len(len);
-        sum += len;
-        sum
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.write_len_with_header(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.write_len_with_header(),
+        }
     }
 }
 
@@ -189,23 +186,23 @@ impl Esk {
     }
 }
 
-impl TryFrom<PacketBody> for Esk {
+impl TryFrom<Packet> for Esk {
     type Error = Error;
 
-    fn try_from(other: PacketBody) -> Result<Esk> {
+    fn try_from(other: Packet) -> Result<Esk> {
         match other {
-            PacketBody::PublicKeyEncryptedSessionKey(k) => Ok(Esk::PublicKeyEncryptedSessionKey(k)),
-            PacketBody::SymKeyEncryptedSessionKey(k) => Ok(Esk::SymKeyEncryptedSessionKey(k)),
+            Packet::PublicKeyEncryptedSessionKey(k) => Ok(Esk::PublicKeyEncryptedSessionKey(k)),
+            Packet::SymKeyEncryptedSessionKey(k) => Ok(Esk::SymKeyEncryptedSessionKey(k)),
             _ => Err(format_err!("not a valid edata packet: {:?}", other)),
         }
     }
 }
 
-impl From<Esk> for PacketBody {
-    fn from(other: Esk) -> PacketBody {
+impl From<Esk> for Packet {
+    fn from(other: Esk) -> Packet {
         match other {
-            Esk::PublicKeyEncryptedSessionKey(k) => PacketBody::PublicKeyEncryptedSessionKey(k),
-            Esk::SymKeyEncryptedSessionKey(k) => PacketBody::SymKeyEncryptedSessionKey(k),
+            Esk::PublicKeyEncryptedSessionKey(k) => Packet::PublicKeyEncryptedSessionKey(k),
+            Esk::SymKeyEncryptedSessionKey(k) => Packet::SymKeyEncryptedSessionKey(k),
         }
     }
 }
@@ -222,19 +219,16 @@ pub enum Edata {
 impl Serialize for Edata {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
-            Edata::SymEncryptedData(d) => write_packet(writer, d),
-            Edata::SymEncryptedProtectedData(d) => write_packet(writer, d),
+            Edata::SymEncryptedData(d) => d.to_writer_with_header(writer),
+            Edata::SymEncryptedProtectedData(d) => d.to_writer_with_header(writer),
         }
     }
 
     fn write_len(&self) -> usize {
-        let len = match self {
-            Edata::SymEncryptedData(d) => d.write_len(),
-            Edata::SymEncryptedProtectedData(d) => d.write_len(),
-        };
-        let mut sum = write_packet_length_len(len);
-        sum += len;
-        sum
+        match self {
+            Edata::SymEncryptedData(d) => d.write_len_with_header(),
+            Edata::SymEncryptedProtectedData(d) => d.write_len_with_header(),
+        }
     }
 }
 
@@ -244,23 +238,23 @@ impl_try_from_into!(
     SymEncryptedProtectedData => SymEncryptedProtectedData
 );
 
-impl TryFrom<PacketBody> for Edata {
+impl TryFrom<Packet> for Edata {
     type Error = Error;
 
-    fn try_from(other: PacketBody) -> Result<Edata> {
+    fn try_from(other: Packet) -> Result<Edata> {
         match other {
-            PacketBody::SymEncryptedData(d) => Ok(Edata::SymEncryptedData(d)),
-            PacketBody::SymEncryptedProtectedData(d) => Ok(Edata::SymEncryptedProtectedData(d)),
+            Packet::SymEncryptedData(d) => Ok(Edata::SymEncryptedData(d)),
+            Packet::SymEncryptedProtectedData(d) => Ok(Edata::SymEncryptedProtectedData(d)),
             _ => Err(format_err!("not a valid edata packet: {:?}", other)),
         }
     }
 }
 
-impl From<Edata> for PacketBody {
-    fn from(other: Edata) -> PacketBody {
+impl From<Edata> for Packet {
+    fn from(other: Edata) -> Packet {
         match other {
-            Edata::SymEncryptedData(d) => PacketBody::SymEncryptedData(d),
-            Edata::SymEncryptedProtectedData(d) => PacketBody::SymEncryptedProtectedData(d),
+            Edata::SymEncryptedData(d) => Packet::SymEncryptedData(d),
+            Edata::SymEncryptedProtectedData(d) => Packet::SymEncryptedProtectedData(d),
         }
     }
 }
@@ -375,8 +369,8 @@ impl Edata {
 impl Serialize for Message {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
-            Message::Literal(data) => write_packet(writer, data),
-            Message::Compressed(data) => write_packet(writer, data),
+            Message::Literal(data) => data.to_writer_with_header(writer),
+            Message::Compressed(data) => data.to_writer_with_header(writer),
             Message::Signed {
                 message,
                 one_pass_signature,
@@ -384,13 +378,13 @@ impl Serialize for Message {
                 ..
             } => {
                 if let Some(ops) = one_pass_signature {
-                    write_packet(writer, ops)?;
+                    ops.to_writer_with_header(writer)?;
                 }
                 if let Some(message) = message {
                     (**message).to_writer(writer)?;
                 }
 
-                write_packet(writer, signature)?;
+                signature.to_writer_with_header(writer)?;
 
                 Ok(())
             }
@@ -1336,9 +1330,7 @@ mod tests {
         // fs::write("./message-password.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-
         let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
-
         assert_eq!(compressed_msg, decrypted);
     }
 
@@ -1356,12 +1348,12 @@ mod tests {
             .unwrap();
 
         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
+
         // fs::write("./message-password.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
         let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
-
         assert_eq!(compressed_msg, decrypted);
     }
 
@@ -1461,6 +1453,8 @@ mod tests {
 
     #[test]
     fn test_x25519_signing_string() {
+        let _ = pretty_env_logger::try_init();
+
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
         )
@@ -1590,6 +1584,8 @@ mod tests {
 
     #[test]
     fn test_rsa_signing_bytes_compressed() {
+        let _ = pretty_env_logger::try_init();
+
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),

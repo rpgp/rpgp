@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc b70d335b683f089f471cca651ba90a12f4004c2713fc1b5be6b34427a0649b58 # shrinks to header = Old { header: OldPacketHeader { _padding: 0, _version: 0, tag: 0, length_type: 0 }, length: Fixed(0) }
+cc 3a482e046fbd327b714f42d0457a1e6ae00f3ba0b0bdbd3cc85a91f1fe5773e3 # shrinks to header = Old { header: OldPacketHeader { _padding: 0, _version: 0, tag: 0, length_type: 0 }, length: Indeterminate }

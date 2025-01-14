@@ -8,23 +8,35 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{Tag, Version};
+use crate::types::{PacketLength, Tag};
+
+#[cfg(test)]
+use proptest::prelude::*;
 
 /// Literal Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct LiteralData {
+    packet_header: PacketHeader,
     header: LiteralDataHeader,
     /// Raw data, stored normalized to CRLF line endings, to make signing and verification
     /// simpler.
     #[debug("{}", hex::encode(data))]
+    #[cfg_attr(
+        test,
+        proptest(
+            strategy = "any::<Vec<u8>>().prop_map(Into::into)",
+            filter = "|d| !d.is_empty()"
+        )
+    )]
     data: Bytes,
 }
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct LiteralDataHeader {
-    pub packet_version: Version,
     pub mode: DataMode,
     /// The filename, may contain non utf-8 bytes
     pub file_name: Bytes,
@@ -33,6 +45,7 @@ pub struct LiteralDataHeader {
 
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
 #[repr(u8)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum DataMode {
     Binary = b'b',
     Text = b't',
@@ -40,70 +53,72 @@ pub enum DataMode {
     Mime = b'm',
 
     #[num_enum(catch_all)]
+    #[cfg_attr(test, proptest(skip))]
     Other(u8),
 }
 
 impl LiteralData {
     /// Creates a literal data packet from the given string. Normalizes line endings.
     pub fn from_str(file_name: impl Into<Bytes>, raw_data: &str) -> Self {
-        let data = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
+        let data: Bytes = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
+        let header = LiteralDataHeader {
+            mode: DataMode::Utf8,
+            file_name: file_name.into(),
+            created: Utc::now().trunc_subsecs(0),
+        };
+        let len = header.write_len() + data.len();
+        let packet_header = PacketHeader::new(Tag::LiteralData, PacketLength::Fixed(len));
 
         LiteralData {
-            header: LiteralDataHeader {
-                packet_version: Version::New,
-                mode: DataMode::Utf8,
-                file_name: file_name.into(),
-                created: Utc::now().trunc_subsecs(0),
-            },
+            packet_header,
+            header,
             data,
         }
     }
 
     /// Creates a literal data packet from the given bytes.
     pub fn from_bytes(file_name: impl Into<Bytes>, data: Bytes) -> Self {
+        let header = LiteralDataHeader {
+            mode: DataMode::Binary,
+            file_name: file_name.into(),
+            created: Utc::now().trunc_subsecs(0),
+        };
+        let len = header.write_len() + data.len();
+        let packet_header = PacketHeader::new(Tag::LiteralData, PacketLength::Fixed(len));
+
         LiteralData {
-            header: LiteralDataHeader {
-                packet_version: Version::New,
-                mode: DataMode::Binary,
-                file_name: file_name.into(),
-                created: Utc::now().trunc_subsecs(0),
-            },
-            data: data.to_vec().into(),
+            packet_header,
+            header,
+            data,
         }
     }
 
-    /// Parses a `LiteralData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        Self::from_buf(packet_version, input)
-    }
-
     /// Parses a `LiteralData` packet from the given buf.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut data: B) -> Result<Self> {
-        ensure!(data.remaining() > 2, "invalid literal data packet");
-
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
         // Mode
-        let mode = DataMode::from(data.get_u8());
+        let mode = data.read_u8().map(DataMode::from)?;
 
         // Name
-        let name_len = data.get_u8() as usize;
-        ensure!(data.remaining() >= name_len, "invalid literal data packet");
-        let name = data.copy_to_bytes(name_len);
+        let name_len = data.read_u8()?;
+        let name = data.read_take(name_len.into())?;
 
         // Created
-        ensure!(data.remaining() >= 4, "invalid literal data packet");
+        let created = data.read_be_u32()?;
         let created = Utc
-            .timestamp_opt(i64::from(data.get_u32()), 0)
+            .timestamp_opt(created.into(), 0)
             .single()
             .ok_or_else(|| format_err!("invalid created field"))?;
 
+        let data = data.rest();
+
         Ok(LiteralData {
+            packet_header,
             header: LiteralDataHeader {
-                packet_version,
                 mode,
                 created,
-                file_name: name.to_owned(),
+                file_name: name,
             },
-            data: data.copy_to_bytes(data.remaining()),
+            data,
         })
     }
 
@@ -189,20 +204,57 @@ impl Serialize for LiteralData {
 }
 
 impl PacketTrait for LiteralData {
-    fn packet_version(&self) -> Version {
-        self.header.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::LiteralData
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
-#[test]
-fn test_utf8_literal() {
-    #![allow(clippy::unwrap_used)]
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
-    let literal = LiteralData::from_str("", slogan);
-    assert!(std::str::from_utf8(&literal.data).unwrap() == slogan);
+    #[test]
+    fn test_utf8_literal() {
+        let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
+        let literal = LiteralData::from_str("", slogan);
+        assert!(std::str::from_utf8(&literal.data).unwrap() == slogan);
+    }
+
+    impl Arbitrary for LiteralDataHeader {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<(DataMode, Vec<u8>, u32)>()
+                .prop_map(|(mode, file_name, created)| {
+                    let created = chrono::Utc
+                        .timestamp_opt(created as i64, 0)
+                        .single()
+                        .expect("invalid time");
+                    LiteralDataHeader {
+                        mode,
+                        file_name: file_name.into(),
+                        created,
+                    }
+                })
+                .boxed()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(packet: LiteralData) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+        #[test]
+        fn packet_roundtrip(packet: LiteralData) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf).unwrap();
+            let new_packet = LiteralData::from_buf(packet.packet_header, &mut &buf[..]).unwrap();
+            prop_assert_eq!(packet, new_packet);
+        }
+    }
 }

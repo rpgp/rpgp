@@ -3,10 +3,9 @@ use std::io;
 use bytes::Buf;
 
 use crate::errors::Result;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{Tag, Version};
 
 /// PGP as UTF-8 octets.
 const PGP: [u8; 3] = [0x50, 0x47, 0x50];
@@ -16,20 +15,16 @@ const PGP: [u8; 3] = [0x50, 0x47, 0x50];
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Marker {
-    packet_version: Version,
+    packet_header: PacketHeader,
 }
 
 impl Marker {
     /// Parses a `Marker` packet from the given slice.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
         let marker = input.read_array::<3>()?;
         ensure_eq!(marker, PGP, "invalid input");
 
-        Ok(Marker { packet_version })
-    }
-
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
+        Ok(Marker { packet_header })
     }
 }
 
@@ -45,12 +40,8 @@ impl Serialize for Marker {
 }
 
 impl PacketTrait for Marker {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::Marker
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -73,7 +64,7 @@ mod tests {
         fn packet_roundtrip(marker: Marker) {
             let mut buf = Vec::new();
             marker.to_writer(&mut buf).unwrap();
-            let new_marker = Marker::from_buf(marker.packet_version, &mut &buf[..]).unwrap();
+            let new_marker = Marker::from_buf(marker.packet_header, &mut &buf[..]).unwrap();
             assert_eq!(marker, new_marker);
         }
     }

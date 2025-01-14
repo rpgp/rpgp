@@ -20,9 +20,9 @@ impl Serialize for Signature {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
             SignatureVersion::V4 | SignatureVersion::V6 => self.to_writer_v4_v6(writer),
             SignatureVersion::V5 => {
-                bail!("v5 signature unsupported writer")
+                unsupported_err!("crate V5 signature")
             }
-            SignatureVersion::Other(version) => bail!("Unsupported signature version {}", version),
+            SignatureVersion::Other(version) => unsupported_err!("signature version {}", version),
         }
     }
 
@@ -297,7 +297,7 @@ impl SignatureConfig {
         Ok(())
     }
 
-    fn write_len_v3(&self) -> usize {
+    pub(super) fn write_len_v3(&self) -> usize {
         let mut sum = 1 + 1;
 
         if let SignatureVersionSpecific::V2 { issuer, .. }
@@ -349,7 +349,7 @@ impl SignatureConfig {
         Ok(())
     }
 
-    fn write_len_v4_v6(&self) -> usize {
+    pub(super) fn write_len_v4_v6(&self) -> usize {
         let mut sum = 1 + 1 + 1;
 
         // hashed subpackets
@@ -448,7 +448,7 @@ mod tests {
     use bytes::Bytes;
 
     use super::*;
-    use crate::packet::{Packet, PacketBody, PacketParser};
+    use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {
         let f: Bytes = std::fs::read(Path::new("./tests/openpgp/samplemsgs").join(name))
@@ -459,8 +459,8 @@ mod tests {
         let mut serialized = Vec::new();
 
         for p in &packets {
-            if let PacketBody::Signature(_) = p.body() {
-                p.body().to_writer(&mut serialized).unwrap();
+            if let Packet::Signature(_) = p {
+                p.to_writer(&mut serialized).unwrap();
             } else {
                 panic!("unexpected packet: {p:?}");
             };

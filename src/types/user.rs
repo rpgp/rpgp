@@ -3,10 +3,9 @@ use std::io;
 use log::{debug, warn};
 
 use crate::errors::Result;
-use crate::packet::{write_packet, Signature, UserAttribute, UserId};
+use crate::packet::{PacketTrait, Signature, UserAttribute, UserId};
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, Tag};
-use crate::util::write_packet_length_len;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedUser {
@@ -69,21 +68,17 @@ impl SignedUser {
 
 impl Serialize for SignedUser {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.id)?;
+        self.id.to_writer_with_header(writer)?;
         for sig in &self.signatures {
-            write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         Ok(())
     }
     fn write_len(&self) -> usize {
-        let id_len = self.id.write_len();
-        let mut sum = write_packet_length_len(id_len);
-        sum += id_len;
+        let mut sum = self.id.write_len_with_header();
         for sig in &self.signatures {
-            let sig_len = sig.write_len();
-            sum += write_packet_length_len(sig_len);
-            sum += sig_len;
+            sum += sig.write_len_with_header();
         }
         sum
     }
@@ -154,22 +149,18 @@ impl SignedUserAttribute {
 
 impl Serialize for SignedUserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.attr)?;
+        self.attr.to_writer_with_header(writer)?;
         for sig in &self.signatures {
-            write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         Ok(())
     }
 
     fn write_len(&self) -> usize {
-        let attr_len = self.attr.write_len();
-        let mut sum = write_packet_length_len(attr_len);
-        sum += attr_len;
+        let mut sum = self.attr.write_len_with_header();
         for sig in &self.signatures {
-            let sig_len = sig.write_len();
-            sum += write_packet_length_len(sig_len);
-            sum += sig_len;
+            sum += sig.write_len_with_header();
         }
         sum
     }

@@ -9,11 +9,11 @@ use rand::{CryptoRng, Rng};
 
 use crate::errors::Result;
 use crate::packet::{
-    PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+    PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
 };
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Version};
+use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute};
 use crate::util::{packet_length_buf, write_packet_length, write_packet_length_len};
 
 #[cfg(test)]
@@ -38,7 +38,7 @@ pub enum UserAttributeType {
 pub enum UserAttribute {
     #[display("User Attribute: Image (len: {})", data.len())]
     Image {
-        packet_version: Version,
+        packet_header: PacketHeader,
         #[debug("{}", hex::encode(header))]
         #[cfg_attr(
             test,
@@ -60,7 +60,7 @@ pub enum UserAttribute {
     },
     #[display("User Attribute: {} (len: {})", typ, data.len())]
     Unknown {
-        packet_version: Version,
+        packet_header: PacketHeader,
         #[cfg_attr(test, proptest(filter = "|t| *t != UserAttributeType::Image"))]
         typ: UserAttributeType,
         #[debug("{}", hex::encode(data))]
@@ -77,7 +77,7 @@ pub enum UserAttribute {
 
 impl UserAttribute {
     /// Parses a `UserAttribute` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         let len = packet_length_buf(&mut i)?;
         if len < 1 {
             return Err(crate::errors::Error::InvalidInput);
@@ -99,13 +99,13 @@ impl UserAttribute {
 
                 // the actual image is the rest
                 Ok(UserAttribute::Image {
-                    packet_version,
+                    packet_header,
                     header,
                     data,
                 })
             }
             UserAttributeType::Unknown(_) => Ok(UserAttribute::Unknown {
-                packet_version,
+                packet_header,
                 typ,
                 data: body.rest(),
             }),
@@ -233,15 +233,11 @@ impl Serialize for UserAttribute {
 }
 
 impl PacketTrait for UserAttribute {
-    fn packet_version(&self) -> Version {
+    fn packet_header(&self) -> &PacketHeader {
         match self {
-            UserAttribute::Image { packet_version, .. } => *packet_version,
-            UserAttribute::Unknown { packet_version, .. } => *packet_version,
+            UserAttribute::Image { packet_header, .. } => packet_header,
+            UserAttribute::Unknown { packet_header, .. } => packet_header,
         }
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::UserAttribute
     }
 }
 
@@ -262,7 +258,7 @@ mod tests {
         fn packet_roundtrip(attr: UserAttribute) {
             let mut buf = Vec::new();
             attr.to_writer(&mut buf).unwrap();
-            let new_attr = UserAttribute::from_buf(attr.packet_version(), &mut &buf[..]).unwrap();
+            let new_attr = UserAttribute::from_buf(*attr.packet_header(), &mut &buf[..]).unwrap();
             assert_eq!(attr, new_attr);
         }
     }

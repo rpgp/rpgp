@@ -13,7 +13,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa, x25519};
 use crate::errors::Result;
-use crate::packet::{self, KeyFlags, UserAttribute, UserId};
+use crate::packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId};
 use crate::types::{
     self, CompressionAlgorithm, PlainSecretParams, PublicParams, RevocationKey, S2kParams,
 };
@@ -60,7 +60,7 @@ pub struct SecretKeyParams {
     #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
-    packet_version: types::Version,
+    packet_version: types::PacketHeaderVersion,
     #[builder(default)]
     version: types::KeyVersion,
     #[builder(default)]
@@ -94,7 +94,7 @@ pub struct SubkeyParams {
     #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
-    packet_version: types::Version,
+    packet_version: types::PacketHeaderVersion,
     #[builder(default)]
     version: types::KeyVersion,
     #[builder(default)]
@@ -173,17 +173,14 @@ impl SecretKeyParams {
             .s2k
             .unwrap_or_else(|| S2kParams::new_default(&mut rng, self.version));
         let (public_params, secret_params) = self.key_type.generate(&mut rng)?;
-        let mut primary_key = packet::SecretKey::new(
-            packet::PublicKey::new(
-                self.packet_version,
-                self.version,
-                self.key_type.to_alg(),
-                self.created_at,
-                self.expiration.map(|v| v.as_secs() as u16),
-                public_params,
-            )?,
-            secret_params,
-        );
+        let pub_key = PubKeyInner::new(
+            self.version,
+            self.key_type.to_alg(),
+            self.created_at,
+            self.expiration.map(|v| v.as_secs() as u16),
+            public_params,
+        )?;
+        let mut primary_key = packet::SecretKey::new(pub_key, secret_params);
         if let Some(passphrase) = passphrase {
             primary_key.set_password_with_s2k(|| passphrase, s2k)?;
         }
@@ -197,11 +194,11 @@ impl SecretKeyParams {
         Ok(SecretKey::new(
             primary_key,
             KeyDetails::new(
-                UserId::from_str(Default::default(), &self.primary_user_id),
+                UserId::from_str(Default::default(), &self.primary_user_id)?,
                 self.user_ids
                     .iter()
                     .map(|m| UserId::from_str(Default::default(), m))
-                    .collect(),
+                    .collect::<Result<Vec<_>, _>>()?,
                 self.user_attributes,
                 keyflags,
                 self.preferred_symmetric_algorithms,
@@ -226,17 +223,14 @@ impl SecretKeyParams {
                     keyflags.set_sign(subkey.can_sign);
                     keyflags.set_authentication(subkey.can_authenticate);
 
-                    let mut sub = packet::SecretSubkey::new(
-                        packet::PublicSubkey::new(
-                            subkey.packet_version,
-                            subkey.version,
-                            subkey.key_type.to_alg(),
-                            subkey.created_at,
-                            subkey.expiration.map(|v| v.as_secs() as u16),
-                            public_params,
-                        )?,
-                        secret_params,
-                    );
+                    let pub_key = PubKeyInner::new(
+                        subkey.version,
+                        subkey.key_type.to_alg(),
+                        subkey.created_at,
+                        subkey.expiration.map(|v| v.as_secs() as u16),
+                        public_params,
+                    )?;
+                    let mut sub = packet::SecretSubkey::new(pub_key, secret_params);
 
                     if let Some(passphrase) = passphrase {
                         sub.set_password_with_s2k(|| passphrase, s2k)?;

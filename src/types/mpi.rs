@@ -328,5 +328,14 @@ mod tests {
             prop_assert!(i.is_empty());
             prop_assert_eq!(m.as_ref(), m_back);
         }
+
+        #[test]
+        fn mpi_bytes_roundtrip(m: MpiBytes) {
+            let mut buf = Vec::new();
+            m.to_writer(&mut buf)?;
+
+            let m_back = MpiBytes::from_buf(&mut &buf[..])?;
+            prop_assert_eq!(m, m_back);
+        }
     }
 }

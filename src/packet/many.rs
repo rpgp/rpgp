@@ -3,8 +3,7 @@ use bytes_utils::SegmentedBuf;
 use log::debug;
 
 use crate::errors::{Error, Result};
-use crate::packet::packet_sum::Packet;
-use crate::packet::{PacketBody, PacketHeader};
+use crate::packet::{Packet, PacketHeader};
 use crate::parsing::BufParsing;
 use crate::types::{PacketLength, Tag};
 
@@ -45,30 +44,29 @@ impl Iterator for PacketParser {
             }
         };
 
-        debug!("parsed packet: {header:?}");
+        debug!("found header: {header:?}");
 
         match header.packet_length() {
-            PacketLength::Indeterminate => {
-                match PacketBody::from_bytes(header.version(), header.tag(), self.reader.clone()) {
-                    Ok(body) => {
-                        self.reader.advance(self.reader.remaining());
-                        Some(Packet::from_parts(header, body))
-                    }
-                    Err(err) => {
-                        self.is_done = true;
-                        Some(Err(err))
-                    }
+            PacketLength::Indeterminate => match Packet::from_bytes(header, self.reader.clone()) {
+                Ok(packet) => {
+                    self.reader.advance(self.reader.remaining());
+                    Some(Ok(packet))
                 }
-            }
+                Err(err) => {
+                    self.is_done = true;
+                    Some(Err(err))
+                }
+            },
             PacketLength::Fixed(len) => {
                 let packet_bytes = match self.reader.read_take(len) {
                     Ok(b) => b,
                     Err(err) => return Some(Err(err)),
                 };
-                let res = PacketBody::from_bytes(header.version(), header.tag(), packet_bytes);
+                let res = Packet::from_bytes(header, packet_bytes);
                 match res {
-                    Ok(body) => Some(Packet::from_parts(header, body)),
-                    Err(Error::Incomplete(_)) => {
+                    Ok(packet) => Some(Ok(packet)),
+                    Err(Error::Incomplete(e)) => {
+                        debug!("incomplete packet for: {:?}", e);
                         // not bailing, we are just skipping incomplete bodies
                         Some(Err(Error::PacketIncomplete))
                     }
@@ -105,12 +103,13 @@ impl Iterator for PacketParser {
                 }
 
                 let mut body = SegmentedBuf::new();
-                body.push(self.reader.copy_to_bytes(len));
+                body.push(self.reader.copy_to_bytes(len as usize));
 
                 // Read n partials + 1 final fixed
                 loop {
                     match PacketLength::from_buf(&mut self.reader) {
                         Ok(PacketLength::Partial(len)) => {
+                            let len = len as usize;
                             if self.reader.remaining() < len {
                                 self.is_done = true;
                                 return Some(Err(format_err!("invalid packet length detected")));
@@ -137,8 +136,8 @@ impl Iterator for PacketParser {
                     }
                 }
 
-                match PacketBody::from_buf_partial(header.version(), header.tag(), body) {
-                    Ok(body) => Some(Packet::from_parts(header, body)),
+                match Packet::from_buf_partial(header, body) {
+                    Ok(packet) => Some(Ok(packet)),
                     Err(Error::Incomplete(_)) => {
                         // not bailing, we are just skipping incomplete bodies
                         Some(Err(Error::PacketIncomplete))
@@ -164,6 +163,7 @@ mod tests {
     use regex::Regex;
 
     use super::*;
+    use crate::packet::PacketTrait;
     use crate::ser::Serialize;
 
     #[test]
@@ -238,7 +238,6 @@ mod tests {
             let packet = packet.expect("invalid packet");
             let mut buf = Vec::new();
             packet
-                .body()
                 .to_writer(&mut buf)
                 .expect("failed to serialize packet");
 

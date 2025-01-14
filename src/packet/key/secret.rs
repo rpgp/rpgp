@@ -5,29 +5,31 @@ use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{
-        PacketTrait, PublicKey, PublicSubkey, Signature, SignatureConfig, SignatureType, Subpacket,
-        SubpacketData,
+        PacketHeader, PacketTrait, PublicKey, PublicSubkey, Signature, SignatureConfig,
+        SignatureType, Subpacket, SubpacketData,
     },
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes,
-        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
-        SignatureBytes, Tag, Version,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PacketLength,
+        PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        SignatureBytes, Tag,
     },
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
-pub struct SecretKey(SecretKeyInner<PublicKey>);
+use super::public::PubKeyInner;
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
-pub struct SecretSubkey(SecretKeyInner<PublicSubkey>);
+pub struct SecretKey(SecretKeyInner<PubKeyInner>);
+
+#[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
+pub struct SecretSubkey(SecretKeyInner<PubKeyInner>);
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 struct SecretKeyInner<D> {
     #[zeroize(skip)]
+    packet_header: PacketHeader,
+    #[zeroize(skip)]
     details: D,
     secret_params: SecretParams,
-    #[zeroize(skip)]
-    tag: Tag,
 }
 
 impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
@@ -36,7 +38,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         P: FnOnce() -> String,
     {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
-            let unlocked = enc.unlock(password, &self.details, Some(self.tag))?;
+            let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
             self.secret_params = SecretParams::Plain(unlocked);
         }
 
@@ -71,7 +73,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
             &password(),
             s2k_params,
             &self.details,
-            Some(self.tag),
+            Some(self.packet_header.tag()),
         )?);
 
         Ok(())
@@ -79,29 +81,29 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
 }
 
 impl SecretKey {
-    pub fn new(details: PublicKey, secret_params: SecretParams) -> Self {
+    pub fn new(details: PubKeyInner, secret_params: SecretParams) -> Self {
+        let len =
+            crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
+        let packet_header = PacketHeader::new(Tag::SecretKey, PacketLength::Fixed(len));
+
         Self(SecretKeyInner {
+            packet_header,
             details,
             secret_params,
-            tag: Tag::SecretKey,
         })
     }
 
     /// Parses a `SecretKey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
+        ensure_eq!(Tag::SecretKey, packet_header.tag(), "invalid tag");
+
         let (_, details) = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
+
         Ok(Self(SecretKeyInner {
-            details: PublicKey::new(
-                packet_version,
-                version,
-                algorithm,
-                created_at,
-                expiration,
-                public_params,
-            )?,
+            packet_header,
+            details: PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?,
             secret_params,
-            tag: Tag::SecretKey,
         }))
     }
 
@@ -129,29 +131,29 @@ impl SecretKey {
 }
 
 impl SecretSubkey {
-    pub fn new(details: PublicSubkey, secret_params: SecretParams) -> Self {
+    pub fn new(details: PubKeyInner, secret_params: SecretParams) -> Self {
+        let len =
+            crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
+        let packet_header = PacketHeader::new(Tag::SecretSubkey, PacketLength::Fixed(len));
+
         Self(SecretKeyInner {
+            packet_header,
             details,
             secret_params,
-            tag: Tag::SecretSubkey,
         })
     }
 
     /// Parses a `SecretSubkey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
+        ensure_eq!(Tag::SecretSubkey, packet_header.tag(), "invalid tag");
+
         let (_, details) = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
+
         Ok(Self(SecretKeyInner {
-            details: PublicSubkey::new(
-                packet_version,
-                version,
-                algorithm,
-                created_at,
-                expiration,
-                public_params,
-            )?,
+            packet_header,
+            details: PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?,
             secret_params,
-            tag: Tag::SecretSubkey,
         }))
     }
 
@@ -216,9 +218,7 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
     }
 }
 
-impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyTrait
-    for SecretKeyInner<D>
-{
+impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyTrait for SecretKeyInner<D> {
     type PublicKey = D;
     type Unlocked = PlainSecretParams;
 
@@ -231,7 +231,7 @@ impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyT
         match self.secret_params {
             SecretParams::Plain(ref k) => work(pub_params, k),
             SecretParams::Encrypted(ref k) => {
-                let plain = k.unlock(pw, &self.details, Some(self.tag))?;
+                let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
                 work(pub_params, &plain)
             }
         }
@@ -363,7 +363,7 @@ impl SecretKeyTrait for SecretKey {
     }
 
     fn public_key(&self) -> PublicKey {
-        SecretKeyTrait::public_key(&self.0)
+        PublicKey::from_inner(self.0.details.clone())
     }
 }
 
@@ -392,7 +392,7 @@ impl SecretKeyTrait for SecretSubkey {
     }
 
     fn public_key(&self) -> PublicSubkey {
-        SecretKeyTrait::public_key(&self.0)
+        PublicSubkey::from_inner(self.0.details.clone())
     }
 }
 
@@ -433,22 +433,14 @@ impl crate::ser::Serialize for SecretSubkey {
 }
 
 impl PacketTrait for SecretKey {
-    fn packet_version(&self) -> Version {
-        self.0.details.packet_version()
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::SecretKey
+    fn packet_header(&self) -> &PacketHeader {
+        &self.0.packet_header
     }
 }
 
 impl PacketTrait for SecretSubkey {
-    fn packet_version(&self) -> Version {
-        self.0.details.packet_version()
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::SecretSubkey
+    fn packet_header(&self) -> &PacketHeader {
+        &self.0.packet_header
     }
 }
 
@@ -709,8 +701,8 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use crate::crypto::hash::HashAlgorithm;
-    use crate::packet::{PublicKey, SecretKey};
-    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait, Version};
+    use crate::packet::{PubKeyInner, SecretKey};
+    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait};
 
     #[test]
     #[ignore] // slow in debug mode (argon2)
@@ -724,8 +716,7 @@ mod tests {
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
         let mut alice_sec = SecretKey::new(
-            PublicKey::new(
-                Version::New,
+            PubKeyInner::new(
                 KeyVersion::V4,
                 key_type.to_alg(),
                 Utc::now().trunc_subsecs(0),

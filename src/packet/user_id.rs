@@ -6,10 +6,12 @@ use rand::{CryptoRng, Rng};
 
 use crate::errors::Result;
 use crate::packet::{
-    PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+    PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
 };
 use crate::ser::Serialize;
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, Version};
+use crate::types::{
+    KeyVersion, PacketHeaderVersion, PacketLength, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag,
+};
 
 /// User ID Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-user-id-packet-type-id-13>
@@ -17,25 +19,27 @@ use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag, 
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[display("User ID: \"{:?}\"", id)]
 pub struct UserId {
-    packet_version: Version,
+    packet_header: PacketHeader,
     #[cfg_attr(test, proptest(strategy = "tests::id_gen()"))]
     id: Bytes,
 }
 
 impl UserId {
     /// Parses a `UserId` packet from the given buffer.
-    pub fn from_buf(packet_version: Version, mut input: impl Buf) -> Result<Self> {
+    pub fn from_buf(packet_header: PacketHeader, mut input: impl Buf) -> Result<Self> {
         let len = input.remaining();
         let id = input.copy_to_bytes(len);
-        Ok(UserId { packet_version, id })
+        Ok(UserId { packet_header, id })
     }
 
     /// Creates a `UserId` from the given string.
-    pub fn from_str(packet_version: Version, input: impl AsRef<str>) -> Self {
-        UserId {
-            packet_version,
-            id: input.as_ref().as_bytes().to_vec().into(),
-        }
+    pub fn from_str(packet_version: PacketHeaderVersion, input: impl AsRef<str>) -> Result<Self> {
+        let id: Bytes = input.as_ref().as_bytes().to_vec().into();
+
+        let len = PacketLength::Fixed(id.len());
+        let packet_header = PacketHeader::from_parts(packet_version, Tag::UserId, len)?;
+
+        Ok(UserId { packet_header, id })
     }
 
     /// Returns the actual id.
@@ -113,12 +117,8 @@ impl Serialize for UserId {
 }
 
 impl PacketTrait for UserId {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::UserId
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -129,6 +129,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
+    use crate::types::PacketHeaderVersion;
     use crate::{packet, types::KeyVersion, KeyType};
 
     prop_compose! {
@@ -145,8 +146,7 @@ mod tests {
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
         let alice_sec = packet::SecretKey::new(
-            packet::PublicKey::new(
-                Version::New,
+            packet::PubKeyInner::new(
                 KeyVersion::V4,
                 key_type.to_alg(),
                 Utc::now().trunc_subsecs(0),
@@ -159,7 +159,7 @@ mod tests {
 
         let alice_pub = alice_sec.public_key();
 
-        let alice_uid = UserId::from_str(Version::New, "<alice@example.org>");
+        let alice_uid = UserId::from_str(PacketHeaderVersion::New, "<alice@example.org>").unwrap();
 
         // test self-signature
         let self_signed = alice_uid
@@ -173,8 +173,7 @@ mod tests {
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
         let signer_sec = packet::SecretKey::new(
-            packet::PublicKey::new(
-                Version::New,
+            packet::PubKeyInner::new(
                 KeyVersion::V4,
                 key_type.to_alg(),
                 Utc::now().trunc_subsecs(0),
@@ -208,7 +207,7 @@ mod tests {
         fn packet_roundtrip(user_id: UserId) {
             let mut buf = Vec::new();
             user_id.to_writer(&mut buf).unwrap();
-            let new_user_id = UserId::from_buf(user_id.packet_version, &mut &buf[..]).unwrap();
+            let new_user_id = UserId::from_buf(user_id.packet_header, &mut &buf[..]).unwrap();
             prop_assert_eq!(user_id, new_user_id);
         }
     }

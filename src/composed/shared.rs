@@ -7,7 +7,7 @@ use log::{debug, warn};
 
 use crate::armor::{self, BlockType};
 use crate::errors::{Error, Result};
-use crate::packet::{Packet, PacketBody, PacketParser};
+use crate::packet::{Packet, PacketParser};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
@@ -201,7 +201,7 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
 
     match p {
         Ok(ref packet) => {
-            if let PacketBody::Marker(_) = packet.body() {
+            if let Packet::Marker(_) = packet {
                 debug!("skipping marker packet");
                 return None;
             }

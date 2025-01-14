@@ -11,10 +11,11 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::signature::types::*;
+use crate::packet::PacketHeader;
 use crate::parsing::BufParsing;
 use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, RevocationKey, SignatureBytes,
-    Version,
+    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion,
+    PacketLength, RevocationKey, SignatureBytes, Tag,
 };
 use crate::util::packet_length_buf;
 
@@ -22,13 +23,13 @@ impl Signature {
     /// Parses a `Signature` packet from the given buffer
     ///
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2>
-    pub fn from_buf<B: Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         let version = i.read_u8().map(SignatureVersion::from)?;
 
         let signature = match version {
-            SignatureVersion::V2 | SignatureVersion::V3 => v3_parser(packet_version, version, i)?,
-            SignatureVersion::V4 | SignatureVersion::V5 => v4_parser(packet_version, version, i)?,
-            SignatureVersion::V6 => v6_parser(packet_version, i)?,
+            SignatureVersion::V2 | SignatureVersion::V3 => v3_parser(packet_header, version, i)?,
+            SignatureVersion::V4 | SignatureVersion::V5 => v4_parser(packet_header, version, i)?,
+            SignatureVersion::V6 => v6_parser(packet_header, i)?,
             _ => unsupported_err!("signature version {:?}", version),
         };
 
@@ -39,7 +40,7 @@ impl Signature {
 /// Parse a v2 or v3 signature packet
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-version-3-signature-packet-
 fn v3_parser<B: Buf>(
-    packet_version: Version,
+    packet_header: PacketHeader,
     version: SignatureVersion,
     mut i: B,
 ) -> Result<Signature> {
@@ -66,7 +67,7 @@ fn v3_parser<B: Buf>(
 
     match version {
         SignatureVersion::V2 => Ok(Signature::v2(
-            packet_version,
+            packet_header,
             typ,
             pub_alg,
             hash_alg,
@@ -76,7 +77,7 @@ fn v3_parser<B: Buf>(
             sig,
         )),
         SignatureVersion::V3 => Ok(Signature::v3(
-            packet_version,
+            packet_header,
             typ,
             pub_alg,
             hash_alg,
@@ -92,7 +93,7 @@ fn v3_parser<B: Buf>(
 /// Parse a v4 signature packet
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-versions-4-and-6-signature-
 fn v4_parser<B: Buf>(
-    packet_version: Version,
+    packet_header: PacketHeader,
     version: SignatureVersion,
     mut i: B,
 ) -> Result<Signature> {
@@ -110,13 +111,23 @@ fn v4_parser<B: Buf>(
     let hsub_len: usize = i.read_be_u16()?.into();
     i.ensure_remaining(hsub_len)?;
     let hsub_raw = (&mut i).take(hsub_len);
-    let hsub = subpackets(hsub_raw)?;
+    let hsub = subpackets(packet_header.version(), hsub_raw)?;
+    debug!(
+        "found {} hashed subpackets in {} bytes",
+        hsub.len(),
+        hsub_len
+    );
 
     // Two-octet scalar octet count for the following unhashed subpacket data.
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u16()?.into();
     let usub_raw = (&mut i).take(usub_len);
-    let usub = subpackets(usub_raw)?;
+    let usub = subpackets(packet_header.version(), usub_raw)?;
+    debug!(
+        "found {} unhashed subpackets in {} bytes",
+        usub.len(),
+        usub_len
+    );
     // Two-octet field holding the left 16 bits of the signed hash value.
     let ls_hash = i.read_array::<2>()?;
 
@@ -124,7 +135,7 @@ fn v4_parser<B: Buf>(
     let sig = actual_signature(&pub_alg, i)?;
 
     Ok(Signature::v4(
-        packet_version,
+        packet_header,
         typ,
         pub_alg,
         hash_alg,
@@ -137,7 +148,7 @@ fn v4_parser<B: Buf>(
 
 /// Parse a v6 signature packet
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-versions-4-and-6-signature-
-fn v6_parser<B: Buf>(packet_version: Version, mut i: B) -> Result<Signature> {
+fn v6_parser<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Signature> {
     // One-octet signature type.
     let typ = i.read_u8().map(SignatureType::from)?;
     // One-octet public-key algorithm.
@@ -149,7 +160,7 @@ fn v6_parser<B: Buf>(packet_version: Version, mut i: B) -> Result<Signature> {
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u32()?.try_into()?;
     let hsub_raw = (&mut i).take(hsub_len);
-    let hsub = subpackets(hsub_raw)?;
+    let hsub = subpackets(packet_header.version(), hsub_raw)?;
     debug!(
         "found {} hashed subpackets in {} bytes",
         hsub.len(),
@@ -160,7 +171,7 @@ fn v6_parser<B: Buf>(packet_version: Version, mut i: B) -> Result<Signature> {
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u32()?.try_into()?;
     let usub_raw = (&mut i).take(usub_len);
-    let usub = subpackets(usub_raw)?;
+    let usub = subpackets(packet_header.version(), usub_raw)?;
     debug!(
         "found {} unhashed subpackets in {} bytes",
         usub.len(),
@@ -187,7 +198,7 @@ fn v6_parser<B: Buf>(packet_version: Version, mut i: B) -> Result<Signature> {
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, i)?;
     Ok(Signature::v6(
-        packet_version,
+        packet_header,
         typ,
         pub_alg,
         hash_alg,
@@ -199,24 +210,35 @@ fn v6_parser<B: Buf>(packet_version: Version, mut i: B) -> Result<Signature> {
     ))
 }
 
-fn subpackets<B: Buf>(mut i: B) -> Result<Vec<Subpacket>> {
+fn subpackets<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result<Vec<Subpacket>> {
     let mut packets = Vec::new();
     while i.has_remaining() {
         // the subpacket length (1, 2, or 5 octets)
         let len = packet_length_buf(&mut i)?;
         ensure!(len > 0, "emtpy subpacket is not allowed");
-
         // the subpacket type (1 octet)
         let (typ, is_critical) = i.read_u8().map(SubpacketType::from_u8)?;
+        debug!(
+            "reading subpacket {:?}: critical? {}, len: {}",
+            typ,
+            is_critical,
+            len - 1
+        );
+
         i.ensure_remaining(len - 1)?;
         let body = (&mut i).take(len - 1);
-        let packet = subpacket(typ, is_critical, body)?;
+        let packet = subpacket(typ, is_critical, packet_version, body)?;
         packets.push(packet);
     }
     Ok(packets)
 }
 
-fn subpacket<B: Buf>(typ: SubpacketType, is_critical: bool, mut body: B) -> Result<Subpacket> {
+fn subpacket<B: Buf>(
+    typ: SubpacketType,
+    is_critical: bool,
+    packet_version: PacketHeaderVersion,
+    mut body: B,
+) -> Result<Subpacket> {
     use self::SubpacketType::*;
     debug!("parsing subpacket: {:?}", typ);
 
@@ -243,7 +265,7 @@ fn subpacket<B: Buf>(typ: SubpacketType, is_critical: bool, mut body: B) -> Resu
         RevocationReason => rev_reason(body),
         Features => features(body),
         SignatureTarget => sig_target(body),
-        EmbeddedSignature => embedded_sig(body),
+        EmbeddedSignature => embedded_sig(packet_version, body),
         IssuerFingerprint => issuer_fingerprint(body),
         PreferredEncryptionModes => preferred_encryption_modes(body),
         IntendedRecipientFingerprint => intended_recipient_fingerprint(body),
@@ -551,10 +573,15 @@ fn sig_target<B: Buf>(mut i: B) -> Result<SubpacketData> {
 
 /// Parse an Embedded Signature subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-embedded-signature
-fn embedded_sig<B: Buf>(mut i: B) -> Result<SubpacketData> {
+fn embedded_sig<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result<SubpacketData> {
     // copy to bytes, to avoid recursive type explosion
     let signature_bytes = i.rest();
-    let sig = Signature::from_buf(Version::New, signature_bytes)?;
+    let header = PacketHeader::from_parts(
+        packet_version,
+        Tag::Signature,
+        PacketLength::Fixed(signature_bytes.len()),
+    )?;
+    let sig = Signature::from_buf(header, signature_bytes)?;
 
     Ok(SubpacketData::EmbeddedSignature(Box::new(sig)))
 }

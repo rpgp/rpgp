@@ -9,15 +9,16 @@ use zeroize::Zeroizing;
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{Tag, Version};
+use crate::types::{PacketLength, Tag};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedProtectedData {
-    packet_version: Version,
+    packet_header: PacketHeader,
     config: Config,
     #[debug("{}", hex::encode(data))]
     data: Bytes,
@@ -36,25 +37,22 @@ pub enum Config {
 }
 
 impl SymEncryptedProtectedData {
-    /// Parses a `SymEncryptedProtectedData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        Self::from_buf(packet_version, input)
-    }
-
     /// Parses a `SymEncryptedProtectedData` packet from the given buf.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut data: B) -> Result<Self> {
-        ensure!(data.remaining() > 1, "invalid input length");
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
+        ensure_eq!(
+            packet_header.tag(),
+            Tag::SymEncryptedProtectedData,
+            "invalid tag"
+        );
 
-        let version = data.get_u8();
+        let version = data.read_u8()?;
         let config = match version {
             0x01 => Config::V1,
             0x02 => {
-                ensure!(data.remaining() >= 3 + 32, "invalid input length");
-                let sym_alg = SymmetricKeyAlgorithm::from(data.get_u8());
-                let aead = AeadAlgorithm::from(data.get_u8());
-                let chunk_size = data.get_u8();
-                let mut salt = [0u8; 32];
-                data.copy_to_slice(&mut salt);
+                let sym_alg = data.read_u8().map(SymmetricKeyAlgorithm::from)?;
+                let aead = data.read_u8().map(AeadAlgorithm::from)?;
+                let chunk_size = data.read_u8()?;
+                let salt = data.read_array::<32>()?;
 
                 Config::V2 {
                     sym_alg,
@@ -70,10 +68,10 @@ impl SymEncryptedProtectedData {
                 ))
             }
         };
-        let data = data.copy_to_bytes(data.remaining());
+        let data = data.rest();
 
         Ok(SymEncryptedProtectedData {
-            packet_version,
+            packet_header,
             config,
             data,
         })
@@ -86,12 +84,16 @@ impl SymEncryptedProtectedData {
         key: &[u8],
         plaintext: &[u8],
     ) -> Result<Self> {
-        let data = alg.encrypt_protected(rng, key, plaintext)?;
+        let data: Bytes = alg.encrypt_protected(rng, key, plaintext)?.into();
+        let config = Config::V1;
+        let len = config.write_len() + data.len();
+        let packet_header =
+            PacketHeader::new(Tag::SymEncryptedProtectedData, PacketLength::Fixed(len));
 
         Ok(SymEncryptedProtectedData {
-            packet_version: Default::default(),
-            config: Config::V1,
-            data: data.into(),
+            packet_header,
+            config,
+            data,
         })
     }
 
@@ -202,16 +204,21 @@ impl SymEncryptedProtectedData {
         out.extend_from_slice(&final_auth_tag);
 
         debug_assert_eq!(out.len(), out_len, "we pre-allocated the wrong output size");
+        let config = Config::V2 {
+            sym_alg,
+            aead,
+            chunk_size,
+            salt,
+        };
+        let data: Bytes = out.into();
+        let len = config.write_len() + data.len();
+        let packet_header =
+            PacketHeader::new(Tag::SymEncryptedProtectedData, PacketLength::Fixed(len));
 
         Ok(SymEncryptedProtectedData {
-            packet_version: Default::default(),
-            config: Config::V2 {
-                sym_alg,
-                aead,
-                chunk_size,
-                salt,
-            },
-            data: out.into(),
+            packet_header,
+            config,
+            data,
         })
     }
 
@@ -374,12 +381,8 @@ impl Serialize for SymEncryptedProtectedData {
 }
 
 impl PacketTrait for SymEncryptedProtectedData {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::SymEncryptedProtectedData
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -428,8 +431,16 @@ mod tests {
                 .expect("encrypt");
 
                 let dec = enc.decrypt(&session_key, Some(SYM_ALG)).expect("decrypt");
-
                 assert_eq!(message, dec);
+
+                // write test
+                let mut buffer = Vec::new();
+                enc.to_writer(&mut buffer).unwrap();
+                assert_eq!(buffer.len(), enc.write_len());
+
+                let back = SymEncryptedProtectedData::from_buf(enc.packet_header, &mut &buffer[..])
+                    .unwrap();
+                assert_eq!(enc, back);
             }
         }
     }

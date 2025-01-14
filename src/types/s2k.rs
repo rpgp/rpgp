@@ -254,7 +254,6 @@ impl StringToKey {
                     || hash_alg == &HashAlgorithm::SHA1
                     || hash_alg == &HashAlgorithm::RIPEMD160
             }
-
             _ => false,
         }
     }

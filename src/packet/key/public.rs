@@ -5,50 +5,74 @@ use rsa::traits::PublicKeyParts;
 use sha1_checked::{Digest, Sha1};
 
 use crate::ser::Serialize;
-use crate::types::{EcdhPublicParams, EddsaLegacyPublicParams};
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
-    packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{
-        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
-        SecretKeyTrait, SignatureBytes, Tag, Version,
+        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi,
+        PacketLength, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
+        Tag,
     },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct PublicKey(PubKeyInner);
+pub struct PublicKey {
+    packet_header: PacketHeader,
+    inner: PubKeyInner,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct PublicSubkey(PubKeyInner);
+pub struct PublicSubkey {
+    packet_header: PacketHeader,
+    inner: PubKeyInner,
+}
 
 impl PublicKey {
+    pub fn from_inner(inner: PubKeyInner) -> Self {
+        let len = inner.write_len();
+        let packet_header = PacketHeader::new(Tag::PublicKey, PacketLength::Fixed(len));
+        Self {
+            packet_header,
+            inner,
+        }
+    }
+
     /// Create a new `PublicKey` packet from underlying parameters.
-    pub fn new(
-        packet_version: Version,
+    pub fn new_with_header(
+        packet_header: PacketHeader,
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
-        let inner = PubKeyInner::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )?;
-        Ok(Self(inner))
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+
+        if let Some(len) = packet_header.packet_length().maybe_len() {
+            ensure_eq!(
+                inner.write_len(),
+                len,
+                "PublicKey: inconsisteng packet length"
+            );
+        }
+        ensure_eq!(packet_header.tag(), Tag::PublicKey, "invalid tag");
+
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
     /// Parses a `PublicKeyKey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(packet_version, input)?;
-        Ok(Self(inner))
+    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
+        let inner = PubKeyInner::from_slice(input)?;
+        ensure_eq!(packet_header.tag(), Tag::PublicKey, "invalid tag");
+
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
     pub fn sign<R: CryptoRng + Rng, F>(
@@ -60,35 +84,53 @@ impl PublicKey {
     where
         F: FnOnce() -> String,
     {
-        self.0.sign(rng, key, key_pw, SignatureType::KeyBinding)
+        self.inner.sign(rng, key, key_pw, SignatureType::KeyBinding)
     }
 }
 
 impl PublicSubkey {
+    pub fn from_inner(inner: PubKeyInner) -> Self {
+        let len = inner.write_len();
+        let packet_header = PacketHeader::new(Tag::PublicSubkey, PacketLength::Fixed(len));
+        Self {
+            packet_header,
+            inner,
+        }
+    }
     /// Create a new `PublicSubkey` packet from underlying parameters.
-    pub fn new(
-        packet_version: Version,
+    pub fn new_with_header(
+        packet_header: PacketHeader,
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
-        let inner = PubKeyInner::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )?;
-        Ok(Self(inner))
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+
+        if let Some(len) = packet_header.packet_length().maybe_len() {
+            ensure_eq!(
+                inner.write_len(),
+                len,
+                "PublicSubkey: inconsistent packet length"
+            );
+        }
+        ensure_eq!(packet_header.tag(), Tag::PublicSubkey, "invalid tag");
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
     /// Parses a `PublicSubkey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(packet_version, input)?;
-        Ok(Self(inner))
+    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
+        let inner = PubKeyInner::from_slice(input)?;
+        ensure_eq!(packet_header.tag(), Tag::PublicSubkey, "invalid tag");
+
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
     pub fn sign<R: CryptoRng + Rng, F>(
@@ -100,14 +142,14 @@ impl PublicSubkey {
     where
         F: FnOnce() -> String,
     {
-        self.0.sign(rng, key, key_pw, SignatureType::SubkeyBinding)
+        self.inner
+            .sign(rng, key, key_pw, SignatureType::SubkeyBinding)
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[doc(hidden)] // must leak for proptest to work
 pub struct PubKeyInner {
-    packet_version: Version,
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -116,8 +158,14 @@ pub struct PubKeyInner {
 }
 
 impl PubKeyInner {
-    fn new(
-        packet_version: Version,
+    fn from_slice(input: &[u8]) -> Result<Self> {
+        let (_, details) = crate::packet::public_key_parser::parse(input)?;
+        let (version, algorithm, created_at, expiration, public_params) = details;
+
+        Self::new(version, algorithm, created_at, expiration, public_params)
+    }
+
+    pub fn new(
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
@@ -163,27 +211,12 @@ impl PubKeyInner {
         }
 
         Ok(Self {
-            packet_version,
             version,
             algorithm,
             created_at,
             expiration,
             public_params,
         })
-    }
-
-    fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, details) = crate::packet::public_key_parser::parse(input)?;
-        let (version, algorithm, created_at, expiration, public_params) = details;
-
-        Self::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )
     }
 
     fn to_writer_v2_v3<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -263,21 +296,21 @@ impl PubKeyInner {
 
 impl crate::ser::Serialize for PublicKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        crate::ser::Serialize::to_writer(&self.0, writer)
+        self.inner.to_writer(writer)
     }
 
     fn write_len(&self) -> usize {
-        self.0.write_len()
+        self.inner.write_len()
     }
 }
 
 impl crate::ser::Serialize for PublicSubkey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        crate::ser::Serialize::to_writer(&self.0, writer)
+        self.inner.to_writer(writer)
     }
 
     fn write_len(&self) -> usize {
-        self.0.write_len()
+        self.inner.write_len()
     }
 }
 
@@ -310,22 +343,14 @@ impl crate::ser::Serialize for PubKeyInner {
 }
 
 impl crate::packet::PacketTrait for PublicKey {
-    fn packet_version(&self) -> Version {
-        self.0.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::PublicKey
+    fn packet_header(&self) -> &crate::packet::PacketHeader {
+        &self.packet_header
     }
 }
 
 impl crate::packet::PacketTrait for PublicSubkey {
-    fn packet_version(&self) -> Version {
-        self.0.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::PublicSubkey
+    fn packet_header(&self) -> &crate::packet::PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -672,7 +697,7 @@ impl PublicKeyTrait for PublicKey {
         hashed: &[u8],
         sig: &SignatureBytes,
     ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
+        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
     }
 
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
@@ -681,39 +706,39 @@ impl PublicKeyTrait for PublicKey {
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
+        PublicKeyTrait::encrypt(&self.inner, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
+        PublicKeyTrait::serialize_for_hashing(&self.inner, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
+        PublicKeyTrait::public_params(&self.inner)
     }
 
     fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
+        PublicKeyTrait::version(&self.inner)
     }
 
     fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
+        PublicKeyTrait::fingerprint(&self.inner)
     }
 
     fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
+        PublicKeyTrait::key_id(&self.inner)
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
+        PublicKeyTrait::algorithm(&self.inner)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
+        PublicKeyTrait::created_at(&self.inner)
     }
 
     fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
+        PublicKeyTrait::expiration(&self.inner)
     }
 }
 
@@ -724,7 +749,7 @@ impl PublicKeyTrait for PublicSubkey {
         hashed: &[u8],
         sig: &SignatureBytes,
     ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
+        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
     }
 
     fn encrypt<R: rand::CryptoRng + rand::Rng>(
@@ -733,50 +758,50 @@ impl PublicKeyTrait for PublicSubkey {
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
+        PublicKeyTrait::encrypt(&self.inner, rng, plain, typ)
     }
 
     fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
+        PublicKeyTrait::serialize_for_hashing(&self.inner, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
+        PublicKeyTrait::public_params(&self.inner)
     }
 
     fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
+        PublicKeyTrait::version(&self.inner)
     }
 
     fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
+        PublicKeyTrait::fingerprint(&self.inner)
     }
 
     fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
+        PublicKeyTrait::key_id(&self.inner)
     }
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
+        PublicKeyTrait::algorithm(&self.inner)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
+        PublicKeyTrait::created_at(&self.inner)
     }
 
     fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
+        PublicKeyTrait::expiration(&self.inner)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::packet::PacketTrait;
+
     use super::*;
 
     use chrono::TimeZone;
     use proptest::prelude::*;
-
-    use crate::packet::PacketTrait;
 
     fn v3_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
         prop_oneof![Just(PublicKeyAlgorithm::RSA),].boxed()
@@ -810,72 +835,62 @@ mod tests {
 
     impl Arbitrary for PubKeyInner {
         type Parameters = ();
-        type Strategy = BoxedStrategy<PubKeyInner>;
+        type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            any::<(Version, KeyVersion, u32, u16)>()
-                .prop_flat_map(|(packet_version, version, created_at, expiration)| {
+            any::<(KeyVersion, u32, u16)>()
+                .prop_flat_map(|(version, created_at, expiration)| {
                     let created_at = chrono::Utc
                         .timestamp_opt(created_at as i64, 0)
                         .single()
                         .expect("invalid time");
                     match version {
                         KeyVersion::V2 | KeyVersion::V3 => (
-                            Just(packet_version),
                             Just(version),
                             Just(created_at),
                             Just(Some(expiration)),
                             v3_alg(),
                         ),
-                        KeyVersion::V4 => (
-                            Just(packet_version),
-                            Just(version),
-                            Just(created_at),
-                            Just(None),
-                            v4_alg(),
-                        ),
-                        KeyVersion::V5 | KeyVersion::V6 => (
-                            Just(packet_version),
-                            Just(version),
-                            Just(created_at),
-                            Just(None),
-                            v6_alg(),
-                        ),
+                        KeyVersion::V4 => (Just(version), Just(created_at), Just(None), v4_alg()),
+                        KeyVersion::V5 | KeyVersion::V6 => {
+                            (Just(version), Just(created_at), Just(None), v6_alg())
+                        }
                         KeyVersion::Other(_) => unimplemented!(),
                     }
                 })
-                .prop_flat_map(
-                    |(packet_version, version, created_at, expiration, algorithm)| {
-                        (
-                            Just(packet_version),
-                            Just(version),
-                            Just(algorithm),
-                            Just(created_at),
-                            Just(expiration),
-                            any_with::<PublicParams>(algorithm),
-                        )
-                    },
-                )
-                .prop_map(
-                    |(
-                        packet_version,
-                        version,
-                        algorithm,
-                        created_at,
-                        expiration,
-                        public_params,
-                    )| {
-                        PubKeyInner::new(
-                            packet_version,
-                            version,
-                            algorithm,
-                            created_at,
-                            expiration,
-                            public_params,
-                        )
+                .prop_flat_map(|(version, created_at, expiration, algorithm)| {
+                    (
+                        Just(version),
+                        Just(algorithm),
+                        Just(created_at),
+                        Just(expiration),
+                        any_with::<PublicParams>(algorithm),
+                    )
+                })
+                .prop_map(|(version, algorithm, created_at, expiration, pub_params)| {
+                    PubKeyInner::new(version, algorithm, created_at, expiration, pub_params)
                         .unwrap()
-                    },
-                )
+                })
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for PublicKey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<PubKeyInner>().prop_map(PublicKey::from_inner).boxed()
+        }
+    }
+
+    impl Arbitrary for PublicSubkey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<PubKeyInner>()
+                .prop_map(PublicSubkey::from_inner)
                 .boxed()
         }
     }
@@ -894,7 +909,7 @@ mod tests {
         fn public_key_packet_roundtrip(packet: PublicKey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;
-            let new_packet = PublicKey::from_slice(packet.packet_version(), &buf)?;
+            let new_packet = PublicKey::from_slice(*packet.packet_header(), &buf)?;
             prop_assert_eq!(packet, new_packet);
         }
 
@@ -911,7 +926,7 @@ mod tests {
         fn public_sub_key_packet_roundtrip(packet: PublicSubkey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;
-            let new_packet = PublicSubkey::from_slice(packet.packet_version(), &buf)?;
+            let new_packet = PublicSubkey::from_slice(*packet.packet_header(), &buf)?;
             prop_assert_eq!(packet, new_packet);
         }
     }

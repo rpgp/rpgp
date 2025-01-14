@@ -38,7 +38,7 @@
 //! # let passwd_fn = || String::new();
 //! # let signed_secret_key = secret_key.sign(&mut thread_rng(), passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
-//! use pgp::packet::{Signature, SignatureConfig};
+//! use pgp::packet::{Signature, SignatureConfig, PacketTrait};
 //!
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
@@ -59,7 +59,7 @@
 //!      .expect("Should sign");
 //!
 //! let mut signature_bytes = Vec::with_capacity(1024);
-//! packet::write_packet(&mut signature_bytes, &signature_packet).expect("Write must succeed");
+//! signature_packet.to_writer_with_header(&mut signature_bytes).expect("Write must succeed");
 //!
 //! signature_packet
 //!      .verify(&verification_key, DATA)

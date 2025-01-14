@@ -192,7 +192,7 @@ impl SignatureConfig {
         let signed_hash_value = [hash[0], hash[1]];
         let signature = key.create_signature(key_pw, self.hash_alg, hash)?;
 
-        Ok(Signature::from_config(self, signed_hash_value, signature))
+        Signature::from_config(self, signed_hash_value, signature)
     }
 
     /// Create a certification self-signature.
@@ -282,7 +282,7 @@ impl SignatureConfig {
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
 
-        Ok(Signature::from_config(self, signed_hash_value, signature))
+        Signature::from_config(self, signed_hash_value, signature)
     }
 
     /// Sign a key binding.
@@ -327,7 +327,7 @@ impl SignatureConfig {
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
 
-        Ok(Signature::from_config(self, signed_hash_value, signature))
+        Signature::from_config(self, signed_hash_value, signature)
     }
 
     /// Signs a direct key signature or a revocation.
@@ -365,7 +365,7 @@ impl SignatureConfig {
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
 
-        Ok(Signature::from_config(self, signed_hash_value, signature))
+        Signature::from_config(self, signed_hash_value, signature)
     }
 
     /// Returns what kind of signature this is.

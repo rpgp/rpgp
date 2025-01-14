@@ -4,10 +4,10 @@ use bytes::{Buf, Bytes};
 use rand::{CryptoRng, RngCore};
 
 use crate::errors::Result;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{Tag, Version};
+use crate::types::{PacketHeaderVersion, PacketLength, Tag};
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -18,7 +18,7 @@ use proptest::prelude::*;
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Padding {
-    packet_version: Version,
+    packet_header: PacketHeader,
     /// Random data.
     #[debug("{}", hex::encode(data))]
     #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
@@ -27,28 +27,31 @@ pub struct Padding {
 
 impl Padding {
     /// Parses a `Padding` packet from the given slice.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
         let data = input.rest();
 
         Ok(Padding {
-            packet_version,
+            packet_header,
             data,
         })
     }
 
     /// Create a new padding packet of `size` in bytes.
-    pub fn new<R: CryptoRng + RngCore>(mut rng: R, packet_version: Version, size: usize) -> Self {
+    pub fn new<R: CryptoRng + RngCore>(
+        mut rng: R,
+        packet_version: PacketHeaderVersion,
+        size: usize,
+    ) -> Result<Self> {
         let mut data = vec![0u8; size];
         rng.fill_bytes(&mut data);
 
-        Padding {
-            packet_version,
-            data: data.into(),
-        }
-    }
+        let len = PacketLength::Fixed(data.len());
+        let packet_header = PacketHeader::from_parts(packet_version, Tag::Padding, len)?;
 
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
+        Ok(Padding {
+            packet_header,
+            data: data.into(),
+        })
     }
 }
 
@@ -65,12 +68,8 @@ impl Serialize for Padding {
 }
 
 impl PacketTrait for Padding {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::Padding
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -82,7 +81,7 @@ mod tests {
 
     use super::*;
 
-    use crate::packet::{PacketBody, PacketHeader};
+    use crate::packet::{Packet, PacketHeader};
     use crate::types::PacketLength;
 
     #[test]
@@ -96,10 +95,9 @@ mod tests {
         };
         assert_eq!(to_parse.remaining(), len);
         let rest = to_parse.rest();
-        let full_packet =
-            PacketBody::from_bytes(header.version(), header.tag(), rest).expect("body parse");
+        let full_packet = Packet::from_bytes(header, rest).expect("body parse");
 
-        let PacketBody::Padding(ref packet) = full_packet else {
+        let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
         };
         assert_eq!(
@@ -115,7 +113,7 @@ mod tests {
     #[test]
     fn test_padding_new() {
         let mut rng = ChaCha20Rng::seed_from_u64(1);
-        let packet = Padding::new(&mut rng, Version::New, 20);
+        let packet = Padding::new(&mut rng, PacketHeaderVersion::New, 20).unwrap();
         assert_eq!(packet.data.len(), 20);
 
         let encoded = packet.to_bytes().expect("encode");
@@ -135,7 +133,7 @@ mod tests {
         fn packet_roundtrip(padding: Padding) {
             let mut buf = Vec::new();
             padding.to_writer(&mut buf).unwrap();
-            let new_padding = Padding::from_buf(padding.packet_version, &mut &buf[..]).unwrap();
+            let new_padding = Padding::from_buf(padding.packet_header, &mut &buf[..]).unwrap();
             assert_eq!(padding, new_padding);
         }
     }

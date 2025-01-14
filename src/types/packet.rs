@@ -11,9 +11,9 @@ use crate::parsing::BufParsing;
 /// Represents the packet length.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PacketLength {
-    Fixed(usize),
+    Fixed(usize), // TODO: make u32
     Indeterminate,
-    Partial(usize),
+    Partial(u32),
 }
 
 impl PacketLength {
@@ -38,6 +38,15 @@ impl PacketLength {
         };
         Ok(len)
     }
+
+    /// Returns the length in bytes, if it is specified.
+    pub fn maybe_len(&self) -> Option<usize> {
+        match self {
+            Self::Fixed(len) => Some(*len),
+            Self::Indeterminate => None,
+            Self::Partial(len) => Some(*len as usize),
+        }
+    }
 }
 
 impl From<usize> for PacketLength {
@@ -53,6 +62,7 @@ impl From<usize> for PacketLength {
 ///
 /// However, rPGP will continue to use the term "(Packet) Tag" for the time being.
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum Tag {
     /// Public-Key Encrypted Session Key Packet
@@ -93,6 +103,7 @@ pub enum Tag {
     Padding = 21,
 
     #[num_enum(catch_all)]
+    #[cfg_attr(test, proptest(skip))]
     Other(u8),
 }
 
@@ -118,7 +129,7 @@ impl Tag {
 #[repr(u8)]
 #[derive(Default)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub enum Version {
+pub enum PacketHeaderVersion {
     /// Old Packet Format ("Legacy packet format")
     Old = 0,
     /// New Packet Format ("OpenPGP packet format")
@@ -126,12 +137,12 @@ pub enum Version {
     New = 1,
 }
 
-impl Version {
+impl PacketHeaderVersion {
     pub fn write_header(self, writer: &mut impl io::Write, tag: Tag, len: usize) -> Result<()> {
         debug!("write_header {:?} {:?} {}", self, tag, len);
         let tag: u8 = tag.into();
         match self {
-            Version::Old => {
+            PacketHeaderVersion::Old => {
                 if len < 256 {
                     // one octet
                     writer.write_u8(0b1000_0000 | tag << 2)?;
@@ -146,7 +157,7 @@ impl Version {
                     writer.write_u32::<BigEndian>(len as u32)?;
                 }
             }
-            Version::New => {
+            PacketHeaderVersion::New => {
                 writer.write_u8(0b1100_0000 | tag)?;
                 if len < 192 {
                     writer.write_u8(len.try_into()?)?;
@@ -166,7 +177,7 @@ impl Version {
     /// Length of the header, in bytes.
     pub fn header_len(self, len: usize) -> usize {
         match self {
-            Version::Old => {
+            PacketHeaderVersion::Old => {
                 if len < 256 {
                     // one octet
                     2
@@ -178,7 +189,7 @@ impl Version {
                     5
                 }
             }
-            Version::New => {
+            PacketHeaderVersion::New => {
                 if len < 192 {
                     2
                 } else if len < 8384 {
@@ -256,30 +267,44 @@ mod tests {
     #[test]
     fn test_write_header() {
         let mut buf = Vec::new();
-        Version::New
+        PacketHeaderVersion::New
             .write_header(&mut buf, Tag::UserAttribute, 12875)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "d1ff0000324b");
 
         let mut buf = Vec::new();
-        Version::New
+        PacketHeaderVersion::New
             .write_header(&mut buf, Tag::Signature, 302)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06e");
 
         let mut buf = Vec::new();
-        Version::New
+        PacketHeaderVersion::New
             .write_header(&mut buf, Tag::Signature, 303)
             .unwrap();
 
         assert_eq!(hex::encode(buf), "c2c06f");
     }
 
+    impl Arbitrary for PacketLength {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                (1..=u32::MAX).prop_map(|l| PacketLength::Fixed(l as usize)),
+                Just(PacketLength::Indeterminate),
+                (1u32..=30).prop_map(|l: u32| PacketLength::Partial(2u32.pow(l))),
+            ]
+            .boxed()
+        }
+    }
+
     proptest! {
         #[test]
-        fn header_len(version: Version, len: usize) {
+        fn header_len(version: PacketHeaderVersion, len: usize) {
             let mut buf = Vec::new();
             version.write_header(&mut buf, Tag::Signature, len).unwrap();
             assert_eq!(buf.len(), version.header_len(len));

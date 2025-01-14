@@ -17,18 +17,18 @@ use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
 use crate::packet::signature::SignatureConfig;
-use crate::packet::{PacketTrait, SignatureVersionSpecific};
+use crate::packet::{PacketHeader, PacketTrait, SignatureVersionSpecific};
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SignatureBytes,
-    Tag, Version,
+    self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PacketLength, PublicKeyTrait,
+    SignatureBytes, Tag,
 };
 
 /// Signature Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Signature {
-    packet_version: Version,
+    packet_header: PacketHeader,
 
     pub config: SignatureConfig,
     #[debug("{}", hex::encode(signed_hash_value))]
@@ -41,7 +41,7 @@ impl Signature {
     /// Note: This is a historical packet version!
     #[allow(clippy::too_many_arguments)]
     pub fn v2(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -51,7 +51,7 @@ impl Signature {
         signature: SignatureBytes,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -69,7 +69,7 @@ impl Signature {
     /// Note: This is a historical packet version!
     #[allow(clippy::too_many_arguments)]
     pub fn v3(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -79,7 +79,7 @@ impl Signature {
         signature: SignatureBytes,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -99,7 +99,7 @@ impl Signature {
     /// (and formerly in 4880 and 2440).
     #[allow(clippy::too_many_arguments)]
     pub fn v4(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -109,7 +109,7 @@ impl Signature {
         unhashed_subpackets: Vec<Subpacket>,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -128,7 +128,7 @@ impl Signature {
     /// OpenPGP v6 signatures are specified in RFC 9580 and only used with OpenPGP v6 keys.
     #[allow(clippy::too_many_arguments)]
     pub fn v6(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -139,7 +139,7 @@ impl Signature {
         salt: Vec<u8>,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -157,13 +157,39 @@ impl Signature {
         config: SignatureConfig,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
-    ) -> Self {
-        Signature {
-            packet_version: Default::default(),
+    ) -> Result<Self> {
+        let len = match config.version() {
+            SignatureVersion::V2 | SignatureVersion::V3 => {
+                let mut sum = 1;
+                sum += config.write_len_v3();
+                sum += 2; // signed hash value
+                sum += signature.write_len();
+                sum
+            }
+            SignatureVersion::V4 | SignatureVersion::V6 => {
+                let mut sum = 1;
+                sum += config.write_len_v4_v6();
+                sum += 2; // signed hash value
+                if let SignatureVersionSpecific::V6 { ref salt } = config.version_specific {
+                    sum += 1;
+                    sum += salt.len();
+                }
+                sum += signature.write_len();
+                sum
+            }
+            SignatureVersion::V5 => {
+                unsupported_err!("crate V5 signature")
+            }
+            SignatureVersion::Other(version) => unsupported_err!("signature version {}", version),
+        };
+        let packet_header = PacketHeader::new(Tag::Signature, PacketLength::Fixed(len));
+
+        Ok(Signature {
+            packet_header,
             config,
             signed_hash_value,
             signature,
-        }
+        })
     }
 
     /// Returns what kind of signature this is.
@@ -1103,12 +1129,8 @@ pub enum RevocationCode {
 }
 
 impl PacketTrait for Signature {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::Signature
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 

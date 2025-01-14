@@ -10,11 +10,13 @@ use zeroize::Zeroizing;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    DataMode, LiteralDataHeader, PublicKeyEncryptedSessionKey, SymEncryptedProtectedDataConfig,
-    SymKeyEncryptedSessionKey,
+    DataMode, LiteralDataHeader, PacketHeader, PublicKeyEncryptedSessionKey,
+    SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
-use crate::types::{CompressionAlgorithm, PublicKeyTrait, StringToKey, Tag, Version};
+use crate::types::{
+    CompressionAlgorithm, PacketHeaderVersion, PacketLength, PublicKeyTrait, StringToKey, Tag,
+};
 use crate::Esk;
 
 pub struct Builder {
@@ -163,21 +165,18 @@ impl Builder {
 
                     // Construct Literal Data Packet (inner)
                     let literal_data_header = LiteralDataHeader {
-                        packet_version: Version::New,
                         mode: DataMode::Binary,
                         file_name: file_name.into(),
                         created: Utc::now().trunc_subsecs(0),
                     };
+                    let packet_header = PacketHeader::new(
+                        Tag::LiteralData,
+                        PacketLength::Fixed(in_size + literal_data_header.write_len()),
+                    );
 
-                    let literal_data_header_len = literal_data_header.write_len();
-                    let literal_data_packet_len = literal_data_header_len + in_size;
                     // the prefix to encrypt to make a Literal Data Packet
                     let mut prefix = Vec::new();
-                    literal_data_header.packet_version.write_header(
-                        &mut prefix,
-                        Tag::LiteralData,
-                        literal_data_packet_len,
-                    )?;
+                    packet_header.to_writer(&mut prefix)?;
                     literal_data_header.to_writer(&mut prefix)?;
 
                     // calculate expected encrypted file size
@@ -193,7 +192,7 @@ impl Builder {
                     let outer_packet_len = outer_header_len + enc_file_size;
 
                     // Write the outer packet header
-                    Version::New.write_header(
+                    PacketHeaderVersion::New.write_header(
                         &mut out,
                         Tag::SymEncryptedProtectedData,
                         outer_packet_len,
@@ -280,7 +279,6 @@ mod tests {
     #[test]
     fn binary_message_roundtrip_password_seipdv1() {
         let _ = pretty_env_logger::try_init();
-
         let dir = tempfile::tempdir().unwrap();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 

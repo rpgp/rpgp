@@ -9,10 +9,10 @@ use sha2::Sha256;
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{SkeskVersion, StringToKey, Tag, Version};
+use crate::types::{PacketLength, SkeskVersion, StringToKey, Tag};
 use crate::PlainSessionKey;
 
 #[cfg(test)]
@@ -21,32 +21,28 @@ use proptest::prelude::*;
 /// Symmetric-Key Encrypted Session Key Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SymKeyEncryptedSessionKey {
     V4 {
-        packet_version: Version,
+        packet_header: PacketHeader,
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         #[debug("{}", hex::encode(encrypted_key))]
-        #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
         encrypted_key: Bytes,
     },
     V5 {
-        packet_version: Version,
+        packet_header: PacketHeader,
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         aead: AeadProps,
         #[debug("{}", hex::encode(encrypted_key))]
-        #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
         encrypted_key: Bytes,
     },
     V6 {
-        packet_version: Version,
+        packet_header: PacketHeader,
         sym_algorithm: SymmetricKeyAlgorithm,
         s2k: StringToKey,
         aead: AeadProps,
         #[debug("{}", hex::encode(encrypted_key))]
-        #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
         encrypted_key: Bytes,
     },
 }
@@ -104,12 +100,18 @@ impl AeadProps {
 
 impl SymKeyEncryptedSessionKey {
     /// Parses a `SymKeyEncryptedSessionKey` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+        ensure_eq!(
+            packet_header.tag(),
+            Tag::SymKeyEncryptedSessionKey,
+            "invalid tag"
+        );
+
         let version = i.read_u8()?;
         match version {
-            4 => parse_v4(packet_version, i),
-            5 => parse_v5(packet_version, i),
-            6 => parse_v6(packet_version, i),
+            4 => parse_v4(packet_header, i),
+            5 => parse_v5(packet_header, i),
+            6 => parse_v6(packet_header, i),
             _ => unsupported_err!("SKESK version {}", version),
         }
     }
@@ -137,7 +139,6 @@ impl SymKeyEncryptedSessionKey {
     }
 
     pub fn version(&self) -> SkeskVersion {
-        // TODO: use enum
         match self {
             Self::V4 { .. } => SkeskVersion::V4,
             Self::V5 { .. } => SkeskVersion::Other(5),
@@ -283,8 +284,12 @@ impl SymKeyEncryptedSessionKey {
         let mut encrypted_key = private_key.to_vec();
         alg.encrypt_with_iv_regular(&key, &iv, &mut encrypted_key)?;
 
+        let len = 2 + s2k.write_len() + encrypted_key.len();
+        let packet_header =
+            PacketHeader::new(Tag::SymKeyEncryptedSessionKey, PacketLength::Fixed(len));
+
         Ok(SymKeyEncryptedSessionKey::V4 {
-            packet_version: Default::default(),
+            packet_header,
             s2k,
             sym_algorithm: alg,
             encrypted_key: encrypted_key.into(),
@@ -360,9 +365,18 @@ impl SymKeyEncryptedSessionKey {
                 unimplemented_err!("AEAD {:?}", aead);
             }
         };
+        let len = 3
+            + s2k.write_len()
+            + 1
+            + aead.iv().len()
+            + 1
+            + encrypted_key.len()
+            + aead.auth_tag().len();
+        let packet_header =
+            PacketHeader::new(Tag::SymKeyEncryptedSessionKey, PacketLength::Fixed(len));
 
         Ok(SymKeyEncryptedSessionKey::V6 {
-            packet_version: Default::default(),
+            packet_header,
             sym_algorithm,
             s2k,
             aead,
@@ -371,19 +385,19 @@ impl SymKeyEncryptedSessionKey {
     }
 }
 
-fn parse_v4<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v4<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
     let s2k = StringToKey::from_buf(&mut i)?;
 
     Ok(SymKeyEncryptedSessionKey::V4 {
-        packet_version,
+        packet_header,
         sym_algorithm: sym_alg,
         s2k,
         encrypted_key: i.rest(),
     })
 }
 
-fn parse_v5<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v5<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
     let _count = i.read_u8()?;
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
     let aead = i.read_u8().map(AeadAlgorithm::from)?;
@@ -418,7 +432,7 @@ fn parse_v5<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncrypted
     };
 
     Ok(SymKeyEncryptedSessionKey::V5 {
-        packet_version,
+        packet_header,
         sym_algorithm: sym_alg,
         aead,
         s2k,
@@ -426,7 +440,7 @@ fn parse_v5<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncrypted
     })
 }
 
-fn parse_v6<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v6<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
     let _count = i.read_u8()?;
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
     let aead = i.read_u8().map(AeadAlgorithm::from)?;
@@ -459,7 +473,7 @@ fn parse_v6<B: Buf>(packet_version: Version, mut i: B) -> Result<SymKeyEncrypted
     };
 
     Ok(SymKeyEncryptedSessionKey::V6 {
-        packet_version,
+        packet_header,
         sym_algorithm: sym_alg,
         aead,
         s2k,
@@ -471,7 +485,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         match &self {
             SymKeyEncryptedSessionKey::V4 {
-                packet_version: _,
+                packet_header: _,
                 sym_algorithm,
                 s2k,
                 encrypted_key,
@@ -482,7 +496,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 writer.write_all(encrypted_key)?;
             }
             SymKeyEncryptedSessionKey::V5 {
-                packet_version: _,
+                packet_header: _,
                 sym_algorithm,
                 s2k,
                 aead,
@@ -505,7 +519,7 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 writer.write_all(aead.auth_tag())?;
             }
             SymKeyEncryptedSessionKey::V6 {
-                packet_version: _,
+                packet_header: _,
                 sym_algorithm,
                 s2k,
                 aead,
@@ -582,22 +596,131 @@ impl Serialize for SymKeyEncryptedSessionKey {
 }
 
 impl PacketTrait for SymKeyEncryptedSessionKey {
-    fn packet_version(&self) -> Version {
+    fn packet_header(&self) -> &PacketHeader {
         match self {
-            SymKeyEncryptedSessionKey::V4 { packet_version, .. } => *packet_version,
-            SymKeyEncryptedSessionKey::V5 { packet_version, .. } => *packet_version,
-            SymKeyEncryptedSessionKey::V6 { packet_version, .. } => *packet_version,
+            SymKeyEncryptedSessionKey::V4 { packet_header, .. } => packet_header,
+            SymKeyEncryptedSessionKey::V5 { packet_header, .. } => packet_header,
+            SymKeyEncryptedSessionKey::V6 { packet_header, .. } => packet_header,
         }
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::SymKeyEncryptedSessionKey
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+
     use super::*;
+
+    use crate::crypto::hash::HashAlgorithm;
+
+    fn non_weak_hash_alg_gen() -> impl Strategy<Value = HashAlgorithm> {
+        use HashAlgorithm::*;
+        prop_oneof![
+            Just(SHA2_256),
+            Just(SHA2_384),
+            Just(SHA2_512),
+            Just(SHA2_224),
+            Just(SHA3_256),
+            Just(SHA3_512),
+        ]
+    }
+
+    prop_compose! {
+        fn s2k_salted_gen()(hash_alg in non_weak_hash_alg_gen(), salt in any::<[u8; 8]>()) -> StringToKey {
+            StringToKey::Salted {
+                hash_alg,
+                salt,
+            }
+        }
+    }
+
+    prop_compose! {
+        fn s2k_iterated_salted_gen()(hash_alg in non_weak_hash_alg_gen(), salt in any::<[u8; 8]>(), count in 1u8..10) -> StringToKey {
+            StringToKey::IteratedAndSalted {
+                hash_alg,
+                salt,
+                count,
+            }
+        }
+    }
+
+    prop_compose! {
+        fn s2k_argon2_gen()(salt in any::<[u8; 16]>(), t in 1u8..3, p in 1u8..3) -> StringToKey {
+            StringToKey::Argon2 {
+                salt,
+                t,
+                p,
+                m_enc: 8,
+            }
+        }
+    }
+
+    fn s2k_with_salt_gen() -> impl Strategy<Value = StringToKey> {
+        prop_oneof![
+            s2k_salted_gen(),
+            s2k_iterated_salted_gen(),
+            s2k_argon2_gen(),
+        ]
+    }
+
+    fn supported_aead_gen() -> impl Strategy<Value = AeadAlgorithm> {
+        prop_oneof![
+            Just(AeadAlgorithm::Ocb),
+            Just(AeadAlgorithm::Eax),
+            Just(AeadAlgorithm::Gcm),
+        ]
+    }
+
+    fn supported_sym_alg_gen() -> impl Strategy<Value = SymmetricKeyAlgorithm> {
+        prop_oneof![
+            Just(SymmetricKeyAlgorithm::AES128),
+            Just(SymmetricKeyAlgorithm::AES192),
+            Just(SymmetricKeyAlgorithm::AES256),
+        ]
+    }
+
+    prop_compose! {
+        fn v4_gen()(
+            pw in any::<String>(),
+            session_key in any::<Vec<u8>>(),
+            sym_alg in supported_sym_alg_gen(),
+            s2k in s2k_with_salt_gen()
+        ) -> SymKeyEncryptedSessionKey {
+            SymKeyEncryptedSessionKey::encrypt_v4(|| pw, &session_key, s2k, sym_alg)
+            .unwrap()
+        }
+    }
+
+    prop_compose! {
+        fn v6_gen()(
+            pw in any::<String>(),
+            session_key in any::<Vec<u8>>(),
+            sym_alg in supported_sym_alg_gen(),
+            aead in supported_aead_gen(),
+            s2k in s2k_with_salt_gen()
+        ) -> SymKeyEncryptedSessionKey {
+            let mut rng = ChaCha8Rng::seed_from_u64(0);
+            SymKeyEncryptedSessionKey::encrypt_v6(
+                &mut rng,
+                || pw,
+                &session_key,
+                s2k,
+                sym_alg,
+                aead,
+            )
+            .unwrap()
+        }
+    }
+
+    impl Arbitrary for SymKeyEncryptedSessionKey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            prop_oneof![v4_gen(), v6_gen(),].boxed()
+        }
+    }
 
     proptest! {
         #[test]
@@ -612,7 +735,7 @@ mod tests {
         fn packet_roundtrip(packet: SymKeyEncryptedSessionKey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = SymKeyEncryptedSessionKey::from_buf(packet.packet_version(), &mut &buf[..]).unwrap();
+            let new_packet = SymKeyEncryptedSessionKey::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
             assert_eq!(packet, new_packet);
         }
     }

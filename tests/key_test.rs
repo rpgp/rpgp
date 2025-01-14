@@ -19,14 +19,15 @@ use pgp::crypto::{
     hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
 };
 use pgp::errors::Error;
+use pgp::packet::PacketHeader;
 use pgp::packet::{
     KeyFlags, Signature, SignatureType, Subpacket, SubpacketData, UserAttribute, UserId,
 };
 use pgp::ser::Serialize;
-use pgp::types::PlainSecretParams;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyTrait,
-    SecretParams, SignedUser, StringToKey, Version,
+    CompressionAlgorithm, KeyId, KeyVersion, Mpi, PacketHeaderVersion, PacketLength,
+    PlainSecretParams, PublicParams, S2kParams, SecretKeyTrait, SecretParams, SignedUser,
+    StringToKey, Tag,
 };
 use pgp::{armor, types::PublicKeyTrait};
 use rand::thread_rng;
@@ -402,8 +403,14 @@ fn test_parse_details() {
         HashAlgorithm::SHA2_224,
     ];
 
+    let packet_header = PacketHeader::from_parts(
+        PacketHeaderVersion::Old,
+        Tag::Signature,
+        PacketLength::Fixed(568),
+    )
+    .unwrap();
     let sig1 = Signature::v4(
-        Version::Old,
+        packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::SHA1,
@@ -469,12 +476,22 @@ fn test_parse_details() {
     );
 
     let u1 = SignedUser::new(
-        UserId::from_str(Version::Old, "john doe (test) <johndoe@example.com>"),
+        UserId::from_str(
+            PacketHeaderVersion::Old,
+            "john doe (test) <johndoe@example.com>",
+        )
+        .unwrap(),
         vec![sig1],
     );
 
+    let packet_header = PacketHeader::from_parts(
+        PacketHeaderVersion::Old,
+        Tag::Signature,
+        PacketLength::Fixed(568),
+    )
+    .unwrap();
     let sig2 = Signature::v4(
-        Version::Old,
+        packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::SHA1,
@@ -540,7 +557,11 @@ fn test_parse_details() {
     );
 
     let u2 = SignedUser::new(
-        UserId::from_str(Version::Old, "john doe <johndoe@seconddomain.com>"),
+        UserId::from_str(
+            PacketHeaderVersion::Old,
+            "john doe <johndoe@seconddomain.com>",
+        )
+        .unwrap(),
         vec![sig2],
     );
 
@@ -556,8 +577,14 @@ fn test_parse_details() {
         _ => panic!("not here"),
     }
 
+    let packet_header = PacketHeader::from_parts(
+        PacketHeaderVersion::Old,
+        Tag::Signature,
+        PacketLength::Fixed(568),
+    )
+    .unwrap();
     let sig3 = Signature::v4(
-        Version::Old,
+        packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::SHA1,

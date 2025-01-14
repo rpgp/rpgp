@@ -7,7 +7,7 @@ use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
+use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
 use pgp::types::{EcdhPublicParams, EskType, Fingerprint, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
@@ -358,15 +358,16 @@ fn card_decrypt() {
 
         // Transform subkey packet into primary key packet
         // (This is a hack: FakeHsm wants a primary key packet)
-        let as_primary = PublicKey::new(
-            enc_subkey.packet_version(),
-            enc_subkey.version(),
-            enc_subkey.algorithm(),
-            *enc_subkey.created_at(),
-            enc_subkey.expiration(),
-            enc_subkey.public_params().clone(),
-        )
-        .unwrap();
+        let as_primary = PublicKey::from_inner(
+            PubKeyInner::new(
+                enc_subkey.version(),
+                enc_subkey.algorithm(),
+                *enc_subkey.created_at(),
+                enc_subkey.expiration(),
+                enc_subkey.public_params().clone(),
+            )
+            .unwrap(),
+        );
 
         let mut hsm = FakeHsm::with_public_key(as_primary).unwrap();
         hsm.set_fake_decryption_data(input, out);

@@ -32,7 +32,7 @@ impl Serialize for X25519PublicParams {
     }
 
     fn write_len(&self) -> usize {
-        self.key.as_bytes().len()
+        32
     }
 }
 

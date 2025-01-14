@@ -3,17 +3,17 @@ use log::warn;
 
 use crate::errors::{Error, Result};
 use crate::packet::{
-    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PacketBody, Padding,
-    PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
-    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
-    UserId,
+    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Packet, PacketHeader,
+    Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey,
+    Signature, SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust,
+    UserAttribute, UserId,
 };
-use crate::types::{Tag, Version};
+use crate::types::Tag;
 
-impl PacketBody {
+impl Packet {
     // TODO: switch to Buf once fully converted
-    pub fn from_bytes(ver: Version, tag: Tag, mut body: Bytes) -> Result<Self> {
-        let res: Result<Self> = match tag {
+    pub fn from_bytes(ver: PacketHeader, mut body: Bytes) -> Result<Self> {
+        let res: Result<Self> = match ver.tag() {
             Tag::Signature => Signature::from_buf(ver, &mut body).map(Into::into),
             Tag::OnePassSignature => OnePassSignature::from_buf(ver, &mut body).map(Into::into),
 
@@ -49,12 +49,12 @@ impl PacketBody {
             Tag::Other(22..=39) => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
                 return Err(Error::InvalidPacketContent(Box::new(Error::Message(
-                    format!("Unassigned Critical Packet type {:?}", tag),
+                    format!("Unassigned Critical Packet type {:?}", ver.tag()),
                 ))));
             }
             Tag::Other(40..=59) => {
                 // a "soft" error that will usually get ignored while processing packet streams
-                unsupported_err!("Unsupported but non-critical packet type: {:?}", tag)
+                unsupported_err!("Unsupported but non-critical packet type: {:?}", ver.tag())
             }
             Tag::Other(other) => unimplemented_err!("Unknown packet type: {}", other),
         };
@@ -66,7 +66,7 @@ impl PacketBody {
                 warn!(
                     "invalid packet: {:#?} {:?}\n{:?}",
                     err,
-                    tag,
+                    ver.tag(),
                     hex::encode(body)
                 );
                 Err(Error::InvalidPacketContent(Box::new(err)))
@@ -76,11 +76,10 @@ impl PacketBody {
 
     /// Parses the body for partial packets
     pub fn from_buf_partial<B: Buf + std::fmt::Debug>(
-        ver: Version,
-        tag: Tag,
+        ver: PacketHeader,
         mut body: B,
     ) -> Result<Self> {
-        let res: Result<Self> = match tag {
+        let res: Result<Self> = match ver.tag() {
             Tag::CompressedData => CompressedData::from_buf(ver, &mut body).map(Into::into),
             Tag::SymEncryptedData => SymEncryptedData::from_buf(ver, &mut body).map(Into::into),
             Tag::LiteralData => LiteralData::from_buf(ver, &mut body).map(Into::into),
@@ -90,7 +89,7 @@ impl PacketBody {
             _ => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
                 return Err(Error::InvalidPacketContent(Box::new(Error::Message(
-                    format!("invalid packet type with partical length {:?}", tag),
+                    format!("invalid packet type with partical length {:?}", ver.tag()),
                 ))));
             }
         };
@@ -99,7 +98,7 @@ impl PacketBody {
             Ok(res) => Ok(res),
             Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
             Err(err) => {
-                warn!("invalid packet: {:?} {:?}\n{:?}", err, tag, body);
+                warn!("invalid packet: {:?} {:?}\n{:?}", err, ver.tag(), body);
                 Err(Error::InvalidPacketContent(Box::new(err)))
             }
         }

@@ -6,14 +6,14 @@ use bzip2::read::BzDecoder;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 
 use crate::errors::Result;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
 use crate::ser::Serialize;
-use crate::types::{CompressionAlgorithm, Tag, Version};
+use crate::types::{CompressionAlgorithm, PacketLength, Tag};
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct CompressedData {
-    packet_version: Version,
+    packet_header: PacketHeader,
     compression_algorithm: CompressionAlgorithm,
     #[debug("{}", hex::encode(compressed_data))]
     #[cfg_attr(test, proptest(strategy = "compressed_data_gen()"))]
@@ -47,26 +47,23 @@ impl Read for Decompressor<&[u8]> {
 }
 
 impl CompressedData {
-    /// Parses a `CompressedData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        Self::from_buf(packet_version, input)
-    }
-
     /// Parses a `CompressedData` packet from the given `Buf`.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut input: B) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
         ensure!(input.has_remaining(), "input too short");
 
         let alg = CompressionAlgorithm::from(input.get_u8());
         Ok(CompressedData {
-            packet_version,
+            packet_header,
             compression_algorithm: alg,
             compressed_data: input.copy_to_bytes(input.remaining()),
         })
     }
 
     pub fn from_compressed(alg: CompressionAlgorithm, data: Vec<u8>) -> Self {
+        let length = PacketLength::Fixed(1 + data.len());
+
         CompressedData {
-            packet_version: Default::default(),
+            packet_header: PacketHeader::new(Tag::CompressedData, length),
             compression_algorithm: alg,
             compressed_data: Bytes::from(data),
         }
@@ -112,12 +109,8 @@ impl Serialize for CompressedData {
 }
 
 impl PacketTrait for CompressedData {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::CompressedData
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -140,7 +133,7 @@ mod tests {
         fn packet_roundtrip(packet: CompressedData) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = CompressedData::from_slice(packet.packet_version(), &buf).unwrap();
+            let new_packet = CompressedData::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
             assert_eq!(packet, new_packet);
         }
     }

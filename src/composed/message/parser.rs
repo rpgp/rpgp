@@ -6,7 +6,7 @@ use crate::armor::BlockType;
 use crate::composed::message::Message;
 use crate::composed::Deserializable;
 use crate::errors::{Error, Result};
-use crate::packet::Packet;
+use crate::packet::{Packet, PacketTrait};
 use crate::types::{PkeskVersion, SkeskVersion, Tag};
 use crate::{Edata, Esk};
 
@@ -23,17 +23,16 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
 
         debug!("{:?}: ", packet);
         let tag = packet.tag();
-        let (_header, body) = packet.into_parts();
-        // TODO: match on body
+
         match tag {
             Tag::LiteralData => {
-                return match body.try_into() {
+                return match packet.try_into() {
                     Ok(data) => Some(Ok(Message::Literal(data))),
                     Err(err) => Some(Err(err)),
                 };
             }
             Tag::CompressedData => {
-                return match body.try_into() {
+                return match packet.try_into() {
                     Ok(data) => Some(Ok(Message::Compressed(data))),
                     Err(err) => Some(Err(err)),
                 };
@@ -41,7 +40,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
             //    ESK :- Public-Key Encrypted Session Key Packet |
             //           Symmetric-Key Encrypted Session Key Packet.
             Tag::PublicKeyEncryptedSessionKey | Tag::SymKeyEncryptedSessionKey => {
-                return match body.try_into() {
+                return match packet.try_into() {
                     Ok(p) => {
                         let mut esk: Vec<Esk> = vec![p];
 
@@ -53,9 +52,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                             })
                         }) {
                             match res {
-                                Ok(packet) => {
-                                    esk.push(packet.into_parts().1.try_into().expect("peeked"))
-                                }
+                                Ok(packet) => esk.push(packet.try_into().expect("peeked")),
                                 Err(e) => return Some(Err(e)),
                             }
                         }
@@ -66,7 +63,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                                 if p.tag() == Tag::SymEncryptedData
                                     || p.tag() == Tag::SymEncryptedProtectedData =>
                             {
-                                Edata::try_from(p.into_parts().1).expect("peeked")
+                                Edata::try_from(p).expect("peeked")
                             }
                             Some(Ok(p)) => {
                                 return Some(Err(Error::Message(format!(
@@ -125,7 +122,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                 };
             }
             Tag::Signature => {
-                return match body.try_into() {
+                return match packet.try_into() {
                     Ok(signature) => {
                         let message = match next(packets.by_ref()) {
                             Some(Ok(m)) => Some(Box::new(m)),
@@ -143,7 +140,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                 };
             }
             Tag::OnePassSignature => {
-                return match body.try_into() {
+                return match packet.try_into() {
                     Ok(p) => {
                         let one_pass_signature = Some(p);
 
@@ -157,7 +154,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                             .next_if(|res| res.as_ref().is_ok_and(|p| p.tag() == Tag::Signature))
                         {
                             match res {
-                                Ok(packet) => packet.into_parts().1.try_into().expect("peeked"),
+                                Ok(packet) => packet.try_into().expect("peeked"),
                                 Err(e) => return Some(Err(e)),
                             }
                         } else {

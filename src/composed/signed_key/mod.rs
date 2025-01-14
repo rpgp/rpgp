@@ -75,8 +75,9 @@
 //!     .expect("Failed to validate signature");
 //!
 //! // wraps the signature in the appropriate package fmt ready to be serialized
+//! let packet_header = PacketHeader::from_parts(Tag::Signature, PacketLength::Fixed());
 //! let signature = Signature::v4(
-//!     types::Version::Old,
+//!     packet_header,
 //!     packet::SignatureType::Binary,
 //!     PublicKeyAlgorithm::RSA,
 //!     HashAlgorithm::SHA2_256,
@@ -92,8 +93,7 @@
 //! // sign and and write the package (the package written here is NOT RFC 9580 compliant)
 //! let mut signature_bytes = Vec::with_capacity(1024);
 //!
-//! packet::write_packet(&mut signature_bytes, &signature)
-//!     .expect("Write must succeed");
+//! signature.to_writer_with_header(&mut signature_bytes).expect("Write must succeed");
 //!
 //!
 //! let raw_signature = signature.signature;

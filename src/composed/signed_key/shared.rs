@@ -9,6 +9,7 @@ use crate::composed::key::KeyDetails;
 use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
 use crate::errors::Result;
 use crate::packet::KeyFlags;
+use crate::packet::PacketTrait;
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, SignedUser, SignedUserAttribute};
 use crate::util::write_packet_length_len;
@@ -173,11 +174,11 @@ impl SignedKeyDetails {
 impl Serialize for SignedKeyDetails {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         for sig in &self.revocation_signatures {
-            packet::write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         for sig in &self.direct_signatures {
-            packet::write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         for user in &self.users {

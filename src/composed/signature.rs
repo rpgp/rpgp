@@ -2,11 +2,9 @@ use std::iter::Peekable;
 
 use crate::composed::Deserializable;
 use crate::errors::Result;
-use crate::packet::{Packet, Signature};
+use crate::packet::{Packet, PacketTrait, Signature};
 use crate::ser::Serialize;
-use crate::types::PublicKeyTrait;
-use crate::types::Tag;
-use crate::util::write_packet_length_len;
+use crate::types::{PublicKeyTrait, Tag};
 use crate::{armor, ArmorOptions};
 
 /// Standalone signature as defined by the cleartext framework.
@@ -55,13 +53,12 @@ impl StandaloneSignature {
 
 impl Serialize for StandaloneSignature {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        crate::packet::write_packet(writer, &self.signature)
+        self.signature.to_writer_with_header(writer)?;
+        Ok(())
     }
+
     fn write_len(&self) -> usize {
-        let len = self.signature.write_len();
-        let mut sum = write_packet_length_len(len);
-        sum += len;
-        sum
+        self.signature.write_len_with_header()
     }
 }
 
@@ -95,13 +92,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(
 ) -> Option<Result<StandaloneSignature>> {
     match packets.by_ref().next() {
         Some(Ok(packet)) => match packet.tag() {
-            Tag::Signature => Some(
-                packet
-                    .into_parts()
-                    .1
-                    .try_into()
-                    .map(StandaloneSignature::new),
-            ),
+            Tag::Signature => Some(packet.try_into().map(StandaloneSignature::new)),
             _ => Some(Err(format_err!("unexpected packet {:?}", packet.tag()))),
         },
         Some(Err(e)) => Some(Err(e)),

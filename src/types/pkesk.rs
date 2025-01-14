@@ -1,9 +1,11 @@
+use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes};
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::parsing::BufParsing;
+use crate::ser::Serialize;
 
 use super::MpiBytes;
 
@@ -134,6 +136,157 @@ impl PkeskBytes {
             PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
             _ => unsupported_err!("unsupported algorithm for ESK"),
         }
+    }
+}
+
+impl Serialize for PkeskBytes {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            PkeskBytes::Rsa { mpi } => {
+                mpi.to_writer(writer)?;
+            }
+            PkeskBytes::Elgamal { first, second } => {
+                first.to_writer(writer)?;
+                second.to_writer(writer)?;
+            }
+            PkeskBytes::Ecdh {
+                public_point,
+                encrypted_session_key,
+            } => {
+                public_point.to_writer(writer)?;
+
+                // length of session key as one octet
+                writer.write_u8(encrypted_session_key.len().try_into()?)?;
+
+                writer.write_all(encrypted_session_key)?;
+            }
+            PkeskBytes::X25519 {
+                ephemeral,
+                sym_alg,
+                session_key,
+            } => {
+                writer.write_all(ephemeral)?;
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X25519].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
+                if let Some(sym_alg) = sym_alg {
+                    // len: algo octet + session_key len
+                    writer.write_u8((session_key.len() + 1).try_into()?)?;
+
+                    writer.write_u8((*sym_alg).into())?;
+                } else {
+                    // len: esk len
+                    writer.write_u8(session_key.len().try_into()?)?;
+
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+
+                writer.write_all(session_key)?; // encrypted session key
+            }
+            #[cfg(feature = "unstable-curve448")]
+            PkeskBytes::X448 {
+                ephemeral,
+                sym_alg,
+                session_key,
+            } => {
+                writer.write_all(ephemeral)?;
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X448].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
+                if let Some(sym_alg) = sym_alg {
+                    // len: algo + esk len
+                    writer.write_u8((session_key.len() + 1).try_into()?)?;
+
+                    writer.write_u8((*sym_alg).into())?;
+                } else {
+                    // len: algo octet + session_key len
+                    writer.write_u8(session_key.len().try_into()?)?;
+
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+
+                writer.write_all(session_key)?; // encrypted session key
+            }
+            #[cfg(not(feature = "unstable-curve448"))]
+            PkeskBytes::X448 { .. } => {}
+            PkeskBytes::Other => {
+                // Nothing to do
+            }
+        }
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        match self {
+            PkeskBytes::Rsa { mpi } => {
+                sum += mpi.write_len();
+            }
+            PkeskBytes::Elgamal { first, second } => {
+                sum += first.write_len();
+                sum += second.write_len();
+            }
+            PkeskBytes::Ecdh {
+                public_point,
+                encrypted_session_key,
+            } => {
+                sum += public_point.write_len();
+                // length of session key as one octets
+                sum += 1;
+                sum += encrypted_session_key.len();
+            }
+            PkeskBytes::X25519 {
+                ephemeral,
+                sym_alg,
+                session_key,
+            } => {
+                sum += ephemeral.len();
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X25519].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
+                if sym_alg.is_some() {
+                    // len: algo octet + session_key len
+                    sum += 1 + 1;
+                } else {
+                    // len: esk len
+                    sum += 1;
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+                sum += session_key.len(); // encrypted session key
+            }
+            #[cfg(feature = "unstable-curve448")]
+            PkeskBytes::X448 {
+                ephemeral,
+                sym_alg,
+                session_key,
+            } => {
+                sum += ephemeral.len();
+
+                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
+                // the symmetric algorithm ID is not encrypted [for X448].
+                //
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
+                if sym_alg.is_some() {
+                    // len: algo + esk len
+                    sum += 1 + 1;
+                } else {
+                    // len: algo octet + session_key len
+                    sum += 1;
+                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
+                }
+                sum += session_key.len(); // encrypted session key
+            }
+            #[cfg(not(feature = "unstable-curve448"))]
+            PkeskBytes::X448 { .. } => {}
+            PkeskBytes::Other => {}
+        }
+        sum
     }
 }
 

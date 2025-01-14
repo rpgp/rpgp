@@ -8,12 +8,12 @@ use crate::crypto::checksum;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
-    PublicParams, Tag, Version,
+    EskType, Fingerprint, KeyId, KeyVersion, PacketLength, PkeskBytes, PkeskVersion,
+    PublicKeyTrait, PublicParams, Tag,
 };
 
 /// Public Key Encrypted Session Key Packet (PKESK)
@@ -29,28 +29,33 @@ use crate::types::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublicKeyEncryptedSessionKey {
     V3 {
-        packet_version: Version,
+        packet_header: PacketHeader,
         id: KeyId,
         pk_algo: PublicKeyAlgorithm,
         values: PkeskBytes,
     },
 
     V6 {
-        packet_version: Version,
+        packet_header: PacketHeader,
         fingerprint: Option<Fingerprint>,
         pk_algo: PublicKeyAlgorithm,
         values: PkeskBytes,
     },
 
     Other {
-        packet_version: Version,
+        packet_header: PacketHeader,
         version: u8,
     },
 }
 
 impl PublicKeyEncryptedSessionKey {
     /// Parses a `PublicKeyEncryptedSessionKey` packet from the given buffer.
-    pub fn from_buf<B: bytes::Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+    pub fn from_buf<B: bytes::Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+        ensure_eq!(
+            packet_header.tag(),
+            Tag::PublicKeyEncryptedSessionKey,
+            "invalid tag"
+        );
         // version, 3 and 6 are allowed
         let version = i.read_u8()?;
 
@@ -67,7 +72,7 @@ impl PublicKeyEncryptedSessionKey {
                 let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
 
                 Ok(PublicKeyEncryptedSessionKey::V3 {
-                    packet_version,
+                    packet_header,
                     id: key_id,
                     pk_algo,
                     values,
@@ -102,14 +107,14 @@ impl PublicKeyEncryptedSessionKey {
                 let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
 
                 Ok(PublicKeyEncryptedSessionKey::V6 {
-                    packet_version,
+                    packet_header,
                     fingerprint,
                     pk_algo,
                     values,
                 })
             }
             _ => Ok(PublicKeyEncryptedSessionKey::Other {
-                packet_version,
+                packet_header,
                 version,
             }),
         }
@@ -157,9 +162,14 @@ impl PublicKeyEncryptedSessionKey {
 
         let values = pkey.encrypt(rng, &data, EskType::V3_4)?;
 
+        let id = pkey.key_id();
+        let len = write_len_v3(&id, &values);
+        let packet_header =
+            PacketHeader::new(Tag::PublicKeyEncryptedSessionKey, PacketLength::Fixed(len));
+
         Ok(PublicKeyEncryptedSessionKey::V3 {
-            packet_version: Default::default(),
-            id: pkey.key_id(),
+            packet_header,
+            id,
             pk_algo: pkey.algorithm(),
             values,
         })
@@ -182,10 +192,15 @@ impl PublicKeyEncryptedSessionKey {
             Self::prepare_session_key_for_encryption(None, session_key, pkey.public_params());
 
         let values = pkey.encrypt(rng, &data, EskType::V6)?;
+        let fingerprint = Some(pkey.fingerprint());
+
+        let len = write_len_v6(&values, &fingerprint);
+        let packet_header =
+            PacketHeader::new(Tag::PublicKeyEncryptedSessionKey, PacketLength::Fixed(len));
 
         Ok(PublicKeyEncryptedSessionKey::V6 {
-            packet_version: Default::default(),
-            fingerprint: Some(pkey.fingerprint()),
+            packet_header,
+            fingerprint,
             pk_algo: pkey.algorithm(),
             values,
         })
@@ -310,306 +325,84 @@ impl Serialize for PublicKeyEncryptedSessionKey {
         };
 
         writer.write_u8(algorithm.into())?;
-
-        match (algorithm, self.values()?) {
-            (
-                PublicKeyAlgorithm::RSA
-                | PublicKeyAlgorithm::RSASign
-                | PublicKeyAlgorithm::RSAEncrypt,
-                PkeskBytes::Rsa { mpi },
-            ) => {
-                mpi.to_writer(writer)?;
-            }
-            (
-                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign,
-                PkeskBytes::Elgamal { first, second },
-            ) => {
-                first.to_writer(writer)?;
-                second.to_writer(writer)?;
-            }
-            (
-                PublicKeyAlgorithm::ECDH,
-                PkeskBytes::Ecdh {
-                    public_point,
-                    encrypted_session_key,
-                },
-            ) => {
-                public_point.to_writer(writer)?;
-
-                // length of session key as one octet
-                writer.write_u8(encrypted_session_key.len().try_into()?)?;
-
-                writer.write_all(encrypted_session_key)?;
-            }
-            (
-                PublicKeyAlgorithm::X25519,
-                PkeskBytes::X25519 {
-                    ephemeral,
-                    sym_alg,
-                    session_key,
-                },
-            ) => {
-                writer.write_all(ephemeral)?;
-
-                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
-                // the symmetric algorithm ID is not encrypted [for X25519].
-                //
-                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
-                if let Some(sym_alg) = sym_alg {
-                    ensure!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
-                        "Inconsistent: X25519 SymmetricKeyAlgorithm is set for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: algo octet + session_key len
-                    writer.write_u8((session_key.len() + 1).try_into()?)?;
-
-                    writer.write_u8((*sym_alg).into())?;
-                } else {
-                    ensure!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
-                        "Inconsistent: X25519 SymmetricKeyAlgorithm is unset for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: esk len
-                    writer.write_u8(session_key.len().try_into()?)?;
-
-                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
-                }
-
-                writer.write_all(session_key)?; // encrypted session key
-            }
-            #[cfg(feature = "unstable-curve448")]
-            (
-                PublicKeyAlgorithm::X448,
-                PkeskBytes::X448 {
-                    ephemeral,
-                    sym_alg,
-                    session_key,
-                },
-            ) => {
-                writer.write_all(ephemeral)?;
-
-                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
-                // the symmetric algorithm ID is not encrypted [for X448].
-                //
-                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
-                if let Some(sym_alg) = sym_alg {
-                    ensure!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
-                        "Inconsistent: X448 SymmetricKeyAlgorithm is set for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: algo + esk len
-                    writer.write_u8((session_key.len() + 1).try_into()?)?;
-
-                    writer.write_u8((*sym_alg).into())?;
-                } else {
-                    ensure!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
-                        "Inconsistent: X448 SymmetricKeyAlgorithm is unset for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: algo octet + session_key len
-                    writer.write_u8(session_key.len().try_into()?)?;
-
-                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
-                }
-
-                writer.write_all(session_key)?; // encrypted session key
-            }
-            (alg, _) => {
-                bail!("failed to write EskBytes for {:?}", alg);
-            }
-        }
+        self.values()?.to_writer(writer)?;
 
         Ok(())
     }
 
     fn write_len(&self) -> usize {
-        let mut sum = 1;
-
-        let (algorithm, values) = match self {
-            PublicKeyEncryptedSessionKey::V3 {
-                id,
-                pk_algo,
-                values,
-                ..
-            } => {
-                sum += id.as_ref().len();
-                (*pk_algo, values)
-            }
+        match self {
+            PublicKeyEncryptedSessionKey::V3 { id, values, .. } => write_len_v3(id, values),
             PublicKeyEncryptedSessionKey::V6 {
                 fingerprint,
-                pk_algo,
                 values,
                 ..
-            } => {
-                // A one-octet size of the following two fields.
-                // This size may be zero, if the key version number field and the fingerprint field
-                // are omitted for an "anonymous recipient" (see Section 5.1.8).
-                match fingerprint {
-                    Some(fingerprint) => {
-                        sum += 1;
-
-                        // A one octet key version number.
-                        match fingerprint.version() {
-                            Some(_) => {
-                                sum += 1;
-                            }
-                            None => {
-                                panic!("Fingerprint without version information {:?}", fingerprint)
-                            }
-                        }
-
-                        // The fingerprint of the public key or subkey to which the session key is encrypted.
-                        // Note that the length N of the fingerprint for a version 4 key is 20 octets;
-                        // for a version 6 key N is 32.
-                        sum += fingerprint.len();
-                    }
-                    _ => {
-                        sum += 1;
-                    }
-                }
-                (*pk_algo, values)
-            }
-            PublicKeyEncryptedSessionKey::Other { .. } => {
-                sum += 1; // version
-                return sum;
-            }
-        };
-
-        sum += 1;
-
-        match (algorithm, values) {
-            (
-                PublicKeyAlgorithm::RSA
-                | PublicKeyAlgorithm::RSASign
-                | PublicKeyAlgorithm::RSAEncrypt,
-                PkeskBytes::Rsa { mpi },
-            ) => {
-                sum += mpi.write_len();
-            }
-            (
-                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign,
-                PkeskBytes::Elgamal { first, second },
-            ) => {
-                sum += first.write_len();
-                sum += second.write_len();
-            }
-            (
-                PublicKeyAlgorithm::ECDH,
-                PkeskBytes::Ecdh {
-                    public_point,
-                    encrypted_session_key,
-                },
-            ) => {
-                sum += public_point.write_len();
-                // length of session key as one octets
-                sum += 1;
-                sum += encrypted_session_key.len();
-            }
-            (
-                PublicKeyAlgorithm::X25519,
-                PkeskBytes::X25519 {
-                    ephemeral,
-                    sym_alg,
-                    session_key,
-                },
-            ) => {
-                sum += ephemeral.len();
-
-                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
-                // the symmetric algorithm ID is not encrypted [for X25519].
-                //
-                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-
-                if sym_alg.is_some() {
-                    assert!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
-                        "Inconsistent: X25519 SymmetricKeyAlgorithm is set for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: algo octet + session_key len
-                    sum += 1 + 1;
-                } else {
-                    assert!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
-                        "Inconsistent: X25519 SymmetricKeyAlgorithm is unset for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: esk len
-                    sum += 1;
-                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
-                }
-
-                sum += session_key.len(); // encrypted session key
-            }
-            (
-                PublicKeyAlgorithm::X448,
-                PkeskBytes::X448 {
-                    ephemeral,
-                    sym_alg,
-                    session_key,
-                },
-            ) => {
-                sum += ephemeral.len();
-
-                // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
-                // the symmetric algorithm ID is not encrypted [for X448].
-                //
-                // https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x
-                if sym_alg.is_some() {
-                    assert!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V3 { .. }),
-                        "Inconsistent: X448 SymmetricKeyAlgorithm is set for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: algo + esk len
-                    sum += 1 + 1;
-                } else {
-                    assert!(
-                        matches!(self, PublicKeyEncryptedSessionKey::V6 { .. }),
-                        "Inconsistent: X448 SymmetricKeyAlgorithm is unset for {:?} PKESK",
-                        self.version()
-                    );
-
-                    // len: algo octet + session_key len
-                    sum += 1;
-                    // For v6 PKESK, sym_alg is None, and the algorithm is not written here
-                }
-
-                sum += session_key.len(); // encrypted session key
-            }
-            (alg, _) => {
-                panic!("failed to write EskBytes for {:?}", alg);
-            }
+            } => write_len_v6(values, fingerprint),
+            PublicKeyEncryptedSessionKey::Other { .. } => write_len_other(),
         }
-        sum
     }
 }
 
 impl PacketTrait for PublicKeyEncryptedSessionKey {
-    fn packet_version(&self) -> Version {
+    fn packet_header(&self) -> &PacketHeader {
         match self {
-            Self::V3 { packet_version, .. }
-            | Self::V6 { packet_version, .. }
-            | Self::Other { packet_version, .. } => *packet_version,
+            Self::V3 { packet_header, .. }
+            | Self::V6 { packet_header, .. }
+            | Self::Other { packet_header, .. } => packet_header,
         }
     }
-    fn tag(&self) -> Tag {
-        Tag::PublicKeyEncryptedSessionKey
+}
+
+fn write_len_other() -> usize {
+    1 + 1
+}
+
+fn write_len_v3(id: &KeyId, values: &PkeskBytes) -> usize {
+    let mut sum = 1;
+
+    sum += id.as_ref().len();
+    sum += 1;
+    sum += values.write_len();
+    sum
+}
+
+fn write_len_v6(values: &PkeskBytes, fingerprint: &Option<Fingerprint>) -> usize {
+    let mut sum = 1;
+    // A one-octet size of the following two fields.
+    // This size may be zero, if the key version number field and the fingerprint field
+    // are omitted for an "anonymous recipient" (see Section 5.1.8).
+    match fingerprint {
+        Some(fingerprint) => {
+            sum += 1;
+            // A one octet key version number.
+            match fingerprint.version() {
+                Some(_) => {
+                    sum += 1;
+                }
+                None => {
+                    panic!("Fingerprint without version information {:?}", fingerprint)
+                }
+            }
+
+            // The fingerprint of the public key or subkey to which the session key is encrypted.
+            // Note that the length N of the fingerprint for a version 4 key is 20 octets;
+            // for a version 6 key N is 32.
+            sum += fingerprint.len();
+        }
+        _ => {
+            sum += 1;
+        }
     }
+    sum += 1;
+    sum += values.write_len();
+
+    sum
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::types::PacketHeaderVersion;
+
     use super::*;
 
     use proptest::prelude::*;
@@ -626,10 +419,21 @@ mod tests {
         fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
             prop_oneof![
                 any_with::<PkeskBytes>((alg, false))
-                    .prop_flat_map(|values| { (any::<Version>(), any::<KeyId>(), Just(values)) })
+                    .prop_flat_map(|values| {
+                        (any::<PacketHeaderVersion>(), any::<KeyId>(), Just(values))
+                    })
                     .prop_map(move |(packet_version, id, values)| {
-                        Self::V3 {
+                        let len = write_len_v3(&id, &values);
+                        let len = PacketLength::Fixed(len);
+                        let packet_header = PacketHeader::from_parts(
                             packet_version,
+                            Tag::PublicKeyEncryptedSessionKey,
+                            len,
+                        )
+                        .unwrap();
+
+                        Self::V3 {
+                            packet_header,
                             id,
                             pk_algo: alg,
                             values,
@@ -637,11 +441,24 @@ mod tests {
                     }),
                 any_with::<PkeskBytes>((alg, true))
                     .prop_flat_map(|values| {
-                        (any::<Version>(), any::<Option<Fingerprint>>(), Just(values))
+                        (
+                            any::<PacketHeaderVersion>(),
+                            any::<Option<Fingerprint>>(),
+                            Just(values),
+                        )
                     })
                     .prop_map(move |(packet_version, fingerprint, values)| {
-                        Self::V6 {
+                        let len = write_len_v6(&values, &fingerprint);
+                        let len = PacketLength::Fixed(len);
+                        let packet_header = PacketHeader::from_parts(
                             packet_version,
+                            Tag::PublicKeyEncryptedSessionKey,
+                            len,
+                        )
+                        .unwrap();
+
+                        Self::V6 {
+                            packet_header,
                             fingerprint,
                             pk_algo: alg,
                             values,
@@ -681,7 +498,7 @@ mod tests {
         ) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = PublicKeyEncryptedSessionKey::from_buf(packet.packet_version(), &mut &buf[..]).unwrap();
+            let new_packet = PublicKeyEncryptedSessionKey::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
     }

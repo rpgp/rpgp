@@ -54,6 +54,7 @@ impl SignatureBytes {
 
         match &self {
             SignatureBytes::Mpis(mpis) => {
+                debug!("writing {} signature MPIs", mpis.len());
                 // the actual signature
                 for val in mpis {
                     val.to_writer(writer)?;

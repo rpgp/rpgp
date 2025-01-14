@@ -7,10 +7,10 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::signature::SignatureType;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{KeyId, Tag, Version};
+use crate::types::{KeyId, PacketLength, Tag};
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -29,7 +29,7 @@ use proptest::prelude::*;
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct OnePassSignature {
-    pub packet_version: Version,
+    pub packet_header: PacketHeader,
     pub typ: SignatureType,
     pub hash_algorithm: HashAlgorithm,
     pub pub_algorithm: PublicKeyAlgorithm,
@@ -55,6 +55,44 @@ pub enum OpsVersionSpecific {
     },
 }
 
+impl Serialize for OpsVersionSpecific {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        // salt, if v6
+        if let OpsVersionSpecific::V6 { salt, .. } = self {
+            writer.write_u8(salt.len().try_into()?)?;
+            writer.write_all(salt)?;
+        }
+
+        match self {
+            OpsVersionSpecific::V3 { key_id } => {
+                writer.write_all(key_id.as_ref())?;
+            }
+            OpsVersionSpecific::V6 { fingerprint, .. } => {
+                writer.write_all(fingerprint.as_ref())?;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        // salt, if v6
+        if let OpsVersionSpecific::V6 { salt, .. } = self {
+            sum += 1;
+            sum += salt.len();
+        }
+        match self {
+            OpsVersionSpecific::V3 { key_id } => {
+                sum += key_id.as_ref().len();
+            }
+            OpsVersionSpecific::V6 { fingerprint, .. } => {
+                sum += fingerprint.len();
+            }
+        }
+        sum
+    }
+}
+
 impl OnePassSignature {
     pub fn version(&self) -> u8 {
         match self.version_specific {
@@ -66,7 +104,7 @@ impl OnePassSignature {
 
 impl OnePassSignature {
     /// Parses a `OnePassSignature` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_version: Version, mut i: B) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         let version = i.read_u8()?;
         let typ = i.read_u8().map(SignatureType::from)?;
         let hash_algorithm = i.read_u8().map(HashAlgorithm::from)?;
@@ -93,7 +131,7 @@ impl OnePassSignature {
         let last = i.read_u8()?;
 
         Ok(OnePassSignature {
-            packet_version,
+            packet_header,
             typ,
             hash_algorithm,
             pub_algorithm,
@@ -117,13 +155,17 @@ impl OnePassSignature {
         pub_algorithm: PublicKeyAlgorithm,
         key_id: KeyId,
     ) -> Self {
+        let version_specific = OpsVersionSpecific::V3 { key_id };
+        let len = WRITE_LEN_OVERHEAD + version_specific.write_len();
+        let packet_header = PacketHeader::new(Tag::OnePassSignature, PacketLength::Fixed(len));
+
         OnePassSignature {
-            packet_version: Default::default(),
+            packet_header,
             typ,
             hash_algorithm,
             pub_algorithm,
             last: 1,
-            version_specific: OpsVersionSpecific::V3 { key_id },
+            version_specific,
         }
     }
 
@@ -139,19 +181,25 @@ impl OnePassSignature {
         salt: Vec<u8>,
         fingerprint: [u8; 32],
     ) -> Self {
+        let version_specific = OpsVersionSpecific::V6 {
+            salt: salt.into(),
+            fingerprint,
+        };
+        let len = WRITE_LEN_OVERHEAD + version_specific.write_len();
+        let packet_header = PacketHeader::new(Tag::OnePassSignature, PacketLength::Fixed(len));
+
         OnePassSignature {
-            packet_version: Default::default(),
+            packet_header,
             typ,
             hash_algorithm,
             pub_algorithm,
             last: 1,
-            version_specific: OpsVersionSpecific::V6 {
-                salt: salt.into(),
-                fingerprint,
-            },
+            version_specific,
         }
     }
 }
+
+const WRITE_LEN_OVERHEAD: usize = 5;
 
 impl Serialize for OnePassSignature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -160,54 +208,22 @@ impl Serialize for OnePassSignature {
         writer.write_u8(self.hash_algorithm.into())?;
         writer.write_u8(self.pub_algorithm.into())?;
 
-        // salt, if v6
-        if let OpsVersionSpecific::V6 { salt, .. } = &self.version_specific {
-            writer.write_u8(salt.len().try_into()?)?;
-            writer.write_all(salt)?;
-        }
-
-        match &self.version_specific {
-            OpsVersionSpecific::V3 { key_id } => {
-                writer.write_all(key_id.as_ref())?;
-            }
-            OpsVersionSpecific::V6 { fingerprint, .. } => {
-                writer.write_all(fingerprint.as_ref())?;
-            }
-        }
+        self.version_specific.to_writer(writer)?;
         writer.write_u8(self.last)?;
 
         Ok(())
     }
 
     fn write_len(&self) -> usize {
-        let mut sum = 1 + 1 + 1 + 1;
-
-        // salt, if v6
-        if let OpsVersionSpecific::V6 { salt, .. } = &self.version_specific {
-            sum += 1;
-            sum += salt.len();
-        }
-
-        match &self.version_specific {
-            OpsVersionSpecific::V3 { key_id } => {
-                sum += key_id.as_ref().len();
-            }
-            OpsVersionSpecific::V6 { fingerprint, .. } => {
-                sum += fingerprint.len();
-            }
-        }
-        sum += 1;
+        let mut sum = WRITE_LEN_OVERHEAD;
+        sum += self.version_specific.write_len();
         sum
     }
 }
 
 impl PacketTrait for OnePassSignature {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::OnePassSignature
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -227,7 +243,7 @@ mod tests {
         fn packet_roundtrip(packet: OnePassSignature) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = OnePassSignature::from_buf(packet.packet_version, &mut &buf[..]).unwrap();
+            let new_packet = OnePassSignature::from_buf(packet.packet_header, &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
     }

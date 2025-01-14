@@ -9,7 +9,7 @@ use crate::composed::signed_key::SignedKeyDetails;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{self, write_packet, Packet, SignatureType};
+use crate::packet::{self, Packet, PacketTrait, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
@@ -219,7 +219,7 @@ impl PublicKeyTrait for SignedPublicKey {
 
 impl Serialize for SignedPublicKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.primary_key)?;
+        self.primary_key.to_writer_with_header(writer)?;
         self.details.to_writer(writer)?;
         for ps in &self.public_subkeys {
             ps.to_writer(writer)?;
@@ -339,9 +339,9 @@ impl PublicKeyTrait for SignedPublicSubKey {
 
 impl Serialize for SignedPublicSubKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.key)?;
+        self.key.to_writer_with_header(writer)?;
         for sig in &self.signatures {
-            write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         Ok(())

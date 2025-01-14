@@ -9,13 +9,12 @@ use crate::composed::signed_key::{SignedKeyDetails, SignedPublicSubKey};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{self, write_packet, Packet, SignatureType};
+use crate::packet::{self, Packet, PacketTrait, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PlainSecretParams, PublicKeyTrait,
     PublicParams, SecretKeyTrait, SignatureBytes, Tag,
 };
-use crate::util::write_packet_length_len;
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
@@ -169,7 +168,7 @@ impl SignedSecretKey {
 
 impl Serialize for SignedSecretKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.primary_key)?;
+        self.primary_key.to_writer_with_header(writer)?;
         self.details.to_writer(writer)?;
         for ps in &self.public_subkeys {
             ps.to_writer(writer)?;
@@ -183,9 +182,7 @@ impl Serialize for SignedSecretKey {
     }
 
     fn write_len(&self) -> usize {
-        let key_len = self.primary_key.write_len();
-        let mut sum = write_packet_length_len(key_len);
-        sum += key_len;
+        let mut sum = self.primary_key.write_len_with_header();
         sum += self.details.write_len();
         sum += self.public_subkeys.write_len();
         sum += self.secret_subkeys.write_len();
@@ -328,22 +325,18 @@ impl SignedSecretSubKey {
 
 impl Serialize for SignedSecretSubKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.key)?;
+        self.key.to_writer_with_header(writer)?;
         for sig in &self.signatures {
-            write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         Ok(())
     }
 
     fn write_len(&self) -> usize {
-        let key_len = self.key.write_len();
-        let mut sum = write_packet_length_len(key_len);
-        sum += key_len;
+        let mut sum = self.key.write_len_with_header();
         for sig in &self.signatures {
-            let sig_len = sig.write_len();
-            sum += write_packet_length_len(sig_len);
-            sum += sig_len;
+            sum += sig.write_len_with_header()
         }
         sum
     }
