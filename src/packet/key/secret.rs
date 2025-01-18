@@ -9,8 +9,8 @@ use crate::{
         SignatureType, Subpacket, SubpacketData,
     },
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PacketLength,
-        PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes,
+        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
         SignatureBytes, Tag,
     },
 };
@@ -84,7 +84,7 @@ impl SecretKey {
     pub fn new(details: PubKeyInner, secret_params: SecretParams) -> Self {
         let len =
             crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
-        let packet_header = PacketHeader::new(Tag::SecretKey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::SecretKey, len);
 
         Self(SecretKeyInner {
             packet_header,
@@ -134,7 +134,7 @@ impl SecretSubkey {
     pub fn new(details: PubKeyInner, secret_params: SecretParams) -> Self {
         let len =
             crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
-        let packet_header = PacketHeader::new(Tag::SecretSubkey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::SecretSubkey, len);
 
         Self(SecretKeyInner {
             packet_header,

@@ -11,7 +11,7 @@ use crate::normalize_lines::Normalized;
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{PacketLength, Tag};
+use crate::types::Tag;
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -67,7 +67,7 @@ impl LiteralData {
             created: Utc::now().trunc_subsecs(0),
         };
         let len = header.write_len() + data.len();
-        let packet_header = PacketHeader::new(Tag::LiteralData, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len);
 
         LiteralData {
             packet_header,
@@ -84,7 +84,7 @@ impl LiteralData {
             created: Utc::now().trunc_subsecs(0),
         };
         let len = header.write_len() + data.len();
-        let packet_header = PacketHeader::new(Tag::LiteralData, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len);
 
         LiteralData {
             packet_header,

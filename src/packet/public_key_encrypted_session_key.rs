@@ -12,8 +12,8 @@ use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PacketLength, PkeskBytes, PkeskVersion,
-    PublicKeyTrait, PublicParams, Tag,
+    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
+    PublicParams, Tag,
 };
 
 /// Public Key Encrypted Session Key Packet (PKESK)
@@ -164,8 +164,7 @@ impl PublicKeyEncryptedSessionKey {
 
         let id = pkey.key_id();
         let len = write_len_v3(&id, &values);
-        let packet_header =
-            PacketHeader::new(Tag::PublicKeyEncryptedSessionKey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len);
 
         Ok(PublicKeyEncryptedSessionKey::V3 {
             packet_header,
@@ -195,8 +194,7 @@ impl PublicKeyEncryptedSessionKey {
         let fingerprint = Some(pkey.fingerprint());
 
         let len = write_len_v6(&values, &fingerprint);
-        let packet_header =
-            PacketHeader::new(Tag::PublicKeyEncryptedSessionKey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len);
 
         Ok(PublicKeyEncryptedSessionKey::V6 {
             packet_header,
@@ -401,7 +399,7 @@ fn write_len_v6(values: &PkeskBytes, fingerprint: &Option<Fingerprint>) -> usize
 
 #[cfg(test)]
 mod tests {
-    use crate::types::PacketHeaderVersion;
+    use crate::types::{PacketHeaderVersion, PacketLength};
 
     use super::*;
 

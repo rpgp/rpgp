@@ -12,7 +12,7 @@ use crate::errors::{Error, Result};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{PacketLength, SkeskVersion, StringToKey, Tag};
+use crate::types::{SkeskVersion, StringToKey, Tag};
 use crate::PlainSessionKey;
 
 #[cfg(test)]
@@ -285,8 +285,7 @@ impl SymKeyEncryptedSessionKey {
         alg.encrypt_with_iv_regular(&key, &iv, &mut encrypted_key)?;
 
         let len = 2 + s2k.write_len() + encrypted_key.len();
-        let packet_header =
-            PacketHeader::new(Tag::SymKeyEncryptedSessionKey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::SymKeyEncryptedSessionKey, len);
 
         Ok(SymKeyEncryptedSessionKey::V4 {
             packet_header,
@@ -372,8 +371,7 @@ impl SymKeyEncryptedSessionKey {
             + 1
             + encrypted_key.len()
             + aead.auth_tag().len();
-        let packet_header =
-            PacketHeader::new(Tag::SymKeyEncryptedSessionKey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::SymKeyEncryptedSessionKey, len);
 
         Ok(SymKeyEncryptedSessionKey::V6 {
             packet_header,

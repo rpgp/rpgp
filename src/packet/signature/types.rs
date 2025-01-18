@@ -20,8 +20,7 @@ use crate::packet::signature::SignatureConfig;
 use crate::packet::{PacketHeader, PacketTrait, SignatureVersionSpecific};
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PacketLength, PublicKeyTrait,
-    SignatureBytes, Tag,
+    self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SignatureBytes, Tag,
 };
 
 /// Signature Packet
@@ -182,7 +181,7 @@ impl Signature {
             }
             SignatureVersion::Other(version) => unsupported_err!("signature version {}", version),
         };
-        let packet_header = PacketHeader::new(Tag::Signature, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::Signature, len);
 
         Ok(Signature {
             packet_header,

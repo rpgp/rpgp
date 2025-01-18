@@ -46,7 +46,7 @@
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::Signature;
+//! use pgp::{Signature, packet::{PacketTrait, PacketHeader}, types::{PacketLength, Tag}};
 //! use chrono;
 //!
 //! let now = chrono::Utc::now();
@@ -75,7 +75,8 @@
 //!     .expect("Failed to validate signature");
 //!
 //! // wraps the signature in the appropriate package fmt ready to be serialized
-//! let packet_header = PacketHeader::from_parts(Tag::Signature, PacketLength::Fixed());
+//! let len = todo!();
+//! let packet_header = PacketHeader::new_fixed(Tag::Signature, len);
 //! let signature = Signature::v4(
 //!     packet_header,
 //!     packet::SignatureType::Binary,

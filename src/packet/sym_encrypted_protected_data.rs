@@ -12,7 +12,7 @@ use crate::errors::{Error, Result};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{PacketLength, Tag};
+use crate::types::Tag;
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
@@ -87,8 +87,7 @@ impl SymEncryptedProtectedData {
         let data: Bytes = alg.encrypt_protected(rng, key, plaintext)?.into();
         let config = Config::V1;
         let len = config.write_len() + data.len();
-        let packet_header =
-            PacketHeader::new(Tag::SymEncryptedProtectedData, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::SymEncryptedProtectedData, len);
 
         Ok(SymEncryptedProtectedData {
             packet_header,
@@ -212,8 +211,7 @@ impl SymEncryptedProtectedData {
         };
         let data: Bytes = out.into();
         let len = config.write_len() + data.len();
-        let packet_header =
-            PacketHeader::new(Tag::SymEncryptedProtectedData, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::SymEncryptedProtectedData, len);
 
         Ok(SymEncryptedProtectedData {
             packet_header,

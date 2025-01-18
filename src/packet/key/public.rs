@@ -11,8 +11,7 @@ use crate::{
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi,
-        PacketLength, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
-        Tag,
+        PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes, Tag,
     },
 };
 
@@ -31,7 +30,7 @@ pub struct PublicSubkey {
 impl PublicKey {
     pub fn from_inner(inner: PubKeyInner) -> Self {
         let len = inner.write_len();
-        let packet_header = PacketHeader::new(Tag::PublicKey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::PublicKey, len);
         Self {
             packet_header,
             inner,
@@ -91,7 +90,7 @@ impl PublicKey {
 impl PublicSubkey {
     pub fn from_inner(inner: PubKeyInner) -> Self {
         let len = inner.write_len();
-        let packet_header = PacketHeader::new(Tag::PublicSubkey, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::PublicSubkey, len);
         Self {
             packet_header,
             inner,

@@ -10,7 +10,7 @@ use crate::packet::signature::SignatureType;
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{KeyId, PacketLength, Tag};
+use crate::types::{KeyId, Tag};
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -157,7 +157,7 @@ impl OnePassSignature {
     ) -> Self {
         let version_specific = OpsVersionSpecific::V3 { key_id };
         let len = WRITE_LEN_OVERHEAD + version_specific.write_len();
-        let packet_header = PacketHeader::new(Tag::OnePassSignature, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::OnePassSignature, len);
 
         OnePassSignature {
             packet_header,
@@ -186,7 +186,7 @@ impl OnePassSignature {
             fingerprint,
         };
         let len = WRITE_LEN_OVERHEAD + version_specific.write_len();
-        let packet_header = PacketHeader::new(Tag::OnePassSignature, PacketLength::Fixed(len));
+        let packet_header = PacketHeader::new_fixed(Tag::OnePassSignature, len);
 
         OnePassSignature {
             packet_header,

@@ -8,7 +8,7 @@ use flate2::read::{DeflateDecoder, ZlibDecoder};
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::ser::Serialize;
-use crate::types::{CompressionAlgorithm, PacketLength, Tag};
+use crate::types::{CompressionAlgorithm, Tag};
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -60,10 +60,9 @@ impl CompressedData {
     }
 
     pub fn from_compressed(alg: CompressionAlgorithm, data: Vec<u8>) -> Self {
-        let length = PacketLength::Fixed(1 + data.len());
-
+        let packet_header = PacketHeader::new_fixed(Tag::CompressedData, 1 + data.len());
         CompressedData {
-            packet_header: PacketHeader::new(Tag::CompressedData, length),
+            packet_header,
             compression_algorithm: alg,
             compressed_data: Bytes::from(data),
         }

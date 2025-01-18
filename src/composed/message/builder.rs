@@ -14,9 +14,7 @@ use crate::packet::{
     SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
-use crate::types::{
-    CompressionAlgorithm, PacketHeaderVersion, PacketLength, PublicKeyTrait, StringToKey, Tag,
-};
+use crate::types::{CompressionAlgorithm, PacketHeaderVersion, PublicKeyTrait, StringToKey, Tag};
 use crate::Esk;
 
 pub struct Builder {
@@ -169,9 +167,9 @@ impl Builder {
                         file_name: file_name.into(),
                         created: Utc::now().trunc_subsecs(0),
                     };
-                    let packet_header = PacketHeader::new(
+                    let packet_header = PacketHeader::new_fixed(
                         Tag::LiteralData,
-                        PacketLength::Fixed(in_size + literal_data_header.write_len()),
+                        in_size + literal_data_header.write_len(),
                     );
 
                     // the prefix to encrypt to make a Literal Data Packet

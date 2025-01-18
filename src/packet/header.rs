@@ -146,9 +146,12 @@ impl PacketHeader {
     }
 
     /// Creates a `New` style packet header.
-    pub fn new(tag: Tag, length: PacketLength) -> Self {
+    pub fn new_fixed(tag: Tag, length: usize) -> Self {
         let header = NewPacketHeaderBuilder::new().with_tag(tag.into()).build();
-        PacketHeader::New { header, length }
+        PacketHeader::New {
+            header,
+            length: PacketLength::Fixed(length),
+        }
     }
 }
 
