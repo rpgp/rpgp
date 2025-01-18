@@ -4,7 +4,7 @@ use bytes::Buf;
 
 use crate::errors::Result;
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiBytes};
+use crate::types::MpiBytes;
 
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -38,13 +38,13 @@ impl DsaPublicParams {
 impl Serialize for DsaPublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let c = self.key.components();
-        let p: Mpi = c.p().into();
+        let p: MpiBytes = c.p().into();
         p.to_writer(writer)?;
-        let q: Mpi = c.q().into();
+        let q: MpiBytes = c.q().into();
         q.to_writer(writer)?;
-        let g: Mpi = c.g().into();
+        let g: MpiBytes = c.g().into();
         g.to_writer(writer)?;
-        let y: Mpi = self.key.y().into();
+        let y: MpiBytes = self.key.y().into();
         y.to_writer(writer)?;
 
         Ok(())
@@ -54,13 +54,13 @@ impl Serialize for DsaPublicParams {
         let mut sum = 0;
 
         let c = self.key.components();
-        let p: Mpi = c.p().into();
+        let p: MpiBytes = c.p().into();
         sum += p.write_len();
-        let q: Mpi = c.q().into();
+        let q: MpiBytes = c.q().into();
         sum += q.write_len();
-        let g: Mpi = c.g().into();
+        let g: MpiBytes = c.g().into();
         sum += g.write_len();
-        let y: Mpi = self.key.y().into();
+        let y: MpiBytes = self.key.y().into();
         sum += y.write_len();
         sum
     }

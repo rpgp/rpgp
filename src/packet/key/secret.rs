@@ -10,7 +10,7 @@ use crate::{
         SignatureType, Subpacket, SubpacketData,
     },
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, MpiBytes, PkeskBytes,
         PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
         SignatureBytes, Tag,
     },
@@ -315,14 +315,14 @@ impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyTrait for Secre
 
                     ensure_eq!(native.len(), 64, "expect 64 byte signature");
 
-                    signature = Some(SignatureBytes::Native(native));
+                    signature = Some(SignatureBytes::Native(native.into()));
                 }
                 _ => {
                     // MPI format:
                     // strip leading zeros, to match parse results from MPIs
                     let mpis = sig
                         .iter()
-                        .map(|v| Mpi::from_slice(&v[..]))
+                        .map(|v| MpiBytes::from_slice(&v[..]))
                         .collect::<Vec<_>>();
 
                     signature = Some(SignatureBytes::Mpis(mpis));

@@ -9,7 +9,7 @@ use zeroize::Zeroize;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{DsaPublicParams, MpiRef};
+use crate::types::{DsaPublicParams, MpiBytes};
 
 pub use dsa::KeySize;
 
@@ -55,7 +55,7 @@ impl Deref for SecretKey {
 impl Eq for SecretKey {}
 
 impl SecretKey {
-    pub(crate) fn try_from_mpi(pub_params: &DsaPublicParams, x: MpiRef<'_>) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &DsaPublicParams, x: MpiBytes) -> Result<Self> {
         let secret = dsa::SigningKey::from_components(pub_params.key.clone(), x.into())?;
         Ok(Self { key: secret })
     }

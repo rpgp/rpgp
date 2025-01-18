@@ -5,7 +5,7 @@ use rsa::traits::PublicKeyParts;
 
 use crate::errors::Result;
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiBytes};
+use crate::types::MpiBytes;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -41,8 +41,8 @@ impl From<rsa::RsaPublicKey> for RsaPublicParams {
 }
 impl Serialize for RsaPublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        let n: Mpi = self.key.n().into();
-        let e: Mpi = self.key.e().into();
+        let n: MpiBytes = self.key.n().into();
+        let e: MpiBytes = self.key.e().into();
 
         n.to_writer(writer)?;
         e.to_writer(writer)?;
@@ -50,8 +50,8 @@ impl Serialize for RsaPublicParams {
     }
 
     fn write_len(&self) -> usize {
-        let n: Mpi = self.key.n().into();
-        let e: Mpi = self.key.e().into();
+        let n: MpiBytes = self.key.n().into();
+        let e: MpiBytes = self.key.e().into();
 
         let mut sum = n.write_len();
         sum += e.write_len();

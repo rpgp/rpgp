@@ -78,22 +78,13 @@ impl PlainSecretParams {
                 let q = MpiBytes::from_buf(&mut i)?;
                 let u = MpiBytes::from_buf(&mut i)?;
 
-                let key = crate::crypto::rsa::SecretKey::try_from_mpi(
-                    pub_params,
-                    d.to_owned().as_ref(),
-                    p.to_owned().as_ref(),
-                    q.to_owned().as_ref(),
-                    u.to_owned().as_ref(),
-                )?;
+                let key = crate::crypto::rsa::SecretKey::try_from_mpi(pub_params, d, p, q, u)?;
                 Self::RSA(key)
             }
             (PublicKeyAlgorithm::DSA, PublicParams::DSA(pub_params)) => {
                 let secret = MpiBytes::from_buf(i)?;
 
-                let key = crate::crypto::dsa::SecretKey::try_from_mpi(
-                    pub_params,
-                    secret.to_owned().as_ref(),
-                )?;
+                let key = crate::crypto::dsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::DSA(key)
             }
             (PublicKeyAlgorithm::Elgamal, PublicParams::Elgamal(_)) => {
@@ -103,26 +94,20 @@ impl PlainSecretParams {
             (PublicKeyAlgorithm::ECDH, PublicParams::ECDH(pub_params)) => {
                 let secret = MpiBytes::from_buf(i)?;
 
-                let key = crate::crypto::ecdh::SecretKey::try_from_mpi(
-                    pub_params,
-                    secret.to_owned().as_ref(),
-                )?;
+                let key = crate::crypto::ecdh::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::ECDH(key)
             }
             (PublicKeyAlgorithm::ECDSA, PublicParams::ECDSA(pub_params)) => {
                 let secret = MpiBytes::from_buf(i)?;
 
-                let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(
-                    pub_params,
-                    secret.to_owned().as_ref(),
-                )?;
+                let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::ECDSA(key)
             }
             (PublicKeyAlgorithm::EdDSALegacy, PublicParams::EdDSALegacy(_pub_params)) => {
                 let secret = MpiBytes::from_buf(i)?;
 
                 const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
-                let secret = pad_key::<SIZE>(secret.as_bytes())?;
+                let secret = pad_key::<SIZE>(secret.as_ref())?;
                 let key = crate::crypto::eddsa::SecretKey::try_from_bytes(secret)?;
                 Self::EdDSALegacy(key)
             }
@@ -502,14 +487,14 @@ impl PlainSecretParams {
                     .to_biguint()
                     .expect("invalid prime");
 
-                Mpi::from(d).to_writer(writer)?;
-                Mpi::from(p).to_writer(writer)?;
-                Mpi::from(q).to_writer(writer)?;
-                Mpi::from(u).to_writer(writer)?;
+                MpiBytes::from(d).to_writer(writer)?;
+                MpiBytes::from(p).to_writer(writer)?;
+                MpiBytes::from(q).to_writer(writer)?;
+                MpiBytes::from(u).to_writer(writer)?;
             }
             PlainSecretParams::DSA(key) => {
                 let x = key.x();
-                Mpi::from(x).to_writer(writer)?;
+                MpiBytes::from(x).to_writer(writer)?;
             }
             PlainSecretParams::ECDSA(key) => {
                 let x = key.as_mpi();
@@ -553,15 +538,15 @@ impl PlainSecretParams {
                     .expect("invalid prime");
 
                 let mut sum = 0;
-                sum += Mpi::from(d).write_len();
-                sum += Mpi::from(p).write_len();
-                sum += Mpi::from(q).write_len();
-                sum += Mpi::from(u).write_len();
+                sum += MpiBytes::from(d).write_len();
+                sum += MpiBytes::from(p).write_len();
+                sum += MpiBytes::from(q).write_len();
+                sum += MpiBytes::from(u).write_len();
                 sum
             }
             PlainSecretParams::DSA(key) => {
                 let x = key.x();
-                Mpi::from(x).write_len()
+                MpiBytes::from(x).write_len()
             }
             PlainSecretParams::ECDSA(key) => {
                 let x = key.as_mpi();

@@ -7,7 +7,7 @@ use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
 use crate::errors::Result;
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{MpiBytes, MpiRef};
+use crate::types::MpiBytes;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -68,7 +68,7 @@ impl Serialize for EddsaLegacyPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(key.as_bytes());
-                let mpi = MpiRef::from_slice(&mpi);
+                let mpi = MpiBytes::from_slice(&mpi);
                 mpi.to_writer(writer)?;
             }
             Self::Unsupported { curve, mpi } => {
@@ -92,7 +92,7 @@ impl Serialize for EddsaLegacyPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(key.as_bytes());
-                let mpi = MpiRef::from_slice(&mpi);
+                let mpi = MpiBytes::from_slice(&mpi);
                 sum += mpi.write_len();
             }
             Self::Unsupported { curve, mpi } => {

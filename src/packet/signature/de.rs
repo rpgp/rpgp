@@ -1,6 +1,6 @@
 use std::str;
 
-use bytes::Buf;
+use bytes::{Buf, Bytes};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::{debug, warn};
 use smallvec::SmallVec;
@@ -297,8 +297,8 @@ fn actual_signature<B: Buf>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Signat
         }
 
         &PublicKeyAlgorithm::Ed25519 => {
-            let sig = i.read_array::<64>()?;
-            Ok(SignatureBytes::Native(sig.to_vec()))
+            let sig = i.read_take(64)?;
+            Ok(SignatureBytes::Native(sig))
         }
 
         &PublicKeyAlgorithm::Private100
@@ -317,7 +317,7 @@ fn actual_signature<B: Buf>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Signat
         }
         _ => {
             // don't assume format, could be non-MPI
-            Ok(SignatureBytes::Native(Vec::new()))
+            Ok(SignatureBytes::Native(Bytes::new()))
         }
     }
 }

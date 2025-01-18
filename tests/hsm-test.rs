@@ -9,7 +9,7 @@ use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
 use pgp::types::{EcdhPublicParams, EskType, Fingerprint, PkeskBytes, SignatureBytes};
-use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
+use pgp::types::{KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey, SignedSecretKey};
 use rand::{CryptoRng, Rng};
@@ -136,17 +136,23 @@ impl SecretKeyTrait for FakeHsm {
         let sig = self.sign_data.unwrap().1; // fake smartcard output
 
         let mpis = match self.public_key.algorithm() {
-            PublicKeyAlgorithm::RSA => vec![Mpi::from_slice(sig)],
+            PublicKeyAlgorithm::RSA => vec![MpiBytes::from_slice(sig)],
 
             PublicKeyAlgorithm::ECDSA => {
                 let mid = sig.len() / 2;
 
-                vec![Mpi::from_slice(&sig[..mid]), Mpi::from_slice(&sig[mid..])]
+                vec![
+                    MpiBytes::from_slice(&sig[..mid]),
+                    MpiBytes::from_slice(&sig[mid..]),
+                ]
             }
             PublicKeyAlgorithm::EdDSALegacy => {
                 assert_eq!(sig.len(), 64); // FIXME: check curve; add error handling
 
-                vec![Mpi::from_slice(&sig[..32]), Mpi::from_slice(&sig[32..])]
+                vec![
+                    MpiBytes::from_slice(&sig[..32]),
+                    MpiBytes::from_slice(&sig[32..]),
+                ]
             }
 
             _ => unimplemented!(),
@@ -170,9 +176,9 @@ impl FakeHsm {
                 // The test data in self.decrypt_data must match the parameters
                 // (this fake hsm just stores the answer for one request, and it's only legal to
                 // call it with the exact set of parameters we have stored)
-                assert_eq!(vec![mpi.as_bytes()], self.decrypt_data.unwrap().0);
+                assert_eq!(vec![mpi.as_ref()], self.decrypt_data.unwrap().0);
 
-                let _ciphertext = mpi.as_bytes();
+                let _ciphertext = mpi.as_ref();
 
                 // XXX: imagine a smartcard decrypting `_ciphertext`, here
 
@@ -193,14 +199,14 @@ impl FakeHsm {
                 // call it with the exact set of parameters we have stored)
                 assert_eq!(
                     vec![
-                        public_point.as_bytes(),
+                        public_point.as_ref(),
                         &[encrypted_session_key.len() as u8],
                         encrypted_session_key
                     ],
                     self.decrypt_data.unwrap().0
                 );
 
-                let ciphertext = public_point.as_bytes();
+                let ciphertext = public_point.as_ref();
 
                 let _ciphertext = if params.curve() == ECCCurve::Curve25519 {
                     assert_eq!(

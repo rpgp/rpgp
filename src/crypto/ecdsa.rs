@@ -9,7 +9,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::{Error, Result};
 use crate::types::EcdsaPublicParams;
-use crate::types::{Mpi, MpiRef};
+use crate::types::MpiBytes;
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -38,7 +38,7 @@ pub enum SecretKey {
     Unsupported {
         /// The secret point.
         #[debug("..")]
-        x: Mpi,
+        x: Vec<u8>,
         #[zeroize(skip)]
         curve: ECCCurve,
     },
@@ -92,25 +92,25 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: MpiRef<'_>) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: MpiBytes) -> Result<Self> {
         match pub_params {
             EcdsaPublicParams::P256 { .. } => {
-                let secret = p256::SecretKey::from_slice(d.as_bytes())?;
+                let secret = p256::SecretKey::from_slice(d.as_ref())?;
 
                 Ok(SecretKey::P256(secret))
             }
             EcdsaPublicParams::P384 { .. } => {
-                let secret = p384::SecretKey::from_slice(d.as_bytes())?;
+                let secret = p384::SecretKey::from_slice(d.as_ref())?;
 
                 Ok(SecretKey::P384(secret))
             }
             EcdsaPublicParams::P521 { .. } => {
-                let secret = p521::SecretKey::from_slice(d.as_bytes())?;
+                let secret = p521::SecretKey::from_slice(d.as_ref())?;
 
                 Ok(SecretKey::P521(secret))
             }
             EcdsaPublicParams::Secp256k1 { .. } => {
-                let secret = k256::SecretKey::from_slice(d.as_bytes())?;
+                let secret = k256::SecretKey::from_slice(d.as_ref())?;
 
                 Ok(SecretKey::Secp256k1(secret))
             }
@@ -186,13 +186,13 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn as_mpi(&self) -> Mpi {
+    pub(crate) fn as_mpi(&self) -> MpiBytes {
         match self {
-            Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Unsupported { x, .. } => x.clone(),
+            Self::P256(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::P384(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::P521(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::Secp256k1(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::Unsupported { x, .. } => MpiBytes::from_slice(x),
         }
     }
 }
@@ -202,7 +202,7 @@ pub fn verify(
     p: &EcdsaPublicParams,
     hash: HashAlgorithm,
     hashed: &[u8],
-    sig: &[Mpi],
+    sig: &[MpiBytes],
 ) -> Result<()> {
     // NOTE: the `None` case will run into an `unsupported_err`, below, so it's ok not to consider it here
     if let Some(field_size) = p.secret_key_length() {
@@ -238,8 +238,8 @@ pub fn verify(
         EcdsaPublicParams::P256 { key, .. } => {
             const FLEN: usize = 32;
             ensure_eq!(sig.len(), 2);
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
             let mut sig_bytes = [0u8; 2 * FLEN];
@@ -259,8 +259,8 @@ pub fn verify(
             const FLEN: usize = 48;
             ensure_eq!(sig.len(), 2);
 
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
 
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
@@ -282,8 +282,8 @@ pub fn verify(
             const FLEN: usize = 66;
             ensure_eq!(sig.len(), 2);
 
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
 
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
@@ -304,8 +304,8 @@ pub fn verify(
         EcdsaPublicParams::Secp256k1 { key, .. } => {
             const FLEN: usize = 32;
             ensure_eq!(sig.len(), 2);
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
             let mut sig_bytes = [0u8; 2 * FLEN];

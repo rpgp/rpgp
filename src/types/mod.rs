@@ -11,6 +11,7 @@ mod s2k;
 mod secret_key;
 mod user;
 
+use bytes::Bytes;
 use log::debug;
 
 pub use self::compression::*;
@@ -40,12 +41,12 @@ pub enum SignatureBytes {
     /// A cryptographic signature that is represented as a set of [Mpi]s.
     ///
     /// This format has been used for all OpenPGP cryptographic signatures in RFCs 4880 and 6637.
-    Mpis(Vec<Mpi>),
+    Mpis(Vec<MpiBytes>),
 
     /// A cryptographic signature that is represented in native format.
     ///
     /// This format was introduced in RFC 9580 and is currently only used for Ed25519 and Ed448.
-    Native(Vec<u8>),
+    Native(Bytes),
 }
 
 impl SignatureBytes {
@@ -76,7 +77,7 @@ impl SignatureBytes {
     }
 }
 
-impl<'a> TryFrom<&'a SignatureBytes> for &'a [Mpi] {
+impl<'a> TryFrom<&'a SignatureBytes> for &'a [MpiBytes] {
     type Error = crate::errors::Error;
 
     fn try_from(value: &'a SignatureBytes) -> std::result::Result<Self, Self::Error> {
@@ -102,14 +103,14 @@ impl<'a> TryFrom<&'a SignatureBytes> for &'a [u8] {
     }
 }
 
-impl From<Vec<Mpi>> for SignatureBytes {
-    fn from(value: Vec<Mpi>) -> Self {
+impl From<Vec<MpiBytes>> for SignatureBytes {
+    fn from(value: Vec<MpiBytes>) -> Self {
         SignatureBytes::Mpis(value)
     }
 }
 
-impl From<Vec<u8>> for SignatureBytes {
-    fn from(value: Vec<u8>) -> Self {
+impl From<Bytes> for SignatureBytes {
+    fn from(value: Bytes) -> Self {
         SignatureBytes::Native(value)
     }
 }

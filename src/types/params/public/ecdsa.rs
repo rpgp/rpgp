@@ -8,7 +8,7 @@ use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
 use crate::errors::Result;
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiBytes};
+use crate::types::MpiBytes;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -30,7 +30,7 @@ pub enum EcdsaPublicParams {
         key: k256::PublicKey,
     },
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, p: Mpi },
+    Unsupported { curve: ECCCurve, p: MpiBytes },
 }
 
 impl EcdsaPublicParams {
@@ -53,7 +53,7 @@ impl EcdsaPublicParams {
             ECCCurve::P256 => {
                 ensure!(p.len() <= 65, "invalid public key length");
                 let mut key = [0u8; 65];
-                key[..p.len()].copy_from_slice(p.as_bytes());
+                key[..p.len()].copy_from_slice(p.as_ref());
 
                 let public = p256::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::P256 { key: public })
@@ -61,7 +61,7 @@ impl EcdsaPublicParams {
             ECCCurve::P384 => {
                 ensure!(p.len() <= 97, "invalid public key length");
                 let mut key = [0u8; 97];
-                key[..p.len()].copy_from_slice(p.as_bytes());
+                key[..p.len()].copy_from_slice(p.as_ref());
 
                 let public = p384::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::P384 { key: public })
@@ -69,7 +69,7 @@ impl EcdsaPublicParams {
             ECCCurve::P521 => {
                 ensure!(p.len() <= 133, "invalid public key length");
                 let mut key = [0u8; 133];
-                key[..p.len()].copy_from_slice(p.as_bytes());
+                key[..p.len()].copy_from_slice(p.as_ref());
 
                 let public = p521::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::P521 { key: public })
@@ -77,7 +77,7 @@ impl EcdsaPublicParams {
             ECCCurve::Secp256k1 => {
                 ensure!(p.len() <= 65, "invalid public key length");
                 let mut key = [0u8; 65];
-                key[..p.len()].copy_from_slice(p.as_bytes());
+                key[..p.len()].copy_from_slice(p.as_ref());
 
                 let public = k256::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::Secp256k1 { key: public })
@@ -115,23 +115,23 @@ impl Serialize for EcdsaPublicParams {
 
         match self {
             EcdsaPublicParams::P256 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                p.as_ref().to_writer(writer)?;
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                p.to_writer(writer)?;
             }
             EcdsaPublicParams::P384 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                p.as_ref().to_writer(writer)?;
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                p.to_writer(writer)?;
             }
             EcdsaPublicParams::P521 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                p.as_ref().to_writer(writer)?;
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                p.to_writer(writer)?;
             }
             EcdsaPublicParams::Secp256k1 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                p.as_ref().to_writer(writer)?;
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                p.to_writer(writer)?;
             }
             EcdsaPublicParams::Unsupported { p, .. } => {
-                p.as_ref().to_writer(writer)?;
+                p.to_writer(writer)?;
             }
         }
 
@@ -152,23 +152,23 @@ impl Serialize for EcdsaPublicParams {
 
         match self {
             EcdsaPublicParams::P256 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                sum += p.as_ref().write_len();
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                sum += p.write_len();
             }
             EcdsaPublicParams::P384 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                sum += p.as_ref().write_len();
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                sum += p.write_len();
             }
             EcdsaPublicParams::P521 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                sum += p.as_ref().write_len();
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                sum += p.write_len();
             }
             EcdsaPublicParams::Secp256k1 { key, .. } => {
-                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
-                sum += p.as_ref().write_len();
+                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                sum += p.write_len();
             }
             EcdsaPublicParams::Unsupported { p, .. } => {
-                sum += p.as_ref().write_len();
+                sum += p.write_len();
             }
         }
         sum

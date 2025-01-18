@@ -15,7 +15,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::{hash::HashAlgorithm, Decryptor, Signer};
 use crate::errors::Result;
-use crate::types::{Mpi, MpiBytes, MpiRef, PkeskBytes, RsaPublicParams};
+use crate::types::{MpiBytes, PkeskBytes, RsaPublicParams};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
@@ -40,10 +40,10 @@ impl SecretKey {
 
     pub(crate) fn try_from_mpi(
         pub_params: &RsaPublicParams,
-        d: MpiRef<'_>,
-        p: MpiRef<'_>,
-        q: MpiRef<'_>,
-        _u: MpiRef<'_>,
+        d: MpiBytes,
+        p: MpiBytes,
+        q: MpiBytes,
+        _u: MpiBytes,
     ) -> Result<Self> {
         let secret_key = RsaPrivateKey::from_components(
             pub_params.key.n().clone(),
@@ -72,11 +72,11 @@ impl Deref for SecretKey {
 }
 
 impl Decryptor for SecretKey {
-    type EncryptionFields<'a> = &'a Mpi;
+    type EncryptionFields<'a> = &'a MpiBytes;
 
     /// RSA decryption using PKCS1v15 padding.
     fn decrypt(&self, mpi: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
-        let m = self.0.decrypt(Pkcs1v15Encrypt, mpi.as_bytes())?;
+        let m = self.0.decrypt(Pkcs1v15Encrypt, mpi.as_ref())?;
 
         Ok(m)
     }

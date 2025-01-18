@@ -9,7 +9,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{Mpi, MpiBytes, MpiRef};
+use crate::types::MpiBytes;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -56,22 +56,22 @@ impl Serialize for EcdhPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
-                let mpi = MpiRef::from_slice(&mpi);
+                let mpi = MpiBytes::from_slice(&mpi);
                 mpi.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
             Self::P256 { p, hash, alg_sym } => {
-                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
+                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
             Self::P384 { p, hash, alg_sym } => {
-                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
+                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
             Self::P521 { p, hash, alg_sym } => {
-                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
+                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
@@ -101,21 +101,21 @@ impl Serialize for EcdhPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
-                let mpi = MpiRef::from_slice(&mpi);
+                let mpi = MpiBytes::from_slice(&mpi);
                 sum += mpi.write_len();
             }
             Self::P256 { p, .. } => {
-                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
+                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
                 sum += self.curve().oid().len();
                 sum += p.write_len();
             }
             Self::P384 { p, .. } => {
-                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
+                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
                 sum += self.curve().oid().len();
                 sum += p.write_len();
             }
             Self::P521 { p, .. } => {
-                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
+                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
                 sum += self.curve().oid().len();
                 sum += p.write_len();
             }
