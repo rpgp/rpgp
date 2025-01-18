@@ -1,104 +1,12 @@
 //! # Utilities
 
-use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Buf;
-use nom::bytes::streaming::take_while1;
-use nom::character::is_alphanumeric;
-use nom::character::streaming::line_ending;
-use nom::multi::many0;
-use nom::sequence::preceded;
-use nom::{error_position, Err, InputIter, InputLength, Slice};
 
-use crate::errors::{self, IResult, Result};
+use crate::errors::{self, Result};
 use crate::parsing::BufParsing;
-
-#[inline]
-pub fn u8_as_usize(a: u8) -> usize {
-    a as usize
-}
-
-#[inline]
-pub fn u16_as_usize(a: u16) -> usize {
-    a as usize
-}
-
-#[inline]
-pub fn u32_as_usize(a: u32) -> usize {
-    a as usize
-}
-
-#[inline]
-pub fn is_base64_token(c: u8) -> bool {
-    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
-}
-
-pub fn prefixed(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    preceded(many0(line_ending), take_while1(is_base64_token))(input)
-}
-
-/// Recognizes one or more body tokens
-pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
-    let input_length = input.input_len();
-    if input_length == 0 {
-        return Err(Err::Incomplete(nom::Needed::Unknown));
-    }
-
-    for (idx, item) in input.iter_indices() {
-        if !is_base64_token(item) {
-            if idx == 0 {
-                return Err(Err::Error(error_position!(
-                    input,
-                    nom::error::ErrorKind::AlphaNumeric
-                )));
-            } else {
-                return Ok((input.slice(idx..), input.slice(0..idx)));
-            }
-        }
-    }
-    Ok((input.slice(input_length..), input))
-}
-
-/// Returns the bit length of a given slice.
-#[inline]
-pub fn bit_size(val: &[u8]) -> usize {
-    if val.is_empty() {
-        0
-    } else {
-        (val.len() * 8) - val[0].leading_zeros() as usize
-    }
-}
-
-#[inline]
-pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
-    bytes
-        .iter()
-        .position(|b| b != &0)
-        .map_or(&[], |offset| &bytes[offset..])
-}
-
-#[inline]
-pub fn strip_leading_zeros_vec(bytes: &mut Vec<u8>) {
-    if let Some(offset) = bytes.iter().position(|b| b != &0) {
-        bytes.drain(..offset);
-    } else {
-        // no non 0 element found
-        bytes.clear();
-    }
-}
-
-/// Convert a slice into an array.
-pub fn clone_into_array<A, T>(slice: &[T]) -> A
-where
-    A: Sized + Default + AsMut<[T]>,
-    T: Clone,
-{
-    let mut a = Default::default();
-    <A as AsMut<[T]>>::as_mut(&mut a).clone_from_slice(slice);
-    a
-}
 
 /// Parse a packet length.
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.7>
@@ -145,18 +53,6 @@ pub fn write_packet_length_len(len: usize) -> usize {
     } else {
         1 + 4
     }
-}
-
-/// Return the length of the remaining input.
-// Adapted from https://github.com/Geal/nom/pull/684
-#[inline]
-pub fn rest_len<T>(input: T) -> IResult<T, usize>
-where
-    T: Slice<Range<usize>> + Slice<RangeFrom<usize>> + Slice<RangeTo<usize>>,
-    T: InputLength,
-{
-    let len = input.input_len();
-    Ok((input, len))
 }
 
 #[macro_export]
@@ -243,27 +139,5 @@ mod tests {
         let mut res = Vec::new();
         write_packet_length(12870, &mut res).unwrap();
         assert_eq!(hex::encode(res), "ff00003246");
-    }
-
-    #[test]
-    fn test_strip_leading_zeros_with_all_zeros() {
-        let buf = [0u8, 0u8, 0u8];
-        let stripped: &[u8] = strip_leading_zeros(&buf[..]);
-        assert!(stripped.is_empty());
-    }
-
-    #[test]
-    fn test_strip_leading_zeros_vec() {
-        let mut vec = vec![0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        strip_leading_zeros_vec(&mut vec);
-        assert_eq!(vec, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
-
-        let mut vec = vec![0];
-        strip_leading_zeros_vec(&mut vec);
-        assert!(vec.is_empty());
-
-        let mut vec = vec![1, 2, 0, 3, 0];
-        strip_leading_zeros_vec(&mut vec);
-        assert_eq!(vec, vec![1, 2, 0, 3, 0]);
     }
 }

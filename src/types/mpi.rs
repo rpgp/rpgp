@@ -7,7 +7,6 @@ use num_bigint::BigUint;
 use crate::errors::{Error, Result};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::util::{bit_size, strip_leading_zeros};
 
 /// Number of bits we accept when reading or writing MPIs.
 /// The value is the same as gnupgs.
@@ -58,6 +57,24 @@ impl MpiBytes {
     pub fn from_slice(raw: &[u8]) -> Self {
         Self(strip_leading_zeros(raw).to_vec().into())
     }
+}
+
+/// Returns the bit length of a given slice.
+#[inline]
+fn bit_size(val: &[u8]) -> usize {
+    if val.is_empty() {
+        0
+    } else {
+        (val.len() * 8) - val[0].leading_zeros() as usize
+    }
+}
+
+#[inline]
+fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
+    bytes
+        .iter()
+        .position(|b| b != &0)
+        .map_or(&[], |offset| &bytes[offset..])
 }
 
 impl AsRef<[u8]> for MpiBytes {
@@ -163,6 +180,13 @@ mod tests {
             let n_big2 = MpiBytes::from_buf(&mut &n_encoded[..]).unwrap();
             assert_eq!(n_big, n_big2.into());
         }
+    }
+
+    #[test]
+    fn test_strip_leading_zeros_with_all_zeros() {
+        let buf = [0u8, 0u8, 0u8];
+        let stripped: &[u8] = strip_leading_zeros(&buf[..]);
+        assert!(stripped.is_empty());
     }
 
     proptest! {

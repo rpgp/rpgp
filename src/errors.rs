@@ -128,8 +128,6 @@ impl Error {
     }
 }
 
-pub(crate) type IResult<I, O, E = Error> = nom::IResult<I, O, E>;
-
 impl<T> From<nom::error::Error<T>> for Error {
     fn from(err: nom::error::Error<T>) -> Self {
         Self::PacketError(err.code)
