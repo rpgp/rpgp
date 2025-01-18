@@ -115,7 +115,7 @@ mod tests {
     use proptest::prelude::*;
     use rand::SeedableRng;
 
-    use crate::types::Mpi;
+    use crate::types::MpiBytes;
 
     fn hex_num(s: &str) -> BigUint {
         BigUint::from_str_radix(s, 16).expect("invalid hex")
@@ -158,10 +158,10 @@ mod tests {
         );
 
         let params = DsaPublicParams::try_from_mpi(
-            Mpi::from(p).as_ref(),
-            Mpi::from(q).as_ref(),
-            Mpi::from(g).as_ref(),
-            Mpi::from(y).as_ref(),
+            MpiBytes::from(p),
+            MpiBytes::from(q),
+            MpiBytes::from(g),
+            MpiBytes::from(y),
         )
         .unwrap();
 
@@ -293,10 +293,10 @@ mod tests {
         );
 
         let params = DsaPublicParams::try_from_mpi(
-            Mpi::from(p).as_ref(),
-            Mpi::from(q).as_ref(),
-            Mpi::from(g).as_ref(),
-            Mpi::from(y).as_ref(),
+            MpiBytes::from(p),
+            MpiBytes::from(q),
+            MpiBytes::from(g),
+            MpiBytes::from(y),
         )
         .unwrap();
 

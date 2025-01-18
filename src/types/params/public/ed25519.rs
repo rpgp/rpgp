@@ -1,8 +1,9 @@
 use std::io;
 
-use nom::bytes::complete::take;
+use bytes::Buf;
 
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -17,13 +18,13 @@ pub struct Ed25519PublicParams {
 
 impl Ed25519PublicParams {
     /// https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed2
-    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
+    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
         // 32 bytes of public key
-        let (i, p) = take(32u8)(i)?;
-        let key = p.try_into().expect("we took 32 bytes");
+        let p = i.read_array::<32>()?;
+        let key = ed25519_dalek::VerifyingKey::from_bytes(&p)?;
         let params = Self { key };
 
-        Ok((i, params))
+        Ok(params)
     }
 }
 
@@ -56,8 +57,7 @@ mod tests {
         fn params_roundtrip(params: Ed25519PublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = Ed25519PublicParams::try_from_slice(&buf)?;
-            assert!(i.is_empty());
+            let new_params = Ed25519PublicParams::try_from_buf(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

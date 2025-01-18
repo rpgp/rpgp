@@ -83,6 +83,14 @@ impl MpiBytes {
         &self.0
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Parse Multi Precision Integers
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-multiprecision-integers>
     pub fn from_buf<B: bytes::Buf>(mut i: B) -> crate::errors::Result<Self> {
@@ -194,6 +202,12 @@ impl<'a> MpiRef<'a> {
     }
 }
 
+impl AsRef<[u8]> for MpiBytes {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 impl Serialize for MpiBytes {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
         MpiRef(&self.0).to_writer(w)
@@ -233,8 +247,20 @@ impl From<BigUint> for Mpi {
     }
 }
 
+impl From<BigUint> for MpiBytes {
+    fn from(other: BigUint) -> Self {
+        MpiBytes(other.to_bytes_be().into())
+    }
+}
+
 impl From<Mpi> for BigUint {
     fn from(other: Mpi) -> Self {
+        BigUint::from_bytes_be(other.as_bytes())
+    }
+}
+
+impl From<MpiBytes> for BigUint {
+    fn from(other: MpiBytes) -> Self {
         BigUint::from_bytes_be(other.as_bytes())
     }
 }

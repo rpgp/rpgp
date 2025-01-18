@@ -1,8 +1,9 @@
 use std::io;
 
-use nom::bytes::streaming::take;
+use bytes::Buf;
 
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -13,14 +14,12 @@ pub struct X448PublicParams {
 
 impl X448PublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4>
-    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
+    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
         // 56 bytes of public key
-        let (i, p) = take(56u8)(i)?;
-        let params = X448PublicParams {
-            key: p.try_into().expect("we took 56 bytes"),
-        };
+        let key = i.read_array::<56>()?;
+        let params = X448PublicParams { key };
 
-        Ok((i, params))
+        Ok(params)
     }
 }
 
@@ -55,8 +54,7 @@ mod tests {
         fn params_roundtrip(params: X448PublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = X448PublicParams::try_from_slice(&buf)?;
-            assert!(i.is_empty());
+            let new_params = X448PublicParams::try_from_buf(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

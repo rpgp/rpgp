@@ -1,8 +1,10 @@
 use std::io;
 
-use crate::errors::{IResult, Result};
+use bytes::Buf;
+
+use crate::errors::Result;
 use crate::ser::Serialize;
-use crate::types::{mpi, Mpi, MpiRef};
+use crate::types::{Mpi, MpiBytes};
 
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -15,22 +17,17 @@ pub struct DsaPublicParams {
 impl Eq for DsaPublicParams {}
 
 impl DsaPublicParams {
-    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
-        let (i, p) = mpi(i)?;
-        let (i, q) = mpi(i)?;
-        let (i, g) = mpi(i)?;
-        let (i, y) = mpi(i)?;
+    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+        let p = MpiBytes::from_buf(&mut i)?;
+        let q = MpiBytes::from_buf(&mut i)?;
+        let g = MpiBytes::from_buf(&mut i)?;
+        let y = MpiBytes::from_buf(&mut i)?;
 
         let params = DsaPublicParams::try_from_mpi(p, q, g, y)?;
-        Ok((i, params))
+        Ok(params)
     }
 
-    pub(crate) fn try_from_mpi(
-        p: MpiRef<'_>,
-        q: MpiRef<'_>,
-        g: MpiRef<'_>,
-        y: MpiRef<'_>,
-    ) -> Result<Self> {
+    pub(crate) fn try_from_mpi(p: MpiBytes, q: MpiBytes, g: MpiBytes, y: MpiBytes) -> Result<Self> {
         let components = dsa::Components::from_components(p.into(), q.into(), g.into())?;
         let key = dsa::VerifyingKey::from_components(components, y.into())?;
 
@@ -101,8 +98,7 @@ mod tests {
         fn params_roundtrip(params: DsaPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = DsaPublicParams::try_from_slice(&buf)?;
-            assert!(i.is_empty());
+            let new_params = DsaPublicParams::try_from_buf(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

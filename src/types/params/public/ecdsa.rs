@@ -1,15 +1,14 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
+use bytes::Buf;
 use elliptic_curve::sec1::ToEncodedPoint;
-use nom::combinator::map_opt;
-use nom::multi::length_data;
-use nom::number::streaming::be_u8;
 
 use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{mpi, Mpi, MpiRef};
+use crate::types::{Mpi, MpiBytes};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -36,21 +35,20 @@ pub enum EcdsaPublicParams {
 
 impl EcdsaPublicParams {
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ec>
-    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
-        let (i, curve) = map_opt(
-            // a one-octet size of the following field
-            length_data(be_u8),
-            // octets representing a curve OID
-            ecc_curve_from_oid,
-        )(i)?;
+    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+        // a one-octet size of the following field
+        let curve_len = i.read_u8()?;
+        // octets representing a curve OID
+        let curve = ecc_curve_from_oid(&i.read_take(curve_len.into())?)
+            .ok_or_else(|| format_err!("invalid curve"))?;
 
         // MPI of an EC point representing a public key
-        let (i, p) = mpi(i)?;
+        let p = MpiBytes::from_buf(&mut i)?;
         let params = EcdsaPublicParams::try_from_mpi(p, curve)?;
-        Ok((i, params))
+        Ok(params)
     }
 
-    fn try_from_mpi(p: MpiRef<'_>, curve: ECCCurve) -> Result<Self> {
+    fn try_from_mpi(p: MpiBytes, curve: ECCCurve) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
                 ensure!(p.len() <= 65, "invalid public key length");
@@ -224,8 +222,7 @@ mod tests {
         fn params_roundtrip(params: EcdsaPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = EcdsaPublicParams::try_from_slice(&buf)?;
-            assert!(i.is_empty());
+            let new_params = EcdsaPublicParams::try_from_buf(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

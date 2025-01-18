@@ -1,3 +1,4 @@
+use bytes::Buf;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
@@ -93,11 +94,11 @@ impl SecretKey {
         })
     }
 
-    /// Parses a `SecretKey` packet from the given slice.
-    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
+    /// Parses a `SecretKey` packet from the given buffer.
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(Tag::SecretKey, packet_header.tag(), "invalid tag");
 
-        let (_, details) = crate::packet::secret_key_parser::parse(input)?;
+        let details = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
 
         Ok(Self(SecretKeyInner {
@@ -144,10 +145,10 @@ impl SecretSubkey {
     }
 
     /// Parses a `SecretSubkey` packet from the given slice.
-    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(Tag::SecretSubkey, packet_header.tag(), "invalid tag");
 
-        let (_, details) = crate::packet::secret_key_parser::parse(input)?;
+        let details = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
 
         Ok(Self(SecretKeyInner {

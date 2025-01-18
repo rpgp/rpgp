@@ -1,4 +1,5 @@
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use bytes::Buf;
 use md5::Md5;
 use rand::{CryptoRng, Rng};
 use rsa::traits::PublicKeyParts;
@@ -64,9 +65,10 @@ impl PublicKey {
     }
 
     /// Parses a `PublicKeyKey` packet from the given slice.
-    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(input)?;
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(packet_header.tag(), Tag::PublicKey, "invalid tag");
+
+        let inner = PubKeyInner::from_buf(input)?;
 
         Ok(Self {
             packet_header,
@@ -121,10 +123,10 @@ impl PublicSubkey {
         })
     }
 
-    /// Parses a `PublicSubkey` packet from the given slice.
-    pub fn from_slice(packet_header: PacketHeader, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(input)?;
+    /// Parses a `PublicSubkey` packet from the given buffer.
+    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(packet_header.tag(), Tag::PublicSubkey, "invalid tag");
+        let inner = PubKeyInner::from_buf(input)?;
 
         Ok(Self {
             packet_header,
@@ -157,8 +159,8 @@ pub struct PubKeyInner {
 }
 
 impl PubKeyInner {
-    fn from_slice(input: &[u8]) -> Result<Self> {
-        let (_, details) = crate::packet::public_key_parser::parse(input)?;
+    fn from_buf<B: Buf>(input: B) -> Result<Self> {
+        let details = crate::packet::public_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params) = details;
 
         Self::new(version, algorithm, created_at, expiration, public_params)
@@ -908,7 +910,7 @@ mod tests {
         fn public_key_packet_roundtrip(packet: PublicKey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;
-            let new_packet = PublicKey::from_slice(*packet.packet_header(), &buf)?;
+            let new_packet = PublicKey::from_buf(*packet.packet_header(), &mut &buf[..])?;
             prop_assert_eq!(packet, new_packet);
         }
 
@@ -925,7 +927,7 @@ mod tests {
         fn public_sub_key_packet_roundtrip(packet: PublicSubkey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;
-            let new_packet = PublicSubkey::from_slice(*packet.packet_header(), &buf)?;
+            let new_packet = PublicSubkey::from_buf(*packet.packet_header(), &mut &buf[..])?;
             prop_assert_eq!(packet, new_packet);
         }
     }

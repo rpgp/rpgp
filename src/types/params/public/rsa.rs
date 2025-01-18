@@ -1,11 +1,11 @@
 use std::io;
 
-use num_bigint::BigUint;
+use bytes::Buf;
 use rsa::traits::PublicKeyParts;
 
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
 use crate::ser::Serialize;
-use crate::types::{mpi, Mpi, MpiRef};
+use crate::types::{Mpi, MpiBytes};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -15,18 +15,18 @@ pub struct RsaPublicParams {
 }
 
 impl RsaPublicParams {
-    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
-        let (i, n) = mpi(i)?;
-        let (i, e) = mpi(i)?;
+    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+        let n = MpiBytes::from_buf(&mut i)?;
+        let e = MpiBytes::from_buf(&mut i)?;
 
         let params = RsaPublicParams::try_from_mpi(n, e)?;
-        Ok((i, params))
+        Ok(params)
     }
 
-    fn try_from_mpi(n: MpiRef<'_>, e: MpiRef<'_>) -> Result<Self> {
+    fn try_from_mpi(n: MpiBytes, e: MpiBytes) -> Result<Self> {
         let key = rsa::RsaPublicKey::new_with_max_size(
-            BigUint::from_bytes_be(n.as_bytes()),
-            BigUint::from_bytes_be(e.as_bytes()),
+            n.into(),
+            e.into(),
             crate::crypto::rsa::MAX_KEY_SIZE,
         )?;
 
@@ -87,8 +87,7 @@ mod tests {
         fn params_roundtrip(params: RsaPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = RsaPublicParams::try_from_slice(&buf)?;
-            assert!(i.is_empty());
+            let new_params = RsaPublicParams::try_from_buf(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

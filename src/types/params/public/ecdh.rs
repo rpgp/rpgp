@@ -1,17 +1,15 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use nom::bytes::streaming::{tag, take};
-use nom::combinator::{map, map_opt, map_res};
-use nom::multi::length_data;
-use nom::number::streaming::be_u8;
+use bytes::{Buf, Bytes};
 
 use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{mpi, Mpi, MpiRef};
+use crate::types::{Mpi, MpiBytes, MpiRef};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -44,7 +42,7 @@ pub enum EcdhPublicParams {
 
     /// Public parameters for a curve that we don't know about (which might not use Mpi representation).
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, opaque: Vec<u8> },
+    Unsupported { curve: ECCCurve, opaque: Bytes },
 }
 
 impl Serialize for EcdhPublicParams {
@@ -152,52 +150,50 @@ impl EcdhPublicParams {
     }
 
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ecd>
-    pub fn try_from_slice(i: &[u8], len: Option<usize>) -> IResult<&[u8], Self> {
+    pub fn try_from_buf<B: Buf>(mut i: B, len: Option<usize>) -> Result<Self> {
         // a one-octet size of the following field
         // octets representing a curve OID
-        let (i, curve) = map_opt(length_data(be_u8), ecc_curve_from_oid)(i)?;
+        let curve_len = i.read_u8()?;
+        let curve_raw = i.read_take(curve_len.into())?;
+        let curve = ecc_curve_from_oid(&curve_raw).ok_or_else(|| format_err!("invalid curve"))?;
 
         match curve {
             ECCCurve::Curve25519 | ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 => {
                 // MPI of an EC point representing a public key
-                let (i, p) = mpi(i)?;
+                let p = MpiBytes::from_buf(&mut i)?;
 
                 // a one-octet size of the following fields
-                let (i, _len2) = be_u8(i)?;
+                let _len2 = i.read_u8()?;
 
                 // a one-octet value 01, reserved for future extensions
-                let (i, _tag) = tag(&[1][..])(i)?;
+                i.read_tag(&[1])?;
 
                 // a one-octet hash function ID used with a KDF
-                let (i, hash) = map(be_u8, HashAlgorithm::from)(i)?;
+                let hash = i.read_u8().map(HashAlgorithm::from)?;
 
                 // a one-octet algorithm ID for the symmetric algorithm used to wrap
                 // the symmetric key used for the message encryption
-                let (i, alg_sym) = map_res(be_u8, SymmetricKeyAlgorithm::try_from)(i)?;
+                let alg_sym = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
 
                 let params = Self::try_from_mpi(p, curve, hash, alg_sym)?;
-                Ok((i, params))
+                Ok(params)
             }
             _ => {
-                let (i, data) = if let Some(pub_len) = len {
-                    let (i, data) = take(pub_len)(i)?;
-                    (i, data.to_vec())
+                let data = if let Some(pub_len) = len {
+                    i.read_take(pub_len)?
                 } else {
-                    (i, vec![])
+                    Bytes::default()
                 };
-                Ok((
-                    i,
-                    EcdhPublicParams::Unsupported {
-                        curve,
-                        opaque: data,
-                    },
-                ))
+                Ok(EcdhPublicParams::Unsupported {
+                    curve,
+                    opaque: data,
+                })
             }
         }
     }
 
     fn try_from_mpi(
-        p: MpiRef<'_>,
+        p: MpiBytes,
         curve: ECCCurve,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
@@ -206,7 +202,7 @@ impl EcdhPublicParams {
             ECCCurve::Curve25519 => {
                 ensure_eq!(p.len(), 33, "invalid public key length");
                 // public part of the ephemeral key (removes 0x40 prefix)
-                let public_key = &p[1..];
+                let public_key = &p.as_ref()[1..];
 
                 // create montgomery point
                 let mut public_key_arr = [0u8; 32];
@@ -216,15 +212,15 @@ impl EcdhPublicParams {
                 Ok(EcdhPublicParams::Curve25519 { p, hash, alg_sym })
             }
             ECCCurve::P256 => {
-                let p = p256::PublicKey::from_sec1_bytes(&p)?;
+                let p = p256::PublicKey::from_sec1_bytes(p.as_ref())?;
                 Ok(EcdhPublicParams::P256 { p, hash, alg_sym })
             }
             ECCCurve::P384 => {
-                let p = p384::PublicKey::from_sec1_bytes(&p)?;
+                let p = p384::PublicKey::from_sec1_bytes(p.as_ref())?;
                 Ok(EcdhPublicParams::P384 { p, hash, alg_sym })
             }
             ECCCurve::P521 => {
-                let p = p521::PublicKey::from_sec1_bytes(&p)?;
+                let p = p521::PublicKey::from_sec1_bytes(p.as_ref())?;
                 Ok(EcdhPublicParams::P521 { p, hash, alg_sym })
             }
             _ => bail!("unexpected ecdh curve: {:?}", curve),
@@ -285,8 +281,7 @@ pub(super) mod tests {
         fn params_roundtrip(params: EcdhPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = EcdhPublicParams::try_from_slice(&buf, None)?;
-            assert!(i.is_empty());
+            let new_params = EcdhPublicParams::try_from_buf(&mut &buf[..], None)?;
             prop_assert_eq!(params, new_params);
         }
     }

@@ -1,14 +1,13 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use nom::combinator::map_opt;
-use nom::multi::length_data;
-use nom::number::streaming::be_u8;
+use bytes::Buf;
 
 use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
-use crate::errors::{IResult, Result};
+use crate::errors::Result;
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{mpi, Mpi, MpiRef};
+use crate::types::{MpiBytes, MpiRef};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -18,39 +17,36 @@ pub enum EddsaLegacyPublicParams {
         key: ed25519_dalek::VerifyingKey,
     },
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, mpi: Mpi },
+    Unsupported { curve: ECCCurve, mpi: MpiBytes },
 }
 
 impl EddsaLegacyPublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed>
-    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
-        let (i, curve) = map_opt(
-            // a one-octet size of the following field
-            length_data(be_u8),
-            // octets representing a curve OID
-            ecc_curve_from_oid,
-        )(i)?;
+    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+        // a one-octet size of the following field
+        let curve_len = i.read_u8()?;
+        // octets representing a curve OID
+        let curve_raw = i.read_take(curve_len.into())?;
+        let curve = ecc_curve_from_oid(&curve_raw).ok_or_else(|| format_err!("invalid curve"))?;
+
         // MPI of an EC point representing a public key
-        let (i, q) = mpi(i)?;
+        let q = MpiBytes::from_buf(&mut i)?;
         let res = Self::try_from_mpi(curve, q)?;
 
-        Ok((i, res))
+        Ok(res)
     }
 
-    fn try_from_mpi(curve: ECCCurve, mpi: MpiRef<'_>) -> Result<Self> {
+    fn try_from_mpi(curve: ECCCurve, mpi: MpiBytes) -> Result<Self> {
         match curve {
             ECCCurve::Ed25519 => {
                 ensure_eq!(mpi.len(), 33, "invalid Q (len)");
-                ensure_eq!(mpi[0], 0x40, "invalid Q (prefix)");
-                let public = &mpi[1..];
+                ensure_eq!(mpi.as_ref()[0], 0x40, "invalid Q (prefix)");
+                let public = &mpi.as_ref()[1..];
 
                 let key: ed25519_dalek::VerifyingKey = public.try_into()?;
                 Ok(Self::Ed25519 { key })
             }
-            _ => Ok(Self::Unsupported {
-                curve,
-                mpi: mpi.to_owned(),
-            }),
+            _ => Ok(Self::Unsupported { curve, mpi }),
         }
     }
 
@@ -134,8 +130,7 @@ pub(super) mod tests {
         fn params_roundtrip(params: EddsaLegacyPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = EddsaLegacyPublicParams::try_from_slice(&buf)?;
-            assert!(i.is_empty());
+            let new_params = EddsaLegacyPublicParams::try_from_buf(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

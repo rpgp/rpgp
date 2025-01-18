@@ -23,11 +23,11 @@ impl Packet {
                 OnePassSignature::from_buf(packet_header, &mut body).map(Into::into)
             }
 
-            Tag::SecretKey => SecretKey::from_slice(packet_header, &body).map(Into::into),
-            Tag::SecretSubkey => SecretSubkey::from_slice(packet_header, &body).map(Into::into),
+            Tag::SecretKey => SecretKey::from_buf(packet_header, &mut body).map(Into::into),
+            Tag::SecretSubkey => SecretSubkey::from_buf(packet_header, &mut body).map(Into::into),
 
-            Tag::PublicKey => PublicKey::from_slice(packet_header, &body).map(Into::into),
-            Tag::PublicSubkey => PublicSubkey::from_slice(packet_header, &body).map(Into::into),
+            Tag::PublicKey => PublicKey::from_buf(packet_header, &mut body).map(Into::into),
+            Tag::PublicSubkey => PublicSubkey::from_buf(packet_header, &mut body).map(Into::into),
 
             Tag::PublicKeyEncryptedSessionKey => {
                 PublicKeyEncryptedSessionKey::from_buf(packet_header, &mut body).map(Into::into)

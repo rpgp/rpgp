@@ -1,33 +1,31 @@
 use std::io;
 
-use crate::errors::{IResult, Result};
+use bytes::Buf;
+
+use crate::errors::Result;
 use crate::ser::Serialize;
-use crate::types::{mpi, Mpi};
+use crate::types::MpiBytes;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ElgamalPublicParams {
-    p: Mpi,
-    g: Mpi,
-    y: Mpi,
+    p: MpiBytes,
+    g: MpiBytes,
+    y: MpiBytes,
 }
 
 impl ElgamalPublicParams {
-    pub fn try_from_slice(i: &[u8]) -> IResult<&[u8], Self> {
+    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
         // MPI of Elgamal prime p
-        let (i, p) = mpi(i)?;
+        let p = MpiBytes::from_buf(&mut i)?;
         // MPI of Elgamal group generator g
-        let (i, g) = mpi(i)?;
+        let g = MpiBytes::from_buf(&mut i)?;
         // MPI of Elgamal public key value y (= g**x mod p where x is secret)
-        let (i, y) = mpi(i)?;
+        let y = MpiBytes::from_buf(&mut i)?;
 
-        let params = ElgamalPublicParams {
-            p: p.to_owned(),
-            g: g.to_owned(),
-            y: y.to_owned(),
-        };
+        let params = ElgamalPublicParams { p, g, y };
 
-        Ok((i, params))
+        Ok(params)
     }
 }
 
@@ -68,8 +66,7 @@ mod tests {
         fn params_roundtrip(params: ElgamalPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = ElgamalPublicParams::try_from_slice(&buf)?;
-            assert!(i.is_empty());
+            let new_params = ElgamalPublicParams::try_from_buf(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

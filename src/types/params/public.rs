@@ -1,9 +1,10 @@
 use std::io;
 
-use nom::bytes::streaming::take;
+use bytes::{Buf, Bytes};
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::{Error, IResult, Result};
+use crate::errors::{Error, Result};
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 
 mod dsa;
@@ -44,7 +45,7 @@ pub enum PublicParams {
     #[cfg(feature = "unstable-curve448")]
     X448(X448PublicParams),
     Unknown {
-        data: Vec<u8>,
+        data: Bytes,
     },
 }
 impl TryFrom<&PlainSecretParams> for PublicParams {
@@ -67,50 +68,51 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
 
 impl PublicParams {
     /// Parses the public parameters of key.
-    pub fn try_from_slice(
+    pub fn try_from_buf<B: Buf>(
         typ: PublicKeyAlgorithm,
         len: Option<usize>,
-    ) -> impl Fn(&[u8]) -> IResult<&[u8], PublicParams> {
-        move |i: &[u8]| match typ {
+        i: B,
+    ) -> Result<PublicParams> {
+        match typ {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
-                let (i, params) = RsaPublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::RSA(params)))
+                let params = RsaPublicParams::try_from_buf(i)?;
+                Ok(PublicParams::RSA(params))
             }
             PublicKeyAlgorithm::DSA => {
-                let (i, params) = DsaPublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::DSA(params)))
+                let params = DsaPublicParams::try_from_buf(i)?;
+                Ok(PublicParams::DSA(params))
             }
             PublicKeyAlgorithm::ECDSA => {
-                let (i, params) = EcdsaPublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::ECDSA(params)))
+                let params = EcdsaPublicParams::try_from_buf(i)?;
+                Ok(PublicParams::ECDSA(params))
             }
             PublicKeyAlgorithm::ECDH => {
-                let (i, params) = EcdhPublicParams::try_from_slice(i, len)?;
-                Ok((i, PublicParams::ECDH(params)))
+                let params = EcdhPublicParams::try_from_buf(i, len)?;
+                Ok(PublicParams::ECDH(params))
             }
             PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
-                let (i, params) = ElgamalPublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::Elgamal(params)))
+                let params = ElgamalPublicParams::try_from_buf(i)?;
+                Ok(PublicParams::Elgamal(params))
             }
             PublicKeyAlgorithm::EdDSALegacy => {
-                let (i, params) = EddsaLegacyPublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::EdDSALegacy(params)))
+                let params = EddsaLegacyPublicParams::try_from_buf(i)?;
+                Ok(PublicParams::EdDSALegacy(params))
             }
             PublicKeyAlgorithm::Ed25519 => {
-                let (i, params) = Ed25519PublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::Ed25519(params)))
+                let params = Ed25519PublicParams::try_from_buf(i)?;
+                Ok(PublicParams::Ed25519(params))
             }
             PublicKeyAlgorithm::X25519 => {
-                let (i, params) = X25519PublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::X25519(params)))
+                let params = X25519PublicParams::try_from_buf(i)?;
+                Ok(PublicParams::X25519(params))
             }
             PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
             #[cfg(feature = "unstable-curve448")]
             PublicKeyAlgorithm::X448 => {
-                let (i, params) = X448PublicParams::try_from_slice(i)?;
-                Ok((i, PublicParams::X448(params)))
+                let params = X448PublicParams::try_from_buf(i)?;
+                Ok(PublicParams::X448(params))
             }
             #[cfg(not(feature = "unstable-curve448"))]
             PublicKeyAlgorithm::X448 => unknown(i, len),
@@ -132,18 +134,15 @@ impl PublicParams {
     }
 }
 
-fn unknown(i: &[u8], len: Option<usize>) -> IResult<&[u8], PublicParams> {
+fn unknown<B: Buf>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
     if let Some(pub_len) = len {
-        let (i, data) = take(pub_len)(i)?;
-        Ok((
-            i,
-            PublicParams::Unknown {
-                data: data.to_vec(),
-            },
-        ))
+        let data = i.read_take(pub_len)?;
+        Ok(PublicParams::Unknown { data })
     } else {
         // we don't know how many bytes to consume
-        Ok((i, PublicParams::Unknown { data: vec![] }))
+        Ok(PublicParams::Unknown {
+            data: Bytes::default(),
+        })
     }
 }
 
@@ -251,8 +250,7 @@ mod tests {
         ) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let (i, new_params) = PublicParams::try_from_slice(alg, None)(&buf)?;
-            assert!(i.is_empty());
+            let new_params = PublicParams::try_from_buf(alg, None, &mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }
