@@ -91,9 +91,13 @@ impl PacketHeader {
                         bail!("partial lengths are only supported in new style headers");
                     }
                 };
+
                 Ok(Self::Old {
                     header: OldPacketHeaderBuilder::new()
-                        .with_tag(tag.into())
+                        .checked_with_tag(tag.into())
+                        .map_err(|_| {
+                            format_err!("tag is not compatible with old packet headers: {:?}", tag)
+                        })?
                         .with_length_type(typ)
                         .build(),
                     length,
@@ -399,6 +403,19 @@ mod tests {
             header.to_writer(&mut buf).unwrap();
             let new_header = PacketHeader::from_buf(&mut &buf[..]).unwrap();
             prop_assert_eq!(header, new_header);
+        }
+
+        #[test]
+        fn packet_header_from_parts(version: PacketHeaderVersion, tag: Tag, len in 1usize..100000) {
+            let maybe_header = PacketHeader::from_parts(version, tag, PacketLength::Fixed(len));
+            if u8::from(tag) > 16 && version == PacketHeaderVersion::Old {
+                prop_assert!(maybe_header.is_err());
+            } else {
+                let header = maybe_header.unwrap();
+                prop_assert_eq!(header.tag(), tag);
+                prop_assert_eq!(header.packet_length(), PacketLength::Fixed(len));
+                prop_assert_eq!(header.version(), version);
+            }
         }
     }
 }
