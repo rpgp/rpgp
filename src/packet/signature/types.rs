@@ -349,16 +349,13 @@ impl Signature {
 
         // the key of the signee
         {
-            let mut key_buf = Vec::new();
             // TODO: this is different for V5
-            signee.serialize_for_hashing(&mut key_buf)?;
-            hasher.update(&key_buf);
+            signee.serialize_for_hashing(&mut hasher)?;
         }
 
         // the packet content
         {
-            let mut packet_buf = Vec::new();
-            id.to_writer(&mut packet_buf)?;
+            let packet_len = id.write_len();
 
             match self.config.version() {
                 SignatureVersion::V2 | SignatureVersion::V3 => {
@@ -372,7 +369,7 @@ impl Signature {
                     };
 
                     let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
-                    BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len().try_into()?);
+                    BigEndian::write_u32(&mut prefix_buf[1..], packet_len.try_into()?);
 
                     // prefixes
                     hasher.update(&prefix_buf);
@@ -385,7 +382,7 @@ impl Signature {
                 }
             }
 
-            hasher.update(&packet_buf);
+            id.to_writer(&mut hasher)?;
         }
 
         let len = self.config.hash_signature_data(&mut hasher)?;
@@ -452,25 +449,19 @@ impl Signature {
 
         // First key to hash
         {
-            let mut key_buf = Vec::new();
             if !backsig {
-                signer.serialize_for_hashing(&mut key_buf)?; // primary
+                signer.serialize_for_hashing(&mut hasher)?; // primary
             } else {
-                signee.serialize_for_hashing(&mut key_buf)?; // primary
+                signee.serialize_for_hashing(&mut hasher)?; // primary
             }
-
-            hasher.update(&key_buf);
         }
         // Second key to hash
         {
-            let mut key_buf = Vec::new();
             if !backsig {
-                signee.serialize_for_hashing(&mut key_buf)?; // subkey
+                signee.serialize_for_hashing(&mut hasher)?; // subkey
             } else {
-                signer.serialize_for_hashing(&mut key_buf)?; // subkey
+                signer.serialize_for_hashing(&mut hasher)?; // subkey
             }
-
-            hasher.update(&key_buf);
         }
 
         let len = self.config.hash_signature_data(&mut hasher)?;
@@ -504,12 +495,7 @@ impl Signature {
             hasher.update(salt.as_ref())
         }
 
-        {
-            let mut key_buf = Vec::new();
-            key.serialize_for_hashing(&mut key_buf)?;
-
-            hasher.update(&key_buf);
-        }
+        key.serialize_for_hashing(&mut hasher)?;
 
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
