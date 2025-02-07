@@ -195,7 +195,7 @@ pub fn parse_pub_fields(
         PublicKeyAlgorithm::DSA => dsa(i),
         PublicKeyAlgorithm::ECDSA => ecdsa(i),
         PublicKeyAlgorithm::ECDH => ecdh(i),
-        PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => elgamal(i),
+        PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => elgamal(i),
         PublicKeyAlgorithm::EdDSALegacy => eddsa_legacy(i),
 
         PublicKeyAlgorithm::Ed25519 => ed25519(i),

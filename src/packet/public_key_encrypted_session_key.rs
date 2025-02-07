@@ -217,7 +217,7 @@ fn parse_esk<'i>(
         PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSASign | PublicKeyAlgorithm::RSAEncrypt => {
             map(mpi, |v| PkeskBytes::Rsa { mpi: v.to_owned() })(i)
         }
-        PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
+        PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
             map(pair(mpi, mpi), |(first, second)| PkeskBytes::Elgamal {
                 first: first.to_owned(),
                 second: second.to_owned(),
@@ -432,7 +432,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 mpi.to_writer(writer)?;
             }
             (
-                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign,
+                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt,
                 PkeskBytes::Elgamal { first, second },
             ) => {
                 first.to_writer(writer)?;

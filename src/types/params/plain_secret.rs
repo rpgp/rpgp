@@ -483,7 +483,9 @@ fn parse_secret_params(
             rsa_secret_params(i)
         }
         PublicKeyAlgorithm::DSA => map(mpi, |m| PlainSecretParams::DSA(m.to_owned()))(i),
-        PublicKeyAlgorithm::Elgamal => map(mpi, |m| PlainSecretParams::Elgamal(m.to_owned()))(i),
+        PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
+            map(mpi, |m| PlainSecretParams::Elgamal(m.to_owned()))(i)
+        }
         PublicKeyAlgorithm::ECDH => map(mpi, |m| PlainSecretParams::ECDH(m.to_owned()))(i),
         PublicKeyAlgorithm::ECDSA => map(mpi, |m| PlainSecretParams::ECDSA(m.to_owned()))(i),
         PublicKeyAlgorithm::EdDSALegacy => {
