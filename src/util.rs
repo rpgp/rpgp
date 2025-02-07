@@ -110,9 +110,14 @@ pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
     }
 }
 
+/// FIXME: 8383 is the biggest two byte *packet length*.
+///   The biggest two-byte encoded subpacket length is:
+///   "254 255" => (254 - 192) * 256 + 255 + 192 = 16319
+///
+/// See #462
 pub(crate) const MAX_LEN_2_BYTE_PLUS_1: usize = 8384;
 
-/// Write packet length, including the prefix for lengths larger or equal than 8384.
+/// Write packet length, including the prefix for lengths larger or equal than MAX_LEN_2_BYTE_PLUS_1.
 pub fn write_packet_length(
     len: usize,
     needless_5_byte_encoding: bool,
