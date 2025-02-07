@@ -249,7 +249,7 @@ impl Subpacket {
 
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_length(1 + self.body_len()?, writer)?;
+        write_packet_length(1 + self.body_len()?, self.needless_5_byte_encoding, writer)?;
         writer.write_u8(self.typ().as_u8(self.is_critical))?;
         self.body_to_writer(writer)?;
 

@@ -110,11 +110,17 @@ pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
     }
 }
 
+pub(crate) const MAX_LEN_2_BYTE_PLUS_1: usize = 8384;
+
 /// Write packet length, including the prefix for lengths larger or equal than 8384.
-pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
-    if len < 192 {
+pub fn write_packet_length(
+    len: usize,
+    needless_5_byte_encoding: bool,
+    writer: &mut impl io::Write,
+) -> errors::Result<()> {
+    if !needless_5_byte_encoding && len < 192 {
         writer.write_u8(len.try_into()?)?;
-    } else if len < 8384 {
+    } else if !needless_5_byte_encoding && len < MAX_LEN_2_BYTE_PLUS_1 {
         writer.write_u8((((len - 192) / 256) + 192) as u8)?;
         writer.write_u8(((len - 192) % 256) as u8)?;
     } else {
@@ -212,14 +218,14 @@ mod tests {
     #[test]
     fn test_write_packet_len() {
         let mut res = Vec::new();
-        write_packet_length(1173, &mut res).unwrap();
+        write_packet_length(1173, false, &mut res).unwrap();
         assert_eq!(hex::encode(res), "c3d5");
     }
 
     #[test]
     fn test_write_packet_length() {
         let mut res = Vec::new();
-        write_packet_length(12870, &mut res).unwrap();
+        write_packet_length(12870, false, &mut res).unwrap();
         assert_eq!(hex::encode(res), "ff00003246");
     }
 

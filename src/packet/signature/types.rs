@@ -964,6 +964,7 @@ impl SubpacketType {
 pub struct Subpacket {
     pub is_critical: bool,
     pub data: SubpacketData,
+    pub needless_5_byte_encoding: bool,
 }
 
 impl Subpacket {
@@ -972,6 +973,7 @@ impl Subpacket {
         Subpacket {
             is_critical: false,
             data,
+            needless_5_byte_encoding: true,
         }
     }
 
@@ -980,6 +982,7 @@ impl Subpacket {
         Subpacket {
             is_critical: true,
             data,
+            needless_5_byte_encoding: true,
         }
     }
 }

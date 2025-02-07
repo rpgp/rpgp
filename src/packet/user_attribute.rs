@@ -184,7 +184,9 @@ fn parse(packet_version: Version) -> impl Fn(&[u8]) -> IResult<&[u8], UserAttrib
 impl Serialize for UserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         debug!("write_packet_len {}", self.packet_len());
-        write_packet_length(self.packet_len(), writer)?;
+        // FIXME: needless 5 byte encoding can occur in user attributes, we need to handle it
+        //        to correctly hash user attributes that use such length encoding.
+        write_packet_length(self.packet_len(), false, writer)?;
 
         match self {
             UserAttribute::Image {

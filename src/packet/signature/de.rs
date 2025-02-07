@@ -334,7 +334,12 @@ fn intended_recipient_fingerprint(i: &[u8]) -> IResult<&[u8], SubpacketData> {
     }
 }
 
-fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8], Subpacket> {
+fn subpacket(
+    typ: SubpacketType,
+    is_critical: bool,
+    force_5_byte_length_format: bool,
+    body: &[u8],
+) -> IResult<&[u8], Subpacket> {
     use self::SubpacketType::*;
     debug!("parsing subpacket: {:?} {}", typ, hex::encode(body));
 
@@ -373,7 +378,16 @@ fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8
         Other(n) => Ok((body, SubpacketData::Other(n, body.to_vec()))),
     };
 
-    let res = res.map(|(body, data)| (body, Subpacket { is_critical, data }));
+    let res = res.map(|(body, data)| {
+        (
+            body,
+            Subpacket {
+                is_critical,
+                data,
+                needless_5_byte_encoding: force_5_byte_length_format,
+            },
+        )
+    });
 
     if res.is_err() {
         warn!("invalid subpacket: {:?} {:?}", typ, res);
@@ -384,6 +398,8 @@ fn subpacket(typ: SubpacketType, is_critical: bool, body: &[u8]) -> IResult<&[u8
 
 fn subpackets<'a>(i: &'a [u8]) -> IResult<&'a [u8], Vec<Subpacket>> {
     many0(complete(|i: &'a [u8]| {
+        let ff = !i.is_empty() && (i[0] == 255); // probably: 5 byte length encoding
+
         // the subpacket length (1, 2, or 5 octets)
         let (i, len) = packet_length(i)?;
         if len == 0 {
@@ -391,7 +407,14 @@ fn subpackets<'a>(i: &'a [u8]) -> IResult<&'a [u8], Vec<Subpacket>> {
         }
         // the subpacket type (1 octet)
         let (i, typ) = map(be_u8, SubpacketType::from_u8)(i)?;
-        map_parser(take(len - 1), move |b| subpacket(typ.0, typ.1, b))(i)
+        map_parser(take(len - 1), move |b| {
+            subpacket(
+                typ.0,
+                typ.1,
+                ff && (len < crate::util::MAX_LEN_2_BYTE_PLUS_1),
+                b,
+            )
+        })(i)
     }))(i)
 }
 
