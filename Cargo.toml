@@ -105,7 +105,7 @@ bytes-utils = "0.1.4"
 memmap2 = { version = "0.9.5", optional = true }
 bzip2 = { version = "0.5.0", default-features = false, features = [
     "libbz2-rs-sys",
-] }
+], optional = true }
 bitfields = "0.12.3"
 
 [dev-dependencies]
@@ -125,7 +125,8 @@ proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
 
 [features]
-default = ["mmap"]
+default = ["mmap", "bzip2"]
+bzip2 = ["dep:bzip2"]
 asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 unstable-curve448 = ["dep:x448"]

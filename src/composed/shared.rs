@@ -1,4 +1,5 @@
 use std::io::{BufRead, Read};
+#[cfg(feature = "mmap")]
 use std::path::Path;
 
 use buffer_redux::BufReader;

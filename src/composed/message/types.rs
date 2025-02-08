@@ -2,6 +2,7 @@ use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 use bytes::{Bytes, BytesMut};
+#[cfg(feature = "bzip2")]
 use bzip2::write::BzEncoder;
 use chrono::{SubsecRound, Utc};
 use flate2::write::{DeflateEncoder, ZlibEncoder};
@@ -475,10 +476,15 @@ impl Message {
                 self.to_writer(&mut enc)?;
                 enc.finish()?
             }
+            #[cfg(feature = "bzip2")]
             CompressionAlgorithm::BZip2 => {
                 let mut enc = BzEncoder::new(Vec::new(), bzip2::Compression::default());
                 self.to_writer(&mut enc)?;
                 enc.finish()?
+            }
+            #[cfg(not(feature = "bzip2"))]
+            CompressionAlgorithm::BZip2 => {
+                unsupported_err!("Bzip2 compression is unsupported");
             }
             CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => {
                 unsupported_err!("CompressionAlgorithm {} is unsupported", u8::from(alg))
@@ -1110,6 +1116,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bzip2")]
     fn test_compression_bzip2() {
         let lit_msg = Message::new_literal("hello-zip.txt", "hello world");
 

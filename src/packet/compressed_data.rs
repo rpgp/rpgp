@@ -2,6 +2,7 @@ use std::io::{self, Read};
 
 use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes};
+#[cfg(feature = "bzip2")]
 use bzip2::read::BzDecoder;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 
@@ -28,6 +29,7 @@ pub enum Decompressor<R> {
     Uncompressed(R),
     Zip(DeflateDecoder<R>),
     Zlib(ZlibDecoder<R>),
+    #[cfg(feature = "bzip2")]
     Bzip2(BzDecoder<R>),
 }
 
@@ -37,6 +39,7 @@ impl Read for Decompressor<&[u8]> {
             Decompressor::Uncompressed(ref mut c) => c.read(into),
             Decompressor::Zip(ref mut c) => c.read(into),
             Decompressor::Zlib(ref mut c) => c.read(into),
+            #[cfg(feature = "bzip2")]
             Decompressor::Bzip2(ref mut c) => c.read(into),
         }
     }
@@ -78,9 +81,14 @@ impl CompressedData {
             CompressionAlgorithm::ZLIB => Ok(Decompressor::Zlib(ZlibDecoder::new(
                 &self.compressed_data[..],
             ))),
+            #[cfg(feature = "bzip2")]
             CompressionAlgorithm::BZip2 => Ok(Decompressor::Bzip2(BzDecoder::new(
                 &self.compressed_data[..],
             ))),
+            #[cfg(not(feature = "bzip2"))]
+            CompressionAlgorithm::BZip2 => {
+                unsupported_err!("Bzip2 compression is unsupported");
+            }
             CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => unsupported_err!(
                 "CompressionAlgorithm {} is unsupported",
                 u8::from(self.compression_algorithm)

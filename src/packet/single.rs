@@ -104,7 +104,7 @@ impl Packet {
             _ => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
                 return Err(Error::InvalidPacketContent(Box::new(Error::Message(
-                    format!("invalid packet type with partical length {:?}", ver.tag()),
+                    format!("invalid packet type with partial length {:?}", ver.tag()),
                 ))));
             }
         };

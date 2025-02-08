@@ -1,6 +1,6 @@
 /// Represents a Key ID.
 ///
-/// This ID is always 8 bytes long, but calculated differntly, depending on the key version.
+/// This ID is always 8 bytes long, but calculated differently, depending on the key version.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.4>
 #[derive(Clone, Copy, Hash, Eq, PartialEq, derive_more::Debug, derive_more::Display)]
