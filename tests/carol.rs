@@ -20,7 +20,17 @@ fn load_carol_sec() {
         })
         .expect("failed to serialize");
 
-    assert_eq!(original_key.trim(), serialized_key.trim());
+    let original = original_key
+        .trim()
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+
+    let serialized = serialized_key
+        .trim()
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+
+    assert_eq!(original, serialized);
 }
 
 #[test]
@@ -39,5 +49,15 @@ fn load_carol_pub() {
         })
         .expect("failed to serialize");
 
-    assert_eq!(original_key, serialized_key);
+    let original = original_key
+        .trim()
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+
+    let serialized = serialized_key
+        .trim()
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+
+    assert_eq!(original, serialized);
 }

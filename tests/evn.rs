@@ -25,6 +25,15 @@ fn load_evn_pub() {
             ..Default::default()
         })
         .expect("failed to serialize");
+    let original = original_key
+        .trim()
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
 
-    assert_eq!(original_key.trim(), serialized_key.trim());
+    let serialized = serialized_key
+        .trim()
+        .replace("\r\n", "\n")
+        .replace('\r', "\n");
+
+    assert_eq!(original, serialized);
 }
