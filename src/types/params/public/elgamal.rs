@@ -12,10 +12,15 @@ pub struct ElgamalPublicParams {
     p: MpiBytes,
     g: MpiBytes,
     y: MpiBytes,
+    encrypt_only: bool,
 }
 
 impl ElgamalPublicParams {
-    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+    pub(crate) fn is_encrypt_only(&self) -> bool {
+        self.encrypt_only
+    }
+
+    pub fn try_from_buf<B: Buf>(mut i: B, encrypt_only: bool) -> Result<Self> {
         // MPI of Elgamal prime p
         let p = MpiBytes::from_buf(&mut i)?;
         // MPI of Elgamal group generator g
@@ -23,7 +28,12 @@ impl ElgamalPublicParams {
         // MPI of Elgamal public key value y (= g**x mod p where x is secret)
         let y = MpiBytes::from_buf(&mut i)?;
 
-        let params = ElgamalPublicParams { p, g, y };
+        let params = ElgamalPublicParams {
+            p,
+            g,
+            y,
+            encrypt_only,
+        };
 
         Ok(params)
     }
@@ -66,7 +76,7 @@ mod tests {
         fn params_roundtrip(params: ElgamalPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = ElgamalPublicParams::try_from_buf(&mut &buf[..])?;
+            let new_params = ElgamalPublicParams::try_from_buf(&mut &buf[..], false)?;
             prop_assert_eq!(params, new_params);
         }
     }

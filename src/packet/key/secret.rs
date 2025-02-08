@@ -302,6 +302,9 @@ impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyTrait for Secre
                     }
                     priv_key.sign(hash, data)
                 }
+                PlainSecretParams::Elgamal(_) => {
+                    unsupported_err!("Elgamal signing");
+                }
             }?;
 
             match pub_params {

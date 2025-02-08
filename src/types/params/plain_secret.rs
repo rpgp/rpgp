@@ -13,7 +13,7 @@ use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, rsa, x25519, Decryptor};
+use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, elgamal, rsa, x25519, Decryptor};
 use crate::errors::Result;
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
@@ -33,6 +33,7 @@ pub enum PlainSecretParams {
     EdDSA(eddsa::SecretKey),
     EdDSALegacy(eddsa::SecretKey),
     X25519(x25519::SecretKey),
+    Elgamal(elgamal::SecretKey),
     #[cfg(feature = "unstable-curve448")]
     X448(crate::crypto::x448::SecretKey),
 }
@@ -87,13 +88,17 @@ impl PlainSecretParams {
                 let key = crate::crypto::dsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::DSA(key)
             }
-            (PublicKeyAlgorithm::Elgamal, PublicParams::Elgamal(_)) => {
-                // map(mpi, PlainSecretParamsRef::Elgamal)(i)
-                unsupported_err!("elgamal secret key material");
+            (PublicKeyAlgorithm::Elgamal, PublicParams::Elgamal(pub_params)) => {
+                let x = MpiBytes::from_buf(i)?;
+                ensure!(!pub_params.is_encrypt_only(), "inconsistent key state");
+                let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
+                Self::Elgamal(key)
             }
-            (PublicKeyAlgorithm::ElgamalEncrypt, PublicParams::Elgamal(_)) => {
-                // map(mpi, PlainSecretParamsRef::Elgamal)(i)
-                unsupported_err!("elgamal secret key material");
+            (PublicKeyAlgorithm::ElgamalEncrypt, PublicParams::Elgamal(pub_params)) => {
+                let x = MpiBytes::from_buf(i)?;
+                ensure!(pub_params.is_encrypt_only(), "inconsistent key state");
+                let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
+                Self::Elgamal(key)
             }
             (PublicKeyAlgorithm::ECDH, PublicParams::ECDH(pub_params)) => {
                 let secret = MpiBytes::from_buf(i)?;
@@ -500,6 +505,10 @@ impl PlainSecretParams {
                 let x = key.x();
                 MpiBytes::from(x).to_writer(writer)?;
             }
+            PlainSecretParams::Elgamal(key) => {
+                let x = key.as_mpi();
+                x.to_writer(writer)?;
+            }
             PlainSecretParams::ECDSA(key) => {
                 let x = key.as_mpi();
                 x.to_writer(writer)?;
@@ -551,6 +560,10 @@ impl PlainSecretParams {
             PlainSecretParams::DSA(key) => {
                 let x = key.x();
                 MpiBytes::from(x).write_len()
+            }
+            PlainSecretParams::Elgamal(key) => {
+                let x = key.as_mpi();
+                x.write_len()
             }
             PlainSecretParams::ECDSA(key) => {
                 let x = key.as_mpi();

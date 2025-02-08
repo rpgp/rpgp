@@ -57,6 +57,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::DSA(ref p) => Ok(Self::DSA(p.into())),
             PlainSecretParams::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
             PlainSecretParams::ECDH(ref p) => Ok(Self::ECDH(p.into())),
+            PlainSecretParams::Elgamal(ref p) => Ok(Self::Elgamal(p.into())),
             PlainSecretParams::EdDSA(ref p) => Ok(Self::Ed25519(p.into())),
             PlainSecretParams::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
@@ -92,8 +93,12 @@ impl PublicParams {
                 let params = EcdhPublicParams::try_from_buf(i, len)?;
                 Ok(PublicParams::ECDH(params))
             }
-            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
-                let params = ElgamalPublicParams::try_from_buf(i)?;
+            PublicKeyAlgorithm::Elgamal => {
+                let params = ElgamalPublicParams::try_from_buf(i, false)?;
+                Ok(PublicParams::Elgamal(params))
+            }
+            PublicKeyAlgorithm::ElgamalEncrypt => {
+                let params = ElgamalPublicParams::try_from_buf(i, true)?;
                 Ok(PublicParams::Elgamal(params))
             }
             PublicKeyAlgorithm::EdDSALegacy => {

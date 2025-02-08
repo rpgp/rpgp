@@ -80,7 +80,7 @@ impl Serialize for BlockType {
     fn write_len(&self) -> usize {
         // allocates, but this is tiny, should be fine
         let x = self.to_string();
-        x.as_bytes().len()
+        x.len()
     }
 }
 

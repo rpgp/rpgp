@@ -10,6 +10,7 @@ pub mod ecc_curve;
 pub mod ecdh;
 pub mod ecdsa;
 pub mod eddsa;
+pub mod elgamal;
 pub mod hash;
 pub mod public_key;
 pub mod rsa;
