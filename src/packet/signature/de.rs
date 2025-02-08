@@ -162,7 +162,7 @@ fn v6_parser<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Signature>
     // Four-octet scalar octet count for following hashed subpacket data.
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u32()?.try_into()?;
-    let hsub_raw = (&mut i).take(hsub_len);
+    let hsub_raw = i.read_take(hsub_len)?;
     let hsub = subpackets(packet_header.version(), hsub_raw)?;
     debug!(
         "found {} hashed subpackets in {} bytes",
@@ -173,7 +173,7 @@ fn v6_parser<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Signature>
     // Four-octet scalar octet count for the following unhashed subpacket data.
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u32()?.try_into()?;
-    let usub_raw = (&mut i).take(usub_len);
+    let usub_raw = i.read_take(usub_len)?;
     let usub = subpackets(packet_header.version(), usub_raw)?;
     debug!(
         "found {} unhashed subpackets in {} bytes",
