@@ -156,15 +156,15 @@ impl PacketHeaderVersion {
             PacketHeaderVersion::Old => {
                 if len < 256 {
                     // one octet
-                    writer.write_u8(0b1000_0000 | tag << 2)?;
+                    writer.write_u8(0b1000_0000 | (tag << 2))?;
                     writer.write_u8(len.try_into()?)?;
                 } else if len < 65536 {
                     // two octets
-                    writer.write_u8(0b1000_0001 | tag << 2)?;
+                    writer.write_u8(0b1000_0001 | (tag << 2))?;
                     writer.write_u16::<BigEndian>(len as u16)?;
                 } else {
                     // four octets
-                    writer.write_u8(0b1000_0010 | tag << 2)?;
+                    writer.write_u8(0b1000_0010 | (tag << 2))?;
                     writer.write_u32::<BigEndian>(len as u32)?;
                 }
             }

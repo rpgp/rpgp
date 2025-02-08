@@ -172,9 +172,7 @@ pub fn verify(
         HashAlgorithm::SHA3_512 => verify_int::<Sha3_512>(key, hashed, &signature),
         HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
         HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
-    }
-    .map_err(Into::into)
-}
+    }}
 
 #[cfg(test)]
 mod tests {

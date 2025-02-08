@@ -226,7 +226,7 @@ impl SymEncryptedProtectedData {
 
     pub fn version(&self) -> usize {
         match self.config {
-            Config::V1 { .. } => 1,
+            Config::V1 => 1,
             Config::V2 { .. } => 2,
         }
     }
