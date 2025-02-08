@@ -159,98 +159,98 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_696,
+        17_726,
         // Hash::Other(4)
         1,
-        3299,
+        3269,
         20_996
     ),
     (
         test_parse_dumps_1,
         1,
-        17_536,
+        17_565,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3452,
+        3423,
         20_996
     ),
     (
         test_parse_dumps_2,
         2,
-        17_574,
+        17_599,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3415,
+        3390,
         20_994
     ),
     (
         test_parse_dumps_3,
         3,
-        17_646,
+        17_668,
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3344,
+        3322,
         20_996
     ),
     (
         test_parse_dumps_4,
         4,
-        17_582,
+        17_608,
         // - Elgamal verify
         2,
-        3410,
+        3384,
         20_994
     ),
     (
         test_parse_dumps_5,
         5,
-        17_609,
+        17_644,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3387,
+        3352,
         21_004
     ),
     (
         test_parse_dumps_6,
         6,
-        17_671,
+        17_701,
         // - Elgamal verify
         1,
-        3324,
+        3294,
         20_996
     ),
     (
         test_parse_dumps_7,
         7,
-        17_685,
+        17_722,
         // - Elgamal verify
         3,
-        3311,
+        3274,
         20_999
     ),
     (
         test_parse_dumps_8,
         8,
-        17_691,
+        17_722,
         // - Hash::Other(5)
         // - Elgamal verify
         6,
-        3305,
+        3274,
         21_002
     ),
     (
         test_parse_dumps_9,
         9,
-        17_545,
+        17_576,
         // - Hash::Other(5)
         // - Elgamal verify
         3,
-        3462,
+        3431,
         21_010
     ),
 );

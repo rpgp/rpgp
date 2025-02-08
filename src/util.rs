@@ -2,25 +2,6 @@
 
 use std::{hash, io};
 
-use byteorder::{BigEndian, WriteBytesExt};
-
-use crate::errors;
-
-/// Write packet length, including the prefix for lengths larger or equal than 8384.
-pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
-    if len < 192 {
-        writer.write_u8(len.try_into()?)?;
-    } else if len < 8384 {
-        writer.write_u8((((len - 192) / 256) + 192) as u8)?;
-        writer.write_u8(((len - 192) % 256) as u8)?;
-    } else {
-        writer.write_u8(0xFF)?;
-        writer.write_u32::<BigEndian>(len as u32)?;
-    }
-
-    Ok(())
-}
-
 pub fn write_packet_length_len(len: usize) -> usize {
     if len < 192 {
         1
@@ -95,25 +76,4 @@ pub fn write_all(writer: &mut impl io::Write, mut buf: &[u8]) -> io::Result<()> 
         }
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used)]
-
-    use super::*;
-
-    #[test]
-    fn test_write_packet_len() {
-        let mut res = Vec::new();
-        write_packet_length(1173, &mut res).unwrap();
-        assert_eq!(hex::encode(res), "c3d5");
-    }
-
-    #[test]
-    fn test_write_packet_length() {
-        let mut res = Vec::new();
-        write_packet_length(12870, &mut res).unwrap();
-        assert_eq!(hex::encode(res), "ff00003246");
-    }
 }

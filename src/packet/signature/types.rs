@@ -993,7 +993,7 @@ impl SubpacketLength {
         let olen = i.read_u8()?;
         let len = match olen {
             // One-Octet Lengths
-            0..=191 => Self::One(olen as u8),
+            0..=191 => Self::One(olen),
             // Two-Octet Lengths
             192..=254 => {
                 let a = i.read_u8()?;

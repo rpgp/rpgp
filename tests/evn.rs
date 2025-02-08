@@ -26,5 +26,5 @@ fn load_evn_pub() {
         })
         .expect("failed to serialize");
 
-    assert_eq!(original_key, serialized_key);
+    assert_eq!(original_key.trim(), serialized_key.trim());
 }

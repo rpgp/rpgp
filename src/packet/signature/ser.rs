@@ -9,8 +9,6 @@ use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
 use crate::packet::SignatureVersionSpecific;
 use crate::ser::Serialize;
-use crate::util::write_packet_length;
-use crate::util::write_packet_length_len;
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -262,7 +260,7 @@ impl Serialize for SubpacketData {
 
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_length(1 + self.data.write_len(), writer)?;
+        self.len.to_writer(writer)?;
         writer.write_u8(self.typ().as_u8(self.is_critical))?;
         self.data.to_writer(writer)?;
 
@@ -270,10 +268,8 @@ impl Serialize for Subpacket {
     }
 
     fn write_len(&self) -> usize {
-        let body_len = self.data.write_len();
-        let mut sum = write_packet_length_len(1 + body_len);
-        sum += 1;
-        sum += body_len;
+        let mut sum = self.len.len();
+        sum += self.len.write_len();
         sum
     }
 }
