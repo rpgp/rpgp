@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - ${{ env.RUST_NIGHTLY }}
+          - nightly-2025-02-02
           - stable
 
     steps:
@@ -62,7 +62,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - ${{ env.RUST_NIGHTLY }}
+          - nightly-2025-02-02
           - stable
         target:
           - x86_64-pc-windows-gnu
@@ -134,7 +134,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - ${{ env.RUST_NIGHTLY }}
+          - nightly-2025-02-02
           - stable
 
     steps:
