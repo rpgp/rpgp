@@ -8,6 +8,7 @@ use crate::errors::Result;
 use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
 use crate::packet::SignatureVersionSpecific;
+use crate::packet::{Subpacket, SubpacketData, SubpacketType};
 use crate::ser::Serialize;
 
 impl Serialize for Signature {

@@ -10,13 +10,17 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::signature::types::*;
-use crate::packet::PacketHeader;
+use crate::packet::{
+    Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
+    SubpacketType,
+};
 use crate::parsing::BufParsing;
 use crate::types::{
     CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion,
     PacketLength, RevocationKey, SignatureBytes, Tag,
 };
+
+use super::{Signature, SignatureType, SignatureVersion};
 
 impl Signature {
     /// Parses a `Signature` packet from the given buffer
@@ -238,7 +242,8 @@ fn subpacket<B: Buf>(
     packet_version: PacketHeaderVersion,
     mut body: B,
 ) -> Result<Subpacket> {
-    use self::SubpacketType::*;
+    use super::subpacket::SubpacketType::*;
+
     debug!("parsing subpacket: {:?}", typ);
 
     let res = match typ {

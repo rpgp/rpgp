@@ -101,6 +101,7 @@ pub use self::one_pass_signature::*;
 pub use self::packet_sum::*;
 pub use self::padding::*;
 pub use self::public_key_encrypted_session_key::*;
+pub use self::signature::subpacket::{Subpacket, SubpacketData, SubpacketLength, SubpacketType};
 pub use self::signature::*;
 pub use self::sym_encrypted_data::*;
 pub use self::sym_encrypted_protected_data::Config as SymEncryptedProtectedDataConfig;
