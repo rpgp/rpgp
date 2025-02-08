@@ -21,7 +21,6 @@ rust-version = "1.81"
 aes = "0.8.4"
 argon2 = { version = "0.5", features = ["zeroize"] }
 base64 = ">=0.21.7, < 0.23"
-bitfield = "0.17"
 block-padding = "0.3"
 blowfish = "0.9"
 byteorder = "1.4"

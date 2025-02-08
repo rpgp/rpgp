@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use bitfield::bitfield;
+use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
@@ -850,19 +850,25 @@ pub enum SignatureType {
     Other(#[cfg_attr(test, proptest(strategy = "0x51u8.."))] u8),
 }
 
-// TODO: convert to use bitfields::bitfield
-bitfield! {
-    #[derive(Default, PartialEq, Eq, Copy, Clone)]
-    pub struct KeyFlags(u8);
-    impl Debug;
-
-    pub certify, set_certify: 0;
-    pub sign, set_sign: 1;
-    pub encrypt_comms, set_encrypt_comms: 2;
-    pub encrypt_storage, set_encrypt_storage: 3;
-    pub shared, set_shared: 4;
-    pub authentication, set_authentication: 5;
-    pub group, set_group: 7;
+#[bitfield(u8, order = lsb)]
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub struct KeyFlags {
+    #[bits(1)]
+    certify: bool,
+    #[bits(1)]
+    sign: bool,
+    #[bits(1)]
+    encrypt_comms: bool,
+    #[bits(1)]
+    encrypt_storage: bool,
+    #[bits(1)]
+    shared: bool,
+    #[bits(1)]
+    authentication: bool,
+    #[bits(1)]
+    _padding: u8,
+    #[bits(1)]
+    group: bool,
 }
 
 impl<'a> From<&'a [u8]> for KeyFlags {
@@ -936,36 +942,36 @@ mod tests {
     #[test]
     fn test_keyflags() {
         let flags: KeyFlags = Default::default();
-        assert_eq!(flags.0, 0x00);
+        assert_eq!(flags.into_bits(), 0x00);
 
         let mut flags = KeyFlags::default();
         flags.set_certify(true);
         assert!(flags.certify());
-        assert_eq!(flags.0, 0x01);
+        assert_eq!(flags.into_bits(), 0x01);
 
         let mut flags = KeyFlags::default();
         flags.set_sign(true);
-        assert_eq!(flags.0, 0x02);
+        assert_eq!(flags.into_bits(), 0x02);
 
         let mut flags = KeyFlags::default();
         flags.set_encrypt_comms(true);
-        assert_eq!(flags.0, 0x04);
+        assert_eq!(flags.into_bits(), 0x04);
 
         let mut flags = KeyFlags::default();
         flags.set_encrypt_storage(true);
-        assert_eq!(flags.0, 0x08);
+        assert_eq!(flags.into_bits(), 0x08);
 
         let mut flags = KeyFlags::default();
         flags.set_shared(true);
-        assert_eq!(flags.0, 0x10);
+        assert_eq!(flags.into_bits(), 0x10);
 
         let mut flags = KeyFlags::default();
         flags.set_authentication(true);
-        assert_eq!(flags.0, 0x20);
+        assert_eq!(flags.into_bits(), 0x20);
 
         let mut flags = KeyFlags::default();
         flags.set_group(true);
-        assert_eq!(flags.0, 0x80);
+        assert_eq!(flags.into_bits(), 0x80);
     }
 
     #[test]

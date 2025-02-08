@@ -394,7 +394,7 @@ fn test_parse_details() {
         0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C,
     ])))
     .unwrap();
-    let key_flags: SmallVec<[u8; 1]> = KeyFlags(0x03).into();
+    let key_flags: SmallVec<[u8; 1]> = KeyFlags::from_bits(0x03).into();
     let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
         SymmetricKeyAlgorithm::AES192,

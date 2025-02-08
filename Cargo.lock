@@ -147,12 +147,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d7e60934ceec538daadb9d8432424ed043a904d8e0243f3c6446bce549a46ac"
 
 [[package]]
-name = "bitfield"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f798d2d157e547aa99aab0967df39edd0b70307312b6f8bd2848e6abe40896e0"
-
-[[package]]
 name = "bitfields"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1476,7 +1470,7 @@ checksum = "27e1f8e085bfa9b85763fe3ddaacbe90a09cd847b3833129153a6cb063bbe132"
 dependencies = [
  "aes",
  "base64",
- "bitfield 0.14.0",
+ "bitfield",
  "block-padding",
  "blowfish",
  "bstr",
@@ -1529,7 +1523,6 @@ dependencies = [
  "aes-kw",
  "argon2",
  "base64",
- "bitfield 0.17.0",
  "bitfields",
  "block-padding",
  "blowfish",
