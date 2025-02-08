@@ -54,7 +54,7 @@ impl PkeskBytes {
                 let mpi = MpiBytes::from_buf(&mut i)?;
                 Ok(PkeskBytes::Rsa { mpi })
             }
-            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
+            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
                 let first = MpiBytes::from_buf(&mut i)?;
                 let second = MpiBytes::from_buf(&mut i)?;
                 Ok(PkeskBytes::Elgamal { first, second })
@@ -313,7 +313,7 @@ mod tests {
                 | PublicKeyAlgorithm::RSASign => {
                     any::<MpiBytes>().prop_map(|mpi| Self::Rsa { mpi }).boxed()
                 }
-                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
+                PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
                     any::<(MpiBytes, MpiBytes)>()
                         .prop_map(|(first, second)| Self::Elgamal { first, second })
                         .boxed()

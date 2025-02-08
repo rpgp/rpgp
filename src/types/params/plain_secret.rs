@@ -91,6 +91,10 @@ impl PlainSecretParams {
                 // map(mpi, PlainSecretParamsRef::Elgamal)(i)
                 unsupported_err!("elgamal secret key material");
             }
+            (PublicKeyAlgorithm::ElgamalEncrypt, PublicParams::Elgamal(_)) => {
+                // map(mpi, PlainSecretParamsRef::Elgamal)(i)
+                unsupported_err!("elgamal secret key material");
+            }
             (PublicKeyAlgorithm::ECDH, PublicParams::ECDH(pub_params)) => {
                 let secret = MpiBytes::from_buf(i)?;
 

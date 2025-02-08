@@ -2,6 +2,45 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.15.0](https://github.com/rpgp/rpgp/compare/v0.14.2..0.15.0) - 2025-01-29
+
+### ⛰️  Features
+
+- Implement TryFrom<PublicOrSecret> for Signed{Public,Secret}Key - ([f9e7694](https://github.com/rpgp/rpgp/commit/f9e76946789ad0de742f30bcaffb3b804acd834f))
+- [**breaking**] Implement feature gate for x448 - ([e16fa47](https://github.com/rpgp/rpgp/commit/e16fa47ecf78a56e25d8f043eab414d4b92767d1))
+- Update deps - ([8222112](https://github.com/rpgp/rpgp/commit/82221128ead1b71f0b38b7fc7c8844db7c9059f5))
+
+### 🐛 Bug Fixes
+
+- Correctly deal with multi buffer reads in dearmoring - ([7637f18](https://github.com/rpgp/rpgp/commit/7637f18e7827ad12b07bc99e4fb1fbd1830b5e4e))
+
+### 🚜 Refactor
+
+- Remove unused feature flags - ([d800fb5](https://github.com/rpgp/rpgp/commit/d800fb55df6704b8ebe03e5da8c7c5a918222da0))
+
+### 📚 Documentation
+
+- Update changelog - ([2cdd934](https://github.com/rpgp/rpgp/commit/2cdd9345d880c8f01098306f129970e89f6a0832))
+- Add information about ROS audit to security status - ([651bb28](https://github.com/rpgp/rpgp/commit/651bb28c8bfc86bd705fec2cab88504cc64f9b7f))
+
+### 🧪 Testing
+
+- Add cargo fuzz testing harnesses  - ([de9dcf1](https://github.com/rpgp/rpgp/commit/de9dcf1bf9da9db860be6346525d241d359c4faa))
+- Move some slow tests to ignore, to speed up default tests - ([7d16c1c](https://github.com/rpgp/rpgp/commit/7d16c1c835c2d4486ace36f7f8e516f25b3edaa7))
+- Split up key tests for better speed - ([3bc007f](https://github.com/rpgp/rpgp/commit/3bc007fb7a0f7c47a7b1f43e6473ea64df410cdc))
+- Split up tests more - ([9abb7fa](https://github.com/rpgp/rpgp/commit/9abb7fa7eef1166d2be2ea3f5a3b54f21394f4a3))
+
+### ⚙️ Miscellaneous Tasks
+
+- Clippy fixes - ([116568b](https://github.com/rpgp/rpgp/commit/116568bcf47cf4052a7ec940594766c7c77830b3))
+- Drop rust-toolchain ([#449](https://github.com/rpgp/rpgp/issues/449)) - ([3a8267a](https://github.com/rpgp/rpgp/commit/3a8267aa8853bdc10dda80136c7e45e151c28919))
+- Remove beta workflows - ([51727ad](https://github.com/rpgp/rpgp/commit/51727ad8266dddf9b2684a29ba54726a53ec5bbc))
+- Remove duplicated check tasks - ([f21bf0c](https://github.com/rpgp/rpgp/commit/f21bf0cfb92e1a152e74aba5977f097a56a3f9ba))
+- Remove even more duplicated checks - ([1a3b8d6](https://github.com/rpgp/rpgp/commit/1a3b8d619f2a161ed325b75b1ae6c0516bc57f46))
+- Remove duplicated wasm checks - ([fef441b](https://github.com/rpgp/rpgp/commit/fef441ba648291ab3bd4342d869680e09b735900))
+- Use nextest to run tests - ([3b4e22b](https://github.com/rpgp/rpgp/commit/3b4e22bfda8f01e80f0aa7b45de1d70dca6d6b3f))
+- Add Cargo.lock - ([e6a6864](https://github.com/rpgp/rpgp/commit/e6a68645ad820f19ec66fc1d4b254a641de98a42))
+
 ## [0.14.2](https://github.com/rpgp/rpgp/compare/v0.14.1..0.14.2) - 2024-12-05
 
 ### 🐛 Bug Fixes

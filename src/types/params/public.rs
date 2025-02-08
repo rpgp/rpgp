@@ -92,7 +92,7 @@ impl PublicParams {
                 let params = EcdhPublicParams::try_from_buf(i, len)?;
                 Ok(PublicParams::ECDH(params))
             }
-            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalSign => {
+            PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
                 let params = ElgamalPublicParams::try_from_buf(i)?;
                 Ok(PublicParams::Elgamal(params))
             }

@@ -10,9 +10,9 @@ pub enum PublicKeyAlgorithm {
     RSAEncrypt = 2,
     /// DEPRECATED: RSA (Sign-Only)
     RSASign = 3,
-    /// Elgamal (Sign-Only)
+    /// Elgamal (Encrypt-Only)
     #[cfg_attr(test, proptest(skip))]
-    ElgamalSign = 16,
+    ElgamalEncrypt = 16,
     /// DSA (Digital Signature Algorithm)
     DSA = 17,
     /// Elliptic Curve: RFC 9580 [formerly in RFC 6637]

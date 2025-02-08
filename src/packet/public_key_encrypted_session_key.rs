@@ -474,7 +474,7 @@ mod tests {
             Just(RSAEncrypt),
             Just(RSASign),
             Just(Elgamal),
-            Just(ElgamalSign),
+            Just(ElgamalEncrypt),
             Just(ECDH),
             Just(X25519),
         ]
