@@ -72,8 +72,8 @@ impl UserId {
     {
         let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             Utc::now().trunc_subsecs(0),
-        ))];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))];
+        ))?];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?];
 
         let mut config = match signer.version() {
             KeyVersion::V4 => SignatureConfig::v4(

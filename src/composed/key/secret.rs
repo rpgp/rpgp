@@ -99,12 +99,12 @@ impl SecretSubkey {
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
+            ))?,
+            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into()))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
         config.unhashed_subpackets =
-            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))];
+            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
 
         let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
 

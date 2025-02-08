@@ -137,11 +137,12 @@ impl PublicSubkey {
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
+            ))?,
+            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into()))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))];
+        let unhashed_subpackets =
+            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
 
         let mut config = match sec_key.version() {
             KeyVersion::V4 => SignatureConfig::v4(

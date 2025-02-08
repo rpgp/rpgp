@@ -10,11 +10,11 @@ use rand::{CryptoRng, Rng};
 use crate::errors::Result;
 use crate::packet::{
     PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+    SubpacketLength,
 };
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag};
-use crate::util::{packet_length_buf, write_packet_length, write_packet_length_len};
 
 /// The type of a user attribute. Only `Image` is a known type currently
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive, derive_more::Display)]
@@ -42,6 +42,7 @@ pub enum UserAttribute {
     #[display("User Attribute: Image (len: {})", data.len())]
     Image {
         packet_header: PacketHeader,
+        subpacket_len: SubpacketLength,
         header: ImageHeader,
         #[debug("{}", hex::encode(data))]
         data: Bytes,
@@ -49,6 +50,7 @@ pub enum UserAttribute {
     #[display("User Attribute: {} (len: {})", typ, data.len())]
     Unknown {
         packet_header: PacketHeader,
+        subpacket_len: SubpacketLength,
         typ: UserAttributeType,
         #[debug("{}", hex::encode(data))]
         data: Bytes,
@@ -160,44 +162,50 @@ impl UserAttribute {
     /// Parses a `UserAttribute` packet from the given buffer.
     pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         ensure_eq!(packet_header.tag(), Tag::UserAttribute, "invalid tag");
-        let len = packet_length_buf(&mut i)?;
+        let packet_len = SubpacketLength::from_buf(&mut i)?;
+        let mut rest = i.read_take(packet_len.len())?;
+        let typ = rest.read_u8().map(UserAttributeType::from)?;
 
-        ensure!(len >= 1, "invalid user attribute packet");
-        let typ = i.read_u8().map(UserAttributeType::from)?;
-
-        let mut body = i.read_take(len - 1)?;
         match typ {
             UserAttributeType::Image => {
-                let header = ImageHeader::from_buf(&mut body)?;
-                let data = body.rest();
+                let header = ImageHeader::from_buf(&mut rest)?;
+                let data = rest.rest();
 
                 // the actual image is the rest
                 Ok(UserAttribute::Image {
                     packet_header,
+                    subpacket_len: packet_len,
                     header,
                     data,
                 })
             }
             UserAttributeType::Unknown(_) => Ok(UserAttribute::Unknown {
                 packet_header,
+                subpacket_len: packet_len,
                 typ,
-                data: body.rest(),
+                data: rest.rest(),
             }),
         }
     }
 
     /// Creates a new jpeg image.
-    pub fn new_image(image: Bytes) -> Self {
+    pub fn new_image(image: Bytes) -> Result<Self> {
         let header = ImageHeader::V1(ImageHeaderV1::Jpeg { data: [0u8; 12] });
-        let len = image_write_len(&header, &image);
+        // typ + header + data
+        let packet_len = 1 + header.write_len() + image.len();
+        let subpacket_len = SubpacketLength::encode(packet_len.try_into()?);
+
+        let len = packet_len + subpacket_len.write_len();
         let packet_header = PacketHeader::new_fixed(Tag::UserAttribute, len);
 
-        Self::Image {
+        Ok(Self::Image {
             packet_header,
+            subpacket_len,
             header,
             data: image,
-        }
+        })
     }
+
     /// Returns typ of this user attribute.
     pub fn typ(&self) -> UserAttributeType {
         match self {
@@ -234,8 +242,8 @@ impl UserAttribute {
     {
         let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             Utc::now().trunc_subsecs(0),
-        ))];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))];
+        ))?];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?];
 
         let mut config = match signer.version() {
             KeyVersion::V4 => SignatureConfig::v4(
@@ -282,24 +290,29 @@ impl UserAttribute {
             }
         }
     }
-}
 
-fn image_write_len(header: &ImageHeader, data: &[u8]) -> usize {
-    let packet_len = header.write_len() + data.len();
-    let header_len = write_packet_length_len(packet_len);
-    packet_len + header_len
+    fn subpacket_len(&self) -> &SubpacketLength {
+        match self {
+            UserAttribute::Image {
+                ref subpacket_len, ..
+            } => subpacket_len,
+            UserAttribute::Unknown {
+                ref subpacket_len, ..
+            } => subpacket_len,
+        }
+    }
 }
 
 impl Serialize for UserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_length(self.packet_len(), writer)?;
-
         match self {
             UserAttribute::Image {
                 ref data,
                 ref header,
+                ref subpacket_len,
                 ..
             } => {
+                subpacket_len.to_writer(writer)?;
                 // Type Image Attribute Subpacket
                 writer.write_u8(0x01)?;
                 header.to_writer(writer)?;
@@ -307,7 +320,14 @@ impl Serialize for UserAttribute {
                 // actual data
                 writer.write_all(data)?;
             }
-            UserAttribute::Unknown { ref data, typ, .. } => {
+            UserAttribute::Unknown {
+                ref data,
+                typ,
+                ref subpacket_len,
+                ..
+            } => {
+                subpacket_len.to_writer(writer)?;
+
                 // Type Attribute Subpacket
                 writer.write_u8((*typ).into())?;
                 writer.write_all(data)?;
@@ -318,7 +338,7 @@ impl Serialize for UserAttribute {
 
     fn write_len(&self) -> usize {
         let packet_len = self.packet_len();
-        let mut sum = write_packet_length_len(packet_len);
+        let mut sum = self.subpacket_len().write_len();
         sum += packet_len;
         sum
     }
@@ -355,14 +375,8 @@ mod tests {
         fn gen_image()(
             data in vec(0u8..=255, 1..100)
         ) -> UserAttribute {
-            UserAttribute::new_image(data.into())
+            UserAttribute::new_image(data.into()).unwrap()
         }
-    }
-
-    fn unknown_write_len(data: &[u8]) -> usize {
-        let packet_len = 1 + data.len();
-        let header_len = write_packet_length_len(packet_len);
-        packet_len + header_len
     }
 
     prop_compose! {
@@ -370,11 +384,15 @@ mod tests {
             typ in 2u8..,
             data in vec(0u8..=255, 1..100)
         ) -> UserAttribute {
-            let len = unknown_write_len(&data);
+            let packet_len = 1 + data.len();
+            let subpacket_len = SubpacketLength::encode(packet_len.try_into().unwrap());
+            let len = packet_len + subpacket_len.write_len();
+
             let packet_header = PacketHeader::new_fixed(Tag::UserAttribute, len);
 
             UserAttribute::Unknown {
                 packet_header,
+                subpacket_len,
                 typ: UserAttributeType::Unknown(typ),
                 data: data.into(),
             }

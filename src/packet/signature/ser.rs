@@ -40,24 +40,66 @@ impl Serialize for Signature {
     }
 }
 
-impl Subpacket {
-    /// Convert expiration time "Duration" data to OpenPGP u32 format.
-    /// Use u32:MAX on overflow.
-    fn duration_to_u32(d: &Duration) -> u32 {
-        u32::try_from(d.num_seconds()).unwrap_or(u32::MAX)
-    }
+/// Convert expiration time "Duration" data to OpenPGP u32 format.
+/// Use u32:MAX on overflow.
+fn duration_to_u32(d: &Duration) -> u32 {
+    u32::try_from(d.num_seconds()).unwrap_or(u32::MAX)
+}
 
-    fn body_to_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        debug!("writing subpacket: {:?}", self.data);
+impl Subpacket {
+    pub fn typ(&self) -> SubpacketType {
         match &self.data {
+            SubpacketData::SignatureCreationTime(_) => SubpacketType::SignatureCreationTime,
+            SubpacketData::SignatureExpirationTime(_) => SubpacketType::SignatureExpirationTime,
+            SubpacketData::KeyExpirationTime(_) => SubpacketType::KeyExpirationTime,
+            SubpacketData::Issuer(_) => SubpacketType::Issuer,
+            SubpacketData::PreferredSymmetricAlgorithms(_) => {
+                SubpacketType::PreferredSymmetricAlgorithms
+            }
+            SubpacketData::PreferredHashAlgorithms(_) => SubpacketType::PreferredHashAlgorithms,
+            SubpacketData::PreferredCompressionAlgorithms(_) => {
+                SubpacketType::PreferredCompressionAlgorithms
+            }
+            SubpacketData::KeyServerPreferences(_) => SubpacketType::KeyServerPreferences,
+            SubpacketData::KeyFlags(_) => SubpacketType::KeyFlags,
+            SubpacketData::Features(_) => SubpacketType::Features,
+            SubpacketData::RevocationReason(_, _) => SubpacketType::RevocationReason,
+            SubpacketData::IsPrimary(_) => SubpacketType::PrimaryUserId,
+            SubpacketData::Revocable(_) => SubpacketType::Revocable,
+            SubpacketData::EmbeddedSignature(_) => SubpacketType::EmbeddedSignature,
+            SubpacketData::PreferredKeyServer(_) => SubpacketType::PreferredKeyServer,
+            SubpacketData::Notation(_) => SubpacketType::Notation,
+            SubpacketData::RevocationKey(_) => SubpacketType::RevocationKey,
+            SubpacketData::SignersUserID(_) => SubpacketType::SignersUserID,
+            SubpacketData::PolicyURI(_) => SubpacketType::PolicyURI,
+            SubpacketData::TrustSignature(_, _) => SubpacketType::TrustSignature,
+            SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
+            SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
+            SubpacketData::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
+            SubpacketData::PreferredEncryptionModes(_) => SubpacketType::PreferredEncryptionModes,
+            SubpacketData::IntendedRecipientFingerprint(_) => {
+                SubpacketType::IntendedRecipientFingerprint
+            }
+            SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
+            SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
+            SubpacketData::Other(n, _) => SubpacketType::Other(*n),
+            SubpacketData::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
+        }
+    }
+}
+
+impl Serialize for SubpacketData {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        debug!("writing subpacket: {:?}", self);
+        match &self {
             SubpacketData::SignatureCreationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp().try_into()?)?;
             }
             SubpacketData::SignatureExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(Self::duration_to_u32(d))?;
+                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
             }
             SubpacketData::KeyExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(Self::duration_to_u32(d))?;
+                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
             }
             SubpacketData::Issuer(id) => {
                 writer.write_all(id.as_ref())?;
@@ -171,8 +213,8 @@ impl Subpacket {
         Ok(())
     }
 
-    fn body_len(&self) -> usize {
-        let len = match &self.data {
+    fn write_len(&self) -> usize {
+        let len = match &self {
             SubpacketData::SignatureCreationTime(_) => 4,
             SubpacketData::SignatureExpirationTime(_) => 4,
             SubpacketData::KeyExpirationTime(_) => 4,
@@ -216,59 +258,19 @@ impl Subpacket {
 
         len
     }
-
-    pub fn typ(&self) -> SubpacketType {
-        match &self.data {
-            SubpacketData::SignatureCreationTime(_) => SubpacketType::SignatureCreationTime,
-            SubpacketData::SignatureExpirationTime(_) => SubpacketType::SignatureExpirationTime,
-            SubpacketData::KeyExpirationTime(_) => SubpacketType::KeyExpirationTime,
-            SubpacketData::Issuer(_) => SubpacketType::Issuer,
-            SubpacketData::PreferredSymmetricAlgorithms(_) => {
-                SubpacketType::PreferredSymmetricAlgorithms
-            }
-            SubpacketData::PreferredHashAlgorithms(_) => SubpacketType::PreferredHashAlgorithms,
-            SubpacketData::PreferredCompressionAlgorithms(_) => {
-                SubpacketType::PreferredCompressionAlgorithms
-            }
-            SubpacketData::KeyServerPreferences(_) => SubpacketType::KeyServerPreferences,
-            SubpacketData::KeyFlags(_) => SubpacketType::KeyFlags,
-            SubpacketData::Features(_) => SubpacketType::Features,
-            SubpacketData::RevocationReason(_, _) => SubpacketType::RevocationReason,
-            SubpacketData::IsPrimary(_) => SubpacketType::PrimaryUserId,
-            SubpacketData::Revocable(_) => SubpacketType::Revocable,
-            SubpacketData::EmbeddedSignature(_) => SubpacketType::EmbeddedSignature,
-            SubpacketData::PreferredKeyServer(_) => SubpacketType::PreferredKeyServer,
-            SubpacketData::Notation(_) => SubpacketType::Notation,
-            SubpacketData::RevocationKey(_) => SubpacketType::RevocationKey,
-            SubpacketData::SignersUserID(_) => SubpacketType::SignersUserID,
-            SubpacketData::PolicyURI(_) => SubpacketType::PolicyURI,
-            SubpacketData::TrustSignature(_, _) => SubpacketType::TrustSignature,
-            SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
-            SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
-            SubpacketData::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
-            SubpacketData::PreferredEncryptionModes(_) => SubpacketType::PreferredEncryptionModes,
-            SubpacketData::IntendedRecipientFingerprint(_) => {
-                SubpacketType::IntendedRecipientFingerprint
-            }
-            SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
-            SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
-            SubpacketData::Other(n, _) => SubpacketType::Other(*n),
-            SubpacketData::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
-        }
-    }
 }
 
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_length(1 + self.body_len(), writer)?;
+        write_packet_length(1 + self.data.write_len(), writer)?;
         writer.write_u8(self.typ().as_u8(self.is_critical))?;
-        self.body_to_writer(writer)?;
+        self.data.to_writer(writer)?;
 
         Ok(())
     }
 
     fn write_len(&self) -> usize {
-        let body_len = self.body_len();
+        let body_len = self.data.write_len();
         let mut sum = write_packet_length_len(1 + body_len);
         sum += 1;
         sum += body_len;

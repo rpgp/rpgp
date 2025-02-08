@@ -67,12 +67,12 @@ impl CleartextSignedMessage {
         let algorithm = key.algorithm();
         let hash_algorithm = key.hash_alg();
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
-            )),
+            ))?,
         ];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
 
         let mut config = match key.version() {
             KeyVersion::V4 => SignatureConfig::v4(SignatureType::Text, algorithm, hash_algorithm),

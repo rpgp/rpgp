@@ -3,32 +3,8 @@
 use std::{hash, io};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::Buf;
 
-use crate::errors::{self, Result};
-use crate::parsing::BufParsing;
-
-/// Parse a packet length.
-/// <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.7>
-pub(crate) fn packet_length_buf<B: Buf>(mut i: B) -> Result<usize> {
-    let olen = i.read_u8()?;
-    match olen {
-        // One-Octet Lengths
-        0..=191 => Ok(olen as usize),
-        // Two-Octet Lengths
-        192..=254 => {
-            // subpacketLen = ((1st_octet - 192) << 8) + (2nd_octet) + 192
-            let a = i.read_u8()?;
-            let len = ((olen as usize - 192) << 8) + 192 + a as usize;
-            Ok(len)
-        }
-        // Five-Octet Lengths
-        255 => {
-            // subpacket length = [4-octet scalar starting at 2nd_octet]
-            i.read_be_u32().map(|len| len as usize)
-        }
-    }
-}
+use crate::errors;
 
 /// Write packet length, including the prefix for lengths larger or equal than 8384.
 pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {

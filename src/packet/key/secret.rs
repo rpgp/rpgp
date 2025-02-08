@@ -212,8 +212,8 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
 
         config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             chrono::Utc::now().trunc_subsecs(0),
-        ))];
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))];
+        ))?];
+        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
         config.sign_key(key, key_pw, &self)
     }

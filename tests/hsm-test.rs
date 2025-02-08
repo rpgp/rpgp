@@ -505,8 +505,9 @@ fn card_sign() {
         config.hashed_subpackets = vec![
             packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
                 DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
-            )),
-            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())),
+            ))
+            .unwrap(),
+            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())).unwrap(),
         ];
 
         let signature = config.sign(&hsm, String::new, DATA).unwrap();

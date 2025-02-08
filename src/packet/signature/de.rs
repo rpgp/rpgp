@@ -17,7 +17,6 @@ use crate::types::{
     CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion,
     PacketLength, RevocationKey, SignatureBytes, Tag,
 };
-use crate::util::packet_length_buf;
 
 impl Signature {
     /// Parses a `Signature` packet from the given buffer
@@ -214,20 +213,19 @@ fn subpackets<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result<V
     let mut packets = Vec::new();
     while i.has_remaining() {
         // the subpacket length (1, 2, or 5 octets)
-        let len = packet_length_buf(&mut i)?;
-        ensure!(len > 0, "emtpy subpacket is not allowed");
+        let packet_len = SubpacketLength::from_buf(&mut i)?;
+        ensure!(!packet_len.is_empty(), "emtpy subpacket is not allowed");
         // the subpacket type (1 octet)
         let (typ, is_critical) = i.read_u8().map(SubpacketType::from_u8)?;
+        let len = packet_len.len() - 1;
         debug!(
             "reading subpacket {:?}: critical? {}, len: {}",
-            typ,
-            is_critical,
-            len - 1
+            typ, is_critical, len
         );
 
-        i.ensure_remaining(len - 1)?;
-        let body = (&mut i).take(len - 1);
-        let packet = subpacket(typ, is_critical, packet_version, body)?;
+        i.ensure_remaining(len)?;
+        let body = (&mut i).take(len);
+        let packet = subpacket(typ, is_critical, packet_len, packet_version, body)?;
         packets.push(packet);
     }
     Ok(packets)
@@ -236,6 +234,7 @@ fn subpackets<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result<V
 fn subpacket<B: Buf>(
     typ: SubpacketType,
     is_critical: bool,
+    packet_len: SubpacketLength,
     packet_version: PacketHeaderVersion,
     mut body: B,
 ) -> Result<Subpacket> {
@@ -274,7 +273,11 @@ fn subpacket<B: Buf>(
         Other(n) => Ok(SubpacketData::Other(n, body.rest())),
     };
 
-    let res = res.map(|data| Subpacket { is_critical, data });
+    let res = res.map(|data| Subpacket {
+        is_critical,
+        data,
+        len: packet_len,
+    });
 
     if res.is_err() {
         warn!("invalid subpacket: {:?} {:?}", typ, res);

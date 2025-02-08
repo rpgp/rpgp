@@ -392,7 +392,8 @@ fn test_parse_details() {
 
     let issuer = Subpacket::regular(SubpacketData::Issuer(KeyId::from([
         0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C,
-    ])));
+    ])))
+    .unwrap();
     let key_flags: SmallVec<[u8; 1]> = KeyFlags(0x03).into();
     let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
@@ -474,17 +475,21 @@ fn test_parse_details() {
                 DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
             Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                 p_sym_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone()))
+                .unwrap(),
             Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                 p_com_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])),
-            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer.clone()],
     );
@@ -558,17 +563,21 @@ fn test_parse_details() {
                 DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
             Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                 p_sym_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone()))
+                .unwrap(),
             Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                 p_com_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])),
-            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer.clone()],
     );
@@ -654,13 +663,14 @@ fn test_parse_details() {
                 DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(key_flags)),
-            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(p_sym_algs)),
-            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs)),
-            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(p_com_algs)),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])),
-            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags)).unwrap(),
+            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(p_sym_algs)).unwrap(),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs)).unwrap(),
+            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(p_com_algs)).unwrap(),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer],
     );

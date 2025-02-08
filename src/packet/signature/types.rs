@@ -1008,12 +1008,25 @@ impl SubpacketLength {
         Ok(len)
     }
 
+    /// Encodes the given length into a minimal version
+    pub(crate) fn encode(len: u32) -> Self {
+        match len {
+            0..=191 => Self::One(len as u8),
+            192..=254 => Self::Two(len as u16),
+            _ => Self::Five(len),
+        }
+    }
+
     pub(crate) fn len(&self) -> usize {
         match self {
             Self::One(l) => *l as _,
             Self::Two(l) => *l as _,
             Self::Five(l) => *l as _,
         }
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 
@@ -1048,23 +1061,30 @@ impl Serialize for SubpacketLength {
 pub struct Subpacket {
     pub is_critical: bool,
     pub data: SubpacketData,
+    pub len: SubpacketLength,
 }
 
 impl Subpacket {
     /// Construct a new regular subpacket.
-    pub const fn regular(data: SubpacketData) -> Self {
-        Subpacket {
+    pub fn regular(data: SubpacketData) -> Result<Self> {
+        let raw_len = (data.write_len() + 1).try_into()?;
+        let len = SubpacketLength::encode(raw_len);
+        Ok(Subpacket {
             is_critical: false,
             data,
-        }
+            len,
+        })
     }
 
     /// Construct a new critical subpacket.
-    pub const fn critical(data: SubpacketData) -> Self {
-        Subpacket {
+    pub fn critical(data: SubpacketData) -> Result<Self> {
+        let raw_len = (data.write_len() + 1).try_into()?;
+        let len = SubpacketLength::encode(raw_len);
+        Ok(Subpacket {
             is_critical: true,
             data,
-        }
+            len,
+        })
     }
 }
 
