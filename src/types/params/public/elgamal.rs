@@ -12,6 +12,7 @@ pub struct ElgamalPublicParams {
     p: MpiBytes,
     g: MpiBytes,
     y: MpiBytes,
+    #[cfg_attr(test, proptest(value = "false"))]
     encrypt_only: bool,
 }
 
