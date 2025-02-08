@@ -79,7 +79,7 @@ curve25519-dalek = { version = "4.1.3", default-features = false, features = [
     "precomputed-tables",
     "zeroize",
 ] }
-ed25519-dalek = { version = "2.0.0", default-features = false, features = [
+ed25519-dalek = { version = "2.1.1", default-features = false, features = [
     "std",
     "zeroize",
     "fast",
