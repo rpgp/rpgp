@@ -10,24 +10,20 @@ use crate::packet::{PacketHeader, PacketTrait};
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, Tag};
 
+/// Packet for compressed data.
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-compressed-data-packet-type>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct CompressedData {
     packet_header: PacketHeader,
     compression_algorithm: CompressionAlgorithm,
     #[debug("{}", hex::encode(compressed_data))]
-    #[cfg_attr(test, proptest(strategy = "compressed_data_gen()"))]
+    #[cfg_attr(test, proptest(strategy = "tests::compressed_data_gen()"))]
     compressed_data: Bytes,
 }
 
-#[cfg(test)]
-proptest::prop_compose! {
-    fn compressed_data_gen()(source: Vec<u8>) -> Bytes {
-        // TODO: actually compress
-        source.into()
-    }
-}
-
+/// Structure to decompress a given reader.
 pub enum Decompressor<R> {
     Uncompressed(R),
     Zip(DeflateDecoder<R>),
@@ -59,15 +55,18 @@ impl CompressedData {
         })
     }
 
-    pub fn from_compressed(alg: CompressionAlgorithm, data: Vec<u8>) -> Self {
-        let packet_header = PacketHeader::new_fixed(Tag::CompressedData, 1 + data.len());
+    /// Create the structure from the raw compressed data.
+    pub(crate) fn from_compressed(alg: CompressionAlgorithm, data: impl Into<Bytes>) -> Self {
+        let compressed_data = data.into();
+        let packet_header = PacketHeader::new_fixed(Tag::CompressedData, 1 + compressed_data.len());
         CompressedData {
             packet_header,
             compression_algorithm: alg,
-            compressed_data: Bytes::from(data),
+            compressed_data,
         }
     }
 
+    /// Creates a decompressor.
     pub fn decompress(&self) -> Result<Decompressor<&[u8]>> {
         match self.compression_algorithm {
             CompressionAlgorithm::Uncompressed => {
@@ -89,6 +88,7 @@ impl CompressedData {
         }
     }
 
+    /// Returns a reference to raw compressed data.
     pub fn compressed_data(&self) -> &[u8] {
         &self.compressed_data
     }
@@ -118,6 +118,13 @@ mod tests {
     use super::*;
 
     use proptest::prelude::*;
+
+    proptest::prop_compose! {
+        pub fn compressed_data_gen()(source: Vec<u8>) -> Bytes {
+            // TODO: actually compress
+            source.into()
+        }
+    }
 
     proptest! {
         #[test]

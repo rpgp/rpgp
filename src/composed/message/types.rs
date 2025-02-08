@@ -1110,6 +1110,16 @@ mod tests {
     }
 
     #[test]
+    fn test_compression_bzip2() {
+        let lit_msg = Message::new_literal("hello-zip.txt", "hello world");
+
+        let compressed_msg = lit_msg.compress(CompressionAlgorithm::BZip2).unwrap();
+        let uncompressed_msg = compressed_msg.decompress().unwrap();
+
+        assert_eq!(&lit_msg, &uncompressed_msg);
+    }
+
+    #[test]
     fn test_compression_uncompressed() {
         let lit_msg = Message::new_literal("hello.txt", "hello world");
 
