@@ -113,7 +113,7 @@ fn v4_parser<B: Buf>(
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u16()?.into();
     i.ensure_remaining(hsub_len)?;
-    let hsub_raw = (&mut i).take(hsub_len);
+    let hsub_raw = i.read_take(hsub_len)?;
     let hsub = subpackets(packet_header.version(), hsub_raw)?;
     debug!(
         "found {} hashed subpackets in {} bytes",
@@ -124,7 +124,7 @@ fn v4_parser<B: Buf>(
     // Two-octet scalar octet count for the following unhashed subpacket data.
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u16()?.into();
-    let usub_raw = (&mut i).take(usub_len);
+    let usub_raw = i.read_take(usub_len)?;
     let usub = subpackets(packet_header.version(), usub_raw)?;
     debug!(
         "found {} unhashed subpackets in {} bytes",
@@ -228,8 +228,14 @@ fn subpackets<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result<V
         );
 
         i.ensure_remaining(len)?;
-        let body = (&mut i).take(len);
-        let packet = subpacket(typ, is_critical, packet_len, packet_version, body)?;
+        let mut body = i.read_take(len)?;
+        let packet = subpacket(typ, is_critical, packet_len, packet_version, &mut body)?;
+        if !body.is_empty() {
+            warn!("failed to fully process subpacket: {:?}", typ);
+            if is_critical {
+                bail!("invalid subpacket: {:?}", typ);
+            }
+        }
         packets.push(packet);
     }
     Ok(packets)
