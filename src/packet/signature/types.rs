@@ -1,8 +1,8 @@
 use std::io::Read;
 
 use bitfield::bitfield;
-use byteorder::{BigEndian, ByteOrder};
-use bytes::Bytes;
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use bytes::{Buf, Bytes};
 use chrono::{DateTime, Duration, Utc};
 use iter_read::IterRead;
 use log::debug;
@@ -18,6 +18,7 @@ use crate::line_writer::LineBreak;
 use crate::normalize_lines::Normalized;
 use crate::packet::signature::SignatureConfig;
 use crate::packet::{PacketHeader, PacketTrait, SignatureVersionSpecific};
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{
     self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SignatureBytes, Tag,
@@ -972,6 +973,77 @@ impl SubpacketType {
     }
 }
 
+/// Represents a subpack length.
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-subpacket-specifi>
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+pub enum SubpacketLength {
+    /// 1 byte encoding, must be less than `192`.
+    One(#[cfg_attr(test, proptest(strategy = "0u8..=191"))] u8),
+    /// 2 byte encoding
+    Two(#[cfg_attr(test, proptest(strategy = "192u16..=254"))] u16),
+    /// 4 byte encoding
+    Five(#[cfg_attr(test, proptest(strategy = "255u32.."))] u32),
+}
+
+impl SubpacketLength {
+    /// Parses a supbacket length from the given buffer.
+    pub(crate) fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
+        let olen = i.read_u8()?;
+        let len = match olen {
+            // One-Octet Lengths
+            0..=191 => Self::One(olen as u8),
+            // Two-Octet Lengths
+            192..=254 => {
+                let a = i.read_u8()?;
+                let l = ((olen as u16 - 192) << 8) + 192 + a as u16;
+                Self::Two(l)
+            }
+            255 => {
+                let len = i.read_be_u32()?;
+                Self::Five(len)
+            }
+        };
+        Ok(len)
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        match self {
+            Self::One(l) => *l as _,
+            Self::Two(l) => *l as _,
+            Self::Five(l) => *l as _,
+        }
+    }
+}
+
+impl Serialize for SubpacketLength {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            Self::One(l) => {
+                writer.write_u8(*l)?;
+            }
+            Self::Two(l) => {
+                writer.write_u8((((l - 192) / 256) + 192) as u8)?;
+                writer.write_u8(((l - 192) % 256) as u8)?;
+            }
+            Self::Five(l) => {
+                writer.write_u8(0xFF)?;
+                writer.write_u32::<BigEndian>(*l)?
+            }
+        }
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        match self {
+            Self::One(_) => 1,
+            Self::Two(_) => 2,
+            Self::Five(_) => 5,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Subpacket {
     pub is_critical: bool,
@@ -1194,6 +1266,26 @@ mod tests {
         for case in cases {
             assert_eq!(SubpacketType::from_u8(case.as_u8(false)), (case, false));
             assert_eq!(SubpacketType::from_u8(case.as_u8(true)), (case, true));
+        }
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn subpacket_length_write_len(len: SubpacketLength) {
+            let mut buf = Vec::new();
+            len.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), len.write_len());
+        }
+
+
+        #[test]
+        fn subpacket_length_packet_roundtrip(len: SubpacketLength) {
+            let mut buf = Vec::new();
+            len.to_writer(&mut buf).unwrap();
+            let new_len = SubpacketLength::from_buf(&mut &buf[..]).unwrap();
+            assert_eq!(len, new_len);
         }
     }
 }
