@@ -19,7 +19,7 @@
   <!-- msrv -->
   <a href="https://img.shields.io/badge/rustc-1.75+-blue.svg?style=flat-square">
     <img src="https://img.shields.io/badge/rustc-1.75+-blue.svg?style=flat-square"
-      alt="MSRV 1.81" />
+      alt="MSRV 1.82" />
   </a>
 </div>
 
