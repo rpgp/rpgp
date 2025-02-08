@@ -12,7 +12,7 @@ concurrency:
 env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: -Dwarnings
-  RUST_NIGHTLY: nightly-2024-12-04
+  RUST_NIGHTLY: nightly-2025-02-02
 
 jobs:
   build_and_test_nix:
@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - nightly-2024-12-04
+          - ${{ env.RUST_NIGHTLY }}
           - stable
 
     steps:
@@ -62,7 +62,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2024-07-07
+          - ${{ env.RUST_NIGHTLY }}
           - stable
         target:
           - x86_64-pc-windows-gnu
@@ -134,7 +134,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2025-02-02
+          - ${{ env.RUST_NIGHTLY }}
           - stable
 
     steps:
@@ -157,7 +157,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: check
-        args: --target wasm32-unknown-unknown --features wasm
+        args: --target wasm32-unknown-unknown --no-default-features --features wasm
 
   check_fmt_and_docs:
     name: Checking fmt and docs
