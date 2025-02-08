@@ -70,7 +70,7 @@ where
     let in_meta = in_file.metadata()?;
     let in_file_size = in_meta.len();
     let Some(in_file_name) = in_path.file_name() else {
-        bail!("{}: is not a vaild input file", in_path.display());
+        bail!("{}: is not a valid input file", in_path.display());
     };
     let mut in_file = BufReader::new(in_file);
 

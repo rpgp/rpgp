@@ -44,7 +44,7 @@ impl UserId {
 
     /// Returns the actual id.
     ///
-    /// Should be valid UTF-8, but not guranteed, to be more compatible with existing data.
+    /// Should be valid UTF-8, but not guaranteed, to be more compatible with existing data.
     pub fn id(&self) -> &[u8] {
         &self.id
     }

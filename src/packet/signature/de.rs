@@ -218,7 +218,7 @@ fn subpackets<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result<V
     while i.has_remaining() {
         // the subpacket length (1, 2, or 5 octets)
         let packet_len = SubpacketLength::from_buf(&mut i)?;
-        ensure!(!packet_len.is_empty(), "emtpy subpacket is not allowed");
+        ensure!(!packet_len.is_empty(), "empty subpacket is not allowed");
         // the subpacket type (1 octet)
         let (typ, is_critical) = i.read_u8().map(SubpacketType::from_u8)?;
         let len = packet_len.len() - 1;

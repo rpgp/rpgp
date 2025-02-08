@@ -218,7 +218,7 @@ impl Builder {
                 let in_file_size = usize::try_from(in_meta.len())?;
 
                 let Some(in_file_name) = path.file_name() else {
-                    bail!("{}: is not a vaild input file", path.display());
+                    bail!("{}: is not a valid input file", path.display());
                 };
                 let file_name: Bytes = in_file_name.as_encoded_bytes().to_vec().into();
 

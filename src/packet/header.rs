@@ -23,7 +23,7 @@ pub enum PacketHeader {
     },
 }
 
-/// Maxiumum size of partial packet length.
+/// Maximum size of partial packet length.
 const MAX_PARTIAL_LEN: u32 = 2u32.pow(30);
 
 impl PacketHeader {
