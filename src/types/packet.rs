@@ -17,6 +17,17 @@ pub enum PacketLength {
 }
 
 impl PacketLength {
+    /// Returns how many bytes encoding the given length as fixed encoding would need.
+    pub fn fixed_encoding_len(len: usize) -> usize {
+        if len < 192 {
+            1
+        } else if len < 8384 {
+            2
+        } else {
+            1 + 4
+        }
+    }
+
     pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
         let olen = i.read_u8()?;
         let len = match olen {

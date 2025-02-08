@@ -2,16 +2,6 @@
 
 use std::{hash, io};
 
-pub fn write_packet_length_len(len: usize) -> usize {
-    if len < 192 {
-        1
-    } else if len < 8384 {
-        2
-    } else {
-        1 + 4
-    }
-}
-
 #[macro_export]
 macro_rules! impl_try_from_into {
     ($enum_name:ident, $( $name:ident => $variant_type:ty ),*) => {

@@ -27,9 +27,8 @@ use crate::packet::{
 use crate::ser::Serialize;
 use crate::types::{
     CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
-    PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
+    PacketLength, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
-use crate::util::write_packet_length_len;
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -402,13 +401,13 @@ impl Serialize for Message {
         match self {
             Message::Literal(data) => {
                 let len = data.write_len();
-                let mut sum = write_packet_length_len(len);
+                let mut sum = PacketLength::fixed_encoding_len(len);
                 sum += len;
                 sum
             }
             Message::Compressed(data) => {
                 let len = data.write_len();
-                let mut sum = write_packet_length_len(len);
+                let mut sum = PacketLength::fixed_encoding_len(len);
                 sum += len;
                 sum
             }
@@ -421,7 +420,7 @@ impl Serialize for Message {
                 let mut sum = 0;
                 if let Some(ops) = one_pass_signature {
                     let len = ops.write_len();
-                    sum += write_packet_length_len(len);
+                    sum += PacketLength::fixed_encoding_len(len);
                     sum += len;
                 }
                 if let Some(message) = message {
@@ -429,7 +428,7 @@ impl Serialize for Message {
                 }
 
                 let len = signature.write_len();
-                sum += write_packet_length_len(len);
+                sum += PacketLength::fixed_encoding_len(len);
                 sum += len;
 
                 sum
