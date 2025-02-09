@@ -11,7 +11,7 @@ use crate::normalize_lines::Normalized;
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::Tag;
+use crate::types::{PacketHeaderVersion, PacketLength, Tag};
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -209,8 +209,180 @@ impl PacketTrait for LiteralData {
     }
 }
 
+pub(crate) enum LiteralDataGenerator<R: io::Read> {
+    Fixed(LiteralDataFixedGenerator<R>),
+    Partial(LiteralDataPartialGenerator<R>),
+}
+
+const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
+
+impl<R: io::Read> LiteralDataGenerator<R> {
+    pub(crate) fn new(
+        header: LiteralDataHeader,
+        source: R,
+        source_len: Option<u32>,
+    ) -> Result<Self> {
+        match source_len {
+            Some(source_len) => {
+                let gen = LiteralDataFixedGenerator::new(header, source, source_len)?;
+                Ok(Self::Fixed(gen))
+            }
+            None => {
+                let gen = LiteralDataPartialGenerator::new(header, source, DEFAULT_CHUNK_SIZE);
+                Ok(Self::Partial(gen))
+            }
+        }
+    }
+
+    pub(crate) fn len(&self) -> Option<u32> {
+        match self {
+            Self::Fixed(ref fixed) => Some(fixed.total_len),
+            Self::Partial(_) => None,
+        }
+    }
+}
+
+impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Fixed(ref mut fixed) => fixed.read(buf),
+            Self::Partial(ref mut partial) => {
+                todo!()
+            }
+        }
+    }
+}
+
+pub(crate) struct LiteralDataFixedGenerator<R: io::Read> {
+    /// The serialized packet header
+    header: Vec<u8>,
+    /// Data source
+    source: R,
+    /// how many bytes of the header have we written already
+    header_written: usize,
+    total_len: u32,
+}
+
+impl<R: io::Read> LiteralDataFixedGenerator<R> {
+    pub(crate) fn new(header: LiteralDataHeader, source: R, source_len: u32) -> Result<Self> {
+        let len = source_len + u32::try_from(header.write_len())?;
+        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len as usize);
+        let mut serialized_header = Vec::new();
+        packet_header.to_writer(&mut serialized_header)?;
+        header.to_writer(&mut serialized_header)?;
+
+        let total_len = source_len + u32::try_from(serialized_header.len())?;
+
+        Ok(Self {
+            header: serialized_header,
+            source,
+            header_written: 0,
+            total_len,
+        })
+    }
+}
+
+impl<R: io::Read> io::Read for LiteralDataFixedGenerator<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let header_bytes_left = self.header.len() - self.header_written;
+        if header_bytes_left > 0 {
+            // write header
+            let to_write = header_bytes_left.min(buf.len());
+            buf[..to_write]
+                .copy_from_slice(&self.header[self.header_written..self.header_written + to_write]);
+            self.header_written += to_write;
+            Ok(to_write)
+        } else {
+            // write source
+            self.source.read(buf)
+        }
+    }
+}
+
+pub(crate) struct LiteralDataPartialGenerator<R: io::Read> {
+    /// The header
+    header: LiteralDataHeader,
+    /// Data source
+    source: R,
+    /// buffer for the individual data
+    buffer: Box<[u8]>,
+    chunk_size: u32,
+    is_done: bool,
+}
+
+impl<R: io::Read> LiteralDataPartialGenerator<R> {
+    pub(crate) fn new(header: LiteralDataHeader, source: R, chunk_size: u32) -> Self {
+        Self {
+            header,
+            source,
+            buffer: vec![0u8; chunk_size as usize].into_boxed_slice(),
+            chunk_size,
+            is_done: false,
+        }
+    }
+
+    fn fill_buf(&mut self) -> io::Result<usize> {
+        let mut offset = 0;
+        loop {
+            let read = self.source.read(&mut self.buffer[offset..])?;
+            offset += read;
+
+            if read == 0 {
+                break;
+            } else if offset == self.chunk_size as usize {
+                break;
+            }
+        }
+
+        Ok(offset)
+    }
+}
+
+impl<R: io::Read> Iterator for LiteralDataPartialGenerator<R> {
+    type Item = io::Result<LiteralData>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_done {
+            return None;
+        }
+        let buf_size = match self.fill_buf() {
+            Ok(size) => size,
+            Err(err) => {
+                self.is_done = true;
+                return Some(Err(err));
+            }
+        };
+
+        debug_assert!(buf_size <= u32::MAX as usize);
+
+        let data = Bytes::from(self.buffer[..buf_size].to_vec());
+
+        let packet_length = if buf_size == self.chunk_size as usize {
+            // partial
+            PacketLength::Partial(data.len() as u32)
+        } else {
+            // final packet, this can be length 0
+            self.is_done = true;
+            PacketLength::Fixed(data.len())
+        };
+
+        let packet_header =
+            PacketHeader::from_parts(PacketHeaderVersion::New, Tag::LiteralData, packet_length)
+                .expect("known construction");
+
+        Some(Ok(LiteralData {
+            packet_header,
+            header: self.header.clone(),
+            data,
+        }))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+
     use super::*;
 
     #[test]
@@ -239,6 +411,31 @@ mod tests {
                 })
                 .boxed()
         }
+    }
+
+    #[test]
+    fn test_literal_data_fixed_generator() {
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let file_size = 1024 * 14 + 8;
+        let mut buf = vec![0u8; file_size];
+        rng.fill(&mut buf[..]);
+
+        let packet = LiteralData::from_bytes("hello", buf.to_vec().into());
+
+        let mut generator =
+            LiteralDataFixedGenerator::new(packet.header.clone(), &buf[..], file_size as _)
+                .unwrap();
+
+        let mut generator_out = Vec::new();
+        std::io::copy(&mut generator, &mut generator_out).unwrap();
+
+        let mut packet_out = Vec::new();
+        packet.to_writer_with_header(&mut packet_out).unwrap();
+
+        assert_eq!(packet_out, generator_out);
+
+        assert_eq!(packet_out.len(), generator.total_len as usize);
     }
 
     proptest! {
