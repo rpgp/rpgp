@@ -211,10 +211,14 @@ impl PacketTrait for LiteralData {
 
 pub(crate) enum LiteralDataGenerator<R: io::Read> {
     Fixed(LiteralDataFixedGenerator<R>),
-    Partial(LiteralDataPartialGenerator<R>),
+    Partial {
+        gen: LiteralDataPartialGenerator<R>,
+        /// Serialized version of the packet being written currently.
+        current_packet: Option<Bytes>,
+    },
 }
 
-const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
+pub(crate) const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
 
 impl<R: io::Read> LiteralDataGenerator<R> {
     pub(crate) fn new(
@@ -229,7 +233,10 @@ impl<R: io::Read> LiteralDataGenerator<R> {
             }
             None => {
                 let gen = LiteralDataPartialGenerator::new(header, source, DEFAULT_CHUNK_SIZE);
-                Ok(Self::Partial(gen))
+                Ok(Self::Partial {
+                    gen,
+                    current_packet: None,
+                })
             }
         }
     }
@@ -237,7 +244,7 @@ impl<R: io::Read> LiteralDataGenerator<R> {
     pub(crate) fn len(&self) -> Option<u32> {
         match self {
             Self::Fixed(ref fixed) => Some(fixed.total_len),
-            Self::Partial(_) => None,
+            Self::Partial { .. } => None,
         }
     }
 }
@@ -246,8 +253,38 @@ impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Fixed(ref mut fixed) => fixed.read(buf),
-            Self::Partial(ref mut partial) => {
-                todo!()
+            Self::Partial {
+                gen,
+                current_packet,
+            } => {
+                if current_packet.is_none() {
+                    match gen.next() {
+                        None => {
+                            // EOF
+                            return Ok(0);
+                        }
+                        Some(Ok(packet)) => {
+                            let mut packet_ser = Vec::new();
+                            packet
+                                .to_writer_with_header(&mut packet_ser)
+                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                            current_packet.replace(packet_ser.into());
+                        }
+                        Some(Err(err)) => {
+                            return Err(err);
+                        }
+                    }
+                }
+                let current_packet_ref = current_packet.as_mut().expect("just checked");
+
+                let to_write = current_packet_ref.remaining().min(buf.len());
+                current_packet_ref.copy_to_slice(&mut buf[..to_write]);
+
+                if current_packet_ref.remaining() == 0 {
+                    *current_packet = None;
+                }
+
+                Ok(to_write)
             }
         }
     }

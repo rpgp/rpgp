@@ -11,7 +11,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
     DataMode, LiteralDataGenerator, LiteralDataHeader, PacketHeader, PublicKeyEncryptedSessionKey,
-    SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
+    SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey, DEFAULT_CHUNK_SIZE,
 };
 use crate::ser::Serialize;
 use crate::types::{
@@ -19,15 +19,18 @@ use crate::types::{
 };
 use crate::Esk;
 
-pub struct Builder {
-    source: Source,
+type DummyReader = std::io::Cursor<Vec<u8>>;
+
+pub struct Builder<R = DummyReader> {
+    source: Source<R>,
     compression: CompressionAlgorithm,
     encryption: Encryption,
 }
 
-enum Source {
+enum Source<R = DummyReader> {
     Bytes { name: Bytes, bytes: Bytes },
     File(PathBuf),
+    Reader { file_name: Bytes, reader: R },
 }
 
 #[allow(dead_code)]
@@ -45,7 +48,7 @@ enum Encryption {
     },
 }
 
-impl Builder {
+impl Builder<DummyReader> {
     pub fn from_file(path: impl AsRef<Path>) -> Self {
         Self {
             source: Source::File(path.as_ref().into()),
@@ -64,6 +67,18 @@ impl Builder {
             encryption: Encryption::None,
         }
     }
+}
+impl<R: Read> Builder<R> {
+    pub fn from_reader(file_name: impl Into<Bytes>, reader: R) -> Self {
+        Self {
+            source: Source::Reader {
+                file_name: file_name.into(),
+                reader,
+            },
+            compression: CompressionAlgorithm::Uncompressed,
+            encryption: Encryption::None,
+        }
+    }
 
     pub fn compression(mut self, compression: CompressionAlgorithm) -> Self {
         self.compression = compression;
@@ -75,15 +90,15 @@ impl Builder {
         self
     }
 
-    pub fn encrypt_with_password_seipdv1<R, F>(
+    pub fn encrypt_with_password_seipdv1<RAND, F>(
         mut self,
-        mut rng: R,
+        mut rng: RAND,
         s2k: StringToKey,
         sym_alg: SymmetricKeyAlgorithm,
         msg_pw: F,
     ) -> Result<Self>
     where
-        R: Rng + CryptoRng,
+        RAND: Rng + CryptoRng,
         F: FnOnce() -> String + Clone,
     {
         // 1. Generate a session key.
@@ -101,14 +116,14 @@ impl Builder {
         Ok(self)
     }
 
-    pub fn encrypt_to_keys_seipdv1<R>(
+    pub fn encrypt_to_keys_seipdv1<RAND>(
         mut self,
-        mut rng: R,
+        mut rng: RAND,
         sym_alg: SymmetricKeyAlgorithm,
         pkeys: &[&impl PublicKeyTrait],
     ) -> Result<Self>
     where
-        R: CryptoRng + Rng,
+        RAND: CryptoRng + Rng,
     {
         // 1. Generate a session key.
         let session_key = sym_alg.new_session_key(&mut rng);
@@ -135,9 +150,9 @@ impl Builder {
         Ok(self)
     }
 
-    pub fn to_writer<R, W>(self, mut rng: R, out: W) -> Result<()>
+    pub fn to_writer<RAND, W>(self, mut rng: RAND, out: W) -> Result<()>
     where
-        R: Rng + CryptoRng,
+        RAND: Rng + CryptoRng,
         W: std::io::Write,
     {
         // TODO: deal with compression
@@ -188,13 +203,23 @@ impl Builder {
                 )?;
                 encrypt(&mut rng, generator, self.encryption, out)?;
             }
+            Source::Reader { file_name, reader } => {
+                let literal_data_header = LiteralDataHeader {
+                    mode: DataMode::Binary,
+                    file_name,
+                    created: Utc::now().trunc_subsecs(0),
+                };
+
+                let generator = LiteralDataGenerator::new(literal_data_header, reader, None)?;
+                encrypt(&mut rng, generator, self.encryption, out)?;
+            }
         }
         Ok(())
     }
 
-    pub fn to_file<R, P>(self, rng: R, out_path: P) -> Result<()>
+    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
     where
-        R: Rng + CryptoRng,
+        RAND: Rng + CryptoRng,
         P: AsRef<Path>,
     {
         let out_path: &Path = out_path.as_ref();
@@ -265,58 +290,48 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
                     // final packet:
                     // fixed size with the last partn
 
-                    // TODO: figure out a good chunk size
-                    let chunk_size = 1024 * 32;
-
+                    let chunk_size = DEFAULT_CHUNK_SIZE as usize;
                     let mut buffer = vec![0u8; chunk_size];
 
-                    // TODO: need to make a packet header per packet
+                    let config_len = config.write_len();
+                    let chunk_write_size = config_len + chunk_size;
+                    let chunk_enc_write_size: u32 = sym_alg
+                        .encrypted_protected_len(chunk_write_size)
+                        .try_into()?;
+
                     let mut offset = 0;
                     while let Ok(read) = generator.read(&mut buffer[offset..]) {
                         offset += read;
 
-                        if read == 0 {
+                        let (length, buf) = if read == 0 {
                             // last chunk
-                            let packet_header = PacketHeader::from_parts(
-                                PacketHeaderVersion::New,
-                                Tag::SymEncryptedProtectedData,
-                                PacketLength::Fixed(offset),
-                            )?;
-                            packet_header.to_writer(&mut out)?;
-                            config.to_writer(&mut out)?;
-                            sym_alg.encrypt_protected_stream(
-                                &mut rng,
-                                &session_key,
-                                &buffer[..offset],
-                                &mut out,
-                            )?;
+                            let enc_size = sym_alg.encrypted_protected_len(offset + config_len);
+                            (PacketLength::Fixed(enc_size), &buffer[..offset])
                         } else if offset == chunk_size {
                             // new chunk
                             offset = 0;
+                            (PacketLength::Partial(chunk_enc_write_size), &buffer[..])
+                        } else {
+                            continue;
+                        };
+                        let packet_header = PacketHeader::from_parts(
+                            PacketHeaderVersion::New,
+                            Tag::SymEncryptedProtectedData,
+                            length,
+                        )?;
+                        packet_header.to_writer(&mut out)?;
+                        config.to_writer(&mut out)?;
+                        sym_alg.encrypt_protected_stream(&mut rng, &session_key, buf, &mut out)?;
 
-                            let packet_header = PacketHeader::from_parts(
-                                PacketHeaderVersion::New,
-                                Tag::SymEncryptedProtectedData,
-                                PacketLength::Fixed(chunk_size),
-                            )?;
-                            packet_header.to_writer(&mut out)?;
-                            config.to_writer(&mut out)?;
-                            sym_alg.encrypt_protected_stream(
-                                &mut rng,
-                                &session_key,
-                                &buffer[..],
-                                &mut out,
-                            )?;
+                        if matches!(length, PacketLength::Fixed(_)) {
+                            break;
                         }
                     }
-
-                    todo!()
                 }
                 Some(in_size) => {
                     // calculate expected encrypted file size
                     let enc_file_size = sym_alg.encrypted_protected_len(in_size.try_into()?);
-                    let header_len = config.write_len();
-                    let packet_len = header_len + enc_file_size;
+                    let packet_len = config.write_len() + enc_file_size;
 
                     let packet_header = PacketHeader::from_parts(
                         PacketHeaderVersion::New,
@@ -402,7 +417,44 @@ mod tests {
         // encrypt it
         let s2k = crate::types::StringToKey::new_default(&mut rng);
 
-        let builder = Builder::from_bytes("plaintext.txt", buf.clone())
+        let builder = Builder::<DummyReader>::from_bytes("plaintext.txt", buf.clone())
+            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
+                "hello world".to_string()
+            })
+            .unwrap();
+
+        let mut encrypted = Vec::new();
+        builder.to_writer(&mut rng, &mut encrypted).unwrap();
+
+        // decrypt it
+        let message = Message::from_bytes(encrypted.into()).unwrap();
+        dbg!(&message);
+        let decrypted = message
+            .decrypt_with_password(|| "hello world".to_string())
+            .unwrap();
+
+        let Message::Literal(l) = decrypted else {
+            panic!("unexpected message: {:?}", decrypted);
+        };
+
+        assert_eq!(l.file_name(), "plaintext.txt");
+        assert_eq!(l.data(), &buf);
+    }
+
+    #[test]
+    fn binary_file_partial_size_no_compression_roundtrip_password_seipdv1() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        // Generate data
+        let file_size = 1024 * 14 + 8;
+        let mut buf = vec![0u8; file_size];
+        rng.fill(&mut buf[..]);
+
+        // encrypt it
+        let s2k = crate::types::StringToKey::new_default(&mut rng);
+
+        let builder = Builder::from_reader("plaintext.txt", &buf[..])
             .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
                 "hello world".to_string()
             })
