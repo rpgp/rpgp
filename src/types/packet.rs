@@ -58,6 +58,34 @@ impl PacketLength {
             Self::Partial(len) => Some(*len as usize),
         }
     }
+
+    pub fn to_writer_new<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            PacketLength::Fixed(len) => {
+                if *len < 192 {
+                    writer.write_u8(*len as u8)?;
+                } else if *len < 8384 {
+                    writer.write_u8((((len - 192) >> 8) + 192) as u8)?;
+                    writer.write_u8(((len - 192) & 0xFF) as u8)?;
+                } else {
+                    writer.write_u8(255)?;
+                    writer.write_u32::<BigEndian>(*len as u32)?;
+                }
+            }
+            PacketLength::Indeterminate => {
+                unreachable!("invalid state: indeterminate lengths for new style packet header");
+            }
+            PacketLength::Partial(len) => {
+                debug_assert_eq!(len.count_ones(), 1); // must be a power of two
+
+                // y & 0x1F
+                let n = len.trailing_zeros();
+                let n = (224 + n) as u8;
+                writer.write_u8(n)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl From<usize> for PacketLength {

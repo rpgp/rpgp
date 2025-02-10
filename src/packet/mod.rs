@@ -50,8 +50,8 @@
 //!
 //! let mut sig_cfg = SignatureConfig::v4(packet::SignatureType::Binary, PublicKeyAlgorithm::RSA, HashAlgorithm::SHA2_256);
 //! sig_cfg.hashed_subpackets = vec![
-//!     packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
-//!     packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
+//!     packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)).unwrap(),
+//!     packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())).unwrap(),
 //! ];
 //!
 //! let signature_packet = sig_cfg

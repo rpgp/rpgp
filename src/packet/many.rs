@@ -103,16 +103,25 @@ impl Iterator for PacketParser {
                 }
 
                 let mut body = SegmentedBuf::new();
-                body.push(self.reader.copy_to_bytes(len as usize));
+                let first = match self.reader.read_take(len as usize) {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        self.is_done = true;
+                        return Some(Err(err));
+                    }
+                };
+                body.push(first);
 
                 // Read n partials + 1 final fixed
                 loop {
-                    match PacketLength::from_buf(&mut self.reader) {
+                    let len = PacketLength::from_buf(&mut self.reader);
+                    debug!("partials: found packet_length: {:?}", len);
+                    match len {
                         Ok(PacketLength::Partial(len)) => {
                             let len = len as usize;
                             if self.reader.remaining() < len {
                                 self.is_done = true;
-                                return Some(Err(format_err!("invalid packet length detected")));
+                                return Some(Err(format_err!("invalid packet length detected: need {} bytes, only have {} bytes", len, self.reader.remaining())));
                             }
 
                             body.push(self.reader.copy_to_bytes(len));
@@ -120,7 +129,7 @@ impl Iterator for PacketParser {
                         Ok(PacketLength::Fixed(len)) => {
                             if self.reader.remaining() < len {
                                 self.is_done = true;
-                                return Some(Err(format_err!("invalid packet length detected")));
+                                return Some(Err(format_err!("invalid packet length detected: need {} bytes, only have {} bytes", len, self.reader.remaining())));
                             }
                             body.push(self.reader.copy_to_bytes(len));
                             break;

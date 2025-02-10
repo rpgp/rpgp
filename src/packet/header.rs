@@ -36,24 +36,8 @@ impl PacketHeader {
             0b1100_0000 => {
                 // new starts with 0b11
                 let header = NewPacketHeader::from_bits(header);
-                let olen = i.read_u8()?;
-                let length = match olen {
-                    // One-Octet Lengths
-                    0..=191 => PacketLength::Fixed(olen.into()),
-                    // Two-Octet Lengths
-                    192..=223 => {
-                        let a = i.read_u8()?;
-                        let l = ((olen as usize - 192) << 8) + 192 + a as usize;
-                        PacketLength::Fixed(l)
-                    }
-                    // Partial Body Lengths
-                    224..=254 => PacketLength::Partial(1 << (olen as usize & 0x1F)),
-                    // Five-Octet Lengths
-                    255 => {
-                        let len = i.read_be_u32()?;
-                        PacketLength::Fixed(len.try_into()?)
-                    }
-                };
+                let length = PacketLength::from_buf(&mut i)?;
+
                 Ok(PacketHeader::New { header, length })
             }
             0b1000_0000 => {
@@ -109,7 +93,11 @@ impl PacketHeader {
                     "indeterminate packet length is only supported in old style headers"
                 );
                 if let PacketLength::Partial(l) = length {
-                    ensure!(l.count_ones() == 1, "partial length must be a power of two");
+                    ensure!(
+                        l.count_ones() == 1,
+                        "partial length must be a power of two: {}",
+                        l
+                    );
                     ensure!(
                         l <= MAX_PARTIAL_LEN,
                         "partial length must be less or equal than {}",
@@ -164,34 +152,10 @@ impl Serialize for PacketHeader {
         debug!("writing packet header {:?}", self);
 
         match self {
-            Self::New { header, length } => match length {
-                PacketLength::Fixed(len) => {
-                    writer.write_u8(header.into_bits())?;
-                    if *len < 192 {
-                        writer.write_u8(*len as u8)?;
-                    } else if *len < 8384 {
-                        writer.write_u8((((len - 192) >> 8) + 192) as u8)?;
-                        writer.write_u8(((len - 192) & 0xFF) as u8)?;
-                    } else {
-                        writer.write_u8(255)?;
-                        writer.write_u32::<BigEndian>(*len as u32)?;
-                    }
-                }
-                PacketLength::Indeterminate => {
-                    unreachable!(
-                        "invalid state: indeterminate lengths for new style packet header"
-                    );
-                }
-                PacketLength::Partial(len) => {
-                    writer.write_u8(header.into_bits())?;
-                    debug_assert_eq!(len.count_ones(), 1); // must be a power of two
-
-                    // y & 0x1F
-                    let n = len.trailing_zeros();
-                    let n = (224 + n) as u8;
-                    writer.write_u8(n)?;
-                }
-            },
+            Self::New { header, length } => {
+                writer.write_u8(header.into_bits())?;
+                length.to_writer_new(writer)?;
+            }
             Self::Old { header, length } => match length {
                 PacketLength::Fixed(len) => {
                     writer.write_u8(header.into_bits())?;

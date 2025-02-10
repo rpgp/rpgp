@@ -3,6 +3,7 @@ use std::io;
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::{Buf, Bytes};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
+use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::errors::Result;
@@ -215,10 +216,12 @@ pub(crate) enum LiteralDataGenerator<R: io::Read> {
         gen: LiteralDataPartialGenerator<R>,
         /// Serialized version of the packet being written currently.
         current_packet: Option<Bytes>,
+        /// Currently writing the first packet?
+        is_first: bool,
     },
 }
 
-pub(crate) const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
+pub(crate) const DEFAULT_CHUNK_SIZE: u32 = 512; //1024 * 512;
 
 impl<R: io::Read> LiteralDataGenerator<R> {
     pub(crate) fn new(
@@ -236,6 +239,7 @@ impl<R: io::Read> LiteralDataGenerator<R> {
                 Ok(Self::Partial {
                     gen,
                     current_packet: None,
+                    is_first: true,
                 })
             }
         }
@@ -256,6 +260,7 @@ impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
             Self::Partial {
                 gen,
                 current_packet,
+                is_first,
             } => {
                 if current_packet.is_none() {
                     match gen.next() {
@@ -265,9 +270,35 @@ impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
                         }
                         Some(Ok(packet)) => {
                             let mut packet_ser = Vec::new();
-                            packet
-                                .to_writer_with_header(&mut packet_ser)
-                                .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+                            if *is_first {
+                                // only the first packet needs the literal data header
+                                packet
+                                    .packet_header
+                                    .to_writer(&mut packet_ser)
+                                    .map_err(|e| {
+                                        io::Error::new(io::ErrorKind::Other, e.to_string())
+                                    })?;
+
+                                packet.header.to_writer(&mut packet_ser).map_err(|e| {
+                                    io::Error::new(io::ErrorKind::Other, e.to_string())
+                                })?;
+
+                                debug!("first partial packet {:?}", packet.packet_header);
+                                *is_first = false;
+                            } else {
+                                // only length
+                                packet
+                                    .packet_header
+                                    .packet_length()
+                                    .to_writer_new(&mut packet_ser)
+                                    .map_err(|e| {
+                                        io::Error::new(io::ErrorKind::Other, e.to_string())
+                                    })?;
+                                debug!("partial packet {:?}", packet.packet_header.packet_length());
+                            }
+
+                            packet_ser.extend_from_slice(&packet.data);
                             current_packet.replace(packet_ser.into());
                         }
                         Some(Err(err)) => {
@@ -345,6 +376,7 @@ pub(crate) struct LiteralDataPartialGenerator<R: io::Read> {
     buffer: Box<[u8]>,
     chunk_size: u32,
     is_done: bool,
+    is_first: bool,
 }
 
 impl<R: io::Read> LiteralDataPartialGenerator<R> {
@@ -355,18 +387,19 @@ impl<R: io::Read> LiteralDataPartialGenerator<R> {
             buffer: vec![0u8; chunk_size as usize].into_boxed_slice(),
             chunk_size,
             is_done: false,
+            is_first: true,
         }
     }
 
-    fn fill_buf(&mut self) -> io::Result<usize> {
+    fn fill_buf(&mut self, chunk_size: usize) -> io::Result<usize> {
         let mut offset = 0;
         loop {
-            let read = self.source.read(&mut self.buffer[offset..])?;
+            let read = self.source.read(&mut self.buffer[offset..chunk_size])?;
             offset += read;
 
             if read == 0 {
                 break;
-            } else if offset == self.chunk_size as usize {
+            } else if offset == chunk_size {
                 break;
             }
         }
@@ -379,10 +412,18 @@ impl<R: io::Read> Iterator for LiteralDataPartialGenerator<R> {
     type Item = io::Result<LiteralData>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        // TODO: detect if all data fits into a single packet and use fixed
+
         if self.is_done {
             return None;
         }
-        let buf_size = match self.fill_buf() {
+        let chunk_size = if self.is_first {
+            self.chunk_size as usize - self.header.write_len()
+        } else {
+            self.chunk_size as usize
+        };
+
+        let buf_size = match self.fill_buf(chunk_size) {
             Ok(size) => size,
             Err(err) => {
                 self.is_done = true;
@@ -390,19 +431,31 @@ impl<R: io::Read> Iterator for LiteralDataPartialGenerator<R> {
             }
         };
 
+        debug!("read chunk {} bytes", buf_size);
+
         debug_assert!(buf_size <= u32::MAX as usize);
 
         let data = Bytes::from(self.buffer[..buf_size].to_vec());
 
-        let packet_length = if buf_size == self.chunk_size as usize {
-            // partial
-            PacketLength::Partial(data.len() as u32)
-        } else {
-            // final packet, this can be length 0
+        let packet_length = if self.is_first && buf_size < chunk_size {
+            // all data fits into a single packet
+            self.is_first = false;
             self.is_done = true;
-            PacketLength::Fixed(data.len())
-        };
+            PacketLength::Fixed(buf_size + self.header.write_len())
+        } else {
+            if self.is_first {
+                self.is_first = false;
+            }
 
+            if buf_size == chunk_size {
+                // partial
+                PacketLength::Partial(self.chunk_size)
+            } else {
+                // final packet, this can be length 0
+                self.is_done = true;
+                PacketLength::Fixed(data.len())
+            }
+        };
         let packet_header =
             PacketHeader::from_parts(PacketHeaderVersion::New, Tag::LiteralData, packet_length)
                 .expect("known construction");
@@ -419,6 +472,8 @@ impl<R: io::Read> Iterator for LiteralDataPartialGenerator<R> {
 mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
+
+    use crate::packet::Packet;
 
     use super::*;
 
@@ -473,6 +528,88 @@ mod tests {
         assert_eq!(packet_out, generator_out);
 
         assert_eq!(packet_out.len(), generator.total_len as usize);
+    }
+
+    #[test]
+    fn test_literal_data_partial_generator() {
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        let chunk_size = 512;
+        let file_size = chunk_size * 5 + 100;
+        let mut buf = vec![0u8; file_size];
+        rng.fill(&mut buf[..]);
+
+        let header = LiteralDataHeader {
+            file_name: "hello.txt".into(),
+            mode: DataMode::Binary,
+            created: Utc::now().trunc_subsecs(0),
+        };
+
+        let generator = LiteralDataPartialGenerator::new(header, &buf[..], chunk_size as u32);
+
+        let packets: Vec<_> = generator.collect();
+        assert_eq!(packets.len(), 6, "{:?}", packets);
+
+        for i in 0..5 {
+            let packet = packets[i].as_ref().unwrap();
+            assert_eq!(
+                packet.packet_header.packet_length(),
+                PacketLength::Partial(chunk_size as u32)
+            );
+
+            if i == 0 {
+                assert_eq!(packet.data.len(), chunk_size - packet.header.write_len());
+            } else {
+                assert_eq!(packet.data.len(), chunk_size);
+            }
+        }
+
+        let packet = packets[5].as_ref().unwrap();
+        assert_eq!(
+            packet.packet_header.packet_length(),
+            PacketLength::Fixed(115),
+        );
+        assert_eq!(packet.data.len(), 115);
+    }
+
+    #[test]
+    fn test_literal_data_partial_roundtrip() {
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+
+        let max_file_size = chunk_size * 5 + 100;
+
+        for file_size in 1..=max_file_size {
+            println!("size {}", file_size);
+            let mut buf = vec![0u8; file_size];
+            rng.fill(&mut buf[..]);
+
+            let header = LiteralDataHeader {
+                file_name: "hello.txt".into(),
+                mode: DataMode::Binary,
+                created: Utc::now().trunc_subsecs(0),
+            };
+
+            let mut generator = LiteralDataGenerator::new(header.clone(), &buf[..], None).unwrap();
+
+            let mut out = Vec::new();
+            std::io::copy(&mut generator, &mut out).unwrap();
+
+            let packets: Vec<_> = crate::packet::many::PacketParser::new(out.into()).collect();
+            assert_eq!(packets.len(), 1, "{:?}", packets);
+            let packet = packets[0].as_ref().unwrap();
+
+            assert_eq!(packet.packet_header().tag(), Tag::LiteralData);
+            let Packet::LiteralData(data) = packet else {
+                panic!("invalid packet: {:?}", packet);
+            };
+
+            assert_eq!(data.header, header);
+            assert_eq!(data.data, buf);
+        }
     }
 
     proptest! {

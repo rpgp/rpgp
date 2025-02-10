@@ -244,7 +244,7 @@ impl<R: Read> Builder<R> {
 
 fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     mut rng: R,
-    mut generator: LiteralDataGenerator<READ>,
+    generator: LiteralDataGenerator<READ>,
     encryption: Encryption,
     mut out: W,
 ) -> Result<()> {
@@ -288,40 +288,87 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
                     // Partial(encrypted_compressed_chunk_size): encrypted data
                     //
                     // final packet:
-                    // fixed size with the last partn
+                    // fixed size with the last part
 
                     let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+                    let config_len = config.write_len();
+
+                    // headers are written only in the first chunk
+                    // the partial length be a power of two, so subtract the overhead
+                    let first_chunk_size = chunk_size - config_len;
+
                     let mut buffer = vec![0u8; chunk_size];
 
-                    let config_len = config.write_len();
-                    let chunk_write_size = config_len + chunk_size;
-                    let chunk_enc_write_size: u32 = sym_alg
-                        .encrypted_protected_len(chunk_write_size)
-                        .try_into()?;
+                    let mut is_first = true;
 
-                    let mut offset = 0;
-                    while let Ok(read) = generator.read(&mut buffer[offset..]) {
-                        offset += read;
+                    fn fill_buf<R: Read>(
+                        mut source: R,
+                        buffer: &mut [u8],
+                        chunk_size: usize,
+                    ) -> std::io::Result<usize> {
+                        let mut offset = 0;
+                        loop {
+                            let read = source.read(&mut buffer[offset..chunk_size])?;
+                            offset += read;
 
-                        let (length, buf) = if read == 0 {
-                            // last chunk
-                            let enc_size = sym_alg.encrypted_protected_len(offset + config_len);
-                            (PacketLength::Fixed(enc_size), &buffer[..offset])
-                        } else if offset == chunk_size {
-                            // new chunk
-                            offset = 0;
-                            (PacketLength::Partial(chunk_enc_write_size), &buffer[..])
+                            if read == 0 {
+                                break;
+                            } else if offset == chunk_size {
+                                break;
+                            }
+                        }
+                        Ok(offset)
+                    }
+
+                    let mut encrypted =
+                        sym_alg.stream_encryptor(&mut rng, &session_key, generator)?;
+
+                    // TODO: detect if we only need a single packet for everything and use a fixed packet
+                    loop {
+                        let (length, mut buf) = if is_first {
+                            let current_size =
+                                fill_buf(&mut encrypted, &mut buffer, first_chunk_size)?;
+                            (
+                                PacketLength::Partial(chunk_size as u32),
+                                &buffer[..current_size],
+                            )
                         } else {
-                            continue;
+                            let current_size = fill_buf(&mut encrypted, &mut buffer, chunk_size)?;
+
+                            if current_size != chunk_size {
+                                // last chunk
+                                (PacketLength::Fixed(current_size), &buffer[..current_size])
+                            } else {
+                                (
+                                    PacketLength::Partial(chunk_size as u32),
+                                    &buffer[..current_size],
+                                )
+                            }
                         };
-                        let packet_header = PacketHeader::from_parts(
-                            PacketHeaderVersion::New,
-                            Tag::SymEncryptedProtectedData,
-                            length,
-                        )?;
-                        packet_header.to_writer(&mut out)?;
-                        config.to_writer(&mut out)?;
-                        sym_alg.encrypt_protected_stream(&mut rng, &session_key, buf, &mut out)?;
+
+                        let mut im = Vec::new();
+
+                        if is_first {
+                            let packet_header = PacketHeader::from_parts(
+                                PacketHeaderVersion::New,
+                                Tag::SymEncryptedProtectedData,
+                                length,
+                            )?;
+                            debug!("packet {:?}", packet_header);
+
+                            packet_header.to_writer(&mut out)?;
+                            config.to_writer(&mut im)?;
+                            is_first = false;
+                        } else {
+                            debug!("packet {:?}", length);
+                            length.to_writer_new(&mut out)?;
+                        }
+
+                        std::io::copy(&mut buf, &mut im)?;
+
+                        debug!("packet: {}", hex::encode(&im));
+                        assert_eq!(im.len(), length.maybe_len().unwrap());
+                        std::io::copy(&mut &im[..], &mut out)?;
 
                         if matches!(length, PacketLength::Fixed(_)) {
                             break;
@@ -447,7 +494,7 @@ mod tests {
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         // Generate data
-        let file_size = 1024 * 14 + 8;
+        let file_size = 5 * DEFAULT_CHUNK_SIZE as usize + 100;
         let mut buf = vec![0u8; file_size];
         rng.fill(&mut buf[..]);
 
@@ -462,6 +509,8 @@ mod tests {
 
         let mut encrypted = Vec::new();
         builder.to_writer(&mut rng, &mut encrypted).unwrap();
+
+        println!("{}", hex::encode(&encrypted));
 
         // decrypt it
         let message = Message::from_bytes(encrypted.into()).unwrap();
