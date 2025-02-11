@@ -278,7 +278,7 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     encryption: Encryption,
     mut out: W,
 ) -> Result<()> {
-    match encryption {
+    let (tag, sym_alg, session_key) = match encryption {
         Encryption::PasswordSeipdV1 {
             session_key,
             esk,
@@ -288,113 +288,122 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
             let esk = Esk::SymKeyEncryptedSessionKey(esk);
             esk.to_writer(&mut out)?;
 
-            // Construct SEPD Packet (outer)
-            let config = SymEncryptedProtectedDataConfig::V1;
+            (Tag::SymEncryptedProtectedData, sym_alg, session_key)
+        }
+        Encryption::KeysSeipdV1 {
+            sym_alg,
+            session_key,
+            esk,
+        } => {
+            // Write out esks
+            for esk in esk {
+                let esk = Esk::PublicKeyEncryptedSessionKey(esk);
+                esk.to_writer(&mut out)?;
+            }
 
-            // Write the outer packet header
-            match generator.len() {
-                None => {
-                    // partial
-                    // rough plan
-                    // unknown size:
-                    //
-                    // Literal Data
-                    // - N - 1 partials
-                    // - 1 fixed
-                    //
-                    // Compressed Data
-                    // - M - 1 partials
-                    // - 1 fixed
-                    //
-                    // Encrypted Data
-                    // - L - 1 partials
-                    // - 1 fixed
-                    //
-                    // Fixed(chunk_size): literal data
-                    // Fixed(compressed_chunk_size): compressed data
-                    // Partial(encrypted_compressed_chunk_size): encrypted data
-                    //
-                    // final packet:
-                    // fixed size with the last part
+            (Tag::SymEncryptedProtectedData, sym_alg, session_key)
+        }
+    };
 
-                    let chunk_size = DEFAULT_CHUNK_SIZE as usize;
-                    let config_len = config.write_len();
+    // Construct SEPD Packet (outer)
+    let config = SymEncryptedProtectedDataConfig::V1;
 
-                    // headers are written only in the first chunk
-                    // the partial length be a power of two, so subtract the overhead
-                    let first_chunk_size = chunk_size - config_len;
+    // Write the outer packet header
+    match generator.len() {
+        None => {
+            // partial
+            // rough plan
+            // unknown size:
+            //
+            // Literal Data
+            // - N - 1 partials
+            // - 1 fixed
+            //
+            // Compressed Data
+            // - M - 1 partials
+            // - 1 fixed
+            //
+            // Encrypted Data
+            // - L - 1 partials
+            // - 1 fixed
+            //
+            // Fixed(chunk_size): literal data
+            // Fixed(compressed_chunk_size): compressed data
+            // Partial(encrypted_compressed_chunk_size): encrypted data
+            //
+            // final packet:
+            // fixed size with the last part
 
-                    let mut buffer = vec![0u8; chunk_size];
+            let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+            let config_len = config.write_len();
 
-                    let mut is_first = true;
+            // headers are written only in the first chunk
+            // the partial length be a power of two, so subtract the overhead
+            let first_chunk_size = chunk_size - config_len;
 
-                    let mut encrypted =
-                        sym_alg.stream_encryptor(&mut rng, &session_key, generator)?;
+            let mut buffer = vec![0u8; chunk_size];
 
-                    loop {
-                        let (length, mut buf) = if is_first {
-                            let read = fill_buffer(&mut encrypted, &mut buffer, None)?;
+            let mut is_first = true;
 
-                            if read < first_chunk_size {
-                                // finished reading, all data fits into a single chunk
-                                (PacketLength::Fixed(read + config_len), &buffer[..read])
-                            } else {
-                                (PacketLength::Partial(chunk_size as u32), &buffer[..read])
-                            }
-                        } else {
-                            let read = fill_buffer(&mut encrypted, &mut buffer, Some(chunk_size))?;
+            let mut encrypted = sym_alg.stream_encryptor(&mut rng, &session_key, generator)?;
 
-                            if read < chunk_size {
-                                // last chunk
-                                (PacketLength::Fixed(read), &buffer[..read])
-                            } else {
-                                (PacketLength::Partial(chunk_size as u32), &buffer[..read])
-                            }
-                        };
+            loop {
+                let (length, mut buf) = if is_first {
+                    let read = fill_buffer(&mut encrypted, &mut buffer, None)?;
 
-                        if is_first {
-                            let packet_header = PacketHeader::from_parts(
-                                PacketHeaderVersion::New,
-                                Tag::SymEncryptedProtectedData,
-                                length,
-                            )?;
-                            debug!("packet {:?}", packet_header);
-
-                            packet_header.to_writer(&mut out)?;
-                            config.to_writer(&mut out)?;
-                            is_first = false;
-                        } else {
-                            debug!("packet {:?}", length);
-                            length.to_writer_new(&mut out)?;
-                        }
-
-                        std::io::copy(&mut buf, &mut out)?;
-
-                        if matches!(length, PacketLength::Fixed(_)) {
-                            break;
-                        }
+                    if read < first_chunk_size {
+                        // finished reading, all data fits into a single chunk
+                        (PacketLength::Fixed(read + config_len), &buffer[..read])
+                    } else {
+                        (PacketLength::Partial(chunk_size as u32), &buffer[..read])
                     }
-                }
-                Some(in_size) => {
-                    // calculate expected encrypted file size
-                    let enc_file_size = sym_alg.encrypted_protected_len(in_size.try_into()?);
-                    let packet_len = config.write_len() + enc_file_size;
+                } else {
+                    let read = fill_buffer(&mut encrypted, &mut buffer, Some(chunk_size))?;
 
-                    let packet_header = PacketHeader::from_parts(
-                        PacketHeaderVersion::New,
-                        Tag::SymEncryptedProtectedData,
-                        PacketLength::Fixed(packet_len),
-                    )?;
+                    if read < chunk_size {
+                        // last chunk
+                        (PacketLength::Fixed(read), &buffer[..read])
+                    } else {
+                        (PacketLength::Partial(chunk_size as u32), &buffer[..read])
+                    }
+                };
+
+                if is_first {
+                    let packet_header =
+                        PacketHeader::from_parts(PacketHeaderVersion::New, tag, length)?;
+                    debug!("packet {:?}", packet_header);
+
                     packet_header.to_writer(&mut out)?;
                     config.to_writer(&mut out)?;
-                    sym_alg.encrypt_protected_stream(rng, &session_key, generator, &mut out)?;
+                    is_first = false;
+                } else {
+                    debug!("packet {:?}", length);
+                    length.to_writer_new(&mut out)?;
+                }
+
+                std::io::copy(&mut buf, &mut out)?;
+
+                if matches!(length, PacketLength::Fixed(_)) {
+                    break;
                 }
             }
         }
-        Encryption::KeysSeipdV1 { .. } => {
-            todo!()
+        Some(in_size) => {
+            // calculate expected encrypted file size
+            let enc_file_size = sym_alg.encrypted_protected_len(in_size.try_into()?);
+            let packet_len = config.write_len() + enc_file_size;
+
+            let packet_header = PacketHeader::from_parts(
+                PacketHeaderVersion::New,
+                tag,
+                PacketLength::Fixed(packet_len),
+            )?;
+            packet_header.to_writer(&mut out)?;
+            config.to_writer(&mut out)?;
+            sym_alg.encrypt_protected_stream(rng, &session_key, generator, &mut out)?;
         }
     }
+
     Ok(())
 }
 
@@ -406,7 +415,8 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
 
     use crate::crypto::sym::SymmetricKeyAlgorithm;
-    use crate::{Deserializable, Message};
+    use crate::types::SecretKeyTrait;
+    use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
     fn binary_file_fixed_size_no_compression_roundtrip_password_seipdv1() {
@@ -562,6 +572,54 @@ mod tests {
 
             let Message::Literal(l) = message else {
                 panic!("unexpected message: {:?}", message);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.data(), &buf);
+        }
+    }
+
+    #[test]
+    fn binary_file_partial_size_no_compression_roundtrip_public_key_x25519_seipdv1() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let mut buf = vec![0u8; file_size];
+            rng.fill(&mut buf[..]);
+
+            let builder = Builder::from_reader("plaintext.txt", &buf[..])
+                .chunk_size(chunk_size)
+                .unwrap()
+                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .expect("encryption");
+
+            let mut encrypted = Vec::new();
+            builder
+                .to_writer(&mut rng, &mut encrypted)
+                .expect("writing");
+
+            // decrypt it
+            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let (decrypted, _key_ids) = message
+                .decrypt(|| "".to_string(), &[&skey])
+                .expect("decryption");
+
+            let Message::Literal(l) = decrypted else {
+                panic!("unexpected message: {:?}", decrypted);
             };
 
             assert_eq!(l.file_name(), "plaintext.txt");
