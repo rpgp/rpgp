@@ -22,6 +22,17 @@ use crate::Esk;
 
 type DummyReader = std::io::Cursor<Vec<u8>>;
 
+/// Constructs message from a given data source.
+///
+/// All data is processed in a streaming fashion, with minimal memory allocations.
+///
+/// If the file size is known upfront (fixed buffer, or file source), the resulting packets
+/// will be fixed size lengths (unless compression is involved).
+///
+/// If the file size is not known upfront, partial packets will be generated, at each level
+/// (encryption, compression, literal data).
+///
+/// If the total data fits into a single chunk, a single fixed packet is generated.
 pub struct Builder<R = DummyReader> {
     source: Source<R>,
     compression: CompressionAlgorithm,
@@ -50,9 +61,11 @@ enum Encryption {
     },
 }
 
-pub(crate) const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
+/// The default chunk size.
+pub const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
 
 impl Builder<DummyReader> {
+    /// Source the data from the given file path.
     pub fn from_file(path: impl AsRef<Path>) -> Self {
         Self {
             source: Source::File(path.as_ref().into()),
@@ -62,6 +75,7 @@ impl Builder<DummyReader> {
         }
     }
 
+    /// Source the data from the given byte buffer.
     pub fn from_bytes(name: impl Into<Bytes>, bytes: impl Into<Bytes>) -> Self {
         Self {
             source: Source::Bytes {
@@ -75,6 +89,7 @@ impl Builder<DummyReader> {
     }
 }
 impl<R: Read> Builder<R> {
+    /// Source the data from a reader.
     pub fn from_reader(file_name: impl Into<Bytes>, reader: R) -> Self {
         Self {
             source: Source::Reader {
@@ -87,6 +102,10 @@ impl<R: Read> Builder<R> {
         }
     }
 
+    /// Set the chunk size, which controls how large partial packets
+    /// will be.
+    ///
+    /// Defaults to [`DEFAULT_CHUNK_SIZE`].
     pub fn chunk_size(mut self, size: u32) -> Result<Self> {
         ensure!(size >= 512, "chunk size must be larger than 512");
         ensure!(size.is_power_of_two(), "chunk size must be a power of two");
@@ -94,16 +113,21 @@ impl<R: Read> Builder<R> {
         Ok(self)
     }
 
+    /// Configure compression.
+    ///
+    /// Defaults to no compression.
     pub fn compression(mut self, compression: CompressionAlgorithm) -> Self {
         self.compression = compression;
         self
     }
 
+    /// Do not encrypt the data.
     pub fn plaintext(mut self) -> Self {
         self.encryption.take();
         self
     }
 
+    /// Encrypt to a password, version SEIPDv1.
     pub fn encrypt_with_password_seipdv1<RAND, F>(
         mut self,
         mut rng: RAND,
@@ -130,6 +154,7 @@ impl<R: Read> Builder<R> {
         Ok(self)
     }
 
+    /// Encrypt to a list of public keys, version SEIPDv1.
     pub fn encrypt_to_keys_seipdv1<RAND>(
         mut self,
         mut rng: RAND,
@@ -164,6 +189,7 @@ impl<R: Read> Builder<R> {
         Ok(self)
     }
 
+    /// Write the data out to a writer.
     pub fn to_writer<RAND, W>(self, mut rng: RAND, mut out: W) -> Result<()>
     where
         RAND: Rng + CryptoRng,
@@ -247,6 +273,7 @@ impl<R: Read> Builder<R> {
         Ok(())
     }
 
+    /// Write the data out directly to a file.
     pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
     where
         RAND: Rng + CryptoRng,
@@ -311,29 +338,6 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     // Write the outer packet header
     match generator.len() {
         None => {
-            // partial
-            // rough plan
-            // unknown size:
-            //
-            // Literal Data
-            // - N - 1 partials
-            // - 1 fixed
-            //
-            // Compressed Data
-            // - M - 1 partials
-            // - 1 fixed
-            //
-            // Encrypted Data
-            // - L - 1 partials
-            // - 1 fixed
-            //
-            // Fixed(chunk_size): literal data
-            // Fixed(compressed_chunk_size): compressed data
-            // Partial(encrypted_compressed_chunk_size): encrypted data
-            //
-            // final packet:
-            // fixed size with the last part
-
             let chunk_size = DEFAULT_CHUNK_SIZE as usize;
             let config_len = config.write_len();
 
