@@ -2,6 +2,24 @@
 
 use std::{hash, io};
 
+pub(crate) fn fill_buffer<R: std::io::Read>(
+    mut source: R,
+    buffer: &mut [u8],
+    chunk_size: Option<usize>,
+) -> std::io::Result<usize> {
+    let mut offset = 0;
+    let chunk_size = chunk_size.unwrap_or(buffer.len());
+    loop {
+        let read = source.read(&mut buffer[offset..chunk_size])?;
+        offset += read;
+
+        if read == 0 || offset == chunk_size {
+            break;
+        }
+    }
+    Ok(offset)
+}
+
 #[macro_export]
 macro_rules! impl_try_from_into {
     ($enum_name:ident, $( $name:ident => $variant_type:ty ),*) => {

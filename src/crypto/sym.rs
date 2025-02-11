@@ -16,6 +16,7 @@ use twofish::Twofish;
 use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
+use crate::util::fill_buffer;
 
 fn decrypt<MODE>(
     key: &[u8],
@@ -785,7 +786,7 @@ where
                     let mut buffer = BytesMut::zeroed(Self::buffer_size());
 
                     // fill buffer
-                    let read = fill_buffer(&mut source, &mut buffer)?;
+                    let read = fill_buffer(&mut source, &mut buffer, None)?;
                     let source = if read < buffer.len() {
                         // done reading
                         // shorten buffer accordingly
@@ -830,7 +831,7 @@ where
                     let (mdc, source) = if let Some(mut source) = source {
                         // fill buffer
                         buffer.resize(Self::buffer_size(), 0);
-                        let read = fill_buffer(&mut source, &mut buffer)?;
+                        let read = fill_buffer(&mut source, &mut buffer, None)?;
                         let source = if read < buffer.len() {
                             // done reading
                             // shorten buffer accordingly
@@ -896,21 +897,6 @@ where
             }
         }
     }
-}
-
-fn fill_buffer<R: std::io::Read>(mut source: R, buffer: &mut [u8]) -> std::io::Result<usize> {
-    let mut offset = 0;
-    loop {
-        let read = source.read(&mut buffer[offset..])?;
-        offset += read;
-
-        if read == 0 {
-            break;
-        } else if offset == buffer.len() {
-            break;
-        }
-    }
-    Ok(offset)
 }
 
 #[cfg(test)]

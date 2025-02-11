@@ -11,12 +11,13 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
     DataMode, LiteralDataGenerator, LiteralDataHeader, PacketHeader, PublicKeyEncryptedSessionKey,
-    SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey, DEFAULT_CHUNK_SIZE,
+    SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
     CompressionAlgorithm, PacketHeaderVersion, PacketLength, PublicKeyTrait, StringToKey, Tag,
 };
+use crate::util::fill_buffer;
 use crate::Esk;
 
 type DummyReader = std::io::Cursor<Vec<u8>>;
@@ -25,6 +26,8 @@ pub struct Builder<R = DummyReader> {
     source: Source<R>,
     compression: CompressionAlgorithm,
     encryption: Encryption,
+    /// The chunk size when generating partial packets
+    chunk_size: u32,
 }
 
 enum Source<R = DummyReader> {
@@ -48,12 +51,15 @@ enum Encryption {
     },
 }
 
+pub(crate) const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
+
 impl Builder<DummyReader> {
     pub fn from_file(path: impl AsRef<Path>) -> Self {
         Self {
             source: Source::File(path.as_ref().into()),
             compression: CompressionAlgorithm::Uncompressed,
             encryption: Encryption::None,
+            chunk_size: DEFAULT_CHUNK_SIZE,
         }
     }
 
@@ -65,6 +71,7 @@ impl Builder<DummyReader> {
             },
             compression: CompressionAlgorithm::Uncompressed,
             encryption: Encryption::None,
+            chunk_size: DEFAULT_CHUNK_SIZE,
         }
     }
 }
@@ -77,7 +84,15 @@ impl<R: Read> Builder<R> {
             },
             compression: CompressionAlgorithm::Uncompressed,
             encryption: Encryption::None,
+            chunk_size: DEFAULT_CHUNK_SIZE,
         }
+    }
+
+    pub fn chunk_size(mut self, size: u32) -> Result<Self> {
+        ensure!(size >= 512, "chunk size must be larger than 512");
+        ensure!(size.is_power_of_two(), "chunk size must be a power of two");
+        self.chunk_size = size;
+        Ok(self)
     }
 
     pub fn compression(mut self, compression: CompressionAlgorithm) -> Self {
@@ -166,7 +181,7 @@ impl<R: Read> Builder<R> {
                 // Construct Literal Data Packet (inner)
                 let literal_data_header = LiteralDataHeader {
                     mode: DataMode::Binary,
-                    file_name: name.into(),
+                    file_name: name,
                     created: Utc::now().trunc_subsecs(0),
                 };
 
@@ -174,6 +189,7 @@ impl<R: Read> Builder<R> {
                     literal_data_header,
                     bytes.reader(),
                     Some(len.try_into()?),
+                    self.chunk_size,
                 )?;
                 encrypt(&mut rng, generator, self.encryption, out)?;
             }
@@ -200,6 +216,7 @@ impl<R: Read> Builder<R> {
                     literal_data_header,
                     in_file,
                     Some(in_file_size.try_into()?),
+                    self.chunk_size,
                 )?;
                 encrypt(&mut rng, generator, self.encryption, out)?;
             }
@@ -210,7 +227,8 @@ impl<R: Read> Builder<R> {
                     created: Utc::now().trunc_subsecs(0),
                 };
 
-                let generator = LiteralDataGenerator::new(literal_data_header, reader, None)?;
+                let generator =
+                    LiteralDataGenerator::new(literal_data_header, reader, None, self.chunk_size)?;
                 encrypt(&mut rng, generator, self.encryption, out)?;
             }
         }
@@ -301,52 +319,30 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
 
                     let mut is_first = true;
 
-                    fn fill_buf<R: Read>(
-                        mut source: R,
-                        buffer: &mut [u8],
-                        chunk_size: usize,
-                    ) -> std::io::Result<usize> {
-                        let mut offset = 0;
-                        loop {
-                            let read = source.read(&mut buffer[offset..chunk_size])?;
-                            offset += read;
-
-                            if read == 0 {
-                                break;
-                            } else if offset == chunk_size {
-                                break;
-                            }
-                        }
-                        Ok(offset)
-                    }
-
                     let mut encrypted =
                         sym_alg.stream_encryptor(&mut rng, &session_key, generator)?;
 
                     // TODO: detect if we only need a single packet for everything and use a fixed packet
                     loop {
                         let (length, mut buf) = if is_first {
-                            let current_size =
-                                fill_buf(&mut encrypted, &mut buffer, first_chunk_size)?;
-                            (
-                                PacketLength::Partial(chunk_size as u32),
-                                &buffer[..current_size],
-                            )
-                        } else {
-                            let current_size = fill_buf(&mut encrypted, &mut buffer, chunk_size)?;
+                            let read = fill_buffer(&mut encrypted, &mut buffer, None)?;
 
-                            if current_size != chunk_size {
-                                // last chunk
-                                (PacketLength::Fixed(current_size), &buffer[..current_size])
+                            if read < first_chunk_size {
+                                // finished reading, all data fits into a single chunk
+                                (PacketLength::Fixed(read + config_len), &buffer[..read])
                             } else {
-                                (
-                                    PacketLength::Partial(chunk_size as u32),
-                                    &buffer[..current_size],
-                                )
+                                (PacketLength::Partial(chunk_size as u32), &buffer[..read])
+                            }
+                        } else {
+                            let read = fill_buffer(&mut encrypted, &mut buffer, Some(chunk_size))?;
+
+                            if read < chunk_size {
+                                // last chunk
+                                (PacketLength::Fixed(read), &buffer[..read])
+                            } else {
+                                (PacketLength::Partial(chunk_size as u32), &buffer[..read])
                             }
                         };
-
-                        let mut im = Vec::new();
 
                         if is_first {
                             let packet_header = PacketHeader::from_parts(
@@ -357,18 +353,14 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
                             debug!("packet {:?}", packet_header);
 
                             packet_header.to_writer(&mut out)?;
-                            config.to_writer(&mut im)?;
+                            config.to_writer(&mut out)?;
                             is_first = false;
                         } else {
                             debug!("packet {:?}", length);
                             length.to_writer_new(&mut out)?;
                         }
 
-                        std::io::copy(&mut buf, &mut im)?;
-
-                        debug!("packet: {}", hex::encode(&im));
-                        assert_eq!(im.len(), length.maybe_len().unwrap());
-                        std::io::copy(&mut &im[..], &mut out)?;
+                        std::io::copy(&mut buf, &mut out)?;
 
                         if matches!(length, PacketLength::Fixed(_)) {
                             break;
@@ -493,37 +485,44 @@ mod tests {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
-        // Generate data
-        let file_size = 5 * DEFAULT_CHUNK_SIZE as usize + 100;
-        let mut buf = vec![0u8; file_size];
-        rng.fill(&mut buf[..]);
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
 
-        // encrypt it
-        let s2k = crate::types::StringToKey::new_default(&mut rng);
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
 
-        let builder = Builder::from_reader("plaintext.txt", &buf[..])
-            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
-                "hello world".to_string()
-            })
-            .unwrap();
+            // Generate data
+            let mut buf = vec![0u8; file_size];
+            rng.fill(&mut buf[..]);
 
-        let mut encrypted = Vec::new();
-        builder.to_writer(&mut rng, &mut encrypted).unwrap();
+            // encrypt it
+            let s2k = crate::types::StringToKey::new_default(&mut rng);
 
-        println!("{}", hex::encode(&encrypted));
+            let builder = Builder::from_reader("plaintext.txt", &buf[..])
+                .chunk_size(chunk_size)
+                .unwrap()
+                .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
+                    "hello world".to_string()
+                })
+                .expect("encryption");
 
-        // decrypt it
-        let message = Message::from_bytes(encrypted.into()).unwrap();
-        dbg!(&message);
-        let decrypted = message
-            .decrypt_with_password(|| "hello world".to_string())
-            .unwrap();
+            let mut encrypted = Vec::new();
+            builder
+                .to_writer(&mut rng, &mut encrypted)
+                .expect("writing");
 
-        let Message::Literal(l) = decrypted else {
-            panic!("unexpected message: {:?}", decrypted);
-        };
+            // decrypt it
+            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let decrypted = message
+                .decrypt_with_password(|| "hello world".to_string())
+                .expect("decryption");
 
-        assert_eq!(l.file_name(), "plaintext.txt");
-        assert_eq!(l.data(), &buf);
+            let Message::Literal(l) = decrypted else {
+                panic!("unexpected message: {:?}", decrypted);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.data(), &buf);
+        }
     }
 }

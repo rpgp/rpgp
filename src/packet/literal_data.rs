@@ -221,13 +221,12 @@ pub(crate) enum LiteralDataGenerator<R: io::Read> {
     },
 }
 
-pub(crate) const DEFAULT_CHUNK_SIZE: u32 = 512; //1024 * 512;
-
 impl<R: io::Read> LiteralDataGenerator<R> {
     pub(crate) fn new(
         header: LiteralDataHeader,
         source: R,
         source_len: Option<u32>,
+        chunk_size: u32,
     ) -> Result<Self> {
         match source_len {
             Some(source_len) => {
@@ -235,7 +234,7 @@ impl<R: io::Read> LiteralDataGenerator<R> {
                 Ok(Self::Fixed(gen))
             }
             None => {
-                let gen = LiteralDataPartialGenerator::new(header, source, DEFAULT_CHUNK_SIZE);
+                let gen = LiteralDataPartialGenerator::new(header, source, chunk_size)?;
                 Ok(Self::Partial {
                     gen,
                     current_packet: None,
@@ -380,15 +379,20 @@ pub(crate) struct LiteralDataPartialGenerator<R: io::Read> {
 }
 
 impl<R: io::Read> LiteralDataPartialGenerator<R> {
-    pub(crate) fn new(header: LiteralDataHeader, source: R, chunk_size: u32) -> Self {
-        Self {
+    pub(crate) fn new(header: LiteralDataHeader, source: R, chunk_size: u32) -> Result<Self> {
+        ensure!(chunk_size >= 512, "chunk size must be larger than 512");
+        ensure!(
+            chunk_size.is_power_of_two(),
+            "chunk size must be a power of two"
+        );
+        Ok(Self {
             header,
             source,
             buffer: vec![0u8; chunk_size as usize].into_boxed_slice(),
             chunk_size,
             is_done: false,
             is_first: true,
-        }
+        })
     }
 
     fn fill_buf(&mut self, chunk_size: usize) -> io::Result<usize> {
@@ -397,9 +401,7 @@ impl<R: io::Read> LiteralDataPartialGenerator<R> {
             let read = self.source.read(&mut self.buffer[offset..chunk_size])?;
             offset += read;
 
-            if read == 0 {
-                break;
-            } else if offset == chunk_size {
+            if read == 0 || offset == chunk_size {
                 break;
             }
         }
@@ -546,13 +548,14 @@ mod tests {
             created: Utc::now().trunc_subsecs(0),
         };
 
-        let generator = LiteralDataPartialGenerator::new(header, &buf[..], chunk_size as u32);
+        let generator =
+            LiteralDataPartialGenerator::new(header, &buf[..], chunk_size as u32).unwrap();
 
         let packets: Vec<_> = generator.collect();
         assert_eq!(packets.len(), 6, "{:?}", packets);
 
-        for i in 0..5 {
-            let packet = packets[i].as_ref().unwrap();
+        for (i, packet) in packets.iter().enumerate().take(5) {
+            let packet = packet.as_ref().unwrap();
             assert_eq!(
                 packet.packet_header.packet_length(),
                 PacketLength::Partial(chunk_size as u32)
@@ -578,7 +581,7 @@ mod tests {
         pretty_env_logger::try_init().ok();
 
         let mut rng = ChaCha20Rng::seed_from_u64(1);
-        let chunk_size = DEFAULT_CHUNK_SIZE as usize;
+        let chunk_size = 512;
 
         let max_file_size = chunk_size * 5 + 100;
 
@@ -593,7 +596,9 @@ mod tests {
                 created: Utc::now().trunc_subsecs(0),
             };
 
-            let mut generator = LiteralDataGenerator::new(header.clone(), &buf[..], None).unwrap();
+            let mut generator =
+                LiteralDataGenerator::new(header.clone(), &buf[..], None, chunk_size as u32)
+                    .unwrap();
 
             let mut out = Vec::new();
             std::io::copy(&mut generator, &mut out).unwrap();
