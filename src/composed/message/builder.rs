@@ -110,6 +110,10 @@ impl<R: Read> Builder<R> {
     /// Set the chunk size, which controls how large partial packets
     /// will be.
     ///
+    /// Due to the restrictions on partial packet lengths, this size
+    /// - must be larger than `512`,
+    /// - must be a power of 2.
+    ///
     /// Defaults to [`DEFAULT_CHUNK_SIZE`].
     pub fn chunk_size(mut self, size: u32) -> Result<Self> {
         ensure!(size >= 512, "chunk size must be larger than 512");
