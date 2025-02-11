@@ -414,8 +414,6 @@ impl<R: io::Read> Iterator for LiteralDataPartialGenerator<R> {
     type Item = io::Result<LiteralData>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // TODO: detect if all data fits into a single packet and use fixed
-
         if self.is_done {
             return None;
         }

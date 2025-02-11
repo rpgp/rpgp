@@ -25,7 +25,7 @@ type DummyReader = std::io::Cursor<Vec<u8>>;
 pub struct Builder<R = DummyReader> {
     source: Source<R>,
     compression: CompressionAlgorithm,
-    encryption: Encryption,
+    encryption: Option<Encryption>,
     /// The chunk size when generating partial packets
     chunk_size: u32,
 }
@@ -38,7 +38,6 @@ enum Source<R = DummyReader> {
 
 #[allow(dead_code)]
 enum Encryption {
-    None,
     PasswordSeipdV1 {
         session_key: Zeroizing<Vec<u8>>,
         esk: SymKeyEncryptedSessionKey,
@@ -58,7 +57,7 @@ impl Builder<DummyReader> {
         Self {
             source: Source::File(path.as_ref().into()),
             compression: CompressionAlgorithm::Uncompressed,
-            encryption: Encryption::None,
+            encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
         }
     }
@@ -70,7 +69,7 @@ impl Builder<DummyReader> {
                 bytes: bytes.into(),
             },
             compression: CompressionAlgorithm::Uncompressed,
-            encryption: Encryption::None,
+            encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
         }
     }
@@ -83,7 +82,7 @@ impl<R: Read> Builder<R> {
                 reader,
             },
             compression: CompressionAlgorithm::Uncompressed,
-            encryption: Encryption::None,
+            encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
         }
     }
@@ -101,7 +100,7 @@ impl<R: Read> Builder<R> {
     }
 
     pub fn plaintext(mut self) -> Self {
-        self.encryption = Encryption::None;
+        self.encryption.take();
         self
     }
 
@@ -122,11 +121,11 @@ impl<R: Read> Builder<R> {
         // 2. Encrypt (sym) the session key using the provided password.
         let esk = SymKeyEncryptedSessionKey::encrypt_v4(msg_pw, &session_key, s2k, sym_alg)?;
 
-        self.encryption = Encryption::PasswordSeipdV1 {
+        self.encryption.replace(Encryption::PasswordSeipdV1 {
             sym_alg,
             esk,
             session_key,
-        };
+        });
 
         Ok(self)
     }
@@ -156,16 +155,16 @@ impl<R: Read> Builder<R> {
             })
             .collect::<Result<_>>()?;
 
-        self.encryption = Encryption::KeysSeipdV1 {
+        self.encryption.replace(Encryption::KeysSeipdV1 {
             sym_alg,
             session_key,
             esk,
-        };
+        });
 
         Ok(self)
     }
 
-    pub fn to_writer<RAND, W>(self, mut rng: RAND, out: W) -> Result<()>
+    pub fn to_writer<RAND, W>(self, mut rng: RAND, mut out: W) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
@@ -185,13 +184,17 @@ impl<R: Read> Builder<R> {
                     created: Utc::now().trunc_subsecs(0),
                 };
 
-                let generator = LiteralDataGenerator::new(
+                let mut generator = LiteralDataGenerator::new(
                     literal_data_header,
                     bytes.reader(),
                     Some(len.try_into()?),
                     self.chunk_size,
                 )?;
-                encrypt(&mut rng, generator, self.encryption, out)?;
+                if let Some(encryption) = self.encryption {
+                    encrypt(&mut rng, generator, encryption, out)?;
+                } else {
+                    std::io::copy(&mut generator, &mut out)?;
+                }
             }
             Source::File(path) => {
                 let in_file = std::fs::File::open(&path)?;
@@ -212,13 +215,17 @@ impl<R: Read> Builder<R> {
                     created: Utc::now().trunc_subsecs(0),
                 };
 
-                let generator = LiteralDataGenerator::new(
+                let mut generator = LiteralDataGenerator::new(
                     literal_data_header,
                     in_file,
                     Some(in_file_size.try_into()?),
                     self.chunk_size,
                 )?;
-                encrypt(&mut rng, generator, self.encryption, out)?;
+                if let Some(encryption) = self.encryption {
+                    encrypt(&mut rng, generator, encryption, out)?;
+                } else {
+                    std::io::copy(&mut generator, &mut out)?;
+                }
             }
             Source::Reader { file_name, reader } => {
                 let literal_data_header = LiteralDataHeader {
@@ -227,9 +234,14 @@ impl<R: Read> Builder<R> {
                     created: Utc::now().trunc_subsecs(0),
                 };
 
-                let generator =
+                let mut generator =
                     LiteralDataGenerator::new(literal_data_header, reader, None, self.chunk_size)?;
-                encrypt(&mut rng, generator, self.encryption, out)?;
+
+                if let Some(encryption) = self.encryption {
+                    encrypt(&mut rng, generator, encryption, out)?;
+                } else {
+                    std::io::copy(&mut generator, &mut out)?;
+                }
             }
         }
         Ok(())
@@ -267,9 +279,6 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     mut out: W,
 ) -> Result<()> {
     match encryption {
-        Encryption::None => {
-            todo!();
-        }
         Encryption::PasswordSeipdV1 {
             session_key,
             esk,
@@ -322,7 +331,6 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
                     let mut encrypted =
                         sym_alg.stream_encryptor(&mut rng, &session_key, generator)?;
 
-                    // TODO: detect if we only need a single packet for everything and use a fixed packet
                     loop {
                         let (length, mut buf) = if is_first {
                             let read = fill_buffer(&mut encrypted, &mut buffer, None)?;
@@ -519,6 +527,41 @@ mod tests {
 
             let Message::Literal(l) = decrypted else {
                 panic!("unexpected message: {:?}", decrypted);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.data(), &buf);
+        }
+    }
+
+    #[test]
+    fn binary_file_partial_size_no_compression_roundtrip_no_encryption() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let mut buf = vec![0u8; file_size];
+            rng.fill(&mut buf[..]);
+
+            let builder = Builder::from_reader("plaintext.txt", &buf[..])
+                .chunk_size(chunk_size)
+                .unwrap()
+                .plaintext();
+
+            let mut encoded = Vec::new();
+            builder.to_writer(&mut rng, &mut encoded).expect("writing");
+
+            // decrypt it
+            let message = Message::from_bytes(encoded.into()).expect("reading");
+
+            let Message::Literal(l) = message else {
+                panic!("unexpected message: {:?}", message);
             };
 
             assert_eq!(l.file_name(), "plaintext.txt");
