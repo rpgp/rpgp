@@ -41,6 +41,11 @@ pub struct Builder<R = DummyReader> {
     chunk_size: u32,
 }
 
+// TODO:
+// - add all configuration options from literal data packets
+// - add encryption seipdv2 support
+// - add compression support
+
 enum Source<R = DummyReader> {
     Bytes { name: Bytes, bytes: Bytes },
     File(PathBuf),
@@ -297,6 +302,16 @@ impl<R: Read> Builder<R> {
 
         Ok(())
     }
+
+    /// Write the data out directly to a `Vec<u8>`.
+    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
+    where
+        RAND: Rng + CryptoRng,
+    {
+        let mut out = Vec::new();
+        self.to_writer(rng, &mut out)?;
+        Ok(out)
+    }
 }
 
 fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
@@ -484,8 +499,7 @@ mod tests {
             })
             .unwrap();
 
-        let mut encrypted = Vec::new();
-        builder.to_writer(&mut rng, &mut encrypted).unwrap();
+        let encrypted = builder.to_vec(&mut rng).unwrap();
 
         // decrypt it
         let message = Message::from_bytes(encrypted.into()).unwrap();
@@ -528,10 +542,7 @@ mod tests {
                 })
                 .expect("encryption");
 
-            let mut encrypted = Vec::new();
-            builder
-                .to_writer(&mut rng, &mut encrypted)
-                .expect("writing");
+            let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -568,8 +579,7 @@ mod tests {
                 .unwrap()
                 .plaintext();
 
-            let mut encoded = Vec::new();
-            builder.to_writer(&mut rng, &mut encoded).expect("writing");
+            let encoded = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encoded.into()).expect("reading");
@@ -611,10 +621,7 @@ mod tests {
                 .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .expect("encryption");
 
-            let mut encrypted = Vec::new();
-            builder
-                .to_writer(&mut rng, &mut encrypted)
-                .expect("writing");
+            let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
