@@ -81,7 +81,7 @@ mod padding;
 mod public_key_encrypted_session_key;
 mod signature;
 mod sym_encrypted_data;
-mod sym_encrypted_protected_data;
+pub mod sym_encrypted_protected_data;
 mod sym_key_encrypted_session_key;
 mod trust;
 mod user_attribute;

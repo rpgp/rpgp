@@ -19,7 +19,7 @@ use crate::types::Tag;
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedProtectedData {
     packet_header: PacketHeader,
-    config: Config,
+    pub config: Config,
     #[debug("{}", hex::encode(data))]
     data: Bytes,
 }
