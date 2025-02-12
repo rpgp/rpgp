@@ -213,6 +213,21 @@ impl PacketTrait for LiteralData {
 }
 
 #[allow(clippy::large_enum_variant)]
+pub(crate) enum MaybeNormalizedReader<R: io::Read> {
+    Normalized(NormalizedReader<R>),
+    Raw(R),
+}
+
+impl<R: io::Read> io::Read for MaybeNormalizedReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Normalized(r) => r.read(buf),
+            Self::Raw(r) => r.read(buf),
+        }
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum LiteralDataGenerator<R: io::Read> {
     Fixed(LiteralDataFixedGenerator<MaybeNormalizedReader<R>>),
     Partial(LiteralDataPartialGenerator<MaybeNormalizedReader<R>>),
@@ -256,21 +271,6 @@ impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
         match self {
             Self::Fixed(ref mut fixed) => fixed.read(buf),
             Self::Partial(ref mut partial) => partial.read(buf),
-        }
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-pub(crate) enum MaybeNormalizedReader<R: io::Read> {
-    Normalized(NormalizedReader<R>),
-    Raw(R),
-}
-
-impl<R: io::Read> io::Read for MaybeNormalizedReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Normalized(r) => r.read(buf),
-            Self::Raw(r) => r.read(buf),
         }
     }
 }
