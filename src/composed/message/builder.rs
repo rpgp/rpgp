@@ -7,15 +7,18 @@ use log::debug;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
+use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader, PacketHeader,
-    PublicKeyEncryptedSessionKey, SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
+    CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader, OnePassSignature,
+    PacketHeader, PublicKeyEncryptedSessionKey, SignatureType, SignatureVersionSpecific, Subpacket,
+    SubpacketData, SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, PacketHeaderVersion, PacketLength, PublicKeyTrait, StringToKey, Tag,
+    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength,
+    PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 use crate::util::fill_buffer;
 use crate::Esk;
@@ -43,9 +46,7 @@ pub struct Builder<R = DummyReader> {
 }
 
 // TODO:
-// - add all configuration options from literal data packets
 // - add encryption seipdv2 support
-// - add compression support
 
 enum Source<R = DummyReader> {
     Bytes { name: Bytes, bytes: Bytes },
@@ -92,6 +93,86 @@ impl Builder<DummyReader> {
         }
     }
 }
+
+// Stores type erased versions, because we are object safe..
+#[derive(Default)]
+pub struct SignatureConfigs {
+    keys: Vec<Fingerprint>,
+    // key_pws: Vec<u8>, //<dyn PwCallback>,
+    hash_algorithms: Vec<HashAlgorithm>,
+}
+
+impl<'a> SignatureConfigs {
+    pub fn add_key<K: SecretKeyTrait + 'static, F: FnOnce() -> String + 'static>(
+        &mut self,
+        key: &K,
+        pw: F,
+        alg: HashAlgorithm,
+    ) {
+        self.keys.push(key.fingerprint());
+        // self.key_pws.push(pw);
+        self.hash_algorithms.push(alg);
+    }
+
+    fn prepare<R>(
+        self,
+        rng: R,
+        typ: SignatureType,
+    ) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
+    where
+        R: Rng + CryptoRng,
+    {
+        let mut out = Vec::new();
+
+        // for (key_fp, hash_alg) in self.keys.into_iter().zip(self.hash_algorithms.into_iter()) {
+        //     let key = todo!();
+
+        //     // Signature setup
+        //     let key_id = key.key_id();
+        //     let algorithm = key.algorithm();
+
+        //     let hashed_subpackets = vec![
+        //         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
+        //         Subpacket::regular(SubpacketData::SignatureCreationTime(
+        //             chrono::Utc::now().trunc_subsecs(0),
+        //         ))?,
+        //     ];
+        //     let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
+
+        //     // prepare signing
+        //     let mut config = match key.version() {
+        //         KeyVersion::V4 => crate::packet::SignatureConfig::v4(typ, algorithm, hash_alg),
+        //         KeyVersion::V6 => {
+        //             crate::packet::SignatureConfig::v6(rng, typ, algorithm, hash_alg)?
+        //         }
+        //         v => bail!("unsupported key version {:?}", v),
+        //     };
+        //     config.hashed_subpackets = hashed_subpackets;
+        //     config.unhashed_subpackets = unhashed_subpackets;
+
+        //     let ops = match key.version() {
+        //         KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, key_id),
+        //         KeyVersion::V6 => {
+        //             let SignatureVersionSpecific::V6 { ref salt } = config.version_specific else {
+        //                 // This should never happen
+        //                 bail!("Inconsistent Signature and OnePassSignature version")
+        //             };
+
+        //             let Fingerprint::V6(fp) = key.fingerprint() else {
+        //                 bail!("Inconsistent Signature and Fingerprint version")
+        //             };
+
+        //             OnePassSignature::v6(typ, hash_alg, algorithm, salt.clone(), fp)
+        //         }
+        //         v => bail!("Unsupported key version {:?}", v),
+        //     };
+        //     out.push((config, ops));
+        // }
+
+        Ok(out)
+    }
+}
+
 impl<R: Read> Builder<R> {
     /// Source the data from a reader.
     pub fn from_reader(file_name: impl Into<Bytes>, reader: R) -> Self {
@@ -260,6 +341,27 @@ impl<R: Read> Builder<R> {
         }
 
         Ok(self)
+    }
+
+    /// Sign this message, using the provided key.
+    pub fn to_writer_signed<RAND, W>(
+        self,
+        mut rng: RAND,
+        signature_configs: &SignatureConfigs,
+        mut out: W,
+    ) -> Result<()>
+    where
+        RAND: CryptoRng + Rng,
+        W: std::io::Write,
+    {
+        // 1. Write all OnePass Signature packets
+
+        // 2. Write actual message
+        self.to_writer(&mut rng, &mut out)?;
+
+        // 3. Write all Signatures (reverse order as One Pass Signatures)
+
+        Ok(())
     }
 
     /// Write the data out to a writer.
@@ -435,6 +537,19 @@ impl<R: Read> Builder<R> {
     {
         let mut out = Vec::new();
         self.to_writer(rng, &mut out)?;
+        Ok(out)
+    }
+
+    pub fn to_vec_signed<RAND>(
+        self,
+        rng: RAND,
+        signature_configs: &SignatureConfigs,
+    ) -> Result<Vec<u8>>
+    where
+        RAND: CryptoRng + Rng,
+    {
+        let mut out = Vec::new();
+        self.to_writer_signed(rng, signature_configs, &mut out)?;
         Ok(out)
     }
 }
@@ -951,6 +1066,70 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let (decrypted, _key_ids) = message
+                .decrypt(|| "".to_string(), &[&skey])
+                .expect("decryption");
+
+            assert!(matches!(decrypted, Message::Compressed(_)));
+
+            let decompressed = decrypted.decompress().expect("decompression");
+
+            let Message::Literal(l) = decompressed else {
+                panic!("unexpected message: {:?}", decompressed);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            check_strings(
+                l.to_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
+        }
+    }
+
+    #[test]
+    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv1_sign() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                .data_mode(DataMode::Utf8)
+                .compression(CompressionAlgorithm::ZIP)
+                .chunk_size(chunk_size)
+                .unwrap()
+                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .expect("encryption");
+
+            let mut signature_config = SignatureConfigs::default();
+            signature_config.add_key(&skey, || "".to_string(), HashAlgorithm::SHA2_256);
+
+            let encrypted = builder
+                .to_vec_signed(&mut rng, &signature_config)
+                .expect("writing");
+
+            let message = Message::from_bytes(encrypted.into()).expect("reading");
+
+            // verify signature
+            assert!(message.is_one_pass_signed());
+            message.verify(&skey).expect("signed");
+
+            // decrypt it
             let (decrypted, _key_ids) = message
                 .decrypt(|| "".to_string(), &[&skey])
                 .expect("decryption");
