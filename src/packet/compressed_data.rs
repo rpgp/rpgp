@@ -207,13 +207,6 @@ impl<R: io::Read> CompressedDataGenerator<R> {
             }
         }
     }
-
-    pub(crate) fn len(&self) -> Option<u32> {
-        match self {
-            Self::Fixed(ref fixed) => Some(fixed.total_len),
-            Self::Partial { .. } => None,
-        }
-    }
 }
 
 impl<R: io::Read> io::Read for CompressedDataGenerator<R> {
@@ -232,7 +225,6 @@ pub(crate) struct CompressedDataFixedGenerator<R: io::Read> {
     source: Compressor<R>,
     /// how many bytes of the header have we written already
     header_written: usize,
-    total_len: u32,
 }
 
 impl<R: io::Read> CompressedDataFixedGenerator<R> {
@@ -243,13 +235,10 @@ impl<R: io::Read> CompressedDataFixedGenerator<R> {
         packet_header.to_writer(&mut serialized_header)?;
         serialized_header.write_u8(source.algorithm().into())?;
 
-        let total_len = source_len + u32::try_from(serialized_header.len())?;
-
         Ok(Self {
             header: serialized_header,
             source,
             header_written: 0,
-            total_len,
         })
     }
 }

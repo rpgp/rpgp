@@ -10,8 +10,8 @@ use zeroize::Zeroizing;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    DataMode, LiteralDataGenerator, LiteralDataHeader, PacketHeader, PublicKeyEncryptedSessionKey,
-    SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
+    CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader, PacketHeader,
+    PublicKeyEncryptedSessionKey, SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
@@ -35,7 +35,7 @@ type DummyReader = std::io::Cursor<Vec<u8>>;
 /// If the total data fits into a single chunk, a single fixed packet is generated.
 pub struct Builder<R = DummyReader> {
     source: Source<R>,
-    compression: CompressionAlgorithm,
+    compression: Option<CompressionAlgorithm>,
     encryption: Option<Encryption>,
     /// The chunk size when generating partial packets
     chunk_size: u32,
@@ -71,7 +71,7 @@ impl Builder<DummyReader> {
     pub fn from_file(path: impl AsRef<Path>) -> Self {
         Self {
             source: Source::File(path.as_ref().into()),
-            compression: CompressionAlgorithm::Uncompressed,
+            compression: None,
             encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
             data_mode: DataMode::Binary,
@@ -85,7 +85,7 @@ impl Builder<DummyReader> {
                 name: name.into(),
                 bytes: bytes.into(),
             },
-            compression: CompressionAlgorithm::Uncompressed,
+            compression: None,
             encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
             data_mode: DataMode::Binary,
@@ -100,7 +100,7 @@ impl<R: Read> Builder<R> {
                 file_name: file_name.into(),
                 reader,
             },
-            compression: CompressionAlgorithm::Uncompressed,
+            compression: None,
             encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
             data_mode: DataMode::Binary,
@@ -136,7 +136,7 @@ impl<R: Read> Builder<R> {
     ///
     /// Defaults to no compression.
     pub fn compression(mut self, compression: CompressionAlgorithm) -> Self {
-        self.compression = compression;
+        self.compression.replace(compression);
         self
     }
 
@@ -268,8 +268,6 @@ impl<R: Read> Builder<R> {
         RAND: Rng + CryptoRng,
         W: std::io::Write,
     {
-        // TODO: deal with compression
-
         match self.source {
             Source::Bytes { name, bytes } => {
                 debug!("sourcing bytes {:?}: {} bytes", name, bytes.len());
@@ -283,16 +281,36 @@ impl<R: Read> Builder<R> {
                     created: Utc::now().trunc_subsecs(0),
                 };
 
-                let mut generator = LiteralDataGenerator::new(
+                let mut literal_generator = LiteralDataGenerator::new(
                     literal_data_header,
                     bytes.reader(),
                     Some(len.try_into()?),
                     self.chunk_size,
                 )?;
-                if let Some(encryption) = self.encryption {
-                    encrypt(&mut rng, generator, encryption, out)?;
-                } else {
-                    std::io::copy(&mut generator, &mut out)?;
+
+                match self.compression {
+                    Some(compression) => {
+                        let len = literal_generator.len();
+                        let mut generator = CompressedDataGenerator::new(
+                            compression,
+                            literal_generator,
+                            len,
+                            self.chunk_size,
+                        )?;
+                        if let Some(encryption) = self.encryption {
+                            encrypt(&mut rng, generator, None, encryption, out)?;
+                        } else {
+                            std::io::copy(&mut generator, &mut out)?;
+                        }
+                    }
+                    None => {
+                        if let Some(encryption) = self.encryption {
+                            let len = literal_generator.len();
+                            encrypt(&mut rng, literal_generator, len, encryption, out)?;
+                        } else {
+                            std::io::copy(&mut literal_generator, &mut out)?;
+                        }
+                    }
                 }
             }
             Source::File(path) => {
@@ -314,16 +332,36 @@ impl<R: Read> Builder<R> {
                     created: Utc::now().trunc_subsecs(0),
                 };
 
-                let mut generator = LiteralDataGenerator::new(
+                let mut literal_generator = LiteralDataGenerator::new(
                     literal_data_header,
                     in_file,
                     Some(in_file_size.try_into()?),
                     self.chunk_size,
                 )?;
-                if let Some(encryption) = self.encryption {
-                    encrypt(&mut rng, generator, encryption, out)?;
-                } else {
-                    std::io::copy(&mut generator, &mut out)?;
+
+                match self.compression {
+                    Some(compression) => {
+                        let len = literal_generator.len();
+                        let mut generator = CompressedDataGenerator::new(
+                            compression,
+                            literal_generator,
+                            len,
+                            self.chunk_size,
+                        )?;
+                        if let Some(encryption) = self.encryption {
+                            encrypt(&mut rng, generator, None, encryption, out)?;
+                        } else {
+                            std::io::copy(&mut generator, &mut out)?;
+                        }
+                    }
+                    None => {
+                        if let Some(encryption) = self.encryption {
+                            let len = literal_generator.len();
+                            encrypt(&mut rng, literal_generator, len, encryption, out)?;
+                        } else {
+                            std::io::copy(&mut literal_generator, &mut out)?;
+                        }
+                    }
                 }
             }
             Source::Reader { file_name, reader } => {
@@ -333,13 +371,32 @@ impl<R: Read> Builder<R> {
                     created: Utc::now().trunc_subsecs(0),
                 };
 
-                let mut generator =
+                let mut literal_generator =
                     LiteralDataGenerator::new(literal_data_header, reader, None, self.chunk_size)?;
 
-                if let Some(encryption) = self.encryption {
-                    encrypt(&mut rng, generator, encryption, out)?;
-                } else {
-                    std::io::copy(&mut generator, &mut out)?;
+                match self.compression {
+                    Some(compression) => {
+                        let len = literal_generator.len();
+                        let mut generator = CompressedDataGenerator::new(
+                            compression,
+                            literal_generator,
+                            len,
+                            self.chunk_size,
+                        )?;
+                        if let Some(encryption) = self.encryption {
+                            encrypt(&mut rng, generator, None, encryption, out)?;
+                        } else {
+                            std::io::copy(&mut generator, &mut out)?;
+                        }
+                    }
+                    None => {
+                        if let Some(encryption) = self.encryption {
+                            let len = literal_generator.len();
+                            encrypt(&mut rng, literal_generator, len, encryption, out)?;
+                        } else {
+                            std::io::copy(&mut literal_generator, &mut out)?;
+                        }
+                    }
                 }
             }
         }
@@ -384,7 +441,8 @@ impl<R: Read> Builder<R> {
 
 fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     mut rng: R,
-    generator: LiteralDataGenerator<READ>,
+    generator: READ,
+    len: Option<u32>,
     encryption: Encryption,
     mut out: W,
 ) -> Result<()> {
@@ -414,7 +472,7 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     let config = SymEncryptedProtectedDataConfig::V1;
 
     // Write the outer packet header
-    match generator.len() {
+    match len {
         None => {
             let chunk_size = DEFAULT_CHUNK_SIZE as usize;
             let config_len = config.write_len();
@@ -849,6 +907,60 @@ mod tests {
 
             let Message::Literal(l) = decrypted else {
                 panic!("unexpected message: {:?}", decrypted);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            check_strings(
+                l.to_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
+        }
+    }
+
+    #[test]
+    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv1() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                .data_mode(DataMode::Utf8)
+                .compression(CompressionAlgorithm::ZIP)
+                .chunk_size(chunk_size)
+                .unwrap()
+                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .expect("encryption");
+
+            let encrypted = builder.to_vec(&mut rng).expect("writing");
+
+            // decrypt it
+            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let (decrypted, _key_ids) = message
+                .decrypt(|| "".to_string(), &[&skey])
+                .expect("decryption");
+
+            assert!(matches!(decrypted, Message::Compressed(_)));
+
+            let decompressed = decrypted.decompress().expect("decompression");
+
+            let Message::Literal(l) = decompressed else {
+                panic!("unexpected message: {:?}", decompressed);
             };
 
             assert_eq!(l.file_name(), "plaintext.txt");
