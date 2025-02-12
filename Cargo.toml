@@ -107,6 +107,8 @@ bzip2 = { version = "0.5.0", default-features = false, features = [
     "libbz2-rs-sys",
 ], optional = true }
 bitfields = "0.12.3"
+regex = "1.7"
+
 
 [dev-dependencies]
 glob = "0.3"
@@ -115,7 +117,6 @@ pretty_assertions = "1"
 pretty_env_logger = "0.5"
 rand_chacha = "0.3"
 rand_xorshift = "0.3"
-regex = "1.7"
 rpgp_0_10 = { version = "=0.10.2", package = "pgp" }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0"
@@ -123,6 +124,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3.14.0"
 proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
+escape_string = "0.1.2"
 
 [features]
 default = ["mmap", "bzip2"]

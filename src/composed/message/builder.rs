@@ -39,6 +39,7 @@ pub struct Builder<R = DummyReader> {
     encryption: Option<Encryption>,
     /// The chunk size when generating partial packets
     chunk_size: u32,
+    data_mode: DataMode,
 }
 
 // TODO:
@@ -77,6 +78,7 @@ impl Builder<DummyReader> {
             compression: CompressionAlgorithm::Uncompressed,
             encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
+            data_mode: DataMode::Binary,
         }
     }
 
@@ -90,6 +92,7 @@ impl Builder<DummyReader> {
             compression: CompressionAlgorithm::Uncompressed,
             encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
+            data_mode: DataMode::Binary,
         }
     }
 }
@@ -104,7 +107,18 @@ impl<R: Read> Builder<R> {
             compression: CompressionAlgorithm::Uncompressed,
             encryption: None,
             chunk_size: DEFAULT_CHUNK_SIZE,
+            data_mode: DataMode::Binary,
         }
+    }
+
+    /// Configure the [`DataMode`] for the literal data portion.
+    ///
+    /// Defaults to `DataMode::Binary`
+    ///
+    /// If the mode is set to `DataMode::Utf8`, line endings will be normalized.
+    pub fn data_mode(mut self, mode: DataMode) -> Self {
+        self.data_mode = mode;
+        self
     }
 
     /// Set the chunk size, which controls how large partial packets
@@ -214,7 +228,7 @@ impl<R: Read> Builder<R> {
 
                 // Construct Literal Data Packet (inner)
                 let literal_data_header = LiteralDataHeader {
-                    mode: DataMode::Binary,
+                    mode: self.data_mode,
                     file_name: name,
                     created: Utc::now().trunc_subsecs(0),
                 };
@@ -245,7 +259,7 @@ impl<R: Read> Builder<R> {
 
                 let in_file = BufReader::new(in_file);
                 let literal_data_header = LiteralDataHeader {
-                    mode: DataMode::Binary,
+                    mode: self.data_mode,
                     file_name,
                     created: Utc::now().trunc_subsecs(0),
                 };
@@ -264,7 +278,7 @@ impl<R: Read> Builder<R> {
             }
             Source::Reader { file_name, reader } => {
                 let literal_data_header = LiteralDataHeader {
-                    mode: DataMode::Binary,
+                    mode: self.data_mode,
                     file_name,
                     created: Utc::now().trunc_subsecs(0),
                 };
@@ -438,7 +452,10 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
 
     use crate::crypto::sym::SymmetricKeyAlgorithm;
+    use crate::line_writer::LineBreak;
+    use crate::normalize_lines::normalize_lines;
     use crate::types::SecretKeyTrait;
+    use crate::util::test::{check_strings, random_string, ChaosReader};
     use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
@@ -521,7 +538,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_file_partial_size_no_compression_roundtrip_password_seipdv1() {
+    fn binary_reader_partial_size_no_compression_roundtrip_password_seipdv1() {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -564,7 +581,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_file_partial_size_no_compression_roundtrip_no_encryption() {
+    fn binary_reader_partial_size_no_compression_roundtrip_no_encryption() {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -598,7 +615,7 @@ mod tests {
     }
 
     #[test]
-    fn binary_file_partial_size_no_compression_roundtrip_public_key_x25519_seipdv1() {
+    fn binary_reader_partial_size_no_compression_roundtrip_public_key_x25519_seipdv1() {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -639,6 +656,93 @@ mod tests {
 
             assert_eq!(l.file_name(), "plaintext.txt");
             assert_eq!(l.data(), &buf);
+        }
+    }
+
+    #[test]
+    fn utf8_reader_partial_size_no_compression_roundtrip_no_encryption() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                .data_mode(DataMode::Utf8)
+                .chunk_size(chunk_size)
+                .unwrap()
+                .plaintext();
+
+            let encoded = builder.to_vec(&mut rng).expect("writing");
+
+            // decrypt it
+            let message = Message::from_bytes(encoded.into()).expect("reading");
+
+            let Message::Literal(l) = message else {
+                panic!("unexpected message: {:?}", message);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            check_strings(
+                l.to_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
+        }
+    }
+
+    #[test]
+    fn utf8_reader_partial_size_no_compression_roundtrip_public_key_x25519_seipdv1() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                .data_mode(DataMode::Utf8)
+                .chunk_size(chunk_size)
+                .unwrap()
+                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .expect("encryption");
+
+            let encrypted = builder.to_vec(&mut rng).expect("writing");
+
+            // decrypt it
+            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let (decrypted, _key_ids) = message
+                .decrypt(|| "".to_string(), &[&skey])
+                .expect("decryption");
+
+            let Message::Literal(l) = decrypted else {
+                panic!("unexpected message: {:?}", decrypted);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            check_strings(
+                l.to_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
         }
     }
 }

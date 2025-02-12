@@ -8,7 +8,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
-use crate::normalize_lines::Normalized;
+use crate::normalize_lines::{Normalized, NormalizedReader};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
@@ -49,6 +49,7 @@ pub struct LiteralDataHeader {
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum DataMode {
     Binary = b'b',
+    /// Deprecacted.
     Text = b't',
     Utf8 = b'u',
     Mime = b'm',
@@ -210,10 +211,11 @@ impl PacketTrait for LiteralData {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum LiteralDataGenerator<R: io::Read> {
-    Fixed(LiteralDataFixedGenerator<R>),
+    Fixed(LiteralDataFixedGenerator<MaybeNormalizedReader<R>>),
     Partial {
-        gen: LiteralDataPartialGenerator<R>,
+        gen: LiteralDataPartialGenerator<MaybeNormalizedReader<R>>,
         /// Serialized version of the packet being written currently.
         current_packet: Option<Bytes>,
         /// Currently writing the first packet?
@@ -228,6 +230,12 @@ impl<R: io::Read> LiteralDataGenerator<R> {
         source_len: Option<u32>,
         chunk_size: u32,
     ) -> Result<Self> {
+        let source = if header.mode == DataMode::Utf8 {
+            MaybeNormalizedReader::Normalized(NormalizedReader::new(source, LineBreak::Crlf))
+        } else {
+            MaybeNormalizedReader::Raw(source)
+        };
+
         match source_len {
             Some(source_len) => {
                 let gen = LiteralDataFixedGenerator::new(header, source, source_len)?;
@@ -316,6 +324,21 @@ impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
 
                 Ok(to_write)
             }
+        }
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum MaybeNormalizedReader<R: io::Read> {
+    Normalized(NormalizedReader<R>),
+    Raw(R),
+}
+
+impl<R: io::Read> io::Read for MaybeNormalizedReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Normalized(r) => r.read(buf),
+            Self::Raw(r) => r.read(buf),
         }
     }
 }
@@ -473,7 +496,9 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
+    use crate::normalize_lines::normalize_lines;
     use crate::packet::Packet;
+    use crate::util::test::{check_strings, random_string, ChaosReader};
 
     use super::*;
 
@@ -575,7 +600,7 @@ mod tests {
     }
 
     #[test]
-    fn test_literal_data_partial_roundtrip() {
+    fn test_literal_data_binary_partial_roundtrip() {
         pretty_env_logger::try_init().ok();
 
         let mut rng = ChaCha20Rng::seed_from_u64(1);
@@ -612,6 +637,51 @@ mod tests {
 
             assert_eq!(data.header, header);
             assert_eq!(data.data, buf);
+        }
+    }
+
+    #[test]
+    fn test_literal_data_utf8_partial_roundtrip() {
+        pretty_env_logger::try_init().ok();
+
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+        let chunk_size = 512;
+
+        let max_file_size = chunk_size * 5 + 100;
+
+        for file_size in 1..=max_file_size {
+            println!("size {}", file_size);
+
+            let header = LiteralDataHeader {
+                file_name: "hello.txt".into(),
+                mode: DataMode::Utf8,
+                created: Utc::now().trunc_subsecs(0),
+            };
+
+            let s = random_string(&mut rng, file_size);
+            let mut generator = LiteralDataGenerator::new(
+                header.clone(),
+                ChaosReader::new(rng.clone(), s.clone()),
+                None,
+                chunk_size as u32,
+            )
+            .unwrap();
+
+            let mut out = Vec::new();
+            std::io::copy(&mut generator, &mut out).unwrap();
+
+            let packets: Vec<_> = crate::packet::many::PacketParser::new(out.into()).collect();
+            assert_eq!(packets.len(), 1, "{:?}", packets);
+            let packet = packets[0].as_ref().unwrap();
+
+            assert_eq!(packet.packet_header().tag(), Tag::LiteralData);
+            let Packet::LiteralData(data) = packet else {
+                panic!("invalid packet: {:?}", packet);
+            };
+
+            assert_eq!(data.header, header);
+            let normalized_s = normalize_lines(&s, LineBreak::Crlf);
+            check_strings(data.to_string().unwrap(), normalized_s);
         }
     }
 
