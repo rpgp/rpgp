@@ -12,8 +12,9 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
     CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader, OnePassSignature,
-    PacketHeader, PublicKeyEncryptedSessionKey, SignatureType, SignatureVersionSpecific, Subpacket,
-    SubpacketData, SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
+    PacketHeader, PacketTrait, PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType,
+    SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedProtectedDataConfig,
+    SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
@@ -94,83 +95,62 @@ impl Builder<DummyReader> {
     }
 }
 
-// Stores type erased versions, because we are object safe..
-#[derive(Default)]
-pub struct SignatureConfigs {
-    keys: Vec<Fingerprint>,
-    // key_pws: Vec<u8>, //<dyn PwCallback>,
-    hash_algorithms: Vec<HashAlgorithm>,
-}
+fn prepare<R>(
+    mut rng: R,
+    typ: SignatureType,
+    keys: &[&impl SecretKeyTrait],
+    hash_algorithms: &[HashAlgorithm],
+) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
+where
+    R: Rng + CryptoRng,
+{
+    let mut out = Vec::new();
 
-impl<'a> SignatureConfigs {
-    pub fn add_key<K: SecretKeyTrait + 'static, F: FnOnce() -> String + 'static>(
-        &mut self,
-        key: &K,
-        pw: F,
-        alg: HashAlgorithm,
-    ) {
-        self.keys.push(key.fingerprint());
-        // self.key_pws.push(pw);
-        self.hash_algorithms.push(alg);
+    for (key, hash_alg) in keys.iter().zip(hash_algorithms.iter()) {
+        // Signature setup
+        let key_id = key.key_id();
+        let algorithm = key.algorithm();
+        let hash_alg = *hash_alg;
+
+        let hashed_subpackets = vec![
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
+            Subpacket::regular(SubpacketData::SignatureCreationTime(
+                chrono::Utc::now().trunc_subsecs(0),
+            ))?,
+        ];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
+
+        // prepare signing
+        let mut config = match key.version() {
+            KeyVersion::V4 => crate::packet::SignatureConfig::v4(typ, algorithm, hash_alg),
+            KeyVersion::V6 => {
+                crate::packet::SignatureConfig::v6(&mut rng, typ, algorithm, hash_alg)?
+            }
+            v => bail!("unsupported key version {:?}", v),
+        };
+        config.hashed_subpackets = hashed_subpackets;
+        config.unhashed_subpackets = unhashed_subpackets;
+
+        let ops = match key.version() {
+            KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, key_id),
+            KeyVersion::V6 => {
+                let SignatureVersionSpecific::V6 { ref salt } = config.version_specific else {
+                    // This should never happen
+                    bail!("Inconsistent Signature and OnePassSignature version")
+                };
+
+                let Fingerprint::V6(fp) = key.fingerprint() else {
+                    bail!("Inconsistent Signature and Fingerprint version")
+                };
+
+                OnePassSignature::v6(typ, hash_alg, algorithm, salt.clone(), fp)
+            }
+            v => bail!("Unsupported key version {:?}", v),
+        };
+        out.push((config, ops));
     }
 
-    fn prepare<R>(
-        self,
-        rng: R,
-        typ: SignatureType,
-    ) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
-    where
-        R: Rng + CryptoRng,
-    {
-        let mut out = Vec::new();
-
-        // for (key_fp, hash_alg) in self.keys.into_iter().zip(self.hash_algorithms.into_iter()) {
-        //     let key = todo!();
-
-        //     // Signature setup
-        //     let key_id = key.key_id();
-        //     let algorithm = key.algorithm();
-
-        //     let hashed_subpackets = vec![
-        //         Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
-        //         Subpacket::regular(SubpacketData::SignatureCreationTime(
-        //             chrono::Utc::now().trunc_subsecs(0),
-        //         ))?,
-        //     ];
-        //     let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
-
-        //     // prepare signing
-        //     let mut config = match key.version() {
-        //         KeyVersion::V4 => crate::packet::SignatureConfig::v4(typ, algorithm, hash_alg),
-        //         KeyVersion::V6 => {
-        //             crate::packet::SignatureConfig::v6(rng, typ, algorithm, hash_alg)?
-        //         }
-        //         v => bail!("unsupported key version {:?}", v),
-        //     };
-        //     config.hashed_subpackets = hashed_subpackets;
-        //     config.unhashed_subpackets = unhashed_subpackets;
-
-        //     let ops = match key.version() {
-        //         KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, key_id),
-        //         KeyVersion::V6 => {
-        //             let SignatureVersionSpecific::V6 { ref salt } = config.version_specific else {
-        //                 // This should never happen
-        //                 bail!("Inconsistent Signature and OnePassSignature version")
-        //             };
-
-        //             let Fingerprint::V6(fp) = key.fingerprint() else {
-        //                 bail!("Inconsistent Signature and Fingerprint version")
-        //             };
-
-        //             OnePassSignature::v6(typ, hash_alg, algorithm, salt.clone(), fp)
-        //         }
-        //         v => bail!("Unsupported key version {:?}", v),
-        //     };
-        //     out.push((config, ops));
-        // }
-
-        Ok(out)
-    }
+    Ok(out)
 }
 
 impl<R: Read> Builder<R> {
@@ -347,19 +327,52 @@ impl<R: Read> Builder<R> {
     pub fn to_writer_signed<RAND, W>(
         self,
         mut rng: RAND,
-        signature_configs: &SignatureConfigs,
+        keys: &[&impl SecretKeyTrait],
+        key_pws: Vec<impl FnOnce() -> String>,
+        hash_algorithms: &[HashAlgorithm],
         mut out: W,
     ) -> Result<()>
     where
         RAND: CryptoRng + Rng,
         W: std::io::Write,
     {
+        let typ = if self.encryption.is_none()
+            && self.compression.is_none()
+            && self.data_mode == DataMode::Utf8
+        {
+            SignatureType::Text
+        } else {
+            SignatureType::Binary
+        };
+
+        let prep = prepare(&mut rng, typ, keys, hash_algorithms)?;
+
+        let mut hashers = Vec::new();
+
         // 1. Write all OnePass Signature packets
+        for (config, ops) in prep.into_iter() {
+            ops.to_writer_with_header(&mut out)?;
+            hashers.push(config.into_hasher()?);
+        }
 
         // 2. Write actual message
-        self.to_writer(&mut rng, &mut out)?;
+        {
+            // Tee the writer with the hashers
+            let mut tee_writer = TeeManyWriter::new(&mut out, &mut hashers);
+            self.to_writer(&mut rng, &mut tee_writer)?;
+            tee_writer.flush()?;
+        }
 
         // 3. Write all Signatures (reverse order as One Pass Signatures)
+        for ((hasher, key), key_pw) in hashers
+            .into_iter()
+            .zip(keys.iter())
+            .zip(key_pws.into_iter())
+            .rev()
+        {
+            let signature = hasher.sign(key, key_pw)?;
+            signature.to_writer_with_header(&mut out)?;
+        }
 
         Ok(())
     }
@@ -543,13 +556,15 @@ impl<R: Read> Builder<R> {
     pub fn to_vec_signed<RAND>(
         self,
         rng: RAND,
-        signature_configs: &SignatureConfigs,
+        keys: &[&impl SecretKeyTrait],
+        key_pws: Vec<impl FnOnce() -> String>,
+        hash_algorithms: &[HashAlgorithm],
     ) -> Result<Vec<u8>>
     where
         RAND: CryptoRng + Rng,
     {
         let mut out = Vec::new();
-        self.to_writer_signed(rng, signature_configs, &mut out)?;
+        self.to_writer_signed(rng, keys, key_pws, hash_algorithms, &mut out)?;
         Ok(out)
     }
 }
@@ -660,6 +675,37 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     }
 
     Ok(())
+}
+
+struct TeeManyWriter<'a, 'b, A> {
+    writer: &'a mut A,
+    hashers: &'b mut [SignatureHasher],
+}
+
+impl<'a, 'b, A> TeeManyWriter<'a, 'b, A> {
+    fn new(writer: &'a mut A, hashers: &'b mut [SignatureHasher]) -> Self {
+        Self { writer, hashers }
+    }
+}
+
+impl<A: std::io::Write> std::io::Write for TeeManyWriter<'_, '_, A> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let written = self.writer.write(buf)?;
+
+        for hasher in self.hashers.iter_mut() {
+            hasher.write(&buf[..written])?;
+        }
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.writer.flush()?;
+        for hasher in self.hashers.iter_mut() {
+            hasher.flush()?;
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1116,18 +1162,20 @@ mod tests {
                 .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .expect("encryption");
 
-            let mut signature_config = SignatureConfigs::default();
-            signature_config.add_key(&skey, || "".to_string(), HashAlgorithm::SHA2_256);
-
             let encrypted = builder
-                .to_vec_signed(&mut rng, &signature_config)
+                .to_vec_signed(
+                    &mut rng,
+                    &[&skey],
+                    vec![|| "".to_string()],
+                    &[HashAlgorithm::SHA2_256],
+                )
                 .expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
 
             // verify signature
             assert!(message.is_one_pass_signed());
-            message.verify(&skey).expect("signed");
+            message.verify(&skey.public_key()).expect("signed");
 
             // decrypt it
             let (decrypted, _key_ids) = message

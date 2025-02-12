@@ -164,35 +164,28 @@ impl SignatureConfig {
     }
 
     /// Sign the given data.
-    pub fn sign<F, R>(self, key: &impl SecretKeyTrait, key_pw: F, data: R) -> Result<Signature>
+    pub fn sign<F, R>(self, key: &impl SecretKeyTrait, key_pw: F, mut data: R) -> Result<Signature>
     where
         F: FnOnce() -> String,
         R: Read,
     {
-        ensure!(
-            (self.version() == SignatureVersion::V4 && key.version() == KeyVersion::V4)
-                || (self.version() == SignatureVersion::V6 && key.version() == KeyVersion::V6),
-            "signature version {:?} not allowed for signer key version {:?}",
-            self.version(),
-            key.version()
-        );
+        let mut hasher = self.into_hasher()?;
+        std::io::copy(&mut data, &mut hasher)?;
 
+        hasher.sign(key, key_pw)
+    }
+
+    pub fn into_hasher(self) -> Result<SignatureHasher> {
         let mut hasher = self.hash_alg.new_hasher()?;
 
         if let SignatureVersionSpecific::V6 { salt } = &self.version_specific {
             hasher.update(salt.as_ref())
         }
 
-        self.hash_data_to_sign(&mut *hasher, data)?;
-        let len = self.hash_signature_data(&mut hasher)?;
-        hasher.update(&self.trailer(len)?);
-
-        let hash = &hasher.finish()[..];
-
-        let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.create_signature(key_pw, self.hash_alg, hash)?;
-
-        Signature::from_config(self, signed_hash_value, signature)
+        Ok(SignatureHasher {
+            hasher,
+            config: self,
+        })
     }
 
     /// Create a certification self-signature.
@@ -621,5 +614,53 @@ impl SignatureConfig {
                 _ => None,
             })
             .collect()
+    }
+}
+
+pub struct SignatureHasher {
+    hasher: Box<dyn Hasher>,
+    config: SignatureConfig,
+}
+
+impl SignatureHasher {
+    /// Finalizes the signature.
+    pub fn sign<F>(self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
+    where
+        F: FnOnce() -> String,
+    {
+        let Self { config, mut hasher } = self;
+        ensure!(
+            (config.version() == SignatureVersion::V4 && key.version() == KeyVersion::V4)
+                || (config.version() == SignatureVersion::V6 && key.version() == KeyVersion::V6),
+            "signature version {:?} not allowed for signer key version {:?}",
+            config.version(),
+            key.version()
+        );
+        ensure!(
+            matches!(config.typ, SignatureType::Binary | SignatureType::Text),
+            "incompatible signature type {:?}",
+            config.typ
+        );
+
+        let len = config.hash_signature_data(&mut hasher)?;
+        let trailer = config.trailer(len)?;
+        hasher.update(&trailer);
+
+        let hash = &hasher.finish()[..];
+
+        let signed_hash_value = [hash[0], hash[1]];
+        let signature = key.create_signature(key_pw, config.hash_alg, hash)?;
+
+        Signature::from_config(config, signed_hash_value, signature)
+    }
+}
+
+impl std::io::Write for SignatureHasher {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.hasher.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.hasher.flush()
     }
 }
