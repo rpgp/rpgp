@@ -1,7 +1,7 @@
 use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::{Buf, Bytes};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
@@ -13,6 +13,7 @@ use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{PacketHeaderVersion, PacketLength, Tag};
+use crate::util::fill_buffer;
 
 #[cfg(test)]
 use proptest::prelude::*;
@@ -214,13 +215,7 @@ impl PacketTrait for LiteralData {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum LiteralDataGenerator<R: io::Read> {
     Fixed(LiteralDataFixedGenerator<MaybeNormalizedReader<R>>),
-    Partial {
-        gen: LiteralDataPartialGenerator<MaybeNormalizedReader<R>>,
-        /// Serialized version of the packet being written currently.
-        current_packet: Option<Bytes>,
-        /// Currently writing the first packet?
-        is_first: bool,
-    },
+    Partial(LiteralDataPartialGenerator<MaybeNormalizedReader<R>>),
 }
 
 impl<R: io::Read> LiteralDataGenerator<R> {
@@ -243,11 +238,7 @@ impl<R: io::Read> LiteralDataGenerator<R> {
             }
             None => {
                 let gen = LiteralDataPartialGenerator::new(header, source, chunk_size)?;
-                Ok(Self::Partial {
-                    gen,
-                    current_packet: None,
-                    is_first: true,
-                })
+                Ok(Self::Partial(gen))
             }
         }
     }
@@ -264,66 +255,7 @@ impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Fixed(ref mut fixed) => fixed.read(buf),
-            Self::Partial {
-                gen,
-                current_packet,
-                is_first,
-            } => {
-                if current_packet.is_none() {
-                    match gen.next() {
-                        None => {
-                            // EOF
-                            return Ok(0);
-                        }
-                        Some(Ok(packet)) => {
-                            let mut packet_ser = Vec::new();
-
-                            if *is_first {
-                                // only the first packet needs the literal data header
-                                packet
-                                    .packet_header
-                                    .to_writer(&mut packet_ser)
-                                    .map_err(|e| {
-                                        io::Error::new(io::ErrorKind::Other, e.to_string())
-                                    })?;
-
-                                packet.header.to_writer(&mut packet_ser).map_err(|e| {
-                                    io::Error::new(io::ErrorKind::Other, e.to_string())
-                                })?;
-
-                                debug!("first partial packet {:?}", packet.packet_header);
-                                *is_first = false;
-                            } else {
-                                // only length
-                                packet
-                                    .packet_header
-                                    .packet_length()
-                                    .to_writer_new(&mut packet_ser)
-                                    .map_err(|e| {
-                                        io::Error::new(io::ErrorKind::Other, e.to_string())
-                                    })?;
-                                debug!("partial packet {:?}", packet.packet_header.packet_length());
-                            }
-
-                            packet_ser.extend_from_slice(&packet.data);
-                            current_packet.replace(packet_ser.into());
-                        }
-                        Some(Err(err)) => {
-                            return Err(err);
-                        }
-                    }
-                }
-                let current_packet_ref = current_packet.as_mut().expect("just checked");
-
-                let to_write = current_packet_ref.remaining().min(buf.len());
-                current_packet_ref.copy_to_slice(&mut buf[..to_write]);
-
-                if current_packet_ref.remaining() == 0 {
-                    *current_packet = None;
-                }
-
-                Ok(to_write)
-            }
+            Self::Partial(ref mut partial) => partial.read(buf),
         }
     }
 }
@@ -399,6 +331,10 @@ pub(crate) struct LiteralDataPartialGenerator<R: io::Read> {
     chunk_size: u32,
     is_done: bool,
     is_first: bool,
+    /// Did we emit a (final) fixed packet yet?
+    is_fixed_emitted: bool,
+    /// Serialized version of the packet being written currently.
+    current_packet: BytesMut,
 }
 
 impl<R: io::Read> LiteralDataPartialGenerator<R> {
@@ -415,79 +351,93 @@ impl<R: io::Read> LiteralDataPartialGenerator<R> {
             chunk_size,
             is_done: false,
             is_first: true,
+            is_fixed_emitted: false,
+            current_packet: BytesMut::with_capacity(chunk_size as usize),
         })
-    }
-
-    fn fill_buf(&mut self, chunk_size: usize) -> io::Result<usize> {
-        let mut offset = 0;
-        loop {
-            let read = self.source.read(&mut self.buffer[offset..chunk_size])?;
-            offset += read;
-
-            if read == 0 || offset == chunk_size {
-                break;
-            }
-        }
-
-        Ok(offset)
     }
 }
 
-impl<R: io::Read> Iterator for LiteralDataPartialGenerator<R> {
-    type Item = io::Result<LiteralData>;
+impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if !self.current_packet.has_remaining() {
+            if self.is_done && self.is_fixed_emitted {
+                return Ok(0);
+            }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_done {
-            return None;
-        }
-        let chunk_size = if self.is_first {
-            self.chunk_size as usize - self.header.write_len()
-        } else {
-            self.chunk_size as usize
-        };
+            let chunk_size = if self.is_first {
+                self.chunk_size as usize - self.header.write_len()
+            } else {
+                self.chunk_size as usize
+            };
 
-        let buf_size = match self.fill_buf(chunk_size) {
-            Ok(size) => size,
-            Err(err) => {
+            let buf_size = match fill_buffer(&mut self.source, &mut self.buffer, Some(chunk_size)) {
+                Ok(size) => size,
+                Err(err) => {
+                    self.is_done = true;
+                    return Err(err);
+                }
+            };
+
+            debug!("read chunk {} bytes", buf_size);
+            debug_assert!(buf_size <= u32::MAX as usize);
+
+            if buf_size == 0 && self.is_fixed_emitted {
                 self.is_done = true;
-                return Some(Err(err));
-            }
-        };
-
-        debug!("read chunk {} bytes", buf_size);
-
-        debug_assert!(buf_size <= u32::MAX as usize);
-
-        let data = Bytes::from(self.buffer[..buf_size].to_vec());
-
-        let packet_length = if self.is_first && buf_size < chunk_size {
-            // all data fits into a single packet
-            self.is_first = false;
-            self.is_done = true;
-            PacketLength::Fixed(buf_size + self.header.write_len())
-        } else {
-            if self.is_first {
-                self.is_first = false;
+                return Ok(0);
             }
 
-            if buf_size == chunk_size {
+            let data = &self.buffer[..buf_size];
+
+            let packet_length = if self.is_first && buf_size < chunk_size {
+                // all data fits into a single packet
+                self.is_done = true;
+                self.is_fixed_emitted = true;
+                PacketLength::Fixed(buf_size + self.header.write_len())
+            } else if buf_size == chunk_size {
                 // partial
                 PacketLength::Partial(self.chunk_size)
             } else {
                 // final packet, this can be length 0
                 self.is_done = true;
+                self.is_fixed_emitted = true;
                 PacketLength::Fixed(data.len())
-            }
-        };
-        let packet_header =
-            PacketHeader::from_parts(PacketHeaderVersion::New, Tag::LiteralData, packet_length)
-                .expect("known construction");
+            };
 
-        Some(Ok(LiteralData {
-            packet_header,
-            header: self.header.clone(),
-            data,
-        }))
+            let mut writer = std::mem::take(&mut self.current_packet).writer();
+            if self.is_first {
+                // only the first packet needs the literal data header
+                let packet_header = PacketHeader::from_parts(
+                    PacketHeaderVersion::New,
+                    Tag::LiteralData,
+                    packet_length,
+                )
+                .expect("known construction");
+                packet_header
+                    .to_writer(&mut writer)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+                self.header
+                    .to_writer(&mut writer)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+
+                debug!("first partial packet {:?}", packet_header);
+                self.is_first = false;
+            } else {
+                // only length
+                packet_length
+                    .to_writer_new(&mut writer)
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                debug!("partial packet {:?}", packet_length);
+            };
+
+            let mut packet_ser = writer.into_inner();
+            packet_ser.extend_from_slice(data);
+            self.current_packet = packet_ser;
+        }
+
+        let to_write = self.current_packet.remaining().min(buf.len());
+        self.current_packet.copy_to_slice(&mut buf[..to_write]);
+        Ok(to_write)
     }
 }
 
@@ -553,50 +503,6 @@ mod tests {
         assert_eq!(packet_out, generator_out);
 
         assert_eq!(packet_out.len(), generator.total_len as usize);
-    }
-
-    #[test]
-    fn test_literal_data_partial_generator() {
-        pretty_env_logger::try_init().ok();
-
-        let mut rng = ChaCha20Rng::seed_from_u64(1);
-        let chunk_size = 512;
-        let file_size = chunk_size * 5 + 100;
-        let mut buf = vec![0u8; file_size];
-        rng.fill(&mut buf[..]);
-
-        let header = LiteralDataHeader {
-            file_name: "hello.txt".into(),
-            mode: DataMode::Binary,
-            created: Utc::now().trunc_subsecs(0),
-        };
-
-        let generator =
-            LiteralDataPartialGenerator::new(header, &buf[..], chunk_size as u32).unwrap();
-
-        let packets: Vec<_> = generator.collect();
-        assert_eq!(packets.len(), 6, "{:?}", packets);
-
-        for (i, packet) in packets.iter().enumerate().take(5) {
-            let packet = packet.as_ref().unwrap();
-            assert_eq!(
-                packet.packet_header.packet_length(),
-                PacketLength::Partial(chunk_size as u32)
-            );
-
-            if i == 0 {
-                assert_eq!(packet.data.len(), chunk_size - packet.header.write_len());
-            } else {
-                assert_eq!(packet.data.len(), chunk_size);
-            }
-        }
-
-        let packet = packets[5].as_ref().unwrap();
-        assert_eq!(
-            packet.packet_header.packet_length(),
-            PacketLength::Fixed(115),
-        );
-        assert_eq!(packet.data.len(), 115);
     }
 
     #[test]
