@@ -8,7 +8,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
-use crate::normalize_lines::{Normalized, NormalizedReader};
+use crate::normalize_lines::{normalize_lines, NormalizedReader};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
@@ -63,7 +63,9 @@ pub enum DataMode {
 impl LiteralData {
     /// Creates a literal data packet from the given string. Normalizes line endings.
     pub fn from_str(file_name: impl Into<Bytes>, raw_data: &str) -> Self {
-        let data: Bytes = Normalized::new(raw_data.bytes(), LineBreak::Crlf).collect();
+        let data: Bytes = normalize_lines(raw_data, LineBreak::Crlf)
+            .to_string()
+            .into();
         let header = LiteralDataHeader {
             mode: DataMode::Utf8,
             file_name: file_name.into(),

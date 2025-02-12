@@ -1166,12 +1166,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "iter-read"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "071ed4cc1afd86650602c7b11aa2e1ce30762a1c27193201cb5cee9c6ebb1294"
-
-[[package]]
 name = "itertools"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1582,7 +1576,6 @@ dependencies = [
  "hex-literal",
  "hkdf",
  "idea",
- "iter-read",
  "k256",
  "log",
  "md-5",

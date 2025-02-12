@@ -4,7 +4,6 @@ use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
-use iter_read::IterRead;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use smallvec::{smallvec, SmallVec};
@@ -15,7 +14,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
-use crate::normalize_lines::Normalized;
+use crate::normalize_lines::NormalizedReader;
 use crate::packet::signature::SignatureConfig;
 use crate::packet::{
     PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket, SubpacketData,
@@ -283,10 +282,9 @@ impl Signature {
         }
 
         if matches!(self.typ(), SignatureType::Text) {
-            let normalized = Normalized::new(data.bytes().flat_map(|b| b.ok()), LineBreak::Crlf);
+            let normalized = NormalizedReader::new(data, LineBreak::Crlf);
 
-            self.config
-                .hash_data_to_sign(&mut *hasher, IterRead::new(normalized))?;
+            self.config.hash_data_to_sign(&mut *hasher, normalized)?;
         } else {
             self.config.hash_data_to_sign(&mut *hasher, data)?;
         }

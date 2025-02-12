@@ -11,7 +11,7 @@ use crate::armor::{self, header_parser, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
-use crate::normalize_lines::Normalized;
+use crate::normalize_lines::{normalize_lines, NormalizedReader};
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
 use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE};
@@ -45,9 +45,10 @@ impl CleartextSignedMessage {
     where
         F: FnOnce() -> String,
     {
-        let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
+        let mut bytes = text.as_bytes();
+        let signature_text = NormalizedReader::new(&mut bytes, LineBreak::Crlf);
         let hash = config.hash_alg;
-        let signature = config.sign(key, key_pw, &signature_text[..])?;
+        let signature = config.sign(key, key_pw, signature_text)?;
         let signature = StandaloneSignature::new(signature);
 
         Ok(Self {
@@ -93,9 +94,9 @@ impl CleartextSignedMessage {
     /// and needs to produce the individual signatures.
     pub fn new_many<F>(text: &str, signer: F) -> Result<Self>
     where
-        F: FnOnce(&[u8]) -> Result<Vec<Signature>>,
+        F: FnOnce(&str) -> Result<Vec<Signature>>,
     {
-        let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
+        let signature_text = normalize_lines(text, LineBreak::Crlf);
 
         let raw_signatures = signer(&signature_text[..])?;
         let mut hashes = HashSet::new();
@@ -150,11 +151,7 @@ impl CleartextSignedMessage {
     pub fn signed_text(&self) -> String {
         let unescaped = dash_unescape_and_trim(&self.csf_encoded_text);
 
-        let normalized: Vec<u8> = Normalized::new(unescaped.bytes(), LineBreak::Crlf).collect();
-
-        std::str::from_utf8(&normalized)
-            .map(str::to_owned)
-            .expect("csf_encoded_text is UTF8")
+        normalize_lines(&unescaped, LineBreak::Crlf).to_string()
     }
 
     /// The "cleartext framework"-encoded (i.e. dash-escaped) form of the message.
