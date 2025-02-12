@@ -55,15 +55,11 @@ enum Source<R = DummyReader> {
 
 #[allow(dead_code)]
 enum Encryption {
-    PasswordSeipdV1 {
+    SeipdV1 {
         session_key: Zeroizing<Vec<u8>>,
-        esk: SymKeyEncryptedSessionKey,
+        sym_esks: Vec<SymKeyEncryptedSessionKey>,
+        pub_esks: Vec<PublicKeyEncryptedSessionKey>,
         sym_alg: SymmetricKeyAlgorithm,
-    },
-    KeysSeipdV1 {
-        sym_alg: SymmetricKeyAlgorithm,
-        session_key: Zeroizing<Vec<u8>>,
-        esk: Vec<PublicKeyEncryptedSessionKey>,
     },
 }
 
@@ -151,63 +147,117 @@ impl<R: Read> Builder<R> {
     }
 
     /// Encrypt to a password, version SEIPDv1.
+    ///
+    /// This adds a packet with this password.
     pub fn encrypt_with_password_seipdv1<RAND, F>(
         mut self,
         mut rng: RAND,
         s2k: StringToKey,
-        sym_alg: SymmetricKeyAlgorithm,
+        new_sym_alg: SymmetricKeyAlgorithm,
         msg_pw: F,
     ) -> Result<Self>
     where
         RAND: Rng + CryptoRng,
         F: FnOnce() -> String + Clone,
     {
-        // 1. Generate a session key.
-        let session_key = sym_alg.new_session_key(&mut rng);
+        if let Some(ref mut encryption) = self.encryption {
+            match encryption {
+                Encryption::SeipdV1 {
+                    session_key,
+                    sym_esks,
+                    sym_alg,
+                    ..
+                } => {
+                    ensure_eq!(
+                        new_sym_alg,
+                        *sym_alg,
+                        "cannot encrypt to different symmetric algorithms"
+                    );
+                    // Encrypt (sym) the session key using the provided password.
+                    let esk =
+                        SymKeyEncryptedSessionKey::encrypt_v4(msg_pw, session_key, s2k, *sym_alg)?;
+                    sym_esks.push(esk);
+                }
+            }
+        } else {
+            // 1. Generate a session key.
+            let session_key = new_sym_alg.new_session_key(&mut rng);
 
-        // 2. Encrypt (sym) the session key using the provided password.
-        let esk = SymKeyEncryptedSessionKey::encrypt_v4(msg_pw, &session_key, s2k, sym_alg)?;
+            // 2. Encrypt (sym) the session key using the provided password.
+            let esk =
+                SymKeyEncryptedSessionKey::encrypt_v4(msg_pw, &session_key, s2k, new_sym_alg)?;
 
-        self.encryption.replace(Encryption::PasswordSeipdV1 {
-            sym_alg,
-            esk,
-            session_key,
-        });
+            self.encryption = Some(Encryption::SeipdV1 {
+                sym_alg: new_sym_alg,
+                sym_esks: vec![esk],
+                pub_esks: Vec::new(),
+                session_key,
+            });
+        }
 
         Ok(self)
     }
 
     /// Encrypt to a list of public keys, version SEIPDv1.
+    ///
+    /// This adds these public keys as receipients
     pub fn encrypt_to_keys_seipdv1<RAND>(
         mut self,
         mut rng: RAND,
-        sym_alg: SymmetricKeyAlgorithm,
+        new_sym_alg: SymmetricKeyAlgorithm,
         pkeys: &[&impl PublicKeyTrait],
     ) -> Result<Self>
     where
         RAND: CryptoRng + Rng,
     {
-        // 1. Generate a session key.
-        let session_key = sym_alg.new_session_key(&mut rng);
-
-        // 2. Encrypt (pub) the session key, to each PublicKey.
-        let esk = pkeys
-            .iter()
-            .map(|pkey| {
-                PublicKeyEncryptedSessionKey::from_session_key_v3(
-                    &mut rng,
-                    &session_key,
+        if let Some(ref mut encryption) = self.encryption {
+            match encryption {
+                Encryption::SeipdV1 {
+                    session_key,
+                    pub_esks,
                     sym_alg,
-                    pkey,
-                )
-            })
-            .collect::<Result<_>>()?;
+                    ..
+                } => {
+                    ensure_eq!(
+                        new_sym_alg,
+                        *sym_alg,
+                        "cannot encrypt to different symmetric algorithms"
+                    );
+                    // Encrypt (pub) the session key, to each PublicKey.
+                    for pkey in pkeys {
+                        pub_esks.push(PublicKeyEncryptedSessionKey::from_session_key_v3(
+                            &mut rng,
+                            session_key,
+                            *sym_alg,
+                            pkey,
+                        )?);
+                    }
+                }
+            }
+        } else {
+            // 1. Generate a session key.
+            let session_key = new_sym_alg.new_session_key(&mut rng);
 
-        self.encryption.replace(Encryption::KeysSeipdV1 {
-            sym_alg,
-            session_key,
-            esk,
-        });
+            // 2. Encrypt (pub) the session key, to each PublicKey.
+            let esks = pkeys
+                .iter()
+                .map(|pkey| {
+                    PublicKeyEncryptedSessionKey::from_session_key_v3(
+                        &mut rng,
+                        &session_key,
+                        new_sym_alg,
+                        pkey,
+                    )
+                })
+                .collect::<Result<_>>()?;
+
+            self.encryption = Some(Encryption::SeipdV1 {
+                sym_alg: new_sym_alg,
+                session_key,
+                sym_esks: Vec::new(),
+                pub_esks: esks,
+            });
+        }
 
         Ok(self)
     }
@@ -339,25 +389,20 @@ fn encrypt<R: Rng + CryptoRng, READ: std::io::Read, W: std::io::Write>(
     mut out: W,
 ) -> Result<()> {
     let (tag, sym_alg, session_key) = match encryption {
-        Encryption::PasswordSeipdV1 {
+        Encryption::SeipdV1 {
             session_key,
-            esk,
+            sym_esks,
+            pub_esks,
             sym_alg,
         } => {
-            // Write out esk
-            let esk = Esk::SymKeyEncryptedSessionKey(esk);
-            esk.to_writer(&mut out)?;
-
-            (Tag::SymEncryptedProtectedData, sym_alg, session_key)
-        }
-        Encryption::KeysSeipdV1 {
-            sym_alg,
-            session_key,
-            esk,
-        } => {
-            // Write out esks
-            for esk in esk {
-                let esk = Esk::PublicKeyEncryptedSessionKey(esk);
+            // Write out symmetric esks
+            for sym_esk in sym_esks {
+                let esk = Esk::SymKeyEncryptedSessionKey(sym_esk);
+                esk.to_writer(&mut out)?;
+            }
+            // Write out public esks
+            for pub_esk in pub_esks {
+                let esk = Esk::PublicKeyEncryptedSessionKey(pub_esk);
                 esk.to_writer(&mut out)?;
             }
 
@@ -474,7 +519,7 @@ mod tests {
         std::fs::write(&plaintext_file, &buf).unwrap();
 
         // encrypt it
-        let s2k = crate::types::StringToKey::new_default(&mut rng);
+        let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
         let builder = Builder::from_file(&plaintext_file)
             .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
@@ -512,7 +557,7 @@ mod tests {
         rng.fill(&mut buf[..]);
 
         // encrypt it
-        let s2k = crate::types::StringToKey::new_default(&mut rng);
+        let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
         let builder = Builder::<DummyReader>::from_bytes("plaintext.txt", buf.clone())
             .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
@@ -553,7 +598,7 @@ mod tests {
             rng.fill(&mut buf[..]);
 
             // encrypt it
-            let s2k = crate::types::StringToKey::new_default(&mut rng);
+            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
@@ -656,6 +701,74 @@ mod tests {
 
             assert_eq!(l.file_name(), "plaintext.txt");
             assert_eq!(l.data(), &buf);
+        }
+    }
+
+    #[test]
+    fn binary_reader_partial_size_no_compression_roundtrip_public_key_x25519_and_password_seipdv1()
+    {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let mut buf = vec![0u8; file_size];
+            rng.fill(&mut buf[..]);
+
+            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+
+            let builder = Builder::from_reader("plaintext.txt", &buf[..])
+                .chunk_size(chunk_size)
+                .unwrap()
+                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
+                .expect("encryption")
+                .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
+                    "hello world".to_string()
+                })
+                .expect("encryption sym");
+
+            let encrypted = builder.to_vec(&mut rng).expect("writing");
+
+            let message = Message::from_bytes(encrypted.into()).expect("reading");
+
+            // decrypt it - public
+            {
+                let (decrypted, _key_ids) = message
+                    .decrypt(|| "".to_string(), &[&skey])
+                    .expect("decryption");
+
+                let Message::Literal(l) = decrypted else {
+                    panic!("unexpected message: {:?}", decrypted);
+                };
+
+                assert_eq!(l.file_name(), "plaintext.txt");
+                assert_eq!(l.data(), &buf);
+            }
+            // decrypt it - password
+            {
+                let decrypted = message
+                    .decrypt_with_password(|| "hello world".to_string())
+                    .expect("decryption sym");
+
+                let Message::Literal(l) = decrypted else {
+                    panic!("unexpected message: {:?}", decrypted);
+                };
+
+                assert_eq!(l.file_name(), "plaintext.txt");
+                assert_eq!(l.data(), &buf);
+            }
         }
     }
 
