@@ -231,6 +231,11 @@ impl SymEncryptedProtectedData {
         }
     }
 
+    /// Returns the configuration for this packet.
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
     /// Decrypts the inner data, returning the result.
     pub fn decrypt(
         &self,
