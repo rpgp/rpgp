@@ -6,7 +6,7 @@ use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSub
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::ser::Serialize;
-use crate::types::{KeyVersion, SecretKeyTrait};
+use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -44,16 +44,35 @@ impl SecretKey {
         F: (FnOnce() -> String) + Clone,
     {
         let primary_key = self.primary_key;
-        let details = self.details.sign(&mut rng, &primary_key, key_pw.clone())?;
+        let details = self.details.sign(
+            &mut rng,
+            &primary_key,
+            primary_key.public_key(),
+            key_pw.clone(),
+        )?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, key_pw.clone()))
+            .map(|k| {
+                k.sign(
+                    &mut rng,
+                    &primary_key,
+                    primary_key.public_key(),
+                    key_pw.clone(),
+                )
+            })
             .collect::<Result<Vec<_>>>()?;
         let secret_subkeys = self
             .secret_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, &primary_key, key_pw.clone()))
+            .map(|k| {
+                k.sign(
+                    &mut rng,
+                    &primary_key,
+                    primary_key.public_key(),
+                    key_pw.clone(),
+                )
+            })
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedSecretKey {
@@ -70,11 +89,18 @@ impl SecretSubkey {
         SecretSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F, K>(self, mut rng: R, sec_key: &K, key_pw: F) -> Result<SignedSecretSubKey>
+    pub fn sign<R, F, K, P>(
+        self,
+        mut rng: R,
+        sec_key: &K,
+        pub_key: &P,
+        key_pw: F,
+    ) -> Result<SignedSecretSubKey>
     where
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
-        K: SecretKeyTrait + Serialize,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
         let key = self.key;
 
@@ -103,7 +129,8 @@ impl SecretSubkey {
         config.unhashed_subpackets =
             vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
 
-        let signatures = vec![config.sign_key_binding(sec_key, key_pw, key.public_key())?];
+        let signatures =
+            vec![config.sign_key_binding(sec_key, pub_key, key_pw, key.public_key())?];
 
         Ok(SignedSecretSubKey { key, signatures })
     }

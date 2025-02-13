@@ -101,6 +101,7 @@ impl zeroize::DefaultIsZeroes for HashAlgorithm {}
 
 /// Trait to work around the fact that the `Digest` trait from rustcrypto can not
 /// be used as `Box<Digest>`.
+// TODO: replace with digest::DynDigest;
 pub trait Hasher: std::io::Write {
     /// Update the hash with the given value.
     fn update(&mut self, _: &[u8]);

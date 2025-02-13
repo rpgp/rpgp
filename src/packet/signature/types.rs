@@ -21,7 +21,8 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SignatureBytes, Tag,
+    self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
+    SignatureBytes, Tag,
 };
 
 /// Signature Packet
@@ -935,7 +936,7 @@ impl PacketTrait for Signature {
     }
 }
 
-pub(super) fn serialize_for_hashing<K: PublicKeyTrait + Serialize>(
+pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
     key: &K,
     writer: &mut impl std::io::Write,
 ) -> Result<()> {

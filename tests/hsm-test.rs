@@ -92,12 +92,7 @@ impl KeyDetails for FakeHsm {
     }
 }
 
-pub struct Unlocked;
-
 impl SecretKeyTrait for FakeHsm {
-    // XXX: This choice of the public key packet type here is a bit arbitrary.
-    type PublicKey = PublicKey;
-
     fn create_signature<F>(
         &self,
         _key_pw: F,
@@ -139,8 +134,8 @@ impl SecretKeyTrait for FakeHsm {
         Ok(mpis.into())
     }
 
-    fn public_key(&self) -> &Self::PublicKey {
-        &self.public_key
+    fn hash_alg(&self) -> HashAlgorithm {
+        self.public_key.public_params().hash_alg()
     }
 }
 

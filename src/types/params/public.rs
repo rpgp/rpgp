@@ -2,6 +2,7 @@ use std::io;
 
 use bytes::{Buf, Bytes};
 
+use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::parsing::BufParsing;
@@ -48,6 +49,7 @@ pub enum PublicParams {
         data: Bytes,
     },
 }
+
 impl TryFrom<&PlainSecretParams> for PublicParams {
     type Error = Error;
 
@@ -135,6 +137,16 @@ impl PublicParams {
             | PublicKeyAlgorithm::Private109
             | PublicKeyAlgorithm::Private110
             | PublicKeyAlgorithm::Unknown(_) => unknown(i, len),
+        }
+    }
+
+    /// The suggested hash algorithm to calculate the signature hash digest with, when using this
+    /// key as a signer
+    pub fn hash_alg(&self) -> HashAlgorithm {
+        match self {
+            PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::SHA2_384,
+            PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::SHA2_512,
+            _ => HashAlgorithm::default(),
         }
     }
 }

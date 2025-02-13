@@ -13,7 +13,9 @@ use crate::packet::{
     UserId,
 };
 use crate::ser::Serialize;
-use crate::types::{CompressionAlgorithm, KeyVersion, RevocationKey, SecretKeyTrait};
+use crate::types::{
+    CompressionAlgorithm, KeyVersion, PublicKeyTrait, RevocationKey, SecretKeyTrait,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
@@ -78,11 +80,18 @@ impl KeyDetails {
         }
     }
 
-    pub fn sign<R, F, K>(self, mut rng: R, key: &K, key_pw: F) -> Result<SignedKeyDetails>
+    pub fn sign<R, F, K, P>(
+        self,
+        mut rng: R,
+        key: &K,
+        pub_key: &P,
+        key_pw: F,
+    ) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
-        K: SecretKeyTrait + Serialize,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
         let keyflags: SmallVec<[u8; 1]> = self.keyflags.into();
         let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
@@ -137,7 +146,7 @@ impl KeyDetails {
             config.unhashed_subpackets =
                 vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
-            let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
+            let sig = config.sign_certification(key, pub_key, key_pw.clone(), id.tag(), &id)?;
 
             users.push(id.clone().into_signed(sig));
         }
@@ -189,7 +198,8 @@ impl KeyDetails {
                     config.hashed_subpackets = hashed_subpackets;
                     config.unhashed_subpackets = unhashed_subpackets;
 
-                    let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
+                    let sig =
+                        config.sign_certification(key, pub_key, key_pw.clone(), id.tag(), &id)?;
 
                     Ok(id.into_signed(sig))
                 })
@@ -199,7 +209,7 @@ impl KeyDetails {
         let user_attributes = self
             .user_attributes
             .into_iter()
-            .map(|u| u.sign(&mut rng, key, key_pw.clone()))
+            .map(|u| u.sign(&mut rng, key, pub_key, key_pw.clone()))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedKeyDetails {

@@ -477,7 +477,7 @@ mod tests {
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
 
-        msg.verify(&key.public_key()).unwrap();
+        msg.verify(&*key.public_key()).unwrap();
         assert_eq!(msg.signatures().len(), 1);
 
         roundtrip(&data, &msg, &headers);
@@ -607,7 +607,7 @@ mod tests {
             String::new,
         )
         .unwrap();
-        msg.verify(&key.public_key()).unwrap();
+        msg.verify(&*key.public_key()).unwrap();
     }
 
     #[test]
@@ -621,7 +621,7 @@ mod tests {
 
         assert_eq!(msg.signed_text(), MSG);
 
-        msg.verify(&key.public_key()).unwrap();
+        msg.verify(&*key.public_key()).unwrap();
     }
 
     #[test]

@@ -215,13 +215,20 @@ impl UserAttribute {
     }
 
     /// Create a self-signature
-    pub fn sign<R, F, P>(&self, rng: R, key: &P, key_pw: F) -> Result<SignedUserAttribute>
+    pub fn sign<R, F, P, K>(
+        &self,
+        rng: R,
+        signer_sec_key: &P,
+        signer_pub_key: &K,
+        key_pw: F,
+    ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
         P: SecretKeyTrait,
+        K: PublicKeyTrait + Serialize,
     {
-        self.sign_third_party(rng, key, key_pw, key.public_key())
+        self.sign_third_party(rng, signer_sec_key, key_pw, signer_pub_key)
     }
 
     /// Create a third-party signature

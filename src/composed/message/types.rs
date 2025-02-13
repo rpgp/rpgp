@@ -1485,7 +1485,7 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n");
-        assert!(lit_msg.verify(&pkey).is_err()); // Unsigned message shouldn't verify
+        assert!(lit_msg.verify(&*pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
             .sign(&mut rng, &*skey, || "".into(), HashAlgorithm::SHA2_256)
@@ -1494,10 +1494,10 @@ mod tests {
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         // fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
 
-        signed_msg.verify(&pkey).unwrap();
+        signed_msg.verify(&*pkey).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-        parsed.verify(&pkey).unwrap();
+        parsed.verify(&*pkey).unwrap();
     }
 
     #[test]
@@ -1518,10 +1518,10 @@ mod tests {
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         // fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
 
-        signed_msg.verify(&pkey).unwrap();
+        signed_msg.verify(&*pkey).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-        parsed.verify(&pkey).unwrap();
+        parsed.verify(&*pkey).unwrap();
     }
 
     #[test]
@@ -1543,10 +1543,10 @@ mod tests {
         let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
         // fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
 
-        signed_msg.verify(&pkey).unwrap();
+        signed_msg.verify(&*pkey).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-        parsed.verify(&pkey).unwrap();
+        parsed.verify(&*pkey).unwrap();
     }
 
     #[test]
@@ -1571,10 +1571,10 @@ mod tests {
             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
             // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
-            signed_msg.verify(&pkey).unwrap();
+            signed_msg.verify(&*pkey).unwrap();
 
             let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-            parsed.verify(&pkey).unwrap();
+            parsed.verify(&*pkey).unwrap();
         }
     }
 
@@ -1597,10 +1597,10 @@ mod tests {
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
         // fs::write("./message-bytes-signed-rsa.asc", &armored).unwrap();
 
-        signed_msg.verify(&pkey).unwrap();
+        signed_msg.verify(&*pkey).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-        parsed.verify(&pkey).unwrap();
+        parsed.verify(&*pkey).unwrap();
     }
 
     #[test]
@@ -1625,10 +1625,10 @@ mod tests {
         let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
         // fs::write("./message-bytes-compressed-signed-rsa.asc", &armored).unwrap();
 
-        signed_msg.verify(&pkey).unwrap();
+        signed_msg.verify(&*pkey).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-        parsed.verify(&pkey).unwrap();
+        parsed.verify(&*pkey).unwrap();
     }
 
     #[test]
@@ -1685,7 +1685,7 @@ mod tests {
         let msg = include_bytes!("../../../tests/quine.out");
         let msg = Message::from_bytes(Bytes::from_static(msg)).unwrap();
         assert!(msg.get_content().is_err());
-        assert!(msg.verify(&pkey).is_err());
+        assert!(msg.verify(&*pkey).is_err());
     }
 
     // Sample Version 6 Certificate (Transferable Public Key)

@@ -10,7 +10,7 @@ use crate::composed::signed_key::{SignedKeyDetails, SignedPublicSubKey};
 use crate::errors::Result;
 use crate::packet::{self, Packet, PacketTrait, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{EskType, PkeskBytes, PublicKeyTrait, SecretKeyTrait, Tag};
+use crate::types::{EskType, PkeskBytes, PublicKeyTrait, Tag};
 use crate::{armor, ArmorOptions, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
@@ -219,32 +219,6 @@ impl Deref for SignedSecretKey {
     }
 }
 
-// impl SecretKeyTrait for SignedSecretKey {
-//     type PublicKey = crate::packet::PublicKey;
-//     type Unlocked = PlainSecretParams;
-
-//     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-//     where
-//         F: FnOnce() -> String,
-//         G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
-//     {
-//         self.primary_key.unlock(pw, work)
-//     }
-
-//     fn create_signature<F>(
-//         &self,
-//         key_pw: F,
-//         hash: HashAlgorithm,
-//         data: &[u8],
-//     ) -> Result<SignatureBytes>
-//     where
-//         F: FnOnce() -> String,
-//     {
-//         self.primary_key.create_signature(key_pw, hash, data)
-//     }
-
-// }
-
 /// Represents a composed secret PGP SubKey.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedSecretSubKey {
@@ -330,32 +304,6 @@ impl Serialize for SignedSecretSubKey {
         sum
     }
 }
-
-// impl SecretKeyTrait for SignedSecretSubKey {
-//     type PublicKey = crate::packet::PublicSubkey;
-//     type Unlocked = PlainSecretParams;
-
-//     fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-//     where
-//         F: FnOnce() -> String,
-//         G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
-//     {
-//         self.key.unlock(pw, work)
-//     }
-
-//     fn create_signature<F>(
-//         &self,
-//         key_pw: F,
-//         hash: HashAlgorithm,
-//         data: &[u8],
-//     ) -> Result<SignatureBytes>
-//     where
-//         F: FnOnce() -> String,
-//     {
-//         self.key.create_signature(key_pw, hash, data)
-//     }
-
-// }
 
 impl From<SignedSecretKey> for SignedPublicKey {
     fn from(value: SignedSecretKey) -> Self {

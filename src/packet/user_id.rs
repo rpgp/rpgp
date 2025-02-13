@@ -50,14 +50,20 @@ impl UserId {
     }
 
     /// Create a self-signature.
-    pub fn sign<R, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<SignedUser>
+    pub fn sign<R, F, K, P>(
+        &self,
+        rng: R,
+        signer_sec_key: &K,
+        signer_pub_key: &P,
+        key_pw: F,
+    ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
-        K: SecretKeyTrait + Serialize,
-        K::PublicKey: PublicKeyTrait + Serialize,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        self.sign_third_party(rng, key, key_pw, key.public_key())
+        self.sign_third_party(rng, signer_sec_key, key_pw, signer_pub_key)
     }
 
     /// Create a third-party signature.
@@ -166,7 +172,7 @@ mod tests {
 
         // test self-signature
         let self_signed = alice_uid
-            .sign(&mut rng, &alice_sec, String::default)
+            .sign(&mut rng, &alice_sec, &alice_pub, String::default)
             .unwrap();
         self_signed
             .verify(&alice_pub)

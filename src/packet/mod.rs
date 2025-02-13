@@ -62,7 +62,7 @@
 //! signature_packet.to_writer_with_header(&mut signature_bytes).expect("Write must succeed");
 //!
 //! signature_packet
-//!      .verify(&verification_key, DATA)
+//!      .verify(&*verification_key, DATA)
 //!      .expect("Failed to validate signature");
 //! ```
 

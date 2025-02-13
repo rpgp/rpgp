@@ -1167,7 +1167,7 @@ mod tests {
 
             // verify signature
             assert!(message.is_one_pass_signed());
-            message.verify(&skey.public_key()).expect("signed");
+            message.verify(&*skey.public_key()).expect("signed");
 
             // decrypt it
             let (decrypted, _key_ids) = message

@@ -1,10 +1,7 @@
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::ser::Serialize;
-use crate::types::{
-    EcdsaPublicParams, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SignatureBytes,
-};
+use crate::types::{KeyId, KeyVersion, SignatureBytes};
 
 use super::{Fingerprint, KeyDetails};
 
@@ -72,10 +69,6 @@ impl<K: SecretKeyTrait> SigningKey for K {
 }
 
 pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
-    type PublicKey: PublicKeyTrait + Serialize;
-
-    fn public_key(&self) -> &Self::PublicKey;
-
     fn create_signature<F>(
         &self,
         key_pw: F,
@@ -87,18 +80,10 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
 
     /// The suggested hash algorithm to calculate the signature hash digest with, when using this
     /// key as a signer
-    fn hash_alg(&self) -> HashAlgorithm {
-        match self.public_key().public_params() {
-            PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::SHA2_384,
-            PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::SHA2_512,
-            _ => HashAlgorithm::default(),
-        }
-    }
+    fn hash_alg(&self) -> HashAlgorithm;
 }
 
 impl<T: SecretKeyTrait> SecretKeyTrait for &T {
-    type PublicKey = T::PublicKey;
-
     fn create_signature<F>(
         &self,
         key_pw: F,
@@ -111,7 +96,7 @@ impl<T: SecretKeyTrait> SecretKeyTrait for &T {
         (*self).create_signature(key_pw, hash, data)
     }
 
-    fn public_key(&self) -> &Self::PublicKey {
-        (*self).public_key()
+    fn hash_alg(&self) -> HashAlgorithm {
+        (*self).hash_alg()
     }
 }

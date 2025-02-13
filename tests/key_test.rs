@@ -27,8 +27,7 @@ use pgp::ser::Serialize;
 use pgp::types::KeyDetails;
 use pgp::types::{
     CompressionAlgorithm, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion, PacketLength,
-    PlainSecretParams, PublicParams, S2kParams, SecretKeyTrait, SecretParams, SignedUser,
-    StringToKey, Tag,
+    PlainSecretParams, PublicParams, S2kParams, SecretParams, SignedUser, StringToKey, Tag,
 };
 use pgp::{armor, types::PublicKeyTrait};
 use rand::thread_rng;
@@ -1339,12 +1338,12 @@ fn test_encrypted_key() {
     // Incorrect password results in InvalidInput error.
     let res = unsigned_pubkey
         .clone()
-        .sign(&mut rng, &*key, || "".into())
+        .sign(&mut rng, &*key, &*key.public_key(), || "".into())
         .err()
         .unwrap();
 
     assert!(matches!(res, pgp::errors::Error::InvalidInput));
     let _signed_key = unsigned_pubkey
-        .sign(&mut rng, &*key, || "123".into())
+        .sign(&mut rng, &*key, &*key.public_key(), || "123".into())
         .unwrap();
 }

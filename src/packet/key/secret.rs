@@ -76,18 +76,19 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<Signature>
+    pub fn sign<R: CryptoRng + Rng, F, K, P>(
+        &self,
+        rng: R,
+        key: &K,
+        pub_key: &P,
+        key_pw: F,
+    ) -> Result<Signature>
     where
         F: FnOnce() -> String,
-        K: SecretKeyTrait + Serialize,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        sign(
-            rng,
-            key,
-            key_pw,
-            SignatureType::KeyBinding,
-            key.public_key(),
-        )
+        sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
     }
 
     pub fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
@@ -103,6 +104,10 @@ impl SecretKey {
                 work(pub_params, &plain)
             }
         }
+    }
+
+    pub fn public_key(&self) -> &super::PublicKey {
+        &self.details
     }
 }
 
@@ -144,18 +149,19 @@ impl SecretSubkey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<Signature>
+    pub fn sign<R: CryptoRng + Rng, F, K, P>(
+        &self,
+        rng: R,
+        key: &K,
+        pub_key: &P,
+        key_pw: F,
+    ) -> Result<Signature>
     where
         F: FnOnce() -> String,
-        K: SecretKeyTrait + Serialize,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        sign(
-            rng,
-            key,
-            key_pw,
-            SignatureType::SubkeyBinding,
-            key.public_key(),
-        )
+        sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
     pub fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
@@ -172,11 +178,13 @@ impl SecretSubkey {
             }
         }
     }
+
+    pub fn public_key(&self) -> &super::PublicSubkey {
+        &self.details
+    }
 }
 
 impl SecretKeyTrait for SecretKey {
-    type PublicKey = super::PublicKey;
-
     fn create_signature<F>(
         &self,
         key_pw: F,
@@ -196,8 +204,8 @@ impl SecretKeyTrait for SecretKey {
         signature.ok_or_else(|| unreachable!())
     }
 
-    fn public_key(&self) -> &Self::PublicKey {
-        &self.details
+    fn hash_alg(&self) -> HashAlgorithm {
+        self.details.public_params().hash_alg()
     }
 }
 
@@ -234,8 +242,6 @@ impl KeyDetails for SecretSubkey {
 }
 
 impl SecretKeyTrait for SecretSubkey {
-    type PublicKey = super::PublicSubkey;
-
     fn create_signature<F>(
         &self,
         key_pw: F,
@@ -254,9 +260,8 @@ impl SecretKeyTrait for SecretSubkey {
 
         signature.ok_or_else(|| unreachable!())
     }
-
-    fn public_key(&self) -> &Self::PublicKey {
-        &self.details
+    fn hash_alg(&self) -> HashAlgorithm {
+        self.details.public_params().hash_alg()
     }
 }
 

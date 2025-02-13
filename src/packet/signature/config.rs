@@ -192,18 +192,20 @@ impl SignatureConfig {
     }
 
     /// Create a certification self-signature.
-    pub fn sign_certification<F, K>(
+    pub fn sign_certification<F, K, P>(
         self,
         key: &K,
+        pub_key: &P,
         key_pw: F,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
         F: FnOnce() -> String,
-        K: SecretKeyTrait + Serialize,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        self.sign_certification_third_party(key, key_pw, key.public_key(), tag, id)
+        self.sign_certification_third_party(key, key_pw, pub_key, tag, id)
     }
 
     /// Create a certification third-party signature.
@@ -284,11 +286,18 @@ impl SignatureConfig {
     }
 
     /// Sign a key binding.
-    pub fn sign_key_binding<F, K, P>(self, signing_key: &K, key_pw: F, key: &P) -> Result<Signature>
+    pub fn sign_key_binding<F, K, P, L>(
+        self,
+        signing_key: &K,
+        signing_pub_key: &P,
+        key_pw: F,
+        key: &L,
+    ) -> Result<Signature>
     where
         F: FnOnce() -> String,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
+        L: PublicKeyTrait + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)
@@ -310,7 +319,7 @@ impl SignatureConfig {
         }
 
         // Signing Key
-        serialize_for_hashing(signing_key.public_key(), &mut hasher)?;
+        serialize_for_hashing(signing_pub_key, &mut hasher)?;
 
         // Key being bound
         serialize_for_hashing(key, &mut hasher)?;

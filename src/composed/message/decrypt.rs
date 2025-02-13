@@ -4,7 +4,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{EskType, PkeskBytes, PlainSecretParams, SecretKeyTrait, SkeskVersion};
+use crate::types::{EskType, PkeskBytes, SkeskVersion};
 use crate::SignedSecretKey;
 
 /// Decrypts session key using secret key.
@@ -20,7 +20,7 @@ where
     debug!("decrypt session key");
 
     locked_key.unlock(key_pw, |pub_params, priv_key| {
-        priv_key.decrypt(pub_params, values, typ, &locked_key.public_key())
+        priv_key.decrypt(pub_params, values, typ, &*locked_key.public_key())
     })
 }
 
