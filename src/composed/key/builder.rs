@@ -495,7 +495,7 @@ mod tests {
         let public_key = signed_key_plain.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &signed_key_plain, || "".into())
+            .sign(&mut rng, &*signed_key_plain, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -590,7 +590,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &signed_key, || "".into())
+            .sign(&mut rng, &*signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -697,7 +697,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &signed_key, || "".into())
+            .sign(&mut rng, &*signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -783,7 +783,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &signed_key, || "".into())
+            .sign(&mut rng, &*signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -930,7 +930,7 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &signed_key, || "".into())
+            .sign(&mut rng, &*signed_key, || "".into())
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");

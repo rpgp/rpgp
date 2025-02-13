@@ -2,7 +2,7 @@ use log::{debug, warn};
 
 use crate::errors::{Error, Result};
 use crate::packet::{self, Packet, PacketTrait, Signature, SignatureType, UserAttribute, UserId};
-use crate::types::{KeyVersion, PublicKeyTrait, SignedUser, SignedUserAttribute, Tag};
+use crate::types::{KeyDetails, KeyVersion, SignedUser, SignedUserAttribute, Tag};
 use crate::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey};
 
 #[allow(clippy::complexity)]
@@ -20,7 +20,7 @@ pub fn next<I, IKT>(
 >
 where
     I: Sized + Iterator<Item = Result<Packet>>,
-    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + PublicKeyTrait,
+    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + KeyDetails,
 {
     let packets = packets.by_ref();
 
@@ -56,11 +56,6 @@ where
             return Some(Err(err));
         }
     };
-    debug!(
-        "primary key: {:?} (Version: {:?})",
-        primary_key.key_id(),
-        primary_key.version()
-    );
 
     // -- Zero or more revocation signatures
     // -- followed by zero or more direct signatures in V4 keys

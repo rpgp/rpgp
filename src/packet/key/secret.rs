@@ -11,8 +11,8 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, MpiBytes, PkeskBytes,
-        PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
+        PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
         SignatureBytes, Tag,
     },
 };
@@ -34,7 +34,7 @@ struct SecretKeyInner<D> {
     secret_params: SecretParams,
 }
 
-impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
+impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyInner<D> {
     fn remove_password<P>(&mut self, password: P) -> Result<()>
     where
         P: FnOnce() -> String,
@@ -184,7 +184,7 @@ impl SecretSubkey {
     }
 }
 
-impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
+impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyInner<D> {
     fn secret_params(&self) -> &SecretParams {
         &self.secret_params
     }
@@ -219,7 +219,23 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         ))?];
         config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
-        config.sign_key(key, key_pw, &self)
+        config.sign_key(key, key_pw, &self.public_key())
+    }
+}
+
+impl<D: KeyDetails> KeyDetails for SecretKeyInner<D> {
+    fn version(&self) -> KeyVersion {
+        self.details.version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.details.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.details.key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.details.algorithm()
     }
 }
 
@@ -346,6 +362,22 @@ impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> SecretKeyTrait for Secre
     }
 }
 
+impl KeyDetails for SecretKey {
+    fn version(&self) -> KeyVersion {
+        self.0.details.version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.0.details.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.0.details.key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.0.details.algorithm()
+    }
+}
+
 impl SecretKeyTrait for SecretKey {
     type PublicKey = PublicKey;
     type Unlocked = PlainSecretParams;
@@ -372,6 +404,22 @@ impl SecretKeyTrait for SecretKey {
 
     fn public_key(&self) -> PublicKey {
         PublicKey::from_inner(self.0.details.clone())
+    }
+}
+
+impl KeyDetails for SecretSubkey {
+    fn version(&self) -> KeyVersion {
+        self.0.details.version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.0.details.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.0.details.key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.0.details.algorithm()
     }
 }
 
@@ -404,7 +452,9 @@ impl SecretKeyTrait for SecretSubkey {
     }
 }
 
-impl<D: PublicKeyTrait + crate::ser::Serialize> crate::ser::Serialize for SecretKeyInner<D> {
+impl<D: PublicKeyTrait + Clone + crate::ser::Serialize> crate::ser::Serialize
+    for SecretKeyInner<D>
+{
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         // writes version and public part
         crate::ser::Serialize::to_writer(&self.details, writer)?;
@@ -449,123 +499,6 @@ impl PacketTrait for SecretKey {
 impl PacketTrait for SecretSubkey {
     fn packet_header(&self) -> &PacketHeader {
         &self.0.packet_header
-    }
-}
-
-impl PublicKeyTrait for SecretKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
-    }
-
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
-    }
-}
-
-impl PublicKeyTrait for SecretSubkey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
-    }
-
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
-    }
-}
-
-impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInner<D> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.details.verify_signature(hash, hashed, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.details.public_params()
-    }
-
-    fn version(&self) -> KeyVersion {
-        self.details.version()
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        self.details.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.details.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.details.algorithm()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.details.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.details.expiration()
     }
 }
 

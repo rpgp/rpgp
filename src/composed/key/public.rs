@@ -7,11 +7,11 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::ser::Serialize;
-use crate::types::PkeskBytes;
 use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
     SignatureBytes,
 };
+use crate::types::{KeyDetails as _, PkeskBytes};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -71,7 +71,7 @@ impl PublicKey {
     }
 }
 
-impl PublicKeyTrait for PublicKey {
+impl crate::types::KeyDetails for PublicKey {
     fn version(&self) -> crate::types::KeyVersion {
         self.primary_key.version()
     }
@@ -87,6 +87,9 @@ impl PublicKeyTrait for PublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
+}
+
+impl PublicKeyTrait for PublicKey {
     fn verify_signature(
         &self,
         hash: HashAlgorithm,
@@ -121,26 +124,28 @@ impl PublicSubkey {
         K: SecretKeyTrait + Serialize,
     {
         let key = self.key;
+        let psec_key = sec_key.public_key();
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             ))?,
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into()))?,
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(psec_key.fingerprint()))?,
         ];
-        let unhashed_subpackets =
-            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(
+            psec_key.key_id(),
+        ))?];
 
-        let mut config = match sec_key.version() {
+        let mut config = match psec_key.version() {
             KeyVersion::V4 => SignatureConfig::v4(
                 SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
+                psec_key.algorithm(),
                 sec_key.hash_alg(),
             ),
             KeyVersion::V6 => SignatureConfig::v6(
                 &mut rng,
                 SignatureType::SubkeyBinding,
-                sec_key.algorithm(),
+                psec_key.algorithm(),
                 sec_key.hash_alg(),
             )?,
             v => unsupported_err!("unsupported key version: {:?}", v),
@@ -164,7 +169,7 @@ impl PublicSubkey {
     }
 }
 
-impl PublicKeyTrait for PublicSubkey {
+impl crate::types::KeyDetails for PublicSubkey {
     fn version(&self) -> crate::types::KeyVersion {
         self.key.version()
     }
@@ -180,7 +185,9 @@ impl PublicKeyTrait for PublicSubkey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
     }
+}
 
+impl PublicKeyTrait for PublicSubkey {
     fn verify_signature(
         &self,
         hash: HashAlgorithm,

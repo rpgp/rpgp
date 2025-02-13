@@ -20,7 +20,7 @@ where
     debug!("decrypt session key");
 
     locked_key.unlock(key_pw, |pub_params, priv_key| {
-        priv_key.decrypt(pub_params, values, typ, locked_key)
+        priv_key.decrypt(pub_params, values, typ, &locked_key.public_key())
     })
 }
 

@@ -103,7 +103,7 @@ impl SecretSubkey {
         config.unhashed_subpackets =
             vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
 
-        let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
+        let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key.public_key())?];
 
         Ok(SignedSecretSubKey { key, signatures })
     }

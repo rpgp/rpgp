@@ -3,18 +3,15 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::types::{Fingerprint, KeyId, KeyVersion, PublicParams, SignatureBytes};
 
-pub trait PublicKeyTrait: std::fmt::Debug {
+pub trait KeyDetails {
     fn version(&self) -> KeyVersion;
-
     fn fingerprint(&self) -> Fingerprint;
-
-    /// Returns the Key ID of the associated primary key.
     fn key_id(&self) -> KeyId;
-
     fn algorithm(&self) -> PublicKeyAlgorithm;
+}
 
+pub trait PublicKeyTrait: KeyDetails + std::fmt::Debug {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc>;
-
     fn expiration(&self) -> Option<u16>;
 
     /// Verify a signed message.
@@ -46,19 +43,7 @@ pub trait PublicKeyTrait: std::fmt::Debug {
     }
 }
 
-impl<T: PublicKeyTrait> PublicKeyTrait for &T {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        (*self).verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        (*self).public_params()
-    }
+impl<T: KeyDetails> KeyDetails for &T {
     fn version(&self) -> KeyVersion {
         (*self).version()
     }
@@ -74,6 +59,21 @@ impl<T: PublicKeyTrait> PublicKeyTrait for &T {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         (*self).algorithm()
+    }
+}
+
+impl<T: PublicKeyTrait> PublicKeyTrait for &T {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        (*self).verify_signature(hash, data, sig)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        (*self).public_params()
     }
 
     fn expiration(&self) -> Option<u16> {

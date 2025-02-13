@@ -603,7 +603,7 @@ mod tests {
         let msg = CleartextSignedMessage::sign(
             &mut rng,
             "hello\n-world-what-\nis up\n",
-            &key,
+            &*key,
             String::new,
         )
         .unwrap();
@@ -617,7 +617,7 @@ mod tests {
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &key, String::new).unwrap();
+        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &*key, String::new).unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 

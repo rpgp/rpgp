@@ -163,7 +163,8 @@ fn rfc9580_roundtrip_csf() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         // roundtrip sign+verify csf
-        let csf = CleartextSignedMessage::sign(&mut rng, MSG, &ssk, String::default).expect("sign");
+        let csf =
+            CleartextSignedMessage::sign(&mut rng, MSG, &*ssk, String::default).expect("sign");
         csf.verify(&spk).expect("verify");
     }
 }
@@ -183,7 +184,7 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         // roundtrip sign+verify inline msg
         let signed = msg
-            .sign(&mut rng, &ssk, String::default, HashAlgorithm::default())
+            .sign(&mut rng, &*ssk, String::default, HashAlgorithm::default())
             .expect("sign");
 
         signed.verify(&spk).expect("verify");

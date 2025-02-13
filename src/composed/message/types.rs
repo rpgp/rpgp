@@ -27,7 +27,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, EskType, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion,
+    CompressionAlgorithm, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketHeaderVersion,
     PacketLength, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 
@@ -848,21 +848,20 @@ impl Message {
                                 "{:?}",
                                 key.secret_subkeys
                                     .iter()
-                                    .map(PublicKeyTrait::key_id)
+                                    .map(|k| k.key_id())
                                     .collect::<Vec<_>>()
                             );
 
                             // find the matching key or subkey
 
-                            if esk_packet.match_identity(&key.primary_key) {
+                            if esk_packet.match_identity(&key.primary_key.public_key()) {
                                 encoding_key = Some(&key.primary_key);
                             }
 
                             if encoding_key.is_none() {
-                                encoding_subkey = key
-                                    .secret_subkeys
-                                    .iter()
-                                    .find(|&subkey| esk_packet.match_identity(&subkey));
+                                encoding_subkey = key.secret_subkeys.iter().find(|&subkey| {
+                                    esk_packet.match_identity(&subkey.public_key())
+                                });
                             }
 
                             if encoding_key.is_some() || encoding_subkey.is_some() {
@@ -898,7 +897,7 @@ impl Message {
                         } else if let Some(ek) = encoding_subkey {
                             Ok((
                                 ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), pkesk.values()?, typ)?,
+                                decrypt_session_key(&***ek, key_pw.clone(), pkesk.values()?, typ)?,
                             ))
                         } else {
                             unreachable!("either a key or a subkey were found");
@@ -1483,7 +1482,7 @@ mod tests {
         assert!(lit_msg.verify(&pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
-            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1507,7 +1506,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1531,7 +1530,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, || "".into(), HashAlgorithm::SHA2_256)
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
@@ -1560,7 +1559,7 @@ mod tests {
 
             let lit_msg = Message::new_literal("hello.txt", "hello world\n");
             let signed_msg = lit_msg
-                .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
+                .sign(&mut rng, &*skey, || "test".into(), HashAlgorithm::SHA2_256)
                 .unwrap();
 
             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1586,7 +1585,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1613,7 +1612,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, || "test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();

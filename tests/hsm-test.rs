@@ -9,7 +9,7 @@ use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
 use pgp::types::{EcdhPublicParams, Fingerprint, PkeskBytes, SignatureBytes};
-use pgp::types::{KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
+use pgp::types::{KeyDetails, KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey, SignedSecretKey};
 
@@ -64,6 +64,17 @@ impl PublicKeyTrait for FakeHsm {
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.public_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.public_key.expiration()
+    }
+}
+
+impl KeyDetails for FakeHsm {
     fn version(&self) -> pgp::types::KeyVersion {
         self.public_key.version()
     }
@@ -78,14 +89,6 @@ impl PublicKeyTrait for FakeHsm {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.public_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
     }
 }
 

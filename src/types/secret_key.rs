@@ -1,11 +1,12 @@
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
+use crate::ser::Serialize;
 use crate::types::{
     EcdsaPublicParams, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SignatureBytes,
 };
 
-use super::Fingerprint;
+use super::{Fingerprint, KeyDetails};
 
 pub struct Unlocker(Box<dyn FnOnce() -> String>);
 
@@ -21,12 +22,7 @@ impl<F: FnOnce() -> String + 'static> From<F> for Unlocker {
     }
 }
 
-pub trait SigningKey {
-    fn version(&self) -> KeyVersion;
-    fn fingerprint(&self) -> Fingerprint;
-    fn key_id(&self) -> KeyId;
-    fn algorithm(&self) -> PublicKeyAlgorithm;
-
+pub trait SigningKey: KeyDetails {
     fn create_signature(
         &self,
         key_pw: Unlocker,
@@ -35,7 +31,7 @@ pub trait SigningKey {
     ) -> Result<crate::types::SignatureBytes>;
 }
 
-impl SigningKey for Box<&dyn SigningKey> {
+impl KeyDetails for Box<&dyn SigningKey> {
     fn version(&self) -> KeyVersion {
         (**self).version()
     }
@@ -51,7 +47,9 @@ impl SigningKey for Box<&dyn SigningKey> {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         (**self).algorithm()
     }
+}
 
+impl SigningKey for Box<&dyn SigningKey> {
     fn create_signature(
         &self,
         key_pw: Unlocker,
@@ -63,34 +61,18 @@ impl SigningKey for Box<&dyn SigningKey> {
 }
 
 impl<K: SecretKeyTrait> SigningKey for K {
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(self)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(self)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(self)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(self)
-    }
-
     fn create_signature(
         &self,
         key_pw: Unlocker,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<crate::types::SignatureBytes> {
-        SecretKeyTrait::create_signature(self, || key_pw.read(), hash, data)
+        (*self).create_signature(|| key_pw.read(), hash, data)
     }
 }
 
-pub trait SecretKeyTrait: PublicKeyTrait {
-    type PublicKey;
+pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
+    type PublicKey: PublicKeyTrait + Serialize;
 
     /// The type representing the unlocked version of this.
     type Unlocked;
@@ -115,7 +97,7 @@ pub trait SecretKeyTrait: PublicKeyTrait {
     /// The suggested hash algorithm to calculate the signature hash digest with, when using this
     /// key as a signer
     fn hash_alg(&self) -> HashAlgorithm {
-        match self.public_params() {
+        match self.public_key().public_params() {
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::SHA2_384,
             PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::SHA2_512,
             _ => HashAlgorithm::default(),

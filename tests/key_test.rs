@@ -24,6 +24,7 @@ use pgp::packet::{
     KeyFlags, Signature, SignatureType, Subpacket, SubpacketData, UserAttribute, UserId,
 };
 use pgp::ser::Serialize;
+use pgp::types::KeyDetails;
 use pgp::types::{
     CompressionAlgorithm, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion, PacketLength,
     PlainSecretParams, PublicParams, S2kParams, SecretKeyTrait, SecretParams, SignedUser,
@@ -1338,12 +1339,12 @@ fn test_encrypted_key() {
     // Incorrect password results in InvalidInput error.
     let res = unsigned_pubkey
         .clone()
-        .sign(&mut rng, &key, || "".into())
+        .sign(&mut rng, &*key, || "".into())
         .err()
         .unwrap();
 
     assert!(matches!(res, pgp::errors::Error::InvalidInput));
     let _signed_key = unsigned_pubkey
-        .sign(&mut rng, &key, || "123".into())
+        .sign(&mut rng, &*key, || "123".into())
         .unwrap();
 }

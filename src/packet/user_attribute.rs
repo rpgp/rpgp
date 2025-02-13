@@ -219,9 +219,9 @@ impl UserAttribute {
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
-        P: SecretKeyTrait + Serialize,
+        P: SecretKeyTrait,
     {
-        self.sign_third_party(rng, key, key_pw, key)
+        self.sign_third_party(rng, key, key_pw, &key.public_key())
     }
 
     /// Create a third-party signature
@@ -235,7 +235,7 @@ impl UserAttribute {
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
-        P: SecretKeyTrait + Serialize,
+        P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {
         let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(

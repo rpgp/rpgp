@@ -11,8 +11,9 @@ use crate::{
     errors::Result,
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{
-        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion,
-        MpiBytes, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes, Tag,
+        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId,
+        KeyVersion, MpiBytes, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        SignatureBytes, Tag,
     },
 };
 
@@ -453,7 +454,7 @@ impl crate::packet::PacketTrait for PublicSubkey {
     }
 }
 
-impl PublicKeyTrait for PubKeyInner {
+impl KeyDetails for PubKeyInner {
     fn version(&self) -> KeyVersion {
         self.version
     }
@@ -574,6 +575,9 @@ impl PublicKeyTrait for PubKeyInner {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
+}
+
+impl PublicKeyTrait for PubKeyInner {
     fn verify_signature(
         &self,
         hash: HashAlgorithm,
@@ -669,6 +673,23 @@ impl PublicKeyTrait for PubKeyInner {
     }
 }
 
+impl KeyDetails for PublicKey {
+    fn version(&self) -> KeyVersion {
+        self.inner.version()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.inner.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.inner.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.inner.algorithm()
+    }
+}
 impl PublicKeyTrait for PublicKey {
     fn verify_signature(
         &self,
@@ -683,28 +704,30 @@ impl PublicKeyTrait for PublicKey {
         PublicKeyTrait::public_params(&self.inner)
     }
 
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.inner)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.inner)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.inner)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.inner)
-    }
-
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         PublicKeyTrait::created_at(&self.inner)
     }
 
     fn expiration(&self) -> Option<u16> {
         PublicKeyTrait::expiration(&self.inner)
+    }
+}
+
+impl KeyDetails for PublicSubkey {
+    fn version(&self) -> KeyVersion {
+        self.inner.version()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.inner.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.inner.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.inner.algorithm()
     }
 }
 
@@ -720,22 +743,6 @@ impl PublicKeyTrait for PublicSubkey {
 
     fn public_params(&self) -> &PublicParams {
         PublicKeyTrait::public_params(&self.inner)
-    }
-
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.inner)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.inner)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.inner)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.inner)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {

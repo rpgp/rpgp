@@ -5,7 +5,7 @@ use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 use pgp::composed::{Deserializable, Message, SignedSecretKey};
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::types::{SecretKeyTrait, StringToKey};
+use pgp::types::StringToKey;
 use pgp::KeyType;
 use rand::{thread_rng, RngCore};
 

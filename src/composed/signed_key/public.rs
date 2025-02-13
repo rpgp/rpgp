@@ -12,7 +12,7 @@ use crate::errors::Result;
 use crate::packet::{self, Packet, PacketTrait, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PacketLength, PkeskBytes, PublicKeyTrait,
+    EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes, PublicKeyTrait,
     PublicParams, SignatureBytes, Tag,
 };
 use crate::{armor, ArmorOptions};
@@ -173,20 +173,7 @@ impl SignedPublicKey {
     }
 }
 
-impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.primary_key.verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.primary_key.public_params()
-    }
-
+impl KeyDetails for SignedPublicKey {
     fn version(&self) -> KeyVersion {
         self.primary_key.version()
     }
@@ -201,6 +188,21 @@ impl PublicKeyTrait for SignedPublicKey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
+    }
+}
+
+impl PublicKeyTrait for SignedPublicKey {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        self.primary_key.verify_signature(hash, data, sig)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
@@ -291,20 +293,7 @@ impl SignedPublicSubKey {
     }
 }
 
-impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
-    }
-
+impl KeyDetails for SignedPublicSubKey {
     fn version(&self) -> KeyVersion {
         self.key.version()
     }
@@ -320,6 +309,20 @@ impl PublicKeyTrait for SignedPublicSubKey {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
+    }
+}
+impl PublicKeyTrait for SignedPublicSubKey {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        self.key.verify_signature(hash, data, sig)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {

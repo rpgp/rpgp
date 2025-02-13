@@ -711,7 +711,6 @@ mod tests {
     use crate::crypto::sym::SymmetricKeyAlgorithm;
     use crate::line_writer::LineBreak;
     use crate::normalize_lines::normalize_lines;
-    use crate::types::SecretKeyTrait;
     use crate::util::test::{check_strings, random_string, ChaosReader};
     use crate::{Deserializable, Message, SignedSecretKey};
 
@@ -1156,7 +1155,7 @@ mod tests {
                 .expect("encryption");
 
             let sig_config = vec![SigningConfig {
-                key: Box::new(&skey),
+                key: Box::new(&*skey),
                 key_pw: (|| "".to_string()).into(),
                 hash_algorithm: HashAlgorithm::SHA2_256,
             }];
