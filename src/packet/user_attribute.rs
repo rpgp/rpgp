@@ -221,7 +221,7 @@ impl UserAttribute {
         F: FnOnce() -> String,
         P: SecretKeyTrait,
     {
-        self.sign_third_party(rng, key, key_pw, &key.public_key())
+        self.sign_third_party(rng, key, key_pw, key.public_key())
     }
 
     /// Create a third-party signature

@@ -15,7 +15,7 @@
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
-//! use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm};
+//! use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm, KeyDetails as _};
 //! use smallvec::*;
 //! #
 //! # let mut key_params = SecretKeyParamsBuilder::default();
@@ -55,7 +55,7 @@
 //! ];
 //!
 //! let signature_packet = sig_cfg
-//!      .sign(&signing_key, passwd_fn, DATA)
+//!      .sign(&*signing_key, passwd_fn, DATA)
 //!      .expect("Should sign");
 //!
 //! let mut signature_bytes = Vec::with_capacity(1024);

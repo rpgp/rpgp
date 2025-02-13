@@ -48,6 +48,11 @@ impl SecretParams {
         Ok(params)
     }
 
+    /// Checks if we should expect a SHA1 checksum in the encrypted part.
+    pub fn has_sha1_checksum(&self) -> bool {
+        self.string_to_key_id() == 254
+    }
+
     pub fn string_to_key_id(&self) -> u8 {
         match self {
             SecretParams::Plain(k) => k.string_to_key_id(),

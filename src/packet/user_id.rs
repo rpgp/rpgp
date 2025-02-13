@@ -57,7 +57,7 @@ impl UserId {
         K: SecretKeyTrait + Serialize,
         K::PublicKey: PublicKeyTrait + Serialize,
     {
-        self.sign_third_party(rng, key, key_pw, &key.public_key())
+        self.sign_third_party(rng, key, key_pw, key.public_key())
     }
 
     /// Create a third-party signature.
@@ -149,17 +149,16 @@ mod tests {
 
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
-        let alice_sec = packet::SecretKey::new(
-            packet::PubKeyInner::new(
-                KeyVersion::V4,
-                key_type.to_alg(),
-                Utc::now().trunc_subsecs(0),
-                None,
-                public_params,
-            )
-            .unwrap(),
-            secret_params,
-        );
+        let pub_key = packet::PubKeyInner::new(
+            KeyVersion::V4,
+            key_type.to_alg(),
+            Utc::now().trunc_subsecs(0),
+            None,
+            public_params,
+        )
+        .unwrap();
+        let pub_key = packet::PublicKey::from_inner(pub_key);
+        let alice_sec = packet::SecretKey::new(pub_key, secret_params);
 
         let alice_pub = alice_sec.public_key();
 
@@ -176,17 +175,16 @@ mod tests {
         // test third-party signature
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
-        let signer_sec = packet::SecretKey::new(
-            packet::PubKeyInner::new(
-                KeyVersion::V4,
-                key_type.to_alg(),
-                Utc::now().trunc_subsecs(0),
-                None,
-                public_params,
-            )
-            .unwrap(),
-            secret_params,
-        );
+        let pub_key = packet::PubKeyInner::new(
+            KeyVersion::V4,
+            key_type.to_alg(),
+            Utc::now().trunc_subsecs(0),
+            None,
+            public_params,
+        )
+        .unwrap();
+        let pub_key = packet::PublicKey::from_inner(pub_key);
+        let signer_sec = packet::SecretKey::new(pub_key, secret_params);
 
         let signer_pub = signer_sec.public_key();
 

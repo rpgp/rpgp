@@ -203,7 +203,7 @@ impl SignatureConfig {
         F: FnOnce() -> String,
         K: SecretKeyTrait + Serialize,
     {
-        self.sign_certification_third_party(key, key_pw, &key.public_key(), tag, id)
+        self.sign_certification_third_party(key, key_pw, key.public_key(), tag, id)
     }
 
     /// Create a certification third-party signature.
@@ -310,7 +310,7 @@ impl SignatureConfig {
         }
 
         // Signing Key
-        serialize_for_hashing(&signing_key.public_key(), &mut hasher)?;
+        serialize_for_hashing(signing_key.public_key(), &mut hasher)?;
 
         // Key being bound
         serialize_for_hashing(key, &mut hasher)?;
@@ -329,7 +329,7 @@ impl SignatureConfig {
     pub fn sign_key<F, K, P>(self, signing_key: &K, key_pw: F, key: &P) -> Result<Signature>
     where
         F: FnOnce() -> String,
-        K: SecretKeyTrait + Serialize,
+        K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
         ensure!(

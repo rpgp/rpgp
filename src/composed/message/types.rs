@@ -830,49 +830,49 @@ impl Message {
                 None => bail!("not encrypted"),
             },
             Message::Encrypted { esk, edata, .. } => {
-                let valid_keys = keys
-                    .iter()
-                    .filter_map(|key| {
-                        // search for a packet with a key id that we have and that key.
-                        let mut packet = None;
-                        let mut encoding_key = None;
-                        let mut encoding_subkey = None;
+                let valid_keys =
+                    keys.iter()
+                        .filter_map(|key| {
+                            // search for a packet with a key id that we have and that key.
+                            let mut packet = None;
+                            let mut encoding_key = None;
+                            let mut encoding_subkey = None;
 
-                        for esk_packet in esk.iter().filter_map(|k| match k {
-                            Esk::PublicKeyEncryptedSessionKey(k) => Some(k),
-                            _ => None,
-                        }) {
-                            debug!("esk packet: {:?}", esk_packet);
-                            debug!("{:?}", key.key_id());
-                            debug!(
-                                "{:?}",
-                                key.secret_subkeys
-                                    .iter()
-                                    .map(|k| k.key_id())
-                                    .collect::<Vec<_>>()
-                            );
+                            for esk_packet in esk.iter().filter_map(|k| match k {
+                                Esk::PublicKeyEncryptedSessionKey(k) => Some(k),
+                                _ => None,
+                            }) {
+                                debug!("esk packet: {:?}", esk_packet);
+                                debug!("{:?}", key.key_id());
+                                debug!(
+                                    "{:?}",
+                                    key.secret_subkeys
+                                        .iter()
+                                        .map(|k| k.key_id())
+                                        .collect::<Vec<_>>()
+                                );
 
-                            // find the matching key or subkey
+                                // find the matching key or subkey
 
-                            if esk_packet.match_identity(&key.primary_key.public_key()) {
-                                encoding_key = Some(&key.primary_key);
+                                if esk_packet.match_identity(&key.primary_key.public_key()) {
+                                    encoding_key = Some(&key.primary_key);
+                                }
+
+                                if encoding_key.is_none() {
+                                    encoding_subkey = key.secret_subkeys.iter().find(|subkey| {
+                                        esk_packet.match_identity(&subkey.public_key())
+                                    });
+                                }
+
+                                if encoding_key.is_some() || encoding_subkey.is_some() {
+                                    packet = Some(esk_packet);
+                                    break;
+                                }
                             }
 
-                            if encoding_key.is_none() {
-                                encoding_subkey = key.secret_subkeys.iter().find(|&subkey| {
-                                    esk_packet.match_identity(&subkey.public_key())
-                                });
-                            }
-
-                            if encoding_key.is_some() || encoding_subkey.is_some() {
-                                packet = Some(esk_packet);
-                                break;
-                            }
-                        }
-
-                        packet.map(|packet| (packet, encoding_key, encoding_subkey))
-                    })
-                    .collect::<Vec<_>>();
+                            packet.map(|packet| (packet, encoding_key, encoding_subkey))
+                        })
+                        .collect::<Vec<_>>();
 
                 if valid_keys.is_empty() {
                     return Err(Error::MissingKey);

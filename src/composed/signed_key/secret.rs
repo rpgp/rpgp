@@ -112,7 +112,7 @@ impl SignedSecretKey {
 
     fn verify_public_subkeys(&self) -> Result<()> {
         for subkey in &self.public_subkeys {
-            subkey.verify(&self.primary_key.public_key())?;
+            subkey.verify(self.primary_key.public_key())?;
         }
 
         Ok(())
@@ -120,18 +120,15 @@ impl SignedSecretKey {
 
     fn verify_secret_subkeys(&self) -> Result<()> {
         for subkey in &self.secret_subkeys {
-            subkey.verify(&self.primary_key.public_key())?;
+            subkey.verify(self.primary_key.public_key())?;
         }
 
         Ok(())
     }
 
     pub fn verify(&self) -> Result<()> {
-        println!("details");
-        self.details.verify(&self.primary_key.public_key())?;
-        println!("pub");
+        self.details.verify(self.primary_key.public_key())?;
         self.verify_public_subkeys()?;
-        println!("secret");
         self.verify_secret_subkeys()?;
 
         Ok(())
@@ -183,7 +180,7 @@ impl SignedSecretKey {
         subkeys.extend(sec_subkeys);
 
         PublicKey::new(
-            self.primary_key.public_key(),
+            self.primary_key.public_key().clone(),
             self.details.as_unsigned(),
             subkeys,
         )
@@ -281,7 +278,7 @@ impl SignedSecretSubKey {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
         for sig in &self.signatures {
-            sig.verify_key_binding(key, &self.key.public_key())?;
+            sig.verify_key_binding(key, self.key.public_key())?;
         }
 
         Ok(())
@@ -303,7 +300,7 @@ impl SignedSecretSubKey {
             .expect("invalid signed subkey")
             .key_flags();
 
-        PublicSubkey::new(self.key.public_key(), keyflags)
+        PublicSubkey::new(self.key.public_key().clone(), keyflags)
     }
 }
 
@@ -372,13 +369,13 @@ impl From<SignedSecretKey> for SignedPublicKey {
             .into_iter()
             .for_each(|key| subkeys.push(key.into()));
 
-        SignedPublicKey::new(primary, details, subkeys)
+        SignedPublicKey::new(primary.clone(), details, subkeys)
     }
 }
 
 impl From<SignedSecretSubKey> for SignedPublicSubKey {
     fn from(value: SignedSecretSubKey) -> Self {
-        SignedPublicSubKey::new(value.key.public_key(), value.signatures)
+        SignedPublicSubKey::new(value.key.public_key().clone(), value.signatures)
     }
 }
 
@@ -510,7 +507,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
             String::default,
             HashAlgorithm::SHA2_256,
         )?;
-        msg.verify(&pri.public_key())?;
+        msg.verify(pri.public_key())?;
 
         // set passphrase with default s2k
         pri.set_password(&mut rng, || ANNEX_A_5_PASSPHRASE.to_string())?;
@@ -522,7 +519,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
             || ANNEX_A_5_PASSPHRASE.to_string(),
             HashAlgorithm::SHA2_256,
         )?;
-        msg.verify(&pri.public_key())?;
+        msg.verify(pri.public_key())?;
 
         // remove passphrase
         pri.remove_password(|| ANNEX_A_5_PASSPHRASE.to_string())?;
@@ -540,7 +537,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
             || ANNEX_A_5_PASSPHRASE.to_string(),
             HashAlgorithm::SHA2_256,
         )?;
-        msg.verify(&pri.public_key())?;
+        msg.verify(pri.public_key())?;
 
         Ok(())
     }

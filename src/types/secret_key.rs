@@ -83,7 +83,7 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
         F: FnOnce() -> String,
         G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>;
 
-    fn public_key(&self) -> Self::PublicKey;
+    fn public_key(&self) -> &Self::PublicKey;
 
     fn create_signature<F>(
         &self,
@@ -129,7 +129,7 @@ impl<T: SecretKeyTrait> SecretKeyTrait for &T {
         (*self).create_signature(key_pw, hash, data)
     }
 
-    fn public_key(&self) -> Self::PublicKey {
+    fn public_key(&self) -> &Self::PublicKey {
         (*self).public_key()
     }
 }

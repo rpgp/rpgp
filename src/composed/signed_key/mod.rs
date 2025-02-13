@@ -46,7 +46,7 @@
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::{Signature, packet::{PacketTrait, PacketHeader}, types::{PacketLength, Tag}};
+//! use pgp::{Signature, packet::{PacketTrait, PacketHeader}, types::{PacketLength, Tag, KeyDetails as _}};
 //! use chrono;
 //!
 //! let now = chrono::Utc::now();

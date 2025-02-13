@@ -180,6 +180,7 @@ impl SecretKeyParams {
             self.expiration.map(|v| v.as_secs() as u16),
             public_params,
         )?;
+        let pub_key = crate::packet::PublicKey::from_inner(pub_key);
         let mut primary_key = packet::SecretKey::new(pub_key, secret_params);
         if let Some(passphrase) = passphrase {
             primary_key.set_password_with_s2k(|| passphrase, s2k)?;
@@ -230,6 +231,7 @@ impl SecretKeyParams {
                         subkey.expiration.map(|v| v.as_secs() as u16),
                         public_params,
                     )?;
+                    let pub_key = packet::PublicSubkey::from_inner(pub_key);
                     let mut sub = packet::SecretSubkey::new(pub_key, secret_params);
 
                     if let Some(passphrase) = passphrase {

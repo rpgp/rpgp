@@ -867,6 +867,9 @@ mod tests {
         #[test]
         #[ignore]
         fn public_key_packet_roundtrip(packet: PublicKey) {
+            // dyn compat
+            let _: Box<&dyn PublicKeyTrait> = Box::new(&packet);
+
             let mut buf = Vec::new();
             packet.to_writer(&mut buf)?;
             let new_packet = PublicKey::from_buf(*packet.packet_header(), &mut &buf[..])?;
