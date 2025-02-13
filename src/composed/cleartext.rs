@@ -43,7 +43,7 @@ impl CleartextSignedMessage {
         key_pw: F,
     ) -> Result<Self>
     where
-        F: FnOnce() -> String,
+        F: FnOnce() -> String + 'static,
     {
         let mut bytes = text.as_bytes();
         let signature_text = NormalizedReader::new(&mut bytes, LineBreak::Crlf);
@@ -62,7 +62,7 @@ impl CleartextSignedMessage {
     pub fn sign<R, F>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
-        F: FnOnce() -> String,
+        F: FnOnce() -> String + 'static,
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();

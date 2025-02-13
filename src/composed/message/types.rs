@@ -683,7 +683,7 @@ impl Message {
     ) -> Result<Self>
     where
         R: CryptoRng + Rng,
-        F: FnOnce() -> String,
+        F: FnOnce() -> String + 'static,
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();

@@ -12,7 +12,9 @@ use crate::packet::{
     Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
 };
 use crate::ser::Serialize;
-use crate::types::{Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, Tag};
+use crate::types::{
+    Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, SigningKey, Tag,
+};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
@@ -166,7 +168,7 @@ impl SignatureConfig {
     /// Sign the given data.
     pub fn sign<F, R>(self, key: &impl SecretKeyTrait, key_pw: F, mut data: R) -> Result<Signature>
     where
-        F: FnOnce() -> String,
+        F: FnOnce() -> String + 'static,
         R: Read,
     {
         let mut hasher = self.into_hasher()?;
@@ -624,9 +626,9 @@ pub struct SignatureHasher {
 
 impl SignatureHasher {
     /// Finalizes the signature.
-    pub fn sign<F>(self, key: &impl SecretKeyTrait, key_pw: F) -> Result<Signature>
+    pub fn sign<F>(self, key: &impl SigningKey, key_pw: F) -> Result<Signature>
     where
-        F: FnOnce() -> String,
+        F: FnOnce() -> String + 'static,
     {
         let Self { config, mut hasher } = self;
         ensure!(
@@ -649,7 +651,7 @@ impl SignatureHasher {
         let hash = &hasher.finish()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.create_signature(key_pw, config.hash_alg, hash)?;
+        let signature = key.create_signature(key_pw.into(), config.hash_alg, hash)?;
 
         Signature::from_config(config, signed_hash_value, signature)
     }

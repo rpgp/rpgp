@@ -18,8 +18,8 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength,
-    PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
+    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength, SigningKey,
+    StringToKey, Tag, Unlocker,
 };
 use crate::util::fill_buffer;
 use crate::Esk;
@@ -65,6 +65,12 @@ enum Encryption {
     },
 }
 
+pub struct SigningConfig<'a> {
+    pub key: Box<&'a dyn SigningKey>,
+    pub key_pw: Unlocker,
+    pub hash_algorithm: HashAlgorithm,
+}
+
 /// The default chunk size.
 pub const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
 
@@ -98,22 +104,21 @@ impl Builder<DummyReader> {
 fn prepare<R>(
     mut rng: R,
     typ: SignatureType,
-    keys: &[&impl SecretKeyTrait],
-    hash_algorithms: &[HashAlgorithm],
+    keys: &[SigningConfig<'_>],
 ) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
 where
     R: Rng + CryptoRng,
 {
     let mut out = Vec::new();
 
-    for (key, hash_alg) in keys.iter().zip(hash_algorithms.iter()) {
+    for config in keys {
         // Signature setup
-        let key_id = key.key_id();
-        let algorithm = key.algorithm();
-        let hash_alg = *hash_alg;
+        let key_id = config.key.key_id();
+        let algorithm = config.key.algorithm();
+        let hash_alg = config.hash_algorithm;
 
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(config.key.fingerprint()))?,
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             ))?,
@@ -121,25 +126,25 @@ where
         let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
 
         // prepare signing
-        let mut config = match key.version() {
+        let mut sig_config = match config.key.version() {
             KeyVersion::V4 => crate::packet::SignatureConfig::v4(typ, algorithm, hash_alg),
             KeyVersion::V6 => {
                 crate::packet::SignatureConfig::v6(&mut rng, typ, algorithm, hash_alg)?
             }
             v => bail!("unsupported key version {:?}", v),
         };
-        config.hashed_subpackets = hashed_subpackets;
-        config.unhashed_subpackets = unhashed_subpackets;
+        sig_config.hashed_subpackets = hashed_subpackets;
+        sig_config.unhashed_subpackets = unhashed_subpackets;
 
-        let ops = match key.version() {
+        let ops = match config.key.version() {
             KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, key_id),
             KeyVersion::V6 => {
-                let SignatureVersionSpecific::V6 { ref salt } = config.version_specific else {
+                let SignatureVersionSpecific::V6 { ref salt } = sig_config.version_specific else {
                     // This should never happen
                     bail!("Inconsistent Signature and OnePassSignature version")
                 };
 
-                let Fingerprint::V6(fp) = key.fingerprint() else {
+                let Fingerprint::V6(fp) = config.key.fingerprint() else {
                     bail!("Inconsistent Signature and Fingerprint version")
                 };
 
@@ -147,7 +152,7 @@ where
             }
             v => bail!("Unsupported key version {:?}", v),
         };
-        out.push((config, ops));
+        out.push((sig_config, ops));
     }
 
     Ok(out)
@@ -266,7 +271,7 @@ impl<R: Read> Builder<R> {
         mut self,
         mut rng: RAND,
         new_sym_alg: SymmetricKeyAlgorithm,
-        pkeys: &[&impl PublicKeyTrait],
+        pkeys: &[&impl crate::types::PublicKeyTrait],
     ) -> Result<Self>
     where
         RAND: CryptoRng + Rng,
@@ -327,9 +332,7 @@ impl<R: Read> Builder<R> {
     pub fn to_writer_signed<RAND, W>(
         self,
         mut rng: RAND,
-        keys: &[&impl SecretKeyTrait],
-        key_pws: Vec<impl FnOnce() -> String>,
-        hash_algorithms: &[HashAlgorithm],
+        keys: Vec<SigningConfig<'_>>,
         mut out: W,
     ) -> Result<()>
     where
@@ -345,7 +348,7 @@ impl<R: Read> Builder<R> {
             SignatureType::Binary
         };
 
-        let prep = prepare(&mut rng, typ, keys, hash_algorithms)?;
+        let prep = prepare(&mut rng, typ, &keys)?;
 
         let mut hashers = Vec::new();
 
@@ -364,13 +367,9 @@ impl<R: Read> Builder<R> {
         }
 
         // 3. Write all Signatures (reverse order as One Pass Signatures)
-        for ((hasher, key), key_pw) in hashers
-            .into_iter()
-            .zip(keys.iter())
-            .zip(key_pws.into_iter())
-            .rev()
-        {
-            let signature = hasher.sign(key, key_pw)?;
+        for (hasher, config) in hashers.into_iter().zip(keys.into_iter()).rev() {
+            let key = &config.key;
+            let signature = hasher.sign(key, || config.key_pw.read())?;
             signature.to_writer_with_header(&mut out)?;
         }
 
@@ -553,18 +552,12 @@ impl<R: Read> Builder<R> {
         Ok(out)
     }
 
-    pub fn to_vec_signed<RAND>(
-        self,
-        rng: RAND,
-        keys: &[&impl SecretKeyTrait],
-        key_pws: Vec<impl FnOnce() -> String>,
-        hash_algorithms: &[HashAlgorithm],
-    ) -> Result<Vec<u8>>
+    pub fn to_vec_signed<RAND>(self, rng: RAND, keys: Vec<SigningConfig<'_>>) -> Result<Vec<u8>>
     where
         RAND: CryptoRng + Rng,
     {
         let mut out = Vec::new();
-        self.to_writer_signed(rng, keys, key_pws, hash_algorithms, &mut out)?;
+        self.to_writer_signed(rng, keys, &mut out)?;
         Ok(out)
     }
 }
@@ -1162,13 +1155,13 @@ mod tests {
                 .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .expect("encryption");
 
+            let sig_config = vec![SigningConfig {
+                key: Box::new(&skey),
+                key_pw: (|| "".to_string()).into(),
+                hash_algorithm: HashAlgorithm::SHA2_256,
+            }];
             let encrypted = builder
-                .to_vec_signed(
-                    &mut rng,
-                    &[&skey],
-                    vec![|| "".to_string()],
-                    &[HashAlgorithm::SHA2_256],
-                )
+                .to_vec_signed(&mut rng, sig_config)
                 .expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
