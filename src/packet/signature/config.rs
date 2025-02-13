@@ -632,9 +632,10 @@ pub struct SignatureHasher {
 
 impl SignatureHasher {
     /// Finalizes the signature.
-    pub fn sign<F>(self, key: &impl SigningKey, key_pw: F) -> Result<Signature>
+    pub fn sign<F, K>(self, key: &K, key_pw: F) -> Result<Signature>
     where
         F: FnOnce() -> String + 'static,
+        K: SigningKey,
     {
         let Self { config, mut hasher } = self;
         ensure!(

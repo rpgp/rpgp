@@ -1,7 +1,7 @@
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::types::{KeyId, KeyVersion, SignatureBytes};
+use crate::types::{KeyId, KeyVersion};
 
 use super::{Fingerprint, KeyDetails};
 
@@ -81,22 +81,4 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
     /// The suggested hash algorithm to calculate the signature hash digest with, when using this
     /// key as a signer
     fn hash_alg(&self) -> HashAlgorithm;
-}
-
-impl<T: SecretKeyTrait> SecretKeyTrait for &T {
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
-        (*self).create_signature(key_pw, hash, data)
-    }
-
-    fn hash_alg(&self) -> HashAlgorithm {
-        (*self).hash_alg()
-    }
 }
