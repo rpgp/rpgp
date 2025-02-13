@@ -10,8 +10,8 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    KeyVersion, PacketHeaderVersion, PacketLength, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag,
-    Unlocker,
+    KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SecretKeyTrait,
+    SignedUser, Tag,
 };
 
 /// User ID Packet
@@ -56,7 +56,7 @@ impl UserId {
         rng: R,
         signer_sec_key: &K,
         signer_pub_key: &P,
-        key_pw: &Unlocker,
+        key_pw: &Password,
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
@@ -71,7 +71,7 @@ impl UserId {
         &self,
         mut rng: R,
         signer: &P,
-        signer_pw: &Unlocker,
+        signer_pw: &Password,
         signee: &K,
     ) -> Result<SignedUser>
     where

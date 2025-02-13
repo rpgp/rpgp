@@ -59,7 +59,7 @@ impl EncryptedSecretParams {
 
     pub fn unlock(
         &self,
-        pw: &Unlocker,
+        pw: &Password,
         pub_key: &(impl PublicKeyTrait + Serialize),
         secret_tag: Option<Tag>,
     ) -> Result<PlainSecretParams> {

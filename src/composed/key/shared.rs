@@ -14,7 +14,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, KeyVersion, PublicKeyTrait, RevocationKey, SecretKeyTrait, Unlocker,
+    CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, RevocationKey, SecretKeyTrait,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -85,7 +85,7 @@ impl KeyDetails {
         mut rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: &Unlocker,
+        key_pw: &Password,
     ) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,

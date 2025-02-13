@@ -8,7 +8,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
-use pgp::types::{EcdhPublicParams, Fingerprint, PkeskBytes, SignatureBytes, Unlocker};
+use pgp::types::{EcdhPublicParams, Fingerprint, Password, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyDetails, KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey, SignedSecretKey};
@@ -95,7 +95,7 @@ impl KeyDetails for FakeHsm {
 impl SecretKeyTrait for FakeHsm {
     fn create_signature(
         &self,
-        _key_pw: &Unlocker,
+        _key_pw: &Password,
         _hash: HashAlgorithm,
         data: &[u8],
     ) -> pgp::errors::Result<SignatureBytes> {

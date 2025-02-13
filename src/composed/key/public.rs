@@ -13,7 +13,7 @@ use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
     SignatureBytes,
 };
-use crate::types::{PkeskBytes, Unlocker};
+use crate::types::{Password, PkeskBytes};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -47,7 +47,7 @@ impl PublicKey {
         mut rng: R,
         sec_key: &K,
         pub_key: &P,
-        key_pw: &Unlocker,
+        key_pw: &Password,
     ) -> Result<SignedPublicKey>
     where
         R: CryptoRng + Rng,
@@ -97,7 +97,7 @@ impl PublicSubkey {
         mut rng: R,
         sec_key: &K,
         pub_key: &P,
-        key_pw: &Unlocker,
+        key_pw: &Password,
     ) -> Result<SignedPublicSubKey>
     where
         R: CryptoRng + Rng,

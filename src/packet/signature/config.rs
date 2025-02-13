@@ -13,7 +13,7 @@ use crate::packet::{
     Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
 };
 use crate::ser::Serialize;
-use crate::types::{Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, Tag, Unlocker};
+use crate::types::{Fingerprint, KeyId, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
@@ -168,7 +168,7 @@ impl SignatureConfig {
     pub fn sign<R>(
         self,
         key: &impl SecretKeyTrait,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         mut data: R,
     ) -> Result<Signature>
     where
@@ -198,7 +198,7 @@ impl SignatureConfig {
         self,
         key: &K,
         pub_key: &P,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
@@ -213,7 +213,7 @@ impl SignatureConfig {
     pub fn sign_certification_third_party<P>(
         self,
         signer: &impl SecretKeyTrait,
-        signer_pw: &Unlocker,
+        signer_pw: &Password,
         signee: &P,
         tag: Tag,
         id: &impl Serialize,
@@ -290,7 +290,7 @@ impl SignatureConfig {
         self,
         signing_key: &K,
         signing_pub_key: &P,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         key: &L,
     ) -> Result<Signature>
     where
@@ -334,7 +334,7 @@ impl SignatureConfig {
     }
 
     /// Signs a direct key signature or a revocation.
-    pub fn sign_key<K, P>(self, signing_key: &K, key_pw: Unlocker, key: &P) -> Result<Signature>
+    pub fn sign_key<K, P>(self, signing_key: &K, key_pw: Password, key: &P) -> Result<Signature>
     where
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
@@ -630,7 +630,7 @@ pub struct SignatureHasher {
 
 impl SignatureHasher {
     /// Finalizes the signature.
-    pub fn sign<K>(self, key: &K, key_pw: &Unlocker) -> Result<Signature>
+    pub fn sign<K>(self, key: &K, key_pw: &Password) -> Result<Signature>
     where
         K: SecretKeyTrait,
     {

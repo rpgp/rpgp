@@ -18,8 +18,8 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength,
-    SecretKeyTrait, StringToKey, Tag, Unlocker,
+    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength, Password,
+    SecretKeyTrait, StringToKey, Tag,
 };
 use crate::util::fill_buffer;
 use crate::Esk;
@@ -67,7 +67,7 @@ enum Encryption {
 
 pub struct SigningConfig<'a> {
     pub key: Box<&'a dyn SecretKeyTrait>,
-    pub key_pw: Unlocker,
+    pub key_pw: Password,
     pub hash_algorithm: HashAlgorithm,
 }
 
@@ -903,7 +903,7 @@ mod tests {
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
             let (decrypted, _key_ids) = message
-                .decrypt(&[Unlocker::empty()], &[&skey])
+                .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
             let Message::Literal(l) = decrypted else {
@@ -1103,7 +1103,7 @@ mod tests {
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
             let (decrypted, _key_ids) = message
-                .decrypt(&[Unlocker::empty()], &[&skey])
+                .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
             assert!(matches!(decrypted, Message::Compressed(_)));
@@ -1154,7 +1154,7 @@ mod tests {
 
             let sig_config = vec![SigningConfig {
                 key: Box::new(&*skey),
-                key_pw: Unlocker::empty(),
+                key_pw: Password::empty(),
                 hash_algorithm: HashAlgorithm::SHA2_256,
             }];
             let encrypted = builder
@@ -1169,7 +1169,7 @@ mod tests {
 
             // decrypt it
             let (decrypted, _key_ids) = message
-                .decrypt(&[Unlocker::empty()], &[&skey])
+                .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
             assert!(matches!(decrypted, Message::Compressed(_)));

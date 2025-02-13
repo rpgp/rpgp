@@ -338,7 +338,7 @@ mod tests {
 
     use super::*;
     use crate::crypto::hash::HashAlgorithm;
-    use crate::types::{KeyVersion, S2kParams, Unlocker};
+    use crate::types::{KeyVersion, Password, S2kParams};
     use crate::{composed::shared::Deserializable, Message};
 
     #[test]
@@ -374,7 +374,7 @@ k0mXubZvyl4GBg==
         let pri = ssk.primary_key;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let signed = msg.sign(&mut rng, &pri, &Unlocker::empty(), HashAlgorithm::SHA2_256)?;
+        let signed = msg.sign(&mut rng, &pri, &Password::empty(), HashAlgorithm::SHA2_256)?;
 
         signed.verify(&pri.public_key())?;
 
@@ -452,7 +452,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let msg = Message::Literal(lit.clone()).sign(
             &mut rng,
             &pri,
-            &Unlocker::empty(),
+            &Password::empty(),
             HashAlgorithm::SHA2_256,
         )?;
         msg.verify(pri.public_key())?;

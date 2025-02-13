@@ -573,7 +573,7 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::Unlocker;
+    use crate::types::Password;
     use crate::{Deserializable, Message, SignedSecretKey};
 
     #[test]
@@ -640,7 +640,7 @@ mod tests {
                 .expect("failed to parse message");
 
             let (msg, _ids) = message
-                .decrypt(&[Unlocker::empty()], &[&decrypt_key])
+                .decrypt(&[Password::empty()], &[&decrypt_key])
                 .expect("failed to init decryption");
 
             let data = msg.get_literal().unwrap().data();

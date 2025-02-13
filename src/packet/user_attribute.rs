@@ -15,7 +15,7 @@ use crate::packet::{
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Unlocker,
+    KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag,
 };
 
 /// The type of a user attribute. Only `Image` is a known type currently
@@ -222,7 +222,7 @@ impl UserAttribute {
         rng: R,
         signer_sec_key: &P,
         signer_pub_key: &K,
-        key_pw: &Unlocker,
+        key_pw: &Password,
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
@@ -237,7 +237,7 @@ impl UserAttribute {
         &self,
         mut rng: R,
         signer: &P,
-        signer_pw: &Unlocker,
+        signer_pw: &Password,
         signee: &K,
     ) -> Result<SignedUserAttribute>
     where

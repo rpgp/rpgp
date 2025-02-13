@@ -13,7 +13,7 @@ use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::{normalize_lines, NormalizedReader};
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, Unlocker};
+use crate::types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait};
 use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE};
 
 /// Implementation of a Cleartext Signed Message.
@@ -40,7 +40,7 @@ impl CleartextSignedMessage {
         text: &str,
         config: SignatureConfig,
         key: &impl SecretKeyTrait,
-        key_pw: &Unlocker,
+        key_pw: &Password,
     ) -> Result<Self>
 where {
         let mut bytes = text.as_bytes();
@@ -57,7 +57,7 @@ where {
     }
 
     /// Sign the given text.
-    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Unlocker) -> Result<Self>
+    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Password) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
     {
@@ -601,7 +601,7 @@ mod tests {
             &mut rng,
             "hello\n-world-what-\nis up\n",
             &*key,
-            &Unlocker::empty(),
+            &Password::empty(),
         )
         .unwrap();
         msg.verify(&*key.public_key()).unwrap();
@@ -614,7 +614,7 @@ mod tests {
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &*key, &Unlocker::empty()).unwrap();
+        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &*key, &Password::empty()).unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 

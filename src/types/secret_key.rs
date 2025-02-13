@@ -9,30 +9,30 @@ use super::{Fingerprint, KeyDetails};
 
 /// Wraps around a callback to unlock keys.
 #[derive(derive_more::Debug)]
-pub enum Unlocker {
+pub enum Password {
     Dynamic(#[debug("Box<Fn>")] Box<dyn Fn() -> Zeroizing<String>>),
     Static(#[debug("***")] Zeroizing<String>),
 }
 
-impl From<String> for Unlocker {
+impl From<String> for Password {
     fn from(value: String) -> Self {
         Self::Static(value.into())
     }
 }
 
-impl From<&str> for Unlocker {
+impl From<&str> for Password {
     fn from(value: &str) -> Self {
         Self::Static(value.to_string().into())
     }
 }
 
-impl Default for Unlocker {
+impl Default for Password {
     fn default() -> Self {
         Self::empty()
     }
 }
 
-impl Unlocker {
+impl Password {
     /// Creates an empty password unlocker.
     pub fn empty() -> Self {
         Self::Static(String::new().into())
@@ -47,7 +47,7 @@ impl Unlocker {
     }
 }
 
-impl<F: Fn() -> Zeroizing<String> + 'static> From<F> for Unlocker {
+impl<F: Fn() -> Zeroizing<String> + 'static> From<F> for Password {
     fn from(value: F) -> Self {
         Self::Dynamic(Box::new(value))
     }
@@ -74,7 +74,7 @@ impl KeyDetails for Box<&dyn SecretKeyTrait> {
 impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
     fn create_signature(
         &self,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<crate::types::SignatureBytes> {
@@ -89,7 +89,7 @@ impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
 pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
     fn create_signature(
         &self,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<crate::types::SignatureBytes>;

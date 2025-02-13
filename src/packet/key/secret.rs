@@ -12,8 +12,8 @@ use crate::{
     ser::Serialize,
     types::{
         EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
-        PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
-        SignatureBytes, Tag, Unlocker,
+        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        SecretParams, SignatureBytes, Tag,
     },
 };
 
@@ -81,7 +81,7 @@ impl SecretKey {
         rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: Unlocker,
+        key_pw: Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
@@ -90,7 +90,7 @@ impl SecretKey {
         sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Unlocker, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<T>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
@@ -152,7 +152,7 @@ impl SecretSubkey {
         rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: Unlocker,
+        key_pw: Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
@@ -161,7 +161,7 @@ impl SecretSubkey {
         sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Unlocker, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<T>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
@@ -183,7 +183,7 @@ impl SecretSubkey {
 impl SecretKeyTrait for SecretKey {
     fn create_signature(
         &self,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<SignatureBytes> {
@@ -237,7 +237,7 @@ impl KeyDetails for SecretSubkey {
 impl SecretKeyTrait for SecretSubkey {
     fn create_signature(
         &self,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
     ) -> Result<SignatureBytes> {
@@ -306,7 +306,7 @@ impl SecretKey {
     /// If the Secret Key material in the packet is not locked, it is left unchanged.
     ///
     /// The current locking password for this key must be provided in `password`.
-    pub fn remove_password(&mut self, password: &Unlocker) -> Result<()> {
+    pub fn remove_password(&mut self, password: &Password) -> Result<()> {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
             let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
             self.secret_params = SecretParams::Plain(unlocked);
@@ -324,7 +324,7 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Unlocker) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
     {
@@ -339,7 +339,7 @@ impl SecretKey {
     /// using [Self::remove_password] before calling this function.
     pub fn set_password_with_s2k(
         &mut self,
-        password: &Unlocker,
+        password: &Password,
         s2k_params: crate::types::S2kParams,
     ) -> Result<()> {
         let plain = match &self.secret_params {
@@ -376,7 +376,7 @@ impl SecretSubkey {
     /// If the Secret Key material in the packet is not locked, it is left unchanged.
     ///
     /// The current locking password for this key must be provided in `password`.
-    pub fn remove_password(&mut self, password: &Unlocker) -> Result<()> {
+    pub fn remove_password(&mut self, password: &Password) -> Result<()> {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
             let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
             self.secret_params = SecretParams::Plain(unlocked);
@@ -392,7 +392,7 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Unlocker) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
     {
@@ -407,7 +407,7 @@ impl SecretSubkey {
     /// using [Self::remove_password] before calling this function.
     pub fn set_password_with_s2k(
         &mut self,
-        password: &Unlocker,
+        password: &Password,
         s2k_params: crate::types::S2kParams,
     ) -> Result<()> {
         let plain = match &self.secret_params {
@@ -529,7 +529,7 @@ fn create_signature(
 fn sign<R: CryptoRng + Rng, K, P>(
     mut rng: R,
     key: &K,
-    key_pw: Unlocker,
+    key_pw: Password,
     sig_typ: SignatureType,
     pub_key: &P,
 ) -> Result<Signature>

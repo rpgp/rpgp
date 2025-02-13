@@ -6,7 +6,7 @@ use rsa::traits::PublicKeyParts;
 use sha1_checked::{Digest, Sha1};
 
 use crate::ser::Serialize;
-use crate::types::Unlocker;
+use crate::types::Password;
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -82,7 +82,7 @@ impl PublicKey {
         &self,
         rng: R,
         key: &K,
-        key_pw: Unlocker,
+        key_pw: Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait + Serialize,
@@ -149,7 +149,7 @@ impl PublicSubkey {
         &self,
         rng: R,
         key: &K,
-        key_pw: Unlocker,
+        key_pw: Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait + Serialize,
@@ -290,7 +290,7 @@ impl PubKeyInner {
         &self,
         mut rng: R,
         key: &K,
-        key_pw: Unlocker,
+        key_pw: Password,
         sig_type: SignatureType,
     ) -> Result<Signature>
     where

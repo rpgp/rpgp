@@ -6,7 +6,7 @@ use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSub
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::ser::Serialize;
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, Unlocker};
+use crate::types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait};
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,7 +38,7 @@ impl SecretKey {
         }
     }
 
-    pub fn sign<R>(self, mut rng: R, key_pw: &Unlocker) -> Result<SignedSecretKey>
+    pub fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
     where
         R: CryptoRng + Rng,
     {
@@ -76,7 +76,7 @@ impl SecretSubkey {
         mut rng: R,
         sec_key: &K,
         pub_key: &P,
-        key_pw: &Unlocker,
+        key_pw: &Password,
     ) -> Result<SignedSecretSubKey>
     where
         R: CryptoRng + Rng,

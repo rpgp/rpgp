@@ -28,7 +28,7 @@ use crate::packet::{
 use crate::ser::Serialize;
 use crate::types::{
     CompressionAlgorithm, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketHeaderVersion,
-    PacketLength, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag, Unlocker,
+    PacketLength, Password, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
@@ -678,7 +678,7 @@ impl Message {
         self,
         rng: R,
         key: &impl SecretKeyTrait,
-        key_pw: &Unlocker,
+        key_pw: &Password,
         hash_algorithm: HashAlgorithm,
     ) -> Result<Self>
     where
@@ -818,7 +818,7 @@ impl Message {
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt(
         &self,
-        key_pws: &[Unlocker],
+        key_pws: &[Password],
         keys: &[&SignedSecretKey],
     ) -> Result<(Message, Vec<KeyId>)> {
         match self {
@@ -1792,7 +1792,7 @@ bhF30A+IitsxxA==
 
         let (message, _) = Message::from_string(msg).expect("ok");
         let (dec, _) = message
-            .decrypt(&[Unlocker::empty()], &[&ssk])
+            .decrypt(&[Password::empty()], &[&ssk])
             .expect("decrypt");
 
         let decrypted =
