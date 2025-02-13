@@ -58,13 +58,10 @@ pub enum PlainSessionKey {
 ///
 /// Returns decrypted or derived session key
 /// and symmetric algorithm of the key.
-pub fn decrypt_session_key_with_password<F>(
+pub fn decrypt_session_key_with_password(
     packet: &SymKeyEncryptedSessionKey,
-    msg_pw: F,
-) -> Result<PlainSessionKey>
-where
-    F: FnOnce() -> String,
-{
+    msg_pw: &Password,
+) -> Result<PlainSessionKey> {
     debug!("decrypt session key with password");
 
     let packet_algorithm = packet.sym_algorithm();
@@ -87,7 +84,7 @@ where
 
     let key = packet
         .s2k()
-        .derive_key(&msg_pw(), packet_algorithm.key_size())?;
+        .derive_key(&msg_pw.read(), packet_algorithm.key_size())?;
 
     debug!("derived key: {}", hex::encode(&key));
     if packet.encrypted_key().is_empty() {

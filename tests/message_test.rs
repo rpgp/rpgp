@@ -358,9 +358,7 @@ fn msg_literal_signature() {
 fn binary_msg_password() {
     // encrypted README.md using gpg
     let message = Message::from_file("./tests/binary_password.gpg").unwrap();
-    let decrypted = message
-        .decrypt_with_password(|| "1234".to_string())
-        .unwrap();
+    let decrypted = message.decrypt_with_password(&"1234".into()).unwrap();
     let decompressed = decrypted.decompress().unwrap();
     let Message::Literal(l) = decompressed else {
         panic!("unexpected message: {:?}", decompressed);
@@ -399,7 +397,7 @@ fn binary_message_roundtrip_password_seipdv1() {
         CompressionAlgorithm::Uncompressed,
         s2k,
         SymmetricKeyAlgorithm::AES128,
-        || "hello world".to_string(),
+        &"hello world".into(),
     )
     .unwrap();
 
@@ -409,7 +407,7 @@ fn binary_message_roundtrip_password_seipdv1() {
     let message = Message::from_file(&encrypted_file).unwrap();
     dbg!(&message);
     let decrypted = message
-        .decrypt_with_password(|| "hello world".to_string())
+        .decrypt_with_password(&"hello world".into())
         .unwrap();
 
     let Message::Literal(l) = decrypted else {

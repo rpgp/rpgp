@@ -74,7 +74,7 @@ fn bench_message(c: &mut Criterion) {
                             &mut rng,
                             s2k.clone(),
                             SymmetricKeyAlgorithm::default(),
-                            || "pw".into(),
+                            &"pw".into(),
                         )
                         .unwrap();
 
@@ -100,16 +100,16 @@ fn bench_message(c: &mut Criterion) {
                         &mut rng,
                         s2k,
                         SymmetricKeyAlgorithm::default(),
-                        || "pw".into(),
+                        &"pw".into(),
                     )
                     .unwrap();
 
                 // sanity check
-                let res = message.decrypt_with_password(|| "pw".into()).unwrap();
+                let res = message.decrypt_with_password(&"pw".into()).unwrap();
                 assert_eq!(res.get_content().unwrap().unwrap(), bytes);
 
                 b.iter(|| {
-                    let res = message.decrypt_with_password(|| "pw".into()).unwrap();
+                    let res = message.decrypt_with_password(&"pw".into()).unwrap();
                     black_box(res);
                 });
             },

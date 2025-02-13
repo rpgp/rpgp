@@ -182,7 +182,7 @@ impl PlainSecretParams {
 
     pub fn encrypt(
         &self,
-        passphrase: &str,
+        passphrase: &[u8],
         s2k_params: S2kParams,
         pub_key: &(impl PublicKeyTrait + Serialize),
         secret_tag: Option<Tag>,

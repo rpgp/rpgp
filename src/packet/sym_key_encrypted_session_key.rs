@@ -12,7 +12,7 @@ use crate::errors::{Error, Result};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{SkeskVersion, StringToKey, Tag};
+use crate::types::{Password, SkeskVersion, StringToKey, Tag};
 use crate::PlainSessionKey;
 
 #[cfg(test)]
@@ -251,15 +251,12 @@ impl SymKeyEncryptedSessionKey {
     /// Encrypt a session key to a password as a Version 4 Symmetric Key Encrypted Session Key Packet
     ///
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-4-symmetric-key-enc>
-    pub fn encrypt_v4<F>(
-        msg_pw: F,
+    pub fn encrypt_v4(
+        msg_pw: &Password,
         session_key: &[u8],
         s2k: StringToKey,
         alg: SymmetricKeyAlgorithm,
-    ) -> Result<Self>
-    where
-        F: FnOnce() -> String + Clone,
-    {
+    ) -> Result<Self> {
         ensure!(
             s2k.uses_salt(),
             "Can not use an s2k algorithm without a salt: {:?}",
@@ -274,7 +271,7 @@ impl SymKeyEncryptedSessionKey {
             s2k
         );
 
-        let key = s2k.derive_key(&msg_pw(), alg.key_size())?;
+        let key = s2k.derive_key(&msg_pw.read(), alg.key_size())?;
 
         let mut private_key = Vec::with_capacity(session_key.len());
         private_key.push(u8::from(alg));
@@ -298,17 +295,14 @@ impl SymKeyEncryptedSessionKey {
     /// Encrypt a session key to a password as a Version 6 Symmetric Key Encrypted Session Key Packet
     ///
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-6-symmetric-key-enc>
-    pub fn encrypt_v6<F, R: CryptoRng + Rng>(
+    pub fn encrypt_v6<R: CryptoRng + Rng>(
         mut rng: R,
-        msg_pw: F,
+        msg_pw: &Password,
         session_key: &[u8],
         s2k: StringToKey,
         sym_algorithm: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-    ) -> Result<Self>
-    where
-        F: FnOnce() -> String + Clone,
-    {
+    ) -> Result<Self> {
         ensure!(
             s2k.uses_salt(),
             "Can not use an s2k algorithm without a salt: {:?}",
@@ -324,7 +318,7 @@ impl SymKeyEncryptedSessionKey {
         );
 
         // Initial key material is the s2k derived key.
-        let ikm = s2k.derive_key(&msg_pw(), sym_algorithm.key_size())?;
+        let ikm = s2k.derive_key(&msg_pw.read(), sym_algorithm.key_size())?;
         // No salt is used
         let salt = None;
 
@@ -685,7 +679,7 @@ mod tests {
             sym_alg in supported_sym_alg_gen(),
             s2k in s2k_with_salt_gen()
         ) -> SymKeyEncryptedSessionKey {
-            SymKeyEncryptedSessionKey::encrypt_v4(|| pw, &session_key, s2k, sym_alg)
+            SymKeyEncryptedSessionKey::encrypt_v4(&pw.into(), &session_key, s2k, sym_alg)
             .unwrap()
         }
     }
@@ -701,7 +695,7 @@ mod tests {
             let mut rng = ChaCha8Rng::seed_from_u64(0);
             SymKeyEncryptedSessionKey::encrypt_v6(
                 &mut rng,
-                || pw,
+                &pw.into(),
                 &session_key,
                 s2k,
                 sym_alg,

@@ -10,19 +10,19 @@ use super::{Fingerprint, KeyDetails};
 /// Wraps around a callback to unlock keys.
 #[derive(derive_more::Debug)]
 pub enum Password {
-    Dynamic(#[debug("Box<Fn>")] Box<dyn Fn() -> Zeroizing<String>>),
-    Static(#[debug("***")] Zeroizing<String>),
+    Dynamic(#[debug("Box<Fn>")] Box<dyn Fn() -> Zeroizing<Vec<u8>>>),
+    Static(#[debug("***")] Zeroizing<Vec<u8>>),
 }
 
 impl From<String> for Password {
     fn from(value: String) -> Self {
-        Self::Static(value.into())
+        Self::Static(value.as_bytes().to_vec().into())
     }
 }
 
 impl From<&str> for Password {
     fn from(value: &str) -> Self {
-        Self::Static(value.to_string().into())
+        Self::Static(value.as_bytes().to_vec().into())
     }
 }
 
@@ -35,11 +35,11 @@ impl Default for Password {
 impl Password {
     /// Creates an empty password unlocker.
     pub fn empty() -> Self {
-        Self::Static(String::new().into())
+        Self::Static(Vec::new().into())
     }
 
     /// Executes the callback and returns the result.
-    pub fn read(&self) -> Zeroizing<String> {
+    pub fn read(&self) -> Zeroizing<Vec<u8>> {
         match self {
             Self::Dynamic(ref f) => f(),
             Self::Static(ref s) => s.clone(),
@@ -47,7 +47,7 @@ impl Password {
     }
 }
 
-impl<F: Fn() -> Zeroizing<String> + 'static> From<F> for Password {
+impl<F: Fn() -> Zeroizing<Vec<u8>> + 'static> From<F> for Password {
     fn from(value: F) -> Self {
         Self::Dynamic(Box::new(value))
     }

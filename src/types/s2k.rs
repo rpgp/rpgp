@@ -267,7 +267,7 @@ impl StringToKey {
     ///   function in an S2K KDF.
     /// - Implementations MUST NOT decrypt a secret using MD5, SHA-1, or RIPEMD-160 as a hash
     ///   function in an S2K KDF in a version 6 (or later) packet.
-    pub fn derive_key(&self, passphrase: &str, key_size: usize) -> Result<Vec<u8>> {
+    pub fn derive_key(&self, passphrase: &[u8], key_size: usize) -> Result<Vec<u8>> {
         let key = match self {
             Self::Simple { hash_alg, .. }
             | Self::Salted { hash_alg, .. }
@@ -288,11 +288,11 @@ impl StringToKey {
 
                     match self {
                         StringToKey::Simple { .. } => {
-                            hasher.update(passphrase.as_bytes());
+                            hasher.update(passphrase);
                         }
                         StringToKey::Salted { salt, .. } => {
                             hasher.update(salt);
-                            hasher.update(passphrase.as_bytes());
+                            hasher.update(passphrase);
                         }
                         StringToKey::IteratedAndSalted { salt, count, .. } => {
                             /// Converts a coded iteration count into a decoded count.
@@ -303,8 +303,7 @@ impl StringToKey {
                                     as usize
                             }
 
-                            let pw = passphrase.as_bytes();
-                            let data_size = salt.len() + pw.len();
+                            let data_size = salt.len() + passphrase.len();
                             // how many bytes are supposed to be hashed
                             let mut count = decode_count(*count);
 
@@ -315,7 +314,7 @@ impl StringToKey {
 
                             while count > data_size {
                                 hasher.update(salt);
-                                hasher.update(pw);
+                                hasher.update(passphrase);
                                 count -= data_size;
                             }
 
@@ -324,7 +323,7 @@ impl StringToKey {
                             } else {
                                 hasher.update(salt);
                                 count -= salt.len();
-                                hasher.update(&pw[..count]);
+                                hasher.update(&passphrase[..count]);
                             }
                         }
                         _ => unimplemented_err!("S2K {:?} is not available", self),
@@ -394,7 +393,7 @@ impl StringToKey {
 
                 let mut output_key_material = vec![0; key_size];
 
-                a2.hash_password_into(passphrase.as_bytes(), salt, &mut output_key_material)
+                a2.hash_password_into(passphrase, salt, &mut output_key_material)
                     .map_err(|e| Error::Message(format!("{:?}", e)))?;
 
                 output_key_material
@@ -579,7 +578,7 @@ mod tests {
                         let passphrase = Alphanumeric.sample_string(&mut rng, size);
 
                         let res = s2k
-                            .derive_key(&passphrase, sym_alg.key_size())
+                            .derive_key(passphrase.as_bytes(), sym_alg.key_size())
                             .expect("failed to derive key");
                         assert_eq!(res.len(), sym_alg.key_size());
                     }
@@ -603,7 +602,7 @@ mod tests {
             p: 4,
             m_enc: 21,
         };
-        let key = s2k.derive_key("password", 16).expect("argon derive");
+        let key = s2k.derive_key(b"password", 16).expect("argon derive");
         assert_eq!(
             key,
             [
@@ -622,7 +621,7 @@ mod tests {
             p: 4,
             m_enc: 21,
         };
-        let key = s2k.derive_key("password", 24).expect("argon derive");
+        let key = s2k.derive_key(b"password", 24).expect("argon derive");
         assert_eq!(
             key,
             [
@@ -641,7 +640,7 @@ mod tests {
             p: 4,
             m_enc: 21,
         };
-        let key = s2k.derive_key("password", 32).expect("argon derive");
+        let key = s2k.derive_key(b"password", 32).expect("argon derive");
         assert_eq!(
             key,
             [
@@ -678,7 +677,7 @@ mod tests {
 
             dbg!(&header);
             let decrypted = msg
-                .decrypt_with_password(|| "password".to_string())
+                .decrypt_with_password(&"password".into())
                 .expect("decrypt argon2 skesk");
 
             let Message::Literal(data) = decrypted else {
@@ -732,7 +731,7 @@ mod tests {
         let (msg, header) = Message::from_armor_single(raw_file).expect("parse");
 
         let decrypted = msg
-            .decrypt_with_password(|| "password".to_string())
+            .decrypt_with_password(&"password".into())
             .expect("decrypt");
 
         let Message::Literal(data) = decrypted else {

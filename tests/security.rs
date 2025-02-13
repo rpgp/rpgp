@@ -30,7 +30,7 @@ fn rpg_019_message_decrypt_with_password_panic1() {
     // expected bug behavior
     // thread '<unnamed>' panicked at library/alloc/src/raw_vec.rs:545:5:
     // capacity overflow
-    let _ = message.decrypt_with_password(|| "password does not matter".into());
+    let _ = message.decrypt_with_password(&"password does not matter".into());
 }
 
 /// RPG-019
@@ -48,7 +48,7 @@ fn rpg_019_message_decrypt_with_password_panic2() {
     // expected bug behavior
     // thread '[..]' panicked at [..]/src/crypto/sym.rs:265:52:
     // not implemented: CFB resync is not here
-    let _ = message.decrypt_with_password(|| "bogus_password".into());
+    let _ = message.decrypt_with_password(&"bogus_password".into());
 }
 
 /// RPG-016

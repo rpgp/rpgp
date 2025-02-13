@@ -215,16 +215,15 @@ impl<R: Read> Builder<R> {
     /// Encrypt to a password, version SEIPDv1.
     ///
     /// This adds a packet with this password.
-    pub fn encrypt_with_password_seipdv1<RAND, F>(
+    pub fn encrypt_with_password_seipdv1<RAND>(
         mut self,
         mut rng: RAND,
         s2k: StringToKey,
         new_sym_alg: SymmetricKeyAlgorithm,
-        msg_pw: F,
+        msg_pw: &Password,
     ) -> Result<Self>
     where
         RAND: Rng + CryptoRng,
-        F: FnOnce() -> String + Clone,
     {
         if let Some(ref mut encryption) = self.encryption {
             match encryption {
@@ -733,9 +732,12 @@ mod tests {
         let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
         let builder = Builder::from_file(&plaintext_file)
-            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
-                "hello world".to_string()
-            })
+            .encrypt_with_password_seipdv1(
+                &mut rng,
+                s2k,
+                SymmetricKeyAlgorithm::AES128,
+                &"hello world".into(),
+            )
             .unwrap();
 
         builder.to_file(&mut rng, &encrypted_file).unwrap();
@@ -745,7 +747,7 @@ mod tests {
         let message = Message::from_bytes(encrypted_file_data.into()).unwrap();
         dbg!(&message);
         let decrypted = message
-            .decrypt_with_password(|| "hello world".to_string())
+            .decrypt_with_password(&"hello world".into())
             .unwrap();
 
         let Message::Literal(l) = decrypted else {
@@ -771,9 +773,12 @@ mod tests {
         let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
         let builder = Builder::<DummyReader>::from_bytes("plaintext.txt", buf.clone())
-            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
-                "hello world".to_string()
-            })
+            .encrypt_with_password_seipdv1(
+                &mut rng,
+                s2k,
+                SymmetricKeyAlgorithm::AES128,
+                &"hello world".into(),
+            )
             .unwrap();
 
         let encrypted = builder.to_vec(&mut rng).unwrap();
@@ -782,7 +787,7 @@ mod tests {
         let message = Message::from_bytes(encrypted.into()).unwrap();
         dbg!(&message);
         let decrypted = message
-            .decrypt_with_password(|| "hello world".to_string())
+            .decrypt_with_password(&"hello world".into())
             .unwrap();
 
         let Message::Literal(l) = decrypted else {
@@ -814,9 +819,12 @@ mod tests {
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
-                    "hello world".to_string()
-                })
+                .encrypt_with_password_seipdv1(
+                    &mut rng,
+                    s2k,
+                    SymmetricKeyAlgorithm::AES128,
+                    &"hello world".into(),
+                )
                 .expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -824,7 +832,7 @@ mod tests {
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
             let decrypted = message
-                .decrypt_with_password(|| "hello world".to_string())
+                .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
 
             let Message::Literal(l) = decrypted else {
@@ -945,9 +953,12 @@ mod tests {
                 .unwrap()
                 .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
                 .expect("encryption")
-                .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
-                    "hello world".to_string()
-                })
+                .encrypt_with_password_seipdv1(
+                    &mut rng,
+                    s2k,
+                    SymmetricKeyAlgorithm::AES128,
+                    &"hello world".into(),
+                )
                 .expect("encryption sym");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -969,7 +980,7 @@ mod tests {
             // decrypt it - password
             {
                 let decrypted = message
-                    .decrypt_with_password(|| "hello world".to_string())
+                    .decrypt_with_password(&"hello world".into())
                     .expect("decryption sym");
 
                 let Message::Literal(l) = decrypted else {

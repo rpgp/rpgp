@@ -45,8 +45,9 @@ fn bench_s2k(c: &mut Criterion) {
                                 let passphrase = Alphanumeric.sample_string(&mut rng, size);
 
                                 b.iter(|| {
-                                    let res =
-                                        s2k.derive_key(&passphrase, sym_alg.key_size()).unwrap();
+                                    let res = s2k
+                                        .derive_key(passphrase.as_bytes(), sym_alg.key_size())
+                                        .unwrap();
                                     black_box(res);
                                 })
                             },

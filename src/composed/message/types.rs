@@ -51,18 +51,17 @@ pub enum Message {
 }
 
 /// Compresses and encrypts the provided file, into the new location.
-pub fn compress_encrypt_with_password_seipdv1<R, P, Q, F>(
+pub fn compress_encrypt_with_password_seipdv1<R, P, Q>(
     mut rng: R,
     in_path: P,
     out_path: Q,
     _compression: CompressionAlgorithm,
     s2k: StringToKey,
     sym_alg: SymmetricKeyAlgorithm,
-    msg_pw: F,
+    msg_pw: &Password,
 ) -> Result<()>
 where
     R: Rng + CryptoRng,
-    F: FnOnce() -> String + Clone,
     P: AsRef<Path>,
     Q: AsRef<Path>,
 {
@@ -568,16 +567,15 @@ impl Message {
     }
 
     /// Encrypt the message in SEIPDv1 format to a password `msg_pw`.
-    pub fn encrypt_with_password_seipdv1<R, F>(
+    pub fn encrypt_with_password_seipdv1<R>(
         &self,
         mut rng: R,
         s2k: StringToKey,
         alg: SymmetricKeyAlgorithm,
-        msg_pw: F,
+        msg_pw: &Password,
     ) -> Result<Self>
     where
         R: Rng + CryptoRng,
-        F: FnOnce() -> String + Clone,
     {
         // 1. Generate a session key.
         let session_key = alg.new_session_key(&mut rng);
@@ -595,18 +593,17 @@ impl Message {
     }
 
     /// Encrypt the message in SEIPDv2 format to a password `msg_pw`.
-    pub fn encrypt_with_password_seipdv2<R, F>(
+    pub fn encrypt_with_password_seipdv2<R>(
         &self,
         mut rng: R,
         s2k: StringToKey,
         alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: u8,
-        msg_pw: F,
+        msg_pw: &Password,
     ) -> Result<Self>
     where
         R: Rng + CryptoRng,
-        F: FnOnce() -> String + Clone,
     {
         // 1. Generate a session key.
         let session_key = alg.new_session_key(&mut rng);
@@ -940,10 +937,7 @@ impl Message {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt_with_password<F>(&self, msg_pw: F) -> Result<Message>
-    where
-        F: FnOnce() -> String + Clone,
-    {
+    pub fn decrypt_with_password(&self, msg_pw: &Password) -> Result<Message> {
         match self {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
@@ -1341,16 +1335,19 @@ mod tests {
         let s2k = StringToKey::new_default(&mut rng);
 
         let encrypted = compressed_msg
-            .encrypt_with_password_seipdv1(&mut rng, s2k, SymmetricKeyAlgorithm::AES128, || {
-                "secret".into()
-            })
+            .encrypt_with_password_seipdv1(
+                &mut rng,
+                s2k,
+                SymmetricKeyAlgorithm::AES128,
+                &"secret".into(),
+            )
             .unwrap();
 
         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
         // fs::write("./message-password.asc", &armored).unwrap();
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-        let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
+        let decrypted = parsed.decrypt_with_password(&"secret".into()).unwrap();
         assert_eq!(compressed_msg, decrypted);
     }
 
@@ -1364,7 +1361,7 @@ mod tests {
         let s2k = StringToKey::new_default(&mut rng);
 
         let encrypted = compressed_msg
-            .encrypt_with_password_seipdv2(&mut rng, s2k, sym, aead, 0x06, || "secret".into())
+            .encrypt_with_password_seipdv2(&mut rng, s2k, sym, aead, 0x06, &"secret".into())
             .unwrap();
 
         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
@@ -1373,7 +1370,7 @@ mod tests {
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-        let decrypted = parsed.decrypt_with_password(|| "secret".into()).unwrap();
+        let decrypted = parsed.decrypt_with_password(&"secret".into()).unwrap();
         assert_eq!(compressed_msg, decrypted);
     }
 
@@ -1464,7 +1461,7 @@ mod tests {
         //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
         // where "48656c6c6f20776f726c6421" is an encoded "Hello world!" string.
         assert!(msg
-            .decrypt_with_password(|| "foobarbaz".into())
+            .decrypt_with_password(&"foobarbaz".into())
             .err()
             .unwrap()
             .to_string()
