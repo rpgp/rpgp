@@ -1,5 +1,3 @@
-use std::io;
-
 use chrono::SubsecRound;
 use rand::{CryptoRng, Rng};
 
@@ -8,6 +6,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
+use crate::ser::Serialize;
 use crate::types::PkeskBytes;
 use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
@@ -41,15 +40,11 @@ impl PublicKey {
         }
     }
 
-    pub fn sign<R, F>(
-        self,
-        mut rng: R,
-        sec_key: &impl SecretKeyTrait,
-        key_pw: F,
-    ) -> Result<SignedPublicKey>
+    pub fn sign<R, F, K>(self, mut rng: R, sec_key: &K, key_pw: F) -> Result<SignedPublicKey>
     where
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
+        K: SecretKeyTrait + Serialize,
     {
         let primary_key = self.primary_key;
         let details = self.details.sign(&mut rng, sec_key, key_pw.clone())?;
@@ -64,6 +59,15 @@ impl PublicKey {
             details,
             public_subkeys,
         })
+    }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.primary_key.encrypt(rng, plain, typ)
     }
 }
 
@@ -92,19 +96,6 @@ impl PublicKeyTrait for PublicKey {
         self.primary_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.primary_key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.primary_key.serialize_for_hashing(writer)
-    }
-
     fn public_params(&self) -> &PublicParams {
         self.primary_key.public_params()
     }
@@ -123,15 +114,11 @@ impl PublicSubkey {
         PublicSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F>(
-        self,
-        mut rng: R,
-        sec_key: &impl SecretKeyTrait,
-        key_pw: F,
-    ) -> Result<SignedPublicSubKey>
+    pub fn sign<R, F, K>(self, mut rng: R, sec_key: &K, key_pw: F) -> Result<SignedPublicSubKey>
     where
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
+        K: SecretKeyTrait + Serialize,
     {
         let key = self.key;
         let hashed_subpackets = vec![
@@ -166,6 +153,15 @@ impl PublicSubkey {
 
         Ok(SignedPublicSubKey { key, signatures })
     }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.key.encrypt(rng, plain, typ)
+    }
 }
 
 impl PublicKeyTrait for PublicSubkey {
@@ -192,19 +188,6 @@ impl PublicKeyTrait for PublicSubkey {
         sig: &SignatureBytes,
     ) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

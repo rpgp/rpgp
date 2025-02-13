@@ -74,7 +74,10 @@ impl SignedKeyDetails {
             .cloned()
     }
 
-    fn verify_users(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_users<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for user in &self.users {
             user.verify(key)?;
         }
@@ -82,7 +85,10 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_attributes(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_attributes<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for attr in &self.user_attributes {
             attr.verify(key)?;
         }
@@ -90,7 +96,10 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_revocation_signatures(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_revocation_signatures<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for sig in &self.revocation_signatures {
             sig.verify_key(key)?;
         }
@@ -98,7 +107,10 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_direct_signatures(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_direct_signatures<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for sig in &self.direct_signatures {
             sig.verify_key(key)?;
         }
@@ -106,10 +118,17 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
+        println!("users");
         self.verify_users(key)?;
+        println!("attrs");
         self.verify_attributes(key)?;
+        println!("revocation");
         self.verify_revocation_signatures(key)?;
+        println!("direct");
         self.verify_direct_signatures(key)?;
 
         Ok(())

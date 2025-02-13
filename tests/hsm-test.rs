@@ -8,11 +8,10 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
-use pgp::types::{EcdhPublicParams, EskType, Fingerprint, PkeskBytes, SignatureBytes};
+use pgp::types::{EcdhPublicParams, Fingerprint, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
 use pgp::{packet, Deserializable, Esk};
 use pgp::{Message, SignedPublicKey, SignedSecretKey};
-use rand::{CryptoRng, Rng};
 
 #[derive(Debug, Clone)]
 pub struct FakeHsm {
@@ -60,19 +59,6 @@ impl PublicKeyTrait for FakeHsm {
         sig: &SignatureBytes,
     ) -> pgp::errors::Result<()> {
         self.public_key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> pgp::errors::Result<PkeskBytes> {
-        self.public_key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {
-        self.public_key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use bitfields::bitfield;
-use byteorder::{BigEndian, ByteOrder};
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
 use log::debug;
@@ -313,23 +313,25 @@ impl Signature {
     }
 
     /// Verifies a certification signature type (for self-signatures).
-    pub fn verify_certification(
-        &self,
-        key: &impl PublicKeyTrait,
-        tag: Tag,
-        id: &impl Serialize,
-    ) -> Result<()> {
+    pub fn verify_certification<P>(&self, key: &P, tag: Tag, id: &impl Serialize) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         self.verify_third_party_certification(&key, &key, tag, id)
     }
 
     /// Verifies a certification signature type (for third-party signatures).
-    pub fn verify_third_party_certification(
+    pub fn verify_third_party_certification<P, K>(
         &self,
-        signee: &impl PublicKeyTrait,
-        signer: &impl PublicKeyTrait,
+        signee: &P,
+        signer: &K,
         tag: Tag,
         id: &impl Serialize,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         let key_id = signee.key_id();
         debug!("verifying certification {:?} {:#?}", key_id, self);
 
@@ -350,7 +352,7 @@ impl Signature {
         // the key of the signee
         {
             // TODO: this is different for V5
-            signee.serialize_for_hashing(&mut hasher)?;
+            serialize_for_hashing(signee, &mut hasher)?;
         }
 
         // the packet content
@@ -401,22 +403,22 @@ impl Signature {
     /// Verifies a key binding (which binds a subkey to the primary key).
     ///
     /// "Subkey Binding Signature (type ID 0x18)"
-    pub fn verify_key_binding(
-        &self,
-        signing_key: &impl PublicKeyTrait,
-        key: &impl PublicKeyTrait,
-    ) -> Result<()> {
+    pub fn verify_key_binding<P, K>(&self, signing_key: &P, key: &K) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         self.verify_key_binding_internal(signing_key, key, false)
     }
 
     /// Verifies a primary key binding signature, or "back signature" (which links the primary to a signing subkey).
     ///
     /// "Primary Key Binding Signature (type ID 0x19)"
-    pub fn verify_backwards_key_binding(
-        &self,
-        signing_key: &impl PublicKeyTrait,
-        key: &impl PublicKeyTrait,
-    ) -> Result<()> {
+    pub fn verify_backwards_key_binding<P, K>(&self, signing_key: &P, key: &K) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         self.verify_key_binding_internal(signing_key, key, true)
     }
 
@@ -424,12 +426,11 @@ impl Signature {
     ///
     /// - when backsig is false: verify a "Subkey Binding Signature (type ID 0x18)"
     /// - when backsig is true: verify a "Primary Key Binding Signature (type ID 0x19)"
-    fn verify_key_binding_internal(
-        &self,
-        signer: &impl PublicKeyTrait,
-        signee: &impl PublicKeyTrait,
-        backsig: bool,
-    ) -> Result<()> {
+    fn verify_key_binding_internal<P, K>(&self, signer: &P, signee: &K, backsig: bool) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         debug!(
             "verifying key binding: {:#?} - {:#?} - {:#?} (backsig: {})",
             self, signer, signee, backsig
@@ -450,17 +451,17 @@ impl Signature {
         // First key to hash
         {
             if !backsig {
-                signer.serialize_for_hashing(&mut hasher)?; // primary
+                serialize_for_hashing(signer, &mut hasher)?; // primary
             } else {
-                signee.serialize_for_hashing(&mut hasher)?; // primary
+                serialize_for_hashing(signee, &mut hasher)?; // primary
             }
         }
         // Second key to hash
         {
             if !backsig {
-                signee.serialize_for_hashing(&mut hasher)?; // subkey
+                serialize_for_hashing(signee, &mut hasher)?; // subkey
             } else {
-                signer.serialize_for_hashing(&mut hasher)?; // subkey
+                serialize_for_hashing(signer, &mut hasher)?; // subkey
             }
         }
 
@@ -478,7 +479,10 @@ impl Signature {
     }
 
     /// Verifies a direct key signature or a revocation.
-    pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify_key<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         debug!("verifying key (revocation): {:#?} - {:#?}", self, key);
 
         Self::check_signature_key_version_alignment(&key, &self.config)?;
@@ -495,7 +499,7 @@ impl Signature {
             hasher.update(salt.as_ref())
         }
 
-        key.serialize_for_hashing(&mut hasher)?;
+        serialize_for_hashing(key, &mut hasher)?;
 
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
@@ -929,6 +933,39 @@ impl PacketTrait for Signature {
     fn packet_header(&self) -> &PacketHeader {
         &self.packet_header
     }
+}
+
+pub(super) fn serialize_for_hashing<K: PublicKeyTrait + Serialize>(
+    key: &K,
+    writer: &mut impl std::io::Write,
+) -> Result<()> {
+    let key_len = key.write_len();
+
+    // old style packet header for the key
+    match key.version() {
+        KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 => {
+            // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
+            // followed by a two-octet length of the key, and then the body of the key packet.
+            writer.write_u8(0x99)?;
+            writer.write_u16::<BigEndian>(key_len.try_into()?)?;
+        }
+
+        KeyVersion::V6 => {
+            // When a v6 signature is made over a key, the hash data starts with the salt
+            // [NOTE: the salt is hashed in packet/signature/config.rs],
+
+            // then octet 0x9B, followed by a four-octet length of the key,
+            // and then the body of the key packet.
+            writer.write_u8(0x9b)?;
+            writer.write_u32::<BigEndian>(key_len.try_into()?)?;
+        }
+
+        v => unimplemented_err!("key version {:?}", v),
+    }
+
+    key.to_writer(writer)?;
+
+    Ok(())
 }
 
 #[cfg(test)]

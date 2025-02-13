@@ -76,16 +76,21 @@ impl PublicKey {
         })
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
-        &self,
-        rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
-    ) -> Result<Signature>
+    pub fn sign<R: CryptoRng + Rng, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         self.inner.sign(rng, key, key_pw, SignatureType::KeyBinding)
+    }
+
+    pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.inner, rng, plain, typ)
     }
 }
 
@@ -134,17 +139,22 @@ impl PublicSubkey {
         })
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
-        &self,
-        rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
-    ) -> Result<Signature>
+    pub fn sign<R: CryptoRng + Rng, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         self.inner
             .sign(rng, key, key_pw, SignatureType::SubkeyBinding)
+    }
+
+    pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.inner, rng, plain, typ)
     }
 }
 
@@ -266,15 +276,16 @@ impl PubKeyInner {
         sum
     }
 
-    fn sign<R: CryptoRng + Rng, F>(
+    fn sign<R: CryptoRng + Rng, F, K>(
         &self,
         mut rng: R,
-        key: &impl SecretKeyTrait,
+        key: &K,
         key_pw: F,
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         use chrono::SubsecRound;
 
@@ -292,6 +303,93 @@ impl PubKeyInner {
         config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
         config.sign_key(key, key_pw, &self)
+    }
+}
+
+pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
+    key: &K,
+    mut rng: R,
+    plain: &[u8],
+    typ: EskType,
+) -> Result<PkeskBytes> {
+    match key.public_params() {
+        PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
+        PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
+        PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
+        PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
+        PublicParams::ECDH(ref params) => match params {
+            EcdhPublicParams::Unsupported { ref curve, .. } => {
+                unsupported_err!("ECDH over curve {:?} is unsupported", curve)
+            }
+            _ => {
+                if key.version() == KeyVersion::V6 {
+                    // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
+                    // listed curve that announces a different KDF or KEK parameter.
+                    //
+                    // (See https://www.rfoc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
+                    let curve = params.curve();
+                    match params {
+                        EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P256 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P521 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
+                            if curve.hash_algo()? != *hash || curve.sym_algo()? != *alg_sym {
+                                bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}", curve, hash, alg_sym);
+                            }
+                        }
+                        _ => unsupported_err!("{:?} for ECDH", params),
+                    }
+                }
+
+                crypto::ecdh::encrypt(rng, params, key.fingerprint().as_bytes(), plain)
+            }
+        },
+        PublicParams::X25519(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, &params.key, plain)?;
+
+            Ok(PkeskBytes::X25519 {
+                ephemeral,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        #[cfg(feature = "unstable-curve448")]
+        PublicParams::X448(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, params, plain)?;
+
+            Ok(PkeskBytes::X448 {
+                ephemeral,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
+        PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
+        PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }
 }
 
@@ -558,126 +656,6 @@ impl PublicKeyTrait for PubKeyInner {
         }
     }
 
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        mut rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        match self.public_params {
-            PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
-            PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
-            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
-            PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
-            PublicParams::ECDH(ref params) => match params {
-                EcdhPublicParams::Unsupported { ref curve, .. } => {
-                    unsupported_err!("ECDH over curve {:?} is unsupported", curve)
-                }
-                _ => {
-                    if self.version() == KeyVersion::V6 {
-                        // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
-                        // listed curve that announces a different KDF or KEK parameter.
-                        //
-                        // (See https://www.rfoc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
-                        let curve = params.curve();
-                        match params {
-                            EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
-                            | EcdhPublicParams::P256 { hash, alg_sym, .. }
-                            | EcdhPublicParams::P521 { hash, alg_sym, .. }
-                            | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
-                                if curve.hash_algo()? != *hash || curve.sym_algo()? != *alg_sym {
-                                    bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}", curve, hash, alg_sym);
-                                }
-                            }
-                            _ => unsupported_err!("{:?} for ECDH", params),
-                        }
-                    }
-
-                    crypto::ecdh::encrypt(rng, params, self.fingerprint().as_bytes(), plain)
-                }
-            },
-            PublicParams::X25519(ref params) => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
-
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
-
-                let (ephemeral, session_key) =
-                    crypto::x25519::encrypt(&mut rng, &params.key, plain)?;
-
-                Ok(PkeskBytes::X25519 {
-                    ephemeral,
-                    session_key: session_key.into(),
-                    sym_alg,
-                })
-            }
-            #[cfg(feature = "unstable-curve448")]
-            PublicParams::X448(ref params) => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
-
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
-
-                let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, params, plain)?;
-
-                Ok(PkeskBytes::X448 {
-                    ephemeral,
-                    session_key: session_key.into(),
-                    sym_alg,
-                })
-            }
-            PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
-            PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
-            PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
-        }
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        use crate::ser::Serialize;
-
-        let key_len = self.write_len();
-
-        // old style packet header for the key
-        match self.version() {
-            KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 => {
-                // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
-                // followed by a two-octet length of the key, and then the body of the key packet.
-                writer.write_u8(0x99)?;
-                writer.write_u16::<BigEndian>(key_len.try_into()?)?;
-            }
-
-            KeyVersion::V6 => {
-                // When a v6 signature is made over a key, the hash data starts with the salt
-                // [NOTE: the salt is hashed in packet/signature/config.rs],
-
-                // then octet 0x9B, followed by a four-octet length of the key,
-                // and then the body of the key packet.
-                writer.write_u8(0x9b)?;
-                writer.write_u32::<BigEndian>(key_len.try_into()?)?;
-            }
-
-            v => unimplemented_err!("key version {:?}", v),
-        }
-
-        self.to_writer(writer)?;
-
-        Ok(())
-    }
-
     fn public_params(&self) -> &PublicParams {
         &self.public_params
     }
@@ -699,19 +677,6 @@ impl PublicKeyTrait for PublicKey {
         sig: &SignatureBytes,
     ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.inner, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.inner, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -751,19 +716,6 @@ impl PublicKeyTrait for PublicSubkey {
         sig: &SignatureBytes,
     ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.inner, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.inner, writer)
     }
 
     fn public_params(&self) -> &PublicParams {

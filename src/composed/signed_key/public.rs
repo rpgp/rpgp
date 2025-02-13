@@ -162,6 +162,15 @@ impl SignedPublicKey {
                 .collect(),
         )
     }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.primary_key.encrypt(rng, plain, typ)
+    }
 }
 
 impl PublicKeyTrait for SignedPublicKey {
@@ -172,19 +181,6 @@ impl PublicKeyTrait for SignedPublicKey {
         sig: &SignatureBytes,
     ) -> Result<()> {
         self.primary_key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.primary_key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.primary_key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -263,7 +259,10 @@ impl SignedPublicSubKey {
         SignedPublicSubKey { key, signatures }
     }
 
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
         for sig in &self.signatures {
             sig.verify_key_binding(key, &self.key)?;
@@ -281,6 +280,15 @@ impl SignedPublicSubKey {
 
         PublicSubkey::new(self.key.clone(), keyflags)
     }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.key.encrypt(rng, plain, typ)
+    }
 }
 
 impl PublicKeyTrait for SignedPublicSubKey {
@@ -291,19 +299,6 @@ impl PublicKeyTrait for SignedPublicSubKey {
         sig: &SignatureBytes,
     ) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

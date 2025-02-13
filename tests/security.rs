@@ -1,8 +1,5 @@
 use bytes::Bytes;
-use pgp::{
-    types::{PublicKeyTrait, SecretKeyTrait},
-    Deserializable, Message,
-};
+use pgp::{types::SecretKeyTrait, Deserializable, Message};
 
 /// RPG-022
 #[test]

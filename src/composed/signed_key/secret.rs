@@ -116,7 +116,7 @@ impl SignedSecretKey {
 
     fn verify_public_subkeys(&self) -> Result<()> {
         for subkey in &self.public_subkeys {
-            subkey.verify(&self.primary_key)?;
+            subkey.verify(&self.primary_key.public_key())?;
         }
 
         Ok(())
@@ -124,15 +124,18 @@ impl SignedSecretKey {
 
     fn verify_secret_subkeys(&self) -> Result<()> {
         for subkey in &self.secret_subkeys {
-            subkey.verify(&self.primary_key)?;
+            subkey.verify(&self.primary_key.public_key())?;
         }
 
         Ok(())
     }
 
     pub fn verify(&self) -> Result<()> {
-        self.details.verify(&self.primary_key)?;
+        println!("details");
+        self.details.verify(&self.primary_key.public_key())?;
+        println!("pub");
         self.verify_public_subkeys()?;
+        println!("secret");
         self.verify_secret_subkeys()?;
 
         Ok(())
@@ -163,6 +166,15 @@ impl SignedSecretKey {
     pub fn to_armored_string(&self, opts: ArmorOptions<'_>) -> Result<String> {
         let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
         Ok(res)
+    }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.primary_key.encrypt(rng, plain, typ)
     }
 }
 
@@ -239,20 +251,9 @@ impl PublicKeyTrait for SignedSecretKey {
         data: &[u8],
         sig: &SignatureBytes,
     ) -> Result<()> {
-        self.primary_key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.primary_key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.primary_key.serialize_for_hashing(writer)
+        self.primary_key
+            .public_key()
+            .verify_signature(hash, data, sig)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -312,14 +313,26 @@ impl SignedSecretSubKey {
         SignedSecretSubKey { key, signatures }
     }
 
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
         for sig in &self.signatures {
-            sig.verify_key_binding(key, &self.key)?;
+            sig.verify_key_binding(key, &self.key.public_key())?;
         }
 
         Ok(())
+    }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.key.encrypt(rng, plain, typ)
     }
 }
 
@@ -384,20 +397,7 @@ impl PublicKeyTrait for SignedSecretSubKey {
         data: &[u8],
         sig: &SignatureBytes,
     ) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.serialize_for_hashing(writer)
+        self.key.public_key().verify_signature(hash, data, sig)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -487,7 +487,7 @@ k0mXubZvyl4GBg==
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(tsk))?;
 
-        eprintln!("ssk: {:#02x?}", ssk);
+        // eprintln!("ssk: {:#02x?}", ssk);
 
         ssk.verify()?;
 

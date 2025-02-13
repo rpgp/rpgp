@@ -160,7 +160,7 @@ impl PublicKeyEncryptedSessionKey {
         let data =
             Self::prepare_session_key_for_encryption(Some(alg), session_key, pkey.public_params());
 
-        let values = pkey.encrypt(rng, &data, EskType::V3_4)?;
+        let values = crate::packet::key::encrypt(pkey, rng, &data, EskType::V3_4)?;
 
         let id = pkey.key_id();
         let len = write_len_v3(&id, &values);
@@ -190,7 +190,7 @@ impl PublicKeyEncryptedSessionKey {
         let data =
             Self::prepare_session_key_for_encryption(None, session_key, pkey.public_params());
 
-        let values = pkey.encrypt(rng, &data, EskType::V6)?;
+        let values = crate::packet::key::encrypt(pkey, rng, &data, EskType::V6)?;
         let fingerprint = Some(pkey.fingerprint());
 
         let len = write_len_v6(&values, &fingerprint);

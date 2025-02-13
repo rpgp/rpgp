@@ -9,6 +9,7 @@ use crate::{
         PacketHeader, PacketTrait, PublicKey, PublicSubkey, Signature, SignatureConfig,
         SignatureType, Subpacket, SubpacketData,
     },
+    ser::Serialize,
     types::{
         EddsaLegacyPublicParams, EskType, Fingerprint, KeyId, KeyVersion, MpiBytes, PkeskBytes,
         PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
@@ -16,7 +17,7 @@ use crate::{
     },
 };
 
-use super::public::PubKeyInner;
+use super::public::{encrypt, PubKeyInner};
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretKey(SecretKeyInner<PubKeyInner>);
@@ -117,14 +118,15 @@ impl SecretKey {
         self.0.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn sign<R: CryptoRng + Rng, F, K>(
         &self,
         mut rng: R,
-        key: &impl SecretKeyTrait,
+        key: &K,
         key_pw: F,
     ) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         self.0
             .sign(&mut rng, key, key_pw, SignatureType::KeyBinding)
@@ -167,14 +169,15 @@ impl SecretSubkey {
         self.0.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn sign<R: CryptoRng + Rng, F, K>(
         &self,
         mut rng: R,
-        key: &impl SecretKeyTrait,
+        key: &K,
         key_pw: F,
     ) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         self.0
             .sign(&mut rng, key, key_pw, SignatureType::SubkeyBinding)
@@ -190,15 +193,16 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
         self.secret_params.string_to_key_id() == 254
     }
 
-    fn sign<R: CryptoRng + Rng, F>(
+    fn sign<R: CryptoRng + Rng, F, K>(
         &self,
         mut rng: R,
-        key: &impl SecretKeyTrait,
+        key: &K,
         key_pw: F,
         sig_typ: SignatureType,
     ) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         use chrono::SubsecRound;
 
@@ -458,19 +462,6 @@ impl PublicKeyTrait for SecretKey {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
-    }
-
     fn public_params(&self) -> &PublicParams {
         PublicKeyTrait::public_params(&self.0)
     }
@@ -508,19 +499,6 @@ impl PublicKeyTrait for SecretSubkey {
         sig: &SignatureBytes,
     ) -> Result<()> {
         PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -562,18 +540,6 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
         self.details.verify_signature(hash, hashed, sig)
     }
 
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.details.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        self.details.serialize_for_hashing(writer)
-    }
     fn public_params(&self) -> &PublicParams {
         self.details.public_params()
     }
@@ -649,6 +615,15 @@ impl SecretKey {
     {
         self.0.set_password_with_s2k(password, s2k_params)
     }
+
+    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.0.details, rng, plain, typ)
+    }
 }
 
 impl SecretSubkey {
@@ -694,6 +669,14 @@ impl SecretSubkey {
         P: FnOnce() -> String,
     {
         self.0.set_password_with_s2k(password, s2k_params)
+    }
+    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.0.details, rng, plain, typ)
     }
 }
 

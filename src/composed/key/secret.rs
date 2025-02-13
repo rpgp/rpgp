@@ -5,6 +5,7 @@ use rand::Rng;
 use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
+use crate::ser::Serialize;
 use crate::types::{KeyVersion, SecretKeyTrait};
 
 /// User facing interface to work with a secret key.
@@ -69,15 +70,11 @@ impl SecretSubkey {
         SecretSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F>(
-        self,
-        mut rng: R,
-        sec_key: &impl SecretKeyTrait,
-        key_pw: F,
-    ) -> Result<SignedSecretSubKey>
+    pub fn sign<R, F, K>(self, mut rng: R, sec_key: &K, key_pw: F) -> Result<SignedSecretSubKey>
     where
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
+        K: SecretKeyTrait + Serialize,
     {
         let key = self.key;
 

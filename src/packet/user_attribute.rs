@@ -215,30 +215,28 @@ impl UserAttribute {
     }
 
     /// Create a self-signature
-    pub fn sign<R, F>(
-        &self,
-        rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
-    ) -> Result<SignedUserAttribute>
+    pub fn sign<R, F, P>(&self, rng: R, key: &P, key_pw: F) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
+        P: SecretKeyTrait + Serialize,
     {
         self.sign_third_party(rng, key, key_pw, key)
     }
 
     /// Create a third-party signature
-    pub fn sign_third_party<R, F>(
+    pub fn sign_third_party<R, F, P, K>(
         &self,
         mut rng: R,
-        signer: &impl SecretKeyTrait,
+        signer: &P,
         signer_pw: F,
-        signee: &impl PublicKeyTrait,
+        signee: &K,
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
+        P: SecretKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
     {
         let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             Utc::now().trunc_subsecs(0),

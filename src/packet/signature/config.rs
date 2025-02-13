@@ -8,6 +8,7 @@ use rand::{CryptoRng, Rng};
 use crate::crypto::hash::{HashAlgorithm, Hasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
+use crate::packet::types::serialize_for_hashing;
 use crate::packet::{
     Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
 };
@@ -191,30 +192,32 @@ impl SignatureConfig {
     }
 
     /// Create a certification self-signature.
-    pub fn sign_certification<F>(
+    pub fn sign_certification<F, K>(
         self,
-        key: &impl SecretKeyTrait,
+        key: &K,
         key_pw: F,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         self.sign_certification_third_party(key, key_pw, key, tag, id)
     }
 
     /// Create a certification third-party signature.
-    pub fn sign_certification_third_party<F>(
+    pub fn sign_certification_third_party<F, P>(
         self,
         signer: &impl SecretKeyTrait,
         signer_pw: F,
-        signee: &impl PublicKeyTrait,
+        signee: &P,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        P: PublicKeyTrait + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signer.version() == KeyVersion::V4)
@@ -236,7 +239,7 @@ impl SignatureConfig {
             hasher.update(salt.as_ref())
         }
 
-        signee.serialize_for_hashing(&mut hasher)?;
+        serialize_for_hashing(signee, &mut hasher)?;
 
         let mut packet_buf = Vec::new();
         id.to_writer(&mut packet_buf)?;
@@ -281,14 +284,11 @@ impl SignatureConfig {
     }
 
     /// Sign a key binding.
-    pub fn sign_key_binding<F>(
-        self,
-        signing_key: &impl SecretKeyTrait,
-        key_pw: F,
-        key: &impl PublicKeyTrait,
-    ) -> Result<Signature>
+    pub fn sign_key_binding<F, K, P>(self, signing_key: &K, key_pw: F, key: &P) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
+        P: PublicKeyTrait + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)
@@ -310,10 +310,10 @@ impl SignatureConfig {
         }
 
         // Signing Key
-        signing_key.serialize_for_hashing(&mut hasher)?;
+        serialize_for_hashing(signing_key, &mut hasher)?;
 
         // Key being bound
-        key.serialize_for_hashing(&mut hasher)?;
+        serialize_for_hashing(key, &mut hasher)?;
 
         let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
@@ -326,14 +326,11 @@ impl SignatureConfig {
     }
 
     /// Signs a direct key signature or a revocation.
-    pub fn sign_key<F>(
-        self,
-        signing_key: &impl SecretKeyTrait,
-        key_pw: F,
-        key: &impl PublicKeyTrait,
-    ) -> Result<Signature>
+    pub fn sign_key<F, K, P>(self, signing_key: &K, key_pw: F, key: &P) -> Result<Signature>
     where
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
+        P: PublicKeyTrait + Serialize,
     {
         ensure!(
             (self.version() == SignatureVersion::V4 && signing_key.version() == KeyVersion::V4)
@@ -351,7 +348,7 @@ impl SignatureConfig {
             hasher.update(salt.as_ref())
         }
 
-        key.serialize_for_hashing(&mut hasher)?;
+        serialize_for_hashing(key, &mut hasher)?;
 
         let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);

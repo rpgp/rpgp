@@ -50,25 +50,29 @@ impl UserId {
     }
 
     /// Create a self-signature.
-    pub fn sign<R, F>(&self, rng: R, key: &impl SecretKeyTrait, key_pw: F) -> Result<SignedUser>
+    pub fn sign<R, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
+        K::PublicKey: PublicKeyTrait + Serialize,
     {
-        self.sign_third_party(rng, key, key_pw, key)
+        self.sign_third_party(rng, key, key_pw, &key.public_key())
     }
 
     /// Create a third-party signature.
-    pub fn sign_third_party<R, F>(
+    pub fn sign_third_party<R, F, P, K>(
         &self,
         mut rng: R,
-        signer: &impl SecretKeyTrait,
+        signer: &P,
         signer_pw: F,
-        signee: &impl PublicKeyTrait,
+        signee: &K,
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
         F: FnOnce() -> String,
+        P: SecretKeyTrait,
+        K: PublicKeyTrait + Serialize,
     {
         let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             Utc::now().trunc_subsecs(0),

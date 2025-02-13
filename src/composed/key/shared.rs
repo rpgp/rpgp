@@ -12,6 +12,7 @@ use crate::packet::{
     KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData, UserAttribute,
     UserId,
 };
+use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, KeyVersion, RevocationKey, SecretKeyTrait};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -77,15 +78,11 @@ impl KeyDetails {
         }
     }
 
-    pub fn sign<R, F>(
-        self,
-        mut rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
-    ) -> Result<SignedKeyDetails>
+    pub fn sign<R, F, K>(self, mut rng: R, key: &K, key_pw: F) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,
         F: (FnOnce() -> String) + Clone,
+        K: SecretKeyTrait + Serialize,
     {
         let keyflags: SmallVec<[u8; 1]> = self.keyflags.into();
         let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
