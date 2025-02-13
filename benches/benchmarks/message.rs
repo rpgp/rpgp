@@ -5,7 +5,7 @@ use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 use pgp::composed::{Deserializable, Message, SignedSecretKey};
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::types::StringToKey;
+use pgp::types::{StringToKey, Unlocker};
 use pgp::KeyType;
 use rand::{thread_rng, RngCore};
 
@@ -47,7 +47,7 @@ fn bench_message(c: &mut Criterion) {
 
             black_box(
                 message
-                    .decrypt(|| "test".to_string(), &[&decrypt_key][..])
+                    .decrypt(&["test".into()], &[&decrypt_key][..])
                     .unwrap(),
             );
         });
@@ -160,7 +160,7 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, || "".into()).unwrap();
+                    let signed_key = key.sign(&mut rng, &Unlocker::empty()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes);
 
@@ -193,7 +193,7 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, || "".into()).unwrap();
+                    let signed_key = key.sign(&mut rng, &Unlocker::empty()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes)
                         .encrypt_to_keys_seipdv1(
@@ -204,11 +204,15 @@ fn bench_message(c: &mut Criterion) {
                         .unwrap();
 
                     // sanity check
-                    let (res, _) = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
+                    let (res, _) = message
+                        .decrypt(&[Unlocker::empty()], &[&signed_key])
+                        .unwrap();
                     assert_eq!(res.get_content().unwrap().unwrap(), bytes);
 
                     b.iter(|| {
-                        let res = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
+                        let res = message
+                            .decrypt(&[Unlocker::empty()], &[&signed_key])
+                            .unwrap();
                         black_box(res);
                     });
                 },

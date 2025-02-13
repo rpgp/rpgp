@@ -9,11 +9,11 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::ser::Serialize;
-use crate::types::PkeskBytes;
 use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
     SignatureBytes,
 };
+use crate::types::{PkeskBytes, Unlocker};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -42,27 +42,24 @@ impl PublicKey {
         }
     }
 
-    pub fn sign<R, F, K, P>(
+    pub fn sign<R, K, P>(
         self,
         mut rng: R,
         sec_key: &K,
         pub_key: &P,
-        key_pw: F,
+        key_pw: &Unlocker,
     ) -> Result<SignedPublicKey>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
         let primary_key = self.primary_key;
-        let details = self
-            .details
-            .sign(&mut rng, sec_key, pub_key, key_pw.clone())?;
+        let details = self.details.sign(&mut rng, sec_key, pub_key, key_pw)?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, sec_key, pub_key, key_pw.clone()))
+            .map(|k| k.sign(&mut rng, sec_key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedPublicKey {
@@ -95,16 +92,15 @@ impl PublicSubkey {
         PublicSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F, K, P>(
+    pub fn sign<R, K, P>(
         self,
         mut rng: R,
         sec_key: &K,
         pub_key: &P,
-        key_pw: F,
+        key_pw: &Unlocker,
     ) -> Result<SignedPublicSubKey>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {

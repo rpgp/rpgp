@@ -45,7 +45,7 @@ fn try_decrypt(keyfile: &str, msg_file: &str) {
 
     // load seipdv1 msg, decrypt
     let (message, _) = Message::from_armor_single(File::open(msg_file).unwrap()).expect("ok");
-    let (dec, _) = message.decrypt(String::default, &[&ssk]).expect("decrypt");
+    let (dec, _) = message.decrypt(&["".into()], &[&ssk]).expect("decrypt");
 
     let decrypted =
         String::from_utf8(dec.get_literal().expect("literal").data().to_vec()).expect("utf8");
@@ -109,7 +109,7 @@ fn rfc9580_seipdv1_roundtrip() {
             .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES256, &[enc_subkey])
             .expect("encrypt");
 
-        let (dec, _) = enc.decrypt(String::default, &[&ssk]).expect("decrypt");
+        let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
         let Message::Literal(lit) = dec else {
             panic!("expecting literal data");
         };
@@ -143,7 +143,7 @@ fn rfc9580_seipdv2_roundtrip() {
             )
             .expect("encrypt");
 
-        let (dec, _) = enc.decrypt(String::default, &[&ssk]).expect("decrypt");
+        let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
         let Message::Literal(lit) = dec else {
             panic!("expecting literal data");
         };
@@ -163,8 +163,7 @@ fn rfc9580_roundtrip_csf() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         // roundtrip sign+verify csf
-        let csf =
-            CleartextSignedMessage::sign(&mut rng, MSG, &*ssk, String::default).expect("sign");
+        let csf = CleartextSignedMessage::sign(&mut rng, MSG, &*ssk, &"".into()).expect("sign");
         csf.verify(&spk).expect("verify");
     }
 }
@@ -184,7 +183,7 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         // roundtrip sign+verify inline msg
         let signed = msg
-            .sign(&mut rng, &*ssk, String::default, HashAlgorithm::default())
+            .sign(&mut rng, &*ssk, &"".into(), HashAlgorithm::default())
             .expect("sign");
 
         signed.verify(&spk).expect("verify");

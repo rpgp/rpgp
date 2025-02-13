@@ -14,7 +14,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, KeyVersion, PublicKeyTrait, RevocationKey, SecretKeyTrait,
+    CompressionAlgorithm, KeyVersion, PublicKeyTrait, RevocationKey, SecretKeyTrait, Unlocker,
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -80,16 +80,15 @@ impl KeyDetails {
         }
     }
 
-    pub fn sign<R, F, K, P>(
+    pub fn sign<R, K, P>(
         self,
         mut rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: F,
+        key_pw: &Unlocker,
     ) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
@@ -146,7 +145,7 @@ impl KeyDetails {
             config.unhashed_subpackets =
                 vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
-            let sig = config.sign_certification(key, pub_key, key_pw.clone(), id.tag(), &id)?;
+            let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
 
             users.push(id.clone().into_signed(sig));
         }
@@ -198,8 +197,7 @@ impl KeyDetails {
                     config.hashed_subpackets = hashed_subpackets;
                     config.unhashed_subpackets = unhashed_subpackets;
 
-                    let sig =
-                        config.sign_certification(key, pub_key, key_pw.clone(), id.tag(), &id)?;
+                    let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
 
                     Ok(id.into_signed(sig))
                 })
@@ -209,7 +207,7 @@ impl KeyDetails {
         let user_attributes = self
             .user_attributes
             .into_iter()
-            .map(|u| u.sign(&mut rng, key, pub_key, key_pw.clone()))
+            .map(|u| u.sign(&mut rng, key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedKeyDetails {

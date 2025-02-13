@@ -13,7 +13,7 @@ use crate::{
     types::{
         EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
         PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
-        SignatureBytes, Tag,
+        SignatureBytes, Tag, Unlocker,
     },
 };
 
@@ -76,24 +76,22 @@ impl SecretKey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F, K, P>(
+    pub fn sign<R: CryptoRng + Rng, K, P>(
         &self,
         rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: F,
+        key_pw: Unlocker,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
         sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
     }
 
-    pub fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Unlocker, work: G) -> Result<T>
     where
-        F: FnOnce() -> String,
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
@@ -149,24 +147,22 @@ impl SecretSubkey {
         self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F, K, P>(
+    pub fn sign<R: CryptoRng + Rng, K, P>(
         &self,
         rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: F,
+        key_pw: Unlocker,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
         sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
-    pub fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Unlocker, work: G) -> Result<T>
     where
-        F: FnOnce() -> String,
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
@@ -185,15 +181,12 @@ impl SecretSubkey {
 }
 
 impl SecretKeyTrait for SecretKey {
-    fn create_signature<F>(
+    fn create_signature(
         &self,
-        key_pw: F,
+        key_pw: &Unlocker,
         hash: HashAlgorithm,
         data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
+    ) -> Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |pub_params, priv_key| {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
@@ -242,15 +235,12 @@ impl KeyDetails for SecretSubkey {
 }
 
 impl SecretKeyTrait for SecretSubkey {
-    fn create_signature<F>(
+    fn create_signature(
         &self,
-        key_pw: F,
+        key_pw: &Unlocker,
         hash: HashAlgorithm,
         data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
+    ) -> Result<SignatureBytes> {
         let mut signature: Option<SignatureBytes> = None;
         self.unlock(key_pw, |pub_params, priv_key| {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
@@ -316,10 +306,7 @@ impl SecretKey {
     /// If the Secret Key material in the packet is not locked, it is left unchanged.
     ///
     /// The current locking password for this key must be provided in `password`.
-    pub fn remove_password<P>(&mut self, password: P) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
+    pub fn remove_password(&mut self, password: &Unlocker) -> Result<()> {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
             let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
             self.secret_params = SecretParams::Plain(unlocked);
@@ -337,10 +324,9 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: R, password: &Unlocker) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
-        P: FnOnce() -> String,
     {
         let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
@@ -351,14 +337,11 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password_with_s2k<P>(
+    pub fn set_password_with_s2k(
         &mut self,
-        password: P,
+        password: &Unlocker,
         s2k_params: crate::types::S2kParams,
-    ) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
+    ) -> Result<()> {
         let plain = match &self.secret_params {
             SecretParams::Plain(plain) => plain,
             SecretParams::Encrypted(_) => {
@@ -367,7 +350,7 @@ impl SecretKey {
         };
 
         self.secret_params = SecretParams::Encrypted(plain.clone().encrypt(
-            &password(),
+            &password.read(),
             s2k_params,
             &self.details,
             Some(self.packet_header.tag()),
@@ -393,10 +376,7 @@ impl SecretSubkey {
     /// If the Secret Key material in the packet is not locked, it is left unchanged.
     ///
     /// The current locking password for this key must be provided in `password`.
-    pub fn remove_password<P>(&mut self, password: P) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
+    pub fn remove_password(&mut self, password: &Unlocker) -> Result<()> {
         if let SecretParams::Encrypted(enc) = &self.secret_params {
             let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
             self.secret_params = SecretParams::Plain(unlocked);
@@ -412,10 +392,9 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: R, password: &Unlocker) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
-        P: FnOnce() -> String,
     {
         let s2k = crate::types::S2kParams::new_default(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
@@ -426,14 +405,11 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password_with_s2k<P>(
+    pub fn set_password_with_s2k(
         &mut self,
-        password: P,
+        password: &Unlocker,
         s2k_params: crate::types::S2kParams,
-    ) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
+    ) -> Result<()> {
         let plain = match &self.secret_params {
             SecretParams::Plain(plain) => plain,
             SecretParams::Encrypted(_) => {
@@ -442,7 +418,7 @@ impl SecretSubkey {
         };
 
         self.secret_params = SecretParams::Encrypted(plain.clone().encrypt(
-            &password(),
+            &password.read(),
             s2k_params,
             &self.details,
             Some(self.packet_header.tag()),
@@ -550,15 +526,14 @@ fn create_signature(
     }
 }
 
-fn sign<R: CryptoRng + Rng, F, K, P>(
+fn sign<R: CryptoRng + Rng, K, P>(
     mut rng: R,
     key: &K,
-    key_pw: F,
+    key_pw: Unlocker,
     sig_typ: SignatureType,
     pub_key: &P,
 ) -> Result<Signature>
 where
-    F: FnOnce() -> String,
     K: SecretKeyTrait,
     P: PublicKeyTrait + Serialize,
 {
@@ -612,60 +587,56 @@ mod tests {
 
         alice_sec
             .set_password_with_s2k(
-                || "password".to_string(),
+                &"password".into(),
                 crate::types::S2kParams::new_default(&mut rng, KeyVersion::V4),
             )
             .unwrap();
 
         // signing with a wrong password should fail
         assert!(alice_sec
-            .create_signature(|| "wrong".to_string(), HashAlgorithm::default(), DATA)
+            .create_signature(&"wrong".into(), HashAlgorithm::default(), DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(|| "password".to_string(), HashAlgorithm::default(), DATA)
+            .create_signature(&"password".into(), HashAlgorithm::default(), DATA)
             .is_ok());
 
         // remove the password protection
-        alice_sec
-            .remove_password(|| "password".to_string())
-            .unwrap();
+        alice_sec.remove_password(&"password".into()).unwrap();
 
         // signing without a password should succeed now
         assert!(alice_sec
-            .create_signature(String::default, HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
             .is_ok());
 
         // set different password protection
-        alice_sec
-            .set_password(&mut rng, || "foo".to_string())
-            .unwrap();
+        alice_sec.set_password(&mut rng, &"foo".into()).unwrap();
 
         // signing without a password should fail now
         assert!(alice_sec
-            .create_signature(String::default, HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(|| "foo".to_string(), HashAlgorithm::default(), DATA)
+            .create_signature(&"foo".into(), HashAlgorithm::default(), DATA)
             .is_ok());
 
         // remove the password protection again
-        alice_sec.remove_password(|| "foo".to_string()).unwrap();
+        alice_sec.remove_password(&"foo".into()).unwrap();
 
         // set password protection with v6 s2k defaults (AEAD+Argon2)
         alice_sec
             .set_password_with_s2k(
-                || "bar".to_string(),
+                &"bar".into(),
                 S2kParams::new_default(&mut rng, KeyVersion::V6),
             )
             .unwrap();
 
         // signing with the right password should succeed
         alice_sec
-            .create_signature(|| "bar".to_string(), HashAlgorithm::default(), DATA)
+            .create_signature(&"bar".into(), HashAlgorithm::default(), DATA)
             .expect("failed to sign");
     }
 }

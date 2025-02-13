@@ -183,7 +183,7 @@ impl SecretKeyParams {
         let pub_key = crate::packet::PublicKey::from_inner(pub_key);
         let mut primary_key = packet::SecretKey::new(pub_key, secret_params);
         if let Some(passphrase) = passphrase {
-            primary_key.set_password_with_s2k(|| passphrase, s2k)?;
+            primary_key.set_password_with_s2k(&passphrase.into(), s2k)?;
         }
 
         let mut keyflags = KeyFlags::default();
@@ -235,7 +235,7 @@ impl SecretKeyParams {
                     let mut sub = packet::SecretSubkey::new(pub_key, secret_params);
 
                     if let Some(passphrase) = passphrase {
-                        sub.set_password_with_s2k(|| passphrase, s2k)?;
+                        sub.set_password_with_s2k(&passphrase.as_str().into(), s2k)?;
                     }
 
                     Ok(SecretSubkey::new(sub, keyflags))
@@ -461,10 +461,10 @@ mod tests {
             .expect("failed to generate secret key");
 
         let signed_key_enc = key_enc
-            .sign(&mut rng, || "hello".into())
+            .sign(&mut rng, &"hello".into())
             .expect("failed to sign key");
         let signed_key_plain = key_plain
-            .sign(&mut rng, || "".into())
+            .sign(&mut rng, &"".into())
             .expect("failed to sign key");
 
         let armor_enc = signed_key_enc
@@ -486,10 +486,10 @@ mod tests {
         signed_key2_plain.verify().expect("invalid key (plain)");
 
         signed_key2_enc
-            .unlock(|| "hello".into(), |_, _| Ok(()))
+            .unlock(&"hello".into(), |_, _| Ok(()))
             .expect("failed to unlock parsed key (enc)");
         signed_key2_plain
-            .unlock(|| "".into(), |_, _| Ok(()))
+            .unlock(&"".into(), |_, _| Ok(()))
             .expect("failed to unlock parsed key (plain)");
 
         assert_eq!(signed_key_plain, signed_key2_plain);
@@ -501,7 +501,7 @@ mod tests {
                 &mut rng,
                 &*signed_key_plain,
                 &*signed_key_plain.public_key(),
-                || "".into(),
+                &"".into(),
             )
             .expect("failed to sign public key");
 
@@ -578,9 +578,7 @@ mod tests {
             .generate(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key
-            .sign(&mut rng, || "".into())
-            .expect("failed to sign key");
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -597,9 +595,12 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &*signed_key, &*signed_key.public_key(), || {
-                "".into()
-            })
+            .sign(
+                &mut rng,
+                &*signed_key,
+                &*signed_key.public_key(),
+                &"".into(),
+            )
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -687,9 +688,7 @@ mod tests {
             .generate(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key
-            .sign(&mut rng, || "".into())
-            .expect("failed to sign key");
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -706,9 +705,12 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &*signed_key, &*signed_key.public_key(), || {
-                "".into()
-            })
+            .sign(
+                &mut rng,
+                &*signed_key,
+                &*signed_key.public_key(),
+                &"".into(),
+            )
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -771,9 +773,7 @@ mod tests {
             .generate(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key
-            .sign(&mut rng, || "".into())
-            .expect("failed to sign key");
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -794,9 +794,12 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &*signed_key, &*signed_key.public_key(), || {
-                "".into()
-            })
+            .sign(
+                &mut rng,
+                &*signed_key,
+                &*signed_key.public_key(),
+                &"".into(),
+            )
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");
@@ -924,9 +927,7 @@ mod tests {
             .generate(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key
-            .sign(&mut rng, || "".into())
-            .expect("failed to sign key");
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -943,9 +944,12 @@ mod tests {
         let public_key = signed_key.public_key();
 
         let public_signed_key = public_key
-            .sign(&mut rng, &*signed_key, &*signed_key.public_key(), || {
-                "".into()
-            })
+            .sign(
+                &mut rng,
+                &*signed_key,
+                &*signed_key.public_key(),
+                &"".into(),
+            )
             .expect("failed to sign public key");
 
         public_signed_key.verify().expect("invalid public key");

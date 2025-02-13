@@ -6,6 +6,7 @@ use rsa::traits::PublicKeyParts;
 use sha1_checked::{Digest, Sha1};
 
 use crate::ser::Serialize;
+use crate::types::Unlocker;
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -77,9 +78,13 @@ impl PublicKey {
         })
     }
 
-    pub fn sign<R: CryptoRng + Rng, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<Signature>
+    pub fn sign<R: CryptoRng + Rng, K>(
+        &self,
+        rng: R,
+        key: &K,
+        key_pw: Unlocker,
+    ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait + Serialize,
     {
         self.inner.sign(rng, key, key_pw, SignatureType::KeyBinding)
@@ -140,9 +145,13 @@ impl PublicSubkey {
         })
     }
 
-    pub fn sign<R: CryptoRng + Rng, F, K>(&self, rng: R, key: &K, key_pw: F) -> Result<Signature>
+    pub fn sign<R: CryptoRng + Rng, K>(
+        &self,
+        rng: R,
+        key: &K,
+        key_pw: Unlocker,
+    ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait + Serialize,
     {
         self.inner
@@ -277,15 +286,14 @@ impl PubKeyInner {
         sum
     }
 
-    fn sign<R: CryptoRng + Rng, F, K>(
+    fn sign<R: CryptoRng + Rng, K>(
         &self,
         mut rng: R,
         key: &K,
-        key_pw: F,
+        key_pw: Unlocker,
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait + Serialize,
     {
         use chrono::SubsecRound;

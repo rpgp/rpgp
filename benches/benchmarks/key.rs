@@ -5,6 +5,7 @@ use criterion::{black_box, criterion_group, Criterion};
 use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::ser::Serialize;
+use pgp::types::Unlocker;
 use rand::thread_rng;
 
 use super::build_key;
@@ -24,7 +25,7 @@ fn bench_key(c: &mut Criterion) {
 
     g.bench_function("rsa_parse_raw", |b| {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
-            .sign(&mut rng, || "".into())
+            .sign(&mut rng, &Unlocker::empty())
             .unwrap();
         let bytes: Bytes = key.to_bytes().unwrap().into();
 
@@ -33,7 +34,7 @@ fn bench_key(c: &mut Criterion) {
 
     g.bench_function("parse_armored_rsa", |b| {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048))
-            .sign(&mut rng, || "".into())
+            .sign(&mut rng, &Unlocker::empty())
             .unwrap();
         let bytes = key.to_armored_bytes(None.into()).unwrap();
 
@@ -42,7 +43,7 @@ fn bench_key(c: &mut Criterion) {
 
     g.bench_function("x25519_parse_armored", |b| {
         let key = build_key(KeyType::EdDSALegacy, KeyType::ECDH(ECCCurve::Curve25519))
-            .sign(&mut rng, || "".into())
+            .sign(&mut rng, &Unlocker::empty())
             .unwrap();
         let bytes = key.to_armored_bytes(None.into()).unwrap();
 
@@ -61,19 +62,19 @@ fn bench_key(c: &mut Criterion) {
     g.bench_function("x25519_self_sign", |b| {
         let key = build_key(KeyType::EdDSALegacy, KeyType::ECDH(ECCCurve::Curve25519));
 
-        b.iter(|| black_box(key.clone().sign(&mut rng, || "".into()).unwrap()))
+        b.iter(|| black_box(key.clone().sign(&mut rng, &Unlocker::empty()).unwrap()))
     });
 
     g.bench_function("rsa_2048_self_sign", |b| {
         let key = build_key(KeyType::Rsa(2048), KeyType::Rsa(2048));
 
-        b.iter(|| black_box(key.clone().sign(&mut rng, || "".into()).unwrap()))
+        b.iter(|| black_box(key.clone().sign(&mut rng, &Unlocker::empty()).unwrap()))
     });
 
     for curve in [ECCCurve::P256, ECCCurve::P384, ECCCurve::P521] {
         g.bench_function(format!("nistp{}_parse_armored", curve.nbits()), |b| {
             let key = build_key(KeyType::ECDSA(curve.clone()), KeyType::ECDH(curve.clone()))
-                .sign(&mut rng, || "".into())
+                .sign(&mut rng, &Unlocker::empty())
                 .unwrap();
             let bytes = key.to_armored_bytes(None.into()).unwrap();
 
@@ -92,7 +93,7 @@ fn bench_key(c: &mut Criterion) {
         g.bench_function(format!("nistp{}_self_sign", curve.nbits()), |b| {
             let key = build_key(KeyType::ECDSA(curve.clone()), KeyType::ECDH(curve.clone()));
 
-            b.iter(|| black_box(key.clone().sign(&mut rng, || "".into()).unwrap()))
+            b.iter(|| black_box(key.clone().sign(&mut rng, &Unlocker::empty()).unwrap()))
         });
     }
 

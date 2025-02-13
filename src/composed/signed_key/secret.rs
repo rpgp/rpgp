@@ -338,7 +338,7 @@ mod tests {
 
     use super::*;
     use crate::crypto::hash::HashAlgorithm;
-    use crate::types::{KeyVersion, S2kParams};
+    use crate::types::{KeyVersion, S2kParams, Unlocker};
     use crate::{composed::shared::Deserializable, Message};
 
     #[test]
@@ -374,7 +374,7 @@ k0mXubZvyl4GBg==
         let pri = ssk.primary_key;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let signed = msg.sign(&mut rng, &pri, String::default, HashAlgorithm::SHA2_256)?;
+        let signed = msg.sign(&mut rng, &pri, &Unlocker::empty(), HashAlgorithm::SHA2_256)?;
 
         signed.verify(&pri.public_key())?;
 
@@ -422,7 +422,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let msg = Message::Literal(lit).sign(
             &mut rng,
             &ssk.primary_key,
-            || ANNEX_A_5_PASSPHRASE.to_string(),
+            &ANNEX_A_5_PASSPHRASE.into(),
             HashAlgorithm::SHA2_256,
         )?;
 
@@ -446,35 +446,35 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let mut pri = ssk.primary_key;
 
         // remove passphrase
-        pri.remove_password(|| ANNEX_A_5_PASSPHRASE.to_string())?;
+        pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing without pw
         let msg = Message::Literal(lit.clone()).sign(
             &mut rng,
             &pri,
-            String::default,
+            &Unlocker::empty(),
             HashAlgorithm::SHA2_256,
         )?;
         msg.verify(pri.public_key())?;
 
         // set passphrase with default s2k
-        pri.set_password(&mut rng, || ANNEX_A_5_PASSPHRASE.to_string())?;
+        pri.set_password(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing with pw
         let msg = Message::Literal(lit.clone()).sign(
             &mut rng,
             &pri,
-            || ANNEX_A_5_PASSPHRASE.to_string(),
+            &ANNEX_A_5_PASSPHRASE.into(),
             HashAlgorithm::SHA2_256,
         )?;
         msg.verify(pri.public_key())?;
 
         // remove passphrase
-        pri.remove_password(|| ANNEX_A_5_PASSPHRASE.to_string())?;
+        pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
         // set passphrase with Cfb s2k (default for KeyVersion::V4)
         pri.set_password_with_s2k(
-            || ANNEX_A_5_PASSPHRASE.to_string(),
+            &ANNEX_A_5_PASSPHRASE.into(),
             S2kParams::new_default(&mut rng, KeyVersion::V4),
         )?;
 
@@ -482,7 +482,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let msg = Message::Literal(lit).sign(
             &mut rng,
             &pri,
-            || ANNEX_A_5_PASSPHRASE.to_string(),
+            &ANNEX_A_5_PASSPHRASE.into(),
             HashAlgorithm::SHA2_256,
         )?;
         msg.verify(pri.public_key())?;

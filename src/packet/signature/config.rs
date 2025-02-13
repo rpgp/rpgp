@@ -14,7 +14,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, SigningKey, Tag,
+    Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, SigningKey, Tag, Unlocker,
 };
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -167,9 +167,13 @@ impl SignatureConfig {
     }
 
     /// Sign the given data.
-    pub fn sign<F, R>(self, key: &impl SecretKeyTrait, key_pw: F, mut data: R) -> Result<Signature>
+    pub fn sign<R>(
+        self,
+        key: &impl SecretKeyTrait,
+        key_pw: &Unlocker,
+        mut data: R,
+    ) -> Result<Signature>
     where
-        F: FnOnce() -> String + 'static,
         R: Read,
     {
         let mut hasher = self.into_hasher()?;
@@ -192,16 +196,15 @@ impl SignatureConfig {
     }
 
     /// Create a certification self-signature.
-    pub fn sign_certification<F, K, P>(
+    pub fn sign_certification<K, P>(
         self,
         key: &K,
         pub_key: &P,
-        key_pw: F,
+        key_pw: &Unlocker,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
@@ -209,16 +212,15 @@ impl SignatureConfig {
     }
 
     /// Create a certification third-party signature.
-    pub fn sign_certification_third_party<F, P>(
+    pub fn sign_certification_third_party<P>(
         self,
         signer: &impl SecretKeyTrait,
-        signer_pw: F,
+        signer_pw: &Unlocker,
         signee: &P,
         tag: Tag,
         id: &impl Serialize,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         P: PublicKeyTrait + Serialize,
     {
         ensure!(
@@ -286,15 +288,14 @@ impl SignatureConfig {
     }
 
     /// Sign a key binding.
-    pub fn sign_key_binding<F, K, P, L>(
+    pub fn sign_key_binding<K, P, L>(
         self,
         signing_key: &K,
         signing_pub_key: &P,
-        key_pw: F,
+        key_pw: &Unlocker,
         key: &L,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
         L: PublicKeyTrait + Serialize,
@@ -335,9 +336,8 @@ impl SignatureConfig {
     }
 
     /// Signs a direct key signature or a revocation.
-    pub fn sign_key<F, K, P>(self, signing_key: &K, key_pw: F, key: &P) -> Result<Signature>
+    pub fn sign_key<K, P>(self, signing_key: &K, key_pw: Unlocker, key: &P) -> Result<Signature>
     where
-        F: FnOnce() -> String,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
@@ -364,7 +364,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finish()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
+        let signature = signing_key.create_signature(&key_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }
@@ -632,9 +632,8 @@ pub struct SignatureHasher {
 
 impl SignatureHasher {
     /// Finalizes the signature.
-    pub fn sign<F, K>(self, key: &K, key_pw: F) -> Result<Signature>
+    pub fn sign<K>(self, key: &K, key_pw: &Unlocker) -> Result<Signature>
     where
-        F: FnOnce() -> String + 'static,
         K: SigningKey,
     {
         let Self { config, mut hasher } = self;
@@ -658,7 +657,7 @@ impl SignatureHasher {
         let hash = &hasher.finish()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = key.create_signature(key_pw.into(), config.hash_alg, hash)?;
+        let signature = key.create_signature(key_pw, config.hash_alg, hash)?;
 
         Signature::from_config(config, signed_hash_value, signature)
     }

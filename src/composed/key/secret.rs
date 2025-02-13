@@ -6,7 +6,7 @@ use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSub
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use crate::ser::Serialize;
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
+use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, Unlocker};
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -38,41 +38,23 @@ impl SecretKey {
         }
     }
 
-    pub fn sign<R, F>(self, mut rng: R, key_pw: F) -> Result<SignedSecretKey>
+    pub fn sign<R>(self, mut rng: R, key_pw: &Unlocker) -> Result<SignedSecretKey>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
     {
         let primary_key = self.primary_key;
-        let details = self.details.sign(
-            &mut rng,
-            &primary_key,
-            primary_key.public_key(),
-            key_pw.clone(),
-        )?;
+        let details =
+            self.details
+                .sign(&mut rng, &primary_key, primary_key.public_key(), key_pw)?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| {
-                k.sign(
-                    &mut rng,
-                    &primary_key,
-                    primary_key.public_key(),
-                    key_pw.clone(),
-                )
-            })
+            .map(|k| k.sign(&mut rng, &primary_key, primary_key.public_key(), key_pw))
             .collect::<Result<Vec<_>>>()?;
         let secret_subkeys = self
             .secret_subkeys
             .into_iter()
-            .map(|k| {
-                k.sign(
-                    &mut rng,
-                    &primary_key,
-                    primary_key.public_key(),
-                    key_pw.clone(),
-                )
-            })
+            .map(|k| k.sign(&mut rng, &primary_key, primary_key.public_key(), key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedSecretKey {
@@ -89,16 +71,15 @@ impl SecretSubkey {
         SecretSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F, K, P>(
+    pub fn sign<R, K, P>(
         self,
         mut rng: R,
         sec_key: &K,
         pub_key: &P,
-        key_pw: F,
+        key_pw: &Unlocker,
     ) -> Result<SignedSecretSubKey>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {

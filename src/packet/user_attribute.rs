@@ -14,7 +14,9 @@ use crate::packet::{
 };
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag};
+use crate::types::{
+    KeyVersion, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag, Unlocker,
+};
 
 /// The type of a user attribute. Only `Image` is a known type currently
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive, derive_more::Display)]
@@ -215,16 +217,15 @@ impl UserAttribute {
     }
 
     /// Create a self-signature
-    pub fn sign<R, F, P, K>(
+    pub fn sign<R, P, K>(
         &self,
         rng: R,
         signer_sec_key: &P,
         signer_pub_key: &K,
-        key_pw: F,
+        key_pw: &Unlocker,
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
-        F: FnOnce() -> String,
         P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {
@@ -232,16 +233,15 @@ impl UserAttribute {
     }
 
     /// Create a third-party signature
-    pub fn sign_third_party<R, F, P, K>(
+    pub fn sign_third_party<R, P, K>(
         &self,
         mut rng: R,
         signer: &P,
-        signer_pw: F,
+        signer_pw: &Unlocker,
         signee: &K,
     ) -> Result<SignedUserAttribute>
     where
         R: CryptoRng + Rng,
-        F: FnOnce() -> String,
         P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {

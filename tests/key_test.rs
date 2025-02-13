@@ -309,43 +309,40 @@ fn test_parse_openpgp_sample_rsa_private() {
         hex::decode("2c46").expect("failed hex encoding")
     );
 
-    pkey.unlock(
-        || "".to_string(),
-        |_pub_params, unlocked_key| {
-            match unlocked_key {
-                PlainSecretParams::RSA(k) => {
-                    assert_eq!(k.d().bits(), 2044);
-                    assert_eq!(k.primes()[0].bits(), 1024);
-                    assert_eq!(k.primes()[1].bits(), 1024);
+    pkey.unlock(&"".into(), |_pub_params, unlocked_key| {
+        match unlocked_key {
+            PlainSecretParams::RSA(k) => {
+                assert_eq!(k.d().bits(), 2044);
+                assert_eq!(k.primes()[0].bits(), 1024);
+                assert_eq!(k.primes()[1].bits(), 1024);
 
-                    // test basic encrypt decrypt
-                    let plaintext = vec![2u8; 128];
-                    let mut rng = thread_rng();
+                // test basic encrypt decrypt
+                let plaintext = vec![2u8; 128];
+                let mut rng = thread_rng();
 
-                    let ciphertext = {
-                        // TODO: fix this in rust-rsa
-                        let k: &RsaPrivateKey = k;
-                        let k: RsaPrivateKey = k.clone();
-                        let pk: RsaPublicKey = k.into();
-                        pk.encrypt(
-                            &mut rng,
-                            rsa::pkcs1v15::Pkcs1v15Encrypt,
-                            plaintext.as_slice(),
-                        )
-                        .expect("failed to encrypt")
-                    };
-
+                let ciphertext = {
+                    // TODO: fix this in rust-rsa
                     let k: &RsaPrivateKey = k;
-                    let new_plaintext = k
-                        .decrypt(rsa::pkcs1v15::Pkcs1v15Encrypt, ciphertext.as_slice())
-                        .expect("failed to decrypt");
-                    assert_eq!(plaintext, new_plaintext);
-                }
-                _ => panic!("unexpected params type {unlocked_key:?}"),
+                    let k: RsaPrivateKey = k.clone();
+                    let pk: RsaPublicKey = k.into();
+                    pk.encrypt(
+                        &mut rng,
+                        rsa::pkcs1v15::Pkcs1v15Encrypt,
+                        plaintext.as_slice(),
+                    )
+                    .expect("failed to encrypt")
+                };
+
+                let k: &RsaPrivateKey = k;
+                let new_plaintext = k
+                    .decrypt(rsa::pkcs1v15::Pkcs1v15Encrypt, ciphertext.as_slice())
+                    .expect("failed to decrypt");
+                assert_eq!(plaintext, new_plaintext);
             }
-            Ok(())
-        },
-    )
+            _ => panic!("unexpected params type {unlocked_key:?}"),
+        }
+        Ok(())
+    })
     .expect("failed to unlock");
 
     let pub_key = pkey.public_key();
@@ -724,7 +721,7 @@ fn encrypted_private_key() {
     }
 
     key.unlock(
-        || "test".to_string(),
+        &"test".into(),
         |_pub_params, k| {
             info!("{:?}", k);
             match k {
@@ -885,7 +882,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
             match parsed {
                 PublicOrSecret::Secret(sec) => {
-                    sec.unlock(|| pw.to_string(), |_, _| Ok(())).unwrap();
+                    sec.unlock(&pw.into(), |_, _| Ok(())).unwrap();
                 }
                 PublicOrSecret::Public(_) => {
                     // Nothing todo
@@ -1131,18 +1128,15 @@ fn private_ecc1_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
-    sk.unlock(
-        || "ecc".to_string(),
-        |_pub_params, k| {
-            match k {
-                PlainSecretParams::ECDSA(ref inner_key) => {
-                    assert!(matches!(inner_key, ECDSASecretKey::P256(_)));
-                }
-                _ => panic!("invalid key"),
+    sk.unlock(&"ecc".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::ECDSA(ref inner_key) => {
+                assert!(matches!(inner_key, ECDSASecretKey::P256(_)));
             }
-            Ok(())
-        },
-    )
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1156,18 +1150,15 @@ fn private_ecc2_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 0);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "098033880F54719F",);
-    sk.unlock(
-        || "ecc".to_string(),
-        |_pub_params, k| {
-            match k {
-                PlainSecretParams::ECDSA(ref inner_key) => {
-                    assert!(matches!(inner_key, ECDSASecretKey::P384(_)));
-                }
-                _ => panic!("invalid key"),
+    sk.unlock(&"ecc".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::ECDSA(ref inner_key) => {
+                assert!(matches!(inner_key, ECDSASecretKey::P384(_)));
             }
-            Ok(())
-        },
-    )
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
     .unwrap();
 
     /*
@@ -1184,18 +1175,15 @@ fn private_ecc3_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "E15A9BB15A23A43F",);
-    sk.unlock(
-        || "ecc".to_string(),
-        |_pub_params, k| {
-            match k {
-                PlainSecretParams::ECDSA(ref inner_key) => {
-                    assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
-                }
-                _ => panic!("invalid key"),
+    sk.unlock(&"ecc".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::ECDSA(ref inner_key) => {
+                assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
             }
-            Ok(())
-        },
-    )
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1209,16 +1197,13 @@ fn private_x25519_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
-    sk.unlock(
-        || "moon".to_string(),
-        |_pub_params, k| {
-            match k {
-                PlainSecretParams::EdDSALegacy(..) => {}
-                _ => panic!("invalid key"),
-            }
-            Ok(())
-        },
-    )
+    sk.unlock(&"moon".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::EdDSALegacy(..) => {}
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1261,7 +1246,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
 
         if unlock {
             let sk: SignedSecretKey = parsed.clone().try_into().unwrap();
-            sk.unlock(|| "".to_string(), |_, _| Ok(()))
+            sk.unlock(&"".into(), |_, _| Ok(()))
                 .expect("failed to unlock key");
 
             let pub_key = sk.public_key();
@@ -1338,12 +1323,12 @@ fn test_encrypted_key() {
     // Incorrect password results in InvalidInput error.
     let res = unsigned_pubkey
         .clone()
-        .sign(&mut rng, &*key, &*key.public_key(), || "".into())
+        .sign(&mut rng, &*key, &*key.public_key(), &"".into())
         .err()
         .unwrap();
 
     assert!(matches!(res, pgp::errors::Error::InvalidInput));
     let _signed_key = unsigned_pubkey
-        .sign(&mut rng, &*key, &*key.public_key(), || "123".into())
+        .sign(&mut rng, &*key, &*key.public_key(), &"123".into())
         .unwrap();
 }

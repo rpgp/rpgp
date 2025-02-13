@@ -28,7 +28,7 @@ use crate::packet::{
 use crate::ser::Serialize;
 use crate::types::{
     CompressionAlgorithm, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketHeaderVersion,
-    PacketLength, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
+    PacketLength, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag, Unlocker,
 };
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
@@ -674,16 +674,15 @@ impl Message {
     }
 
     /// Sign this message using the provided key.
-    pub fn sign<R, F>(
+    pub fn sign<R>(
         self,
         rng: R,
         key: &impl SecretKeyTrait,
-        key_pw: F,
+        key_pw: &Unlocker,
         hash_algorithm: HashAlgorithm,
     ) -> Result<Self>
     where
         R: CryptoRng + Rng,
-        F: FnOnce() -> String + 'static,
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
@@ -817,22 +816,24 @@ impl Message {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt<G>(&self, key_pw: G, keys: &[&SignedSecretKey]) -> Result<(Message, Vec<KeyId>)>
-    where
-        G: FnOnce() -> String + Clone,
-    {
+    pub fn decrypt(
+        &self,
+        key_pws: &[Unlocker],
+        keys: &[&SignedSecretKey],
+    ) -> Result<(Message, Vec<KeyId>)> {
         match self {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
             }
             Message::Signed { message, .. } => match message {
-                Some(message) => message.as_ref().decrypt(key_pw, keys),
+                Some(message) => message.as_ref().decrypt(key_pws, keys),
                 None => bail!("not encrypted"),
             },
             Message::Encrypted { esk, edata, .. } => {
                 let valid_keys =
                     keys.iter()
-                        .filter_map(|key| {
+                        .zip(key_pws.iter())
+                        .filter_map(|(key, key_pw)| {
                             // search for a packet with a key id that we have and that key.
                             let mut packet = None;
                             let mut encoding_key = None;
@@ -870,7 +871,7 @@ impl Message {
                                 }
                             }
 
-                            packet.map(|packet| (packet, encoding_key, encoding_subkey))
+                            packet.map(|packet| (packet, encoding_key, encoding_subkey, key_pw))
                         })
                         .collect::<Vec<_>>();
 
@@ -880,7 +881,7 @@ impl Message {
 
                 let session_keys = valid_keys
                     .iter()
-                    .map(|(pkesk, encoding_key, encoding_subkey)| {
+                    .map(|(pkesk, encoding_key, encoding_subkey, key_pw)| {
                         let typ = match pkesk.version() {
                             PkeskVersion::V3 => EskType::V3_4,
                             PkeskVersion::V6 => EskType::V6,
@@ -893,17 +894,15 @@ impl Message {
                             debug!("decrypt session key");
 
                             let values = pkesk.values()?;
-                            let session_key =
-                                ek.unlock(key_pw.clone(), |pub_params, priv_key| {
-                                    priv_key.decrypt(pub_params, values, typ, &ek.public_key())
-                                })?;
+                            let session_key = ek.unlock(key_pw, |pub_params, priv_key| {
+                                priv_key.decrypt(pub_params, values, typ, &ek.public_key())
+                            })?;
                             Ok((ek.key_id(), session_key))
                         } else if let Some(ek) = encoding_subkey {
                             let values = pkesk.values()?;
-                            let session_key =
-                                ek.unlock(key_pw.clone(), |pub_params, priv_key| {
-                                    priv_key.decrypt(pub_params, values, typ, &ek.public_key())
-                                })?;
+                            let session_key = ek.unlock(key_pw, |pub_params, priv_key| {
+                                priv_key.decrypt(pub_params, values, typ, &ek.public_key())
+                            })?;
                             Ok((ek.key_id(), session_key))
                         } else {
                             unreachable!("either a key or a subkey were found");
@@ -1175,7 +1174,7 @@ mod tests {
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-        let decrypted = parsed.decrypt(|| "test".into(), &[&skey]).unwrap().0;
+        let decrypted = parsed.decrypt(&["test".into()], &[&skey]).unwrap().0;
 
         assert_eq!(compressed_msg, decrypted);
     }
@@ -1222,7 +1221,7 @@ mod tests {
 
         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-        let decrypted = parsed.decrypt(|| "test".into(), &[&skey]).unwrap().0;
+        let decrypted = parsed.decrypt(&["test".into()], &[&skey]).unwrap().0;
 
         assert_eq!(compressed_msg, decrypted);
     }
@@ -1250,7 +1249,7 @@ mod tests {
 
             let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-            let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
+            let decrypted = parsed.decrypt(&["".into()], &[&skey]).unwrap().0;
 
             assert_eq!(compressed_msg, decrypted);
         }
@@ -1279,7 +1278,7 @@ mod tests {
 
             let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
 
-            let decrypted = parsed.decrypt(|| "".into(), &[&skey]).unwrap().0;
+            let decrypted = parsed.decrypt(&["".into()], &[&skey]).unwrap().0;
 
             assert_eq!(compressed_msg, decrypted);
         }
@@ -1488,7 +1487,7 @@ mod tests {
         assert!(lit_msg.verify(&*pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1512,7 +1511,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1536,7 +1535,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, || "".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::SHA2_256)
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
@@ -1565,7 +1564,7 @@ mod tests {
 
             let lit_msg = Message::new_literal("hello.txt", "hello world\n");
             let signed_msg = lit_msg
-                .sign(&mut rng, &*skey, || "test".into(), HashAlgorithm::SHA2_256)
+                .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::SHA2_256)
                 .unwrap();
 
             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1591,7 +1590,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1618,7 +1617,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, || "test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::SHA2_256)
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
@@ -1792,7 +1791,9 @@ bhF30A+IitsxxA==
 -----END PGP MESSAGE-----";
 
         let (message, _) = Message::from_string(msg).expect("ok");
-        let (dec, _) = message.decrypt(String::default, &[&ssk]).expect("decrypt");
+        let (dec, _) = message
+            .decrypt(&[Unlocker::empty()], &[&ssk])
+            .expect("decrypt");
 
         let decrypted =
             String::from_utf8(dec.get_literal().expect("literal").data().to_vec()).expect("utf8");

@@ -11,6 +11,7 @@ use crate::packet::{
 use crate::ser::Serialize;
 use crate::types::{
     KeyVersion, PacketHeaderVersion, PacketLength, PublicKeyTrait, SecretKeyTrait, SignedUser, Tag,
+    Unlocker,
 };
 
 /// User ID Packet
@@ -50,16 +51,15 @@ impl UserId {
     }
 
     /// Create a self-signature.
-    pub fn sign<R, F, K, P>(
+    pub fn sign<R, K, P>(
         &self,
         rng: R,
         signer_sec_key: &K,
         signer_pub_key: &P,
-        key_pw: F,
+        key_pw: &Unlocker,
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        F: FnOnce() -> String,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
@@ -67,16 +67,15 @@ impl UserId {
     }
 
     /// Create a third-party signature.
-    pub fn sign_third_party<R, F, P, K>(
+    pub fn sign_third_party<R, P, K>(
         &self,
         mut rng: R,
         signer: &P,
-        signer_pw: F,
+        signer_pw: &Unlocker,
         signee: &K,
     ) -> Result<SignedUser>
     where
         R: CryptoRng + Rng,
-        F: FnOnce() -> String,
         P: SecretKeyTrait,
         K: PublicKeyTrait + Serialize,
     {
@@ -172,7 +171,7 @@ mod tests {
 
         // test self-signature
         let self_signed = alice_uid
-            .sign(&mut rng, &alice_sec, &alice_pub, String::default)
+            .sign(&mut rng, &alice_sec, &alice_pub, &"".into())
             .unwrap();
         self_signed
             .verify(&alice_pub)
@@ -195,7 +194,7 @@ mod tests {
         let signer_pub = signer_sec.public_key();
 
         let third_signed = alice_uid
-            .sign_third_party(&mut rng, &signer_sec, String::default, &alice_pub)
+            .sign_third_party(&mut rng, &signer_sec, &"".into(), &alice_pub)
             .unwrap();
         third_signed
             .verify_third_party(&alice_pub, &signer_pub)

@@ -270,7 +270,7 @@ fn rpg_020_signed_secret_key_create_signature_panic2() {
     // thread '[..]' panicked at [..]/src/types/params/encrypted_secret.rs:155:39:
     // assertion failed: mid <= self.len()
     let _ = key.create_signature(
-        || "pw".into(),
+        &"pw".into(),
         pgp::crypto::hash::HashAlgorithm::SHA2_256,
         dummy_data,
     );
@@ -288,7 +288,7 @@ fn rpg_020_signed_secret_key_create_signature_oom_crash1() {
     // expected bug behavior:
     // memory allocation of 137438871552 bytes failed
     let _ = key.create_signature(
-        || "pw".into(),
+        &"pw".into(),
         pgp::crypto::hash::HashAlgorithm::SHA2_256,
         dummy_data,
     );

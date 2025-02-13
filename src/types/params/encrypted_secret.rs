@@ -57,15 +57,12 @@ impl EncryptedSecretParams {
         }
     }
 
-    pub fn unlock<F>(
+    pub fn unlock(
         &self,
-        pw: F,
+        pw: &Unlocker,
         pub_key: &(impl PublicKeyTrait + Serialize),
         secret_tag: Option<Tag>,
-    ) -> Result<PlainSecretParams>
-    where
-        F: FnOnce() -> String,
-    {
+    ) -> Result<PlainSecretParams> {
         // Argon2 is only used with AEAD (S2K usage octet 253).
         //
         // An implementation MUST NOT create and MUST reject as malformed any secret key packet
@@ -118,7 +115,7 @@ impl EncryptedSecretParams {
         match &self.s2k_params {
             S2kParams::Unprotected => unreachable!(),
             S2kParams::LegacyCfb { sym_alg, iv } => {
-                let key = md5::Md5::digest(pw());
+                let key = md5::Md5::digest(pw.read());
 
                 // Decryption
                 let mut plaintext: BytesMut = self.data.clone().into();
@@ -148,7 +145,7 @@ impl EncryptedSecretParams {
                         }
 
                         // derive key
-                        let derived = s2k.derive_key(&pw(), 32)?;
+                        let derived = s2k.derive_key(&pw.read(), 32)?;
 
                         let Some(secret_tag) = secret_tag else {
                             bail!("no secret_tag provided");
@@ -176,7 +173,7 @@ impl EncryptedSecretParams {
                 }
             }
             S2kParams::Cfb { sym_alg, s2k, iv } => {
-                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+                let key = s2k.derive_key(&pw.read(), sym_alg.key_size())?;
 
                 // Decryption
                 let mut plaintext: BytesMut = self.data.clone().into();
@@ -204,7 +201,7 @@ impl EncryptedSecretParams {
                 )
             }
             S2kParams::MalleableCfb { sym_alg, s2k, iv } => {
-                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+                let key = s2k.derive_key(&pw.read(), sym_alg.key_size())?;
 
                 // Decryption
                 let mut plaintext: BytesMut = self.data.clone().into();

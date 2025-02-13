@@ -369,7 +369,7 @@ impl<R: Read> Builder<R> {
         // 3. Write all Signatures (reverse order as One Pass Signatures)
         for (hasher, config) in hashers.into_iter().zip(keys.into_iter()).rev() {
             let key = &config.key;
-            let signature = hasher.sign(key, || config.key_pw.read())?;
+            let signature = hasher.sign(key, &config.key_pw)?;
             signature.to_writer_with_header(&mut out)?;
         }
 
@@ -903,7 +903,7 @@ mod tests {
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
             let (decrypted, _key_ids) = message
-                .decrypt(|| "".to_string(), &[&skey])
+                .decrypt(&[Unlocker::empty()], &[&skey])
                 .expect("decryption");
 
             let Message::Literal(l) = decrypted else {
@@ -956,9 +956,8 @@ mod tests {
 
             // decrypt it - public
             {
-                let (decrypted, _key_ids) = message
-                    .decrypt(|| "".to_string(), &[&skey])
-                    .expect("decryption");
+                let (decrypted, _key_ids) =
+                    message.decrypt(&["".into()], &[&skey]).expect("decryption");
 
                 let Message::Literal(l) = decrypted else {
                     panic!("unexpected message: {:?}", decrypted);
@@ -1054,9 +1053,8 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
-            let (decrypted, _key_ids) = message
-                .decrypt(|| "".to_string(), &[&skey])
-                .expect("decryption");
+            let (decrypted, _key_ids) =
+                message.decrypt(&["".into()], &[&skey]).expect("decryption");
 
             let Message::Literal(l) = decrypted else {
                 panic!("unexpected message: {:?}", decrypted);
@@ -1105,7 +1103,7 @@ mod tests {
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
             let (decrypted, _key_ids) = message
-                .decrypt(|| "".to_string(), &[&skey])
+                .decrypt(&[Unlocker::empty()], &[&skey])
                 .expect("decryption");
 
             assert!(matches!(decrypted, Message::Compressed(_)));
@@ -1156,7 +1154,7 @@ mod tests {
 
             let sig_config = vec![SigningConfig {
                 key: Box::new(&*skey),
-                key_pw: (|| "".to_string()).into(),
+                key_pw: Unlocker::empty(),
                 hash_algorithm: HashAlgorithm::SHA2_256,
             }];
             let encrypted = builder
@@ -1171,7 +1169,7 @@ mod tests {
 
             // decrypt it
             let (decrypted, _key_ids) = message
-                .decrypt(|| "".to_string(), &[&skey])
+                .decrypt(&[Unlocker::empty()], &[&skey])
                 .expect("decryption");
 
             assert!(matches!(decrypted, Message::Compressed(_)));

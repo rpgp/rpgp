@@ -13,7 +13,7 @@ use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::{normalize_lines, NormalizedReader};
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
+use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait, Unlocker};
 use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE};
 
 /// Implementation of a Cleartext Signed Message.
@@ -36,15 +36,13 @@ pub struct CleartextSignedMessage {
 
 impl CleartextSignedMessage {
     /// Construct a new cleartext message and sign it using the given key.
-    pub fn new<F>(
+    pub fn new(
         text: &str,
         config: SignatureConfig,
         key: &impl SecretKeyTrait,
-        key_pw: F,
+        key_pw: &Unlocker,
     ) -> Result<Self>
-    where
-        F: FnOnce() -> String + 'static,
-    {
+where {
         let mut bytes = text.as_bytes();
         let signature_text = NormalizedReader::new(&mut bytes, LineBreak::Crlf);
         let hash = config.hash_alg;
@@ -59,10 +57,9 @@ impl CleartextSignedMessage {
     }
 
     /// Sign the given text.
-    pub fn sign<R, F>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
+    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Unlocker) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
-        F: FnOnce() -> String + 'static,
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
@@ -604,7 +601,7 @@ mod tests {
             &mut rng,
             "hello\n-world-what-\nis up\n",
             &*key,
-            String::new,
+            &Unlocker::empty(),
         )
         .unwrap();
         msg.verify(&*key.public_key()).unwrap();
@@ -617,7 +614,7 @@ mod tests {
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &*key, String::new).unwrap();
+        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &*key, &Unlocker::empty()).unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 
