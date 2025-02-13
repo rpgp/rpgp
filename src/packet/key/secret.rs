@@ -89,6 +89,21 @@ impl SecretKey {
             key.public_key(),
         )
     }
+
+    pub fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
+    where
+        F: FnOnce() -> String,
+        G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
+    {
+        let pub_params = self.details.public_params();
+        match self.secret_params {
+            SecretParams::Plain(ref k) => work(pub_params, k),
+            SecretParams::Encrypted(ref k) => {
+                let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
+                work(pub_params, &plain)
+            }
+        }
+    }
 }
 
 impl SecretSubkey {
@@ -142,16 +157,11 @@ impl SecretSubkey {
             key.public_key(),
         )
     }
-}
 
-impl SecretKeyTrait for SecretKey {
-    type PublicKey = super::PublicKey;
-    type Unlocked = PlainSecretParams;
-
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
+    pub fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
     where
         F: FnOnce() -> String,
-        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
+        G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
         match self.secret_params {
@@ -162,6 +172,10 @@ impl SecretKeyTrait for SecretKey {
             }
         }
     }
+}
+
+impl SecretKeyTrait for SecretKey {
+    type PublicKey = super::PublicKey;
 
     fn create_signature<F>(
         &self,
@@ -221,22 +235,6 @@ impl KeyDetails for SecretSubkey {
 
 impl SecretKeyTrait for SecretSubkey {
     type PublicKey = super::PublicSubkey;
-    type Unlocked = PlainSecretParams;
-
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>,
-    {
-        let pub_params = self.details.public_params();
-        match self.secret_params {
-            SecretParams::Plain(ref k) => work(pub_params, k),
-            SecretParams::Encrypted(ref k) => {
-                let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
-                work(pub_params, &plain)
-            }
-        }
-    }
 
     fn create_signature<F>(
         &self,

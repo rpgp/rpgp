@@ -98,17 +98,6 @@ impl SecretKeyTrait for FakeHsm {
     // XXX: This choice of the public key packet type here is a bit arbitrary.
     type PublicKey = PublicKey;
 
-    type Unlocked = Self;
-
-    fn unlock<F, G, T>(&self, _pw: F, work: G) -> pgp::errors::Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&PublicParams, &Self::Unlocked) -> pgp::errors::Result<T>,
-    {
-        let params = self.public_params();
-        work(params, self)
-    }
-
     fn create_signature<F>(
         &self,
         _key_pw: F,
@@ -379,11 +368,7 @@ fn card_decrypt() {
             panic!("whoops")
         };
 
-        let (session_key, session_key_algorithm) = hsm
-            .unlock(String::new, |_pub_params, priv_key| {
-                priv_key.decrypt(values)
-            })
-            .unwrap();
+        let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
 
         let decrypted = edata
             .decrypt(pgp::PlainSessionKey::V3_4 {

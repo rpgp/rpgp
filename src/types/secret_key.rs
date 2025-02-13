@@ -74,15 +74,6 @@ impl<K: SecretKeyTrait> SigningKey for K {
 pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
     type PublicKey: PublicKeyTrait + Serialize;
 
-    /// The type representing the unlocked version of this.
-    type Unlocked;
-
-    /// Unlock the raw data in the secret parameters.
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<T>;
-
     fn public_key(&self) -> &Self::PublicKey;
 
     fn create_signature<F>(
@@ -107,15 +98,6 @@ pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
 
 impl<T: SecretKeyTrait> SecretKeyTrait for &T {
     type PublicKey = T::PublicKey;
-    type Unlocked = T::Unlocked;
-
-    fn unlock<F, G, S>(&self, pw: F, work: G) -> Result<S>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&PublicParams, &Self::Unlocked) -> Result<S>,
-    {
-        (*self).unlock(pw, work)
-    }
 
     fn create_signature<F>(
         &self,

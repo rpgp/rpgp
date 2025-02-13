@@ -890,15 +890,21 @@ impl Message {
                         };
 
                         if let Some(ek) = encoding_key {
-                            Ok((
-                                ek.key_id(),
-                                decrypt_session_key(ek, key_pw.clone(), pkesk.values()?, typ)?,
-                            ))
+                            debug!("decrypt session key");
+
+                            let values = pkesk.values()?;
+                            let session_key =
+                                ek.unlock(key_pw.clone(), |pub_params, priv_key| {
+                                    priv_key.decrypt(pub_params, values, typ, &ek.public_key())
+                                })?;
+                            Ok((ek.key_id(), session_key))
                         } else if let Some(ek) = encoding_subkey {
-                            Ok((
-                                ek.key_id(),
-                                decrypt_session_key(&***ek, key_pw.clone(), pkesk.values()?, typ)?,
-                            ))
+                            let values = pkesk.values()?;
+                            let session_key =
+                                ek.unlock(key_pw.clone(), |pub_params, priv_key| {
+                                    priv_key.decrypt(pub_params, values, typ, &ek.public_key())
+                                })?;
+                            Ok((ek.key_id(), session_key))
                         } else {
                             unreachable!("either a key or a subkey were found");
                         }
