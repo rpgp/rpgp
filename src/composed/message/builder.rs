@@ -18,8 +18,8 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength, SigningKey,
-    StringToKey, Tag, Unlocker,
+    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength,
+    SecretKeyTrait, StringToKey, Tag, Unlocker,
 };
 use crate::util::fill_buffer;
 use crate::Esk;
@@ -66,7 +66,7 @@ enum Encryption {
 }
 
 pub struct SigningConfig<'a> {
-    pub key: Box<&'a dyn SigningKey>,
+    pub key: Box<&'a dyn SecretKeyTrait>,
     pub key_pw: Unlocker,
     pub hash_algorithm: HashAlgorithm,
 }

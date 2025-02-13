@@ -13,9 +13,7 @@ use crate::packet::{
     Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
 };
 use crate::ser::Serialize;
-use crate::types::{
-    Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, SigningKey, Tag, Unlocker,
-};
+use crate::types::{Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SecretKeyTrait, Tag, Unlocker};
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
@@ -634,7 +632,7 @@ impl SignatureHasher {
     /// Finalizes the signature.
     pub fn sign<K>(self, key: &K, key_pw: &Unlocker) -> Result<Signature>
     where
-        K: SigningKey,
+        K: SecretKeyTrait,
     {
         let Self { config, mut hasher } = self;
         ensure!(

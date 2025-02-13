@@ -53,16 +53,7 @@ impl<F: Fn() -> Zeroizing<String> + 'static> From<F> for Unlocker {
     }
 }
 
-pub trait SigningKey: KeyDetails {
-    fn create_signature(
-        &self,
-        key_pw: &Unlocker,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<crate::types::SignatureBytes>;
-}
-
-impl KeyDetails for Box<&dyn SigningKey> {
+impl KeyDetails for Box<&dyn SecretKeyTrait> {
     fn version(&self) -> KeyVersion {
         (**self).version()
     }
@@ -80,7 +71,7 @@ impl KeyDetails for Box<&dyn SigningKey> {
     }
 }
 
-impl SigningKey for Box<&dyn SigningKey> {
+impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
     fn create_signature(
         &self,
         key_pw: &Unlocker,
@@ -89,16 +80,9 @@ impl SigningKey for Box<&dyn SigningKey> {
     ) -> Result<crate::types::SignatureBytes> {
         (**self).create_signature(key_pw, hash, data)
     }
-}
 
-impl<K: SecretKeyTrait> SigningKey for K {
-    fn create_signature(
-        &self,
-        key_pw: &Unlocker,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<crate::types::SignatureBytes> {
-        (*self).create_signature(key_pw, hash, data)
+    fn hash_alg(&self) -> HashAlgorithm {
+        (**self).hash_alg()
     }
 }
 
