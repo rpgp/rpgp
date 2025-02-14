@@ -2,10 +2,11 @@ use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
 use chrono::{DateTime, Utc};
+use digest::DynDigest;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
-use crate::crypto::hash::{HashAlgorithm, Hasher};
+use crate::crypto::hash::{HashAlgorithm, WriteHasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::types::serialize_for_hashing;
@@ -277,7 +278,7 @@ impl SignatureConfig {
         let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signer.create_signature(signer_pw, self.hash_alg, hash)?;
@@ -326,7 +327,7 @@ impl SignatureConfig {
         let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
 
@@ -360,7 +361,7 @@ impl SignatureConfig {
         let len = self.hash_signature_data(&mut hasher)?;
         hasher.update(&self.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
         let signature = signing_key.create_signature(&key_pw, self.hash_alg, hash)?;
 
@@ -373,7 +374,7 @@ impl SignatureConfig {
     }
 
     /// Calculate the serialized version of this packet, but only the part relevant for hashing.
-    pub fn hash_signature_data(&self, hasher: &mut dyn std::io::Write) -> Result<usize> {
+    pub fn hash_signature_data(&self, hasher: &mut Box<dyn DynDigest>) -> Result<usize> {
         match self.version() {
             SignatureVersion::V2 | SignatureVersion::V3 => {
                 let created = {
@@ -390,7 +391,7 @@ impl SignatureConfig {
                 buf[0] = self.typ.into();
                 BigEndian::write_u32(&mut buf[1..], created.timestamp().try_into()?);
 
-                hasher.write_all(&buf)?;
+                hasher.update(&buf);
 
                 // no trailer
                 Ok(0)
@@ -453,7 +454,7 @@ impl SignatureConfig {
 
                 res.extend(hashed_subpackets);
 
-                hasher.write_all(&res)?;
+                hasher.update(&res);
 
                 Ok(res.len())
             }
@@ -466,7 +467,11 @@ impl SignatureConfig {
         }
     }
 
-    pub fn hash_data_to_sign<R>(&self, hasher: &mut dyn Hasher, mut data: R) -> Result<usize>
+    pub fn hash_data_to_sign<R>(
+        &self,
+        hasher: &mut Box<dyn DynDigest>,
+        mut data: R,
+    ) -> Result<usize>
     where
         R: Read,
     {
@@ -474,7 +479,8 @@ impl SignatureConfig {
             SignatureType::Text |
                 // assumes that the passed in text was already valid utf8 and normalized
             SignatureType::Binary => {
-                Ok(std::io::copy(&mut data, hasher)? as usize)
+                let written = std::io::copy(&mut data, &mut WriteHasher(hasher))?;
+                Ok(written.try_into()?)
             }
             SignatureType::Timestamp |
             SignatureType::Standalone => {
@@ -624,7 +630,7 @@ impl SignatureConfig {
 }
 
 pub struct SignatureHasher {
-    hasher: Box<dyn Hasher>,
+    hasher: Box<dyn DynDigest>,
     config: SignatureConfig,
 }
 
@@ -652,7 +658,7 @@ impl SignatureHasher {
         let trailer = config.trailer(len)?;
         hasher.update(&trailer);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
 
         let signed_hash_value = [hash[0], hash[1]];
         let signature = key.create_signature(key_pw, config.hash_alg, hash)?;
@@ -663,10 +669,11 @@ impl SignatureHasher {
 
 impl std::io::Write for SignatureHasher {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.hasher.write(buf)
+        self.hasher.update(buf);
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.hasher.flush()
+        Ok(())
     }
 }

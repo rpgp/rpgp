@@ -336,7 +336,8 @@ impl StringToKey {
                         (round + 1) * digest_size
                     };
 
-                    hasher.finish_reset_into(&mut key[start..end]);
+                    let hash = hasher.finalize();
+                    key[start..end].copy_from_slice(&hash[..end - start]);
                 }
 
                 key

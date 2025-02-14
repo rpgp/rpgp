@@ -1,6 +1,6 @@
-use std::{fmt::Display, str::FromStr};
+use std::str::FromStr;
 
-use digest::Digest;
+use digest::DynDigest;
 use md5::Md5;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use ripemd::Ripemd160;
@@ -10,21 +10,33 @@ use crate::errors::{Error, Result};
 
 /// Available hash algorithms.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-hash-algorithms>
-#[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive, Hash)]
+#[derive(
+    Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive, Hash, derive_more::Display,
+)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum HashAlgorithm {
     #[cfg_attr(test, proptest(skip))]
+    #[display("NONE")]
     None = 0,
+    #[display("MD5")]
     MD5 = 1,
+    #[display("SHA1")]
     SHA1 = 2,
+    #[display("RIPEMD160")]
     RIPEMD160 = 3,
 
+    #[display("SHA256")]
     SHA2_256 = 8,
+    #[display("SHA384")]
     SHA2_384 = 9,
+    #[display("SHA512")]
     SHA2_512 = 10,
+    #[display("SHA224")]
     SHA2_224 = 11,
+    #[display("SHA3-256")]
     SHA3_256 = 12,
+    #[display("SHA3-512")]
     SHA3_512 = 14,
 
     /// Do not use, just for compatibility with GnuPG.
@@ -37,6 +49,27 @@ pub enum HashAlgorithm {
 impl Default for HashAlgorithm {
     fn default() -> Self {
         Self::SHA2_256
+    }
+}
+
+impl FromStr for HashAlgorithm {
+    type Err = Error;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" => Ok(Self::None),
+            "md5" => Ok(Self::MD5),
+            "sha1" => Ok(Self::SHA1),
+            "ripemd160" => Ok(Self::RIPEMD160),
+            "sha256" => Ok(Self::SHA2_256),
+            "sha384" => Ok(Self::SHA2_384),
+            "sha512" => Ok(Self::SHA2_512),
+            "sha224" => Ok(Self::SHA2_224),
+            "sha3-256" => Ok(Self::SHA3_256),
+            "sha3-512" => Ok(Self::SHA3_512),
+            "private10" => Ok(Self::Private10),
+            _ => bail!("unknown hash"),
+        }
     }
 }
 
@@ -56,125 +89,44 @@ impl HashAlgorithm {
     }
 }
 
-impl FromStr for HashAlgorithm {
-    type Err = Error;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        match s {
-            "None" => Ok(Self::None),
-            "MD5" => Ok(Self::MD5),
-            "SHA1" => Ok(Self::SHA1),
-            "RIPEMD160" => Ok(Self::RIPEMD160),
-            "SHA256" => Ok(Self::SHA2_256),
-            "SHA384" => Ok(Self::SHA2_384),
-            "SHA512" => Ok(Self::SHA2_512),
-            "SHA224" => Ok(Self::SHA2_224),
-            "SHA3-256" => Ok(Self::SHA3_256),
-            "SHA3-512" => Ok(Self::SHA3_512),
-            "Private10" => Ok(Self::Private10),
-            _ => bail!("unknown hash"),
-        }
-    }
-}
-
-impl Display for HashAlgorithm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::MD5 => "MD5",
-            Self::SHA1 => "SHA1",
-            Self::RIPEMD160 => "RIPEMD160",
-            Self::SHA2_256 => "SHA256",
-            Self::SHA2_384 => "SHA384",
-            Self::SHA2_512 => "SHA512",
-            Self::SHA2_224 => "SHA224",
-            Self::SHA3_256 => "SHA3-256",
-            Self::SHA3_512 => "SHA3-512",
-            Self::Private10 => "Private10",
-            Self::Other(v) => return write!(f, "Other({})", v),
-            Self::None => "None",
-        };
-        write!(f, "{}", s)
-    }
-}
-
 impl zeroize::DefaultIsZeroes for HashAlgorithm {}
 
-/// Trait to work around the fact that the `Digest` trait from rustcrypto can not
-/// be used as `Box<Digest>`.
-// TODO: replace with digest::DynDigest;
-pub trait Hasher: std::io::Write {
-    /// Update the hash with the given value.
-    fn update(&mut self, _: &[u8]);
-    /// Finalize the hash and return the result.
-    fn finish(self: Box<Self>) -> Vec<u8>;
-    /// Finalize into the provided buffer. Truncates to the length of `out`.
-    fn finish_reset_into(&mut self, out: &mut [u8]);
+/// Temporary wrapper around `Box<dyn DynDigest>` to implement `io::Write`.
+pub(crate) struct WriteHasher<'a>(pub(crate) &'a mut Box<dyn DynDigest>);
+
+impl std::io::Write for WriteHasher<'_> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let digest = &mut **self.0;
+        DynDigest::update(digest, buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
-
-macro_rules! derive_hasher {
-    ($name:ident, $struct:path) => {
-        #[derive(Clone, Default)]
-        pub struct $name {
-            inner: $struct,
-        }
-
-        impl Hasher for $name {
-            fn update(&mut self, data: &[u8]) {
-                self.inner.update(data);
-            }
-
-            fn finish(self: Box<Self>) -> Vec<u8> {
-                self.inner.finalize().as_slice().to_vec()
-            }
-
-            fn finish_reset_into(&mut self, out: &mut [u8]) {
-                let res = self.inner.finalize_reset();
-                out.copy_from_slice(&res.as_slice()[..out.len()]);
-            }
-        }
-
-        impl std::io::Write for $name {
-            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                self.update(buf);
-                Ok(buf.len())
-            }
-
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
-            }
-        }
-    };
-}
-
-derive_hasher!(Md5Hasher, Md5);
-derive_hasher!(Sha1Hasher, Sha1);
-derive_hasher!(Ripemd160Hasher, Ripemd160);
-derive_hasher!(Sha2_256Hasher, sha2::Sha256);
-derive_hasher!(Sha2_384Hasher, sha2::Sha384);
-derive_hasher!(Sha2_512Hasher, sha2::Sha512);
-derive_hasher!(Sha2_224Hasher, sha2::Sha224);
-derive_hasher!(Sha3_256Hasher, sha3::Sha3_256);
-derive_hasher!(Sha3_512Hasher, sha3::Sha3_512);
 
 impl HashAlgorithm {
     /// Create a new hasher.
-    pub fn new_hasher(self) -> Result<Box<dyn Hasher>> {
+    pub fn new_hasher(self) -> Result<Box<dyn DynDigest>> {
         match self {
-            HashAlgorithm::MD5 => Ok(Box::<Md5Hasher>::default()),
-            HashAlgorithm::SHA1 => Ok(Box::<Sha1Hasher>::default()),
-            HashAlgorithm::RIPEMD160 => Ok(Box::<Ripemd160Hasher>::default()),
-            HashAlgorithm::SHA2_256 => Ok(Box::<Sha2_256Hasher>::default()),
-            HashAlgorithm::SHA2_384 => Ok(Box::<Sha2_384Hasher>::default()),
-            HashAlgorithm::SHA2_512 => Ok(Box::<Sha2_512Hasher>::default()),
-            HashAlgorithm::SHA2_224 => Ok(Box::<Sha2_224Hasher>::default()),
-            HashAlgorithm::SHA3_256 => Ok(Box::<Sha3_256Hasher>::default()),
-            HashAlgorithm::SHA3_512 => Ok(Box::<Sha3_512Hasher>::default()),
+            HashAlgorithm::MD5 => Ok(Box::<Md5>::default()),
+            HashAlgorithm::SHA1 => Ok(Box::<Sha1>::default()),
+            HashAlgorithm::RIPEMD160 => Ok(Box::<Ripemd160>::default()),
+            HashAlgorithm::SHA2_256 => Ok(Box::<sha2::Sha256>::default()),
+            HashAlgorithm::SHA2_384 => Ok(Box::<sha2::Sha384>::default()),
+            HashAlgorithm::SHA2_512 => Ok(Box::<sha2::Sha512>::default()),
+            HashAlgorithm::SHA2_224 => Ok(Box::<sha2::Sha224>::default()),
+            HashAlgorithm::SHA3_256 => Ok(Box::<sha3::Sha3_256>::default()),
+            HashAlgorithm::SHA3_512 => Ok(Box::<sha3::Sha3_512>::default()),
             _ => unimplemented_err!("hasher {:?}", self),
         }
     }
 
     /// Calculate the digest of the given input data.
     pub fn digest(self, data: &[u8]) -> Result<Vec<u8>> {
+        use digest::Digest;
+
         Ok(match self {
             HashAlgorithm::MD5 => Md5::digest(data).to_vec(),
             HashAlgorithm::SHA1 => match Sha1::try_digest(data) {
@@ -198,18 +150,34 @@ impl HashAlgorithm {
 
     /// Returns the expected digest size for the given algorithm.
     pub fn digest_size(self) -> Option<usize> {
+        use digest::Digest;
+
         let size = match self {
-            HashAlgorithm::MD5 => Md5::output_size(),
-            HashAlgorithm::SHA1 => Sha1::output_size(),
-            HashAlgorithm::RIPEMD160 => Ripemd160::output_size(),
-            HashAlgorithm::SHA2_256 => sha2::Sha256::output_size(),
-            HashAlgorithm::SHA2_384 => sha2::Sha384::output_size(),
-            HashAlgorithm::SHA2_512 => sha2::Sha512::output_size(),
-            HashAlgorithm::SHA2_224 => sha2::Sha224::output_size(),
-            HashAlgorithm::SHA3_256 => sha3::Sha3_256::output_size(),
-            HashAlgorithm::SHA3_512 => sha3::Sha3_512::output_size(),
+            HashAlgorithm::MD5 => <Md5 as Digest>::output_size(),
+            HashAlgorithm::SHA1 => <Sha1 as Digest>::output_size(),
+            HashAlgorithm::RIPEMD160 => <Ripemd160 as Digest>::output_size(),
+            HashAlgorithm::SHA2_256 => <sha2::Sha256 as Digest>::output_size(),
+            HashAlgorithm::SHA2_384 => <sha2::Sha384 as Digest>::output_size(),
+            HashAlgorithm::SHA2_512 => <sha2::Sha512 as Digest>::output_size(),
+            HashAlgorithm::SHA2_224 => <sha2::Sha224 as Digest>::output_size(),
+            HashAlgorithm::SHA3_256 => <sha3::Sha3_256 as Digest>::output_size(),
+            HashAlgorithm::SHA3_512 => <sha3::Sha3_512 as Digest>::output_size(),
             _ => return None,
         };
         Some(size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display_parse_hash() {
+        assert_eq!(HashAlgorithm::None.to_string(), "NONE".to_string());
+
+        assert_eq!(HashAlgorithm::SHA2_256.to_string(), "SHA256".to_string());
+
+        assert_eq!(HashAlgorithm::SHA3_512, "SHA3-512".parse().unwrap());
     }
 }

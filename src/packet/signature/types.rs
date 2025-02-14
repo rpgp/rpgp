@@ -4,12 +4,13 @@ use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
+use digest::DynDigest;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use smallvec::{smallvec, SmallVec};
 
 use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::hash::{HashAlgorithm, WriteHasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
@@ -285,14 +286,14 @@ impl Signature {
         if matches!(self.typ(), SignatureType::Text) {
             let normalized = NormalizedReader::new(data, LineBreak::Crlf);
 
-            self.config.hash_data_to_sign(&mut *hasher, normalized)?;
+            self.config.hash_data_to_sign(&mut hasher, normalized)?;
         } else {
-            self.config.hash_data_to_sign(&mut *hasher, data)?;
+            self.config.hash_data_to_sign(&mut hasher, data)?;
         }
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
 
         // Check that the high 16 bits of the hash from the signature packet match with the hash we
         // just calculated.
@@ -385,13 +386,13 @@ impl Signature {
                 }
             }
 
-            id.to_writer(&mut hasher)?;
+            id.to_writer(&mut WriteHasher(&mut hasher))?;
         }
 
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
@@ -469,7 +470,7 @@ impl Signature {
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
@@ -505,7 +506,7 @@ impl Signature {
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
@@ -938,9 +939,11 @@ impl PacketTrait for Signature {
 
 pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
     key: &K,
-    writer: &mut impl std::io::Write,
+    hasher: &mut Box<dyn DynDigest>,
 ) -> Result<()> {
     let key_len = key.write_len();
+
+    let mut writer = WriteHasher(hasher);
 
     // old style packet header for the key
     match key.version() {
@@ -964,7 +967,7 @@ pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
         v => unimplemented_err!("key version {:?}", v),
     }
 
-    key.to_writer(writer)?;
+    key.to_writer(&mut writer)?;
 
     Ok(())
 }
