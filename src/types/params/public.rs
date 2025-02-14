@@ -144,8 +144,8 @@ impl PublicParams {
     /// key as a signer
     pub fn hash_alg(&self) -> HashAlgorithm {
         match self {
-            PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::SHA2_384,
-            PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::SHA2_512,
+            PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
+            PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
             _ => HashAlgorithm::default(),
         }
     }

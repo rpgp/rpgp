@@ -465,7 +465,7 @@ fn card_sign() {
         let mut config = SignatureConfig::v4(
             packet::SignatureType::Binary,
             hsm.public_key().algorithm(),
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
         );
 
         config.hashed_subpackets = vec![

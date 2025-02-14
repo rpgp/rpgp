@@ -405,11 +405,11 @@ fn test_parse_details() {
         CompressionAlgorithm::ZIP,
     ];
     let p_hash_algs = smallvec![
-        HashAlgorithm::SHA2_256,
-        HashAlgorithm::SHA1,
-        HashAlgorithm::SHA2_384,
-        HashAlgorithm::SHA2_512,
-        HashAlgorithm::SHA2_224,
+        HashAlgorithm::Sha256,
+        HashAlgorithm::Sha1,
+        HashAlgorithm::Sha384,
+        HashAlgorithm::Sha512,
+        HashAlgorithm::Sha224,
     ];
 
     let packet_header = PacketHeader::from_parts(
@@ -422,7 +422,7 @@ fn test_parse_details() {
         packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA1,
+        HashAlgorithm::Sha1,
         [0x7c, 0x63],
         vec![MpiBytes::from_raw(
             vec![
@@ -510,7 +510,7 @@ fn test_parse_details() {
         packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA1,
+        HashAlgorithm::Sha1,
         [0xca, 0x6c],
         vec![MpiBytes::from_raw(
             vec![
@@ -610,7 +610,7 @@ fn test_parse_details() {
         packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA1,
+        HashAlgorithm::Sha1,
         [0x02, 0x0c],
         vec![MpiBytes::from_raw(
             vec![
@@ -709,7 +709,7 @@ fn encrypted_private_key() {
                     salt,
                     count,
                 } => {
-                    assert_eq!(*hash_alg, HashAlgorithm::SHA2_256);
+                    assert_eq!(*hash_alg, HashAlgorithm::Sha256);
                     assert_eq!(salt, &hex::decode("CB18E77884F2F055").unwrap()[..]);
                     assert_eq!(*count, 96u8); // This is an encoded iteration count
                 }

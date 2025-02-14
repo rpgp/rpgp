@@ -1166,7 +1166,7 @@ mod tests {
             let sig_config = vec![SigningConfig {
                 key: Box::new(&*skey),
                 key_pw: Password::empty(),
-                hash_algorithm: HashAlgorithm::SHA2_256,
+                hash_algorithm: HashAlgorithm::Sha256,
             }];
             let encrypted = builder
                 .to_vec_signed(&mut rng, sig_config)

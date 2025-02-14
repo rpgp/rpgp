@@ -513,9 +513,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // Implementations MUST NOT use MD5, SHA-1, or RIPEMD-160 as a hash function in an ECDH KDF.
     // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-9.5-3)
     ensure!(
-        *hash != HashAlgorithm::MD5
-            && *hash != HashAlgorithm::SHA1
-            && *hash != HashAlgorithm::RIPEMD160,
+        *hash != HashAlgorithm::Md5
+            && *hash != HashAlgorithm::Sha1
+            && *hash != HashAlgorithm::Ripemd160,
         "{:?} is not a legal hash function for ECDH KDF",
         hash
     );

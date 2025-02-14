@@ -250,9 +250,9 @@ impl StringToKey {
             Self::Simple { hash_alg }
             | Self::Salted { hash_alg, .. }
             | Self::IteratedAndSalted { hash_alg, .. } => {
-                hash_alg == &HashAlgorithm::MD5
-                    || hash_alg == &HashAlgorithm::SHA1
-                    || hash_alg == &HashAlgorithm::RIPEMD160
+                hash_alg == &HashAlgorithm::Md5
+                    || hash_alg == &HashAlgorithm::Sha1
+                    || hash_alg == &HashAlgorithm::Ripemd160
             }
             _ => false,
         }
@@ -559,9 +559,9 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let algs = [
-            HashAlgorithm::SHA1,
-            HashAlgorithm::SHA2_256,
-            HashAlgorithm::SHA3_256,
+            HashAlgorithm::Sha1,
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Sha3_256,
         ];
         let counts = [
             1u8,

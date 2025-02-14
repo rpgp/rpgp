@@ -374,7 +374,7 @@ k0mXubZvyl4GBg==
         let pri = ssk.primary_key;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let signed = msg.sign(&mut rng, &pri, &Password::empty(), HashAlgorithm::SHA2_256)?;
+        let signed = msg.sign(&mut rng, &pri, &Password::empty(), HashAlgorithm::Sha256)?;
 
         signed.verify(&pri.public_key())?;
 
@@ -423,7 +423,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
             &mut rng,
             &ssk.primary_key,
             &ANNEX_A_5_PASSPHRASE.into(),
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
         )?;
 
         msg.verify(&ssk.primary_key.public_key())?;
@@ -453,7 +453,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
             &mut rng,
             &pri,
             &Password::empty(),
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
         )?;
         msg.verify(pri.public_key())?;
 
@@ -465,7 +465,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
             &mut rng,
             &pri,
             &ANNEX_A_5_PASSPHRASE.into(),
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
         )?;
         msg.verify(pri.public_key())?;
 
@@ -483,7 +483,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
             &mut rng,
             &pri,
             &ANNEX_A_5_PASSPHRASE.into(),
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
         )?;
         msg.verify(pri.public_key())?;
 

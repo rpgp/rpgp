@@ -271,7 +271,7 @@ fn rpg_020_signed_secret_key_create_signature_panic2() {
     // assertion failed: mid <= self.len()
     let _ = key.create_signature(
         &"pw".into(),
-        pgp::crypto::hash::HashAlgorithm::SHA2_256,
+        pgp::crypto::hash::HashAlgorithm::Sha256,
         dummy_data,
     );
 }
@@ -289,7 +289,7 @@ fn rpg_020_signed_secret_key_create_signature_oom_crash1() {
     // memory allocation of 137438871552 bytes failed
     let _ = key.create_signature(
         &"pw".into(),
-        pgp::crypto::hash::HashAlgorithm::SHA2_256,
+        pgp::crypto::hash::HashAlgorithm::Sha256,
         dummy_data,
     );
 }

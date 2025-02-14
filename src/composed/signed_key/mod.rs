@@ -33,7 +33,7 @@
 //! #     SymmetricKeyAlgorithm::AES256,
 //! # ])
 //! # .preferred_hash_algorithms(smallvec![
-//! #     HashAlgorithm::SHA2_256,
+//! #     HashAlgorithm::Sha256,
 //! # ])
 //! # .preferred_compression_algorithms(smallvec![
 //! #     CompressionAlgorithm::ZLIB,
@@ -66,12 +66,12 @@
 //!
 //! // creates the cryptographic core of the signature without any metadata
 //! let signature = signing_key
-//!     .create_signature(passwd_fn, HashAlgorithm::SHA2_256, digest)
+//!     .create_signature(passwd_fn, HashAlgorithm::Sha256, digest)
 //!     .expect("Failed to crate signature");
 //!
 //! // the signature can already be verified
 //! verification_key
-//!     .verify_signature(HashAlgorithm::SHA2_256, digest, &signature)
+//!     .verify_signature(HashAlgorithm::Sha256, digest, &signature)
 //!     .expect("Failed to validate signature");
 //!
 //! // wraps the signature in the appropriate package fmt ready to be serialized
@@ -81,7 +81,7 @@
 //!     packet_header,
 //!     packet::SignatureType::Binary,
 //!     PublicKeyAlgorithm::RSA,
-//!     HashAlgorithm::SHA2_256,
+//!     HashAlgorithm::Sha256,
 //!     [digest[0], digest[1]],
 //!     signature,
 //!     vec![
@@ -99,7 +99,7 @@
 //!
 //! let raw_signature = signature.signature;
 //! verification_key
-//!     .verify_signature(HashAlgorithm::SHA2_256, digest, &raw_signature)
+//!     .verify_signature(HashAlgorithm::Sha256, digest, &raw_signature)
 //!     .expect("Verify must succeed");
 //! ```
 

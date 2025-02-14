@@ -24,7 +24,7 @@
 //!     .can_sign(true)
 //!     .primary_user_id("Me <me@example.com>".into())
 //!     .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
-//!     .preferred_hash_algorithms(smallvec![HashAlgorithm::SHA2_256])
+//!     .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha256])
 //!     .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB]);
 //! let secret_key_params = key_params
 //!     .build()

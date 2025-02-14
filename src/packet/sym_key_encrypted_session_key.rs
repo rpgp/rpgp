@@ -609,12 +609,12 @@ mod tests {
     fn non_weak_hash_alg_gen() -> impl Strategy<Value = HashAlgorithm> {
         use HashAlgorithm::*;
         prop_oneof![
-            Just(SHA2_256),
-            Just(SHA2_384),
-            Just(SHA2_512),
-            Just(SHA2_224),
-            Just(SHA3_256),
-            Just(SHA3_512),
+            Just(Sha256),
+            Just(Sha384),
+            Just(Sha512),
+            Just(Sha224),
+            Just(Sha3_256),
+            Just(Sha3_512),
         ]
     }
 

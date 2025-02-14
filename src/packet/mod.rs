@@ -28,7 +28,7 @@
 //! #          SymmetricKeyAlgorithm::AES256,
 //! #     ])
 //! #     .preferred_hash_algorithms(smallvec![
-//! #          HashAlgorithm::SHA2_256,
+//! #          HashAlgorithm::Sha256,
 //! #     ])
 //! #     .preferred_compression_algorithms(smallvec![
 //! #          CompressionAlgorithm::ZLIB,
@@ -48,7 +48,7 @@
 //!
 //! let now = chrono::Utc::now();
 //!
-//! let mut sig_cfg = SignatureConfig::v4(packet::SignatureType::Binary, PublicKeyAlgorithm::RSA, HashAlgorithm::SHA2_256);
+//! let mut sig_cfg = SignatureConfig::v4(packet::SignatureType::Binary, PublicKeyAlgorithm::RSA, HashAlgorithm::Sha256);
 //! sig_cfg.hashed_subpackets = vec![
 //!     packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)).unwrap(),
 //!     packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())).unwrap(),

@@ -1484,7 +1484,7 @@ mod tests {
         assert!(lit_msg.verify(&*pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1508,7 +1508,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1532,7 +1532,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
             .unwrap();
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
@@ -1561,7 +1561,7 @@ mod tests {
 
             let lit_msg = Message::new_literal("hello.txt", "hello world\n");
             let signed_msg = lit_msg
-                .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::SHA2_256)
+                .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
                 .unwrap();
 
             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1587,7 +1587,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
             .unwrap();
 
         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
@@ -1614,7 +1614,7 @@ mod tests {
 
         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
         let signed_msg = lit_msg
-            .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::SHA2_256)
+            .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
             .unwrap();
 
         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();

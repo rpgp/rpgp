@@ -124,11 +124,11 @@ impl ECCCurve {
             | ECCCurve::Ed25519
             | ECCCurve::P256
             | ECCCurve::BrainpoolP256r1
-            | ECCCurve::Secp256k1 => Ok(HashAlgorithm::SHA2_256),
+            | ECCCurve::Secp256k1 => Ok(HashAlgorithm::Sha256),
 
-            ECCCurve::P384 | ECCCurve::BrainpoolP384r1 => Ok(HashAlgorithm::SHA2_384),
+            ECCCurve::P384 | ECCCurve::BrainpoolP384r1 => Ok(HashAlgorithm::Sha384),
 
-            ECCCurve::P521 | ECCCurve::BrainpoolP512r1 => Ok(HashAlgorithm::SHA2_512),
+            ECCCurve::P521 | ECCCurve::BrainpoolP512r1 => Ok(HashAlgorithm::Sha512),
 
             ECCCurve::Unknown(_oid) => {
                 unsupported_err!("no default hash_algo for curve {:?}", self.to_string())

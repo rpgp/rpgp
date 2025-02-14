@@ -20,24 +20,24 @@ pub enum HashAlgorithm {
     #[display("NONE")]
     None = 0,
     #[display("MD5")]
-    MD5 = 1,
+    Md5 = 1,
     #[display("SHA1")]
-    SHA1 = 2,
+    Sha1 = 2,
     #[display("RIPEMD160")]
-    RIPEMD160 = 3,
+    Ripemd160 = 3,
 
     #[display("SHA256")]
-    SHA2_256 = 8,
+    Sha256 = 8,
     #[display("SHA384")]
-    SHA2_384 = 9,
+    Sha384 = 9,
     #[display("SHA512")]
-    SHA2_512 = 10,
+    Sha512 = 10,
     #[display("SHA224")]
-    SHA2_224 = 11,
+    Sha224 = 11,
     #[display("SHA3-256")]
-    SHA3_256 = 12,
+    Sha3_256 = 12,
     #[display("SHA3-512")]
-    SHA3_512 = 14,
+    Sha3_512 = 14,
 
     /// Do not use, just for compatibility with GnuPG.
     Private10 = 110,
@@ -48,7 +48,7 @@ pub enum HashAlgorithm {
 
 impl Default for HashAlgorithm {
     fn default() -> Self {
-        Self::SHA2_256
+        Self::Sha256
     }
 }
 
@@ -58,15 +58,15 @@ impl FromStr for HashAlgorithm {
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "none" => Ok(Self::None),
-            "md5" => Ok(Self::MD5),
-            "sha1" => Ok(Self::SHA1),
-            "ripemd160" => Ok(Self::RIPEMD160),
-            "sha256" => Ok(Self::SHA2_256),
-            "sha384" => Ok(Self::SHA2_384),
-            "sha512" => Ok(Self::SHA2_512),
-            "sha224" => Ok(Self::SHA2_224),
-            "sha3-256" => Ok(Self::SHA3_256),
-            "sha3-512" => Ok(Self::SHA3_512),
+            "md5" => Ok(Self::Md5),
+            "sha1" => Ok(Self::Sha1),
+            "ripemd160" => Ok(Self::Ripemd160),
+            "sha256" => Ok(Self::Sha256),
+            "sha384" => Ok(Self::Sha384),
+            "sha512" => Ok(Self::Sha512),
+            "sha224" => Ok(Self::Sha224),
+            "sha3-256" => Ok(Self::Sha3_256),
+            "sha3-512" => Ok(Self::Sha3_512),
             "private10" => Ok(Self::Private10),
             _ => bail!("unknown hash"),
         }
@@ -78,12 +78,12 @@ impl HashAlgorithm {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#hash-algos>
     pub const fn salt_len(&self) -> Option<usize> {
         match self {
-            Self::SHA2_224 => Some(16),
-            Self::SHA2_256 => Some(16),
-            Self::SHA2_384 => Some(24),
-            Self::SHA2_512 => Some(32),
-            Self::SHA3_256 => Some(16),
-            Self::SHA3_512 => Some(32),
+            Self::Sha224 => Some(16),
+            Self::Sha256 => Some(16),
+            Self::Sha384 => Some(24),
+            Self::Sha512 => Some(32),
+            Self::Sha3_256 => Some(16),
+            Self::Sha3_512 => Some(32),
             _ => None,
         }
     }
@@ -110,15 +110,15 @@ impl HashAlgorithm {
     /// Create a new hasher.
     pub fn new_hasher(self) -> Result<Box<dyn DynDigest>> {
         match self {
-            HashAlgorithm::MD5 => Ok(Box::<Md5>::default()),
-            HashAlgorithm::SHA1 => Ok(Box::<Sha1>::default()),
-            HashAlgorithm::RIPEMD160 => Ok(Box::<Ripemd160>::default()),
-            HashAlgorithm::SHA2_256 => Ok(Box::<sha2::Sha256>::default()),
-            HashAlgorithm::SHA2_384 => Ok(Box::<sha2::Sha384>::default()),
-            HashAlgorithm::SHA2_512 => Ok(Box::<sha2::Sha512>::default()),
-            HashAlgorithm::SHA2_224 => Ok(Box::<sha2::Sha224>::default()),
-            HashAlgorithm::SHA3_256 => Ok(Box::<sha3::Sha3_256>::default()),
-            HashAlgorithm::SHA3_512 => Ok(Box::<sha3::Sha3_512>::default()),
+            HashAlgorithm::Md5 => Ok(Box::<Md5>::default()),
+            HashAlgorithm::Sha1 => Ok(Box::<Sha1>::default()),
+            HashAlgorithm::Ripemd160 => Ok(Box::<Ripemd160>::default()),
+            HashAlgorithm::Sha256 => Ok(Box::<sha2::Sha256>::default()),
+            HashAlgorithm::Sha384 => Ok(Box::<sha2::Sha384>::default()),
+            HashAlgorithm::Sha512 => Ok(Box::<sha2::Sha512>::default()),
+            HashAlgorithm::Sha224 => Ok(Box::<sha2::Sha224>::default()),
+            HashAlgorithm::Sha3_256 => Ok(Box::<sha3::Sha3_256>::default()),
+            HashAlgorithm::Sha3_512 => Ok(Box::<sha3::Sha3_512>::default()),
             _ => unimplemented_err!("hasher {:?}", self),
         }
     }
@@ -128,20 +128,20 @@ impl HashAlgorithm {
         use digest::Digest;
 
         Ok(match self {
-            HashAlgorithm::MD5 => Md5::digest(data).to_vec(),
-            HashAlgorithm::SHA1 => match Sha1::try_digest(data) {
+            HashAlgorithm::Md5 => Md5::digest(data).to_vec(),
+            HashAlgorithm::Sha1 => match Sha1::try_digest(data) {
                 CollisionResult::Ok(output) => output.to_vec(),
                 CollisionResult::Collision(_) | CollisionResult::Mitigated(_) => {
                     return Err(Error::Sha1HashCollision)
                 }
             },
-            HashAlgorithm::RIPEMD160 => Ripemd160::digest(data).to_vec(),
-            HashAlgorithm::SHA2_256 => sha2::Sha256::digest(data).to_vec(),
-            HashAlgorithm::SHA2_384 => sha2::Sha384::digest(data).to_vec(),
-            HashAlgorithm::SHA2_512 => sha2::Sha512::digest(data).to_vec(),
-            HashAlgorithm::SHA2_224 => sha2::Sha224::digest(data).to_vec(),
-            HashAlgorithm::SHA3_256 => sha3::Sha3_256::digest(data).to_vec(),
-            HashAlgorithm::SHA3_512 => sha3::Sha3_512::digest(data).to_vec(),
+            HashAlgorithm::Ripemd160 => Ripemd160::digest(data).to_vec(),
+            HashAlgorithm::Sha256 => sha2::Sha256::digest(data).to_vec(),
+            HashAlgorithm::Sha384 => sha2::Sha384::digest(data).to_vec(),
+            HashAlgorithm::Sha512 => sha2::Sha512::digest(data).to_vec(),
+            HashAlgorithm::Sha224 => sha2::Sha224::digest(data).to_vec(),
+            HashAlgorithm::Sha3_256 => sha3::Sha3_256::digest(data).to_vec(),
+            HashAlgorithm::Sha3_512 => sha3::Sha3_512::digest(data).to_vec(),
 
             HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
             _ => unimplemented_err!("hasher: {:?}", self),
@@ -153,15 +153,15 @@ impl HashAlgorithm {
         use digest::Digest;
 
         let size = match self {
-            HashAlgorithm::MD5 => <Md5 as Digest>::output_size(),
-            HashAlgorithm::SHA1 => <Sha1 as Digest>::output_size(),
-            HashAlgorithm::RIPEMD160 => <Ripemd160 as Digest>::output_size(),
-            HashAlgorithm::SHA2_256 => <sha2::Sha256 as Digest>::output_size(),
-            HashAlgorithm::SHA2_384 => <sha2::Sha384 as Digest>::output_size(),
-            HashAlgorithm::SHA2_512 => <sha2::Sha512 as Digest>::output_size(),
-            HashAlgorithm::SHA2_224 => <sha2::Sha224 as Digest>::output_size(),
-            HashAlgorithm::SHA3_256 => <sha3::Sha3_256 as Digest>::output_size(),
-            HashAlgorithm::SHA3_512 => <sha3::Sha3_512 as Digest>::output_size(),
+            HashAlgorithm::Md5 => <Md5 as Digest>::output_size(),
+            HashAlgorithm::Sha1 => <Sha1 as Digest>::output_size(),
+            HashAlgorithm::Ripemd160 => <Ripemd160 as Digest>::output_size(),
+            HashAlgorithm::Sha256 => <sha2::Sha256 as Digest>::output_size(),
+            HashAlgorithm::Sha384 => <sha2::Sha384 as Digest>::output_size(),
+            HashAlgorithm::Sha512 => <sha2::Sha512 as Digest>::output_size(),
+            HashAlgorithm::Sha224 => <sha2::Sha224 as Digest>::output_size(),
+            HashAlgorithm::Sha3_256 => <sha3::Sha3_256 as Digest>::output_size(),
+            HashAlgorithm::Sha3_512 => <sha3::Sha3_512 as Digest>::output_size(),
             _ => return None,
         };
         Some(size)
@@ -176,8 +176,8 @@ mod tests {
     fn test_display_parse_hash() {
         assert_eq!(HashAlgorithm::None.to_string(), "NONE".to_string());
 
-        assert_eq!(HashAlgorithm::SHA2_256.to_string(), "SHA256".to_string());
+        assert_eq!(HashAlgorithm::Sha256.to_string(), "SHA256".to_string());
 
-        assert_eq!(HashAlgorithm::SHA3_512, "SHA3-512".parse().unwrap());
+        assert_eq!(HashAlgorithm::Sha3_512, "SHA3-512".parse().unwrap());
     }
 }
