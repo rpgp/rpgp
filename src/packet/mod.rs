@@ -15,7 +15,7 @@
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
-//! use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm, KeyDetails as _};
+//! use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm, KeyDetails as _, Password};
 //! use smallvec::*;
 //! #
 //! # let mut key_params = SecretKeyParamsBuilder::default();
@@ -35,8 +35,8 @@
 //! #     ]);
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
 //! # let secret_key = secret_key_params.generate(thread_rng()).expect("Failed to generate a plain key.");
-//! # let passwd_fn = || String::new();
-//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), passwd_fn).expect("Must be able to sign its own metadata");
+//! # let passwd_fn = Password::empty();
+//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), &passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
 //! use pgp::packet::{Signature, SignatureConfig, PacketTrait};
 //!
@@ -44,7 +44,7 @@
 //! let verification_key = public_key;
 //!
 //!
-//! let passwd_fn = || String::new();
+//! let passwd_fn = Password::empty();
 //!
 //! let now = chrono::Utc::now();
 //!
@@ -55,7 +55,7 @@
 //! ];
 //!
 //! let signature_packet = sig_cfg
-//!      .sign(&*signing_key, passwd_fn, DATA)
+//!      .sign(&*signing_key, &passwd_fn, DATA)
 //!      .expect("Should sign");
 //!
 //! let mut signature_bytes = Vec::with_capacity(1024);
