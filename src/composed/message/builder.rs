@@ -75,11 +75,25 @@ enum Encryption {
 /// Configures a signing key and how to use it.
 pub struct SigningConfig<'a> {
     /// The key to sign with
-    pub key: Box<&'a dyn SecretKeyTrait>,
+    key: &'a dyn SecretKeyTrait,
     /// A password to unlock it
-    pub key_pw: Password,
+    key_pw: Password,
     /// The hash algorithm to be used when sigining.
-    pub hash_algorithm: HashAlgorithm,
+    hash_algorithm: HashAlgorithm,
+}
+
+impl<'a> SigningConfig<'a> {
+    /// Create a new signing configuration.
+    pub fn new<K>(key: &'a K, key_pw: Password, hash: HashAlgorithm) -> Self
+    where
+        K: SecretKeyTrait,
+    {
+        Self {
+            key,
+            key_pw,
+            hash_algorithm: hash,
+        }
+    }
 }
 
 /// Configures the version specific parts of
@@ -534,8 +548,7 @@ impl<R: Read> Builder<R> {
 
         // 3. Write all Signatures (reverse order as One Pass Signatures)
         for (hasher, config) in hashers.into_iter().zip(keys.into_iter()).rev() {
-            let key = &config.key;
-            let signature = hasher.sign(key, &config.key_pw)?;
+            let signature = hasher.sign(config.key, &config.key_pw)?;
             signature.to_writer_with_header(&mut out)?;
         }
 
@@ -1433,11 +1446,12 @@ mod tests {
                 )
                 .expect("encryption");
 
-            let sig_config = vec![SigningConfig {
-                key: Box::new(&*skey),
-                key_pw: Password::empty(),
-                hash_algorithm: HashAlgorithm::Sha256,
-            }];
+            let sig_config = vec![SigningConfig::new(
+                &*skey,
+                Password::empty(),
+                HashAlgorithm::Sha256,
+            )];
+
             let encrypted = builder
                 .to_vec_signed(&mut rng, sig_config)
                 .expect("writing");
@@ -1528,6 +1542,7 @@ mod tests {
             std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
         )
         .unwrap();
+
         // subkey[0] is the encryption key
         let pkey = skey.secret_subkeys[0].public_key();
 
@@ -1557,11 +1572,12 @@ mod tests {
                 )
                 .expect("encryption");
 
-            let sig_config = vec![SigningConfig {
-                key: Box::new(&*skey),
-                key_pw: Password::empty(),
-                hash_algorithm: HashAlgorithm::Sha256,
-            }];
+            let sig_config = vec![SigningConfig::new(
+                &*skey,
+                Password::empty(),
+                HashAlgorithm::Sha256,
+            )];
+
             let encrypted = builder
                 .to_vec_signed(&mut rng, sig_config)
                 .expect("writing");

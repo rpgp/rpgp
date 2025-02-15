@@ -638,7 +638,7 @@ impl SignatureHasher {
     /// Finalizes the signature.
     pub fn sign<K>(self, key: &K, key_pw: &Password) -> Result<Signature>
     where
-        K: SecretKeyTrait,
+        K: SecretKeyTrait + ?Sized,
     {
         let Self { config, mut hasher } = self;
         ensure!(
