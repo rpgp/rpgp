@@ -2,6 +2,7 @@ use std::io::{self, Read};
 
 use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes, BytesMut};
+use num_enum::{IntoPrimitive, TryFromPrimitive};
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 use zeroize::Zeroizing;
@@ -31,10 +32,46 @@ pub enum Config {
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         #[debug("{}", hex::encode(salt))]
         salt: [u8; 32],
     },
+}
+
+/// Allowed chunk sizes.
+/// The range is from 64B to 4 MiB.
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-2-symmetrically-enc>
+#[derive(
+    Default, IntoPrimitive, Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, TryFromPrimitive,
+)]
+#[repr(u8)]
+pub enum ChunkSize {
+    C64B = 0,
+    C128B = 1,
+    C256B = 2,
+    C512B = 3,
+    C1KiB = 4,
+    C2KiB = 5,
+    #[default]
+    C4KiB = 6,
+    C8KiB = 7,
+    C16KiB = 8,
+    C32KiB = 9,
+    C64KiB = 10,
+    C128KiB = 11,
+    C256KiB = 12,
+    C512KiB = 13,
+    C1MiB = 14,
+    C2MiB = 15,
+    C4MiB = 16,
+}
+
+impl ChunkSize {
+    /// Returns the number of bytes for this chunk size.
+    pub const fn as_byte_size(self) -> u32 {
+        1u32 << ((self as u32) + 6)
+    }
 }
 
 impl SymEncryptedProtectedData {
@@ -52,7 +89,10 @@ impl SymEncryptedProtectedData {
             0x02 => {
                 let sym_alg = data.read_u8().map(SymmetricKeyAlgorithm::from)?;
                 let aead = data.read_u8().map(AeadAlgorithm::from)?;
-                let chunk_size = data.read_u8()?;
+                let chunk_size = data
+                    .read_u8()?
+                    .try_into()
+                    .map_err(|_| Error::InvalidInput)?;
                 let salt = data.read_array::<32>()?;
 
                 Config::V2 {
@@ -102,7 +142,7 @@ impl SymEncryptedProtectedData {
         mut rng: R,
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         session_key: &[u8],
         mut plaintext: &[u8],
     ) -> Result<Self> {
@@ -143,7 +183,7 @@ impl SymEncryptedProtectedData {
     pub fn encrypt_seipdv2_stream<R: io::Read>(
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         session_key: &[u8],
         salt: [u8; 32],
         source: R,
@@ -200,7 +240,7 @@ impl SymEncryptedProtectedData {
                 // Initial key material is the session key.
                 let ikm = session_key;
 
-                let chunk_size_expanded = usize::try_from(expand_chunk_size(*chunk_size))?;
+                let chunk_size_expanded: usize = chunk_size.as_byte_size().try_into()?;
 
                 let (info, message_key, mut nonce) =
                     aead_setup(*sym_alg, *aead, *chunk_size, &salt[..], ikm)?;
@@ -284,7 +324,7 @@ impl Serialize for Config {
                 writer.write_u8(0x02)?;
                 writer.write_u8((*sym_alg).into())?;
                 writer.write_u8((*aead).into())?;
-                writer.write_u8(*chunk_size)?;
+                writer.write_u8((*chunk_size).into())?;
                 writer.write_all(salt)?;
             }
         }
@@ -322,16 +362,12 @@ impl PacketTrait for SymEncryptedProtectedData {
     }
 }
 
-fn expand_chunk_size(s: u8) -> u32 {
-    1u32 << (s as u32 + 6)
-}
-
 /// Get (info, message_key, nonce) for the given parameters
 #[allow(clippy::type_complexity)]
 pub(crate) fn aead_setup(
     sym_alg: SymmetricKeyAlgorithm,
     aead: AeadAlgorithm,
-    chunk_size: u8,
+    chunk_size: ChunkSize,
     salt: &[u8],
     ikm: &[u8],
 ) -> Result<([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>)> {
@@ -340,7 +376,7 @@ pub(crate) fn aead_setup(
         0x02,                                    // version
         sym_alg.into(),
         aead.into(),
-        chunk_size,
+        chunk_size.into(),
     ];
 
     let hk = hkdf::Hkdf::<Sha256>::new(Some(salt), ikm);
@@ -379,7 +415,7 @@ impl<R: io::Read> StreamEncryptor<R> {
     pub(crate) fn new(
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         session_key: &[u8],
         salt: &[u8; 32],
         source: R,
@@ -393,7 +429,7 @@ impl<R: io::Read> StreamEncryptor<R> {
 
         let (info, message_key, nonce) =
             aead_setup(sym_alg, aead, chunk_size, &salt[..], session_key)?;
-        let chunk_size_expanded = expand_chunk_size(chunk_size);
+        let chunk_size_expanded = chunk_size.as_byte_size();
 
         let buffer = BytesMut::with_capacity(chunk_size_expanded as usize);
 
@@ -498,13 +534,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_chunk_size() {
+        assert_eq!(ChunkSize::default().as_byte_size(), 4 * 1024);
+        assert_eq!(ChunkSize::C64B.as_byte_size(), 64);
+    }
+
+    #[test]
     fn test_aead_message_sizes() {
         // Test that AEAD encryption/decryption works for message sizes that span 0-2 chunks.
 
         let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
-
-        // Chunk size parameter 0 means "chunks of 64 byte each"
-        const CHUNK_SIZE: u8 = 0;
 
         const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES128;
 
@@ -522,7 +561,7 @@ mod tests {
                     &mut rng,
                     SYM_ALG,
                     aead,
-                    CHUNK_SIZE,
+                    ChunkSize::C64B,
                     &session_key,
                     &message,
                 )

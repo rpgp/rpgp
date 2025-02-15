@@ -12,9 +12,9 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{
-    CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader, OnePassSignature,
-    PacketHeader, PacketTrait, PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType,
-    SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedProtectedData,
+    ChunkSize, CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
+    OnePassSignature, PacketHeader, PacketTrait, PublicKeyEncryptedSessionKey, SignatureHasher,
+    SignatureType, SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedProtectedData,
     SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
@@ -67,7 +67,7 @@ enum Encryption {
         pub_esks: Vec<PublicKeyEncryptedSessionKey>,
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         salt: [u8; 32],
     },
 }
@@ -105,7 +105,7 @@ pub enum Seipd {
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
     },
 }
 
@@ -1509,7 +1509,7 @@ mod tests {
                     Seipd::V2 {
                         sym_alg: SymmetricKeyAlgorithm::AES128,
                         aead: AeadAlgorithm::Gcm,
-                        chunk_size: 0x06,
+                        chunk_size: ChunkSize::default(),
                     },
                     s2k,
                     &"hello world".into(),
@@ -1566,7 +1566,7 @@ mod tests {
                     Seipd::V2 {
                         sym_alg: SymmetricKeyAlgorithm::AES128,
                         aead: AeadAlgorithm::Gcm,
-                        chunk_size: 0x06,
+                        chunk_size: ChunkSize::default(),
                     },
                     &pkey,
                 )
@@ -1647,7 +1647,7 @@ mod tests {
                     Seipd::V2 {
                         sym_alg: SymmetricKeyAlgorithm::AES128,
                         aead: AeadAlgorithm::Gcm,
-                        chunk_size: 0x06,
+                        chunk_size: ChunkSize::default(),
                     },
                     &pkey1,
                 )

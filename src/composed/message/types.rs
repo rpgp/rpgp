@@ -20,7 +20,7 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
-    CompressedData, DataMode, LiteralData, OnePassSignature, Packet, PacketTrait,
+    ChunkSize, CompressedData, DataMode, LiteralData, OnePassSignature, Packet, PacketTrait,
     PublicKeyEncryptedSessionKey, Signature, SignatureConfig, SignatureType,
     SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
     SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
@@ -543,7 +543,7 @@ impl Message {
         mut rng: R,
         alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         pkeys: &[&impl PublicKeyTrait],
     ) -> Result<Self> {
         // 1. Generate a session key.
@@ -599,7 +599,7 @@ impl Message {
         s2k: StringToKey,
         alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         msg_pw: &Password,
     ) -> Result<Self>
     where
@@ -653,7 +653,7 @@ impl Message {
         esk: Vec<Esk>,
         alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
-        chunk_size: u8,
+        chunk_size: ChunkSize,
         session_key: &[u8],
     ) -> Result<Self> {
         let data = self.to_bytes()?;
@@ -1223,7 +1223,7 @@ mod tests {
                 &mut rng,
                 SymmetricKeyAlgorithm::AES128,
                 AeadAlgorithm::Ocb,
-                0x06,
+                ChunkSize::default(),
                 &[&pkey][..],
             )
             .unwrap();
@@ -1232,7 +1232,7 @@ mod tests {
                 &mut rng2,
                 SymmetricKeyAlgorithm::AES128,
                 AeadAlgorithm::Ocb,
-                0x06,
+                ChunkSize::default(),
                 &[&pkey][..],
             )
             .unwrap();
@@ -1292,7 +1292,7 @@ mod tests {
 
         for _ in 0..1000 {
             let encrypted = compressed_msg
-                .encrypt_to_keys_seipdv2(&mut rng, sym, aead, 0x06, &[&pkey][..])
+                .encrypt_to_keys_seipdv2(&mut rng, sym, aead, ChunkSize::default(), &[&pkey][..])
                 .unwrap();
 
             let armored = encrypted.to_armored_bytes(None.into()).unwrap();
@@ -1389,7 +1389,14 @@ mod tests {
         let s2k = StringToKey::new_default(&mut rng);
 
         let encrypted = compressed_msg
-            .encrypt_with_password_seipdv2(&mut rng, s2k, sym, aead, 0x06, &"secret".into())
+            .encrypt_with_password_seipdv2(
+                &mut rng,
+                s2k,
+                sym,
+                aead,
+                ChunkSize::default(),
+                &"secret".into(),
+            )
             .unwrap();
 
         let armored = encrypted.to_armored_bytes(None.into()).unwrap();

@@ -104,8 +104,9 @@ pub use self::public_key_encrypted_session_key::*;
 pub use self::signature::subpacket::{Subpacket, SubpacketData, SubpacketLength, SubpacketType};
 pub use self::signature::*;
 pub use self::sym_encrypted_data::*;
-pub use self::sym_encrypted_protected_data::Config as SymEncryptedProtectedDataConfig;
-pub use self::sym_encrypted_protected_data::SymEncryptedProtectedData;
+pub use self::sym_encrypted_protected_data::{
+    ChunkSize, Config as SymEncryptedProtectedDataConfig, SymEncryptedProtectedData,
+};
 pub use self::sym_key_encrypted_session_key::*;
 pub use self::trust::*;
 pub use self::user_attribute::*;

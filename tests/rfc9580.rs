@@ -3,7 +3,7 @@ use std::fs::File;
 use bytes::Bytes;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
-use pgp::packet::LiteralData;
+use pgp::packet::{ChunkSize, LiteralData};
 use pgp::types::KeyVersion;
 use pgp::{
     cleartext::CleartextSignedMessage, Deserializable, KeyType, Message, SecretKeyParamsBuilder,
@@ -138,7 +138,7 @@ fn rfc9580_seipdv2_roundtrip() {
                 &mut rng,
                 SymmetricKeyAlgorithm::AES256,
                 AeadAlgorithm::Ocb,
-                0x06, // 2^12 bytes
+                ChunkSize::default(),
                 &[enc_subkey],
             )
             .expect("encrypt");
