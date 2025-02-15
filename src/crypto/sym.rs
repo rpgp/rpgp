@@ -497,21 +497,6 @@ impl SymmetricKeyAlgorithm {
         let mut encryptor = self.stream_encryptor(rng, key, plaintext)?;
         std::io::copy(&mut encryptor, &mut ciphertext)?;
         Ok(())
-
-        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
-
-        // let mut buffer = vec![0u8; 1024 * bs];
-        // loop {
-        //     let read = plaintext.read(&mut buffer)?;
-        //     if read == 0 {
-        //         break;
-        //     }
-        //     hasher.update(&buffer[..read]);
-        //     encryptor.encrypt(&mut buffer[..read]);
-        //     ciphertext.write_all(&buffer[..read])?;
-        // }
-
-        // Ok(())
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.

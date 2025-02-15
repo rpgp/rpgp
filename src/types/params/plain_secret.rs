@@ -3,7 +3,7 @@ use std::io;
 
 use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
-use bytes::Buf;
+use bytes::{Buf, BufMut, BytesMut};
 use hkdf::Hkdf;
 use num_bigint::ModInverse;
 use sha2::Sha256;
@@ -249,8 +249,11 @@ impl PlainSecretParams {
                         unimplemented_err!("Encryption for V2/V3 keys is not available")
                     }
                     KeyVersion::V4 | KeyVersion::V6 => {
-                        let mut data = Vec::with_capacity(self.write_len_raw());
-                        self.to_writer_raw(&mut data).expect("preallocated vector");
+                        let data = BytesMut::with_capacity(self.write_len_raw());
+                        let mut writer = data.writer();
+                        self.to_writer_raw(&mut writer)
+                            .expect("preallocated vector");
+                        let mut data = writer.into_inner();
 
                         let Some(secret_tag) = secret_tag else {
                             bail!("no secret_tag provided");
@@ -260,11 +263,7 @@ impl PlainSecretParams {
                             s2k_usage_aead(&key, secret_tag, pub_key, *sym_alg, *aead_mode)?;
 
                         // AEAD encrypt
-                        let tag =
-                            aead_mode.encrypt_in_place(sym_alg, &okm, nonce, &ad, &mut data)?;
-
-                        // append tag to now encrypted secret params
-                        data.extend_from_slice(&tag);
+                        aead_mode.encrypt_in_place(sym_alg, &okm, nonce, &ad, &mut data)?;
 
                         data
                     }

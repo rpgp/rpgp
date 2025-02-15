@@ -19,6 +19,7 @@ rust-version = "1.83"
 
 [dependencies]
 aes = "0.8.4"
+aead = { version = "0.5", features = ["bytes"] }
 argon2 = { version = "0.5", features = ["zeroize"] }
 base64 = ">=0.21.7, < 0.23"
 block-padding = "0.3"

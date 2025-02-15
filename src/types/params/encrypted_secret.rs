@@ -155,14 +155,12 @@ impl EncryptedSecretParams {
                             s2k_usage_aead(&derived, secret_tag, pub_key, *sym_alg, *aead_mode)?;
 
                         // AEAD decrypt
-                        let (ciphertext, tag) = self.data.split_at(self.data.len() - tag_size);
-
-                        let mut decrypt: Vec<_> = ciphertext.to_vec();
-                        aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, tag, &mut decrypt)?;
+                        let mut ciphertext: BytesMut = self.data.clone().into();
+                        aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut ciphertext)?;
 
                         // "decrypt" now contains the decrypted key material
                         PlainSecretParams::try_from_buf_no_checksum(
-                            &mut &decrypt[..],
+                            &mut ciphertext,
                             pub_key.version(),
                             alg,
                             pub_key.public_params(),

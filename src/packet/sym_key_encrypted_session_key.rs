@@ -1,7 +1,7 @@
 use std::io;
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes};
+use bytes::{Buf, Bytes, BytesMut};
 use log::debug;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
@@ -53,20 +53,14 @@ pub enum AeadProps {
     Eax {
         #[debug("{}", hex::encode(iv))]
         iv: [u8; 16],
-        #[debug("{}", hex::encode(auth_tag))]
-        auth_tag: [u8; 16],
     },
     Ocb {
         #[debug("{}", hex::encode(iv))]
         iv: [u8; 15],
-        #[debug("{}", hex::encode(auth_tag))]
-        auth_tag: [u8; 16],
     },
     Gcm {
         #[debug("{}", hex::encode(iv))]
         iv: [u8; 12],
-        #[debug("{}", hex::encode(auth_tag))]
-        auth_tag: [u8; 16],
     },
 }
 
@@ -86,14 +80,6 @@ impl AeadProps {
             AeadProps::Eax { iv, .. } => iv,
             AeadProps::Ocb { iv, .. } => iv,
             AeadProps::Gcm { iv, .. } => iv,
-        }
-    }
-
-    fn auth_tag(&self) -> &[u8] {
-        match self {
-            AeadProps::Eax { auth_tag, .. } => auth_tag,
-            AeadProps::Ocb { auth_tag, .. } => auth_tag,
-            AeadProps::Gcm { auth_tag, .. } => auth_tag,
         }
     }
 }
@@ -149,7 +135,7 @@ impl SymKeyEncryptedSessionKey {
     pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
         debug!("decrypt session key {:?}", self.version());
 
-        let mut decrypted_key = self.encrypted_key().to_vec();
+        let mut decrypted_key: BytesMut = self.encrypted_key().clone().into();
 
         match self {
             Self::V4 { sym_algorithm, .. } => {
@@ -186,16 +172,11 @@ impl SymKeyEncryptedSessionKey {
                 hk.expand(&info, &mut okm).expect("42");
 
                 // AEAD decrypt
-                alg.decrypt_in_place(
-                    sym_algorithm,
-                    &okm,
-                    aead.iv(),
-                    &info,
-                    aead.auth_tag(),
-                    &mut decrypted_key,
-                )?;
+                alg.decrypt_in_place(sym_algorithm, &okm, aead.iv(), &info, &mut decrypted_key)?;
 
-                Ok(PlainSessionKey::V5 { key: decrypted_key })
+                Ok(PlainSessionKey::V5 {
+                    key: decrypted_key.into(),
+                })
             }
             Self::V6 {
                 sym_algorithm,
@@ -220,21 +201,16 @@ impl SymKeyEncryptedSessionKey {
                 hk.expand(&info, &mut okm).expect("42");
 
                 // AEAD decrypt
-                alg.decrypt_in_place(
-                    sym_algorithm,
-                    &okm,
-                    aead.iv(),
-                    &info,
-                    aead.auth_tag(),
-                    &mut decrypted_key,
-                )?;
+                alg.decrypt_in_place(sym_algorithm, &okm, aead.iv(), &info, &mut decrypted_key)?;
 
-                Ok(PlainSessionKey::V6 { key: decrypted_key })
+                Ok(PlainSessionKey::V6 {
+                    key: decrypted_key.into(),
+                })
             }
         }
     }
 
-    pub fn encrypted_key(&self) -> &[u8] {
+    pub fn encrypted_key(&self) -> &Bytes {
         match self {
             Self::V4 {
                 ref encrypted_key, ..
@@ -337,34 +313,25 @@ impl SymKeyEncryptedSessionKey {
         rng.fill_bytes(&mut iv);
 
         // AEAD encrypt
-        let mut encrypted_key = session_key.to_vec();
-        let auth_tag =
-            aead.encrypt_in_place(&sym_algorithm, &okm, &iv, &info, &mut encrypted_key)?;
+        let mut encrypted_key: BytesMut = session_key.into();
+        aead.encrypt_in_place(&sym_algorithm, &okm, &iv, &info, &mut encrypted_key)?;
 
         let aead = match aead {
             AeadAlgorithm::Eax => AeadProps::Eax {
                 iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
             },
             AeadAlgorithm::Ocb => AeadProps::Ocb {
                 iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
             },
             AeadAlgorithm::Gcm => AeadProps::Gcm {
                 iv: iv.try_into().expect("checked"),
-                auth_tag: auth_tag.try_into().expect("checked"),
             },
             _ => {
                 unimplemented_err!("AEAD {:?}", aead);
             }
         };
-        let len = 3
-            + s2k.write_len()
-            + 1
-            + aead.iv().len()
-            + 1
-            + encrypted_key.len()
-            + aead.auth_tag().len();
+        let len = 3 + s2k.write_len() + 1 + aead.iv().len() + 1 + encrypted_key.len();
+
         let packet_header = PacketHeader::new_fixed(Tag::SymKeyEncryptedSessionKey, len);
 
         Ok(SymKeyEncryptedSessionKey::V6 {
@@ -403,22 +370,17 @@ fn parse_v5<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncry
     if l < aead_tag_size {
         return Err(Error::InvalidInput);
     }
-    let esk_size = l - aead_tag_size;
-    let esk = i.read_take(esk_size)?;
-    let auth_tag = i.read_take(aead_tag_size)?;
+    let esk = i.read_take(l)?;
 
     let aead = match aead {
         AeadAlgorithm::Eax => AeadProps::Eax {
             iv: iv.as_ref().try_into().expect("checked"),
-            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
         },
         AeadAlgorithm::Ocb => AeadProps::Ocb {
             iv: iv.as_ref().try_into().expect("checked"),
-            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
         },
         AeadAlgorithm::Gcm => AeadProps::Gcm {
             iv: iv.as_ref().try_into().expect("checked"),
-            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
         },
         _ => unsupported_err!("aead algorithm for v5: {:?}", aead),
     };
@@ -445,21 +407,17 @@ fn parse_v6<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncry
     if l < aead_tag_size {
         return Err(Error::InvalidInput);
     }
-    let esk = i.read_take(l - aead_tag_size)?;
-    let auth_tag = i.read_take(aead_tag_size)?;
+    let esk = i.read_take(l)?;
 
     let aead = match aead {
         AeadAlgorithm::Eax => AeadProps::Eax {
             iv: iv.as_ref().try_into().expect("checked"),
-            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
         },
         AeadAlgorithm::Ocb => AeadProps::Ocb {
             iv: iv.as_ref().try_into().expect("checked"),
-            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
         },
         AeadAlgorithm::Gcm => AeadProps::Gcm {
             iv: iv.as_ref().try_into().expect("checked"),
-            auth_tag: auth_tag.as_ref().try_into().expect("checked"),
         },
         _ => unsupported_err!("aead algorithm for v6: {:?}", aead),
     };
@@ -508,7 +466,6 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 writer.write_all(aead.iv())?;
 
                 writer.write_all(encrypted_key)?;
-                writer.write_all(aead.auth_tag())?;
             }
             SymKeyEncryptedSessionKey::V6 {
                 packet_header: _,
@@ -532,7 +489,6 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 writer.write_all(aead.iv())?;
 
                 writer.write_all(encrypted_key)?;
-                writer.write_all(aead.auth_tag())?;
             }
         }
         Ok(())
@@ -563,7 +519,6 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 sum += 1;
                 sum += encrypted_key.len();
-                sum += aead.auth_tag().len();
             }
             SymKeyEncryptedSessionKey::V6 {
                 s2k,
@@ -580,7 +535,6 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 sum += 1;
                 sum += encrypted_key.len();
-                sum += aead.auth_tag().len();
             }
         }
         sum

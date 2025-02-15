@@ -1,7 +1,7 @@
-use std::io;
+use std::io::{self, Read};
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes};
+use bytes::{Buf, Bytes, BytesMut};
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 use zeroize::Zeroizing;
@@ -13,6 +13,7 @@ use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::Tag;
+use crate::util::fill_buffer;
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
@@ -96,38 +97,6 @@ impl SymEncryptedProtectedData {
         })
     }
 
-    /// Get (info, message_key, nonce) for the given parameters
-    #[allow(clippy::type_complexity)]
-    fn aead_setup(
-        sym_alg: SymmetricKeyAlgorithm,
-        aead: AeadAlgorithm,
-        chunk_size: u8,
-        salt: &[u8],
-        ikm: &[u8],
-    ) -> Result<([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>)> {
-        let info = [
-            Tag::SymEncryptedProtectedData.encode(), // packet type
-            0x02,                                    // version
-            sym_alg.into(),
-            aead.into(),
-            chunk_size,
-        ];
-
-        let hk = hkdf::Hkdf::<Sha256>::new(Some(salt), ikm);
-        let mut okm = Zeroizing::new([0u8; 42]);
-        hk.expand(&info, okm.as_mut_slice()).expect("42");
-
-        let mut message_key = Zeroizing::new(vec![0; sym_alg.key_size()]);
-        message_key.copy_from_slice(&okm.as_slice()[..sym_alg.key_size()]);
-
-        let raw_iv_len = aead.nonce_size() - 8;
-        let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
-        let mut nonce = vec![0u8; aead.nonce_size()];
-        nonce[..raw_iv_len].copy_from_slice(iv);
-
-        Ok((info, message_key, nonce))
-    }
-
     /// Encrypts the data using the given symmetric key.
     pub fn encrypt_seipdv2<R: CryptoRng + Rng>(
         mut rng: R,
@@ -135,74 +104,24 @@ impl SymEncryptedProtectedData {
         aead: AeadAlgorithm,
         chunk_size: u8,
         session_key: &[u8],
-        plaintext: &[u8],
+        mut plaintext: &[u8],
     ) -> Result<Self> {
-        ensure_eq!(
-            session_key.len(),
-            sym_alg.key_size(),
-            "Unexpected session key length for {:?}",
-            sym_alg
-        );
-
-        // Initial key material is the session key.
-        let ikm = session_key;
-
         // Generate new salt for this seipd packet.
         let mut salt = [0u8; 32];
         rng.fill(&mut salt[..]);
 
-        let chunk_size_expanded = usize::try_from(expand_chunk_size(chunk_size))?;
-
-        let (info, message_key, mut nonce) =
-            Self::aead_setup(sym_alg, aead, chunk_size, &salt[..], ikm)?;
-
-        // Calculate output size (for more efficient vector allocation):
-        // - plaintext length
-        let plain_len = plaintext.len();
-        // - number of chunks: plaintext length divided by chunk size, rounded up to the next integer
-        let num_chunks = plain_len.div_ceil(chunk_size_expanded);
-        // - total output size: plaintext length + size of all authentication tags (one tag per chunk, plus one final tag)
-        let out_len = plain_len + (num_chunks + 1) * aead.tag_size().unwrap_or_default();
-
-        let mut out = Vec::with_capacity(out_len);
-
-        let mut chunk_index: u64 = 0;
-        for chunk in plaintext.chunks(chunk_size_expanded) {
-            let pos = out.len();
-
-            // append this next unencrypted chunk to `out`, and encrypt it in place
-            out.extend_from_slice(chunk);
-
-            let encrypt_chunk = &mut out[pos..];
-
-            let auth_tag =
-                aead.encrypt_in_place(&sym_alg, &message_key, &nonce, &info, encrypt_chunk)?;
-
-            out.extend_from_slice(&auth_tag);
-
-            // Update nonce to include the next chunk index
-            chunk_index += 1;
-            let l = nonce.len() - 8;
-            nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
-        }
-
-        // Make and append final auth tag
-
-        // Associated data is extended with number of plaintext octets.
-        let size = plaintext.len() as u64;
-        let mut final_info = info.to_vec();
-        final_info.extend_from_slice(&size.to_be_bytes());
-
-        let final_auth_tag = aead.encrypt_in_place(
-            &sym_alg,
-            &message_key,
-            &nonce,
-            &final_info,
-            &mut [][..], // encrypts empty string
+        let mut encryptor = StreamEncryptor::new(
+            sym_alg,
+            aead,
+            chunk_size,
+            session_key,
+            &salt,
+            &mut plaintext,
         )?;
-        out.extend_from_slice(&final_auth_tag);
 
-        debug_assert_eq!(out.len(), out_len, "we pre-allocated the wrong output size");
+        let mut out = Vec::new();
+        encryptor.read_to_end(&mut out)?;
+
         let config = Config::V2 {
             sym_alg,
             aead,
@@ -218,6 +137,21 @@ impl SymEncryptedProtectedData {
             config,
             data,
         })
+    }
+
+    /// Encrypts the data using the given symmetric key.
+    pub fn encrypt_seipdv2_stream<R: io::Read>(
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        session_key: &[u8],
+        salt: [u8; 32],
+        source: R,
+    ) -> Result<StreamEncryptor<R>> {
+        let encryptor =
+            StreamEncryptor::new(sym_alg, aead, chunk_size, session_key, &salt, source)?;
+
+        Ok(encryptor)
     }
 
     pub fn data(&self) -> &Bytes {
@@ -269,9 +203,9 @@ impl SymEncryptedProtectedData {
                 let chunk_size_expanded = usize::try_from(expand_chunk_size(*chunk_size))?;
 
                 let (info, message_key, mut nonce) =
-                    Self::aead_setup(*sym_alg, *aead, *chunk_size, &salt[..], ikm)?;
+                    aead_setup(*sym_alg, *aead, *chunk_size, &salt[..], ikm)?;
 
-                let mut data = self.data.to_vec();
+                let mut data: BytesMut = self.data.clone().into();
 
                 // There are n chunks, n auth tags + 1 final auth tag
                 let Some(aead_tag_size) = aead.tag_size() else {
@@ -281,7 +215,7 @@ impl SymEncryptedProtectedData {
                     return Err(Error::InvalidInput);
                 }
                 let offset = data.len() - aead_tag_size;
-                let (main_chunks, final_auth_tag) = data.split_at_mut(offset);
+                let mut final_auth_tag = data.split_off(offset);
 
                 // Calculate output size (for more efficient vector allocation):
                 // - number of chunks: main_chunks length divided by (chunk size + tag size), rounded up to the next integer
@@ -289,7 +223,7 @@ impl SymEncryptedProtectedData {
                     unsupported_err!("AEAD mode: {:?}", aead);
                 };
                 let chunk_and_tag_len = chunk_size_expanded + aead_tag_size;
-                let main_len = main_chunks.len();
+                let main_len = data.len();
                 let num_chunks = main_len.div_ceil(chunk_and_tag_len);
                 // - total output size: main_chunks length - size of one authentication tag per chunk
                 let out_len = main_len - num_chunks * aead_tag_size;
@@ -297,13 +231,13 @@ impl SymEncryptedProtectedData {
                 let mut out = Vec::with_capacity(out_len);
 
                 let mut chunk_index: u64 = 0;
-                for chunk in main_chunks.chunks_mut(chunk_size_expanded + aead_tag_size) {
-                    let offset = chunk.len() - aead_tag_size;
-                    let (chunk, auth_tag) = chunk.split_at_mut(offset);
+                let full_chunk_size = chunk_size_expanded + aead_tag_size;
+                while !data.is_empty() {
+                    let size = full_chunk_size.min(data.len());
+                    let mut chunk = data.split_to(size);
 
-                    aead.decrypt_in_place(sym_alg, &message_key, &nonce, &info, auth_tag, chunk)?;
-
-                    out.extend_from_slice(chunk);
+                    aead.decrypt_in_place(sym_alg, &message_key, &nonce, &info, &mut chunk)?;
+                    out.extend_from_slice(&chunk);
 
                     // Update nonce to include the next chunk index
                     chunk_index += 1;
@@ -324,8 +258,7 @@ impl SymEncryptedProtectedData {
                     &message_key,
                     &nonce,
                     &final_info,
-                    final_auth_tag,
-                    &mut [][..], // decrypts empty string
+                    &mut final_auth_tag,
                 )?;
 
                 debug_assert_eq!(out.len(), out_len, "we pre-allocated the wrong output size");
@@ -391,6 +324,168 @@ impl PacketTrait for SymEncryptedProtectedData {
 
 fn expand_chunk_size(s: u8) -> u32 {
     1u32 << (s as u32 + 6)
+}
+
+/// Get (info, message_key, nonce) for the given parameters
+#[allow(clippy::type_complexity)]
+pub(crate) fn aead_setup(
+    sym_alg: SymmetricKeyAlgorithm,
+    aead: AeadAlgorithm,
+    chunk_size: u8,
+    salt: &[u8],
+    ikm: &[u8],
+) -> Result<([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>)> {
+    let info = [
+        Tag::SymEncryptedProtectedData.encode(), // packet type
+        0x02,                                    // version
+        sym_alg.into(),
+        aead.into(),
+        chunk_size,
+    ];
+
+    let hk = hkdf::Hkdf::<Sha256>::new(Some(salt), ikm);
+    let mut okm = Zeroizing::new([0u8; 42]);
+    hk.expand(&info, okm.as_mut_slice()).expect("42");
+
+    let mut message_key = Zeroizing::new(vec![0; sym_alg.key_size()]);
+    message_key.copy_from_slice(&okm.as_slice()[..sym_alg.key_size()]);
+
+    let raw_iv_len = aead.nonce_size() - 8;
+    let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
+    let mut nonce = vec![0u8; aead.nonce_size()];
+    nonce[..raw_iv_len].copy_from_slice(iv);
+
+    Ok((info, message_key, nonce))
+}
+
+pub struct StreamEncryptor<R> {
+    source: R,
+    /// Indicates if we are done reading from the `source`.
+    is_source_done: bool,
+    /// Total number of bytes read from the source.
+    bytes_read: usize,
+    chunk_index: u64,
+    buffer: BytesMut,
+    info: [u8; 5],
+    message_key: Zeroizing<Vec<u8>>,
+    nonce: Vec<u8>,
+    chunk_size_expanded: u32,
+    aead: AeadAlgorithm,
+    sym_alg: SymmetricKeyAlgorithm,
+}
+
+impl<R: io::Read> StreamEncryptor<R> {
+    /// Encrypts the data using the given symmetric key.
+    pub(crate) fn new(
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+        session_key: &[u8],
+        salt: &[u8; 32],
+        source: R,
+    ) -> Result<Self> {
+        ensure_eq!(
+            session_key.len(),
+            sym_alg.key_size(),
+            "Unexpected session key length for {:?}",
+            sym_alg
+        );
+
+        let (info, message_key, nonce) =
+            aead_setup(sym_alg, aead, chunk_size, &salt[..], session_key)?;
+        let chunk_size_expanded = expand_chunk_size(chunk_size);
+
+        let buffer = BytesMut::with_capacity(chunk_size_expanded as usize);
+
+        Ok(StreamEncryptor {
+            source,
+            is_source_done: false,
+            bytes_read: 0,
+            chunk_index: 0,
+            info,
+            message_key,
+            nonce,
+            chunk_size_expanded,
+            aead,
+            sym_alg,
+            buffer,
+        })
+    }
+
+    /// Constructs the final auth tag
+    fn create_final_auth_tag(&mut self) -> io::Result<()> {
+        // Associated data is extended with number of plaintext octets.
+        let mut final_info = self.info.to_vec();
+        final_info.extend_from_slice(&self.bytes_read.to_be_bytes());
+
+        // encrypts empty string
+        self.buffer.clear();
+        self.aead
+            .encrypt_in_place(
+                &self.sym_alg,
+                &self.message_key,
+                &self.nonce,
+                &final_info,
+                &mut self.buffer,
+            )
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn fill_buffer(&mut self) -> io::Result<()> {
+        self.buffer.resize(self.chunk_size_expanded as _, 0);
+        let read = fill_buffer(
+            &mut self.source,
+            &mut self.buffer,
+            Some(self.chunk_size_expanded as _),
+        )?;
+        self.bytes_read += read;
+        if read == 0 {
+            self.is_source_done = true;
+            // time to write the final chunk
+            self.create_final_auth_tag()?;
+
+            return Ok(());
+        }
+        self.buffer.truncate(read);
+
+        self.aead
+            .encrypt_in_place(
+                &self.sym_alg,
+                &self.message_key,
+                &self.nonce,
+                &self.info,
+                &mut self.buffer,
+            )
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+
+        // Update nonce to include the next chunk index
+        self.chunk_index += 1;
+        let l = self.nonce.len() - 8;
+        self.nonce[l..].copy_from_slice(&self.chunk_index.to_be_bytes());
+
+        Ok(())
+    }
+}
+
+impl<R: io::Read> io::Read for StreamEncryptor<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if !self.buffer.has_remaining() {
+            if !self.is_source_done {
+                // Still more to read and encrypt from the source.
+                self.fill_buffer()?;
+            } else {
+                // The final chunk was written, we have nothing left to give.
+                return Ok(0);
+            }
+        }
+
+        let to_write = buf.len().min(self.buffer.remaining());
+        self.buffer.copy_to_slice(&mut buf[..to_write]);
+
+        Ok(to_write)
+    }
 }
 
 #[cfg(test)]

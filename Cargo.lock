@@ -14,6 +14,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
 dependencies = [
+ "bytes",
  "crypto-common",
  "generic-array",
 ]
@@ -1536,6 +1537,7 @@ dependencies = [
 name = "pgp"
 version = "0.15.0"
 dependencies = [
+ "aead",
  "aes",
  "aes-gcm",
  "aes-kw",
