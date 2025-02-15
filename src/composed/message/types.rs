@@ -780,10 +780,38 @@ impl Message {
             Message::Signed {
                 signature, message, ..
             } => {
-                if let Some(message) = message {
+                if let Some(ref message) = message {
                     match **message {
                         Message::Literal(ref data) => signature.verify(key, data.data()),
-                        _ => {
+                        Message::Signed { ref message, .. } => {
+                            // TODO: add api to verify the inner messages
+
+                            // We need to search for the inner most non signed message for the data
+                            let Some(ref message) = message else {
+                                unimplemented_err!("no message, what to do?");
+                            };
+                            let mut current_message = message;
+                            // Limit nesting
+                            for _ in 0..1024 {
+                                match **current_message {
+                                    Message::Literal(ref data) => {
+                                        return signature.verify(key, data.data());
+                                    }
+                                    Message::Compressed(_) | Message::Encrypted { .. } => {
+                                        let data = current_message.to_bytes()?;
+                                        return signature.verify(key, &data[..]);
+                                    }
+                                    Message::Signed { ref message, .. } => {
+                                        let Some(message) = message else {
+                                            unimplemented_err!("no message, what to do?");
+                                        };
+                                        current_message = message;
+                                    }
+                                }
+                            }
+                            bail!("More than 1024 nested signed messages are not supported");
+                        }
+                        Message::Compressed(_) | Message::Encrypted { .. } => {
                             let data = message.to_bytes()?;
                             signature.verify(key, &data[..])
                         }

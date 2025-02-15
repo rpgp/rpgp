@@ -1534,7 +1534,7 @@ mod tests {
     }
 
     #[test]
-    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign() {
+    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_once() {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
@@ -1591,6 +1591,101 @@ mod tests {
             // decrypt it
             let (decrypted, _key_ids) = message
                 .decrypt(&[Password::empty()], &[&skey])
+                .expect("decryption");
+
+            assert!(matches!(decrypted, Message::Compressed(_)));
+
+            let decompressed = decrypted.decompress().expect("decompression");
+
+            let Message::Literal(l) = decompressed else {
+                panic!("unexpected message: {:?}", decompressed);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            check_strings(
+                l.to_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
+        }
+    }
+
+    #[test]
+    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_twice() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey1, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        // subkey[0] is the encryption key
+        let pkey1 = skey1.secret_subkeys[0].public_key();
+
+        let (skey2, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/bob@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("Size {}", file_size);
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                .data_mode(DataMode::Utf8)
+                .compression(CompressionAlgorithm::ZIP)
+                .chunk_size(chunk_size)
+                .unwrap()
+                .encrypt_to_key(
+                    &mut rng,
+                    Seipd::V2 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                        aead: AeadAlgorithm::Gcm,
+                        chunk_size: 0x06,
+                    },
+                    &pkey1,
+                )
+                .expect("encryption");
+
+            let sig_config = vec![
+                SigningConfig::new(&*skey1, Password::empty(), HashAlgorithm::Sha256),
+                SigningConfig::new(&*skey2, Password::empty(), HashAlgorithm::Sha512),
+            ];
+
+            let encrypted = builder
+                .to_vec_signed(&mut rng, sig_config)
+                .expect("writing");
+
+            println!("--- parsing");
+            let message = Message::from_bytes(encrypted.into()).expect("reading");
+
+            println!("parsed {:#?}", message);
+
+            // verify signature outer
+            assert!(message.is_one_pass_signed());
+            message.verify(&*skey1.public_key()).expect("signed alice");
+
+            // verify inner signature
+            match message {
+                Message::Signed { ref message, .. } => {
+                    let message = message.as_ref().expect("missing message");
+                    assert!(message.is_one_pass_signed());
+                    message.verify(&*skey2.public_key()).expect("signed bob");
+                }
+                _ => {
+                    panic!("invalid structure: {:?}", message);
+                }
+            };
+
+            // decrypt it
+            let (decrypted, _key_ids) = message
+                .decrypt(&[Password::empty()], &[&skey1])
                 .expect("decryption");
 
             assert!(matches!(decrypted, Message::Compressed(_)));
