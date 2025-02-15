@@ -349,7 +349,7 @@ impl<R: Read> Builder<R> {
     /// Encrypt to a list of public keys, version SEIPDv1.
     ///
     /// This adds these public keys as receipients
-    pub fn encrypt_to_keys_seipdv1<RAND>(
+    pub fn encrypt_to_key_seipdv1<RAND>(
         mut self,
         mut rng: RAND,
         new_sym_alg: SymmetricKeyAlgorithm,
@@ -409,7 +409,7 @@ impl<R: Read> Builder<R> {
     /// Encrypt to a list of public keys, version SEIPDv1.
     ///
     /// This adds these public keys as receipients
-    pub fn encrypt_to_keys_seipdv2<RAND>(
+    pub fn encrypt_to_key_seipdv2<RAND>(
         mut self,
         mut rng: RAND,
         new_sym_alg: SymmetricKeyAlgorithm,
@@ -1112,7 +1112,7 @@ mod tests {
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
                 .expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -1160,7 +1160,7 @@ mod tests {
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
                 .expect("encryption")
                 .encrypt_with_password_seipdv1(
                     &mut rng,
@@ -1266,7 +1266,7 @@ mod tests {
                 .data_mode(DataMode::Utf8)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
                 .expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -1315,7 +1315,7 @@ mod tests {
                 .compression(CompressionAlgorithm::ZIP)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
                 .expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -1369,7 +1369,7 @@ mod tests {
                 .compression(CompressionAlgorithm::ZIP)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
                 .expect("encryption");
 
             let sig_config = vec![SigningConfig {
@@ -1483,7 +1483,7 @@ mod tests {
                 .compression(CompressionAlgorithm::ZIP)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_keys_seipdv2(
+                .encrypt_to_key_seipdv2(
                     &mut rng,
                     SymmetricKeyAlgorithm::AES128,
                     AeadAlgorithm::Gcm,
