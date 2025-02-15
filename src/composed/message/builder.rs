@@ -72,10 +72,27 @@ enum Encryption {
     },
 }
 
+/// Configures a signing key and how to use it.
 pub struct SigningConfig<'a> {
+    /// The key to sign with
     pub key: Box<&'a dyn SecretKeyTrait>,
+    /// A password to unlock it
     pub key_pw: Password,
+    /// The hash algorithm to be used when sigining.
     pub hash_algorithm: HashAlgorithm,
+}
+
+/// Configures the version specific parts of
+/// the Symmetric Encrypted and Integrity Data Packet.
+pub enum Seipd {
+    /// Version 1
+    V1 { sym_alg: SymmetricKeyAlgorithm },
+    /// Version 2
+    V2 {
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: u8,
+    },
 }
 
 /// The default chunk size.
@@ -219,27 +236,30 @@ impl<R: Read> Builder<R> {
         self
     }
 
-    /// Encrypt to a password, version SEIPDv1.
-    ///
-    /// This adds a packet with this password.
-    pub fn encrypt_with_password_seipdv1<RAND>(
+    /// Encrypt to a password.
+    pub fn encrypt_with_password<RAND>(
         mut self,
         mut rng: RAND,
+        seipd: Seipd,
         s2k: StringToKey,
-        new_sym_alg: SymmetricKeyAlgorithm,
         msg_pw: &Password,
     ) -> Result<Self>
     where
         RAND: Rng + CryptoRng,
     {
         if let Some(ref mut encryption) = self.encryption {
-            match encryption {
-                Encryption::SeipdV1 {
-                    session_key,
-                    sym_esks,
-                    sym_alg,
-                    ..
-                } => {
+            match (encryption, seipd) {
+                (
+                    Encryption::SeipdV1 {
+                        session_key,
+                        sym_esks,
+                        sym_alg,
+                        ..
+                    },
+                    Seipd::V1 {
+                        sym_alg: new_sym_alg,
+                    },
+                ) => {
                     ensure_eq!(
                         new_sym_alg,
                         *sym_alg,
@@ -250,56 +270,31 @@ impl<R: Read> Builder<R> {
                         SymKeyEncryptedSessionKey::encrypt_v4(msg_pw, session_key, s2k, *sym_alg)?;
                     sym_esks.push(esk);
                 }
-                Encryption::SeipdV2 { .. } => {
-                    bail!("cannot mix SeipdV1 and SeipdV2 in the same message");
-                }
-            }
-        } else {
-            // 1. Generate a session key.
-            let session_key = new_sym_alg.new_session_key(&mut rng);
-
-            // 2. Encrypt (sym) the session key using the provided password.
-            let esk =
-                SymKeyEncryptedSessionKey::encrypt_v4(msg_pw, &session_key, s2k, new_sym_alg)?;
-
-            self.encryption = Some(Encryption::SeipdV1 {
-                sym_alg: new_sym_alg,
-                sym_esks: vec![esk],
-                pub_esks: Vec::new(),
-                session_key,
-            });
-        }
-
-        Ok(self)
-    }
-
-    /// Encrypt to a password, version SEIPDv2.
-    ///
-    /// This adds a packet with this password.
-    pub fn encrypt_with_password_seipdv2<RAND>(
-        mut self,
-        mut rng: RAND,
-        s2k: StringToKey,
-        new_sym_alg: SymmetricKeyAlgorithm,
-        aead: AeadAlgorithm,
-        chunk_size: u8,
-        msg_pw: &Password,
-    ) -> Result<Self>
-    where
-        RAND: Rng + CryptoRng,
-    {
-        if let Some(ref mut encryption) = self.encryption {
-            match encryption {
-                Encryption::SeipdV2 {
-                    session_key,
-                    sym_esks,
-                    sym_alg,
-                    ..
-                } => {
+                (
+                    Encryption::SeipdV2 {
+                        session_key,
+                        sym_esks,
+                        sym_alg,
+                        aead,
+                        chunk_size,
+                        ..
+                    },
+                    Seipd::V2 {
+                        sym_alg: new_sym_alg,
+                        aead: new_aead,
+                        chunk_size: new_chunk_size,
+                    },
+                ) => {
                     ensure_eq!(
-                        new_sym_alg,
                         *sym_alg,
+                        new_sym_alg,
                         "cannot encrypt to different symmetric algorithms"
+                    );
+                    ensure_eq!(*aead, new_aead, "cannot encrypt to different aeads");
+                    ensure_eq!(
+                        *chunk_size,
+                        new_chunk_size,
+                        "cannot encrypt to different chunk sizes"
                     );
                     // Encrypt (sym) the session key using the provided password.
                     let esk = SymKeyEncryptedSessionKey::encrypt_v6(
@@ -308,70 +303,96 @@ impl<R: Read> Builder<R> {
                         session_key,
                         s2k,
                         *sym_alg,
-                        aead,
+                        *aead,
                     )?;
                     sym_esks.push(esk);
                 }
-                Encryption::SeipdV1 { .. } => {
+                _ => {
                     bail!("cannot mix SeipdV1 and SeipdV2 in the same message");
                 }
             }
         } else {
-            // 1. Generate a session key.
-            let session_key = new_sym_alg.new_session_key(&mut rng);
+            match seipd {
+                Seipd::V1 { sym_alg } => {
+                    // 1. Generate a session key.
+                    let session_key = sym_alg.new_session_key(&mut rng);
 
-            // 2. Encrypt (sym) the session key using the provided password.
-            let esk = SymKeyEncryptedSessionKey::encrypt_v6(
-                &mut rng,
-                msg_pw,
-                &session_key,
-                s2k,
-                new_sym_alg,
-                aead,
-            )?;
+                    // 2. Encrypt (sym) the session key using the provided password.
+                    let esk =
+                        SymKeyEncryptedSessionKey::encrypt_v4(msg_pw, &session_key, s2k, sym_alg)?;
 
-            let mut salt = [0u8; 32];
-            rng.fill_bytes(&mut salt);
-            self.encryption = Some(Encryption::SeipdV2 {
-                sym_alg: new_sym_alg,
-                sym_esks: vec![esk],
-                pub_esks: Vec::new(),
-                session_key,
-                aead,
-                salt,
-                chunk_size,
-            });
+                    self.encryption = Some(Encryption::SeipdV1 {
+                        sym_alg,
+                        sym_esks: vec![esk],
+                        pub_esks: Vec::new(),
+                        session_key,
+                    });
+                }
+                Seipd::V2 {
+                    sym_alg,
+                    aead,
+                    chunk_size,
+                } => {
+                    // 1. Generate a session key.
+                    let session_key = sym_alg.new_session_key(&mut rng);
+
+                    // 2. Encrypt (sym) the session key using the provided password.
+                    let esk = SymKeyEncryptedSessionKey::encrypt_v6(
+                        &mut rng,
+                        msg_pw,
+                        &session_key,
+                        s2k,
+                        sym_alg,
+                        aead,
+                    )?;
+
+                    let mut salt = [0u8; 32];
+                    rng.fill_bytes(&mut salt);
+                    self.encryption = Some(Encryption::SeipdV2 {
+                        sym_alg,
+                        sym_esks: vec![esk],
+                        pub_esks: Vec::new(),
+                        session_key,
+                        aead,
+                        salt,
+                        chunk_size,
+                    });
+                }
+            }
         }
 
         Ok(self)
     }
 
-    /// Encrypt to a list of public keys, version SEIPDv1.
-    ///
-    /// This adds these public keys as receipients
-    pub fn encrypt_to_key_seipdv1<RAND>(
+    /// Encrypt to a public key
+    pub fn encrypt_to_key<RAND>(
         mut self,
         mut rng: RAND,
-        new_sym_alg: SymmetricKeyAlgorithm,
+        seipd: Seipd,
         pkey: &impl crate::types::PublicKeyTrait,
     ) -> Result<Self>
     where
         RAND: CryptoRng + Rng,
     {
         if let Some(ref mut encryption) = self.encryption {
-            match encryption {
-                Encryption::SeipdV1 {
-                    session_key,
-                    pub_esks,
-                    sym_alg,
-                    ..
-                } => {
+            match (encryption, seipd) {
+                (
+                    Encryption::SeipdV1 {
+                        session_key,
+                        pub_esks,
+                        sym_alg,
+                        ..
+                    },
+                    Seipd::V1 {
+                        sym_alg: new_sym_alg,
+                    },
+                ) => {
                     ensure_eq!(
                         new_sym_alg,
                         *sym_alg,
                         "cannot encrypt to different symmetric algorithms"
                     );
-                    // Encrypt (pub) the session key, to each PublicKey.
+                    // Encrypt (sym) the session key using the provided password.
                     pub_esks.push(PublicKeyEncryptedSessionKey::from_session_key_v3(
                         &mut rng,
                         session_key,
@@ -379,61 +400,33 @@ impl<R: Read> Builder<R> {
                         pkey,
                     )?);
                 }
-                Encryption::SeipdV2 { .. } => {
-                    bail!("cannot mix SeipdV1 and SeipdV2 in the same message");
-                }
-            }
-        } else {
-            // 1. Generate a session key.
-            let session_key = new_sym_alg.new_session_key(&mut rng);
-
-            // 2. Encrypt (pub) the session key, to the PublicKey.
-            let esk = PublicKeyEncryptedSessionKey::from_session_key_v3(
-                &mut rng,
-                &session_key,
-                new_sym_alg,
-                pkey,
-            )?;
-
-            self.encryption = Some(Encryption::SeipdV1 {
-                sym_alg: new_sym_alg,
-                session_key,
-                sym_esks: Vec::new(),
-                pub_esks: vec![esk],
-            });
-        }
-
-        Ok(self)
-    }
-
-    /// Encrypt to a list of public keys, version SEIPDv1.
-    ///
-    /// This adds these public keys as receipients
-    pub fn encrypt_to_key_seipdv2<RAND>(
-        mut self,
-        mut rng: RAND,
-        new_sym_alg: SymmetricKeyAlgorithm,
-        aead: AeadAlgorithm,
-        chunk_size: u8,
-        pkey: &impl crate::types::PublicKeyTrait,
-    ) -> Result<Self>
-    where
-        RAND: CryptoRng + Rng,
-    {
-        if let Some(ref mut encryption) = self.encryption {
-            match encryption {
-                Encryption::SeipdV2 {
-                    session_key,
-                    pub_esks,
-                    sym_alg,
-                    ..
-                } => {
+                (
+                    Encryption::SeipdV2 {
+                        session_key,
+                        pub_esks,
+                        sym_alg,
+                        aead,
+                        chunk_size,
+                        ..
+                    },
+                    Seipd::V2 {
+                        sym_alg: new_sym_alg,
+                        aead: new_aead,
+                        chunk_size: new_chunk_size,
+                    },
+                ) => {
                     ensure_eq!(
-                        new_sym_alg,
                         *sym_alg,
+                        new_sym_alg,
                         "cannot encrypt to different symmetric algorithms"
                     );
-                    // Encrypt (pub) the session key PublicKey.
+                    ensure_eq!(*aead, new_aead, "cannot encrypt to different aeads");
+                    ensure_eq!(
+                        *chunk_size,
+                        new_chunk_size,
+                        "cannot encrypt to different chunk sizes"
+                    );
+                    // Encrypt (sym) the session key using the provided password.
                     let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
                         &mut rng,
                         session_key,
@@ -442,30 +435,60 @@ impl<R: Read> Builder<R> {
 
                     pub_esks.push(pkes);
                 }
-                Encryption::SeipdV1 { .. } => {
+                _ => {
                     bail!("cannot mix SeipdV1 and SeipdV2 in the same message");
                 }
             }
         } else {
-            // 1. Generate a session key.
-            let session_key = new_sym_alg.new_session_key(&mut rng);
+            match seipd {
+                Seipd::V1 { sym_alg } => {
+                    // 1. Generate a session key.
+                    let session_key = sym_alg.new_session_key(&mut rng);
 
-            // 2. Encrypt (pub) the session key, to the PublicKey.
-            let pkes =
-                PublicKeyEncryptedSessionKey::from_session_key_v6(&mut rng, &session_key, pkey)?;
+                    // 2. Encrypt (pub) the session key, to the PublicKey.
+                    let esk = PublicKeyEncryptedSessionKey::from_session_key_v3(
+                        &mut rng,
+                        &session_key,
+                        sym_alg,
+                        pkey,
+                    )?;
 
-            let mut salt = [0u8; 32];
-            rng.fill_bytes(&mut salt);
+                    self.encryption = Some(Encryption::SeipdV1 {
+                        sym_alg,
+                        session_key,
+                        sym_esks: Vec::new(),
+                        pub_esks: vec![esk],
+                    });
+                }
+                Seipd::V2 {
+                    sym_alg,
+                    aead,
+                    chunk_size,
+                } => {
+                    // 1. Generate a session key.
+                    let session_key = sym_alg.new_session_key(&mut rng);
 
-            self.encryption = Some(Encryption::SeipdV2 {
-                sym_alg: new_sym_alg,
-                session_key,
-                chunk_size,
-                aead,
-                salt,
-                sym_esks: Vec::new(),
-                pub_esks: vec![pkes],
-            });
+                    // 2. Encrypt (pub) the session key, to the PublicKey.
+                    let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+                        &mut rng,
+                        &session_key,
+                        pkey,
+                    )?;
+
+                    let mut salt = [0u8; 32];
+                    rng.fill_bytes(&mut salt);
+
+                    self.encryption = Some(Encryption::SeipdV2 {
+                        sym_alg,
+                        session_key,
+                        chunk_size,
+                        aead,
+                        salt,
+                        sym_esks: Vec::new(),
+                        pub_esks: vec![pkes],
+                    });
+                }
+            }
         }
 
         Ok(self)
@@ -941,10 +964,12 @@ mod tests {
         let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
         let builder = Builder::from_file(&plaintext_file)
-            .encrypt_with_password_seipdv1(
+            .encrypt_with_password(
                 &mut rng,
+                Seipd::V1 {
+                    sym_alg: SymmetricKeyAlgorithm::AES128,
+                },
                 s2k,
-                SymmetricKeyAlgorithm::AES128,
                 &"hello world".into(),
             )
             .unwrap();
@@ -982,10 +1007,12 @@ mod tests {
         let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
         let builder = Builder::<DummyReader>::from_bytes("plaintext.txt", buf.clone())
-            .encrypt_with_password_seipdv1(
+            .encrypt_with_password(
                 &mut rng,
+                Seipd::V1 {
+                    sym_alg: SymmetricKeyAlgorithm::AES128,
+                },
                 s2k,
-                SymmetricKeyAlgorithm::AES128,
                 &"hello world".into(),
             )
             .unwrap();
@@ -1028,10 +1055,12 @@ mod tests {
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_with_password_seipdv1(
+                .encrypt_with_password(
                     &mut rng,
+                    Seipd::V1 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                    },
                     s2k,
-                    SymmetricKeyAlgorithm::AES128,
                     &"hello world".into(),
                 )
                 .expect("encryption");
@@ -1112,7 +1141,13 @@ mod tests {
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key(
+                    &mut rng,
+                    Seipd::V1 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                    },
+                    &pkey,
+                )
                 .expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -1160,12 +1195,20 @@ mod tests {
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
-                .expect("encryption")
-                .encrypt_with_password_seipdv1(
+                .encrypt_to_key(
                     &mut rng,
+                    Seipd::V1 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                    },
+                    &pkey,
+                )
+                .expect("encryption")
+                .encrypt_with_password(
+                    &mut rng,
+                    Seipd::V1 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                    },
                     s2k,
-                    SymmetricKeyAlgorithm::AES128,
                     &"hello world".into(),
                 )
                 .expect("encryption sym");
@@ -1266,7 +1309,13 @@ mod tests {
                 .data_mode(DataMode::Utf8)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key(
+                    &mut rng,
+                    Seipd::V1 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                    },
+                    &pkey,
+                )
                 .expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -1315,7 +1364,13 @@ mod tests {
                 .compression(CompressionAlgorithm::ZIP)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key(
+                    &mut rng,
+                    Seipd::V1 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                    },
+                    &pkey,
+                )
                 .expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
@@ -1369,7 +1424,13 @@ mod tests {
                 .compression(CompressionAlgorithm::ZIP)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_key_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &pkey)
+                .encrypt_to_key(
+                    &mut rng,
+                    Seipd::V1 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                    },
+                    &pkey,
+                )
                 .expect("encryption");
 
             let sig_config = vec![SigningConfig {
@@ -1429,12 +1490,14 @@ mod tests {
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_with_password_seipdv2(
+                .encrypt_with_password(
                     &mut rng,
+                    Seipd::V2 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                        aead: AeadAlgorithm::Gcm,
+                        chunk_size: 0x06,
+                    },
                     s2k,
-                    SymmetricKeyAlgorithm::AES128,
-                    AeadAlgorithm::Gcm,
-                    0x06,
                     &"hello world".into(),
                 )
                 .expect("encryption");
@@ -1483,11 +1546,13 @@ mod tests {
                 .compression(CompressionAlgorithm::ZIP)
                 .chunk_size(chunk_size)
                 .unwrap()
-                .encrypt_to_key_seipdv2(
+                .encrypt_to_key(
                     &mut rng,
-                    SymmetricKeyAlgorithm::AES128,
-                    AeadAlgorithm::Gcm,
-                    0x06,
+                    Seipd::V2 {
+                        sym_alg: SymmetricKeyAlgorithm::AES128,
+                        aead: AeadAlgorithm::Gcm,
+                        chunk_size: 0x06,
+                    },
                     &pkey,
                 )
                 .expect("encryption");
