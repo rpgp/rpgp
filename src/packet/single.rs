@@ -1,4 +1,4 @@
-use bytes::{Buf, Bytes};
+use bytes::Buf;
 use log::warn;
 
 use crate::errors::{Error, Result};
@@ -11,12 +11,10 @@ use crate::packet::{
 use crate::types::Tag;
 
 impl Packet {
-    // TODO: switch to Buf once fully converted
-    pub fn from_bytes(packet_header: PacketHeader, mut body: Bytes) -> Result<Self> {
-        if let Some(len) = packet_header.packet_length().maybe_len() {
-            ensure_eq!(len, body.len(), "inconsistent packet length");
-        }
-
+    pub fn from_bytes<B: Buf + std::fmt::Debug>(
+        packet_header: PacketHeader,
+        mut body: B,
+    ) -> Result<Self> {
         let res: Result<Self> = match packet_header.tag() {
             Tag::Signature => Signature::from_buf(packet_header, &mut body).map(Into::into),
             Tag::OnePassSignature => {
@@ -82,38 +80,8 @@ impl Packet {
                     "invalid packet: {:#?} {:?}\n{:?}",
                     err,
                     packet_header.tag(),
-                    hex::encode(body)
+                    body
                 );
-                Err(Error::InvalidPacketContent(Box::new(err)))
-            }
-        }
-    }
-
-    /// Parses the body for partial packets
-    pub fn from_buf_partial<B: Buf + std::fmt::Debug>(
-        ver: PacketHeader,
-        mut body: B,
-    ) -> Result<Self> {
-        let res: Result<Self> = match ver.tag() {
-            Tag::CompressedData => CompressedData::from_buf(ver, &mut body).map(Into::into),
-            Tag::SymEncryptedData => SymEncryptedData::from_buf(ver, &mut body).map(Into::into),
-            Tag::LiteralData => LiteralData::from_buf(ver, &mut body).map(Into::into),
-            Tag::SymEncryptedProtectedData => {
-                SymEncryptedProtectedData::from_buf(ver, &mut body).map(Into::into)
-            }
-            _ => {
-                // a "hard" error that will bubble up and interrupt processing of compositions
-                return Err(Error::InvalidPacketContent(Box::new(Error::Message(
-                    format!("invalid packet type with partial length {:?}", ver.tag()),
-                ))));
-            }
-        };
-
-        match res {
-            Ok(res) => Ok(res),
-            Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
-            Err(err) => {
-                warn!("invalid packet: {:?} {:?}\n{:?}", err, ver.tag(), body);
                 Err(Error::InvalidPacketContent(Box::new(err)))
             }
         }

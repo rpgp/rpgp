@@ -53,7 +53,6 @@ enum Source<R = DummyReader> {
     Reader { file_name: Bytes, reader: R },
 }
 
-#[allow(dead_code)]
 enum Encryption {
     SeipdV1 {
         session_key: Zeroizing<Vec<u8>>,

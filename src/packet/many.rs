@@ -47,16 +47,16 @@ impl Iterator for PacketParser {
         debug!("found header: {header:?}");
 
         match header.packet_length() {
-            PacketLength::Indeterminate => match Packet::from_bytes(header, self.reader.clone()) {
-                Ok(packet) => {
-                    self.reader.advance(self.reader.remaining());
-                    Some(Ok(packet))
+            PacketLength::Indeterminate => {
+                let body = self.reader.rest();
+                match Packet::from_bytes(header, body) {
+                    Ok(packet) => Some(Ok(packet)),
+                    Err(err) => {
+                        self.is_done = true;
+                        Some(Err(err))
+                    }
                 }
-                Err(err) => {
-                    self.is_done = true;
-                    Some(Err(err))
-                }
-            },
+            }
             PacketLength::Fixed(len) => {
                 let packet_bytes = match self.reader.read_take(len) {
                     Ok(b) => b,
@@ -145,7 +145,7 @@ impl Iterator for PacketParser {
                     }
                 }
 
-                match Packet::from_buf_partial(header, body) {
+                match Packet::from_bytes(header, body) {
                     Ok(packet) => Some(Ok(packet)),
                     Err(Error::Incomplete(_)) => {
                         // not bailing, we are just skipping incomplete bodies
