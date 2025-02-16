@@ -1,25 +1,19 @@
 use std::num::TryFromIntError;
 
 use ed25519_dalek::SignatureError;
-use nom::{
-    error::{FromExternalError, ParseError},
-    ErrorConvert,
-};
 
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
 // custom nom error types
 pub const MPI_TOO_LONG: u32 = 1000;
 
+pub use crate::parsing::{Error as ParsingError, RemainingError};
+
 /// Error types
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("failed to parse {0:?}")]
-    ParsingError(nom::error::ErrorKind),
     #[error("invalid input")]
     InvalidInput,
-    #[error("incomplete input: {0:?}")]
-    Incomplete(nom::Needed),
     #[error("invalid armor wrappers")]
     InvalidArmorWrappers,
     #[error("invalid crc24 checksum")]
@@ -33,13 +27,11 @@ pub enum Error {
     #[error("more than one matching packet was found")]
     TooManyPackets,
     #[error("rsa error: {0:?}")]
-    RSAError(rsa::errors::Error),
+    RSAError(#[from] rsa::errors::Error),
     #[error("elliptic error: {0:?}")]
     EllipticCurve(#[from] elliptic_curve::Error),
     #[error("io error: {0:?}")]
     IOError(#[from] std::io::Error),
-    #[error("missing packets")]
-    MissingPackets,
     #[error("invalid key length")]
     InvalidKeyLength,
     #[error("block mode error")]
@@ -50,14 +42,13 @@ pub enum Error {
     CfbInvalidKeyIvLength,
     #[error("Not yet implemented: {0:?}")]
     Unimplemented(String),
+    /// Signals packet versions and parameters we don't support, but can safely ignore
     #[error("Unsupported: {0:?}")]
-    Unsupported(String), // Signals packet versions and parameters we don't support, but can safely ignore
+    Unsupported(String),
     #[error("{0:?}")]
     Message(String),
     #[error("Invalid Packet {0:?}")]
     PacketError(nom::error::ErrorKind),
-    #[error("Incomplete Packet")]
-    PacketIncomplete,
     #[error("Unpadding failed")]
     UnpadError,
     #[error("Padding failed")]
@@ -84,105 +75,15 @@ pub enum Error {
     Sha1HashCollision,
     #[error("AES Key Wrap error {0}")]
     AesKek(#[from] aes_kw::Error),
-}
-
-impl Error {
-    pub fn as_code(&self) -> u32 {
-        match self {
-            Error::ParsingError(_) => 0,
-            Error::InvalidInput => 1,
-            Error::Incomplete(_) => 2,
-            Error::InvalidArmorWrappers => 3,
-            Error::InvalidChecksum => 4,
-            Error::Base64DecodeError(_) => 5,
-            Error::RequestedSizeTooLarge => 6,
-            Error::NoMatchingPacket => 7,
-            Error::TooManyPackets => 8,
-            Error::RSAError(_) => 9,
-            Error::IOError { .. } => 10,
-            Error::MissingPackets => 11,
-            Error::InvalidKeyLength => 12,
-            Error::BlockMode => 13,
-            Error::MissingKey => 14,
-            Error::CfbInvalidKeyIvLength => 15,
-            Error::Unimplemented(_) => 16,
-            Error::Unsupported(_) => 17,
-            Error::Message(_) => 18,
-            Error::PacketError(_) => 19,
-            Error::PacketIncomplete => 20,
-            Error::UnpadError => 21,
-            Error::PadError => 22,
-            Error::Utf8Error(_) => 23,
-            Error::ParseIntError(_) => 24,
-            Error::InvalidPacketContent(_) => 25,
-            Error::SignatureError(_) => 26,
-            Error::MdcError => 27,
-            Error::TryFromInt(_) => 28,
-            Error::EllipticCurve(_) => 29,
-            Error::Gcm => 30,
-            Error::Eax => 31,
-            Error::Ocb => 32,
-            Error::Sha1HashCollision => 33,
-            Error::AesKek(_) => 34,
-        }
-    }
+    #[error("failed to parse packet {0:?}")]
+    PacketParsing(#[from] ParsingError),
+    #[error("packet is incomplete: {0:?}")]
+    PacketIncomplete(ParsingError),
 }
 
 impl<T> From<nom::error::Error<T>> for Error {
     fn from(err: nom::error::Error<T>) -> Self {
         Self::PacketError(err.code)
-    }
-}
-
-impl<I> ParseError<I> for Error {
-    fn from_error_kind(_input: I, kind: nom::error::ErrorKind) -> Self {
-        Self::ParsingError(kind)
-    }
-
-    fn append(_input: I, _kind: nom::error::ErrorKind, other: Self) -> Self {
-        other
-    }
-}
-
-impl<I, E> FromExternalError<I, E> for Error {
-    fn from_external_error(input: I, kind: nom::error::ErrorKind, e: E) -> Self {
-        nom::error::Error::from_external_error(input, kind, e).into()
-    }
-}
-
-impl From<Error> for nom::Err<Error> {
-    fn from(err: Error) -> Self {
-        Self::Error(err)
-    }
-}
-
-impl ErrorConvert<Self> for Error {
-    fn convert(self) -> Self {
-        self
-    }
-}
-
-impl From<nom::Err<Error>> for Error {
-    fn from(err: nom::Err<Error>) -> Self {
-        match err {
-            nom::Err::Incomplete(err) => Self::Incomplete(err),
-            nom::Err::Error(err) | nom::Err::Failure(err) => err,
-        }
-    }
-}
-
-impl<T> From<nom::Err<nom::error::Error<T>>> for Error {
-    fn from(err: nom::Err<nom::error::Error<T>>) -> Error {
-        match err {
-            nom::Err::Incomplete(err) => Self::Incomplete(err),
-            nom::Err::Error(err) | nom::Err::Failure(err) => Self::ParsingError(err.code),
-        }
-    }
-}
-
-impl From<rsa::errors::Error> for Error {
-    fn from(err: rsa::errors::Error) -> Error {
-        Error::RSAError(err)
     }
 }
 

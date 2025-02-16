@@ -112,7 +112,6 @@ fn v4_parser<B: Buf>(
     // Two-octet scalar octet count for following hashed subpacket data.
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u16()?.into();
-    i.ensure_remaining(hsub_len)?;
     let hsub_raw = i.read_take(hsub_len)?;
     let hsub = subpackets(packet_header.version(), hsub_raw)?;
     debug!(
@@ -227,7 +226,6 @@ fn subpackets<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result<V
             typ, is_critical, len
         );
 
-        i.ensure_remaining(len)?;
         let mut body = i.read_take(len)?;
         let packet = subpacket(typ, is_critical, packet_len, packet_version, &mut body)?;
         if !body.is_empty() {

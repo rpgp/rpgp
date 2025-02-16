@@ -233,9 +233,10 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
                     return None;
                 }
             }
-            if let Error::PacketIncomplete = e {
+            if let Error::PacketIncomplete(e) = e {
                 // We ignore incomplete packets for now (some of these occur in the SKS dumps under `tests`)
                 warn!("skipping incomplete packet: {p:?}");
+                debug!("error: {e:?}");
                 return None;
             }
 

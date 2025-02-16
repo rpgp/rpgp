@@ -122,13 +122,9 @@ impl SignedKeyDetails {
     where
         P: PublicKeyTrait + Serialize,
     {
-        println!("users");
         self.verify_users(key)?;
-        println!("attrs");
         self.verify_attributes(key)?;
-        println!("revocation");
         self.verify_revocation_signatures(key)?;
-        println!("direct");
         self.verify_direct_signatures(key)?;
 
         Ok(())

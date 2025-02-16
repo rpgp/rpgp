@@ -60,15 +60,15 @@ impl Iterator for PacketParser {
             PacketLength::Fixed(len) => {
                 let packet_bytes = match self.reader.read_take(len) {
                     Ok(b) => b,
-                    Err(err) => return Some(Err(err)),
+                    Err(err) => return Some(Err(err.into())),
                 };
                 let res = Packet::from_bytes(header, packet_bytes);
                 match res {
                     Ok(packet) => Some(Ok(packet)),
-                    Err(Error::Incomplete(e)) => {
+                    Err(Error::PacketParsing(e)) if e.is_incomplete() => {
                         debug!("incomplete packet for: {:?}", e);
                         // not bailing, we are just skipping incomplete bodies
-                        Some(Err(Error::PacketIncomplete))
+                        Some(Err(Error::PacketIncomplete(e)))
                     }
                     Err(err) => Some(Err(err)),
                 }
@@ -107,7 +107,7 @@ impl Iterator for PacketParser {
                     Ok(bytes) => bytes,
                     Err(err) => {
                         self.is_done = true;
-                        return Some(Err(err));
+                        return Some(Err(err.into()));
                     }
                 };
                 body.push(first);
@@ -147,9 +147,10 @@ impl Iterator for PacketParser {
 
                 match Packet::from_bytes(header, body) {
                     Ok(packet) => Some(Ok(packet)),
-                    Err(Error::Incomplete(_)) => {
+                    Err(Error::PacketParsing(e)) if e.is_incomplete() => {
+                        debug!("incomplete packet for: {:?}", e);
                         // not bailing, we are just skipping incomplete bodies
-                        Some(Err(Error::PacketIncomplete))
+                        Some(Err(Error::PacketIncomplete(e)))
                     }
                     Err(err) => {
                         self.is_done = true;

@@ -74,7 +74,7 @@ impl Packet {
 
         match res {
             Ok(res) => Ok(res),
-            Err(Error::Incomplete(n)) => Err(Error::Incomplete(n)),
+            Err(Error::PacketParsing(e)) if e.is_incomplete() => Err(Error::PacketIncomplete(e)),
             Err(err) => {
                 warn!(
                     "invalid packet: {:#?} {:?}\n{:?}",
