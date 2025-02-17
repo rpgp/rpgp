@@ -399,13 +399,13 @@ pub struct StreamEncryptor<R> {
     /// Indicates if we are done reading from the `source`.
     is_source_done: bool,
     /// Total number of bytes read from the source.
-    bytes_read: usize,
+    bytes_read: u64,
     chunk_index: u64,
     buffer: BytesMut,
     info: [u8; 5],
     message_key: Zeroizing<Vec<u8>>,
     nonce: Vec<u8>,
-    chunk_size_expanded: u32,
+    chunk_size_expanded: usize,
     aead: AeadAlgorithm,
     sym_alg: SymmetricKeyAlgorithm,
 }
@@ -429,9 +429,9 @@ impl<R: io::Read> StreamEncryptor<R> {
 
         let (info, message_key, nonce) =
             aead_setup(sym_alg, aead, chunk_size, &salt[..], session_key)?;
-        let chunk_size_expanded = chunk_size.as_byte_size();
+        let chunk_size_expanded: usize = chunk_size.as_byte_size().try_into()?;
 
-        let buffer = BytesMut::with_capacity(chunk_size_expanded as usize);
+        let buffer = BytesMut::with_capacity(chunk_size_expanded);
 
         Ok(StreamEncryptor {
             source,
@@ -452,6 +452,7 @@ impl<R: io::Read> StreamEncryptor<R> {
     fn create_final_auth_tag(&mut self) -> io::Result<()> {
         // Associated data is extended with number of plaintext octets.
         let mut final_info = self.info.to_vec();
+        // length: 8 octets as big endian
         final_info.extend_from_slice(&self.bytes_read.to_be_bytes());
 
         // encrypts empty string
@@ -470,13 +471,27 @@ impl<R: io::Read> StreamEncryptor<R> {
     }
 
     fn fill_buffer(&mut self) -> io::Result<()> {
-        self.buffer.resize(self.chunk_size_expanded as _, 0);
+        self.buffer.resize(self.chunk_size_expanded, 0);
         let read = fill_buffer(
             &mut self.source,
             &mut self.buffer,
-            Some(self.chunk_size_expanded as _),
+            Some(self.chunk_size_expanded),
         )?;
-        self.bytes_read += read;
+        let read_u64 = read.try_into().map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "too much data read".to_string(),
+            )
+        })?;
+        self.bytes_read = match self.bytes_read.checked_add(read_u64) {
+            Some(read) => read,
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "can not read more than u64::MAX data".to_string(),
+                ));
+            }
+        };
         if read == 0 {
             self.is_source_done = true;
             // time to write the final chunk
