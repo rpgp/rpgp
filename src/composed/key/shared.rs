@@ -92,7 +92,7 @@ impl KeyDetails {
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
-        let keyflags: SmallVec<[u8; 1]> = self.keyflags.into();
+        let keyflags = self.keyflags;
         let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
         let preferred_hash_algorithms = self.preferred_hash_algorithms;
         let preferred_compression_algorithms = self.preferred_compression_algorithms;

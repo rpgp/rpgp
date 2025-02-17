@@ -104,7 +104,7 @@ impl SecretSubkey {
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
             ))?,
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into()))?,
+            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
         config.unhashed_subpackets =

@@ -12,7 +12,7 @@ use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, Fingerprint, KeyId, RevocationKey};
 
-use super::{Notation, RevocationCode, Signature};
+use super::{KeyFlags, Notation, RevocationCode, Signature};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 /// Available signature subpacket types
@@ -271,7 +271,7 @@ pub enum SubpacketData {
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     PreferredCompressionAlgorithms(SmallVec<[CompressionAlgorithm; 8]>),
     KeyServerPreferences(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 4]>),
-    KeyFlags(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
+    KeyFlags(KeyFlags),
     Features(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
     RevocationReason(RevocationCode, Bytes),
     IsPrimary(bool),

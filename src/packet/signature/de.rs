@@ -20,7 +20,7 @@ use crate::types::{
     PacketLength, RevocationKey, SignatureBytes, Tag,
 };
 
-use super::{Signature, SignatureType, SignatureVersion};
+use super::{KeyFlags, Signature, SignatureType, SignatureVersion};
 
 impl Signature {
     /// Parses a `Signature` packet from the given buffer
@@ -543,7 +543,7 @@ fn policy_uri<B: Buf>(mut i: B) -> Result<SubpacketData> {
 /// Parse a Key Flags subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags
 fn key_flags<B: Buf>(mut i: B) -> Result<SubpacketData> {
-    let flags = SmallVec::from_slice(&i.rest());
+    let flags = KeyFlags::from_buf(i.rest())?;
 
     Ok(SubpacketData::KeyFlags(flags))
 }

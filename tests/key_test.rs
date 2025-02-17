@@ -24,6 +24,7 @@ use pgp::packet::{
     KeyFlags, Signature, SignatureType, Subpacket, SubpacketData, UserAttribute, UserId,
 };
 use pgp::ser::Serialize;
+use pgp::types::Fingerprint;
 use pgp::types::KeyDetails;
 use pgp::types::{
     CompressionAlgorithm, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion, PacketLength,
@@ -37,7 +38,6 @@ use rsa::{
     traits::{PrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
 };
-use smallvec::SmallVec;
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
     // Open the path in read-only mode, returns `io::Result<File>`
@@ -391,7 +391,10 @@ fn test_parse_details() {
         0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C,
     ])))
     .unwrap();
-    let key_flags: SmallVec<[u8; 1]> = KeyFlags::from_bits(0x03).into();
+    let mut key_flags = KeyFlags::default();
+    key_flags.set_certify(true);
+    key_flags.set_sign(true);
+
     let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
         SymmetricKeyAlgorithm::AES192,
@@ -1331,4 +1334,70 @@ fn test_encrypted_key() {
     let _signed_key = unsigned_pubkey
         .sign(&mut rng, &*key, &*key.public_key(), &"123".into())
         .unwrap();
+}
+
+/// Handle a test certificate with key flags that span more than a single `u8`.
+/// The test key was created with GnuPG, see https://www.gnupg.org/blog/20230321-adsk.html
+#[test]
+fn load_adsk_pub() {
+    let _ = pretty_env_logger::try_init();
+
+    let key_file = File::open("tests/adsk.pub.asc").unwrap();
+
+    let (mut iter, _) = pgp::composed::signed_key::from_reader_many(key_file).expect("ok");
+
+    let public: SignedPublicKey = match iter.next().expect("result") {
+        Ok(pos) => {
+            eprintln!("{:#?}", pos);
+            pos.try_into().expect("public")
+        }
+        Err(e) => panic!("error: {:?}", e),
+    };
+
+    let adsk_subkey = public
+        .public_subkeys
+        .iter()
+        .find(|sk| {
+            sk.fingerprint()
+                == Fingerprint::V4(
+                    hex::decode("7051E786F572CF85E023D8B9A59FE955A52FFD57")
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                )
+        })
+        .unwrap();
+
+    let sig = &adsk_subkey.signatures[0];
+
+    let key_flags = sig.key_flags();
+    println!("key_flags {:?}", key_flags);
+    assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
+}
+
+/// Handle a test certificate with key flags that span more than a single `u8`.
+/// The test key was created with GnuPG, see https://www.gnupg.org/blog/20230321-adsk.html
+#[test]
+fn load_adsk_sec() {
+    let _ = pretty_env_logger::try_init();
+
+    let key_file = File::open("tests/adsk.sec.asc").unwrap();
+
+    let (mut iter, _) = pgp::composed::signed_key::from_reader_many(key_file).expect("ok");
+
+    let sec: SignedSecretKey = match iter.next().expect("result") {
+        Ok(pos) => {
+            eprintln!("{:#?}", pos);
+            pos.try_into().expect("secret")
+        }
+        Err(e) => panic!("error: {:?}", e),
+    };
+
+    assert_eq!(sec.secret_subkeys.len(), 2);
+    let adsk_subkey = &sec.secret_subkeys[1];
+    let sig = &adsk_subkey.signatures[0];
+
+    let key_flags = sig.key_flags();
+    println!("key_flags {:?}", key_flags);
+    assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
 }

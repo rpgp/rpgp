@@ -116,7 +116,7 @@ impl Serialize for SubpacketData {
                 writer.write_all(prefs)?;
             }
             SubpacketData::KeyFlags(flags) => {
-                writer.write_all(flags)?;
+                flags.to_writer(writer)?;
             }
             SubpacketData::Features(features) => {
                 writer.write_all(features)?;
@@ -222,7 +222,7 @@ impl Serialize for SubpacketData {
             SubpacketData::PreferredHashAlgorithms(algs) => algs.len(),
             SubpacketData::PreferredCompressionAlgorithms(algs) => algs.len(),
             SubpacketData::KeyServerPreferences(prefs) => prefs.len(),
-            SubpacketData::KeyFlags(flags) => flags.len(),
+            SubpacketData::KeyFlags(flags) => flags.write_len(),
             SubpacketData::Features(features) => features.len(),
 
             SubpacketData::RevocationReason(_, reason) => {

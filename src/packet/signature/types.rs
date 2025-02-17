@@ -2,12 +2,11 @@ use std::io::Read;
 
 use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use chrono::{DateTime, Duration, Utc};
 use digest::DynDigest;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use smallvec::{smallvec, SmallVec};
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::{HashAlgorithm, WriteHasher};
@@ -20,6 +19,7 @@ use crate::packet::signature::SignatureConfig;
 use crate::packet::{
     PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket, SubpacketData,
 };
+use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{
     self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
@@ -601,7 +601,7 @@ impl Signature {
         self.config
             .hashed_subpackets()
             .find_map(|p| match &p.data {
-                SubpacketData::KeyFlags(d) => Some(d[..].into()),
+                SubpacketData::KeyFlags(flags) => Some(flags.clone()),
                 _ => None,
             })
             .unwrap_or_default()
@@ -854,9 +854,155 @@ pub enum SignatureType {
     Other(#[cfg_attr(test, proptest(strategy = "0x51u8.."))] u8),
 }
 
-#[bitfield(u8, order = lsb)]
-#[derive(PartialEq, Eq, Copy, Clone)]
+/// Key flags by default are only 1 byte large, but there are reserved
+/// extensions making them 2 bytes large.
+/// In addition the spec defines them to be arbitrarily large, but this is
+/// not yet used.
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
+#[derive(Default, Clone, PartialEq, Eq, Debug)]
 pub struct KeyFlags {
+    /// Handles the first two bytes.
+    known: KnownKeyFlags,
+    /// Any additional key flag bytes.
+    rest: Option<Bytes>,
+    /// Need to store this, to understand the if the decoded value was
+    /// stored in one ore two bytes.
+    known_two_bytes: bool,
+}
+
+impl KeyFlags {
+    /// Parse the key flags from the given buffer.
+    pub fn from_buf<B: Buf>(mut buf: B) -> Result<Self> {
+        let remaining = buf.remaining();
+
+        if remaining == 0 {
+            Ok(Self::default())
+        } else if remaining == 1 {
+            let known = KnownKeyFlags::from_bits(buf.read_u8()? as u16);
+            Ok(Self {
+                known,
+                rest: None,
+                known_two_bytes: false,
+            })
+        } else if remaining == 2 {
+            let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
+            Ok(Self {
+                known,
+                rest: None,
+                known_two_bytes: true,
+            })
+        } else {
+            let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
+            let rest = Some(buf.rest());
+            Ok(Self {
+                known,
+                rest,
+                known_two_bytes: true,
+            })
+        }
+    }
+
+    pub fn set_certify(&mut self, val: bool) {
+        self.known.set_certify(val);
+    }
+    pub fn set_encrypt_comms(&mut self, val: bool) {
+        self.known.set_encrypt_comms(val);
+    }
+    pub fn set_encrypt_storage(&mut self, val: bool) {
+        self.known.set_encrypt_storage(val);
+    }
+    pub fn set_sign(&mut self, val: bool) {
+        self.known.set_sign(val);
+    }
+    pub fn set_shared(&mut self, val: bool) {
+        self.known.set_shared(val);
+    }
+    pub fn set_authentication(&mut self, val: bool) {
+        self.known.set_authentication(val);
+    }
+    pub fn set_group(&mut self, val: bool) {
+        self.known.set_group(val);
+    }
+
+    pub fn set_adsk(&mut self, val: bool) {
+        self.known.set_adsk(val);
+    }
+
+    pub fn set_timestamping(&mut self, val: bool) {
+        self.known.set_timestamping(val);
+    }
+
+    pub fn certify(&self) -> bool {
+        self.known.certify()
+    }
+
+    pub fn encrypt_comms(&self) -> bool {
+        self.known.encrypt_comms()
+    }
+
+    pub fn encrypt_storage(&self) -> bool {
+        self.known.encrypt_storage()
+    }
+
+    pub fn sign(&self) -> bool {
+        self.known.sign()
+    }
+
+    pub fn shared(&self) -> bool {
+        self.known.shared()
+    }
+
+    pub fn authentication(&self) -> bool {
+        self.known.authentication()
+    }
+
+    pub fn group(&self) -> bool {
+        self.known.group()
+    }
+
+    pub fn adsk(&self) -> bool {
+        self.known.adsk()
+    }
+
+    pub fn timesetamping(&self) -> bool {
+        self.known.timestamping()
+    }
+}
+
+impl Serialize for KeyFlags {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        let [a, b] = self.known.into_bits().to_le_bytes();
+        writer.write_u8(a)?;
+        if self.known_two_bytes || b != 0 {
+            writer.write_u8(b)?;
+        }
+        dbg!(&self.rest);
+        if let Some(ref rest) = self.rest {
+            writer.write_all(rest)?;
+        }
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        let [_, b] = self.known.into_bits().to_le_bytes();
+        if self.known_two_bytes || b > 0 {
+            sum += 2;
+        } else {
+            sum += 1;
+        }
+
+        if let Some(ref rest) = self.rest {
+            sum += rest.len();
+        }
+        sum
+    }
+}
+
+#[bitfield(u16, order = lsb)]
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub struct KnownKeyFlags {
     #[bits(1)]
     certify: bool,
     #[bits(1)]
@@ -870,25 +1016,17 @@ pub struct KeyFlags {
     #[bits(1)]
     authentication: bool,
     #[bits(1)]
-    _padding: u8,
+    _padding0: u8,
     #[bits(1)]
     group: bool,
-}
-
-impl<'a> From<&'a [u8]> for KeyFlags {
-    fn from(other: &'a [u8]) -> Self {
-        if other.is_empty() {
-            Default::default()
-        } else {
-            KeyFlags(other[0])
-        }
-    }
-}
-
-impl From<KeyFlags> for SmallVec<[u8; 1]> {
-    fn from(flags: KeyFlags) -> Self {
-        smallvec![flags.0]
-    }
+    #[bits(2)]
+    _padding1: u8,
+    #[bits(1)]
+    adsk: bool,
+    #[bits(1)]
+    timestamping: bool,
+    #[bits(4)]
+    _padding2: u8,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -979,38 +1117,61 @@ mod tests {
     use crate::packet::SubpacketType;
 
     #[test]
-    fn test_keyflags() {
+    fn test_keyflags_1_byte() {
         let flags: KeyFlags = Default::default();
-        assert_eq!(flags.into_bits(), 0x00);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x00]);
 
         let mut flags = KeyFlags::default();
         flags.set_certify(true);
         assert!(flags.certify());
-        assert_eq!(flags.into_bits(), 0x01);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x01]);
 
         let mut flags = KeyFlags::default();
         flags.set_sign(true);
-        assert_eq!(flags.into_bits(), 0x02);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x02]);
 
         let mut flags = KeyFlags::default();
         flags.set_encrypt_comms(true);
-        assert_eq!(flags.into_bits(), 0x04);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x04]);
 
         let mut flags = KeyFlags::default();
         flags.set_encrypt_storage(true);
-        assert_eq!(flags.into_bits(), 0x08);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x08]);
 
         let mut flags = KeyFlags::default();
         flags.set_shared(true);
-        assert_eq!(flags.into_bits(), 0x10);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x10]);
 
         let mut flags = KeyFlags::default();
         flags.set_authentication(true);
-        assert_eq!(flags.into_bits(), 0x20);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x20]);
 
         let mut flags = KeyFlags::default();
         flags.set_group(true);
-        assert_eq!(flags.into_bits(), 0x80);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x80]);
+
+        let mut flags = KeyFlags::default();
+        flags.set_certify(true);
+        flags.set_sign(true);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x03]);
+    }
+
+    #[test]
+    fn test_keyflags_2_bytes() {
+        let mut flags: KeyFlags = Default::default();
+        flags.set_adsk(true);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x00, 0x04]);
+
+        let mut flags: KeyFlags = Default::default();
+        flags.set_timestamping(true);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x00, 0x08]);
+
+        let mut flags: KeyFlags = Default::default();
+        flags.set_timestamping(true);
+        flags.set_certify(true);
+        flags.set_sign(true);
+
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x03, 0x08]);
     }
 
     #[test]
@@ -1048,6 +1209,36 @@ mod tests {
         for case in cases {
             assert_eq!(SubpacketType::from_u8(case.as_u8(false)), (case, false));
             assert_eq!(SubpacketType::from_u8(case.as_u8(true)), (case, true));
+        }
+    }
+
+    use proptest::prelude::*;
+
+    impl Arbitrary for KeyFlags {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            proptest::collection::vec(0u8..255, 1..500)
+                .prop_map(|v| KeyFlags::from_buf(&mut &v[..]).unwrap())
+                .boxed()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn keyflags_write_len(flags: KeyFlags) {
+            let mut buf = Vec::new();
+            flags.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), flags.write_len());
+        }
+
+        #[test]
+        fn keyflags_packet_roundtrip(flags: KeyFlags) {
+            let mut buf = Vec::new();
+            flags.to_writer(&mut buf).unwrap();
+            let new_flags = KeyFlags::from_buf(&mut &buf[..]).unwrap();
+            prop_assert_eq!(flags, new_flags);
         }
     }
 }
