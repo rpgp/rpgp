@@ -26,6 +26,12 @@ impl From<&str> for Password {
     }
 }
 
+impl From<&[u8]> for Password {
+    fn from(value: &[u8]) -> Self {
+        Self::Static(value.to_vec().into())
+    }
+}
+
 impl Default for Password {
     fn default() -> Self {
         Self::empty()
