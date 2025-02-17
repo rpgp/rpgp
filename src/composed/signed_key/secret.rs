@@ -2,7 +2,7 @@ use std::io;
 use std::ops::Deref;
 
 use chrono::{DateTime, Utc};
-use log::warn;
+use log::{debug, warn};
 use rand::{CryptoRng, Rng};
 
 use crate::composed::key::{PublicKey, PublicSubkey};
@@ -10,8 +10,8 @@ use crate::composed::signed_key::{SignedKeyDetails, SignedPublicSubKey};
 use crate::errors::Result;
 use crate::packet::{self, Packet, PacketTrait, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{EskType, PkeskBytes, PublicKeyTrait, Tag};
-use crate::{armor, ArmorOptions, SignedPublicKey};
+use crate::types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag};
+use crate::{armor, ArmorOptions, PlainSessionKey, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -185,6 +185,20 @@ impl SignedSecretKey {
             subkeys,
         )
     }
+
+    /// Decrypts session key using this key.
+    pub fn decrypt_session_key(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<PlainSessionKey> {
+        debug!("decrypt session key");
+
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.primary_key.public_key())
+        })
+    }
 }
 
 impl Serialize for SignedSecretKey {
@@ -275,6 +289,20 @@ impl SignedSecretSubKey {
             .key_flags();
 
         PublicSubkey::new(self.key.public_key().clone(), keyflags)
+    }
+
+    /// Decrypts session key using this key.
+    pub fn decrypt_session_key(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<PlainSessionKey> {
+        debug!("decrypt session key");
+
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.key.public_key())
+        })
     }
 }
 
