@@ -301,7 +301,10 @@ impl<R: Read> Builder<R, EncryptionSeipdV1> {
         Ok(self)
     }
 
-    /// Returns the currently used session.
+    /// Returns the currently used session key.
+    ///
+    /// WARNING: this is sensitive material, and leaking it can lead to
+    /// a compromise of the data.
     pub fn session_key(&self) -> &Zeroizing<Vec<u8>> {
         &self.encryption.session_key
     }
@@ -350,7 +353,10 @@ impl<R: Read> Builder<R, EncryptionSeipdV2> {
         Ok(self)
     }
 
-    /// Returns the currently used session.
+    /// Returns the currently used session key.
+    ///
+    /// WARNING: this is sensitive material, and leaking it can lead to
+    /// a compromise of the data.
     pub fn session_key(&self) -> &Zeroizing<Vec<u8>> {
         &self.encryption.session_key
     }
