@@ -300,6 +300,11 @@ impl<R: Read> Builder<R, EncryptionSeipdV1> {
         self.encryption.sym_esks.push(esk);
         Ok(self)
     }
+
+    /// Returns the currently used session.
+    pub fn session_key(&self) -> &Zeroizing<Vec<u8>> {
+        &self.encryption.session_key
+    }
 }
 
 impl<R: Read> Builder<R, EncryptionSeipdV2> {
@@ -343,6 +348,11 @@ impl<R: Read> Builder<R, EncryptionSeipdV2> {
         self.encryption.sym_esks.push(esk);
 
         Ok(self)
+    }
+
+    /// Returns the currently used session.
+    pub fn session_key(&self) -> &Zeroizing<Vec<u8>> {
+        &self.encryption.session_key
     }
 }
 
