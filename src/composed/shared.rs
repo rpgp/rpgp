@@ -209,41 +209,39 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
             Some(p)
         }
         Err(ref e) => {
-            if let Error::Unsupported(e) = e {
+            if let Error::Unsupported { message } = e {
                 // "Error::Unsupported" signals parser errors that we can safely ignore
                 // (e.g. packets with unsupported versions)
                 warn!("skipping unsupported packet: {p:?}");
-                debug!("error: {e:?}");
+                debug!("error: {message}");
                 return None;
             }
-            if let Error::InvalidPacketContent(b) = &e {
-                let err: &Error = b; // unbox
-                if let Error::Unsupported(e) = err {
+            if let Error::InvalidPacketContent { source } = &e {
+                let err: &Error = source; // unbox
+                if let Error::Unsupported { message } = err {
                     // "Error::Unsupported" signals parser errors that we can safely ignore
                     // (e.g. packets with unsupported versions)
                     warn!("skipping unsupported packet: {p:?}");
-                    debug!("error: {e:?}");
+                    debug!("error: {message}");
                     return None;
                 }
-                if let Error::EllipticCurve(e) = err {
+                if let Error::EllipticCurve { source } = err {
                     // this error happens in one SKS test key, presumably bad public key material.
                     // ignoring the packet seems safe.
                     warn!("skipping bad elliptic curve data: {p:?}");
-                    debug!("error: {e:?}");
+                    debug!("error: {source:?}");
                     return None;
                 }
             }
-            if let Error::PacketIncomplete(e) = e {
+            if let Error::PacketIncomplete { source } = e {
                 // We ignore incomplete packets for now (some of these occur in the SKS dumps under `tests`)
                 warn!("skipping incomplete packet: {p:?}");
-                debug!("error: {e:?}");
+                debug!("error: {source:?}");
                 return None;
             }
 
             // Pass through all other errors from the low level parser, they should be surfaced
-            Some(Err(Error::Message(format!(
-                "unexpected packet data: {e:?}"
-            ))))
+            Some(Err(format_err!("unexpected packet data: {e:?}")))
         }
     }
 }

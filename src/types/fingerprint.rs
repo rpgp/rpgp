@@ -1,4 +1,4 @@
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::types::KeyVersion;
 
 /// Represents a Fingerprint.
@@ -32,11 +32,11 @@ impl Fingerprint {
     /// otherwise an error is returned.
     pub fn new(version: KeyVersion, fp: &[u8]) -> Result<Self> {
         let e = |_| {
-            Error::Message(format!(
+            format_err!(
                 "Illegal fingerprint length {} for key version {:?}",
                 fp.len(),
                 version
-            ))
+            )
         };
 
         let fp = match version {

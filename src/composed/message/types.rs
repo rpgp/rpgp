@@ -833,9 +833,7 @@ impl Message {
                 }
             }
             // We don't know how to verify a signature for other Message types, and shouldn't return Ok
-            _ => Err(Error::Unsupported(format!(
-                "Unexpected message format: {self:?}",
-            ))),
+            _ => unsupported_err!("Unexpected message format: {self:?}"),
         }
     }
 

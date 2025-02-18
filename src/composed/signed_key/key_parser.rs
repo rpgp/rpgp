@@ -223,7 +223,7 @@ where
     if let Some(Err(e)) = packets.next_if(|peek| peek.is_err()) {
         match e {
             // "Unsupported" errors are by definition "soft", these packets are safe to skip silently
-            Error::Unsupported(_) => {}
+            Error::Unsupported { .. } => {}
 
             _ => {
                 return Some(Err(format_err!(
@@ -241,18 +241,18 @@ where
     if primary_key.version() == KeyVersion::V6 {
         for sub in &public_subkey_container {
             if sub.version() != KeyVersion::V6 {
-                return Some(Err(crate::errors::Error::Message(format!(
+                return Some(Err(format_err!(
                     "Illegal public subkey {:?} in v6 key",
                     sub.version()
-                ))));
+                )));
             }
         }
         for sub in &secret_subkey_container {
             if sub.version() != KeyVersion::V6 {
-                return Some(Err(crate::errors::Error::Message(format!(
+                return Some(Err(format_err!(
                     "Illegal secret subkey {:?} in v6 key",
                     sub.version()
-                ))));
+                )));
             }
         }
     }

@@ -1,17 +1,18 @@
 //! Parsing functions to parse data using [Buf].
 
 use bytes::{Buf, Bytes};
+use snafu::Snafu;
 
 /// Parsing errors
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("{}: reading {:?}: {:?}", context, typ, error)]
+    #[snafu(display("{}: reading {:?}: {:?}", context, typ, error))]
     TooShort {
         typ: Typ,
         context: &'static str,
         error: RemainingError,
     },
-    #[error("expected {}, found {}", debug_bytes(expected), debug_bytes(&found[..]))]
+    #[snafu(display("expected {}, found {}", debug_bytes(expected), debug_bytes(&found[..])))]
     TagMissmatch {
         expected: Vec<u8>,
         found: Bytes,
@@ -36,8 +37,8 @@ fn debug_bytes(b: &[u8]) -> String {
     hex::encode(b)
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error("needed {}, remaining {}", needed, remaining)]
+#[derive(Debug, Snafu)]
+#[snafu(display("needed {}, remaining {}", needed, remaining))]
 pub struct RemainingError {
     pub needed: usize,
     pub remaining: usize,

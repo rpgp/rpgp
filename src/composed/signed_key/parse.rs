@@ -7,7 +7,7 @@ use crate::armor::{self, BlockType};
 use crate::composed::signed_key::{
     PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey, SignedSecretKeyParser,
 };
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::packet::{Packet, PacketParser, PacketTrait};
 use crate::types::Tag;
 
@@ -145,7 +145,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for PubPrivIterator<I>
 
                     res
                 }
-                Some(Err(e)) => Some(Err(Error::Message(e.to_string()))),
+                Some(Err(_)) => Some(Err(packets.next().expect("checked").expect_err("checked"))),
                 None => None,
             },
         }

@@ -58,9 +58,12 @@ impl Packet {
             }
             Tag::Other(22..=39) => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
-                return Err(Error::InvalidPacketContent(Box::new(Error::Message(
-                    format!("Unassigned Critical Packet type {:?}", packet_header.tag()),
-                ))));
+                return Err(Error::InvalidPacketContent {
+                    source: Box::new(format_err!(
+                        "Unassigned Critical Packet type {:?}",
+                        packet_header.tag()
+                    )),
+                });
             }
             Tag::Other(40..=59) => {
                 // a "soft" error that will usually get ignored while processing packet streams
@@ -74,7 +77,9 @@ impl Packet {
 
         match res {
             Ok(res) => Ok(res),
-            Err(Error::PacketParsing(e)) if e.is_incomplete() => Err(Error::PacketIncomplete(e)),
+            Err(Error::PacketParsing { source }) if source.is_incomplete() => {
+                Err(Error::PacketIncomplete { source })
+            }
             Err(err) => {
                 warn!(
                     "invalid packet: {:#?} {:?}\n{:?}",
@@ -82,7 +87,9 @@ impl Packet {
                     packet_header.tag(),
                     body
                 );
-                Err(Error::InvalidPacketContent(Box::new(err)))
+                Err(Error::InvalidPacketContent {
+                    source: Box::new(err),
+                })
             }
         }
     }

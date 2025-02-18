@@ -65,10 +65,10 @@ impl Iterator for PacketParser {
                 let res = Packet::from_bytes(header, packet_bytes);
                 match res {
                     Ok(packet) => Some(Ok(packet)),
-                    Err(Error::PacketParsing(e)) if e.is_incomplete() => {
-                        debug!("incomplete packet for: {:?}", e);
+                    Err(Error::PacketParsing { source }) if source.is_incomplete() => {
+                        debug!("incomplete packet for: {:?}", source);
                         // not bailing, we are just skipping incomplete bodies
-                        Some(Err(Error::PacketIncomplete(e)))
+                        Some(Err(Error::PacketIncomplete { source }))
                     }
                     Err(err) => Some(Err(err)),
                 }
@@ -147,10 +147,10 @@ impl Iterator for PacketParser {
 
                 match Packet::from_bytes(header, body) {
                     Ok(packet) => Some(Ok(packet)),
-                    Err(Error::PacketParsing(e)) if e.is_incomplete() => {
-                        debug!("incomplete packet for: {:?}", e);
+                    Err(Error::PacketParsing { source }) if source.is_incomplete() => {
+                        debug!("incomplete packet for: {:?}", source);
                         // not bailing, we are just skipping incomplete bodies
-                        Some(Err(Error::PacketIncomplete(e)))
+                        Some(Err(Error::PacketIncomplete { source }))
                     }
                     Err(err) => {
                         self.is_done = true;

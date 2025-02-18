@@ -7,7 +7,7 @@ use rand::{CryptoRng, Rng};
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::KeyVersion;
@@ -388,14 +388,12 @@ impl StringToKey {
                 let a2 = Argon2::new(
                     Algorithm::Argon2id,
                     Version::V0x13,
-                    Params::new(m, *t as u32, *p as u32, Some(key_size))
-                        .map_err(|e| Error::Message(format!("{:?}", e)))?,
+                    Params::new(m, *t as u32, *p as u32, Some(key_size))?,
                 );
 
                 let mut output_key_material = vec![0; key_size];
 
-                a2.hash_password_into(passphrase, salt, &mut output_key_material)
-                    .map_err(|e| Error::Message(format!("{:?}", e)))?;
+                a2.hash_password_into(passphrase, salt, &mut output_key_material)?;
 
                 output_key_material
             }

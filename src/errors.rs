@@ -1,6 +1,7 @@
 use std::num::TryFromIntError;
 
 use ed25519_dalek::SignatureError;
+use snafu::{Backtrace, Snafu};
 
 pub type Result<T, E = Error> = ::std::result::Result<T, E>;
 
@@ -10,80 +11,85 @@ pub const MPI_TOO_LONG: u32 = 1000;
 pub use crate::parsing::{Error as ParsingError, RemainingError};
 
 /// Error types
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("invalid input")]
+    #[snafu(display("invalid input"))]
     InvalidInput,
-    #[error("invalid armor wrappers")]
+    #[snafu(display("invalid armor wrappers"))]
     InvalidArmorWrappers,
-    #[error("invalid crc24 checksum")]
+    #[snafu(display("invalid crc24 checksum"))]
     InvalidChecksum,
-    #[error("failed to decode base64 {0:?}")]
-    Base64DecodeError(#[from] base64::DecodeError),
-    #[error("requested data size is larger than the packet body")]
+    #[snafu(transparent)]
+    Base64Decode { source: base64::DecodeError },
+    #[snafu(display("requested data size is larger than the packet body"))]
     RequestedSizeTooLarge,
-    #[error("no matching packet found")]
+    #[snafu(display("no matching packet found"))]
     NoMatchingPacket,
-    #[error("more than one matching packet was found")]
+    #[snafu(display("more than one matching packet was found"))]
     TooManyPackets,
-    #[error("rsa error: {0:?}")]
-    RSAError(#[from] rsa::errors::Error),
-    #[error("elliptic error: {0:?}")]
-    EllipticCurve(#[from] elliptic_curve::Error),
-    #[error("io error: {0:?}")]
-    IOError(#[from] std::io::Error),
-    #[error("invalid key length")]
+    #[snafu(transparent)]
+    RSAError { source: rsa::errors::Error },
+    #[snafu(transparent)]
+    EllipticCurve { source: elliptic_curve::Error },
+    #[snafu(transparent)]
+    IO {
+        source: std::io::Error,
+        backtrace: Backtrace,
+    },
+    #[snafu(display("invalid key length"))]
     InvalidKeyLength,
-    #[error("block mode error")]
+    #[snafu(display("block mode error"))]
     BlockMode,
-    #[error("missing key")]
+    #[snafu(display("missing key"))]
     MissingKey,
-    #[error("cfb: invalid key iv length")]
+    #[snafu(display("cfb: invalid key iv length"))]
     CfbInvalidKeyIvLength,
-    #[error("Not yet implemented: {0:?}")]
-    Unimplemented(String),
+    #[snafu(display("Not yet implemented: {message}"))]
+    Unimplemented { message: String },
     /// Signals packet versions and parameters we don't support, but can safely ignore
-    #[error("Unsupported: {0:?}")]
-    Unsupported(String),
-    #[error("{0:?}")]
-    Message(String),
-    #[error("Invalid Packet {0:?}")]
-    PacketError(nom::error::ErrorKind),
-    #[error("Unpadding failed")]
+    #[snafu(display("Unsupported: {message}"))]
+    Unsupported { message: String },
+    #[snafu(display("{message}"))]
+    Message { message: String },
+    #[snafu(display("Invalid Packet {kind:?}"))]
+    PacketError { kind: nom::error::ErrorKind },
+    #[snafu(display("Unpadding failed"))]
     UnpadError,
-    #[error("Padding failed")]
+    #[snafu(display("Padding failed"))]
     PadError,
-    #[error("Utf8 {0:?}")]
-    Utf8Error(#[from] std::str::Utf8Error),
-    #[error("ParseInt {0:?}")]
-    ParseIntError(#[from] std::num::ParseIntError),
-    #[error("Invalid Packet Content {0:?}")]
-    InvalidPacketContent(Box<Error>),
-    #[error("Signature {0:?}")]
-    SignatureError(#[from] SignatureError),
-    #[error("Modification Detection Code error")]
+    #[snafu(transparent)]
+    Utf8Error { source: std::str::Utf8Error },
+    #[snafu(transparent)]
+    ParseIntError { source: std::num::ParseIntError },
+    #[snafu(display("Invalid Packet Content {source:?}"))]
+    InvalidPacketContent { source: Box<Error> },
+    #[snafu(transparent)]
+    SignatureError { source: SignatureError },
+    #[snafu(display("Modification Detection Code error"))]
     MdcError,
-    #[error("Invalid size conversion {0}")]
-    TryFromInt(#[from] TryFromIntError),
-    #[error("GCM")]
+    #[snafu(transparent)]
+    TryFromInt { source: TryFromIntError },
+    #[snafu(display("GCM"))]
     Gcm,
-    #[error("EAX")]
+    #[snafu(display("EAX"))]
     Eax,
-    #[error("OCB")]
+    #[snafu(display("OCB"))]
     Ocb,
-    #[error("SHA1 hash collision detected")]
+    #[snafu(display("SHA1 hash collision detected"))]
     Sha1HashCollision,
-    #[error("AES Key Wrap error {0}")]
-    AesKek(#[from] aes_kw::Error),
-    #[error("failed to parse packet {0:?}")]
-    PacketParsing(#[from] ParsingError),
-    #[error("packet is incomplete: {0:?}")]
-    PacketIncomplete(ParsingError),
+    #[snafu(transparent)]
+    AesKek { source: aes_kw::Error },
+    #[snafu(transparent)]
+    PacketParsing { source: ParsingError },
+    #[snafu(display("packet is incomplete"))]
+    PacketIncomplete { source: ParsingError },
+    #[snafu(transparent)]
+    Argon2 { source: argon2::Error },
 }
 
 impl<T> From<nom::error::Error<T>> for Error {
     fn from(err: nom::error::Error<T>) -> Self {
-        Self::PacketError(err.code)
+        Self::PacketError { kind: err.code }
     }
 }
 
@@ -101,53 +107,55 @@ impl From<block_padding::UnpadError> for Error {
 
 impl From<String> for Error {
     fn from(err: String) -> Error {
-        Error::Message(err)
+        Error::Message { message: err }
     }
 }
 
 impl From<derive_builder::UninitializedFieldError> for Error {
     fn from(err: derive_builder::UninitializedFieldError) -> Error {
-        Error::Message(err.to_string())
+        Error::Message {
+            message: err.to_string(),
+        }
     }
 }
 
 #[macro_export]
 macro_rules! unimplemented_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unimplemented($e.to_string()))
+        return Err($crate::errors::Error::Unimplemented { message: $e.to_string() })
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unimplemented(format!($fmt, $($arg)+)))
+        return Err($crate::errors::Error::Unimplemented { message: format!($fmt, $($arg)+)})
     };
 }
 
 #[macro_export]
 macro_rules! unsupported_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unsupported($e.to_string()))
+        return Err($crate::errors::Error::Unsupported { message: $e.to_string()})
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unsupported(format!($fmt, $($arg)+)))
+        return Err($crate::errors::Error::Unsupported { message: format!($fmt, $($arg)+) })
     };
 }
 
 #[macro_export]
 macro_rules! bail {
     ($e:expr) => {
-        return Err($crate::errors::Error::Message($e.to_string()))
+        return Err($crate::errors::Error::Message { message: $e.to_string() })
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Message(format!($fmt, $($arg)+)))
+        return Err($crate::errors::Error::Message { message: format!($fmt, $($arg)+) })
     };
 }
 
 #[macro_export]
 macro_rules! format_err {
     ($e:expr) => {
-        $crate::errors::Error::Message($e.to_string())
+        $crate::errors::Error::Message { message: $e.to_string() }
     };
     ($fmt:expr, $($arg:tt)+) => {
-        $crate::errors::Error::Message(format!($fmt, $($arg)+))
+        $crate::errors::Error::Message { message: format!($fmt, $($arg)+) }
     };
 }
 

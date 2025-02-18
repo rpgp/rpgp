@@ -5,7 +5,7 @@ use log::debug;
 use crate::armor::BlockType;
 use crate::composed::message::Message;
 use crate::composed::Deserializable;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::packet::{Packet, PacketTrait};
 use crate::types::{PkeskVersion, SkeskVersion, Tag};
 use crate::{Edata, Esk};
@@ -66,15 +66,13 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
                                 Edata::try_from(p).expect("peeked")
                             }
                             Some(Ok(p)) => {
-                                return Some(Err(Error::Message(format!(
+                                return Some(Err(format_err!(
                                     "Expected encrypted data packet, but found {:?}",
                                     p
-                                ))));
+                                )));
                             }
                             None => {
-                                return Some(Err(Error::Message(
-                                    "Missing encrypted data packet".to_string(),
-                                )))
+                                return Some(Err(format_err!("Missing encrypted data packet")));
                             }
                             Some(Err(e)) => return Some(Err(e)),
                         };

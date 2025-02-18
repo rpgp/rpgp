@@ -1,9 +1,9 @@
-use std::fmt;
 use std::io;
 
 use chrono::Duration;
 use log::warn;
 use smallvec::SmallVec;
+use snafu::Snafu;
 
 use crate::composed::key::KeyDetails;
 use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
@@ -307,14 +307,9 @@ impl PublicOrSecret {
 
 /// Error returned when trying to convert `PublicOrSecret` key
 /// into the wrong type.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Snafu)]
+#[snafu(display("Attempt to convert PublicOrSecret key to the wrong type"))]
 pub struct TryFromPublicOrSecretError;
-
-impl fmt::Display for TryFromPublicOrSecretError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Attempt to convert PublicOrSecret key to the wrong type")
-    }
-}
 
 impl TryFrom<PublicOrSecret> for SignedPublicKey {
     type Error = TryFromPublicOrSecretError;

@@ -87,8 +87,8 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
         if let Err(err) = key.verify() {
             match err {
                 // Skip these for now
-                Error::Unimplemented(err) => {
-                    warn!("unimplemented: {}:{} {:?}", i, j, err);
+                Error::Unimplemented { message } => {
+                    warn!("unimplemented: {}:{} {:?}", i, j, message);
                     actual.unimpl_count += 1;
                 }
                 _ => {
@@ -269,8 +269,8 @@ fn test_parse_gnupg_v1() {
         let (pk, headers) = SignedPublicKey::from_string(input).expect("failed to parse key");
         match pk.verify() {
             // Skip these for now
-            Err(Error::Unimplemented(err)) => {
-                warn!("verification failed: {:?}", err);
+            Err(Error::Unimplemented { message }) => {
+                warn!("verification failed: {:?}", message);
             }
             Err(err) => panic!("{err:?}"),
             // all good

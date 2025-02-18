@@ -20,7 +20,7 @@ rust-version = "1.83"
 [dependencies]
 aes = "0.8.4"
 aead = { version = "0.5", features = ["bytes"] }
-argon2 = { version = "0.5", features = ["zeroize"] }
+argon2 = { version = "0.5", features = ["zeroize", "std"] }
 base64 = ">=0.21.7, < 0.23"
 block-padding = "0.3"
 blowfish = "0.9"
@@ -62,7 +62,6 @@ sha2 = { version = "0.10.6", features = ["oid"] }
 sha3 = { version = "0.10.5", features = ["oid"] }
 signature = "2.1"
 smallvec = "1.10.0"
-thiserror = "2.0.9"
 twofish = "0.7"
 zeroize = { version = "1.7", features = ["zeroize_derive"] }
 getrandom = { version = "0.2", optional = true }
@@ -108,6 +107,7 @@ bzip2 = { version = "0.5.0", default-features = false, features = [
 ], optional = true }
 bitfields = "0.12.3"
 regex = "1.7"
+snafu = { version = "0.8.5", features = ["rust_1_81", "backtraces-impl-backtrace-crate"] }
 
 
 [dev-dependencies]
