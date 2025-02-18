@@ -860,15 +860,24 @@ pub enum SignatureType {
 /// not yet used.
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
-#[derive(Default, Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct KeyFlags {
     /// Handles the first two bytes.
     known: KnownKeyFlags,
     /// Any additional key flag bytes.
     rest: Option<Bytes>,
-    /// Need to store this, to understand the if the decoded value was
-    /// stored in one ore two bytes.
-    known_two_bytes: bool,
+    /// Need to store this, to fully roundtrip..
+    original_len: usize,
+}
+
+impl Default for KeyFlags {
+    fn default() -> Self {
+        Self {
+            known: KnownKeyFlags::default(),
+            rest: None,
+            original_len: 1,
+        }
+    }
 }
 
 impl KeyFlags {
@@ -877,30 +886,35 @@ impl KeyFlags {
         let remaining = buf.remaining();
 
         if remaining == 0 {
-            Ok(Self::default())
-        } else if remaining == 1 {
-            let known = KnownKeyFlags::from_bits(buf.read_u8()? as u16);
-            Ok(Self {
-                known,
+            return Ok(Self {
+                known: KnownKeyFlags::default(),
                 rest: None,
-                known_two_bytes: false,
-            })
-        } else if remaining == 2 {
-            let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
-            Ok(Self {
-                known,
-                rest: None,
-                known_two_bytes: true,
-            })
-        } else {
-            let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
-            let rest = Some(buf.rest());
-            Ok(Self {
-                known,
-                rest,
-                known_two_bytes: true,
-            })
+                original_len: remaining,
+            });
         }
+        if remaining == 1 {
+            let known = KnownKeyFlags::from_bits(buf.read_u8()? as u16);
+            return Ok(Self {
+                known,
+                rest: None,
+                original_len: remaining,
+            });
+        }
+        if remaining == 2 {
+            let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
+            return Ok(Self {
+                known,
+                rest: None,
+                original_len: remaining,
+            });
+        }
+        let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
+        let rest = Some(buf.rest());
+        Ok(Self {
+            known,
+            rest,
+            original_len: remaining,
+        })
     }
 
     pub fn set_certify(&mut self, val: bool) {
@@ -972,12 +986,17 @@ impl KeyFlags {
 
 impl Serialize for KeyFlags {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        if self.original_len == 0 {
+            return Ok(());
+        }
+
         let [a, b] = self.known.into_bits().to_le_bytes();
         writer.write_u8(a)?;
-        if self.known_two_bytes || b != 0 {
+
+        if self.original_len > 1 || b != 0 {
             writer.write_u8(b)?;
         }
-        dbg!(&self.rest);
+
         if let Some(ref rest) = self.rest {
             writer.write_all(rest)?;
         }
@@ -985,9 +1004,12 @@ impl Serialize for KeyFlags {
     }
 
     fn write_len(&self) -> usize {
+        if self.original_len == 0 {
+            return 0;
+        }
         let mut sum = 0;
         let [_, b] = self.known.into_bits().to_le_bytes();
-        if self.known_two_bytes || b > 0 {
+        if self.original_len > 1 || b > 0 {
             sum += 2;
         } else {
             sum += 1;
@@ -1112,8 +1134,22 @@ pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
 
 #[cfg(test)]
 mod tests {
+    use bytes::BytesMut;
+
     use super::*;
     use crate::packet::SubpacketType;
+
+    /// keyflags being all zeros..are special
+    #[test]
+    fn test_keyflags_crazy_versions() {
+        for i in 0..1024 {
+            println!("size {}", i);
+            // I write this with pain...
+            let source = BytesMut::zeroed(i).freeze();
+            let flags = KeyFlags::from_buf(&source[..]).unwrap();
+            assert_eq!(&flags.to_bytes().unwrap(), &source);
+        }
+    }
 
     #[test]
     fn test_keyflags_1_byte() {
