@@ -59,10 +59,22 @@ impl<'a, A, B> TeeWriter<'a, A, B> {
 
 impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.a.write(buf);
-        write_all(&mut self.b, buf)?;
+        let written = self.b.write(buf)?;
+        self.a.write(&buf[..written]);
 
-        Ok(buf.len())
+        Ok(written)
+    }
+
+    fn write_all(&mut self, mut buf: &[u8]) -> io::Result<()> {
+        while !buf.is_empty() {
+            match self.write(buf) {
+                Ok(0) => {}
+                Ok(n) => buf = &buf[n..],
+                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -70,20 +82,6 @@ impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
 
         Ok(())
     }
-}
-
-/// The same as the std lib, but doesn't choke on write 0. This is a hack, to be compatible with
-/// rust-base64.
-pub fn write_all(writer: &mut impl io::Write, mut buf: &[u8]) -> io::Result<()> {
-    while !buf.is_empty() {
-        match writer.write(buf) {
-            Ok(0) => {}
-            Ok(n) => buf = &buf[n..],
-            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

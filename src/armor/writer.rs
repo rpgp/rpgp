@@ -32,7 +32,11 @@ pub fn write(
     Ok(())
 }
 
-fn write_header(writer: &mut impl Write, typ: BlockType, headers: Option<&Headers>) -> Result<()> {
+pub(crate) fn write_header(
+    writer: &mut impl Write,
+    typ: BlockType,
+    headers: Option<&Headers>,
+) -> Result<()> {
     // write armor header
     writer.write_all(&b"-----BEGIN "[..])?;
     typ.to_writer(writer)?;
@@ -63,10 +67,7 @@ fn write_body(
 ) -> Result<()> {
     {
         let mut line_wrapper = LineWriter::<_, U64>::new(writer.by_ref(), LineBreak::Lf);
-        let mut enc = ZeroWrapper(base64::write::EncoderWriter::new(
-            &mut line_wrapper,
-            &general_purpose::STANDARD,
-        ));
+        let mut enc = Base64Encoder::new(&mut line_wrapper);
 
         if let Some(crc_hasher) = crc_hasher {
             let mut tee = TeeWriter::new(crc_hasher, &mut enc);
@@ -79,7 +80,7 @@ fn write_body(
     Ok(())
 }
 
-fn write_footer(
+pub(crate) fn write_footer(
     writer: &mut impl Write,
     typ: BlockType,
     crc_hasher: Option<Crc24Hasher>,
@@ -112,16 +113,26 @@ fn write_footer(
 /// Otherwise we can't use `write_all`.
 ///
 /// Ref https://github.com/marshallpierce/rust-base64/issues/148
-struct ZeroWrapper<W: std::io::Write>(W);
+pub(crate) struct Base64Encoder<W: std::io::Write>(
+    base64::write::EncoderWriter<'static, general_purpose::GeneralPurpose, W>,
+);
 
-impl<W: std::io::Write> std::io::Write for ZeroWrapper<W> {
+impl<W: std::io::Write> Base64Encoder<W> {
+    pub(crate) fn new(writer: W) -> Self {
+        Self(base64::write::EncoderWriter::new(
+            writer,
+            &general_purpose::STANDARD,
+        ))
+    }
+}
+impl<W: std::io::Write> std::io::Write for Base64Encoder<W> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.0.write(buf)
     }
 
     fn write_all(&mut self, mut buf: &[u8]) -> std::io::Result<()> {
         while !buf.is_empty() {
-            match self.write(buf) {
+            match self.0.write(buf) {
                 Ok(0) => {}
                 Ok(n) => buf = &buf[n..],
                 Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
@@ -140,8 +151,11 @@ impl<W: std::io::Write> std::io::Write for ZeroWrapper<W> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use crate::util::test::ChaosReader;
+
     use super::*;
     use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
     use rand_xorshift::XorShiftRng;
     use std::io;
 
@@ -215,6 +229,27 @@ mod tests {
                 "last line must not be empty"
             );
             assert_eq!(lines[lines.len() - 1], "-----END PGP MESSAGE-----");
+        }
+    }
+
+    #[test]
+    fn test_base64_encoder() {
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        for size in 1..=500 {
+            // Generate data
+            let mut buf = vec![0u8; size];
+            rng.fill(&mut buf[..]);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            let mut out = Vec::new();
+            {
+                let mut writer = Base64Encoder::new(&mut out);
+                std::io::copy(&mut reader, &mut writer).unwrap();
+            }
+            let out = std::string::String::from_utf8(out).unwrap();
+
+            let out2 = general_purpose::STANDARD.encode(buf);
+            assert_eq!(out, out2);
         }
     }
 }

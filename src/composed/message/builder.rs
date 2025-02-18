@@ -3,14 +3,18 @@ use std::path::{Path, PathBuf};
 
 use bytes::Bytes;
 use chrono::{SubsecRound, Utc};
+use crc24::Crc24Hasher;
+use generic_array::typenum::U64;
 use log::debug;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
+use crate::armor;
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
+use crate::line_writer::{LineBreak, LineWriter};
 use crate::packet::{
     ChunkSize, CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
     OnePassSignature, PacketHeader, PacketTrait, PublicKeyEncryptedSessionKey, SignatureHasher,
@@ -23,7 +27,10 @@ use crate::types::{
     SecretKeyTrait, StringToKey, Tag,
 };
 use crate::util::fill_buffer;
+use crate::util::TeeWriter;
 use crate::Esk;
+
+use super::ArmorOptions;
 
 type DummyReader = std::io::Cursor<Vec<u8>>;
 
@@ -38,6 +45,7 @@ type DummyReader = std::io::Cursor<Vec<u8>>;
 /// (encryption, compression, literal data).
 ///
 /// If the total data fits into a single chunk, a single fixed packet is generated.
+#[derive(Clone)]
 pub struct Builder<R = DummyReader, E = NoEncryption> {
     source: Source<R>,
     compression: Option<CompressionAlgorithm>,
@@ -47,16 +55,17 @@ pub struct Builder<R = DummyReader, E = NoEncryption> {
     data_mode: DataMode,
 }
 
+#[derive(Clone)]
 enum Source<R = DummyReader> {
     Bytes { name: Bytes, bytes: Bytes },
     File(PathBuf),
     Reader { file_name: Bytes, reader: R },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct NoEncryption;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct EncryptionSeipdV1 {
     session_key: Zeroizing<Vec<u8>>,
     sym_esks: Vec<SymKeyEncryptedSessionKey>,
@@ -64,7 +73,7 @@ pub struct EncryptionSeipdV1 {
     sym_alg: SymmetricKeyAlgorithm,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct EncryptionSeipdV2 {
     session_key: Zeroizing<Vec<u8>>,
     sym_esks: Vec<SymKeyEncryptedSessionKey>,
@@ -582,6 +591,83 @@ impl<R: Read, E: Encryption> Builder<R, E> {
         Ok(())
     }
 
+    /// Write the data not as binary, but ascii armor encoded.
+    pub fn to_armored_writer<RAND, W>(
+        self,
+        rng: RAND,
+        opts: ArmorOptions<'_>,
+        mut out: W,
+    ) -> Result<()>
+    where
+        RAND: Rng + CryptoRng,
+        W: std::io::Write,
+    {
+        let typ = armor::BlockType::Message;
+
+        // write header
+        armor::write_header(&mut out, typ, opts.headers)?;
+
+        // write body
+        let mut crc_hasher = opts.include_checksum.then(Crc24Hasher::new);
+        {
+            let crc_hasher = crc_hasher.as_mut();
+            let mut line_wrapper = LineWriter::<_, U64>::new(out.by_ref(), LineBreak::Lf);
+            let mut enc = armor::Base64Encoder::new(&mut line_wrapper);
+
+            if let Some(crc_hasher) = crc_hasher {
+                let mut tee = TeeWriter::new(crc_hasher, &mut enc);
+                self.to_writer(rng, &mut tee)?;
+            } else {
+                self.to_writer(rng, &mut enc)?;
+            }
+        }
+
+        // write footer
+        armor::write_footer(&mut out, typ, crc_hasher)?;
+        out.flush()?;
+
+        Ok(())
+    }
+
+    /// Write the data not as binary, but ascii armor encoded.
+    pub fn to_armored_writer_signed<RAND, W>(
+        self,
+        rng: RAND,
+        opts: ArmorOptions<'_>,
+        keys: Vec<SigningConfig<'_>>,
+        mut out: W,
+    ) -> Result<()>
+    where
+        RAND: Rng + CryptoRng,
+        W: std::io::Write,
+    {
+        let typ = armor::BlockType::Message;
+
+        // write header
+        armor::write_header(&mut out, typ, opts.headers)?;
+
+        // write body
+        let mut crc_hasher = opts.include_checksum.then(Crc24Hasher::new);
+        {
+            let crc_hasher = crc_hasher.as_mut();
+            let mut line_wrapper = LineWriter::<_, U64>::new(&mut out, LineBreak::Lf);
+            let mut enc = armor::Base64Encoder::new(&mut line_wrapper);
+
+            if let Some(crc_hasher) = crc_hasher {
+                let mut tee = TeeWriter::new(crc_hasher, &mut enc);
+                self.to_writer_signed(rng, keys, &mut tee)?;
+            } else {
+                self.to_writer_signed(rng, keys, &mut enc)?;
+            }
+        }
+
+        // write footer
+        armor::write_footer(&mut out, typ, crc_hasher)?;
+        out.flush()?;
+
+        Ok(())
+    }
+
     /// Write the data out directly to a file.
     pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
     where
@@ -607,6 +693,97 @@ impl<R: Read, E: Encryption> Builder<R, E> {
         Ok(())
     }
 
+    /// Write the data out directly to a file.
+    pub fn to_armored_file<RAND, P>(
+        self,
+        rng: RAND,
+        out_path: P,
+        opts: ArmorOptions<'_>,
+    ) -> Result<()>
+    where
+        RAND: Rng + CryptoRng,
+        P: AsRef<Path>,
+    {
+        let out_path: &Path = out_path.as_ref();
+        debug!("writing to file: {}", out_path.display());
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let out_file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(out_path)?;
+        let mut out_file = BufWriter::new(out_file);
+
+        self.to_armored_writer(rng, opts, &mut out_file)?;
+
+        out_file.flush()?;
+
+        Ok(())
+    }
+
+    /// Write the data out directly to a file.
+    pub fn to_file_signed<RAND, P>(
+        self,
+        rng: RAND,
+        out_path: P,
+        keys: Vec<SigningConfig<'_>>,
+    ) -> Result<()>
+    where
+        RAND: Rng + CryptoRng,
+        P: AsRef<Path>,
+    {
+        let out_path: &Path = out_path.as_ref();
+        debug!("writing to file: {}", out_path.display());
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let out_file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(out_path)?;
+        let mut out_file = BufWriter::new(out_file);
+
+        self.to_writer_signed(rng, keys, &mut out_file)?;
+
+        out_file.flush()?;
+
+        Ok(())
+    }
+
+    /// Write the data out directly to a file.
+    pub fn to_armored_file_signed<RAND, P>(
+        self,
+        rng: RAND,
+        out_path: P,
+        opts: ArmorOptions<'_>,
+        keys: Vec<SigningConfig<'_>>,
+    ) -> Result<()>
+    where
+        RAND: Rng + CryptoRng,
+        P: AsRef<Path>,
+    {
+        let out_path: &Path = out_path.as_ref();
+        debug!("writing to file: {}", out_path.display());
+        if let Some(parent) = out_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let out_file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(out_path)?;
+        let mut out_file = BufWriter::new(out_file);
+
+        self.to_armored_writer_signed(rng, opts, keys, &mut out_file)?;
+
+        out_file.flush()?;
+
+        Ok(())
+    }
+
     /// Write the data out directly to a `Vec<u8>`.
     pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
     where
@@ -617,12 +794,38 @@ impl<R: Read, E: Encryption> Builder<R, E> {
         Ok(out)
     }
 
+    /// Write the data as ascii armored data, directly to a `String`.
+    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
+    where
+        RAND: Rng + CryptoRng,
+    {
+        let mut out = Vec::new();
+        self.to_armored_writer(rng, opts, &mut out)?;
+        let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
+        Ok(out)
+    }
+
     pub fn to_vec_signed<RAND>(self, rng: RAND, keys: Vec<SigningConfig<'_>>) -> Result<Vec<u8>>
     where
         RAND: CryptoRng + Rng,
     {
         let mut out = Vec::new();
         self.to_writer_signed(rng, keys, &mut out)?;
+        Ok(out)
+    }
+
+    pub fn to_armored_string_signed<RAND>(
+        self,
+        rng: RAND,
+        keys: Vec<SigningConfig<'_>>,
+        opts: ArmorOptions<'_>,
+    ) -> Result<String>
+    where
+        RAND: CryptoRng + Rng,
+    {
+        let mut out = Vec::new();
+        self.to_armored_writer_signed(rng, opts, keys, &mut out)?;
+        let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
         Ok(out)
     }
 }
@@ -870,6 +1073,19 @@ impl<A: std::io::Write> std::io::Write for TeeManyWriter<'_, '_, A> {
         Ok(written)
     }
 
+    // custom impl, to work around Base64Encoder returning Ok(0) from write
+    fn write_all(&mut self, mut buf: &[u8]) -> std::io::Result<()> {
+        while !buf.is_empty() {
+            match self.write(buf) {
+                Ok(0) => {}
+                Ok(n) => buf = &buf[n..],
+                Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
     fn flush(&mut self) -> std::io::Result<()> {
         self.writer.flush()?;
         for hasher in self.hashers.iter_mut() {
@@ -886,6 +1102,7 @@ mod tests {
 
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
+    use testresult::TestResult;
 
     use crate::crypto::sym::SymmetricKeyAlgorithm;
     use crate::line_writer::LineBreak;
@@ -921,7 +1138,7 @@ mod tests {
         // decrypt it
         let encrypted_file_data = std::fs::read(&encrypted_file).unwrap();
         let message = Message::from_bytes(encrypted_file_data.into()).unwrap();
-        dbg!(&message);
+
         let decrypted = message
             .decrypt_with_password(&"hello world".into())
             .unwrap();
@@ -1487,96 +1704,119 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    enum Encoding<'a> {
+        Binary,
+        Armor(ArmorOptions<'a>),
+    }
+
     #[test]
-    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_twice() {
+    fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv2_sign_twice(
+    ) -> TestResult {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
-        let (skey1, _headers) = SignedSecretKey::from_armor_single(
-            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-        )
-        .unwrap();
+        let (skey1, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
 
         // subkey[0] is the encryption key
         let pkey1 = skey1.secret_subkeys[0].public_key();
 
-        let (skey2, _headers) = SignedSecretKey::from_armor_single(
-            std::fs::File::open("./tests/autocrypt/bob@autocrypt.example.sec.asc").unwrap(),
-        )
-        .unwrap();
+        let (skey2, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/bob@autocrypt.example.sec.asc",
+        )?)?;
 
         let chunk_size = 512u32;
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            for encoding in [
+                Encoding::Binary,
+                Encoding::Armor(ArmorOptions {
+                    headers: None,
+                    include_checksum: true,
+                }),
+                Encoding::Armor(ArmorOptions {
+                    headers: None,
+                    include_checksum: false,
+                }),
+            ] {
+                println!("-- Size: {} encoding: {:?}", file_size, encoding);
 
-            // Generate data
-            let buf = random_string(&mut rng, file_size);
-            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+                // Generate data
+                let buf = random_string(&mut rng, file_size);
+                let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .data_mode(DataMode::Utf8)
-                .compression(CompressionAlgorithm::ZIP)
-                .chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v2(
-                    &mut rng,
-                    SymmetricKeyAlgorithm::AES128,
-                    AeadAlgorithm::Gcm,
-                    ChunkSize::default(),
-                )
-                .encrypt_to_key(&mut rng, &pkey1)
-                .expect("encryption");
+                let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                    .data_mode(DataMode::Utf8)
+                    .compression(CompressionAlgorithm::ZIP)
+                    .chunk_size(chunk_size)?
+                    .seipd_v2(
+                        &mut rng,
+                        SymmetricKeyAlgorithm::AES128,
+                        AeadAlgorithm::Gcm,
+                        ChunkSize::default(),
+                    )
+                    .encrypt_to_key(&mut rng, &pkey1)?;
 
-            let sig_config = vec![
-                SigningConfig::new(&*skey1, Password::empty(), HashAlgorithm::Sha256),
-                SigningConfig::new(&*skey2, Password::empty(), HashAlgorithm::Sha512),
-            ];
+                let sig_config = vec![
+                    SigningConfig::new(&*skey1, Password::empty(), HashAlgorithm::Sha256),
+                    SigningConfig::new(&*skey2, Password::empty(), HashAlgorithm::Sha512),
+                ];
 
-            let encrypted = builder
-                .to_vec_signed(&mut rng, sig_config)
-                .expect("writing");
+                let message = match encoding {
+                    Encoding::Armor(opts) => {
+                        let encrypted =
+                            builder.to_armored_string_signed(&mut rng, sig_config, opts)?;
 
-            println!("--- parsing");
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+                        println!("{}", encrypted);
 
-            println!("parsed {:#?}", message);
+                        let (message, _) = Message::from_armor_single(encrypted.as_bytes())?;
+                        message
+                    }
+                    Encoding::Binary => {
+                        let encrypted = builder.to_vec_signed(&mut rng, sig_config)?;
 
-            // verify signature outer
-            assert!(message.is_one_pass_signed());
-            message.verify(&*skey1.public_key()).expect("signed alice");
+                        println!("{}", hex::encode(&encrypted));
+                        Message::from_bytes(encrypted.into())?
+                    }
+                };
 
-            // verify inner signature
-            match message {
-                Message::Signed { ref message, .. } => {
-                    let message = message.as_ref().expect("missing message");
-                    assert!(message.is_one_pass_signed());
-                    message.verify(&*skey2.public_key()).expect("signed bob");
-                }
-                _ => {
-                    panic!("invalid structure: {:?}", message);
-                }
-            };
+                // verify signature outer
+                assert!(message.is_one_pass_signed());
+                message.verify(&*skey1.public_key())?;
 
-            // decrypt it
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey1])
-                .expect("decryption");
+                // verify inner signature
+                match message {
+                    Message::Signed { ref message, .. } => {
+                        let message = message.as_ref().unwrap();
+                        assert!(message.is_one_pass_signed());
+                        message.verify(&*skey2.public_key())?;
+                    }
+                    _ => {
+                        panic!("invalid structure: {:?}", message);
+                    }
+                };
 
-            assert!(matches!(decrypted, Message::Compressed(_)));
+                // decrypt it
+                let (decrypted, _key_ids) = message.decrypt(&[Password::empty()], &[&skey1])?;
 
-            let decompressed = decrypted.decompress().expect("decompression");
+                assert!(matches!(decrypted, Message::Compressed(_)));
 
-            let Message::Literal(l) = decompressed else {
-                panic!("unexpected message: {:?}", decompressed);
-            };
+                let decompressed = decrypted.decompress()?;
 
-            assert_eq!(l.file_name(), "plaintext.txt");
-            check_strings(
-                l.to_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
-            );
+                let Message::Literal(l) = decompressed else {
+                    panic!("unexpected message: {:?}", decompressed);
+                };
+
+                assert_eq!(l.file_name(), "plaintext.txt");
+                check_strings(
+                    l.to_string().unwrap(),
+                    normalize_lines(&buf, LineBreak::Crlf),
+                );
+            }
         }
+        Ok(())
     }
 }

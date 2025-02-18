@@ -125,6 +125,7 @@ tempfile = "3.14.0"
 proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
 escape_string = "0.1.2"
+testresult = "0.4.1"
 
 [features]
 default = ["mmap", "bzip2"]
