@@ -1,3 +1,4 @@
 [submodule "tests/tests"]
 	path = tests/tests
 	url = https://github.com/rpgp/tests.git
+	update = none
