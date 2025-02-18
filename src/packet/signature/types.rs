@@ -965,7 +965,7 @@ impl KeyFlags {
         self.known.adsk()
     }
 
-    pub fn timesetamping(&self) -> bool {
+    pub fn timestamping(&self) -> bool {
         self.known.timestamping()
     }
 }
@@ -1113,7 +1113,6 @@ pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
     use crate::packet::SubpacketType;
 
     #[test]
