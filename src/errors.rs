@@ -20,7 +20,10 @@ pub enum Error {
     #[snafu(display("invalid crc24 checksum"))]
     InvalidChecksum,
     #[snafu(transparent)]
-    Base64Decode { source: base64::DecodeError },
+    Base64Decode {
+        source: base64::DecodeError,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(display("requested data size is larger than the packet body"))]
     RequestedSizeTooLarge,
     #[snafu(display("no matching packet found"))]
@@ -28,13 +31,19 @@ pub enum Error {
     #[snafu(display("more than one matching packet was found"))]
     TooManyPackets,
     #[snafu(transparent)]
-    RSAError { source: rsa::errors::Error },
+    RSAError {
+        source: rsa::errors::Error,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(transparent)]
-    EllipticCurve { source: elliptic_curve::Error },
+    EllipticCurve {
+        source: elliptic_curve::Error,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(transparent)]
     IO {
         source: std::io::Error,
-        backtrace: Backtrace,
+        backtrace: Option<Backtrace>,
     },
     #[snafu(display("invalid key length"))]
     InvalidKeyLength,
@@ -48,9 +57,15 @@ pub enum Error {
     Unimplemented { message: String },
     /// Signals packet versions and parameters we don't support, but can safely ignore
     #[snafu(display("Unsupported: {message}"))]
-    Unsupported { message: String },
+    Unsupported {
+        message: String,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(display("{message}"))]
-    Message { message: String },
+    Message {
+        message: String,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(display("Invalid Packet {kind:?}"))]
     PacketError { kind: nom::error::ErrorKind },
     #[snafu(display("Unpadding failed"))]
@@ -58,9 +73,15 @@ pub enum Error {
     #[snafu(display("Padding failed"))]
     PadError,
     #[snafu(transparent)]
-    Utf8Error { source: std::str::Utf8Error },
+    Utf8Error {
+        source: std::str::Utf8Error,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(transparent)]
-    ParseIntError { source: std::num::ParseIntError },
+    ParseIntError {
+        source: std::num::ParseIntError,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(display("Invalid Packet Content {source:?}"))]
     InvalidPacketContent { source: Box<Error> },
     #[snafu(transparent)]
@@ -68,7 +89,10 @@ pub enum Error {
     #[snafu(display("Modification Detection Code error"))]
     MdcError,
     #[snafu(transparent)]
-    TryFromInt { source: TryFromIntError },
+    TryFromInt {
+        source: TryFromIntError,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(display("GCM"))]
     Gcm,
     #[snafu(display("EAX"))]
@@ -80,11 +104,20 @@ pub enum Error {
     #[snafu(transparent)]
     AesKek { source: aes_kw::Error },
     #[snafu(transparent)]
-    PacketParsing { source: ParsingError },
+    PacketParsing {
+        source: ParsingError,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(display("packet is incomplete"))]
-    PacketIncomplete { source: ParsingError },
+    PacketIncomplete {
+        source: ParsingError,
+        backtrace: Option<Backtrace>,
+    },
     #[snafu(transparent)]
-    Argon2 { source: argon2::Error },
+    Argon2 {
+        source: argon2::Error,
+        backtrace: Option<Backtrace>,
+    },
 }
 
 impl<T> From<nom::error::Error<T>> for Error {
@@ -107,7 +140,10 @@ impl From<block_padding::UnpadError> for Error {
 
 impl From<String> for Error {
     fn from(err: String) -> Error {
-        Error::Message { message: err }
+        Error::Message {
+            message: err,
+            backtrace: Some(snafu::Backtrace::capture()),
+        }
     }
 }
 
@@ -115,6 +151,7 @@ impl From<derive_builder::UninitializedFieldError> for Error {
     fn from(err: derive_builder::UninitializedFieldError) -> Error {
         Error::Message {
             message: err.to_string(),
+            backtrace: Some(snafu::Backtrace::capture()),
         }
     }
 }
@@ -132,30 +169,48 @@ macro_rules! unimplemented_err {
 #[macro_export]
 macro_rules! unsupported_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unsupported { message: $e.to_string()})
+        return Err($crate::errors::Error::Unsupported {
+            message: $e.to_string(),
+            backtrace: Some(snafu::Backtrace::capture()),
+        })
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unsupported { message: format!($fmt, $($arg)+) })
+        return Err($crate::errors::Error::Unsupported {
+            message: format!($fmt, $($arg)+),
+            backtrace: Some(snafu::Backtrace::capture()),
+        })
     };
 }
 
 #[macro_export]
 macro_rules! bail {
     ($e:expr) => {
-        return Err($crate::errors::Error::Message { message: $e.to_string() })
+        return Err($crate::errors::Error::Message {
+            message: $e.to_string(),
+            backtrace: Some(snafu::Backtrace::capture()),
+        })
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Message { message: format!($fmt, $($arg)+) })
+        return Err($crate::errors::Error::Message {
+            message: format!($fmt, $($arg)+),
+            backtrace: Some(snafu::Backtrace::capture()),
+        })
     };
 }
 
 #[macro_export]
 macro_rules! format_err {
     ($e:expr) => {
-        $crate::errors::Error::Message { message: $e.to_string() }
+        $crate::errors::Error::Message {
+            message: $e.to_string(),
+            backtrace: Some(snafu::Backtrace::capture()),
+        }
     };
     ($fmt:expr, $($arg:tt)+) => {
-        $crate::errors::Error::Message { message: format!($fmt, $($arg)+) }
+        $crate::errors::Error::Message {
+            message: format!($fmt, $($arg)+),
+            backtrace: Some(snafu::Backtrace::capture()),
+        }
     };
 }
 

@@ -209,7 +209,7 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
             Some(p)
         }
         Err(ref e) => {
-            if let Error::Unsupported { message } = e {
+            if let Error::Unsupported { message, .. } = e {
                 // "Error::Unsupported" signals parser errors that we can safely ignore
                 // (e.g. packets with unsupported versions)
                 warn!("skipping unsupported packet: {p:?}");
@@ -218,14 +218,14 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
             }
             if let Error::InvalidPacketContent { source } = &e {
                 let err: &Error = source; // unbox
-                if let Error::Unsupported { message } = err {
+                if let Error::Unsupported { message, .. } = err {
                     // "Error::Unsupported" signals parser errors that we can safely ignore
                     // (e.g. packets with unsupported versions)
                     warn!("skipping unsupported packet: {p:?}");
                     debug!("error: {message}");
                     return None;
                 }
-                if let Error::EllipticCurve { source } = err {
+                if let Error::EllipticCurve { source, .. } = err {
                     // this error happens in one SKS test key, presumably bad public key material.
                     // ignoring the packet seems safe.
                     warn!("skipping bad elliptic curve data: {p:?}");
@@ -233,7 +233,7 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
                     return None;
                 }
             }
-            if let Error::PacketIncomplete { source } = e {
+            if let Error::PacketIncomplete { source, .. } = e {
                 // We ignore incomplete packets for now (some of these occur in the SKS dumps under `tests`)
                 warn!("skipping incomplete packet: {p:?}");
                 debug!("error: {source:?}");

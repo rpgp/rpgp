@@ -77,8 +77,8 @@ impl Packet {
 
         match res {
             Ok(res) => Ok(res),
-            Err(Error::PacketParsing { source }) if source.is_incomplete() => {
-                Err(Error::PacketIncomplete { source })
+            Err(Error::PacketParsing { source, backtrace }) if source.is_incomplete() => {
+                Err(Error::PacketIncomplete { source, backtrace })
             }
             Err(err) => {
                 warn!(
