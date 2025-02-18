@@ -57,7 +57,7 @@ Additionally, it fully supports all functionality required by the [Autocrypt 1.1
 
 ### Load a public key and verify an inline-signed message
 
-```rust
+```rust no_run
 use std::fs;
 use pgp::{SignedPublicKey, Message, Deserializable};
 
@@ -81,7 +81,7 @@ println!("Signed message: {:?}", msg_string);
 
 ### Generate and verify a detached signature with an OpenPGP keypair
 
-```rust
+```rust no_run
 use std::fs;
 use pgp::{Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::types::{PublicKeyTrait, SecretKeyTrait};
@@ -157,9 +157,9 @@ with financial support from the European Commission's [Next Generation Internet]
 This project is licensed under either of
 
  * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-   http://www.apache.org/licenses/LICENSE-2.0)
+   <http://www.apache.org/licenses/LICENSE-2.0>)
  * MIT license ([LICENSE-MIT](LICENSE-MIT) or
-   http://opensource.org/licenses/MIT)
+   <http://opensource.org/licenses/MIT>)
 
 at your option.
 
