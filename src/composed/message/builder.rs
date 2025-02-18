@@ -1,7 +1,7 @@
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use chrono::{SubsecRound, Utc};
 use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
@@ -45,10 +45,10 @@ type DummyReader = std::io::Cursor<Vec<u8>>;
 /// (encryption, compression, literal data).
 ///
 /// If the total data fits into a single chunk, a single fixed packet is generated.
-#[derive(Clone)]
-pub struct Builder<R = DummyReader, E = NoEncryption> {
+pub struct Builder<'a, R = DummyReader, E = NoEncryption> {
     source: Source<R>,
     compression: Option<CompressionAlgorithm>,
+    signing: Vec<SigningConfig<'a>>,
     encryption: E,
     /// The chunk size when generating partial packets
     chunk_size: u32,
@@ -95,6 +95,7 @@ pub trait Encryption: PartialEq {
 }
 
 /// Configures a signing key and how to use it.
+#[derive(Debug)]
 pub struct SigningConfig<'a> {
     /// The key to sign with
     key: &'a dyn SecretKeyTrait,
@@ -134,13 +135,14 @@ pub enum Seipd {
 /// The default chunk size.
 pub const DEFAULT_CHUNK_SIZE: u32 = 1024 * 512;
 
-impl Builder<DummyReader> {
+impl Builder<'_, DummyReader> {
     /// Source the data from the given file path.
     pub fn from_file(path: impl AsRef<Path>) -> Self {
         Self {
             source: Source::File(path.as_ref().into()),
             compression: None,
             encryption: NoEncryption,
+            signing: Vec::new(),
             chunk_size: DEFAULT_CHUNK_SIZE,
             data_mode: DataMode::Binary,
         }
@@ -157,6 +159,7 @@ impl Builder<DummyReader> {
             encryption: NoEncryption,
             chunk_size: DEFAULT_CHUNK_SIZE,
             data_mode: DataMode::Binary,
+            signing: Vec::new(),
         }
     }
 }
@@ -218,13 +221,13 @@ where
     Ok(out)
 }
 
-impl<R: Read> Builder<R, NoEncryption> {
+impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     /// Encrypt this message using Seipd V1.
     pub fn seipd_v1<RAND>(
         self,
         mut rng: RAND,
         sym_alg: SymmetricKeyAlgorithm,
-    ) -> Builder<R, EncryptionSeipdV1>
+    ) -> Builder<'a, R, EncryptionSeipdV1>
     where
         RAND: CryptoRng + Rng,
     {
@@ -241,11 +244,12 @@ impl<R: Read> Builder<R, NoEncryption> {
                 sym_esks: Vec::new(),
                 pub_esks: Vec::new(),
             },
+            signing: Vec::new(),
         }
     }
 }
 
-impl<R: Read> Builder<R, NoEncryption> {
+impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     /// Encrypt this message using Seipd V2.
     pub fn seipd_v2<RAND>(
         self,
@@ -253,7 +257,7 @@ impl<R: Read> Builder<R, NoEncryption> {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: ChunkSize,
-    ) -> Builder<R, EncryptionSeipdV2>
+    ) -> Builder<'a, R, EncryptionSeipdV2>
     where
         RAND: CryptoRng + Rng,
     {
@@ -276,11 +280,12 @@ impl<R: Read> Builder<R, NoEncryption> {
                 sym_esks: Vec::new(),
                 pub_esks: Vec::new(),
             },
+            signing: Vec::new(),
         }
     }
 }
 
-impl<R: Read> Builder<R, EncryptionSeipdV1> {
+impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// Encrypt to a public key
     pub fn encrypt_to_key<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
     where
@@ -319,7 +324,7 @@ impl<R: Read> Builder<R, EncryptionSeipdV1> {
     }
 }
 
-impl<R: Read> Builder<R, EncryptionSeipdV2> {
+impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// Encrypt to a public key
     pub fn encrypt_to_key<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
     where
@@ -371,7 +376,7 @@ impl<R: Read> Builder<R, EncryptionSeipdV2> {
     }
 }
 
-impl<R: Read> Builder<R, NoEncryption> {
+impl<R: Read> Builder<'_, R, NoEncryption> {
     /// Source the data from a reader.
     pub fn from_reader(file_name: impl Into<Bytes>, reader: R) -> Self {
         Self {
@@ -383,10 +388,12 @@ impl<R: Read> Builder<R, NoEncryption> {
             encryption: NoEncryption,
             chunk_size: DEFAULT_CHUNK_SIZE,
             data_mode: DataMode::Binary,
+            signing: Vec::new(),
         }
     }
 }
-impl<R: Read, E: Encryption> Builder<R, E> {
+
+impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// Configure the [`DataMode`] for the literal data portion.
     ///
     /// Defaults to `DataMode::Binary`
@@ -420,13 +427,24 @@ impl<R: Read, E: Encryption> Builder<R, E> {
         self
     }
 
+    pub fn sign(mut self, signer: SigningConfig<'a>) -> Self {
+        self.signing.push(signer);
+        self
+    }
+
+    fn sign_typ(&self) -> SignatureType {
+        if self.encryption.is_plaintext()
+            && self.compression.is_none()
+            && self.data_mode == DataMode::Utf8
+        {
+            SignatureType::Text
+        } else {
+            SignatureType::Binary
+        }
+    }
+
     /// Sign this message, using the provided key.
-    pub fn to_writer_signed<RAND, W>(
-        self,
-        mut rng: RAND,
-        keys: Vec<SigningConfig<'_>>,
-        mut out: W,
-    ) -> Result<()>
+    pub fn to_writer_signed<RAND, W>(mut self, mut rng: RAND, mut out: W) -> Result<()>
     where
         RAND: CryptoRng + Rng,
         W: std::io::Write,
@@ -440,7 +458,7 @@ impl<R: Read, E: Encryption> Builder<R, E> {
             SignatureType::Binary
         };
 
-        let prep = prepare(&mut rng, typ, &keys)?;
+        let prep = prepare(&mut rng, typ, &self.signing)?;
 
         let mut hashers = Vec::new();
 
@@ -449,6 +467,8 @@ impl<R: Read, E: Encryption> Builder<R, E> {
             ops.to_writer_with_header(&mut out)?;
             hashers.push(config.into_hasher()?);
         }
+
+        let keys = std::mem::take(&mut self.signing);
 
         // 2. Write actual message
         {
@@ -468,11 +488,13 @@ impl<R: Read, E: Encryption> Builder<R, E> {
     }
 
     /// Write the data out to a writer.
-    pub fn to_writer<RAND, W>(self, mut rng: RAND, out: W) -> Result<()>
+    pub fn to_writer<RAND, W>(mut self, mut rng: RAND, out: W) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
     {
+        let sign_typ = self.sign_typ();
+
         match self.source {
             Source::Bytes { name, bytes } => {
                 debug!("sourcing bytes {:?}: {} bytes", name, bytes.len());
@@ -503,12 +525,32 @@ impl<R: Read, E: Encryption> Builder<R, E> {
                             self.chunk_size,
                         )?;
 
-                        self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        if self.signing.is_empty() {
+                            self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        } else {
+                            let singers = std::mem::take(&mut self.signing);
+                            let generator =
+                                SignGenerator::new(&mut rng, sign_typ, generator, singers, None)?;
+                            self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        }
                     }
                     None => {
                         let len = literal_generator.len();
-                        self.encryption
-                            .encrypt(&mut rng, literal_generator, len, out)?;
+                        if self.signing.is_empty() {
+                            self.encryption
+                                .encrypt(&mut rng, literal_generator, len, out)?;
+                        } else {
+                            let singers = std::mem::take(&mut self.signing);
+                            let generator = SignGenerator::new(
+                                &mut rng,
+                                sign_typ,
+                                literal_generator,
+                                singers,
+                                len,
+                            )?;
+                            let len = generator.len();
+                            self.encryption.encrypt(&mut rng, generator, len, out)?;
+                        }
                     }
                 }
             }
@@ -548,12 +590,32 @@ impl<R: Read, E: Encryption> Builder<R, E> {
                             self.chunk_size,
                         )?;
 
-                        self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        if self.signing.is_empty() {
+                            self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        } else {
+                            let singers = std::mem::take(&mut self.signing);
+                            let generator =
+                                SignGenerator::new(&mut rng, sign_typ, generator, singers, None)?;
+                            self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        }
                     }
                     None => {
                         let len = literal_generator.len();
-                        self.encryption
-                            .encrypt(&mut rng, literal_generator, len, out)?;
+                        if self.signing.is_empty() {
+                            self.encryption
+                                .encrypt(&mut rng, literal_generator, len, out)?;
+                        } else {
+                            let singers = std::mem::take(&mut self.signing);
+                            let generator = SignGenerator::new(
+                                &mut rng,
+                                sign_typ,
+                                literal_generator,
+                                singers,
+                                len,
+                            )?;
+                            let len = generator.len();
+                            self.encryption.encrypt(&mut rng, generator, len, out)?;
+                        }
                     }
                 }
             }
@@ -577,13 +639,34 @@ impl<R: Read, E: Encryption> Builder<R, E> {
                             self.chunk_size,
                         )?;
 
-                        self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        if self.signing.is_empty() {
+                            self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        } else {
+                            let singers = std::mem::take(&mut self.signing);
+                            let generator =
+                                SignGenerator::new(&mut rng, sign_typ, generator, singers, None)?;
+                            self.encryption.encrypt(&mut rng, generator, None, out)?;
+                        }
                     }
 
                     None => {
                         let len = literal_generator.len();
-                        self.encryption
-                            .encrypt(&mut rng, literal_generator, len, out)?;
+
+                        if self.signing.is_empty() {
+                            self.encryption
+                                .encrypt(&mut rng, literal_generator, len, out)?;
+                        } else {
+                            let singers = std::mem::take(&mut self.signing);
+                            let generator = SignGenerator::new(
+                                &mut rng,
+                                sign_typ,
+                                literal_generator,
+                                singers,
+                                len,
+                            )?;
+                            let len = generator.len();
+                            self.encryption.encrypt(&mut rng, generator, len, out)?;
+                        }
                     }
                 }
             }
@@ -634,7 +717,6 @@ impl<R: Read, E: Encryption> Builder<R, E> {
         self,
         rng: RAND,
         opts: ArmorOptions<'_>,
-        keys: Vec<SigningConfig<'_>>,
         mut out: W,
     ) -> Result<()>
     where
@@ -655,9 +737,9 @@ impl<R: Read, E: Encryption> Builder<R, E> {
 
             if let Some(crc_hasher) = crc_hasher {
                 let mut tee = TeeWriter::new(crc_hasher, &mut enc);
-                self.to_writer_signed(rng, keys, &mut tee)?;
+                self.to_writer_signed(rng, &mut tee)?;
             } else {
-                self.to_writer_signed(rng, keys, &mut enc)?;
+                self.to_writer_signed(rng, &mut enc)?;
             }
         }
 
@@ -724,12 +806,7 @@ impl<R: Read, E: Encryption> Builder<R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_file_signed<RAND, P>(
-        self,
-        rng: RAND,
-        out_path: P,
-        keys: Vec<SigningConfig<'_>>,
-    ) -> Result<()>
+    pub fn to_file_signed<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         P: AsRef<Path>,
@@ -746,7 +823,7 @@ impl<R: Read, E: Encryption> Builder<R, E> {
             .open(out_path)?;
         let mut out_file = BufWriter::new(out_file);
 
-        self.to_writer_signed(rng, keys, &mut out_file)?;
+        self.to_writer_signed(rng, &mut out_file)?;
 
         out_file.flush()?;
 
@@ -759,7 +836,6 @@ impl<R: Read, E: Encryption> Builder<R, E> {
         rng: RAND,
         out_path: P,
         opts: ArmorOptions<'_>,
-        keys: Vec<SigningConfig<'_>>,
     ) -> Result<()>
     where
         RAND: Rng + CryptoRng,
@@ -777,7 +853,7 @@ impl<R: Read, E: Encryption> Builder<R, E> {
             .open(out_path)?;
         let mut out_file = BufWriter::new(out_file);
 
-        self.to_armored_writer_signed(rng, opts, keys, &mut out_file)?;
+        self.to_armored_writer_signed(rng, opts, &mut out_file)?;
 
         out_file.flush()?;
 
@@ -805,26 +881,21 @@ impl<R: Read, E: Encryption> Builder<R, E> {
         Ok(out)
     }
 
-    pub fn to_vec_signed<RAND>(self, rng: RAND, keys: Vec<SigningConfig<'_>>) -> Result<Vec<u8>>
+    pub fn to_vec_signed<RAND>(self, rng: RAND) -> Result<Vec<u8>>
     where
         RAND: CryptoRng + Rng,
     {
         let mut out = Vec::new();
-        self.to_writer_signed(rng, keys, &mut out)?;
+        self.to_writer_signed(rng, &mut out)?;
         Ok(out)
     }
 
-    pub fn to_armored_string_signed<RAND>(
-        self,
-        rng: RAND,
-        keys: Vec<SigningConfig<'_>>,
-        opts: ArmorOptions<'_>,
-    ) -> Result<String>
+    pub fn to_armored_string_signed<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
     where
         RAND: CryptoRng + Rng,
     {
         let mut out = Vec::new();
-        self.to_armored_writer_signed(rng, opts, keys, &mut out)?;
+        self.to_armored_writer_signed(rng, opts, &mut out)?;
         let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
         Ok(out)
     }
@@ -1093,6 +1164,80 @@ impl<A: std::io::Write> std::io::Write for TeeManyWriter<'_, '_, A> {
         }
 
         Ok(())
+    }
+}
+
+struct SignGenerator<'a, R> {
+    typ: SignatureType,
+    signers: Vec<SigningConfig<'a>>,
+    hashers: Vec<SignatureHasher>,
+    source: R,
+    total_len: Option<u32>,
+    state: State,
+    /// Finished reading from the source?
+    source_done: bool,
+}
+
+enum State {
+    /// Buffer a single OPS
+    Ops {
+        ops: Vec<OnePassSignature>,
+        buffer: BytesMut,
+    },
+    /// Pass through the source,
+    /// sending the data to the hashers as well
+    Body,
+    /// Buffer a single Signature
+    Signatures { buffer: BytesMut },
+}
+
+impl<'a, R> SignGenerator<'a, R> {
+    fn new<RAND>(
+        mut rng: RAND,
+        typ: SignatureType,
+        source: R,
+        signers: Vec<SigningConfig<'a>>,
+        len: Option<u32>,
+    ) -> Result<Self>
+    where
+        RAND: CryptoRng + Rng,
+    {
+        let prep = prepare(&mut rng, typ, &signers)?;
+        let mut hashers = Vec::with_capacity(prep.len());
+        let mut ops = Vec::with_capacity(prep.len());
+        for (config, op) in prep.into_iter() {
+            ops.push(op);
+            hashers.push(config.into_hasher()?);
+        }
+
+        let total_len = len.map(|l| {
+            // calculate final length
+            todo!()
+        });
+
+        Ok(Self {
+            typ,
+            signers,
+            source,
+            hashers,
+            total_len,
+            source_done: false,
+            state: State::Ops {
+                ops,
+                buffer: BytesMut::new(),
+            },
+        })
+    }
+
+    /// Returns the expected write length if known upfront.
+    fn len(&self) -> Option<u32> {
+        self.total_len
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        todo!()
     }
 }
 
@@ -1546,14 +1691,11 @@ mod tests {
                 .encrypt_to_key(&mut rng, &pkey)
                 .expect("encryption");
 
-            let sig_config = vec![SigningConfig::new(
-                &*skey,
-                Password::empty(),
-                HashAlgorithm::Sha256,
-            )];
+            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
             let encrypted = builder
-                .to_vec_signed(&mut rng, sig_config)
+                .sign(sig_config)
+                .to_vec_signed(&mut rng)
                 .expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -1667,14 +1809,11 @@ mod tests {
                 .encrypt_to_key(&mut rng, &pkey)
                 .expect("encryption");
 
-            let sig_config = vec![SigningConfig::new(
-                &*skey,
-                Password::empty(),
-                HashAlgorithm::Sha256,
-            )];
+            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
             let encrypted = builder
-                .to_vec_signed(&mut rng, sig_config)
+                .sign(sig_config)
+                .to_vec_signed(&mut rng)
                 .expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -1758,17 +1897,21 @@ mod tests {
                         AeadAlgorithm::Gcm,
                         ChunkSize::default(),
                     )
-                    .encrypt_to_key(&mut rng, &pkey1)?;
-
-                let sig_config = vec![
-                    SigningConfig::new(&*skey1, Password::empty(), HashAlgorithm::Sha256),
-                    SigningConfig::new(&*skey2, Password::empty(), HashAlgorithm::Sha512),
-                ];
+                    .encrypt_to_key(&mut rng, &pkey1)?
+                    .sign(SigningConfig::new(
+                        &*skey1,
+                        Password::empty(),
+                        HashAlgorithm::Sha256,
+                    ))
+                    .sign(SigningConfig::new(
+                        &*skey2,
+                        Password::empty(),
+                        HashAlgorithm::Sha512,
+                    ));
 
                 let message = match encoding {
                     Encoding::Armor(opts) => {
-                        let encrypted =
-                            builder.to_armored_string_signed(&mut rng, sig_config, opts)?;
+                        let encrypted = builder.to_armored_string_signed(&mut rng, opts)?;
 
                         println!("{}", encrypted);
 
@@ -1776,7 +1919,7 @@ mod tests {
                         message
                     }
                     Encoding::Binary => {
-                        let encrypted = builder.to_vec_signed(&mut rng, sig_config)?;
+                        let encrypted = builder.to_vec_signed(&mut rng)?;
 
                         println!("{}", hex::encode(&encrypted));
                         Message::from_bytes(encrypted.into())?
