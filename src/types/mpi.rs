@@ -35,7 +35,9 @@ impl MpiBytes {
         self.0.is_empty()
     }
 
-    /// Parses the given buffer for an MPI.
+    /// Parses the given buffer as an MPI.
+    ///
+    /// The buffer is expected to be length-prefixed.
     pub fn from_buf<B: bytes::Buf>(mut i: B) -> Result<Self> {
         let len_bits = i.read_be_u16()?;
 
@@ -52,6 +54,9 @@ impl MpiBytes {
         Ok(MpiBytes(n_stripped))
     }
 
+    /// Represent the data in `raw` as an Mpi.
+    /// Note that `raw` is not expected to be length-prefixed!
+    ///
     /// Strips leading zeros.
     pub fn from_slice(raw: &[u8]) -> Self {
         Self(strip_leading_zeros(raw).to_vec().into())
