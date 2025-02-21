@@ -198,11 +198,20 @@ impl Serialize for SubpacketLength {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
             Self::One(l) => {
+                debug_assert!(*l < 192, "Inconsistent SubpacketLength::One");
                 writer.write_u8(*l)?;
             }
             Self::Two(l) => {
-                writer.write_u8((((l - 192) / 256) + 192) as u8)?;
-                writer.write_u8(((l - 192) % 256) as u8)?;
+                let one = (((l - 192) / 256) + 192) as u8;
+                let two = ((l - 192) % 256) as u8;
+
+                debug_assert!(
+                    (192..=254).contains(&one),
+                    "Inconsistent SubpacketLength::Two"
+                );
+
+                writer.write_u8(one)?;
+                writer.write_u8(two)?;
             }
             Self::Five(l) => {
                 writer.write_u8(0xFF)?;
