@@ -12,6 +12,7 @@ pub use crate::parsing::{Error as ParsingError, RemainingError};
 
 /// Error types
 #[derive(Debug, Snafu)]
+#[snafu(visibility(pub(crate)))]
 pub enum Error {
     #[snafu(display("invalid input"))]
     InvalidInput,
@@ -27,7 +28,7 @@ pub enum Error {
     #[snafu(display("requested data size is larger than the packet body"))]
     RequestedSizeTooLarge,
     #[snafu(display("no matching packet found"))]
-    NoMatchingPacket,
+    NoMatchingPacket { backtrace: Option<Backtrace> },
     #[snafu(display("more than one matching packet was found"))]
     TooManyPackets,
     #[snafu(transparent)]
@@ -40,7 +41,7 @@ pub enum Error {
         source: elliptic_curve::Error,
         backtrace: Option<Backtrace>,
     },
-    #[snafu(transparent)]
+    #[snafu(display("IO error"), context(false))]
     IO {
         source: std::io::Error,
         backtrace: Option<Backtrace>,
@@ -105,13 +106,13 @@ pub enum Error {
     AesKek { source: aes_kw::Error },
     #[snafu(transparent)]
     PacketParsing {
+        #[snafu(backtrace)]
         source: ParsingError,
-        backtrace: Option<Backtrace>,
     },
     #[snafu(display("packet is incomplete"))]
     PacketIncomplete {
+        #[snafu(backtrace)]
         source: ParsingError,
-        backtrace: Option<Backtrace>,
     },
     #[snafu(transparent)]
     Argon2 {
@@ -142,7 +143,7 @@ impl From<String> for Error {
     fn from(err: String) -> Error {
         Error::Message {
             message: err,
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         }
     }
 }
@@ -151,7 +152,7 @@ impl From<derive_builder::UninitializedFieldError> for Error {
     fn from(err: derive_builder::UninitializedFieldError) -> Error {
         Error::Message {
             message: err.to_string(),
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         }
     }
 }
@@ -171,13 +172,13 @@ macro_rules! unsupported_err {
     ($e:expr) => {
         return Err($crate::errors::Error::Unsupported {
             message: $e.to_string(),
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         })
     };
     ($fmt:expr, $($arg:tt)+) => {
         return Err($crate::errors::Error::Unsupported {
             message: format!($fmt, $($arg)+),
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         })
     };
 }
@@ -187,13 +188,13 @@ macro_rules! bail {
     ($e:expr) => {
         return Err($crate::errors::Error::Message {
             message: $e.to_string(),
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         })
     };
     ($fmt:expr, $($arg:tt)+) => {
         return Err($crate::errors::Error::Message {
             message: format!($fmt, $($arg)+),
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         })
     };
 }
@@ -203,13 +204,13 @@ macro_rules! format_err {
     ($e:expr) => {
         $crate::errors::Error::Message {
             message: $e.to_string(),
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         }
     };
     ($fmt:expr, $($arg:tt)+) => {
         $crate::errors::Error::Message {
             message: format!($fmt, $($arg)+),
-            backtrace: Some(snafu::Backtrace::capture()),
+            backtrace: Some(snafu::GenerateImplicitData::generate()),
         }
     };
 }

@@ -1,22 +1,24 @@
 //! Parsing functions to parse data using [Buf].
 
 use bytes::{Buf, Bytes};
-use snafu::Snafu;
+use snafu::{Backtrace, Snafu};
 
 /// Parsing errors
 #[derive(Debug, Snafu)]
 pub enum Error {
-    #[snafu(display("{}: reading {:?}: {:?}", context, typ, error))]
+    #[snafu(display("{}: reading {:?}", context, typ))]
     TooShort {
         typ: Typ,
         context: &'static str,
-        error: RemainingError,
+        #[snafu(backtrace)]
+        source: RemainingError,
     },
     #[snafu(display("expected {}, found {}", debug_bytes(expected), debug_bytes(&found[..])))]
     TagMissmatch {
         expected: Vec<u8>,
         found: Bytes,
         context: &'static str,
+        backtrace: Option<Backtrace>,
     },
 }
 
@@ -42,6 +44,7 @@ fn debug_bytes(b: &[u8]) -> String {
 pub struct RemainingError {
     pub needed: usize,
     pub remaining: usize,
+    backtrace: Option<Backtrace>,
 }
 
 #[derive(Debug)]
@@ -59,7 +62,7 @@ pub trait BufParsing: Buf + Sized {
     fn read_u8(&mut self) -> Result<u8, Error> {
         self.ensure_remaining(1).map_err(|e| Error::TooShort {
             typ: Typ::U8,
-            error: e,
+            source: e,
             context: "todo",
         })?;
         Ok(self.get_u8())
@@ -68,7 +71,7 @@ pub trait BufParsing: Buf + Sized {
     fn read_be_u16(&mut self) -> Result<u16, Error> {
         self.ensure_remaining(2).map_err(|e| Error::TooShort {
             typ: Typ::U16Be,
-            error: e,
+            source: e,
             context: "todo",
         })?;
         Ok(self.get_u16())
@@ -77,7 +80,7 @@ pub trait BufParsing: Buf + Sized {
     fn read_le_u16(&mut self) -> Result<u16, Error> {
         self.ensure_remaining(2).map_err(|e| Error::TooShort {
             typ: Typ::U16Le,
-            error: e,
+            source: e,
             context: "todo",
         })?;
         Ok(self.get_u16_le())
@@ -86,7 +89,7 @@ pub trait BufParsing: Buf + Sized {
     fn read_be_u32(&mut self) -> Result<u32, Error> {
         self.ensure_remaining(4).map_err(|e| Error::TooShort {
             typ: Typ::U32Be,
-            error: e,
+            source: e,
             context: "todo",
         })?;
         Ok(self.get_u32())
@@ -95,7 +98,7 @@ pub trait BufParsing: Buf + Sized {
     fn read_array<const C: usize>(&mut self) -> Result<[u8; C], Error> {
         self.ensure_remaining(C).map_err(|e| Error::TooShort {
             typ: Typ::Array(C),
-            error: e,
+            source: e,
             context: "todo",
         })?;
         let mut arr = [0u8; C];
@@ -106,7 +109,7 @@ pub trait BufParsing: Buf + Sized {
     fn read_take(&mut self, size: usize) -> Result<Bytes, Error> {
         self.ensure_remaining(size).map_err(|e| Error::TooShort {
             typ: Typ::Take(size),
-            error: e,
+            source: e,
             context: "todo",
         })?;
         Ok(self.copy_to_bytes(size))
@@ -122,6 +125,7 @@ pub trait BufParsing: Buf + Sized {
             return Err(RemainingError {
                 needed: size,
                 remaining: self.remaining(),
+                backtrace: snafu::GenerateImplicitData::generate(),
             });
         }
 
@@ -132,7 +136,7 @@ pub trait BufParsing: Buf + Sized {
         self.ensure_remaining(tag.len())
             .map_err(|e| Error::TooShort {
                 typ: Typ::Tag(tag.to_vec()),
-                error: e,
+                source: e,
                 context: "todo",
             })?;
         let read = self.copy_to_bytes(tag.len());
@@ -141,6 +145,7 @@ pub trait BufParsing: Buf + Sized {
                 context: "todo",
                 expected: tag.to_vec(),
                 found: read,
+                backtrace: snafu::GenerateImplicitData::generate(),
             });
         }
         Ok(())

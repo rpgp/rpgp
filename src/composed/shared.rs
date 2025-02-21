@@ -14,13 +14,18 @@ pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
     fn from_bytes(bytes: Bytes) -> Result<Self> {
         let mut el = Self::from_bytes_many(bytes)?;
-        el.next().ok_or(Error::NoMatchingPacket)?
+        el.next()
+            .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
     }
 
     /// Parse a single armor encoded composition.
     fn from_string(input: &str) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_string_many(input)?;
-        Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
+        Ok((
+            el.next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??,
+            headers,
+        ))
     }
 
     /// Parse an armor encoded list of compositions.
@@ -34,13 +39,21 @@ pub trait Deserializable: Sized {
     /// Armored ascii data.
     fn from_armor_single<R: Read>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
-        Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
+        Ok((
+            el.next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??,
+            headers,
+        ))
     }
 
     /// Armored ascii data.
     fn from_armor_single_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many_buf(input)?;
-        Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
+        Ok((
+            el.next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??,
+            headers,
+        ))
     }
 
     /// Armored ascii data.
@@ -107,7 +120,8 @@ pub trait Deserializable: Sized {
     #[cfg(feature = "mmap")]
     fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut el = Self::from_file_many(path)?;
-        el.next().ok_or(Error::NoMatchingPacket)?
+        el.next()
+            .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
     }
 
     /// Ready binary packets from the given file, using mmap.
@@ -208,40 +222,40 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
             }
             Some(p)
         }
-        Err(ref e) => {
-            if let Error::Unsupported { message, .. } = e {
+        Err(e) => {
+            if let Error::Unsupported { ref message, .. } = e {
                 // "Error::Unsupported" signals parser errors that we can safely ignore
                 // (e.g. packets with unsupported versions)
-                warn!("skipping unsupported packet: {p:?}");
+                warn!("skipping unsupported packet: {e:?}");
                 debug!("error: {message}");
                 return None;
             }
-            if let Error::InvalidPacketContent { source } = &e {
+            if let Error::InvalidPacketContent { ref source } = &e {
                 let err: &Error = source; // unbox
                 if let Error::Unsupported { message, .. } = err {
                     // "Error::Unsupported" signals parser errors that we can safely ignore
                     // (e.g. packets with unsupported versions)
-                    warn!("skipping unsupported packet: {p:?}");
+                    warn!("skipping unsupported packet: {e:?}");
                     debug!("error: {message}");
                     return None;
                 }
                 if let Error::EllipticCurve { source, .. } = err {
                     // this error happens in one SKS test key, presumably bad public key material.
                     // ignoring the packet seems safe.
-                    warn!("skipping bad elliptic curve data: {p:?}");
+                    warn!("skipping bad elliptic curve data: {e:?}");
                     debug!("error: {source:?}");
                     return None;
                 }
             }
-            if let Error::PacketIncomplete { source, .. } = e {
+            if let Error::PacketIncomplete { ref source, .. } = e {
                 // We ignore incomplete packets for now (some of these occur in the SKS dumps under `tests`)
-                warn!("skipping incomplete packet: {p:?}");
+                warn!("skipping incomplete packet: {e:?}");
                 debug!("error: {source:?}");
                 return None;
             }
 
             // Pass through all other errors from the low level parser, they should be surfaced
-            Some(Err(format_err!("unexpected packet data: {e:?}")))
+            Some(Err(e))
         }
     }
 }

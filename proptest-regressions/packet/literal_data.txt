@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d52654d691ac52b4c9dc470fdc01ae7b8289bc86f43e15f8fc04e550df369c39 # shrinks to packet = LiteralData { packet_header: Old { header: OldPacketHeader { _padding: 1, _version: 0, tag: 1, length_type: 0 }, length: Fixed(1) }, header: LiteralDataHeader { mode: Binary, file_name: b"", created: 1970-01-01T00:00:00Z }, data: 00 }
