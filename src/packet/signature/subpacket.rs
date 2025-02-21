@@ -8,11 +8,10 @@ use crate::crypto::{
     sym::SymmetricKeyAlgorithm,
 };
 use crate::errors::Result;
+use crate::packet::{KeyFlags, Notation, RevocationCode, Signature};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, Fingerprint, KeyId, RevocationKey};
-
-use super::{KeyFlags, Notation, RevocationCode, Signature};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 /// Available signature subpacket types
@@ -138,7 +137,7 @@ impl SubpacketType {
     }
 }
 
-/// Represents a subpack length.
+/// Represents a subpacket length.
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-subpacket-specifi>
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -147,13 +146,13 @@ pub enum SubpacketLength {
     /// 1 byte encoding, must be less than `192`.
     One(#[cfg_attr(test, proptest(strategy = "0u8..=191"))] u8),
     /// 2 byte encoding
-    Two(#[cfg_attr(test, proptest(strategy = "192u16..=254"))] u16),
-    /// 4 byte encoding
-    Five(#[cfg_attr(test, proptest(strategy = "255u32.."))] u32),
+    Two(#[cfg_attr(test, proptest(strategy = "192u16..=16319"))] u16),
+    /// 5 byte encoding
+    Five(#[cfg_attr(test, proptest(strategy = "16320u32.."))] u32),
 }
 
 impl SubpacketLength {
-    /// Parses a supbacket length from the given buffer.
+    /// Parses a subpacket length from the given buffer.
     pub(crate) fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
         let olen = i.read_u8()?;
         let len = match olen {
@@ -177,7 +176,7 @@ impl SubpacketLength {
     pub(crate) fn encode(len: u32) -> Self {
         match len {
             0..=191 => Self::One(len as u8),
-            192..=254 => Self::Two(len as u16),
+            192..=16319 => Self::Two(len as u16), // max 2 byte value: (254, 255) -> 16319
             _ => Self::Five(len),
         }
     }
@@ -199,11 +198,20 @@ impl Serialize for SubpacketLength {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         match self {
             Self::One(l) => {
+                debug_assert!(*l < 192, "Inconsistent SubpacketLength::One");
                 writer.write_u8(*l)?;
             }
             Self::Two(l) => {
-                writer.write_u8((((l - 192) / 256) + 192) as u8)?;
-                writer.write_u8(((l - 192) % 256) as u8)?;
+                let one = (((l - 192) / 256) + 192) as u8;
+                let two = ((l - 192) % 256) as u8;
+
+                debug_assert!(
+                    (192..=254).contains(&one),
+                    "Inconsistent SubpacketLength::Two"
+                );
+
+                writer.write_u8(one)?;
+                writer.write_u8(two)?;
             }
             Self::Five(l) => {
                 writer.write_u8(0xFF)?;
@@ -301,9 +309,37 @@ pub enum SubpacketData {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
-    use proptest::prelude::*;
+    #[test]
+    fn subpacket_len() {
+        // explicitly test the edges between the size ranges
+
+        const MAX_TWO_BYTE: usize = 16319;
+
+        let len = SubpacketLength::encode(191);
+        assert!(matches!(len, SubpacketLength::One(_)));
+        assert_eq!(len.len(), 191);
+
+        let len = SubpacketLength::encode(192);
+        assert!(matches!(len, SubpacketLength::Two(_)));
+        assert_eq!(len.len(), 192);
+
+        // test that parsing (254, 255) encodes correctly
+        let len = SubpacketLength::from_buf(&mut &[254, 255][..]).unwrap();
+        assert!(matches!(len, SubpacketLength::Two(_)));
+        assert_eq!(len.len(), MAX_TWO_BYTE);
+
+        let len = SubpacketLength::encode(MAX_TWO_BYTE as u32);
+        assert!(matches!(len, SubpacketLength::Two(_)));
+        assert_eq!(len.len(), MAX_TWO_BYTE);
+
+        let len = SubpacketLength::encode(MAX_TWO_BYTE as u32 + 1);
+        assert!(matches!(len, SubpacketLength::Five(_)));
+        assert_eq!(len.len(), MAX_TWO_BYTE + 1);
+    }
 
     proptest! {
         #[test]
