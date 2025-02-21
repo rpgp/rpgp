@@ -313,6 +313,34 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn subpacket_len() {
+        // explicitly test the edges between the size ranges
+
+        const MAX_TWO_BYTE: usize = 16319;
+
+        let len = SubpacketLength::encode(191);
+        assert!(matches!(len, SubpacketLength::One(_)));
+        assert_eq!(len.len(), 191);
+
+        let len = SubpacketLength::encode(192);
+        assert!(matches!(len, SubpacketLength::Two(_)));
+        assert_eq!(len.len(), 192);
+
+        // test that parsing (254, 255) encodes correctly
+        let len = SubpacketLength::from_buf(&mut &[254, 255][..]).unwrap();
+        assert!(matches!(len, SubpacketLength::Two(_)));
+        assert_eq!(len.len(), MAX_TWO_BYTE);
+
+        let len = SubpacketLength::encode(MAX_TWO_BYTE as u32);
+        assert!(matches!(len, SubpacketLength::Two(_)));
+        assert_eq!(len.len(), MAX_TWO_BYTE);
+
+        let len = SubpacketLength::encode(MAX_TWO_BYTE as u32 + 1);
+        assert!(matches!(len, SubpacketLength::Five(_)));
+        assert_eq!(len.len(), MAX_TWO_BYTE + 1);
+    }
+
     proptest! {
         #[test]
         fn subpacket_length_write_len(len: SubpacketLength) {
