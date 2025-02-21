@@ -878,7 +878,7 @@ where
             }
             Self::Done => Ok(0),
             Self::Unknown => {
-                panic!("encryption paniced");
+                panic!("encryption panicked");
             }
         }
     }
@@ -920,8 +920,8 @@ mod tests {
                         let mut rng = ChaCha8Rng::seed_from_u64(8);
                         $alg.encrypt_protected_stream(&mut rng, &key, &mut input, &mut output)
                             .unwrap();
-                        assert_eq!(output.len(), len, "output length missmatch");
-                        assert_eq!(ciphertext, output, "output missmatch");
+                        assert_eq!(output.len(), len, "output length mismatch");
+                        assert_eq!(ciphertext, output, "output mismatch");
                     }
 
                     info!("decrypt");
