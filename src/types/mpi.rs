@@ -10,7 +10,7 @@ use crate::ser::Serialize;
 
 /// Number of bits we accept when reading or writing MPIs.
 /// The value is the same as gnupgs.
-const MAX_EXTERN_MPI_BITS: u32 = 16384;
+const MAX_EXTERN_MPI_BITS: u16 = 16384;
 
 /// Represents an owned MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
@@ -35,24 +35,28 @@ impl MpiBytes {
         self.0.is_empty()
     }
 
-    /// Parses the given buffer for an MPI.
+    /// Parses the given buffer as an MPI.
+    ///
+    /// The buffer is expected to be length-prefixed.
     pub fn from_buf<B: bytes::Buf>(mut i: B) -> Result<Self> {
-        let len = i.read_be_u16()?;
+        let len_bits = i.read_be_u16()?;
 
-        let bits = u32::from(len);
-        let len_actual = (bits + 7) >> 3;
-
-        if len_actual > MAX_EXTERN_MPI_BITS {
+        if len_bits > MAX_EXTERN_MPI_BITS {
             return Err(Error::InvalidInput);
         }
 
-        let n = i.read_take(len_actual.try_into()?)?;
+        let len_bytes = (len_bits + 7) >> 3;
+
+        let n = i.read_take(usize::from(len_bytes))?;
         let n_stripped = strip_leading_zeros(&n);
         let n_stripped = n.slice_ref(n_stripped);
 
         Ok(MpiBytes(n_stripped))
     }
 
+    /// Represent the data in `raw` as an Mpi.
+    /// Note that `raw` is not expected to be length-prefixed!
+    ///
     /// Strips leading zeros.
     pub fn from_slice(raw: &[u8]) -> Self {
         Self(strip_leading_zeros(raw).to_vec().into())
@@ -118,9 +122,9 @@ impl From<MpiBytes> for BigUint {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     impl Arbitrary for MpiBytes {
         type Parameters = ();
