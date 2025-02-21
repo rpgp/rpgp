@@ -147,7 +147,7 @@ pub enum SubpacketLength {
     One(#[cfg_attr(test, proptest(strategy = "0u8..=191"))] u8),
     /// 2 byte encoding
     Two(#[cfg_attr(test, proptest(strategy = "192u16..=16319"))] u16),
-    /// 4 byte encoding
+    /// 5 byte encoding
     Five(#[cfg_attr(test, proptest(strategy = "16320u32.."))] u32),
 }
 
