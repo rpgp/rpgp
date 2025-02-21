@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2dd9b615efc438b2efd92c636834bca8b4e1f6c894e99442c084ccd85c45a594 # shrinks to packet = OnePassSignature { packet_version: Old, typ: Other(0), hash_algorithm: MD5, pub_algorithm: RSA, last: 0, version_specific: V3 { key_id: KeyId(0000000000000000) } }

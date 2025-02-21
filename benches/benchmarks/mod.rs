@@ -20,11 +20,11 @@ pub fn build_key(kt: KeyType, kt_sub: KeyType) -> SecretKey {
             SymmetricKeyAlgorithm::AES128,
         ])
         .preferred_hash_algorithms(smallvec![
-            HashAlgorithm::SHA2_256,
-            HashAlgorithm::SHA2_384,
-            HashAlgorithm::SHA2_512,
-            HashAlgorithm::SHA2_224,
-            HashAlgorithm::SHA1,
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Sha384,
+            HashAlgorithm::Sha512,
+            HashAlgorithm::Sha224,
+            HashAlgorithm::Sha1,
         ])
         .preferred_compression_algorithms(smallvec![
             CompressionAlgorithm::ZLIB,

@@ -3,8 +3,6 @@
 use std::io;
 use std::io::prelude::*;
 
-use crate::util::is_base64_token;
-
 /// Reads base64 values from a given byte input, stops once it detects the first non base64 char.
 #[derive(Debug)]
 pub struct Base64Reader<R: BufRead> {
@@ -70,10 +68,20 @@ impl<R: BufRead> Read for Base64Reader<R> {
     }
 }
 
+#[inline]
+fn is_base64_token(c: u8) -> bool {
+    ((0x41..=0x5A).contains(&c) || (0x61..=0x7A).contains(&c))
+        // alphabetic
+        || (0x30..=0x39).contains(&c) //  digit
+        || c == b'/'
+        || c == b'+'
+        || c == b'='
+        || c == b'\n'
+        || c == b'\r'
+}
+
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use super::*;
 
     fn read_exact(data: &[u8], size: usize) -> Vec<u8> {
