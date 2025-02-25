@@ -334,6 +334,10 @@ impl Message {
     }
 
     /// Encrypt the message in SEIPDv1 format to a list of public keys `pkeys`.
+    ///
+    /// ## Note
+    ///
+    /// Prefer to use SEIPDv1 when compatibility with OpenPGP prior to v6 matters.
     pub fn encrypt_to_keys_seipdv1<R: CryptoRng + Rng>(
         &self,
         mut rng: R,
