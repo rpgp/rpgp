@@ -10,6 +10,7 @@ use log::debug;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
+use super::ArmorOptions;
 use crate::armor;
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
@@ -32,8 +33,6 @@ use crate::types::{
 use crate::util::fill_buffer;
 use crate::util::TeeWriter;
 use crate::Esk;
-
-use super::ArmorOptions;
 
 type DummyReader = std::io::Cursor<Vec<u8>>;
 
@@ -1043,7 +1042,7 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
                     return Ok(0);
                 }
                 State::Error => {
-                    panic!("inconsistent state, paniced before");
+                    panic!("inconsistent state, panicked before");
                 }
                 State::Ops {
                     mut ops,
@@ -1149,12 +1148,11 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
     use testresult::TestResult;
 
+    use super::*;
     use crate::crypto::sym::SymmetricKeyAlgorithm;
     use crate::line_writer::LineBreak;
     use crate::normalize_lines::normalize_lines;
@@ -1926,7 +1924,7 @@ mod tests {
                             ..
                         } = message.as_ref()
                         else {
-                            panic!("unexpeted message: {:?}", message);
+                            panic!("unexpected message: {:?}", message);
                         };
                         inner_message
                     }
