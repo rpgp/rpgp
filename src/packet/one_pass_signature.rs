@@ -2,6 +2,8 @@ use std::io;
 
 use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes};
+#[cfg(test)]
+use proptest::prelude::*;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
@@ -11,9 +13,6 @@ use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{KeyId, Tag};
-
-#[cfg(test)]
-use proptest::prelude::*;
 
 /// One-Pass Signature Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t>
@@ -198,7 +197,7 @@ impl OnePassSignature {
         }
     }
 
-    /// Returns true if this expectes another one pass signature afterwards.
+    /// Returns true if this expects another one pass signature afterwards.
     pub fn is_nested(&self) -> bool {
         self.last == 0
     }
