@@ -29,12 +29,12 @@ use proptest::prelude::*;
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct OnePassSignature {
-    pub packet_header: PacketHeader,
-    pub typ: SignatureType,
-    pub hash_algorithm: HashAlgorithm,
-    pub pub_algorithm: PublicKeyAlgorithm,
-    pub last: u8,
-    pub version_specific: OpsVersionSpecific,
+    packet_header: PacketHeader,
+    typ: SignatureType,
+    hash_algorithm: HashAlgorithm,
+    pub_algorithm: PublicKeyAlgorithm,
+    last: u8,
+    version_specific: OpsVersionSpecific,
 }
 
 /// Version-specific elements of a One-Pass Signature Packet:
@@ -196,6 +196,31 @@ impl OnePassSignature {
             last: 1,
             version_specific,
         }
+    }
+
+    /// Returns true if this expectes another one pass signature afterwards.
+    pub fn is_nested(&self) -> bool {
+        self.last == 0
+    }
+
+    /// Marks this as being part of a nested signature structure.
+    pub fn set_is_nested(&mut self) {
+        self.last = 0;
+    }
+
+    /// Returns the used hash algorithm.
+    pub fn hash_algorithm(&self) -> HashAlgorithm {
+        self.hash_algorithm
+    }
+
+    /// Returns the used public key algorithm.
+    pub fn public_key_algorithm(&self) -> PublicKeyAlgorithm {
+        self.pub_algorithm
+    }
+
+    /// Returns the signature type.
+    pub fn typ(&self) -> SignatureType {
+        self.typ
     }
 }
 

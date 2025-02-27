@@ -177,7 +177,10 @@ where
 {
     let mut out = Vec::new();
 
-    for config in keys {
+    let keys_len = keys.len();
+    for (i, config) in keys.iter().enumerate() {
+        let is_last = i == keys_len - 1;
+
         // Signature setup
         let key_id = config.key.key_id();
         let algorithm = config.key.algorithm();
@@ -202,7 +205,7 @@ where
         sig_config.hashed_subpackets = hashed_subpackets;
         sig_config.unhashed_subpackets = unhashed_subpackets;
 
-        let ops = match config.key.version() {
+        let mut ops = match config.key.version() {
             KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, key_id),
             KeyVersion::V6 => {
                 let SignatureVersionSpecific::V6 { ref salt } = sig_config.version_specific else {
@@ -218,6 +221,11 @@ where
             }
             v => bail!("Unsupported key version {:?}", v),
         };
+
+        if !is_last {
+            ops.set_is_nested();
+        }
+
         out.push((sig_config, ops));
     }
 
@@ -1916,18 +1924,23 @@ mod tests {
                 let inner = match decompressed {
                     Message::Signed {
                         message: Some(ref message),
+                        one_pass_signature: Some(ops),
                         ..
                     } => {
+                        assert!(ops.is_nested(), "outer OPS must be nested");
+
                         assert!(message.is_one_pass_signed());
                         message.verify(&*skey2.public_key())?;
 
                         let Message::Signed {
                             message: Some(inner_message),
+                            one_pass_signature: Some(ops),
                             ..
                         } = message.as_ref()
                         else {
                             panic!("unexpeted message: {:?}", message);
                         };
+                        assert!(!ops.is_nested(), "innner OPS must not be nested");
                         inner_message
                     }
                     _ => {

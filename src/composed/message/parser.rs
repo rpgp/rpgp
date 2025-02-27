@@ -140,6 +140,7 @@ fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option
             Tag::OnePassSignature => {
                 return match packet.try_into() {
                     Ok(p) => {
+                        // TODO: check for `is_nested` marker on OnePassSignatures
                         let one_pass_signature = Some(p);
 
                         let message = match next(packets.by_ref()) {
