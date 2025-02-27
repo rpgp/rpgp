@@ -358,7 +358,12 @@ fn read_cleartext_body<B: BufRead>(b: &mut B) -> Result<(String, String)> {
             bail!("unexpected early end");
         }
 
-        // Look at the last line
+        // Empty CSF message body
+        if out.starts_with("-----") {
+            return Ok(("".to_string(), out));
+        }
+
+        // Look for header start in the last line
         if let Some(pos) = out.rfind("\n-----") {
             // found our end
             let rest = out.split_off(pos + 1);
