@@ -43,16 +43,16 @@ impl<R: std::io::Read> NormalizedReader<R> {
         if read == 0 {
             self.is_done = true;
         }
+
         let first_is_lf = self.in_buffer[0] == b'\n';
 
         self.cleanup_buffer(read, last_was_cr && first_is_lf);
-
         Ok(())
     }
 
     /// Normalizes the line endings in the current buffer
     fn cleanup_buffer(&mut self, read: usize, have_split_crlf: bool) {
-        let in_buffer = if have_split_crlf {
+        let in_buffer = if have_split_crlf && read > 0 {
             // skip the first byte of the buffer, which is a `\n` as it was already handled before
             &self.in_buffer[1..read]
         } else {
@@ -62,6 +62,10 @@ impl<R: std::io::Read> NormalizedReader<R> {
         let res = RE.replace_all(in_buffer, self.line_break.as_ref());
         self.replaced.clear();
         self.replaced.extend_from_slice(&res);
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.source
     }
 }
 

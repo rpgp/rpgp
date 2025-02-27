@@ -1,7 +1,8 @@
+use std::collections::VecDeque;
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::{SubsecRound, Utc};
 use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
@@ -15,11 +16,13 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::{LineBreak, LineWriter};
+use crate::normalize_lines::NormalizedReader;
 use crate::packet::{
     ChunkSize, CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
-    OnePassSignature, PacketHeader, PacketTrait, PublicKeyEncryptedSessionKey, SignatureHasher,
-    SignatureType, SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedProtectedData,
-    SymEncryptedProtectedDataConfig, SymKeyEncryptedSessionKey,
+    MaybeNormalizedReader, OnePassSignature, PacketHeader, PacketTrait,
+    PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType, SignatureVersionSpecific,
+    Subpacket, SubpacketData, SymEncryptedProtectedData, SymEncryptedProtectedDataConfig,
+    SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
@@ -443,52 +446,8 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         }
     }
 
-    /// Sign this message, using the provided key.
-    pub fn to_writer_signed<RAND, W>(mut self, mut rng: RAND, mut out: W) -> Result<()>
-    where
-        RAND: CryptoRng + Rng,
-        W: std::io::Write,
-    {
-        let typ = if self.encryption.is_plaintext()
-            && self.compression.is_none()
-            && self.data_mode == DataMode::Utf8
-        {
-            SignatureType::Text
-        } else {
-            SignatureType::Binary
-        };
-
-        let prep = prepare(&mut rng, typ, &self.signing)?;
-
-        let mut hashers = Vec::new();
-
-        // 1. Write all OnePass Signature packets
-        for (config, ops) in prep.into_iter() {
-            ops.to_writer_with_header(&mut out)?;
-            hashers.push(config.into_hasher()?);
-        }
-
-        let keys = std::mem::take(&mut self.signing);
-
-        // 2. Write actual message
-        {
-            // Tee the writer with the hashers
-            let mut tee_writer = TeeManyWriter::new(&mut out, &mut hashers);
-            self.to_writer(&mut rng, &mut tee_writer)?;
-            tee_writer.flush()?;
-        }
-
-        // 3. Write all Signatures (reverse order as One Pass Signatures)
-        for (hasher, config) in hashers.into_iter().zip(keys.into_iter()).rev() {
-            let signature = hasher.sign(config.key, &config.key_pw)?;
-            signature.to_writer_with_header(&mut out)?;
-        }
-
-        Ok(())
-    }
-
     /// Write the data out to a writer.
-    pub fn to_writer<RAND, W>(mut self, mut rng: RAND, out: W) -> Result<()>
+    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
@@ -499,65 +458,26 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
             Source::Bytes { name, bytes } => {
                 debug!("sourcing bytes {:?}: {} bytes", name, bytes.len());
                 use bytes::Buf;
-                let len = bytes.len();
-
-                // Construct Literal Data Packet (inner)
-                let literal_data_header = LiteralDataHeader {
-                    mode: self.data_mode,
-                    file_name: name,
-                    created: Utc::now().trunc_subsecs(0),
-                };
-
-                let literal_generator = LiteralDataGenerator::new(
-                    literal_data_header,
-                    bytes.reader(),
-                    Some(len.try_into()?),
+                let len = bytes.len().try_into()?;
+                let source = bytes.reader();
+                to_writer_inner(
+                    rng,
+                    name,
+                    source,
+                    Some(len),
+                    sign_typ,
+                    self.signing,
+                    self.data_mode,
                     self.chunk_size,
+                    self.compression,
+                    self.encryption,
+                    out,
                 )?;
-
-                match self.compression {
-                    Some(compression) => {
-                        let len = literal_generator.len();
-                        let generator = CompressedDataGenerator::new(
-                            compression,
-                            literal_generator,
-                            len,
-                            self.chunk_size,
-                        )?;
-
-                        if self.signing.is_empty() {
-                            self.encryption.encrypt(&mut rng, generator, None, out)?;
-                        } else {
-                            let singers = std::mem::take(&mut self.signing);
-                            let generator =
-                                SignGenerator::new(&mut rng, sign_typ, generator, singers, None)?;
-                            self.encryption.encrypt(&mut rng, generator, None, out)?;
-                        }
-                    }
-                    None => {
-                        let len = literal_generator.len();
-                        if self.signing.is_empty() {
-                            self.encryption
-                                .encrypt(&mut rng, literal_generator, len, out)?;
-                        } else {
-                            let singers = std::mem::take(&mut self.signing);
-                            let generator = SignGenerator::new(
-                                &mut rng,
-                                sign_typ,
-                                literal_generator,
-                                singers,
-                                len,
-                            )?;
-                            let len = generator.len();
-                            self.encryption.encrypt(&mut rng, generator, len, out)?;
-                        }
-                    }
-                }
             }
-            Source::File(path) => {
-                let in_file = std::fs::File::open(&path)?;
+            Source::File(ref path) => {
+                let in_file = std::fs::File::open(path)?;
                 let in_meta = in_file.metadata()?;
-                let in_file_size = usize::try_from(in_meta.len())?;
+                let in_file_size: u32 = in_meta.len().try_into()?;
 
                 let Some(in_file_name) = path.file_name() else {
                     bail!("{}: is not a valid input file", path.display());
@@ -567,108 +487,35 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
                 debug!("sourcing file {:?}: {} bytes", file_name, in_file_size);
 
                 let in_file = BufReader::new(in_file);
-                let literal_data_header = LiteralDataHeader {
-                    mode: self.data_mode,
+
+                to_writer_inner(
+                    rng,
                     file_name,
-                    created: Utc::now().trunc_subsecs(0),
-                };
-
-                let literal_generator = LiteralDataGenerator::new(
-                    literal_data_header,
                     in_file,
-                    Some(in_file_size.try_into()?),
+                    Some(in_file_size),
+                    sign_typ,
+                    self.signing,
+                    self.data_mode,
                     self.chunk_size,
+                    self.compression,
+                    self.encryption,
+                    out,
                 )?;
-
-                match self.compression {
-                    Some(compression) => {
-                        let len = literal_generator.len();
-                        let generator = CompressedDataGenerator::new(
-                            compression,
-                            literal_generator,
-                            len,
-                            self.chunk_size,
-                        )?;
-
-                        if self.signing.is_empty() {
-                            self.encryption.encrypt(&mut rng, generator, None, out)?;
-                        } else {
-                            let singers = std::mem::take(&mut self.signing);
-                            let generator =
-                                SignGenerator::new(&mut rng, sign_typ, generator, singers, None)?;
-                            self.encryption.encrypt(&mut rng, generator, None, out)?;
-                        }
-                    }
-                    None => {
-                        let len = literal_generator.len();
-                        if self.signing.is_empty() {
-                            self.encryption
-                                .encrypt(&mut rng, literal_generator, len, out)?;
-                        } else {
-                            let singers = std::mem::take(&mut self.signing);
-                            let generator = SignGenerator::new(
-                                &mut rng,
-                                sign_typ,
-                                literal_generator,
-                                singers,
-                                len,
-                            )?;
-                            let len = generator.len();
-                            self.encryption.encrypt(&mut rng, generator, len, out)?;
-                        }
-                    }
-                }
             }
             Source::Reader { file_name, reader } => {
-                let literal_data_header = LiteralDataHeader {
-                    mode: self.data_mode,
+                to_writer_inner(
+                    rng,
                     file_name,
-                    created: Utc::now().trunc_subsecs(0),
-                };
-
-                let literal_generator =
-                    LiteralDataGenerator::new(literal_data_header, reader, None, self.chunk_size)?;
-
-                match self.compression {
-                    Some(compression) => {
-                        let len = literal_generator.len();
-                        let generator = CompressedDataGenerator::new(
-                            compression,
-                            literal_generator,
-                            len,
-                            self.chunk_size,
-                        )?;
-
-                        if self.signing.is_empty() {
-                            self.encryption.encrypt(&mut rng, generator, None, out)?;
-                        } else {
-                            let singers = std::mem::take(&mut self.signing);
-                            let generator =
-                                SignGenerator::new(&mut rng, sign_typ, generator, singers, None)?;
-                            self.encryption.encrypt(&mut rng, generator, None, out)?;
-                        }
-                    }
-
-                    None => {
-                        let len = literal_generator.len();
-
-                        if self.signing.is_empty() {
-                            self.encryption
-                                .encrypt(&mut rng, literal_generator, len, out)?;
-                        } else {
-                            let singers = std::mem::take(&mut self.signing);
-                            let generator = SignGenerator::new(
-                                &mut rng,
-                                sign_typ,
-                                literal_generator,
-                                singers,
-                                len,
-                            )?;
-                            let len = generator.len();
-                            self.encryption.encrypt(&mut rng, generator, len, out)?;
-                        }
-                    }
-                }
+                    reader,
+                    None,
+                    sign_typ,
+                    self.signing,
+                    self.data_mode,
+                    self.chunk_size,
+                    self.compression,
+                    self.encryption,
+                    out,
+                )?;
             }
         }
         Ok(())
@@ -702,44 +549,6 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
                 self.to_writer(rng, &mut tee)?;
             } else {
                 self.to_writer(rng, &mut enc)?;
-            }
-        }
-
-        // write footer
-        armor::write_footer(&mut out, typ, crc_hasher)?;
-        out.flush()?;
-
-        Ok(())
-    }
-
-    /// Write the data not as binary, but ascii armor encoded.
-    pub fn to_armored_writer_signed<RAND, W>(
-        self,
-        rng: RAND,
-        opts: ArmorOptions<'_>,
-        mut out: W,
-    ) -> Result<()>
-    where
-        RAND: Rng + CryptoRng,
-        W: std::io::Write,
-    {
-        let typ = armor::BlockType::Message;
-
-        // write header
-        armor::write_header(&mut out, typ, opts.headers)?;
-
-        // write body
-        let mut crc_hasher = opts.include_checksum.then(Crc24Hasher::new);
-        {
-            let crc_hasher = crc_hasher.as_mut();
-            let mut line_wrapper = LineWriter::<_, U64>::new(&mut out, LineBreak::Lf);
-            let mut enc = armor::Base64Encoder::new(&mut line_wrapper);
-
-            if let Some(crc_hasher) = crc_hasher {
-                let mut tee = TeeWriter::new(crc_hasher, &mut enc);
-                self.to_writer_signed(rng, &mut tee)?;
-            } else {
-                self.to_writer_signed(rng, &mut enc)?;
             }
         }
 
@@ -805,61 +614,6 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         Ok(())
     }
 
-    /// Write the data out directly to a file.
-    pub fn to_file_signed<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
-    where
-        RAND: Rng + CryptoRng,
-        P: AsRef<Path>,
-    {
-        let out_path: &Path = out_path.as_ref();
-        debug!("writing to file: {}", out_path.display());
-        if let Some(parent) = out_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let out_file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(out_path)?;
-        let mut out_file = BufWriter::new(out_file);
-
-        self.to_writer_signed(rng, &mut out_file)?;
-
-        out_file.flush()?;
-
-        Ok(())
-    }
-
-    /// Write the data out directly to a file.
-    pub fn to_armored_file_signed<RAND, P>(
-        self,
-        rng: RAND,
-        out_path: P,
-        opts: ArmorOptions<'_>,
-    ) -> Result<()>
-    where
-        RAND: Rng + CryptoRng,
-        P: AsRef<Path>,
-    {
-        let out_path: &Path = out_path.as_ref();
-        debug!("writing to file: {}", out_path.display());
-        if let Some(parent) = out_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        let out_file = std::fs::OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(out_path)?;
-        let mut out_file = BufWriter::new(out_file);
-
-        self.to_armored_writer_signed(rng, opts, &mut out_file)?;
-
-        out_file.flush()?;
-
-        Ok(())
-    }
-
     /// Write the data out directly to a `Vec<u8>`.
     pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
     where
@@ -880,25 +634,59 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
         Ok(out)
     }
+}
 
-    pub fn to_vec_signed<RAND>(self, rng: RAND) -> Result<Vec<u8>>
-    where
-        RAND: CryptoRng + Rng,
-    {
-        let mut out = Vec::new();
-        self.to_writer_signed(rng, &mut out)?;
-        Ok(out)
-    }
+#[allow(clippy::too_many_arguments)]
+fn to_writer_inner<RAND, R, W, E>(
+    mut rng: RAND,
+    name: Bytes,
+    source: R,
+    source_len: Option<u32>,
+    sign_typ: SignatureType,
+    signers: Vec<SigningConfig<'_>>,
+    data_mode: DataMode,
+    chunk_size: u32,
+    compression: Option<CompressionAlgorithm>,
+    encryption: E,
+    out: W,
+) -> Result<()>
+where
+    RAND: Rng + CryptoRng,
+    R: std::io::Read,
+    W: std::io::Write,
+    E: Encryption,
+{
+    // Construct Literal Data Packet (inner)
+    let literal_data_header = LiteralDataHeader {
+        mode: data_mode,
+        file_name: name,
+        created: Utc::now().trunc_subsecs(0),
+    };
 
-    pub fn to_armored_string_signed<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
-    where
-        RAND: CryptoRng + Rng,
-    {
-        let mut out = Vec::new();
-        self.to_armored_writer_signed(rng, opts, &mut out)?;
-        let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
-        Ok(out)
+    let sign_generator = SignGenerator::new(
+        &mut rng,
+        sign_typ,
+        literal_data_header,
+        chunk_size,
+        source,
+        signers,
+        source_len,
+    )?;
+
+    match compression {
+        Some(compression) => {
+            let len = sign_generator.len();
+            let generator =
+                CompressedDataGenerator::new(compression, sign_generator, len, chunk_size)?;
+
+            encryption.encrypt(&mut rng, generator, None, out)?;
+        }
+        None => {
+            let len = sign_generator.len();
+            encryption.encrypt(&mut rng, sign_generator, len, out)?;
+        }
     }
+    Ok(())
 }
 
 impl Encryption for NoEncryption {
@@ -1123,110 +911,121 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
     Ok(())
 }
 
-struct TeeManyWriter<'a, 'b, A> {
-    writer: &'a mut A,
-    hashers: &'b mut [SignatureHasher],
-}
-
-impl<'a, 'b, A> TeeManyWriter<'a, 'b, A> {
-    fn new(writer: &'a mut A, hashers: &'b mut [SignatureHasher]) -> Self {
-        Self { writer, hashers }
-    }
-}
-
-impl<A: std::io::Write> std::io::Write for TeeManyWriter<'_, '_, A> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let written = self.writer.write(buf)?;
-
-        for hasher in self.hashers.iter_mut() {
-            hasher.write(&buf[..written])?;
-        }
-        Ok(written)
-    }
-
-    // custom impl, to work around Base64Encoder returning Ok(0) from write
-    fn write_all(&mut self, mut buf: &[u8]) -> std::io::Result<()> {
-        while !buf.is_empty() {
-            match self.write(buf) {
-                Ok(0) => {}
-                Ok(n) => buf = &buf[n..],
-                Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
-            }
-        }
-        Ok(())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.writer.flush()?;
-        for hasher in self.hashers.iter_mut() {
-            hasher.flush()?;
-        }
-
-        Ok(())
-    }
-}
-
-struct SignGenerator<'a, R> {
-    typ: SignatureType,
-    signers: Vec<SigningConfig<'a>>,
-    hashers: Vec<SignatureHasher>,
-    source: R,
+struct SignGenerator<'a, R: std::io::Read> {
     total_len: Option<u32>,
-    state: State,
-    /// Finished reading from the source?
-    source_done: bool,
+    state: State<'a, R>,
 }
 
-enum State {
+enum State<'a, R: std::io::Read> {
     /// Buffer a single OPS
     Ops {
-        ops: Vec<OnePassSignature>,
+        /// We pop off one OPS at a time, until this is empty
+        ops: VecDeque<OnePassSignature>,
         buffer: BytesMut,
+        configs: VecDeque<SigningConfig<'a>>,
+        source: LiteralDataGenerator<SignatureHashers<MaybeNormalizedReader<R>>>,
     },
     /// Pass through the source,
     /// sending the data to the hashers as well
-    Body,
+    Body {
+        configs: VecDeque<SigningConfig<'a>>,
+        source: LiteralDataGenerator<SignatureHashers<MaybeNormalizedReader<R>>>,
+    },
     /// Buffer a single Signature
-    Signatures { buffer: BytesMut },
+    Signatures {
+        buffer: BytesMut,
+        configs: VecDeque<SigningConfig<'a>>,
+        hashers: VecDeque<SignatureHasher>,
+    },
+    Error,
+    Done,
 }
 
-impl<'a, R> SignGenerator<'a, R> {
+struct SignatureHashers<R> {
+    hashers: VecDeque<SignatureHasher>,
+    source: R,
+}
+
+impl<R> SignatureHashers<R> {
+    fn update_hashers(&mut self, buf: &[u8]) {
+        for hasher in &mut self.hashers {
+            hasher.update(buf);
+        }
+    }
+}
+
+impl<R: std::io::Read> std::io::Read for SignatureHashers<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let read = self.source.read(buf)?;
+
+        self.update_hashers(&buf[..read]);
+
+        Ok(read)
+    }
+}
+
+impl<'a, R: std::io::Read> SignGenerator<'a, R> {
     fn new<RAND>(
         mut rng: RAND,
         typ: SignatureType,
+        literal_data_header: LiteralDataHeader,
+        chunk_size: u32,
         source: R,
         signers: Vec<SigningConfig<'a>>,
-        len: Option<u32>,
+        source_len: Option<u32>,
     ) -> Result<Self>
     where
         RAND: CryptoRng + Rng,
     {
         let prep = prepare(&mut rng, typ, &signers)?;
-        let mut hashers = Vec::with_capacity(prep.len());
-        let mut ops = Vec::with_capacity(prep.len());
-        for (config, op) in prep.into_iter() {
-            ops.push(op);
-            hashers.push(config.into_hasher()?);
+        let mut configs = VecDeque::with_capacity(prep.len());
+        let mut sign_hashers = VecDeque::with_capacity(prep.len());
+        let mut ops = VecDeque::with_capacity(prep.len());
+        for ((config, op), signer) in prep.into_iter().zip(signers.into_iter()) {
+            ops.push_back(op);
+            sign_hashers.push_back(config.into_hasher()?);
+            configs.push_back(signer);
         }
 
-        let total_len = len.map(|l| {
-            // calculate final length
-            todo!()
-        });
+        let normalized_source = if literal_data_header.mode == DataMode::Utf8 {
+            MaybeNormalizedReader::Normalized(NormalizedReader::new(source, LineBreak::Crlf))
+        } else {
+            MaybeNormalizedReader::Raw(source)
+        };
 
-        Ok(Self {
-            typ,
-            signers,
-            source,
-            hashers,
-            total_len,
-            source_done: false,
-            state: State::Ops {
+        let hashed_source = SignatureHashers {
+            hashers: sign_hashers,
+            source: normalized_source,
+        };
+
+        let source =
+            LiteralDataGenerator::new(literal_data_header, hashed_source, source_len, chunk_size)?;
+        let _len = source.len();
+
+        let total_len = None;
+        // len.map(|source_len| {
+        // calculate final length
+        //  let ops_len = ops.iter().map(|o| o.write_len_with_header()).sum();
+        // let sigs_len = sign_hashers
+        //     .iter()
+        //     .map(|(signer, hasher)| hasher.write_len_with_header())
+        //     .sum();
+        // TODO:
+        // ops_len + source_len + sigs_len
+        // });
+
+        let state = if ops.is_empty() {
+            State::Body { configs, source }
+        } else {
+            State::Ops {
                 ops,
                 buffer: BytesMut::new(),
-            },
-        })
+                configs,
+                source,
+            }
+        };
+
+        Ok(Self { total_len, state })
     }
 
     /// Returns the expected write length if known upfront.
@@ -1237,7 +1036,114 @@ impl<'a, R> SignGenerator<'a, R> {
 
 impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        todo!()
+        loop {
+            match std::mem::replace(&mut self.state, State::Error) {
+                State::Done => {
+                    self.state = State::Done;
+                    return Ok(0);
+                }
+                State::Error => {
+                    panic!("inconsistent state, paniced before");
+                }
+                State::Ops {
+                    mut ops,
+                    mut buffer,
+                    configs,
+                    source,
+                } => {
+                    if !buffer.has_remaining() {
+                        if let Some(op) = ops.pop_front() {
+                            let mut writer = buffer.writer();
+                            op.to_writer_with_header(&mut writer).map_err(|e| {
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                            })?;
+                            buffer = writer.into_inner();
+                        } else {
+                            // Done, move onto the next state
+                            self.state = State::Body { configs, source };
+                            continue;
+                        }
+                    }
+
+                    let to_write = buf.len().min(buffer.remaining());
+                    buffer.copy_to_slice(&mut buf[..to_write]);
+
+                    self.state = State::Ops {
+                        ops,
+                        buffer,
+                        configs,
+                        source,
+                    };
+
+                    return Ok(to_write);
+                }
+                State::Body {
+                    configs,
+                    mut source,
+                } => {
+                    // read from the original source
+                    let read = source.read(buf)?;
+
+                    if read == 0 {
+                        let sig_hasher = source.into_inner();
+                        let hashers = sig_hasher.hashers;
+
+                        // nothing to read anymore
+                        self.state = State::Signatures {
+                            buffer: BytesMut::new(),
+                            configs,
+                            hashers,
+                        };
+                        continue;
+                    }
+
+                    self.state = State::Body { configs, source };
+                    return Ok(read);
+                }
+                State::Signatures {
+                    mut configs,
+                    mut buffer,
+                    mut hashers,
+                } => {
+                    if !buffer.has_remaining() {
+                        // fill buffer
+                        // pop_back because of reverse ordering than OPS
+                        if let (Some(signer), Some(hasher)) =
+                            (configs.pop_back(), hashers.pop_back())
+                        {
+                            let mut writer = buffer.writer();
+
+                            // sign and write the signature into the buffer
+                            hasher
+                                .sign(signer.key, &signer.key_pw)
+                                .and_then(|sig| sig.to_writer_with_header(&mut writer))
+                                .map_err(|e| {
+                                    std::io::Error::new(
+                                        std::io::ErrorKind::InvalidData,
+                                        e.to_string(),
+                                    )
+                                })?;
+
+                            buffer = writer.into_inner();
+                        } else {
+                            // Done
+                            self.state = State::Done;
+                            return Ok(0);
+                        }
+                    }
+
+                    let to_write = buf.len().min(buffer.remaining());
+                    buffer.copy_to_slice(&mut buf[..to_write]);
+
+                    self.state = State::Signatures {
+                        buffer,
+                        configs,
+                        hashers,
+                    };
+                    return Ok(to_write);
+                }
+            }
+        }
     }
 }
 
@@ -1319,7 +1225,6 @@ mod tests {
 
         // decrypt it
         let message = Message::from_bytes(encrypted.into()).unwrap();
-        dbg!(&message);
         let decrypted = message
             .decrypt_with_password(&"hello world".into())
             .unwrap();
@@ -1661,6 +1566,62 @@ mod tests {
     }
 
     #[test]
+    fn utf8_reader_partial_size_no_compression_roundtrip_x25519_seipdv1_sign() {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            println!("-- Size {}", file_size);
+
+            // Generate data
+            let buf = random_string(&mut rng, file_size);
+            let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            println!("data:\n{}", hex::encode(buf.as_bytes()));
+
+            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                .data_mode(DataMode::Utf8)
+                .chunk_size(chunk_size)
+                .unwrap();
+
+            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
+
+            let signed = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
+            let message = Message::from_bytes(signed.into()).expect("reading");
+
+            // verify signature
+            assert!(message.is_one_pass_signed());
+            message.verify(&*skey.public_key()).expect("signed");
+
+            let Message::Signed {
+                message: Some(next_message),
+                ..
+            } = message
+            else {
+                panic!("unexpected message: {:?}", message);
+            };
+
+            let Message::Literal(l) = &*next_message else {
+                panic!("unexpected message: {:?}", next_message);
+            };
+
+            assert_eq!(l.file_name(), "plaintext.txt");
+            check_strings(
+                l.to_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
+        }
+    }
+
+    #[test]
     fn utf8_reader_partial_size_compression_zip_roundtrip_public_key_x25519_seipdv1_sign() {
         let _ = pretty_env_logger::try_init();
         let mut rng = ChaCha20Rng::seed_from_u64(1);
@@ -1676,11 +1637,18 @@ mod tests {
         let max_file_size = 5 * chunk_size as usize + 100;
 
         for file_size in (1..=max_file_size).step_by(10) {
-            println!("Size {}", file_size);
+            println!("-- Size {}", file_size);
 
             // Generate data
             let buf = random_string(&mut rng, file_size);
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+            println!(
+                "data:\n{}\n{} ({})",
+                buf,
+                hex::encode(buf.as_bytes()),
+                buf.len()
+            );
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
                 .data_mode(DataMode::Utf8)
@@ -1693,28 +1661,32 @@ mod tests {
 
             let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-            let encrypted = builder
-                .sign(sig_config)
-                .to_vec_signed(&mut rng)
-                .expect("writing");
+            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
-
-            // verify signature
-            assert!(message.is_one_pass_signed());
-            message.verify(&*skey.public_key()).expect("signed");
 
             // decrypt it
             let (decrypted, _key_ids) = message
                 .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
-            assert!(matches!(decrypted, Message::Compressed(_)));
+            let next = decrypted.decompress().expect("decompression");
 
-            let decompressed = decrypted.decompress().expect("decompression");
+            // verify signature
+            dbg!(&next);
+            assert!(next.is_one_pass_signed());
+            next.verify(&*skey.public_key()).expect("signed");
 
-            let Message::Literal(l) = decompressed else {
-                panic!("unexpected message: {:?}", decompressed);
+            let Message::Signed {
+                message: Some(next_message),
+                ..
+            } = next
+            else {
+                panic!("unexpected message: {:?}", next);
+            };
+
+            let Message::Literal(l) = &*next_message else {
+                panic!("unexpected message: {:?}", next_message);
             };
 
             assert_eq!(l.file_name(), "plaintext.txt");
@@ -1811,28 +1783,32 @@ mod tests {
 
             let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-            let encrypted = builder
-                .sign(sig_config)
-                .to_vec_signed(&mut rng)
-                .expect("writing");
+            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
-
-            // verify signature
-            assert!(message.is_one_pass_signed());
-            message.verify(&*skey.public_key()).expect("signed");
 
             // decrypt it
             let (decrypted, _key_ids) = message
                 .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
-            assert!(matches!(decrypted, Message::Compressed(_)));
-
+            assert!(decrypted.is_compressed());
             let decompressed = decrypted.decompress().expect("decompression");
 
-            let Message::Literal(l) = decompressed else {
+            // verify signature
+            assert!(decompressed.is_one_pass_signed());
+            decompressed.verify(&*skey.public_key()).expect("signed");
+
+            let Message::Signed {
+                message: Some(inner_message),
+                ..
+            } = decompressed
+            else {
                 panic!("unexpected message: {:?}", decompressed);
+            };
+
+            let Message::Literal(l) = &*inner_message else {
+                panic!("unexpected message: {:?}", inner_message);
             };
 
             assert_eq!(l.file_name(), "plaintext.txt");
@@ -1911,7 +1887,7 @@ mod tests {
 
                 let message = match encoding {
                     Encoding::Armor(opts) => {
-                        let encrypted = builder.to_armored_string_signed(&mut rng, opts)?;
+                        let encrypted = builder.to_armored_string(&mut rng, opts)?;
 
                         println!("{}", encrypted);
 
@@ -1919,38 +1895,48 @@ mod tests {
                         message
                     }
                     Encoding::Binary => {
-                        let encrypted = builder.to_vec_signed(&mut rng)?;
+                        let encrypted = builder.to_vec(&mut rng)?;
 
                         println!("{}", hex::encode(&encrypted));
                         Message::from_bytes(encrypted.into())?
                     }
                 };
 
-                // verify signature outer
-                assert!(message.is_one_pass_signed());
-                message.verify(&*skey1.public_key())?;
+                // decrypt it
+                let (decrypted, _key_ids) = message.decrypt(&[Password::empty()], &[&skey1])?;
 
-                // verify inner signature
-                match message {
-                    Message::Signed { ref message, .. } => {
-                        let message = message.as_ref().unwrap();
+                assert!(decrypted.is_compressed());
+
+                let decompressed = decrypted.decompress()?;
+
+                // verify signature outer
+                assert!(decompressed.is_one_pass_signed());
+                decompressed.verify(&*skey1.public_key())?;
+
+                let inner = match decompressed {
+                    Message::Signed {
+                        message: Some(ref message),
+                        ..
+                    } => {
                         assert!(message.is_one_pass_signed());
                         message.verify(&*skey2.public_key())?;
+
+                        let Message::Signed {
+                            message: Some(inner_message),
+                            ..
+                        } = message.as_ref()
+                        else {
+                            panic!("unexpeted message: {:?}", message);
+                        };
+                        inner_message
                     }
                     _ => {
                         panic!("invalid structure: {:?}", message);
                     }
                 };
 
-                // decrypt it
-                let (decrypted, _key_ids) = message.decrypt(&[Password::empty()], &[&skey1])?;
-
-                assert!(matches!(decrypted, Message::Compressed(_)));
-
-                let decompressed = decrypted.decompress()?;
-
-                let Message::Literal(l) = decompressed else {
-                    panic!("unexpected message: {:?}", decompressed);
+                let Message::Literal(l) = &**inner else {
+                    panic!("unexpected message: {:?}", inner);
                 };
 
                 assert_eq!(l.file_name(), "plaintext.txt");

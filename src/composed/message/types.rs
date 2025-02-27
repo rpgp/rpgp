@@ -505,6 +505,10 @@ impl Message {
 
                 Message::from_bytes(bytes.into())
             }
+            Message::Signed {
+                message: Some(message),
+                ..
+            } => message.decompress(),
             _ => Ok(self),
         }
     }
@@ -797,8 +801,20 @@ impl Message {
                                     Message::Literal(ref data) => {
                                         return signature.verify(key, data.data());
                                     }
-                                    Message::Compressed(_) | Message::Encrypted { .. } => {
-                                        let data = current_message.to_bytes()?;
+                                    Message::Compressed(ref data) => {
+                                        if decompress {
+                                            // TODO: limited read to 1GiB
+                                            let mut bytes = Vec::new();
+                                            data.decompress()?.read_to_end(&mut bytes)?;
+
+                                            let msg = Message::from_bytes(bytes.into())?;
+                                            return msg.verify_internal(key, false);
+                                        } else {
+                                            bail!("Recursive decompression not allowed");
+                                        }
+                                    }
+                                    Message::Encrypted { .. } => {
+                                        let data = message.to_bytes()?;
                                         return signature.verify(key, &data[..]);
                                     }
                                     Message::Signed { ref message, .. } => {
@@ -811,7 +827,21 @@ impl Message {
                             }
                             bail!("More than 1024 nested signed messages are not supported");
                         }
-                        Message::Compressed(_) | Message::Encrypted { .. } => {
+                        Message::Compressed(ref data) => {
+                            debug!("verifying compressed message");
+                            if decompress {
+                                // TODO: limited read to 1GiB
+                                let mut bytes = Vec::new();
+                                data.decompress()?.read_to_end(&mut bytes)?;
+
+                                let msg = Message::from_bytes(bytes.into())?;
+                                msg.verify_internal(key, false)
+                            } else {
+                                bail!("Recursive decompression not allowed");
+                            }
+                        }
+                        Message::Encrypted { .. } => {
+                            debug!("verifying encrypted message");
                             let data = message.to_bytes()?;
                             signature.verify(key, &data[..])
                         }
@@ -821,6 +851,7 @@ impl Message {
                 }
             }
             Message::Compressed(data) => {
+                debug!("verifying compressed message");
                 if decompress {
                     // TODO: limited read to 1GiB
                     let mut bytes = Vec::new();
@@ -996,6 +1027,11 @@ impl Message {
             } => one_pass_signature.is_some(),
             _ => false,
         }
+    }
+
+    /// Is this a compressed message?
+    pub fn is_compressed(&self) -> bool {
+        matches!(self, Message::Compressed(_))
     }
 
     pub fn is_literal(&self) -> bool {

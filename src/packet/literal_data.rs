@@ -220,6 +220,15 @@ pub(crate) enum MaybeNormalizedReader<R: io::Read> {
     Raw(R),
 }
 
+impl<R: io::Read> MaybeNormalizedReader<R> {
+    pub(crate) fn into_inner(self) -> R {
+        match self {
+            Self::Normalized(s) => s.into_inner(),
+            Self::Raw(s) => s,
+        }
+    }
+}
+
 impl<R: io::Read> io::Read for MaybeNormalizedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
@@ -248,6 +257,15 @@ impl<R: io::Read> LiteralDataGenerator<R> {
             MaybeNormalizedReader::Raw(source)
         };
 
+        Self::from_normalized(header, source, source_len, chunk_size)
+    }
+
+    pub(crate) fn from_normalized(
+        header: LiteralDataHeader,
+        source: MaybeNormalizedReader<R>,
+        source_len: Option<u32>,
+        chunk_size: u32,
+    ) -> Result<Self> {
         match source_len {
             Some(source_len) => {
                 let gen = LiteralDataFixedGenerator::new(header, source, source_len)?;
@@ -266,14 +284,22 @@ impl<R: io::Read> LiteralDataGenerator<R> {
             Self::Partial { .. } => None,
         }
     }
+
+    pub(crate) fn into_inner(self) -> R {
+        match self {
+            Self::Fixed(s) => s.into_inner().into_inner(),
+            Self::Partial(s) => s.into_inner().into_inner(),
+        }
+    }
 }
 
 impl<R: io::Read> io::Read for LiteralDataGenerator<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Fixed(ref mut fixed) => fixed.read(buf),
-            Self::Partial(ref mut partial) => partial.read(buf),
-        }
+        let read = match self {
+            Self::Fixed(ref mut fixed) => fixed.read(buf)?,
+            Self::Partial(ref mut partial) => partial.read(buf)?,
+        };
+        Ok(read)
     }
 }
 
@@ -303,6 +329,10 @@ impl<R: io::Read> LiteralDataFixedGenerator<R> {
             header_written: 0,
             total_len,
         })
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.source
     }
 }
 
@@ -356,6 +386,10 @@ impl<R: io::Read> LiteralDataPartialGenerator<R> {
             is_fixed_emitted: false,
             current_packet: BytesMut::with_capacity(chunk_size as usize),
         })
+    }
+
+    pub(crate) fn into_inner(self) -> R {
+        self.source
     }
 }
 

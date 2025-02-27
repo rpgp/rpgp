@@ -172,13 +172,13 @@ macro_rules! unsupported_err {
     ($e:expr) => {
         return Err($crate::errors::Error::Unsupported {
             message: $e.to_string(),
-            backtrace: Some(snafu::GenerateImplicitData::generate()),
+            backtrace: ::snafu::GenerateImplicitData::generate(),
         })
     };
     ($fmt:expr, $($arg:tt)+) => {
         return Err($crate::errors::Error::Unsupported {
             message: format!($fmt, $($arg)+),
-            backtrace: Some(snafu::GenerateImplicitData::generate()),
+            backtrace: ::snafu::GenerateImplicitData::generate(),
         })
     };
 }
@@ -188,13 +188,13 @@ macro_rules! bail {
     ($e:expr) => {
         return Err($crate::errors::Error::Message {
             message: $e.to_string(),
-            backtrace: Some(snafu::GenerateImplicitData::generate()),
+            backtrace: ::snafu::GenerateImplicitData::generate(),
         })
     };
     ($fmt:expr, $($arg:tt)+) => {
         return Err($crate::errors::Error::Message {
             message: format!($fmt, $($arg)+),
-            backtrace: Some(snafu::GenerateImplicitData::generate()),
+            backtrace: ::snafu::GenerateImplicitData::generate(),
         })
     };
 }
@@ -204,13 +204,13 @@ macro_rules! format_err {
     ($e:expr) => {
         $crate::errors::Error::Message {
             message: $e.to_string(),
-            backtrace: Some(snafu::GenerateImplicitData::generate()),
+            backtrace: ::snafu::GenerateImplicitData::generate(),
         }
     };
     ($fmt:expr, $($arg:tt)+) => {
         $crate::errors::Error::Message {
             message: format!($fmt, $($arg)+),
-            backtrace: Some(snafu::GenerateImplicitData::generate()),
+            backtrace: ::snafu::GenerateImplicitData::generate(),
         }
     };
 }

@@ -665,6 +665,11 @@ impl SignatureHasher {
 
         Signature::from_config(config, signed_hash_value, signature)
     }
+
+    /// Update the internal hasher.
+    pub(crate) fn update(&mut self, buf: &[u8]) {
+        self.hasher.update(buf);
+    }
 }
 
 impl std::io::Write for SignatureHasher {
