@@ -5,6 +5,8 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::{DateTime, SubsecRound, TimeZone, Utc};
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
+#[cfg(test)]
+use proptest::prelude::*;
 
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
@@ -14,9 +16,6 @@ use crate::parsing::BufParsing;
 use crate::ser::Serialize;
 use crate::types::{PacketHeaderVersion, PacketLength, Tag};
 use crate::util::fill_buffer;
-
-#[cfg(test)]
-use proptest::prelude::*;
 
 /// Literal Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
@@ -41,8 +40,18 @@ pub struct LiteralData {
 pub struct LiteralDataHeader {
     pub mode: DataMode,
     /// The filename, may contain non utf-8 bytes
-    pub file_name: Bytes,
-    pub created: DateTime<Utc>,
+    file_name: Bytes,
+    created: DateTime<Utc>,
+}
+
+impl LiteralDataHeader {
+    pub fn new(mode: DataMode) -> Self {
+        Self {
+            mode,
+            file_name: "".into(),
+            created: std::time::UNIX_EPOCH.into(),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]
@@ -482,11 +491,10 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
+    use super::*;
     use crate::normalize_lines::normalize_lines;
     use crate::packet::Packet;
     use crate::util::test::{check_strings, random_string, ChaosReader};
-
-    use super::*;
 
     #[test]
     fn test_utf8_literal() {
