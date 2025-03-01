@@ -810,6 +810,7 @@ mod tests {
     #[test]
     fn test_parse_armor_full_no_header() {
         let c = "-----BEGIN RSA PRIVATE KEY-----
+
 MIIEpgIBAAKCAQEAxp4sIUtrNBl4Vbd4075CmtHmwxTc0FhQIGw36kptbrWReLb9
 Np0RQylKyc6qUruxZlCdPVFo7iX3vs272/0GEakPv0DAsKGbe1nTsMyxxz0o3dP4
 JQOlOGEnpETa0ybfPLMX1+qNiBdm7HLjqcP5+S0Exb0Z0deFNIhEP6XckUEgHmwA
