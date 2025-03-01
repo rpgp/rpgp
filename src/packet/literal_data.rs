@@ -41,8 +41,18 @@ pub struct LiteralData {
 pub struct LiteralDataHeader {
     pub mode: DataMode,
     /// The filename, may contain non utf-8 bytes
-    pub file_name: Bytes,
-    pub created: DateTime<Utc>,
+    file_name: Bytes,
+    created: DateTime<Utc>,
+}
+
+impl LiteralDataHeader {
+    pub fn new(mode: DataMode) -> Self {
+        Self {
+            mode,
+            file_name: "".into(),
+            created: std::time::UNIX_EPOCH.into(),
+        }
+    }
 }
 
 impl LiteralDataHeader {
