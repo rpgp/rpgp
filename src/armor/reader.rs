@@ -246,7 +246,6 @@ fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
 
 fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
     let (i, headers) = many0(complete(hash_header_line))(i)?;
-    let (i, _) = pair(space0, line_ending)(i)?;
 
     let mut res = BTreeMap::new();
     let headers = headers.into_iter().flatten().collect();
@@ -1005,7 +1004,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            armor_headers_hash(b"Hash: hello,world\n\n").unwrap(),
+            armor_headers_hash(b"Hash: hello,world\n").unwrap(),
             (&[][..], headers),
         );
 
@@ -1016,7 +1015,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            armor_headers_hash(b"Hash: hello,world\nHash: cool\n\n").unwrap(),
+            armor_headers_hash(b"Hash: hello,world\nHash: cool\n").unwrap(),
             (&[][..], headers,),
         );
     }
