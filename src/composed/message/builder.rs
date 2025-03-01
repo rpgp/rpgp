@@ -3,7 +3,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use chrono::{SubsecRound, Utc};
+use chrono::SubsecRound;
 use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
 use log::debug;
@@ -646,7 +646,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
 #[allow(clippy::too_many_arguments)]
 fn to_writer_inner<RAND, R, W, E>(
     mut rng: RAND,
-    name: Bytes,
+    _name: Bytes,
     source: R,
     source_len: Option<u32>,
     sign_typ: SignatureType,
@@ -664,11 +664,7 @@ where
     E: Encryption,
 {
     // Construct Literal Data Packet (inner)
-    let literal_data_header = LiteralDataHeader {
-        mode: data_mode,
-        file_name: name,
-        created: Utc::now().trunc_subsecs(0),
-    };
+    let literal_data_header = LiteralDataHeader::new(data_mode);
 
     let sign_generator = SignGenerator::new(
         &mut rng,
@@ -1204,7 +1200,7 @@ mod tests {
             panic!("unexpected message: {:?}", decrypted);
         };
 
-        assert_eq!(l.file_name(), "plaintext.txt");
+        assert_eq!(l.file_name(), "");
         assert_eq!(l.data(), &buf);
     }
 
@@ -1239,7 +1235,7 @@ mod tests {
             panic!("unexpected message: {:?}", decrypted);
         };
 
-        assert_eq!(l.file_name(), "plaintext.txt");
+        assert_eq!(l.file_name(), "");
         assert_eq!(l.data(), &buf);
     }
 
@@ -1280,7 +1276,7 @@ mod tests {
                 panic!("unexpected message: {:?}", decrypted);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             assert_eq!(l.data(), &buf);
         }
     }
@@ -1313,7 +1309,7 @@ mod tests {
                 panic!("unexpected message: {:?}", message);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             assert_eq!(l.data(), &buf);
         }
     }
@@ -1359,7 +1355,7 @@ mod tests {
                 panic!("unexpected message: {:?}", decrypted);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             assert_eq!(l.data(), &buf);
         }
     }
@@ -1411,7 +1407,7 @@ mod tests {
                     panic!("unexpected message: {:?}", decrypted);
                 };
 
-                assert_eq!(l.file_name(), "plaintext.txt");
+                assert_eq!(l.file_name(), "");
                 assert_eq!(l.data(), &buf);
             }
             // decrypt it - password
@@ -1424,7 +1420,7 @@ mod tests {
                     panic!("unexpected message: {:?}", decrypted);
                 };
 
-                assert_eq!(l.file_name(), "plaintext.txt");
+                assert_eq!(l.file_name(), "");
                 assert_eq!(l.data(), &buf);
             }
         }
@@ -1459,7 +1455,7 @@ mod tests {
                 panic!("unexpected message: {:?}", message);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             check_strings(
                 l.to_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
@@ -1508,7 +1504,7 @@ mod tests {
                 panic!("unexpected message: {:?}", decrypted);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             check_strings(
                 l.to_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
@@ -1563,7 +1559,7 @@ mod tests {
                 panic!("unexpected message: {:?}", decompressed);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             check_strings(
                 l.to_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
@@ -1619,7 +1615,7 @@ mod tests {
                 panic!("unexpected message: {:?}", next_message);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             check_strings(
                 l.to_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
@@ -1695,7 +1691,7 @@ mod tests {
                 panic!("unexpected message: {:?}", next_message);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             check_strings(
                 l.to_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
@@ -1745,7 +1741,7 @@ mod tests {
                 panic!("unexpected message: {:?}", decrypted);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             assert_eq!(l.data(), &buf);
         }
     }
@@ -1817,7 +1813,7 @@ mod tests {
                 panic!("unexpected message: {:?}", inner_message);
             };
 
-            assert_eq!(l.file_name(), "plaintext.txt");
+            assert_eq!(l.file_name(), "");
             check_strings(
                 l.to_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
@@ -1950,7 +1946,7 @@ mod tests {
                     panic!("unexpected message: {:?}", inner);
                 };
 
-                assert_eq!(l.file_name(), "plaintext.txt");
+                assert_eq!(l.file_name(), "");
                 check_strings(
                     l.to_string().unwrap(),
                     normalize_lines(&buf, LineBreak::Crlf),
