@@ -286,10 +286,17 @@ fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
 }
 
 pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers, bool)> {
+    // https://www.rfc-editor.org/rfc/rfc9580.html#name-forming-ascii-armor
+
     let (i, prefix) = take_until("-----")(i)?;
     let has_leading_data = !prefix.is_empty();
+
+    // "An Armor Header Line, appropriate for the type of data" (returned as 'typ')
+    // "Armor Headers" ('headers')
     let (i, (typ, headers)) = armor_header(i)?;
-    let (i, _) = many0(pair(space0, line_ending))(i)?;
+
+    // "A blank (zero length or containing only whitespace) line"
+    let (i, _) = pair(space0, line_ending)(i)?;
 
     Ok((i, (typ, headers, has_leading_data)))
 }
