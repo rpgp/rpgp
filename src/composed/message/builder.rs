@@ -103,7 +103,7 @@ pub struct SigningConfig<'a> {
     key: &'a dyn SecretKeyTrait,
     /// A password to unlock it
     key_pw: Password,
-    /// The hash algorithm to be used when sigining.
+    /// The hash algorithm to be used when signing.
     hash_algorithm: HashAlgorithm,
 }
 
