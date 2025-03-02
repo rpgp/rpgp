@@ -22,7 +22,10 @@ fn load_csf_starts_with_newline() {
     let empty_csf_msg =
         std::fs::read_to_string("tests/unit-tests/csf/starts-with-newline.csf").unwrap();
 
-    let (any, _) = pgp::Any::from_armor(empty_csf_msg.as_bytes()).expect("from_armor");
+    let (any, headers) = pgp::Any::from_armor(empty_csf_msg.as_bytes()).expect("from_armor");
+
+    // The header in the SIGNATURE block is empty
+    assert!(headers.is_empty());
 
     match any {
         pgp::Any::Cleartext(csm) => {
