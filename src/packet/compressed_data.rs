@@ -59,6 +59,16 @@ impl<R: BufRead> Decompressor<R> {
             )),
         }
     }
+
+    pub fn into_inner(self) -> R {
+        match self {
+            Self::Uncompressed(r) => r,
+            Self::Zip(r) => r.into_inner().into_inner(),
+            Self::Zlib(r) => r.into_inner().into_inner(),
+            #[cfg(feature = "bzip2")]
+            Self::Bzip2(r) => r.into_inner().into_inner(),
+        }
+    }
 }
 
 impl<R: BufRead> BufRead for Decompressor<R> {
