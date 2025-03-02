@@ -1,3 +1,7 @@
+use std::fs::File;
+
+use pgp::{Deserializable, SignedPublicKey};
+
 #[test]
 fn load_csf() {
     // Try to load a regular CSF message
@@ -34,7 +38,13 @@ fn load_csf_starts_with_newline() {
 
             assert_eq!(payload, "\ntest\n");
 
-            // TODO: verify signature?
+            // verify signature
+            let (pkey, _) = SignedPublicKey::from_armor_single(
+                File::open("./tests/unit-tests/csf/alice.pub.asc").unwrap(),
+            )
+            .unwrap();
+
+            csm.verify(&pkey).expect("verify ok");
         }
         _ => panic!("unexpected type"),
     }
