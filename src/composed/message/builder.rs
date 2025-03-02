@@ -103,7 +103,7 @@ pub struct SigningConfig<'a> {
     key: &'a dyn SecretKeyTrait,
     /// A password to unlock it
     key_pw: Password,
-    /// The hash algorithm to be used when sigining.
+    /// The hash algorithm to be used when signing.
     hash_algorithm: HashAlgorithm,
 }
 
@@ -408,7 +408,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     ///
     /// Defaults to `DataMode::Binary`
     ///
-    /// If the mode is set to `DataMode::Utf8`, line endings will be normalized.
+    /// If the mode is set to `DataMode::Utf8` (or `DataMode::Text`), the [SignatureType] will be `Text`, and line endings will be hashed in normalized form.
     pub fn data_mode(mut self, mode: DataMode) -> Self {
         self.data_mode = mode;
         self
@@ -443,10 +443,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     fn sign_typ(&self) -> SignatureType {
-        if self.encryption.is_plaintext()
-            && self.compression.is_none()
-            && self.data_mode == DataMode::Utf8
-        {
+        if self.data_mode == DataMode::Utf8 || self.data_mode == DataMode::Text {
             SignatureType::Text
         } else {
             SignatureType::Binary
