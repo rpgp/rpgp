@@ -515,6 +515,20 @@ impl Message {
     }
 
     /// Encrypt the message in SEIPDv1 format to a list of public keys `pkeys`.
+    ///
+    /// ## Note
+    ///
+    /// SEIPDv1 is broadly supported, while SEIPDv2 is specified in the new OpenPGP
+    /// RFC 9580, and not supported by all implementations yet.
+    /// Therefore, SEIPDv1 encryption may sometimes be preferable for compatibility reasons.
+    ///
+    /// Recipients can signal support for SEIPD versions via the
+    /// [Features](https://www.rfc-editor.org/rfc/rfc9580.html#name-features) subpacket in their certificates.
+    ///
+    /// Senders should select the most robust encrypted container format that the intended recipients can handle.
+    /// See [RFC 9580](https://www.rfc-editor.org/rfc/rfc9580.html#section-13.7-8).
+    ///
+    /// Also see ["OpenPGP for application developers"](https://openpgp.dev/book/migration.html#seipd-v2).
     pub fn encrypt_to_keys_seipdv1<R: CryptoRng + Rng>(
         &self,
         mut rng: R,
