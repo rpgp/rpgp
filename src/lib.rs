@@ -1,7 +1,5 @@
-//! # rPGP
-//!
-//! rPGP is an OpenPGP implementation.
-//!
+#![doc = include_str!("../README.md")]
+
 //! Usage examples are available under the respective modules:
 //! [Key generation], [signing and verifying with external hashing], [packet based signing and verifying].
 //!
