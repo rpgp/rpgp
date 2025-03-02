@@ -246,7 +246,6 @@ fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
 
 fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
     let (i, headers) = many0(complete(hash_header_line))(i)?;
-    let (i, _) = pair(space0, line_ending)(i)?;
 
     let mut res = BTreeMap::new();
     let headers = headers.into_iter().flatten().collect();
@@ -287,10 +286,17 @@ fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
 }
 
 pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers, bool)> {
+    // https://www.rfc-editor.org/rfc/rfc9580.html#name-forming-ascii-armor
+
     let (i, prefix) = take_until("-----")(i)?;
     let has_leading_data = !prefix.is_empty();
+
+    // "An Armor Header Line, appropriate for the type of data" (returned as 'typ')
+    // "Armor Headers" ('headers')
     let (i, (typ, headers)) = armor_header(i)?;
-    let (i, _) = many0(pair(space0, line_ending))(i)?;
+
+    // "A blank (zero length or containing only whitespace) line"
+    let (i, _) = pair(space0, line_ending)(i)?;
 
     Ok((i, (typ, headers, has_leading_data)))
 }
@@ -804,6 +810,7 @@ mod tests {
     #[test]
     fn test_parse_armor_full_no_header() {
         let c = "-----BEGIN RSA PRIVATE KEY-----
+
 MIIEpgIBAAKCAQEAxp4sIUtrNBl4Vbd4075CmtHmwxTc0FhQIGw36kptbrWReLb9
 Np0RQylKyc6qUruxZlCdPVFo7iX3vs272/0GEakPv0DAsKGbe1nTsMyxxz0o3dP4
 JQOlOGEnpETa0ybfPLMX1+qNiBdm7HLjqcP5+S0Exb0Z0deFNIhEP6XckUEgHmwA
@@ -1005,7 +1012,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            armor_headers_hash(b"Hash: hello,world\n\n").unwrap(),
+            armor_headers_hash(b"Hash: hello,world\n").unwrap(),
             (&[][..], headers),
         );
 
@@ -1016,7 +1023,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            armor_headers_hash(b"Hash: hello,world\nHash: cool\n\n").unwrap(),
+            armor_headers_hash(b"Hash: hello,world\nHash: cool\n").unwrap(),
             (&[][..], headers,),
         );
     }
