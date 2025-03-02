@@ -1,3 +1,5 @@
+use std::io::BufRead;
+
 use bitfields::bitfield;
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Buf;
@@ -5,6 +7,7 @@ use log::debug;
 
 use crate::errors::Result;
 use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{PacketHeaderVersion, PacketLength, Tag};
 
@@ -58,6 +61,41 @@ impl PacketHeader {
             _ => {
                 bail!("unknown packet header version {:b}", header);
             }
+        }
+    }
+
+    /// Parse a single packet header from the given reader.
+    pub fn from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
+        let header = r.read_u8()?;
+
+        let first_two_bits = header & 0b1100_0000;
+        match first_two_bits {
+            0b1100_0000 => {
+                // new starts with 0b11
+                let header = NewPacketHeader::from_bits(header);
+                let length = PacketLength::from_reader(r)?;
+
+                Ok(PacketHeader::New { header, length })
+            }
+            0b1000_0000 => {
+                // old starts with 0b10
+                let header = OldPacketHeader::from_bits(header);
+                let length = match header.length_type() {
+                    // One-Octet Lengths
+                    0 => PacketLength::Fixed(r.read_u8()?.into()),
+                    // Two-Octet Lengths
+                    1 => PacketLength::Fixed(r.read_be_u16()?.into()),
+                    // Four-Octet Lengths
+                    2 => PacketLength::Fixed(r.read_be_u32()?),
+                    3 => PacketLength::Indeterminate,
+                    _ => unreachable!("old packet length type is only 2 bits"),
+                };
+                Ok(PacketHeader::Old { header, length })
+            }
+            _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("unknown packet header version {:b}", header),
+            )),
         }
     }
 
@@ -362,10 +400,19 @@ mod tests {
         }
 
         #[test]
-        fn packet_roundtrip(header: PacketHeader) {
+        fn packet_roundtrip_buf(header: PacketHeader) {
             let mut buf = Vec::new();
             header.to_writer(&mut buf).unwrap();
             let new_header = PacketHeader::from_buf(&mut &buf[..]).unwrap();
+            prop_assert_eq!(header, new_header);
+        }
+
+
+        #[test]
+        fn packet_roundtrip_reader(header: PacketHeader) {
+            let mut buf = Vec::new();
+            header.to_writer(&mut buf).unwrap();
+            let new_header = PacketHeader::from_reader(&mut &buf[..]).unwrap();
             prop_assert_eq!(header, new_header);
         }
 

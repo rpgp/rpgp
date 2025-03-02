@@ -35,6 +35,7 @@ pub mod ser;
 pub mod types;
 
 mod parsing;
+mod parsing_reader;
 
 // reexports for easier use
 #[allow(unused_imports)]

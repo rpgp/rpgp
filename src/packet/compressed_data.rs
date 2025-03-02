@@ -1,14 +1,16 @@
-use std::io::{self, Read};
+use std::io::{self, BufRead, BufReader, Read};
 
 use byteorder::WriteBytesExt;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 #[cfg(feature = "bzip2")]
-use bzip2::read::BzDecoder;
-use flate2::read::{DeflateDecoder, ZlibDecoder};
+use bzip2::bufread::BzDecoder;
+use flate2::bufread::{DeflateDecoder, ZlibDecoder};
 use log::debug;
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
+use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, PacketHeaderVersion, PacketLength, Tag};
 use crate::util::fill_buffer;
@@ -27,15 +29,61 @@ pub struct CompressedData {
 }
 
 /// Structure to decompress a given reader.
+#[derive(derive_more::Debug)]
 pub enum Decompressor<R> {
     Uncompressed(R),
-    Zip(DeflateDecoder<R>),
-    Zlib(ZlibDecoder<R>),
+    Zip(BufReader<DeflateDecoder<R>>),
+    Zlib(BufReader<ZlibDecoder<R>>),
     #[cfg(feature = "bzip2")]
-    Bzip2(BzDecoder<R>),
+    Bzip2(#[debug("BufReader")] BufReader<BzDecoder<R>>),
 }
 
-impl Read for Decompressor<&[u8]> {
+impl<R: BufRead> Decompressor<R> {
+    pub fn from_reader(mut r: R) -> io::Result<Self> {
+        debug!("reading decompressor");
+        let alg = r.read_u8().map(CompressionAlgorithm::from)?;
+        Self::from_algorithm(alg, r)
+    }
+
+    pub fn from_algorithm(alg: CompressionAlgorithm, r: R) -> io::Result<Self> {
+        debug!("creating decompressor for {:?}", alg);
+        match alg {
+            CompressionAlgorithm::Uncompressed => Ok(Self::Uncompressed(r)),
+            CompressionAlgorithm::ZIP => Ok(Self::Zip(BufReader::new(DeflateDecoder::new(r)))),
+            CompressionAlgorithm::ZLIB => Ok(Self::Zlib(BufReader::new(ZlibDecoder::new(r)))),
+            #[cfg(feature = "bzip2")]
+            CompressionAlgorithm::BZip2 => Ok(Self::Bzip2(BufReader::new(BzDecoder::new(r)))),
+            _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("unsupported compression algorithm {:?}", alg),
+            )),
+        }
+    }
+}
+
+impl<R: BufRead> BufRead for Decompressor<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Decompressor::Uncompressed(ref mut c) => c.fill_buf(),
+            Decompressor::Zip(ref mut c) => c.fill_buf(),
+            Decompressor::Zlib(ref mut c) => c.fill_buf(),
+            #[cfg(feature = "bzip2")]
+            Decompressor::Bzip2(ref mut c) => c.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Decompressor::Uncompressed(ref mut c) => c.consume(amt),
+            Decompressor::Zip(ref mut c) => c.consume(amt),
+            Decompressor::Zlib(ref mut c) => c.consume(amt),
+            #[cfg(feature = "bzip2")]
+            Decompressor::Bzip2(ref mut c) => c.consume(amt),
+        }
+    }
+}
+
+impl<R: BufRead> Read for Decompressor<R> {
     fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
         match self {
             Decompressor::Uncompressed(ref mut c) => c.read(into),
@@ -50,9 +98,8 @@ impl Read for Decompressor<&[u8]> {
 impl CompressedData {
     /// Parses a `CompressedData` packet from the given `Buf`.
     pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
-        ensure!(input.has_remaining(), "input too short");
+        let alg = input.read_u8().map(CompressionAlgorithm::from)?;
 
-        let alg = CompressionAlgorithm::from(input.get_u8());
         Ok(CompressedData {
             packet_header,
             compression_algorithm: alg,
@@ -78,29 +125,9 @@ impl CompressedData {
 
     /// Creates a decompressor.
     pub fn decompress(&self) -> Result<Decompressor<&[u8]>> {
-        match self.compression_algorithm {
-            CompressionAlgorithm::Uncompressed => {
-                Ok(Decompressor::Uncompressed(&self.compressed_data[..]))
-            }
-            CompressionAlgorithm::ZIP => Ok(Decompressor::Zip(DeflateDecoder::new(
-                &self.compressed_data[..],
-            ))),
-            CompressionAlgorithm::ZLIB => Ok(Decompressor::Zlib(ZlibDecoder::new(
-                &self.compressed_data[..],
-            ))),
-            #[cfg(feature = "bzip2")]
-            CompressionAlgorithm::BZip2 => Ok(Decompressor::Bzip2(BzDecoder::new(
-                &self.compressed_data[..],
-            ))),
-            #[cfg(not(feature = "bzip2"))]
-            CompressionAlgorithm::BZip2 => {
-                unsupported_err!("Bzip2 compression is unsupported");
-            }
-            CompressionAlgorithm::Private10 | CompressionAlgorithm::Other(_) => unsupported_err!(
-                "CompressionAlgorithm {} is unsupported",
-                u8::from(self.compression_algorithm)
-            ),
-        }
+        let decompressor =
+            Decompressor::from_algorithm(self.compression_algorithm, &self.compressed_data[..])?;
+        Ok(decompressor)
     }
 
     /// Returns a reference to raw compressed data.

@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -13,6 +13,7 @@ use crate::line_writer::LineBreak;
 use crate::normalize_lines::{normalize_lines, NormalizedReader};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{PacketHeaderVersion, PacketLength, Tag};
 use crate::util::fill_buffer;
@@ -42,6 +43,30 @@ pub struct LiteralDataHeader {
     /// The filename, may contain non utf-8 bytes
     pub file_name: Bytes,
     pub created: DateTime<Utc>,
+}
+
+impl LiteralDataHeader {
+    pub fn from_reader<R: BufRead>(mut r: R) -> io::Result<Self> {
+        // Mode
+        let mode = r.read_u8().map(DataMode::from)?;
+
+        // Name
+        let name_len = r.read_u8()?;
+        let file_name = r.read_take(name_len.into())?;
+
+        // Created
+        let created = r.read_be_u32()?;
+        let created = Utc
+            .timestamp_opt(created.into(), 0)
+            .single()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid created field"))?;
+
+        Ok(Self {
+            mode,
+            file_name: file_name.freeze(),
+            created,
+        })
+    }
 }
 
 #[derive(Debug, Copy, Clone, FromPrimitive, IntoPrimitive, PartialEq, Eq)]

@@ -34,7 +34,7 @@ use crate::util::fill_buffer;
 use crate::util::TeeWriter;
 use crate::Esk;
 
-type DummyReader = std::io::Cursor<Vec<u8>>;
+pub type DummyReader = std::io::Cursor<Vec<u8>>;
 
 /// Constructs message from a given data source.
 ///
