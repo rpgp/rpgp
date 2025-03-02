@@ -343,7 +343,8 @@ fn card_decrypt() {
                 enc_subkey.public_params().clone(),
             )
             .unwrap(),
-        );
+        )
+        .unwrap();
 
         let mut hsm = FakeHsm::with_public_key(as_primary).unwrap();
         hsm.set_fake_decryption_data(input, out);

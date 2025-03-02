@@ -397,18 +397,19 @@ impl Serialize for Message {
             }
         }
     }
+
     fn write_len(&self) -> usize {
         match self {
             Message::Literal(data) => {
-                let len = data.write_len();
+                let len = data.write_len().try_into().expect("construction");
                 let mut sum = PacketLength::fixed_encoding_len(len);
-                sum += len;
+                sum += len as usize;
                 sum
             }
             Message::Compressed(data) => {
-                let len = data.write_len();
+                let len = data.write_len().try_into().expect("construction");
                 let mut sum = PacketLength::fixed_encoding_len(len);
-                sum += len;
+                sum += len as usize;
                 sum
             }
             Message::Signed {
@@ -419,17 +420,17 @@ impl Serialize for Message {
             } => {
                 let mut sum = 0;
                 if let Some(ops) = one_pass_signature {
-                    let len = ops.write_len();
+                    let len = ops.write_len().try_into().expect("signature size");
                     sum += PacketLength::fixed_encoding_len(len);
-                    sum += len;
+                    sum += len as usize;
                 }
                 if let Some(message) = message {
                     sum += message.write_len();
                 }
 
-                let len = signature.write_len();
+                let len = signature.write_len().try_into().expect("signature size");
                 sum += PacketLength::fixed_encoding_len(len);
-                sum += len;
+                sum += len as usize;
 
                 sum
             }
@@ -446,15 +447,15 @@ impl Serialize for Message {
 }
 
 impl Message {
-    pub fn new_literal(file_name: impl Into<Bytes>, data: &str) -> Self {
-        Message::Literal(LiteralData::from_str(file_name, data))
+    pub fn new_literal(file_name: impl Into<Bytes>, data: &str) -> Result<Self> {
+        Ok(Message::Literal(LiteralData::from_str(file_name, data)?))
     }
 
-    pub fn new_literal_bytes(file_name: impl Into<Bytes>, data: &[u8]) -> Self {
-        Message::Literal(LiteralData::from_bytes(
+    pub fn new_literal_bytes(file_name: impl Into<Bytes>, data: &[u8]) -> Result<Self> {
+        Ok(Message::Literal(LiteralData::from_bytes(
             file_name,
             Bytes::from(data.to_vec()),
-        ))
+        )?))
     }
 
     /// Compresses the message.
@@ -492,7 +493,7 @@ impl Message {
 
         Ok(Message::Compressed(CompressedData::from_compressed(
             alg, data,
-        )))
+        )?))
     }
 
     /// Decompresses the data if compressed.
@@ -1157,7 +1158,7 @@ mod tests {
 
     #[test]
     fn test_compression_zlib() {
-        let lit_msg = Message::new_literal("hello-zlib.txt", "hello world");
+        let lit_msg = Message::new_literal("hello-zlib.txt", "hello world").unwrap();
 
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
         let uncompressed_msg = compressed_msg.decompress().unwrap();
@@ -1167,7 +1168,7 @@ mod tests {
 
     #[test]
     fn test_compression_zip() {
-        let lit_msg = Message::new_literal("hello-zip.txt", "hello world");
+        let lit_msg = Message::new_literal("hello-zip.txt", "hello world").unwrap();
 
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZIP).unwrap();
         let uncompressed_msg = compressed_msg.decompress().unwrap();
@@ -1178,7 +1179,7 @@ mod tests {
     #[test]
     #[cfg(feature = "bzip2")]
     fn test_compression_bzip2() {
-        let lit_msg = Message::new_literal("hello-zip.txt", "hello world");
+        let lit_msg = Message::new_literal("hello-zip.txt", "hello world").unwrap();
 
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::BZip2).unwrap();
         let uncompressed_msg = compressed_msg.decompress().unwrap();
@@ -1188,7 +1189,7 @@ mod tests {
 
     #[test]
     fn test_compression_uncompressed() {
-        let lit_msg = Message::new_literal("hello.txt", "hello world");
+        let lit_msg = Message::new_literal("hello.txt", "hello world").unwrap();
 
         let compressed_msg = lit_msg
             .compress(CompressionAlgorithm::Uncompressed)
@@ -1213,7 +1214,7 @@ mod tests {
         let mut rng = rand::rngs::StdRng::seed_from_u64(100);
         let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
         // Encrypt and test that rng is the only source of randomness.
@@ -1248,7 +1249,7 @@ mod tests {
         let mut rng = rand::rngs::StdRng::seed_from_u64(100);
         let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
         // Encrypt and test that rng is the only source of randomness.
@@ -1293,7 +1294,7 @@ mod tests {
         let pkey = skey.secret_subkeys[0].public_key();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
         for _ in 0..1000 {
             let encrypted = compressed_msg
@@ -1321,7 +1322,7 @@ mod tests {
         let pkey = skey.secret_subkeys[0].public_key();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
         for _ in 0..1000 {
@@ -1391,7 +1392,7 @@ mod tests {
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
         let s2k = StringToKey::new_default(&mut rng);
@@ -1418,7 +1419,7 @@ mod tests {
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
         let s2k = StringToKey::new_default(&mut rng);
 
@@ -1549,7 +1550,7 @@ mod tests {
         let pkey = skey.public_key();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+        let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         assert!(lit_msg.verify(&*pkey).is_err()); // Unsigned message shouldn't verify
 
         let signed_msg = lit_msg
@@ -1575,7 +1576,7 @@ mod tests {
         let pkey = skey.public_key();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
         let signed_msg = lit_msg
             .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
             .unwrap();
@@ -1599,7 +1600,7 @@ mod tests {
         let pkey = skey.public_key();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
         let signed_msg = lit_msg
             .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
             .unwrap();
@@ -1628,7 +1629,7 @@ mod tests {
             let pkey = skey.public_key();
             let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-            let lit_msg = Message::new_literal("hello.txt", "hello world\n");
+            let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
             let signed_msg = lit_msg
                 .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
                 .unwrap();
@@ -1654,7 +1655,7 @@ mod tests {
         let pkey = skey.public_key();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
         let signed_msg = lit_msg
             .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
             .unwrap();
@@ -1681,7 +1682,7 @@ mod tests {
         let pkey = skey.public_key();
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]);
+        let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
         let signed_msg = lit_msg
             .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
             .unwrap();

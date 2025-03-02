@@ -157,7 +157,8 @@ impl OnePassSignature {
     ) -> Self {
         let version_specific = OpsVersionSpecific::V3 { key_id };
         let len = WRITE_LEN_OVERHEAD + version_specific.write_len();
-        let packet_header = PacketHeader::new_fixed(Tag::OnePassSignature, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::OnePassSignature, len.try_into().expect("fixed"));
 
         OnePassSignature {
             packet_header,
@@ -186,7 +187,8 @@ impl OnePassSignature {
             fingerprint,
         };
         let len = WRITE_LEN_OVERHEAD + version_specific.write_len();
-        let packet_header = PacketHeader::new_fixed(Tag::OnePassSignature, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::OnePassSignature, len.try_into().expect("fixed"));
 
         OnePassSignature {
             packet_header,

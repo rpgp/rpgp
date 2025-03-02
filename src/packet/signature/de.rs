@@ -591,7 +591,7 @@ fn embedded_sig<B: Buf>(packet_version: PacketHeaderVersion, mut i: B) -> Result
     let header = PacketHeader::from_parts(
         packet_version,
         Tag::Signature,
-        PacketLength::Fixed(signature_bytes.len()),
+        PacketLength::Fixed(signature_bytes.len().try_into()?),
     )?;
     let sig = Signature::from_buf(header, signature_bytes)?;
 

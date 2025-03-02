@@ -37,7 +37,7 @@ impl UserId {
     pub fn from_str(packet_version: PacketHeaderVersion, input: impl AsRef<str>) -> Result<Self> {
         let id: Bytes = input.as_ref().as_bytes().to_vec().into();
 
-        let len = PacketLength::Fixed(id.len());
+        let len = PacketLength::Fixed(id.len().try_into()?);
         let packet_header = PacketHeader::from_parts(packet_version, Tag::UserId, len)?;
 
         Ok(UserId { packet_header, id })
@@ -162,8 +162,8 @@ mod tests {
             public_params,
         )
         .unwrap();
-        let pub_key = packet::PublicKey::from_inner(pub_key);
-        let alice_sec = packet::SecretKey::new(pub_key, secret_params);
+        let pub_key = packet::PublicKey::from_inner(pub_key).unwrap();
+        let alice_sec = packet::SecretKey::new(pub_key, secret_params).unwrap();
 
         let alice_pub = alice_sec.public_key();
 
@@ -188,8 +188,8 @@ mod tests {
             public_params,
         )
         .unwrap();
-        let pub_key = packet::PublicKey::from_inner(pub_key);
-        let signer_sec = packet::SecretKey::new(pub_key, secret_params);
+        let pub_key = packet::PublicKey::from_inner(pub_key).unwrap();
+        let signer_sec = packet::SecretKey::new(pub_key, secret_params).unwrap();
 
         let signer_pub = signer_sec.public_key();
 

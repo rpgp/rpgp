@@ -164,7 +164,8 @@ impl PublicKeyEncryptedSessionKey {
 
         let id = pkey.key_id();
         let len = write_len_v3(&id, &values);
-        let packet_header = PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len.try_into()?);
 
         Ok(PublicKeyEncryptedSessionKey::V3 {
             packet_header,
@@ -194,7 +195,8 @@ impl PublicKeyEncryptedSessionKey {
         let fingerprint = Some(pkey.fingerprint());
 
         let len = write_len_v6(&values, &fingerprint);
-        let packet_header = PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::PublicKeyEncryptedSessionKey, len.try_into()?);
 
         Ok(PublicKeyEncryptedSessionKey::V6 {
             packet_header,
@@ -422,7 +424,7 @@ mod tests {
                     })
                     .prop_map(move |(packet_version, id, values)| {
                         let len = write_len_v3(&id, &values);
-                        let len = PacketLength::Fixed(len);
+                        let len = PacketLength::Fixed(len.try_into().unwrap());
                         let packet_header = PacketHeader::from_parts(
                             packet_version,
                             Tag::PublicKeyEncryptedSessionKey,
@@ -447,7 +449,7 @@ mod tests {
                     })
                     .prop_map(move |(packet_version, fingerprint, values)| {
                         let len = write_len_v6(&values, &fingerprint);
-                        let len = PacketLength::Fixed(len);
+                        let len = PacketLength::Fixed(len.try_into().unwrap());
                         let packet_header = PacketHeader::from_parts(
                             packet_version,
                             Tag::PublicKeyEncryptedSessionKey,

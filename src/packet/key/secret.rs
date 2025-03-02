@@ -38,16 +38,16 @@ pub struct SecretSubkey {
 }
 
 impl SecretKey {
-    pub fn new(details: super::PublicKey, secret_params: SecretParams) -> Self {
+    pub fn new(details: super::PublicKey, secret_params: SecretParams) -> Result<Self> {
         let len =
             crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
-        let packet_header = PacketHeader::new_fixed(Tag::SecretKey, len);
+        let packet_header = PacketHeader::new_fixed(Tag::SecretKey, len.try_into()?);
 
-        Self {
+        Ok(Self {
             packet_header,
             details,
             secret_params,
-        }
+        })
     }
 
     /// Parses a `SecretKey` packet from the given buffer.
@@ -58,7 +58,7 @@ impl SecretKey {
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
 
         let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
-        let details = super::PublicKey::from_inner(inner);
+        let details = super::PublicKey::from_inner(inner)?;
 
         Ok(Self {
             packet_header,
@@ -110,16 +110,16 @@ impl SecretKey {
 }
 
 impl SecretSubkey {
-    pub fn new(details: super::PublicSubkey, secret_params: SecretParams) -> Self {
+    pub fn new(details: super::PublicSubkey, secret_params: SecretParams) -> Result<Self> {
         let len =
             crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
-        let packet_header = PacketHeader::new_fixed(Tag::SecretSubkey, len);
+        let packet_header = PacketHeader::new_fixed(Tag::SecretSubkey, len.try_into()?);
 
-        Self {
+        Ok(Self {
             packet_header,
             details,
             secret_params,
-        }
+        })
     }
 
     /// Parses a `SecretSubkey` packet from the given slice.
@@ -129,7 +129,7 @@ impl SecretSubkey {
         let details = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
         let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
-        let details = super::PublicSubkey::from_inner(inner);
+        let details = super::PublicSubkey::from_inner(inner)?;
 
         Ok(Self {
             packet_header,
@@ -582,8 +582,8 @@ mod tests {
             public_params,
         )
         .unwrap();
-        let pub_key = crate::packet::PublicKey::from_inner(pub_key);
-        let mut alice_sec = SecretKey::new(pub_key, secret_params);
+        let pub_key = crate::packet::PublicKey::from_inner(pub_key).unwrap();
+        let mut alice_sec = SecretKey::new(pub_key, secret_params).unwrap();
 
         alice_sec
             .set_password_with_s2k(

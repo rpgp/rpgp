@@ -258,7 +258,8 @@ impl SymKeyEncryptedSessionKey {
         alg.encrypt_with_iv_regular(&key, &iv, &mut encrypted_key)?;
 
         let len = 2 + s2k.write_len() + encrypted_key.len();
-        let packet_header = PacketHeader::new_fixed(Tag::SymKeyEncryptedSessionKey, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::SymKeyEncryptedSessionKey, len.try_into()?);
 
         Ok(SymKeyEncryptedSessionKey::V4 {
             packet_header,
@@ -332,7 +333,8 @@ impl SymKeyEncryptedSessionKey {
         };
         let len = 3 + s2k.write_len() + 1 + aead.iv().len() + 1 + encrypted_key.len();
 
-        let packet_header = PacketHeader::new_fixed(Tag::SymKeyEncryptedSessionKey, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::SymKeyEncryptedSessionKey, len.try_into()?);
 
         Ok(SymKeyEncryptedSessionKey::V6 {
             packet_header,

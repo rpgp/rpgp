@@ -464,14 +464,15 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         match self.source {
             Source::Bytes { name, bytes } => {
                 debug!("sourcing bytes {:?}: {} bytes", name, bytes.len());
-                use bytes::Buf;
-                let len = bytes.len().try_into()?;
+                // If the size is larger than u32::MAX switch to None, as
+                // fixed packets can only be at most u32::MAX size large
+                let len = bytes.len().try_into().ok();
                 let source = bytes.reader();
                 to_writer_inner(
                     rng,
                     name,
                     source,
-                    Some(len),
+                    len,
                     sign_typ,
                     self.signing,
                     self.data_mode,
@@ -484,22 +485,24 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
             Source::File(ref path) => {
                 let in_file = std::fs::File::open(path)?;
                 let in_meta = in_file.metadata()?;
-                let in_file_size: u32 = in_meta.len().try_into()?;
 
                 let Some(in_file_name) = path.file_name() else {
                     bail!("{}: is not a valid input file", path.display());
                 };
                 let file_name: Bytes = in_file_name.as_encoded_bytes().to_vec().into();
 
-                debug!("sourcing file {:?}: {} bytes", file_name, in_file_size);
+                debug!("sourcing file {:?}: {} bytes", file_name, in_meta.len());
 
                 let in_file = BufReader::new(in_file);
+                // If the size is larger than u32::MAX switch to None, as
+                // fixed packets can only be at most u32::MAX size large
+                let in_file_size = in_meta.len().try_into().ok();
 
                 to_writer_inner(
                     rng,
                     file_name,
                     in_file,
-                    Some(in_file_size),
+                    in_file_size,
                     sign_typ,
                     self.signing,
                     self.data_mode,
@@ -863,18 +866,25 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
 
                     if read < first_chunk_size {
                         // finished reading, all data fits into a single chunk
-                        (PacketLength::Fixed(read + config_len), &buffer[..read])
+                        let size = (read + config_len).try_into()?;
+                        (PacketLength::Fixed(size), &buffer[..read])
                     } else {
-                        (PacketLength::Partial(chunk_size as u32), &buffer[..read])
+                        (
+                            PacketLength::Partial(chunk_size.try_into()?),
+                            &buffer[..read],
+                        )
                     }
                 } else {
                     let read = fill_buffer(&mut encrypted, &mut buffer, Some(chunk_size))?;
 
                     if read < chunk_size {
                         // last chunk
-                        (PacketLength::Fixed(read), &buffer[..read])
+                        (PacketLength::Fixed(read.try_into()?), &buffer[..read])
                     } else {
-                        (PacketLength::Partial(chunk_size as u32), &buffer[..read])
+                        (
+                            PacketLength::Partial(chunk_size.try_into()?),
+                            &buffer[..read],
+                        )
                     }
                 };
 
@@ -906,7 +916,7 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
             let packet_header = PacketHeader::from_parts(
                 PacketHeaderVersion::New,
                 tag,
-                PacketLength::Fixed(packet_len),
+                PacketLength::Fixed(packet_len.try_into()?),
             )?;
             packet_header.to_writer(&mut out)?;
             config.to_writer(&mut out)?;

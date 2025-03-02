@@ -198,7 +198,7 @@ impl UserAttribute {
         let subpacket_len = SubpacketLength::encode(packet_len.try_into()?);
 
         let len = packet_len + subpacket_len.write_len();
-        let packet_header = PacketHeader::new_fixed(Tag::UserAttribute, len);
+        let packet_header = PacketHeader::new_fixed(Tag::UserAttribute, len.try_into()?);
 
         Ok(Self::Image {
             packet_header,
@@ -393,7 +393,7 @@ mod tests {
             let subpacket_len = SubpacketLength::encode(packet_len.try_into().unwrap());
             let len = packet_len + subpacket_len.write_len();
 
-            let packet_header = PacketHeader::new_fixed(Tag::UserAttribute, len);
+            let packet_header = PacketHeader::new_fixed(Tag::UserAttribute, len as u32);
 
             UserAttribute::Unknown {
                 packet_header,

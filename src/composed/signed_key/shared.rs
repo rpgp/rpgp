@@ -210,15 +210,15 @@ impl Serialize for SignedKeyDetails {
     fn write_len(&self) -> usize {
         let mut sum = 0;
         for sig in &self.revocation_signatures {
-            let len = sig.write_len();
+            let len = sig.write_len().try_into().expect("signature size");
             sum += PacketLength::fixed_encoding_len(len);
-            sum += len;
+            sum += len as usize;
         }
 
         for sig in &self.direct_signatures {
-            let len = sig.write_len();
+            let len = sig.write_len().try_into().expect("signature size");
             sum += PacketLength::fixed_encoding_len(len);
-            sum += len;
+            sum += len as usize;
         }
 
         for user in &self.users {

@@ -66,7 +66,7 @@ fn bench_message(c: &mut Criterion) {
                 rng.fill_bytes(&mut bytes);
 
                 let s2k = StringToKey::new_default(&mut rng);
-                let message = Message::new_literal_bytes("test", &bytes);
+                let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
                 b.iter(|| {
                     let res = message
@@ -96,6 +96,7 @@ fn bench_message(c: &mut Criterion) {
 
                 let s2k = StringToKey::new_default(&mut rng);
                 let message = Message::new_literal_bytes("test", &bytes)
+                    .unwrap()
                     .encrypt_with_password_seipdv1(
                         &mut rng,
                         s2k,
@@ -162,7 +163,7 @@ fn bench_message(c: &mut Criterion) {
                     let key = build_key(kt1.clone(), kt2.clone());
                     let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
 
-                    let message = Message::new_literal_bytes("test", &bytes);
+                    let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
                     b.iter(|| {
                         let res = message
@@ -196,6 +197,7 @@ fn bench_message(c: &mut Criterion) {
                     let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes)
+                        .unwrap()
                         .encrypt_to_keys_seipdv1(
                             &mut rng,
                             sym,

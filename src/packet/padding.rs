@@ -45,7 +45,7 @@ impl Padding {
         let mut data = vec![0u8; size];
         rng.fill_bytes(&mut data);
 
-        let len = PacketLength::Fixed(data.len());
+        let len = PacketLength::Fixed(data.len().try_into()?);
         let packet_header = PacketHeader::from_parts(packet_version, Tag::Padding, len)?;
 
         Ok(Padding {
@@ -93,7 +93,7 @@ mod tests {
         let PacketLength::Fixed(len) = header.packet_length() else {
             panic!("invalid parse result");
         };
-        assert_eq!(to_parse.remaining(), len);
+        assert_eq!(to_parse.remaining(), len as usize);
         let rest = to_parse.rest();
         let full_packet = Packet::from_bytes(header, rest).expect("body parse");
 

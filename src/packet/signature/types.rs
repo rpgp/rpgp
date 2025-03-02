@@ -184,7 +184,7 @@ impl Signature {
             }
             SignatureVersion::Other(version) => unsupported_err!("signature version {}", version),
         };
-        let packet_header = PacketHeader::new_fixed(Tag::Signature, len);
+        let packet_header = PacketHeader::new_fixed(Tag::Signature, len.try_into()?);
 
         Ok(Signature {
             packet_header,

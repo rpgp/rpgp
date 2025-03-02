@@ -226,9 +226,9 @@ impl Serialize for SignedPublicKey {
     }
 
     fn write_len(&self) -> usize {
-        let key_len = self.primary_key.write_len();
+        let key_len = self.primary_key.write_len().try_into().expect("key size");
         let mut sum = PacketLength::fixed_encoding_len(key_len);
-        sum += key_len;
+        sum += key_len as usize;
         sum += self.details.write_len();
         sum += self.public_subkeys.write_len();
         sum
@@ -345,13 +345,13 @@ impl Serialize for SignedPublicSubKey {
     }
 
     fn write_len(&self) -> usize {
-        let key_len = self.key.write_len();
+        let key_len = self.key.write_len().try_into().expect("key size");
         let mut sum = PacketLength::fixed_encoding_len(key_len);
-        sum += key_len;
+        sum += key_len as usize;
         for sig in &self.signatures {
-            let sig_len = sig.write_len();
+            let sig_len = sig.write_len().try_into().expect("signature size");
             sum += PacketLength::fixed_encoding_len(sig_len);
-            sum += sig_len;
+            sum += sig_len as usize;
         }
         sum
     }

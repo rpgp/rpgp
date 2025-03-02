@@ -101,7 +101,7 @@ fn rfc9580_seipdv1_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(MSG.as_bytes()));
+        let lit = LiteralData::from_bytes("", Bytes::from_static(MSG.as_bytes())).unwrap();
         let msg = Message::Literal(lit);
 
         // SEIPDv1 encrypt/decrypt roundtrip
@@ -129,7 +129,7 @@ fn rfc9580_seipdv2_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("", MSG.as_bytes().into());
+        let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
         let msg = Message::Literal(lit);
 
         // SEIPDv2 encrypt/decrypt roundtrip
@@ -178,7 +178,7 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         let spk = SignedPublicKey::from(ssk.clone());
 
-        let lit = LiteralData::from_bytes("", MSG.as_bytes().into());
+        let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
         let msg = Message::Literal(lit);
 
         // roundtrip sign+verify inline msg

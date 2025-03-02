@@ -11,14 +11,14 @@ use crate::parsing::BufParsing;
 /// Represents the packet length.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PacketLength {
-    Fixed(usize), // TODO: make u32
+    Fixed(u32),
     Indeterminate,
     Partial(u32),
 }
 
 impl PacketLength {
     /// Returns how many bytes encoding the given length as fixed encoding would need.
-    pub fn fixed_encoding_len(len: usize) -> usize {
+    pub fn fixed_encoding_len(len: u32) -> usize {
         if len < 192 {
             1
         } else if len < 8384 {
@@ -36,7 +36,7 @@ impl PacketLength {
             // Two-Octet Lengths
             192..=223 => {
                 let a = i.read_u8()?;
-                let l = ((olen as usize - 192) << 8) + 192 + a as usize;
+                let l = ((olen as u32 - 192) << 8) + 192 + a as u32;
                 PacketLength::Fixed(l)
             }
             // Partial Body Lengths
@@ -44,18 +44,18 @@ impl PacketLength {
             // Five-Octet Lengths
             255 => {
                 let len = i.read_be_u32()?;
-                PacketLength::Fixed(len.try_into()?)
+                PacketLength::Fixed(len)
             }
         };
         Ok(len)
     }
 
     /// Returns the length in bytes, if it is specified.
-    pub fn maybe_len(&self) -> Option<usize> {
+    pub fn maybe_len(&self) -> Option<u32> {
         match self {
             Self::Fixed(len) => Some(*len),
             Self::Indeterminate => None,
-            Self::Partial(len) => Some(*len as usize),
+            Self::Partial(len) => Some(*len),
         }
     }
 
@@ -69,7 +69,7 @@ impl PacketLength {
                     writer.write_u8(((len - 192) & 0xFF) as u8)?;
                 } else {
                     writer.write_u8(255)?;
-                    writer.write_u32::<BigEndian>(*len as u32)?;
+                    writer.write_u32::<BigEndian>(*len)?;
                 }
             }
             PacketLength::Indeterminate => {
@@ -85,12 +85,6 @@ impl PacketLength {
             }
         }
         Ok(())
-    }
-}
-
-impl From<usize> for PacketLength {
-    fn from(val: usize) -> PacketLength {
-        PacketLength::Fixed(val)
     }
 }
 
@@ -333,7 +327,7 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             prop_oneof![
-                (1..=u32::MAX).prop_map(|l| PacketLength::Fixed(l as usize)),
+                (1..=u32::MAX).prop_map(PacketLength::Fixed),
                 Just(PacketLength::Indeterminate),
                 (1u32..=30).prop_map(|l: u32| PacketLength::Partial(2u32.pow(l))),
             ]

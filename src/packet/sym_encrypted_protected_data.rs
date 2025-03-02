@@ -128,7 +128,8 @@ impl SymEncryptedProtectedData {
         let data: Bytes = alg.encrypt_protected(rng, key, plaintext)?.into();
         let config = Config::V1;
         let len = config.write_len() + data.len();
-        let packet_header = PacketHeader::new_fixed(Tag::SymEncryptedProtectedData, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::SymEncryptedProtectedData, len.try_into()?);
 
         Ok(SymEncryptedProtectedData {
             packet_header,
@@ -170,7 +171,8 @@ impl SymEncryptedProtectedData {
         };
         let data: Bytes = out.into();
         let len = config.write_len() + data.len();
-        let packet_header = PacketHeader::new_fixed(Tag::SymEncryptedProtectedData, len);
+        let packet_header =
+            PacketHeader::new_fixed(Tag::SymEncryptedProtectedData, len.try_into()?);
 
         Ok(SymEncryptedProtectedData {
             packet_header,

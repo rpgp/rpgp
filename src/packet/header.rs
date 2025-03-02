@@ -49,7 +49,7 @@ impl PacketHeader {
                     // Two-Octet Lengths
                     1 => PacketLength::Fixed(i.read_be_u16()?.into()),
                     // Four-Octet Lengths
-                    2 => PacketLength::Fixed(i.read_be_u32()?.try_into()?),
+                    2 => PacketLength::Fixed(i.read_be_u32()?),
                     3 => PacketLength::Indeterminate,
                     _ => unreachable!("old packet length type is only 2 bits"),
                 };
@@ -138,7 +138,7 @@ impl PacketHeader {
     }
 
     /// Creates a `New` style packet header.
-    pub fn new_fixed(tag: Tag, length: usize) -> Self {
+    pub fn new_fixed(tag: Tag, length: u32) -> Self {
         let header = NewPacketHeaderBuilder::new().with_tag(tag.into()).build();
         PacketHeader::New {
             header,
@@ -167,7 +167,7 @@ impl Serialize for PacketHeader {
                         writer.write_u16::<BigEndian>(*len as u16)?;
                     } else {
                         // four octets
-                        writer.write_u32::<BigEndian>(*len as u32)?;
+                        writer.write_u32::<BigEndian>(*len)?;
                     }
                 }
                 PacketLength::Indeterminate => {
@@ -262,7 +262,7 @@ pub struct NewPacketHeader {
     tag: u8,
 }
 
-fn old_fixed_type(len: usize) -> u8 {
+fn old_fixed_type(len: u32) -> u8 {
     if len < 256 {
         0
     } else if len < 65536 {
@@ -370,7 +370,7 @@ mod tests {
         }
 
         #[test]
-        fn packet_header_from_parts(version: PacketHeaderVersion, tag: Tag, len in 1usize..100000) {
+        fn packet_header_from_parts(version: PacketHeaderVersion, tag: Tag, len in 1u32..100000) {
             let maybe_header = PacketHeader::from_parts(version, tag, PacketLength::Fixed(len));
             if u8::from(tag) > 16 && version == PacketHeaderVersion::Old {
                 prop_assert!(maybe_header.is_err());

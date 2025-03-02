@@ -396,7 +396,7 @@ k0mXubZvyl4GBg==
 
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"));
+        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
         let msg = Message::Literal(lit);
 
         let pri = ssk.primary_key;
@@ -444,7 +444,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"));
+        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let msg = Message::Literal(lit).sign(
@@ -464,7 +464,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
     fn secret_key_protection_v6() -> Result<()> {
         let _ = pretty_env_logger::try_init();
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"));
+        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;

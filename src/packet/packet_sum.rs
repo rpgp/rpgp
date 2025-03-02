@@ -125,7 +125,7 @@ pub trait PacketTrait: Serialize {
         // to match the encoding we generate.
         match original_header.packet_length().maybe_len() {
             Some(len) => {
-                let write_len = self.write_len();
+                let write_len = self.write_len().try_into()?;
                 let header = PacketHeader::from_parts(
                     original_header.version(),
                     original_header.tag(),

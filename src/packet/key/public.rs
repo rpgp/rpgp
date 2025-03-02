@@ -31,13 +31,13 @@ pub struct PublicSubkey {
 }
 
 impl PublicKey {
-    pub fn from_inner(inner: PubKeyInner) -> Self {
+    pub fn from_inner(inner: PubKeyInner) -> Result<Self> {
         let len = inner.write_len();
-        let packet_header = PacketHeader::new_fixed(Tag::PublicKey, len);
-        Self {
+        let packet_header = PacketHeader::new_fixed(Tag::PublicKey, len.try_into()?);
+        Ok(Self {
             packet_header,
             inner,
-        }
+        })
     }
 
     /// Create a new `PublicKey` packet from underlying parameters.
@@ -54,7 +54,7 @@ impl PublicKey {
         if let Some(len) = packet_header.packet_length().maybe_len() {
             ensure_eq!(
                 inner.write_len(),
-                len,
+                len as usize,
                 "PublicKey: inconsisteng packet length"
             );
         }
@@ -101,13 +101,14 @@ impl PublicKey {
 }
 
 impl PublicSubkey {
-    pub fn from_inner(inner: PubKeyInner) -> Self {
+    pub fn from_inner(inner: PubKeyInner) -> Result<Self> {
         let len = inner.write_len();
-        let packet_header = PacketHeader::new_fixed(Tag::PublicSubkey, len);
-        Self {
+        let packet_header = PacketHeader::new_fixed(Tag::PublicSubkey, len.try_into()?);
+
+        Ok(Self {
             packet_header,
             inner,
-        }
+        })
     }
     /// Create a new `PublicSubkey` packet from underlying parameters.
     pub fn new_with_header(
@@ -123,7 +124,7 @@ impl PublicSubkey {
         if let Some(len) = packet_header.packet_length().maybe_len() {
             ensure_eq!(
                 inner.write_len(),
-                len,
+                len as usize,
                 "PublicSubkey: inconsistent packet length"
             );
         }
@@ -848,7 +849,9 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            any::<PubKeyInner>().prop_map(PublicKey::from_inner).boxed()
+            any::<PubKeyInner>()
+                .prop_map(|k| PublicKey::from_inner(k).unwrap())
+                .boxed()
         }
     }
 
@@ -858,7 +861,7 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             any::<PubKeyInner>()
-                .prop_map(PublicSubkey::from_inner)
+                .prop_map(|k| PublicSubkey::from_inner(k).unwrap())
                 .boxed()
         }
     }

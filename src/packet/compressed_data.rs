@@ -61,14 +61,19 @@ impl CompressedData {
     }
 
     /// Create the structure from the raw compressed data.
-    pub(crate) fn from_compressed(alg: CompressionAlgorithm, data: impl Into<Bytes>) -> Self {
+    pub(crate) fn from_compressed(
+        alg: CompressionAlgorithm,
+        data: impl Into<Bytes>,
+    ) -> Result<Self> {
         let compressed_data = data.into();
-        let packet_header = PacketHeader::new_fixed(Tag::CompressedData, 1 + compressed_data.len());
-        CompressedData {
+        let len = 1 + compressed_data.len();
+        let packet_header = PacketHeader::new_fixed(Tag::CompressedData, len.try_into()?);
+
+        Ok(CompressedData {
             packet_header,
             compression_algorithm: alg,
             compressed_data,
-        }
+        })
     }
 
     /// Creates a decompressor.
@@ -230,7 +235,7 @@ pub(crate) struct CompressedDataFixedGenerator<R: io::Read> {
 impl<R: io::Read> CompressedDataFixedGenerator<R> {
     pub(crate) fn new(source: Compressor<R>, source_len: u32) -> Result<Self> {
         let len = source_len + 1;
-        let packet_header = PacketHeader::new_fixed(Tag::CompressedData, len as usize);
+        let packet_header = PacketHeader::new_fixed(Tag::CompressedData, len);
         let mut serialized_header = Vec::new();
         packet_header.to_writer(&mut serialized_header)?;
         serialized_header.write_u8(source.algorithm().into())?;
@@ -328,7 +333,10 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
                 // all data fits into a single packet
                 self.is_done = true;
                 self.is_fixed_emitted = true;
-                PacketLength::Fixed(buf_size + 1)
+                let len = (buf_size + 1)
+                    .try_into()
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "too large"))?;
+                PacketLength::Fixed(len)
             } else if buf_size == chunk_size {
                 // partial
                 PacketLength::Partial(self.chunk_size)
@@ -336,7 +344,11 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
                 // final packet, this can be length 0
                 self.is_done = true;
                 self.is_fixed_emitted = true;
-                PacketLength::Fixed(data.len())
+                let len = data
+                    .len()
+                    .try_into()
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "too large"))?;
+                PacketLength::Fixed(len)
             };
 
             let mut writer = std::mem::take(&mut self.current_packet).writer();
@@ -479,7 +491,7 @@ mod tests {
                 packet_back.packet_header().packet_length(),
                 PacketLength::Fixed(_)
             ) {
-                let packet = CompressedData::from_compressed(alg, compressed.clone());
+                let packet = CompressedData::from_compressed(alg, compressed.clone()).unwrap();
                 let mut packet_out = Vec::new();
                 packet.to_writer_with_header(&mut packet_out).unwrap();
 

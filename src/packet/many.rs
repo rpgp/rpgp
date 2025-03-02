@@ -58,7 +58,7 @@ impl Iterator for PacketParser {
                 }
             }
             PacketLength::Fixed(len) => {
-                let packet_bytes = match self.reader.read_take(len) {
+                let packet_bytes = match self.reader.read_take(len as usize) {
                     Ok(b) => b,
                     Err(err) => return Some(Err(err.into())),
                 };
@@ -127,11 +127,11 @@ impl Iterator for PacketParser {
                             body.push(self.reader.copy_to_bytes(len));
                         }
                         Ok(PacketLength::Fixed(len)) => {
-                            if self.reader.remaining() < len {
+                            if self.reader.remaining() < len as usize {
                                 self.is_done = true;
                                 return Some(Err(format_err!("invalid packet length detected: need {} bytes, only have {} bytes", len, self.reader.remaining())));
                             }
-                            body.push(self.reader.copy_to_bytes(len));
+                            body.push(self.reader.copy_to_bytes(len as usize));
                             break;
                         }
                         Ok(PacketLength::Indeterminate) => {

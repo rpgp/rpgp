@@ -62,7 +62,9 @@ pub enum DataMode {
 
 impl LiteralData {
     /// Creates a literal data packet from the given string. Normalizes line endings.
-    pub fn from_str(file_name: impl Into<Bytes>, raw_data: &str) -> Self {
+    ///
+    /// The data length combined with the header information must not be larger than `u32::MAX`.
+    pub fn from_str(file_name: impl Into<Bytes>, raw_data: &str) -> Result<Self> {
         let data: Bytes = normalize_lines(raw_data, LineBreak::Crlf)
             .to_string()
             .into();
@@ -72,30 +74,32 @@ impl LiteralData {
             created: Utc::now().trunc_subsecs(0),
         };
         let len = header.write_len() + data.len();
-        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len);
+        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len.try_into()?);
 
-        LiteralData {
+        Ok(LiteralData {
             packet_header,
             header,
             data,
-        }
+        })
     }
 
     /// Creates a literal data packet from the given bytes.
-    pub fn from_bytes(file_name: impl Into<Bytes>, data: Bytes) -> Self {
+    ///
+    /// The data length combined with the header information must not be larger than `u32::MAX`.
+    pub fn from_bytes(file_name: impl Into<Bytes>, data: Bytes) -> Result<Self> {
         let header = LiteralDataHeader {
             mode: DataMode::Binary,
             file_name: file_name.into(),
             created: Utc::now().trunc_subsecs(0),
         };
         let len = header.write_len() + data.len();
-        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len);
+        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len.try_into()?);
 
-        LiteralData {
+        Ok(LiteralData {
             packet_header,
             header,
             data,
-        }
+        })
     }
 
     /// Parses a `LiteralData` packet from the given buf.
@@ -316,7 +320,7 @@ pub(crate) struct LiteralDataFixedGenerator<R: io::Read> {
 impl<R: io::Read> LiteralDataFixedGenerator<R> {
     pub(crate) fn new(header: LiteralDataHeader, source: R, source_len: u32) -> Result<Self> {
         let len = source_len + u32::try_from(header.write_len())?;
-        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len as usize);
+        let packet_header = PacketHeader::new_fixed(Tag::LiteralData, len);
         let mut serialized_header = Vec::new();
         packet_header.to_writer(&mut serialized_header)?;
         header.to_writer(&mut serialized_header)?;
@@ -428,7 +432,10 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 // all data fits into a single packet
                 self.is_done = true;
                 self.is_fixed_emitted = true;
-                PacketLength::Fixed(buf_size + self.header.write_len())
+                let len = (buf_size + self.header.write_len())
+                    .try_into()
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "too large"))?;
+                PacketLength::Fixed(len)
             } else if buf_size == chunk_size {
                 // partial
                 PacketLength::Partial(self.chunk_size)
@@ -436,7 +443,11 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 // final packet, this can be length 0
                 self.is_done = true;
                 self.is_fixed_emitted = true;
-                PacketLength::Fixed(data.len())
+                let len = data
+                    .len()
+                    .try_into()
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "too large"))?;
+                PacketLength::Fixed(len)
             };
 
             let mut writer = std::mem::take(&mut self.current_packet).writer();
@@ -491,7 +502,7 @@ mod tests {
     #[test]
     fn test_utf8_literal() {
         let slogan = "一门赋予每个人构建可靠且高效软件能力的语言。";
-        let literal = LiteralData::from_str("", slogan);
+        let literal = LiteralData::from_str("", slogan).unwrap();
         assert!(std::str::from_utf8(&literal.data).unwrap() == slogan);
     }
 
@@ -524,7 +535,7 @@ mod tests {
         let mut buf = vec![0u8; file_size];
         rng.fill(&mut buf[..]);
 
-        let packet = LiteralData::from_bytes("hello", buf.to_vec().into());
+        let packet = LiteralData::from_bytes("hello", buf.to_vec().into()).unwrap();
 
         let mut generator =
             LiteralDataFixedGenerator::new(packet.header.clone(), &buf[..], file_size as _)
