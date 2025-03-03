@@ -423,7 +423,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     ///
     /// Defaults to [`DEFAULT_CHUNK_SIZE`].
     pub fn chunk_size(mut self, size: u32) -> Result<Self> {
-        ensure!(size >= 512, "chunk size must be larger than 512");
+        ensure!(size >= 512, "chunk size must be at least 512");
         ensure!(size.is_power_of_two(), "chunk size must be a power of two");
         self.chunk_size = size;
         Ok(self)
