@@ -1218,7 +1218,7 @@ mod tests {
         let mut rng = ChaCha20Rng::seed_from_u64(1);
 
         // Generate a file
-        let file_size = 128; // 1024 * 14 + 8;
+        let file_size = 1024 * 512;
         let mut buf = vec![0u8; file_size];
         rng.fill(&mut buf[..]);
 
