@@ -1,21 +1,23 @@
-use bytes::{Buf, Bytes};
+use std::io::BufRead;
+use std::marker::PhantomData;
+
 use bytes_utils::SegmentedBuf;
 use log::debug;
 
 use crate::errors::{Error, Result};
 use crate::packet::{Packet, PacketHeader};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::types::{PacketLength, Tag};
 
-pub struct PacketParser {
+pub struct PacketParser<R: BufRead> {
     /// The reader that gets advanced through the original source
-    reader: Bytes,
+    reader: R,
     /// Are we done?
     is_done: bool,
 }
 
-impl PacketParser {
-    pub fn new(source: Bytes) -> Self {
+impl<R: BufRead> PacketParser<R> {
+    pub fn new(source: R) -> Self {
         PacketParser {
             reader: source,
             is_done: false,
@@ -23,7 +25,7 @@ impl PacketParser {
     }
 }
 
-impl Iterator for PacketParser {
+impl<R: BufRead> Iterator for PacketParser<R> {
     type Item = Result<Packet>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -31,16 +33,11 @@ impl Iterator for PacketParser {
             return None;
         }
 
-        if !self.reader.has_remaining() {
-            self.is_done = true;
-            return None;
-        }
-
-        let header = match PacketHeader::from_buf(&mut self.reader) {
+        let header = match PacketHeader::from_reader(&mut self.reader) {
             Ok(header) => header,
             Err(err) => {
                 self.is_done = true;
-                return Some(Err(err));
+                return Some(Err(err.into()));
             }
         };
 
@@ -49,7 +46,7 @@ impl Iterator for PacketParser {
         match header.packet_length() {
             PacketLength::Indeterminate => {
                 let body = self.reader.rest();
-                match Packet::from_bytes(header, body) {
+                match Packet::from_reader(header, body) {
                     Ok(packet) => Some(Ok(packet)),
                     Err(err) => {
                         self.is_done = true;
@@ -58,11 +55,8 @@ impl Iterator for PacketParser {
                 }
             }
             PacketLength::Fixed(len) => {
-                let packet_bytes = match self.reader.read_take(len as usize) {
-                    Ok(b) => b,
-                    Err(err) => return Some(Err(err.into())),
-                };
-                let res = Packet::from_bytes(header, packet_bytes);
+                let packet_bytes = self.reader.read_take(len as _);
+                let res = Packet::from_reader(header, packet_bytes);
                 match res {
                     Ok(packet) => Some(Ok(packet)),
                     Err(Error::PacketParsing { source }) if source.is_incomplete() => {
@@ -103,7 +97,7 @@ impl Iterator for PacketParser {
                 }
 
                 let mut body = SegmentedBuf::new();
-                let first = match self.reader.read_take(len as usize) {
+                let first = match self.reader.read_take_fixed(len as usize) {
                     Ok(bytes) => bytes,
                     Err(err) => {
                         self.is_done = true;
@@ -114,25 +108,18 @@ impl Iterator for PacketParser {
 
                 // Read n partials + 1 final fixed
                 loop {
-                    let len = PacketLength::from_buf(&mut self.reader);
+                    let len = PacketLength::from_reader(&mut self.reader);
                     debug!("partials: found packet_length: {:?}", len);
                     match len {
                         Ok(PacketLength::Partial(len)) => {
                             let len = len as usize;
-                            if self.reader.remaining() < len {
-                                self.is_done = true;
-                                return Some(Err(format_err!("invalid packet length detected: need {} bytes, only have {} bytes", len, self.reader.remaining())));
-                            }
-
-                            body.push(self.reader.copy_to_bytes(len));
+                            todo!();
+                            // body.push(self.reader.copy_to_bytes(len));
                         }
                         Ok(PacketLength::Fixed(len)) => {
-                            if self.reader.remaining() < len as usize {
-                                self.is_done = true;
-                                return Some(Err(format_err!("invalid packet length detected: need {} bytes, only have {} bytes", len, self.reader.remaining())));
-                            }
-                            body.push(self.reader.copy_to_bytes(len as usize));
-                            break;
+                            todo!();
+                            // body.push(self.reader.copy_to_bytes(len as usize));
+                            // break;
                         }
                         Ok(PacketLength::Indeterminate) => {
                             self.is_done = true;
@@ -140,7 +127,7 @@ impl Iterator for PacketParser {
                         }
                         Err(err) => {
                             self.is_done = true;
-                            return Some(Err(err));
+                            return Some(Err(err.into()));
                         }
                     }
                 }
@@ -232,11 +219,10 @@ mod tests {
 
         let path = format!("./tests/tests/sks-dump/{dump}.pgp");
         let p = Path::new(&path);
-        let file: Bytes = std::fs::read(p).unwrap().into();
-
+        let mut file = BufReader::new(std::fs::File::open(p).unwrap());
         let mut bytes = File::open(p).unwrap();
 
-        let packets = PacketParser::new(file);
+        let packets = PacketParser::new(&mut file);
 
         for (i, packet) in packets.take(2000).enumerate() {
             // packets we need to skip, because we can not roundtrip them for some reason
@@ -267,7 +253,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         let p = Path::new("./tests/tests/sks-dump/0000.pgp");
-        let file: Bytes = std::fs::read(p).unwrap().into();
+        let file = BufReader::new(std::fs::File::open(p).unwrap());
 
         // list of expected tags
         // this file is built by
@@ -316,8 +302,8 @@ mod tests {
     fn incomplete_packet_parser() {
         let _ = pretty_env_logger::try_init();
 
-        let bytes = Bytes::from_static(&[0x97]);
-        let parser = PacketParser::new(bytes);
+        let bytes = [0x97];
+        let parser = PacketParser::new(&bytes[..]);
         let mut packets = parser.filter_map(|p| {
             // for now we are skipping any packets that we failed to parse
             match p {

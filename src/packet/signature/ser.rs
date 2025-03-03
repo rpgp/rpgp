@@ -441,18 +441,16 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use std::fs::File;
-    use std::io::Read;
+    use std::io::{BufReader, Read};
     use std::path::Path;
-
-    use bytes::Bytes;
 
     use super::*;
     use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {
-        let f: Bytes = std::fs::read(Path::new("./tests/openpgp/samplemsgs").join(name))
-            .unwrap()
-            .into();
+        let f = BufReader::new(
+            std::fs::File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap(),
+        );
 
         let packets: Vec<Packet> = PacketParser::new(f).collect::<Result<_>>().unwrap();
         let mut serialized = Vec::new();

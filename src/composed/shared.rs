@@ -1,9 +1,7 @@
 use std::io::{BufRead, Read};
-#[cfg(feature = "mmap")]
 use std::path::Path;
 
 use buffer_redux::BufReader;
-use bytes::Bytes;
 use log::{debug, warn};
 
 use crate::armor::{self, BlockType};
@@ -12,7 +10,7 @@ use crate::packet::{Packet, PacketParser};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
-    fn from_bytes(bytes: Bytes) -> Result<Self> {
+    fn from_bytes<R: BufRead>(bytes: R) -> Result<Self> {
         let mut el = Self::from_bytes_many(bytes)?;
         el.next()
             .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
@@ -90,11 +88,8 @@ pub trait Deserializable: Sized {
                 if !Self::matches_block_type(typ) {
                     bail!("unexpected block type: {}", typ);
                 }
-                // TODO: limited read to 1GiB
-                let mut bytes = Vec::new();
-                dearmor.read_to_end(&mut bytes)?;
 
-                Ok((Self::from_bytes_many(bytes.into())?, headers))
+                Ok((Self::from_bytes_many(BufReader::new(dearmor))?, headers))
             }
             BlockType::PublicKeyPKCS1(_)
             | BlockType::PublicKeyPKCS8
@@ -108,7 +103,9 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a list of compositions in raw byte format.
-    fn from_bytes_many(bytes: Bytes) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
+    fn from_bytes_many<'a, R: BufRead + 'a>(
+        bytes: R,
+    ) -> Result<Box<dyn Iterator<Item = Result<Self>> + 'a>> {
         let packets = PacketParser::new(bytes)
             .filter_map(crate::composed::shared::filter_parsed_packet_results)
             .peekable();
@@ -117,7 +114,6 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a single binary encoded composition, using mmap.
-    #[cfg(feature = "mmap")]
     fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut el = Self::from_file_many(path)?;
         el.next()
@@ -125,12 +121,9 @@ pub trait Deserializable: Sized {
     }
 
     /// Ready binary packets from the given file, using mmap.
-    #[cfg(feature = "mmap")]
     fn from_file_many<P: AsRef<Path>>(path: P) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
         let file = std::fs::File::open(path)?;
-        let map = unsafe { memmap2::Mmap::map(&file)? };
-        let bytes = Bytes::from_owner(map);
-        Self::from_bytes_many(bytes)
+        Self::from_bytes_many(BufReader::new(file))
     }
 
     /// Turn a list of packets into a usable representation.
@@ -158,10 +151,11 @@ pub trait Deserializable: Sized {
             let (keys, headers) = Self::from_armor_single(input)?;
             Ok((keys, Some(headers)))
         } else {
-            // TODO: limited read to 1GiB
-            let mut bytes = Vec::new();
-            input.read_to_end(&mut bytes)?;
-            Ok((Self::from_bytes(bytes.into())?, None))
+            let (mut el, headers) = Self::from_reader_many_buf(input)?;
+            let packet = el
+                .next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??;
+            Ok((packet, headers))
         }
     }
 
@@ -194,10 +188,7 @@ pub trait Deserializable: Sized {
             let (keys, headers) = Self::from_armor_many_buf(input)?;
             Ok((keys, Some(headers)))
         } else {
-            // TODO: limited read to 1GiB
-            let mut bytes = Vec::new();
-            input.read_to_end(&mut bytes)?;
-            Ok((Self::from_bytes_many(bytes.into())?, None))
+            Ok((Self::from_bytes_many(input)?, None))
         }
     }
 }

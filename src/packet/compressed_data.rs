@@ -514,7 +514,7 @@ mod tests {
             // roundtrip
 
             let packets: Vec<_> =
-                crate::packet::many::PacketParser::new(generator_out.clone().into()).collect();
+                crate::packet::many::PacketParser::new(&generator_out[..]).collect();
             assert_eq!(packets.len(), 1, "{:?}", packets);
             let packet_back = packets[0].as_ref().unwrap();
 

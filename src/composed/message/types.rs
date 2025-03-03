@@ -1,6 +1,6 @@
-use std::io::{self, Read};
+use std::io::{self, BufReader};
 
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 #[cfg(feature = "bzip2")]
 use bzip2::write::BzEncoder;
 use chrono::SubsecRound;
@@ -188,7 +188,7 @@ impl Edata {
     /// Transform decrypted data into a message.
     /// Bails if the packets contain no message or multiple messages.
     fn process_decrypted(packet_data: Bytes) -> Result<Message> {
-        let mut messages = Message::from_bytes_many(packet_data)?;
+        let mut messages = Message::from_bytes_many(packet_data.reader())?;
         // First message is the one we want to return
         let Some(message) = messages.next() else {
             bail!("no valid message found");
@@ -405,11 +405,8 @@ impl Message {
     pub fn decompress(self) -> Result<Self> {
         match self {
             Message::Compressed(data) => {
-                // TODO: limited read to 1GiB
-                let mut bytes = Vec::new();
-                data.decompress()?.read_to_end(&mut bytes)?;
-
-                Message::from_bytes(bytes.into())
+                let dec = data.decompress()?;
+                Message::from_bytes(BufReader::new(dec))
             }
             Message::Signed {
                 message: Some(message),
@@ -723,11 +720,8 @@ impl Message {
                                     }
                                     Message::Compressed(ref data) => {
                                         if decompress {
-                                            // TODO: limited read to 1GiB
-                                            let mut bytes = Vec::new();
-                                            data.decompress()?.read_to_end(&mut bytes)?;
-
-                                            let msg = Message::from_bytes(bytes.into())?;
+                                            let dec = data.decompress()?;
+                                            let msg = Message::from_bytes(BufReader::new(dec))?;
                                             return msg.verify_internal(key, false);
                                         } else {
                                             bail!("Recursive decompression not allowed");
@@ -750,11 +744,8 @@ impl Message {
                         Message::Compressed(ref data) => {
                             debug!("verifying compressed message");
                             if decompress {
-                                // TODO: limited read to 1GiB
-                                let mut bytes = Vec::new();
-                                data.decompress()?.read_to_end(&mut bytes)?;
-
-                                let msg = Message::from_bytes(bytes.into())?;
+                                let dec = data.decompress()?;
+                                let msg = Message::from_bytes(BufReader::new(dec))?;
                                 msg.verify_internal(key, false)
                             } else {
                                 bail!("Recursive decompression not allowed");
@@ -773,11 +764,8 @@ impl Message {
             Message::Compressed(data) => {
                 debug!("verifying compressed message");
                 if decompress {
-                    // TODO: limited read to 1GiB
-                    let mut bytes = Vec::new();
-                    data.decompress()?.read_to_end(&mut bytes)?;
-
-                    let msg = Message::from_bytes(bytes.into())?;
+                    let dec = data.decompress()?;
+                    let msg = Message::from_bytes(BufReader::new(dec))?;
                     msg.verify_internal(key, false)
                 } else {
                     bail!("Recursive decompression not allowed");
@@ -993,10 +981,9 @@ impl Message {
             Message::Compressed(data) => {
                 if decompress {
                     // TODO: limited read to 1GiB
-                    let mut bytes = Vec::new();
-                    data.decompress()?.read_to_end(&mut bytes)?;
+                    let dec = data.decompress()?;
 
-                    let msg = Message::from_bytes(bytes.into())?;
+                    let msg = Message::from_bytes(BufReader::new(dec))?;
 
                     msg.get_content_internal(false)
                 } else {
@@ -1444,7 +1431,7 @@ mod tests {
                 print(data)
         */
 
-        let msg = Message::from_bytes(Bytes::from_static(msg_raw)).unwrap();
+        let msg = Message::from_bytes(&msg_raw[..]).unwrap();
 
         // Before the fix message eventually decrypted to
         //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
@@ -1668,7 +1655,7 @@ mod tests {
         let pkey = skey.public_key();
 
         let msg = include_bytes!("../../../tests/quine.out");
-        let msg = Message::from_bytes(Bytes::from_static(msg)).unwrap();
+        let msg = Message::from_bytes(&msg[..]).unwrap();
         assert!(msg.get_content().is_err());
         assert!(msg.verify(&*pkey).is_err());
     }

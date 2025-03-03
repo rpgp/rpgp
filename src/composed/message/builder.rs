@@ -1224,8 +1224,8 @@ mod tests {
             builder.to_file(&mut rng, &encrypted_file).unwrap();
 
             // decrypt it
-            let encrypted_file_data = std::fs::read(&encrypted_file).unwrap();
-            let message = Message::from_bytes(encrypted_file_data.into()).unwrap();
+            let encrypted_file_data = BufReader::new(std::fs::File::open(&encrypted_file).unwrap());
+            let message = Message::from_bytes(encrypted_file_data).unwrap();
 
             let decrypted = message
                 .decrypt_with_password(&"hello world".into())
@@ -1269,7 +1269,7 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).unwrap();
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).unwrap();
+            let message = Message::from_bytes(&encrypted[..]).unwrap();
             let decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .unwrap();
@@ -1312,7 +1312,7 @@ mod tests {
 
                 // decrypt it
                 log::info!("parsing");
-                let message = Message::from_bytes(encrypted.into()).unwrap();
+                let message = Message::from_bytes(&encrypted[..]).unwrap();
                 log::info!("decrypting");
                 let decrypted = message
                     .decrypt_with_password(&"hello world".into())
@@ -1356,7 +1356,7 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
             let decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
@@ -1392,7 +1392,7 @@ mod tests {
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encoded.into()).expect("reading");
+            let message = Message::from_bytes(&encoded[..]).expect("reading");
 
             let Message::Literal(l) = message else {
                 panic!("unexpected message: {:?}", message);
@@ -1435,7 +1435,7 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
             let (decrypted, _key_ids) = message
                 .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
@@ -1485,7 +1485,7 @@ mod tests {
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
             // decrypt it - public
             {
@@ -1538,7 +1538,7 @@ mod tests {
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encoded.into()).expect("reading");
+            let message = Message::from_bytes(&encoded[..]).expect("reading");
 
             let Message::Literal(l) = message else {
                 panic!("unexpected message: {:?}", message);
@@ -1585,7 +1585,7 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
             let (decrypted, _key_ids) =
                 message.decrypt(&["".into()], &[&skey]).expect("decryption");
 
@@ -1635,7 +1635,7 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
             let (decrypted, _key_ids) = message
                 .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
@@ -1686,7 +1686,7 @@ mod tests {
             let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
             let signed = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
-            let message = Message::from_bytes(signed.into()).expect("reading");
+            let message = Message::from_bytes(&signed[..]).expect("reading");
 
             // verify signature
             assert!(message.is_one_pass_signed());
@@ -1754,7 +1754,7 @@ mod tests {
 
             let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
 
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
             // decrypt it
             let (decrypted, _key_ids) = message
@@ -1821,7 +1821,7 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
             let decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
@@ -1876,7 +1876,7 @@ mod tests {
 
             let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
 
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
             // decrypt it
             let (decrypted, _key_ids) = message
@@ -1989,7 +1989,7 @@ mod tests {
                         let encrypted = builder.to_vec(&mut rng)?;
 
                         println!("{}", hex::encode(&encrypted));
-                        Message::from_bytes(encrypted.into())?
+                        Message::from_bytes(&encrypted[..])?
                     }
                 };
 

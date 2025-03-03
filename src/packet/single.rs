@@ -1,3 +1,5 @@
+use std::io::BufRead;
+
 use bytes::Buf;
 use log::warn;
 
@@ -11,6 +13,10 @@ use crate::packet::{
 use crate::types::Tag;
 
 impl Packet {
+    pub fn from_reader<R: BufRead>(packet_header: PacketHeader, mut body: R) -> Result<Self> {
+        todo!()
+    }
+
     pub fn from_bytes<B: Buf + std::fmt::Debug>(
         packet_header: PacketHeader,
         mut body: B,

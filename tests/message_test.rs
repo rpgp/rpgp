@@ -101,7 +101,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
                 Message::Compressed(data) => {
                     let mut bytes = Vec::new();
                     data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
-                    let m = Message::from_bytes(bytes.into()).unwrap();
+                    let m = Message::from_bytes(&bytes[..]).unwrap();
 
                     // serialize and check we get the same thing
                     let serialized = m.to_armored_bytes(None.into()).unwrap();
@@ -266,7 +266,7 @@ fn msg_large_indeterminate_len() {
         Message::Compressed(data) => {
             let mut bytes = Vec::new();
             data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
-            let m = Message::from_bytes(bytes.into()).unwrap();
+            let m = Message::from_bytes(&bytes[..]).unwrap();
 
             m.get_literal().unwrap().clone()
         }

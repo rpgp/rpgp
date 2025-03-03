@@ -74,7 +74,7 @@ impl LiteralDataHeader {
 
         // Name
         let name_len = r.read_u8()?;
-        let file_name = r.read_take(name_len.into())?;
+        let file_name = r.read_take_fixed(name_len.into())?;
 
         // Created
         let created = r.read_be_u32()?;
@@ -624,7 +624,7 @@ mod tests {
             let mut out = Vec::new();
             std::io::copy(&mut generator, &mut out).unwrap();
 
-            let packets: Vec<_> = crate::packet::many::PacketParser::new(out.into()).collect();
+            let packets: Vec<_> = crate::packet::many::PacketParser::new(&out[..]).collect();
             assert_eq!(packets.len(), 1, "{:?}", packets);
             let packet = packets[0].as_ref().unwrap();
 
@@ -668,7 +668,7 @@ mod tests {
             let mut out = Vec::new();
             std::io::copy(&mut generator, &mut out).unwrap();
 
-            let packets: Vec<_> = crate::packet::many::PacketParser::new(out.into()).collect();
+            let packets: Vec<_> = crate::packet::many::PacketParser::new(&out[..]).collect();
             assert_eq!(packets.len(), 1, "{:?}", packets);
             let packet = packets[0].as_ref().unwrap();
 
