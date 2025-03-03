@@ -39,10 +39,32 @@ pub struct LiteralData {
 }
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct LiteralDataHeader {
-    pub mode: DataMode,
+    mode: DataMode,
     /// The filename, may contain non utf-8 bytes
-    pub file_name: Bytes,
-    pub created: DateTime<Utc>,
+    file_name: Bytes,
+    created: DateTime<Utc>,
+}
+
+impl LiteralDataHeader {
+    pub fn new(mode: DataMode) -> Self {
+        Self {
+            mode,
+            file_name: "".into(),
+            created: std::time::UNIX_EPOCH.into(),
+        }
+    }
+
+    pub fn mode(&self) -> DataMode {
+        self.mode
+    }
+
+    pub fn file_name(&self) -> &Bytes {
+        &self.file_name
+    }
+
+    pub fn created(&self) -> DateTime<Utc> {
+        self.created
+    }
 }
 
 impl LiteralDataHeader {
