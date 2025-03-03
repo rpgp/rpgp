@@ -650,7 +650,7 @@ mod tests {
                 let message = if is_partial {
                     Builder::from_reader("test.txt", buf.as_bytes())
                         .data_mode(DataMode::Binary)
-                        .chunk_size(512)?
+                        .partial_chunk_size(512)?
                         .to_vec(&mut rng)?
                 } else {
                     Builder::from_bytes("test.txt", buf.clone())
@@ -689,7 +689,7 @@ mod tests {
                     Builder::from_reader("test.txt", buf.as_bytes())
                         .data_mode(DataMode::Binary)
                         .compression(CompressionAlgorithm::ZIP)
-                        .chunk_size(512)?
+                        .partial_chunk_size(512)?
                         .to_vec(&mut rng)?
                 } else {
                     Builder::from_bytes("test.txt", buf.clone())
