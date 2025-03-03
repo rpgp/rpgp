@@ -3,6 +3,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum PublicKeyAlgorithm {
     /// RSA (Encrypt and Sign)
     RSA = 1,

@@ -72,6 +72,7 @@ where
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum SymmetricKeyAlgorithm {
     /// Plaintext or unencrypted data
     #[cfg_attr(test, proptest(skip))]

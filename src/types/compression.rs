@@ -5,6 +5,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[repr(u8)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[non_exhaustive]
 pub enum CompressionAlgorithm {
     Uncompressed = 0,
     ZIP = 1,
