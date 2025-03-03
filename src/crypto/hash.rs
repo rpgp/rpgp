@@ -15,6 +15,7 @@ use crate::errors::{Error, Result};
 )]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum HashAlgorithm {
     #[cfg_attr(test, proptest(skip))]
     #[display("NONE")]
