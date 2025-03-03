@@ -4,21 +4,41 @@ use rand::{CryptoRng, Rng};
 use sha2::Sha512;
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::{aes_kw, Decryptor, KeyParams};
+use crate::crypto::{aes_kw, Decryptor};
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams};
+use crate::types::X448PublicParams;
 
 /// Secret key for X448
 #[derive(Clone, derive_more::Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct SecretKey {
     #[debug("..")]
     pub(crate) secret: [u8; 56],
 }
 
-impl KeyParams for SecretKey {
-    type KeyParams = ();
+impl From<&SecretKey> for X448PublicParams {
+    fn from(value: &SecretKey) -> Self {
+        let secret = x448::Secret::from(value.secret); // does clamping
+        let public = *x448::PublicKey::from(&secret).as_bytes();
+        X448PublicParams { key: public }
+    }
+}
 
-    fn key_params(&self) {}
+impl SecretKey {
+    /// Generate an X448 `SecretKey`.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        let mut secret_key_bytes = Zeroizing::new([0u8; 56]);
+        rng.fill_bytes(&mut *secret_key_bytes);
+        let secret = x448::Secret::from(*secret_key_bytes); // does clamping
+
+        SecretKey {
+            secret: *secret.as_bytes(),
+        }
+    }
+
+    pub(crate) fn try_from_bytes(secret: [u8; 56]) -> Result<Self> {
+        Ok(Self { secret })
+    }
 }
 
 pub struct EncryptionFields<'a> {
@@ -84,20 +104,6 @@ pub fn derive_session_key(
     Ok(decrypted_key)
 }
 
-/// Generate an X448 KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecretParams) {
-    let mut secret_key_bytes = Zeroizing::new([0u8; 56]);
-    rng.fill_bytes(&mut *secret_key_bytes);
-
-    let secret = x448::Secret::from(*secret_key_bytes); // does clamping
-    let public = *x448::PublicKey::from(&secret).as_bytes();
-
-    (
-        PublicParams::X448 { public },
-        PlainSecretParams::X448(*secret.as_bytes()),
-    )
-}
-
 /// HKDF for X448
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x>
 pub fn hkdf(
@@ -133,7 +139,7 @@ pub fn hkdf(
 /// Returns (ephemeral, encrypted session key)
 pub fn encrypt<R: CryptoRng + Rng>(
     mut rng: R,
-    recipient_public: [u8; 56],
+    recipient_public: &X448PublicParams,
     plain: &[u8],
 ) -> Result<([u8; 56], Vec<u8>)> {
     debug!("X448 encrypt");
@@ -148,7 +154,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
     let (ephemeral_public, shared_secret) = {
         // create montgomery point
-        let Some(their_public) = x448::PublicKey::from_bytes(&recipient_public) else {
+        let Some(their_public) = x448::PublicKey::from_bytes(&recipient_public.key) else {
             bail!("x448: invalid public key");
         };
 
@@ -170,7 +176,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // hkdf key derivation
     let okm = hkdf(
         ephemeral_public.as_bytes(),
-        &recipient_public,
+        &recipient_public.key,
         shared_secret.as_bytes(),
     )?;
 
@@ -190,20 +196,13 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::SecretKeyRepr;
 
     #[test]
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let (pkey, skey) = generate_key(&mut rng);
-
-        let PublicParams::X448 { public } = pkey else {
-            panic!("invalid key generated")
-        };
-        let SecretKeyRepr::X448(ref secret) = skey.as_ref().as_repr(&pkey).unwrap() else {
-            panic!("invalid key generated")
-        };
+        let skey = SecretKey::generate(&mut rng);
+        let pub_params: X448PublicParams = (&skey).into();
 
         for text_size in (8..=248).step_by(8) {
             for _i in 0..10 {
@@ -213,15 +212,15 @@ mod tests {
                 let mut plain = vec![0u8; text_size];
                 rng.fill_bytes(&mut plain);
 
-                let (ephemeral, enc_sk) = encrypt(&mut rng, public, &plain[..]).unwrap();
+                let (ephemeral, enc_sk) = encrypt(&mut rng, &pub_params, &plain[..]).unwrap();
 
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
-                    recipient_public: public,
+                    recipient_public: pub_params.key,
                     encrypted_session_key: enc_sk.deref(),
                 };
 
-                let decrypted = secret.decrypt(data).unwrap();
+                let decrypted = skey.decrypt(data).unwrap();
 
                 assert_eq!(&plain[..], &decrypted[..]);
             }

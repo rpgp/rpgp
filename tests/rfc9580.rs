@@ -1,8 +1,9 @@
 use std::fs::File;
 
+use bytes::Bytes;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
-use pgp::packet::LiteralData;
+use pgp::packet::{ChunkSize, LiteralData};
 use pgp::types::KeyVersion;
 use pgp::{
     cleartext::CleartextSignedMessage, Deserializable, KeyType, Message, SecretKeyParamsBuilder,
@@ -44,7 +45,7 @@ fn try_decrypt(keyfile: &str, msg_file: &str) {
 
     // load seipdv1 msg, decrypt
     let (message, _) = Message::from_armor_single(File::open(msg_file).unwrap()).expect("ok");
-    let (dec, _) = message.decrypt(String::default, &[&ssk]).expect("decrypt");
+    let (dec, _) = message.decrypt(&["".into()], &[&ssk]).expect("decrypt");
 
     let decrypted =
         String::from_utf8(dec.get_literal().expect("literal").data().to_vec()).expect("utf8");
@@ -100,7 +101,7 @@ fn rfc9580_seipdv1_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
+        let lit = LiteralData::from_bytes("", Bytes::from_static(MSG.as_bytes())).unwrap();
         let msg = Message::Literal(lit);
 
         // SEIPDv1 encrypt/decrypt roundtrip
@@ -108,7 +109,7 @@ fn rfc9580_seipdv1_roundtrip() {
             .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES256, &[enc_subkey])
             .expect("encrypt");
 
-        let (dec, _) = enc.decrypt(String::default, &[&ssk]).expect("decrypt");
+        let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
         let Message::Literal(lit) = dec else {
             panic!("expecting literal data");
         };
@@ -128,7 +129,7 @@ fn rfc9580_seipdv2_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
+        let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
         let msg = Message::Literal(lit);
 
         // SEIPDv2 encrypt/decrypt roundtrip
@@ -137,12 +138,12 @@ fn rfc9580_seipdv2_roundtrip() {
                 &mut rng,
                 SymmetricKeyAlgorithm::AES256,
                 AeadAlgorithm::Ocb,
-                0x06, // 2^12 bytes
+                ChunkSize::default(),
                 &[enc_subkey],
             )
             .expect("encrypt");
 
-        let (dec, _) = enc.decrypt(String::default, &[&ssk]).expect("decrypt");
+        let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
         let Message::Literal(lit) = dec else {
             panic!("expecting literal data");
         };
@@ -162,7 +163,7 @@ fn rfc9580_roundtrip_csf() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         // roundtrip sign+verify csf
-        let csf = CleartextSignedMessage::sign(&mut rng, MSG, &ssk, String::default).expect("sign");
+        let csf = CleartextSignedMessage::sign(&mut rng, MSG, &*ssk, &"".into()).expect("sign");
         csf.verify(&spk).expect("verify");
     }
 }
@@ -177,12 +178,12 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         let spk = SignedPublicKey::from(ssk.clone());
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
+        let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
         let msg = Message::Literal(lit);
 
         // roundtrip sign+verify inline msg
         let signed = msg
-            .sign(&mut rng, &ssk, String::default, HashAlgorithm::default())
+            .sign(&mut rng, &*ssk, &"".into(), HashAlgorithm::default())
             .expect("sign");
 
         signed.verify(&spk).expect("verify");

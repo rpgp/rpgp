@@ -13,7 +13,7 @@ use std::fs::File;
 use std::io::Read;
 
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
-use pgp::types::PublicKeyTrait;
+use pgp::types::KeyDetails;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -78,7 +78,7 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
     match &message {
         Message::Encrypted { .. } => {
             let (decrypted, ids) = message
-                .decrypt(|| details.passphrase.clone(), &[&decrypt_key])
+                .decrypt(&[details.passphrase.into()], &[&decrypt_key])
                 .expect("failed to init decryption");
             assert_eq!(ids.len(), 1);
 
@@ -99,7 +99,9 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
             let raw = match decrypted {
                 Message::Literal(data) => data,
                 Message::Compressed(data) => {
-                    let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
+                    let mut bytes = Vec::new();
+                    data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
+                    let m = Message::from_bytes(bytes.into()).unwrap();
 
                     // serialize and check we get the same thing
                     let serialized = m.to_armored_bytes(None.into()).unwrap();
@@ -255,14 +257,16 @@ fn msg_large_indeterminate_len() {
         SignedSecretKey::from_armor_single(&mut key_file).expect("failed to parse key");
 
     let decrypted = message
-        .decrypt(|| "moon".to_string(), &[&decrypt_key])
+        .decrypt(&["moon".into()], &[&decrypt_key])
         .expect("failed to decrypt message")
         .0;
 
     let raw = match decrypted {
         Message::Literal(data) => data,
         Message::Compressed(data) => {
-            let m = Message::from_bytes(data.decompress().unwrap()).unwrap();
+            let mut bytes = Vec::new();
+            data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
+            let m = Message::from_bytes(bytes.into()).unwrap();
 
             m.get_literal().unwrap().clone()
         }
@@ -347,4 +351,18 @@ fn msg_literal_signature() {
     let (msg, _) = Message::from_armor_single(&mut msg_file).expect("failed to parse message");
 
     msg.verify(&pkey).unwrap();
+}
+
+#[test]
+#[cfg(feature = "mmap")]
+fn binary_msg_password() {
+    // encrypted README.md using gpg
+    let message = Message::from_file("./tests/binary_password.gpg").unwrap();
+    let decrypted = message.decrypt_with_password(&"1234".into()).unwrap();
+    let decompressed = decrypted.decompress().unwrap();
+    let Message::Literal(l) = decompressed else {
+        panic!("unexpected message: {:?}", decompressed);
+    };
+
+    assert_eq!(l.file_name(), "README.md");
 }
