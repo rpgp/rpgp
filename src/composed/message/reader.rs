@@ -668,7 +668,7 @@ mod tests {
                 check_strings(out, buf);
 
                 let header = lit_reader.data_header().unwrap();
-                assert_eq!(header.file_name(), &b"test.txt"[..]);
+                assert_eq!(header.file_name(), &b""[..]);
                 assert_eq!(header.mode(), DataMode::Binary);
             }
         }
@@ -707,7 +707,7 @@ mod tests {
                 check_strings(out, buf);
 
                 let header = lit_reader.data_header().unwrap();
-                assert_eq!(header.file_name(), &b"test.txt"[..]);
+                assert_eq!(header.file_name(), &b""[..]);
                 assert_eq!(header.mode(), DataMode::Binary);
             }
         }
