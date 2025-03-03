@@ -4,11 +4,10 @@ use std::path::Path;
 use bytes::{Buf, Bytes, BytesMut};
 use log::debug;
 
+use super::DummyReader;
 use crate::packet::{Decompressor, LiteralDataHeader, PacketHeader};
 use crate::types::{PacketLength, Tag};
 use crate::util::fill_buffer;
-
-use super::DummyReader;
 
 /// Efficiently parse messages.
 pub struct MessageReader<R = DummyReader> {
@@ -628,17 +627,15 @@ impl<R: BufRead> LiteralReader<R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::CompressionAlgorithm;
-    use crate::util::test::{check_strings, random_string, ChaosReader};
-
-    use super::*;
-
-    use crate::message::Builder;
-    use crate::packet::DataMode;
-
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
     use testresult::TestResult;
+
+    use super::*;
+    use crate::message::Builder;
+    use crate::packet::DataMode;
+    use crate::types::CompressionAlgorithm;
+    use crate::util::test::{check_strings, random_string, ChaosReader};
 
     #[test]
     fn test_read_literal_data_no_compression() -> TestResult {
@@ -671,8 +668,8 @@ mod tests {
                 check_strings(out, buf);
 
                 let header = lit_reader.data_header().unwrap();
-                assert_eq!(header.file_name, &b"test.txt"[..]);
-                assert_eq!(header.mode, DataMode::Binary);
+                assert_eq!(header.file_name(), &b"test.txt"[..]);
+                assert_eq!(header.mode(), DataMode::Binary);
             }
         }
         Ok(())
@@ -710,8 +707,8 @@ mod tests {
                 check_strings(out, buf);
 
                 let header = lit_reader.data_header().unwrap();
-                assert_eq!(header.file_name, &b"test.txt"[..]);
-                assert_eq!(header.mode, DataMode::Binary);
+                assert_eq!(header.file_name(), &b"test.txt"[..]);
+                assert_eq!(header.mode(), DataMode::Binary);
             }
         }
         Ok(())

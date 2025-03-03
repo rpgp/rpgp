@@ -997,7 +997,7 @@ impl<'a, R: std::io::Read> SignGenerator<'a, R> {
             configs.push_back(signer);
         }
 
-        let normalized_source = if literal_data_header.mode == DataMode::Utf8 {
+        let normalized_source = if literal_data_header.mode() == DataMode::Utf8 {
             MaybeNormalizedReader::Normalized(NormalizedReader::new(source, LineBreak::Crlf))
         } else {
             MaybeNormalizedReader::Raw(source)
