@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+pub use dsa::KeySize;
 use dsa::{Components, Signature, SigningKey};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
@@ -10,8 +11,6 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
 use crate::types::{DsaPublicParams, MpiBytes};
-
-pub use dsa::KeySize;
 
 /// Secret key for DSA.
 #[derive(Clone, PartialEq, derive_more::Debug)]
@@ -61,7 +60,7 @@ impl SecretKey {
     }
 
     /// Generate a DSA `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, key_size: KeySize) -> Self {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(mut rng: R, key_size: KeySize) -> Self {
         let components = Components::generate(&mut rng, key_size);
         let signing_key = SigningKey::generate(&mut rng, components);
 
@@ -109,12 +108,11 @@ pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BigUint, s: BigUint) -
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use num_traits::Num;
     use proptest::prelude::*;
     use rand::SeedableRng;
 
+    use super::*;
     use crate::types::MpiBytes;
 
     fn hex_num(s: &str) -> BigUint {

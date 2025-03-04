@@ -163,7 +163,8 @@ fn rfc9580_roundtrip_csf() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         // roundtrip sign+verify csf
-        let csf = CleartextSignedMessage::sign(&mut rng, MSG, &*ssk, &"".into()).expect("sign");
+        let csf =
+            CleartextSignedMessage::sign_with_rng(&mut rng, MSG, &*ssk, &"".into()).expect("sign");
         csf.verify(&spk).expect("verify");
     }
 }
@@ -221,7 +222,7 @@ fn rfc9580_legacy_25519_illegal_in_v6() {
     let secret_key_params = key_params
         .build()
         .expect("Must be able to create secret key params");
-    let res = secret_key_params.generate(&mut rng);
+    let res = secret_key_params.generate_with_rng(&mut rng);
 
     assert!(res.is_err());
 
@@ -235,7 +236,7 @@ fn rfc9580_legacy_25519_illegal_in_v6() {
     let secret_key_params = key_params
         .build()
         .expect("Must be able to create secret key params");
-    let res = secret_key_params.generate(&mut rng);
+    let res = secret_key_params.generate_with_rng(&mut rng);
 
     assert!(res.is_err());
 }

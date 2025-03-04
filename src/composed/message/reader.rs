@@ -651,11 +651,11 @@ mod tests {
                     Builder::from_reader("test.txt", buf.as_bytes())
                         .data_mode(DataMode::Binary)
                         .partial_chunk_size(512)?
-                        .to_vec(&mut rng)?
+                        .to_vec_with_rng(&mut rng)?
                 } else {
                     Builder::from_bytes("test.txt", buf.clone())
                         .data_mode(DataMode::Binary)
-                        .to_vec(&mut rng)?
+                        .to_vec_with_rng(&mut rng)?
                 };
 
                 let mut reader = ChaosReader::new(rng.clone(), message.clone());
@@ -690,12 +690,12 @@ mod tests {
                         .data_mode(DataMode::Binary)
                         .compression(CompressionAlgorithm::ZIP)
                         .partial_chunk_size(512)?
-                        .to_vec(&mut rng)?
+                        .to_vec_with_rng(&mut rng)?
                 } else {
                     Builder::from_bytes("test.txt", buf.clone())
                         .data_mode(DataMode::Binary)
                         .compression(CompressionAlgorithm::ZIP)
-                        .to_vec(&mut rng)?
+                        .to_vec_with_rng(&mut rng)?
                 };
                 let mut reader = ChaosReader::new(rng.clone(), message.clone());
                 let mut msg_reader = MessageReader::from_reader(&mut reader);

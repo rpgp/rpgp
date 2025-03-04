@@ -2,6 +2,7 @@ use bytes::Buf;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
+use super::public::{encrypt, PubKeyInner};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -16,8 +17,6 @@ use crate::{
         SecretParams, SignatureBytes, Tag,
     },
 };
-
-use super::public::{encrypt, PubKeyInner};
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretKey {
@@ -324,11 +323,11 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
+    pub fn set_password_with_rng<R>(&mut self, rng: R, password: &Password) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let s2k = crate::types::S2kParams::new_default(rng, self.version());
+        let s2k = crate::types::S2kParams::new_default_with_rng(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
     }
 
@@ -392,11 +391,11 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
+    pub fn set_password_with_rng<R>(&mut self, rng: R, password: &Password) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let s2k = crate::types::S2kParams::new_default(rng, self.version());
+        let s2k = crate::types::S2kParams::new_default_with_rng(rng, self.version());
         Self::set_password_with_s2k(self, password, s2k)
     }
 
@@ -588,7 +587,7 @@ mod tests {
         alice_sec
             .set_password_with_s2k(
                 &"password".into(),
-                crate::types::S2kParams::new_default(&mut rng, KeyVersion::V4),
+                crate::types::S2kParams::new_default_with_rng(&mut rng, KeyVersion::V4),
             )
             .unwrap();
 
@@ -611,7 +610,9 @@ mod tests {
             .is_ok());
 
         // set different password protection
-        alice_sec.set_password(&mut rng, &"foo".into()).unwrap();
+        alice_sec
+            .set_password_with_rng(&mut rng, &"foo".into())
+            .unwrap();
 
         // signing without a password should fail now
         assert!(alice_sec
@@ -630,7 +631,7 @@ mod tests {
         alice_sec
             .set_password_with_s2k(
                 &"bar".into(),
-                S2kParams::new_default(&mut rng, KeyVersion::V6),
+                S2kParams::new_default_with_rng(&mut rng, KeyVersion::V6),
             )
             .unwrap();
 

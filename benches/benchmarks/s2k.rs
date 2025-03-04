@@ -41,7 +41,7 @@ fn bench_s2k(c: &mut Criterion) {
                                 u8,
                                 SymmetricKeyAlgorithm,
                             )| {
-                                let s2k = StringToKey::new_iterated(&mut rng, alg, count);
+                                let s2k = StringToKey::new_iterated_with_rng(&mut rng, alg, count);
                                 let passphrase = Alphanumeric.sample_string(&mut rng, size);
 
                                 b.iter(|| {

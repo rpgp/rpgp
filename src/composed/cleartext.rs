@@ -57,7 +57,12 @@ where {
     }
 
     /// Sign the given text.
-    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Password) -> Result<Self>
+    pub fn sign_with_rng<R>(
+        rng: R,
+        text: &str,
+        key: &impl SecretKeyTrait,
+        key_pw: &Password,
+    ) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
     {
@@ -602,7 +607,7 @@ mod tests {
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(
+        let msg = CleartextSignedMessage::sign_with_rng(
             &mut rng,
             "hello\n-world-what-\nis up\n",
             &*key,
@@ -619,7 +624,8 @@ mod tests {
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &*key, &Password::empty()).unwrap();
+        let msg = CleartextSignedMessage::sign_with_rng(&mut rng, MSG, &*key, &Password::empty())
+            .unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 

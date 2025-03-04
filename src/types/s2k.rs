@@ -88,7 +88,7 @@ impl S2kParams {
     /// - AES256
     /// - CFB
     /// - Iterated and Salted with 224 rounds
-    pub fn new_default<R: Rng + CryptoRng>(mut rng: R, key_version: KeyVersion) -> Self {
+    pub fn new_default_with_rng<R: Rng + CryptoRng>(mut rng: R, key_version: KeyVersion) -> Self {
         match key_version {
             KeyVersion::V6 => {
                 let sym_alg = SymmetricKeyAlgorithm::AES256;
@@ -122,7 +122,7 @@ impl S2kParams {
 
                 Self::Cfb {
                     sym_alg,
-                    s2k: StringToKey::new_default(rng),
+                    s2k: StringToKey::new_default_with_rng(rng),
                     iv: iv.into(),
                 }
             }
@@ -194,11 +194,11 @@ pub enum StringToKey {
 }
 
 impl StringToKey {
-    pub fn new_default<R: CryptoRng + Rng>(rng: R) -> Self {
-        StringToKey::new_iterated(rng, HashAlgorithm::default(), DEFAULT_ITER_SALTED_COUNT)
+    pub fn new_default_with_rng<R: CryptoRng + Rng>(rng: R) -> Self {
+        StringToKey::new_iterated_with_rng(rng, HashAlgorithm::default(), DEFAULT_ITER_SALTED_COUNT)
     }
 
-    pub fn new_iterated<R: CryptoRng + Rng>(
+    pub fn new_iterated_with_rng<R: CryptoRng + Rng>(
         mut rng: R,
         hash_alg: HashAlgorithm,
         count: u8,
@@ -213,7 +213,7 @@ impl StringToKey {
         }
     }
 
-    pub fn new_argon2<R: CryptoRng + Rng>(mut rng: R, t: u8, p: u8, m_enc: u8) -> Self {
+    pub fn new_argon2_with_rng<R: CryptoRng + Rng>(mut rng: R, t: u8, p: u8, m_enc: u8) -> Self {
         let mut salt = [0u8; 16];
         rng.fill(&mut salt[..]);
 
@@ -573,7 +573,7 @@ mod tests {
                 for alg in algs {
                     for count in counts {
                         println!("{size}/{alg:?}/{count}/{sym_alg:?}");
-                        let s2k = StringToKey::new_iterated(&mut rng, alg, count);
+                        let s2k = StringToKey::new_iterated_with_rng(&mut rng, alg, count);
                         let passphrase = Alphanumeric.sample_string(&mut rng, size);
 
                         let res = s2k
