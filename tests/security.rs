@@ -7,7 +7,7 @@ fn rpg_022_message_from_armor_single_panic2() {
     // thread '[..]' panicked at [..]/src/armor/reader.rs:489:13:
     // invalid state
     let bad_input: &[u8] = b"-----BEGIN PGP SIGNATURE-----\n00LL";
-    let _ = Message::from_armor_single(std::io::Cursor::new(bad_input));
+    let _ = Message::from_armor(bad_input);
 }
 
 /// RPG-019
@@ -144,7 +144,7 @@ fn rpg_007_message_from_armor_single_panic1() {
     // expected bug behavior
     // thread '<unnamed>' panicked at [..]/src/packet/many.rs:126:70:
     // range end index 62 out of range for slice of length 1
-    let _ = Message::from_armor_single(bad_input);
+    let _ = Message::from_armor(bad_input);
 }
 
 /// RPG-017

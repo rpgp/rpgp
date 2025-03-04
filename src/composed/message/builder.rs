@@ -1227,16 +1227,14 @@ mod tests {
             let encrypted_file_data = BufReader::new(std::fs::File::open(&encrypted_file).unwrap());
             let message = Message::from_bytes(encrypted_file_data).unwrap();
 
-            let decrypted = message
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .unwrap();
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec(), &buf);
         }
     }
 
@@ -1270,16 +1268,14 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).unwrap();
-            let decrypted = message
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .unwrap();
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec(), &buf);
         }
     }
 
@@ -1314,16 +1310,14 @@ mod tests {
                 log::info!("parsing");
                 let message = Message::from_bytes(&encrypted[..]).unwrap();
                 log::info!("decrypting");
-                let decrypted = message
+                let mut decrypted = message
                     .decrypt_with_password(&"hello world".into())
                     .unwrap();
 
-                let Message::Literal(l) = decrypted else {
-                    panic!("unexpected message: {:?}", decrypted);
-                };
+                assert!(decrypted.is_literal());
 
-                assert_eq!(l.file_name(), "");
-                assert_eq!(l.data(), &buf);
+                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+                assert_eq!(&decrypted.as_data_vec(), &buf);
             }
         }
     }
@@ -1357,16 +1351,14 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
-            let decrypted = message
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec(), &buf);
         }
     }
 
@@ -1392,14 +1384,12 @@ mod tests {
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(&encoded[..]).expect("reading");
+            let mut decrypted = Message::from_bytes(&encoded[..]).expect("reading");
 
-            let Message::Literal(l) = message else {
-                panic!("unexpected message: {:?}", message);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec(), &buf);
         }
     }
 
@@ -1436,16 +1426,14 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
-            let (decrypted, _key_ids) = message
+            let (mut decrypted, _key_ids) = message
                 .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec(), &buf);
         }
     }
 
@@ -1489,28 +1477,24 @@ mod tests {
 
             // decrypt it - public
             {
-                let (decrypted, _key_ids) =
+                let (mut decrypted, _key_ids) =
                     message.decrypt(&["".into()], &[&skey]).expect("decryption");
 
-                let Message::Literal(l) = decrypted else {
-                    panic!("unexpected message: {:?}", decrypted);
-                };
+                assert!(decrypted.is_literal());
 
-                assert_eq!(l.file_name(), "");
-                assert_eq!(l.data(), &buf);
+                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+                assert_eq!(&decrypted.as_data_vec(), &buf);
             }
             // decrypt it - password
             {
-                let decrypted = message
+                let mut decrypted = message
                     .decrypt_with_password(&"hello world".into())
                     .expect("decryption sym");
 
-                let Message::Literal(l) = decrypted else {
-                    panic!("unexpected message: {:?}", decrypted);
-                };
+                assert!(decrypted.is_literal());
 
-                assert_eq!(l.file_name(), "");
-                assert_eq!(l.data(), &buf);
+                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+                assert_eq!(&decrypted.as_data_vec(), &buf);
             }
         }
     }
@@ -1538,15 +1522,14 @@ mod tests {
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(&encoded[..]).expect("reading");
+            let mut decrypted = Message::from_bytes(&encoded[..]).expect("reading");
 
-            let Message::Literal(l) = message else {
-                panic!("unexpected message: {:?}", message);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1586,16 +1569,15 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
-            let (decrypted, _key_ids) =
+            let (mut decrypted, _key_ids) =
                 message.decrypt(&["".into()], &[&skey]).expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1642,15 +1624,14 @@ mod tests {
 
             assert!(matches!(decrypted, Message::Compressed(_)));
 
-            let decompressed = decrypted.decompress().expect("decompression");
+            let mut decrypted = decrypted.decompress().expect("decompression");
 
-            let Message::Literal(l) = decompressed else {
-                panic!("unexpected message: {:?}", decompressed);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1693,20 +1674,19 @@ mod tests {
             message.verify(&*skey.public_key()).expect("signed");
 
             let Message::Signed {
-                message: Some(next_message),
+                message: Some(mut decrypted),
                 ..
             } = message
             else {
                 panic!("unexpected message: {:?}", message);
             };
 
-            let Message::Literal(l) = &*next_message else {
-                panic!("unexpected message: {:?}", next_message);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1769,20 +1749,19 @@ mod tests {
             next.verify(&*skey.public_key()).expect("signed");
 
             let Message::Signed {
-                message: Some(next_message),
+                message: Some(mut decrypted),
                 ..
             } = next
             else {
                 panic!("unexpected message: {:?}", next);
             };
 
-            let Message::Literal(l) = &*next_message else {
-                panic!("unexpected message: {:?}", next_message);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1822,16 +1801,14 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
-            let decrypted = message
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec(), &buf);
         }
     }
 
@@ -1891,20 +1868,19 @@ mod tests {
             decompressed.verify(&*skey.public_key()).expect("signed");
 
             let Message::Signed {
-                message: Some(inner_message),
+                message: Some(mut decrypted),
                 ..
             } = decompressed
             else {
                 panic!("unexpected message: {:?}", decompressed);
             };
 
-            let Message::Literal(l) = &*inner_message else {
-                panic!("unexpected message: {:?}", inner_message);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1982,7 +1958,7 @@ mod tests {
 
                         println!("{}", encrypted);
 
-                        let (message, _) = Message::from_armor_single(encrypted.as_bytes())?;
+                        let (message, _) = Message::from_armor(encrypted.as_bytes())?;
                         message
                     }
                     Encoding::Binary => {
@@ -1998,7 +1974,7 @@ mod tests {
 
                 assert!(decrypted.is_compressed());
 
-                let decompressed = decrypted.decompress()?;
+                let mut decompressed = decrypted.decompress()?;
 
                 // verify signature outer
                 assert!(decompressed.is_one_pass_signed());
@@ -2006,7 +1982,7 @@ mod tests {
 
                 let inner = match decompressed {
                     Message::Signed {
-                        message: Some(ref message),
+                        message: Some(ref mut message),
                         one_pass_signature: Some(ops),
                         ..
                     } => {
@@ -2019,7 +1995,7 @@ mod tests {
                             message: Some(inner_message),
                             one_pass_signature: Some(ops),
                             ..
-                        } = message.as_ref()
+                        } = message.as_mut()
                         else {
                             panic!("unexpected message: {:?}", message);
                         };
@@ -2031,13 +2007,13 @@ mod tests {
                     }
                 };
 
-                let Message::Literal(l) = &**inner else {
-                    panic!("unexpected message: {:?}", inner);
-                };
+                let decrypted = &mut **inner;
+                assert!(decrypted.is_literal());
 
-                assert_eq!(l.file_name(), "");
+                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
                 check_strings(
-                    l.to_string().unwrap(),
+                    decrypted.as_data_string().unwrap(),
                     normalize_lines(&buf, LineBreak::Crlf),
                 );
             }

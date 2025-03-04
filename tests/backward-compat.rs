@@ -71,9 +71,9 @@ fn decrypt_rpgp_cur(enc_msg: &str, keyfile: &str) -> Vec<u8> {
         pgp::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
             .expect("failed to read key");
 
-    let (dec, _) = enc_msg.decrypt(&["".into()], &[&ssk]).unwrap();
+    let (mut dec, _) = enc_msg.decrypt(&["".into()], &[&ssk]).unwrap();
 
-    dec.get_literal().unwrap().data().to_vec()
+    dec.as_data_vec()
 }
 
 fn encrypt_rpgp_0_10(msg: &[u8], keyfile: &str) -> String {
@@ -104,22 +104,23 @@ fn encrypt_rpgp_cur(msg: &[u8], keyfile: &str) -> String {
 
     let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-    let lit = pgp::packet::LiteralData::from_bytes("", Bytes::from(msg.to_vec())).unwrap();
-    let msg = pgp::Message::Literal(lit);
+    todo!();
+    // let lit = pgp::packet::LiteralData::from_bytes("", Bytes::from(msg.to_vec())).unwrap();
+    // let msg = pgp::Message::Literal(lit);
 
-    let (ssk, _headers) =
-        pgp::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
-            .expect("failed to read key");
+    // let (ssk, _headers) =
+    //     pgp::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
+    //         .expect("failed to read key");
 
-    let enc = &ssk.secret_subkeys[0];
+    // let enc = &ssk.secret_subkeys[0];
 
-    let enc_msg = msg
-        .encrypt_to_keys_seipdv1(
-            &mut rng,
-            SymmetricKeyAlgorithm::AES128,
-            &[&enc.public_key()],
-        )
-        .unwrap();
+    // let enc_msg = msg
+    //     .encrypt_to_keys_seipdv1(
+    //         &mut rng,
+    //         SymmetricKeyAlgorithm::AES128,
+    //         &[&enc.public_key()],
+    //     )
+    //     .unwrap();
 
-    enc_msg.to_armored_string(ArmorOptions::default()).unwrap()
+    // enc_msg.to_armored_string(ArmorOptions::default()).unwrap()
 }

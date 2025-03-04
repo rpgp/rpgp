@@ -349,7 +349,7 @@ fn card_decrypt() {
         let mut hsm = FakeHsm::with_public_key(as_primary).unwrap();
         hsm.set_fake_decryption_data(input, out);
 
-        let (message, _headers) = Message::from_armor_single(File::open(msgfile).unwrap()).unwrap();
+        let (message, _headers) = Message::from_armor_file(msgfile).unwrap();
 
         let Message::Encrypted { esk, edata } = message else {
             panic!("not encrypted");
@@ -370,11 +370,12 @@ fn card_decrypt() {
             })
             .unwrap();
 
-        if let Message::Literal(data) = decrypted {
-            assert_eq!(data.data(), b"foo bar")
-        } else {
-            panic!()
-        }
+        todo!()
+        // if let Message::Literal(data) = decrypted {
+        //     assert_eq!(data.data(), b"foo bar")
+        // } else {
+        //     panic!()
+        // }
     }
 }
 

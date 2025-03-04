@@ -1,13 +1,9 @@
-use std::io::BufRead;
-use std::marker::PhantomData;
-
-use bytes_utils::SegmentedBuf;
 use log::debug;
+use std::io::BufRead;
 
 use crate::errors::{Error, Result};
 use crate::packet::{Packet, PacketHeader};
-use crate::parsing_reader::BufReadParsing;
-use crate::types::{PacketLength, Tag};
+use crate::reader::PacketBodyReader;
 
 pub struct PacketParser<R: BufRead> {
     /// The reader that gets advanced through the original source
@@ -42,117 +38,57 @@ impl<R: BufRead> Iterator for PacketParser<R> {
         };
 
         debug!("found header: {header:?}");
-
-        match header.packet_length() {
-            PacketLength::Indeterminate => {
-                let body = self.reader.rest();
-                match Packet::from_reader(header, body) {
-                    Ok(packet) => Some(Ok(packet)),
-                    Err(err) => {
-                        self.is_done = true;
-                        Some(Err(err))
-                    }
-                }
-            }
-            PacketLength::Fixed(len) => {
-                let packet_bytes = self.reader.read_take(len as _);
-                let res = Packet::from_reader(header, packet_bytes);
-                match res {
-                    Ok(packet) => Some(Ok(packet)),
-                    Err(Error::PacketParsing { source }) if source.is_incomplete() => {
-                        debug!("incomplete packet for: {:?}", source);
-                        // not bailing, we are just skipping incomplete bodies
-                        Some(Err(Error::PacketIncomplete { source }))
-                    }
-                    Err(err) => Some(Err(err)),
-                }
-            }
-            PacketLength::Partial(len) => {
-                // https://www.rfc-editor.org/rfc/rfc9580.html#name-partial-body-lengths
-                // "An implementation MAY use Partial Body Lengths for data packets, be
-                // they literal, compressed, or encrypted [...]
-                // Partial Body Lengths MUST NOT be used for any other packet types"
-                if !matches!(
-                    header.tag(),
-                    Tag::LiteralData
-                        | Tag::CompressedData
-                        | Tag::SymEncryptedData
-                        | Tag::SymEncryptedProtectedData
-                ) {
-                    self.is_done = true;
-                    return Some(Err(format_err!(
-                        "Partial body length is not allowed for packet type {:?}",
-                        header.tag()
-                    )));
-                }
-
-                // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
-                // "The first partial length MUST be at least 512 octets long."
-                if len < 512 {
-                    self.is_done = true;
-                    return Some(Err(format_err!(
-                        "Illegal first partial body length {} (shorter than 512 bytes)",
-                        len,
-                    )));
-                }
-
-                let mut body = SegmentedBuf::new();
-                let first = match self.reader.read_take_fixed(len as usize) {
-                    Ok(bytes) => bytes,
-                    Err(err) => {
-                        self.is_done = true;
-                        return Some(Err(err.into()));
-                    }
-                };
-                body.push(first);
-
-                // Read n partials + 1 final fixed
-                loop {
-                    let len = PacketLength::from_reader(&mut self.reader);
-                    debug!("partials: found packet_length: {:?}", len);
-                    match len {
-                        Ok(PacketLength::Partial(len)) => {
-                            let len = len as usize;
-                            todo!();
-                            // body.push(self.reader.copy_to_bytes(len));
-                        }
-                        Ok(PacketLength::Fixed(len)) => {
-                            todo!();
-                            // body.push(self.reader.copy_to_bytes(len as usize));
-                            // break;
-                        }
-                        Ok(PacketLength::Indeterminate) => {
-                            self.is_done = true;
-                            return Some(Err(Error::InvalidInput));
-                        }
-                        Err(err) => {
-                            self.is_done = true;
-                            return Some(Err(err.into()));
-                        }
-                    }
-                }
-
-                match Packet::from_bytes(header, body) {
-                    Ok(packet) => Some(Ok(packet)),
-                    Err(Error::PacketParsing { source }) if source.is_incomplete() => {
-                        debug!("incomplete packet for: {:?}", source);
-                        // not bailing, we are just skipping incomplete bodies
-                        Some(Err(Error::PacketIncomplete { source }))
-                    }
-                    Err(err) => {
-                        self.is_done = true;
-                        Some(Err(err))
-                    }
-                }
+        let body = PacketBodyReader::new(header, &mut self.reader);
+        match Packet::from_reader(header, body) {
+            Ok(packet) => Some(Ok(packet)),
+            Err(err) => {
+                self.is_done = true;
+                Some(Err(err.into()))
             }
         }
     }
 }
 
+impl<R: BufRead> PacketParser<R> {
+    pub fn next_ref(&mut self) -> Option<Result<PacketBodyReader<&'_ mut R>>> {
+        if self.is_done {
+            return None;
+        }
+
+        let header = match PacketHeader::from_reader(&mut self.reader) {
+            Ok(header) => header,
+            Err(err) => {
+                self.is_done = true;
+                return Some(Err(err.into()));
+            }
+        };
+
+        debug!("found header: {header:?}");
+        let body = PacketBodyReader::new(header, &mut self.reader);
+        Some(Ok(body))
+    }
+
+    pub fn next_owned(mut self) -> Option<Result<PacketBodyReader<R>>> {
+        if self.is_done {
+            return None;
+        }
+
+        let header = match PacketHeader::from_reader(&mut self.reader) {
+            Ok(header) => header,
+            Err(err) => {
+                self.is_done = true;
+                return Some(Err(err.into()));
+            }
+        };
+
+        debug!("found header: {header:?}");
+        let body = PacketBodyReader::new(header, self.reader);
+        Some(Ok(body))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
     use std::fs::File;
     use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
     use std::path::Path;
@@ -162,6 +98,7 @@ mod tests {
     use super::*;
     use crate::packet::PacketTrait;
     use crate::ser::Serialize;
+    use crate::types::Tag;
 
     #[test]
     #[ignore]
@@ -331,20 +268,16 @@ mod tests {
             // Literal Data Packet with first partial length of 512 bytes, followed by a part with five octet length encoding
             "./tests/unit-tests/partial-body-length/literal.packet-partial.512.asc",
         ] {
-            let (message, _headers) = Message::from_armor_single(File::open(msg_file).unwrap())
-                .expect("failed to parse message");
+            let (mut message, _headers) =
+                Message::from_armor_file(msg_file).expect("failed to parse message");
 
-            let Message::Literal(data) = &message else {
-                panic!("expected Literal")
-            };
-
-            assert_eq!(data.data(), TEXT.as_bytes());
+            assert!(message.is_literal());
+            assert_eq!(message.as_data_vec(), TEXT.as_bytes());
         }
 
         // Literal Data Packet with illegal first partial length of 256 bytes
-        let res = Message::from_armor_single(
-            File::open("./tests/unit-tests/partial-body-length/literal.packet-partial.256.asc")
-                .unwrap(),
+        let res = Message::from_armor_file(
+            "./tests/unit-tests/partial-body-length/literal.packet-partial.256.asc",
         );
         assert!(res.is_err());
     }

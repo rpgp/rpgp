@@ -44,13 +44,14 @@ fn try_decrypt(keyfile: &str, msg_file: &str) {
     let ssk = load_ssk(keyfile);
 
     // load seipdv1 msg, decrypt
-    let (message, _) = Message::from_armor_single(File::open(msg_file).unwrap()).expect("ok");
+    let (message, _) = Message::from_armor_file(msg_file).expect("ok");
     let (dec, _) = message.decrypt(&["".into()], &[&ssk]).expect("decrypt");
 
-    let decrypted =
-        String::from_utf8(dec.get_literal().expect("literal").data().to_vec()).expect("utf8");
+    todo!()
+    // let decrypted =
+    //     String::from_utf8(dec.get_literal().expect("literal").data().to_vec()).expect("utf8");
 
-    assert_eq!(&decrypted, MSG);
+    // assert_eq!(&decrypted, MSG);
 }
 
 #[test]
@@ -101,20 +102,21 @@ fn rfc9580_seipdv1_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(MSG.as_bytes())).unwrap();
-        let msg = Message::Literal(lit);
+        // let lit = LiteralData::from_bytes("", Bytes::from_static(MSG.as_bytes())).unwrap();
+        // let msg = Message::Literal(lit);
 
-        // SEIPDv1 encrypt/decrypt roundtrip
-        let enc = msg
-            .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES256, &[enc_subkey])
-            .expect("encrypt");
+        // // SEIPDv1 encrypt/decrypt roundtrip
+        // let enc = msg
+        //     .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES256, &[enc_subkey])
+        //     .expect("encrypt");
 
-        let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
-        let Message::Literal(lit) = dec else {
-            panic!("expecting literal data");
-        };
+        // let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
+        todo!()
+        // let Message::Literal(lit) = dec else {
+        //     panic!("expecting literal data");
+        // };
 
-        assert_eq!(String::from_utf8_lossy(lit.data()), MSG);
+        // assert_eq!(String::from_utf8_lossy(lit.data()), MSG);
     }
 }
 
@@ -129,26 +131,28 @@ fn rfc9580_seipdv2_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
-        let msg = Message::Literal(lit);
+        // let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
+        // let msg = Message::Literal(lit);
 
-        // SEIPDv2 encrypt/decrypt roundtrip
-        let enc = msg
-            .encrypt_to_keys_seipdv2(
-                &mut rng,
-                SymmetricKeyAlgorithm::AES256,
-                AeadAlgorithm::Ocb,
-                ChunkSize::default(),
-                &[enc_subkey],
-            )
-            .expect("encrypt");
+        // // SEIPDv2 encrypt/decrypt roundtrip
+        // let enc = msg
+        //     .encrypt_to_keys_seipdv2(
+        //         &mut rng,
+        //         SymmetricKeyAlgorithm::AES256,
+        //         AeadAlgorithm::Ocb,
+        //         ChunkSize::default(),
+        //         &[enc_subkey],
+        //     )
+        //     .expect("encrypt");
 
-        let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
-        let Message::Literal(lit) = dec else {
-            panic!("expecting literal data");
-        };
+        // let (dec, _) = enc.decrypt(&["".into()], &[&ssk]).expect("decrypt");
 
-        assert_eq!(String::from_utf8_lossy(lit.data()), MSG);
+        todo!()
+        // let Message::Literal(lit) = dec else {
+        //     panic!("expecting literal data");
+        // };
+
+        // assert_eq!(String::from_utf8_lossy(lit.data()), MSG);
     }
 }
 
@@ -178,15 +182,16 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         let spk = SignedPublicKey::from(ssk.clone());
 
-        let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
-        let msg = Message::Literal(lit);
+        todo!()
+        // let lit = LiteralData::from_bytes("", MSG.as_bytes().into()).unwrap();
+        // let msg = Message::Literal(lit);
 
-        // roundtrip sign+verify inline msg
-        let signed = msg
-            .sign(&mut rng, &*ssk, &"".into(), HashAlgorithm::default())
-            .expect("sign");
+        // // roundtrip sign+verify inline msg
+        // let signed = msg
+        //     .sign(&mut rng, &*ssk, &"".into(), HashAlgorithm::default())
+        //     .expect("sign");
 
-        signed.verify(&spk).expect("verify");
+        // signed.verify(&spk).expect("verify");
     }
 }
 

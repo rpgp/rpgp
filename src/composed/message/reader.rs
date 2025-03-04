@@ -73,8 +73,8 @@ impl<R: Read> MessageReader<R> {
         Self { source }
     }
 
-    pub fn get_literal_reader(&mut self) -> LiteralReader<&'_ mut Source<R>> {
-        LiteralReader {
+    pub fn get_literal_reader(&mut self) -> LiteralDataReader<&'_ mut Source<R>> {
+        LiteralDataReader {
             state: LiteralReaderState::Header {
                 source: &mut self.source,
             },
@@ -84,8 +84,8 @@ impl<R: Read> MessageReader<R> {
     pub fn get_literal_decompress_reader(
         &mut self,
         decompress: bool,
-    ) -> LiteralReader<CompressedReader<&'_ mut Source<R>>> {
-        LiteralReader {
+    ) -> LiteralDataReader<CompressedReader<&'_ mut Source<R>>> {
+        LiteralDataReader {
             state: LiteralReaderState::Header {
                 source: CompressedReader {
                     state: CompressedReaderState::Header {
@@ -98,15 +98,16 @@ impl<R: Read> MessageReader<R> {
     }
 }
 
-#[derive(Debug)]
+#[derive(derive_more::Debug)]
 pub struct PacketBodyReader<R: BufRead> {
     packet_header: PacketHeader,
     state: PacketBodyReaderState<R>,
 }
 
-#[derive(Debug)]
+#[derive(derive_more::Debug)]
 enum PacketBodyReaderState<R: BufRead> {
     Header {
+        #[debug("source")]
         source: R,
     },
     Body {
@@ -114,6 +115,7 @@ enum PacketBodyReaderState<R: BufRead> {
         source: LimitedSource<R>,
     },
     Done {
+        #[debug("source")]
         source: R,
     },
     Error,
@@ -158,14 +160,14 @@ impl<R: BufRead> Read for PacketBodyReader<R> {
 }
 
 impl<R: BufRead> PacketBodyReader<R> {
-    fn new(packet_header: PacketHeader, source: R) -> Self {
+    pub fn new(packet_header: PacketHeader, source: R) -> Self {
         Self {
             packet_header,
             state: PacketBodyReaderState::Header { source },
         }
     }
 
-    fn into_inner(self) -> R {
+    pub fn into_inner(self) -> R {
         match self.state {
             PacketBodyReaderState::Header { source } => source,
             PacketBodyReaderState::Body { source, .. } => source.into_inner(),
@@ -174,7 +176,7 @@ impl<R: BufRead> PacketBodyReader<R> {
         }
     }
 
-    fn packet_header(&self) -> PacketHeader {
+    pub fn packet_header(&self) -> PacketHeader {
         self.packet_header
     }
 
@@ -190,10 +192,32 @@ impl<R: BufRead> PacketBodyReader<R> {
                         PacketLength::Fixed(len) => LimitedSource::Fixed(source.take(len as u64)),
                         PacketLength::Indeterminate => LimitedSource::Indeterminate(source),
                         PacketLength::Partial(len) => {
+                            // https://www.rfc-editor.org/rfc/rfc9580.html#name-partial-body-lengths
+                            // "An implementation MAY use Partial Body Lengths for data packets, be
+                            // they literal, compressed, or encrypted [...]
+                            // Partial Body Lengths MUST NOT be used for any other packet types"
+                            if !matches!(
+                                self.packet_header.tag(),
+                                Tag::LiteralData
+                                    | Tag::CompressedData
+                                    | Tag::SymEncryptedData
+                                    | Tag::SymEncryptedProtectedData
+                            ) {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    format!(
+                                        "Partial body length is not allowed for packet type {:?}",
+                                        self.packet_header.tag()
+                                    ),
+                                ));
+                            }
+
+                            // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
+                            // "The first partial length MUST be at least 512 octets long."
                             if len < 512 {
                                 return Err(io::Error::new(
                                     io::ErrorKind::InvalidInput,
-                                    "first partial body length must be at least 512 bytes",
+                                    format!("Illegal first partial body length {} (shorter than 512 bytes)", len)
                                 ));
                             }
 
@@ -416,8 +440,8 @@ impl<R: BufRead> CompressedReader<R> {
 }
 
 /// Read the underlying literal data.
-#[derive(Debug)]
-pub struct LiteralReader<R: BufRead> {
+#[derive(derive_more::Debug)]
+pub struct LiteralDataReader<R: BufRead> {
     state: LiteralReaderState<R>,
 }
 
@@ -460,9 +484,10 @@ impl<R: BufRead> Read for MaybeDecompress<R> {
     }
 }
 
-#[derive(Debug)]
+#[derive(derive_more::Debug)]
 enum LiteralReaderState<R: BufRead> {
     Header {
+        #[debug("source")]
         source: R,
     },
     LiteralHeader {
@@ -474,6 +499,7 @@ enum LiteralReaderState<R: BufRead> {
         header: LiteralDataHeader,
     },
     Done {
+        #[debug("source")]
         source: R,
         packet_header: PacketHeader,
         header: LiteralDataHeader,
@@ -481,11 +507,11 @@ enum LiteralReaderState<R: BufRead> {
     Error,
 }
 
-#[derive(Debug)]
+#[derive(derive_more::Debug)]
 enum LimitedSource<R: BufRead> {
-    Fixed(io::Take<R>),
-    Indeterminate(R),
-    Partial(io::Take<R>),
+    Fixed(#[debug("Take<R>")] io::Take<R>),
+    Indeterminate(#[debug("R")] R),
+    Partial(#[debug("Take<R>")] io::Take<R>),
 }
 
 impl<R: BufRead> BufRead for LimitedSource<R> {
@@ -526,7 +552,7 @@ impl<R: BufRead> LimitedSource<R> {
     }
 }
 
-impl<R: BufRead> Read for LiteralReader<R> {
+impl<R: BufRead> Read for LiteralDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         if matches!(self.state, LiteralReaderState::Done { .. }) {
             return Ok(0);
@@ -616,7 +642,7 @@ impl<R: BufRead> Read for LiteralReader<R> {
     }
 }
 
-impl<R: BufRead> LiteralReader<R> {
+impl<R: BufRead> LiteralDataReader<R> {
     pub fn data_header(&self) -> Option<&LiteralDataHeader> {
         match self.state {
             LiteralReaderState::Done { ref header, .. } => Some(header),
@@ -636,6 +662,9 @@ mod tests {
     use crate::packet::DataMode;
     use crate::types::CompressionAlgorithm;
     use crate::util::test::{check_strings, random_string, ChaosReader};
+
+    #[derive(Debug)]
+    struct DebugPacketBodyReader(PacketBodyReader<Box<dyn BufRead>>);
 
     #[test]
     fn test_read_literal_data_no_compression() -> TestResult {

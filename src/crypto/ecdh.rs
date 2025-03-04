@@ -636,14 +636,14 @@ mod tests {
             "./tests/unit-tests/padding/msg-short-padding.pgp",
             "./tests/unit-tests/padding/msg-long-padding.pgp",
         ] {
-            let (message, _headers) = Message::from_armor_single(fs::File::open(msg_file).unwrap())
-                .expect("failed to parse message");
+            let (message, _headers) =
+                Message::from_armor_file(msg_file).expect("failed to parse message");
 
-            let (msg, _ids) = message
+            let (mut msg, _ids) = message
                 .decrypt(&[Password::empty()], &[&decrypt_key])
                 .expect("failed to init decryption");
 
-            let data = msg.get_literal().unwrap().data();
+            let data = msg.as_data_vec();
 
             assert_eq!(data, "hello\n".as_bytes());
         }
