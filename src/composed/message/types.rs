@@ -441,7 +441,7 @@ impl Message {
         pkeys: &[&impl PublicKeyTrait],
     ) -> Result<Self> {
         // 1. Generate a session key.
-        let session_key = alg.new_session_key(&mut rng);
+        let session_key = alg.new_session_key_with_rng(&mut rng);
 
         // 2. Encrypt (pub) the session key, to each PublicKey.
         let esk = pkeys
@@ -471,7 +471,7 @@ impl Message {
         pkeys: &[&impl PublicKeyTrait],
     ) -> Result<Self> {
         // 1. Generate a session key.
-        let session_key = alg.new_session_key(&mut rng);
+        let session_key = alg.new_session_key_with_rng(&mut rng);
 
         // 2. Encrypt (pub) the session key, to each PublicKey.
         let esk = pkeys
@@ -502,7 +502,7 @@ impl Message {
         R: Rng + CryptoRng,
     {
         // 1. Generate a session key.
-        let session_key = alg.new_session_key(&mut rng);
+        let session_key = alg.new_session_key_with_rng(&mut rng);
 
         // 2. Encrypt (sym) the session key using the provided password.
         let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v4(
@@ -530,7 +530,7 @@ impl Message {
         R: Rng + CryptoRng,
     {
         // 1. Generate a session key.
-        let session_key = alg.new_session_key(&mut rng);
+        let session_key = alg.new_session_key_with_rng(&mut rng);
 
         // 2. Encrypt (sym) the session key using the provided password.
         let skesk = Esk::SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey::encrypt_v6(
@@ -1314,7 +1314,7 @@ mod tests {
         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
 
-        let s2k = StringToKey::new_default(&mut rng);
+        let s2k = StringToKey::new_default_with_rng(&mut rng);
 
         let encrypted = compressed_msg
             .encrypt_with_password_seipdv1(
@@ -1340,7 +1340,7 @@ mod tests {
 
         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
-        let s2k = StringToKey::new_default(&mut rng);
+        let s2k = StringToKey::new_default_with_rng(&mut rng);
 
         let encrypted = compressed_msg
             .encrypt_with_password_seipdv2(

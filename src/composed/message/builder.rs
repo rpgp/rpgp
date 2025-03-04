@@ -248,7 +248,7 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     where
         RAND: CryptoRng + Rng,
     {
-        let session_key = sym_alg.new_session_key(&mut rng);
+        let session_key = sym_alg.new_session_key_with_rng(&mut rng);
 
         Builder {
             source: self.source,
@@ -278,7 +278,7 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
     where
         RAND: CryptoRng + Rng,
     {
-        let session_key = sym_alg.new_session_key(&mut rng);
+        let session_key = sym_alg.new_session_key_with_rng(&mut rng);
 
         let mut salt = [0u8; 32];
         rng.fill_bytes(&mut salt);
@@ -304,7 +304,7 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
 
 impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// Encrypt to a public key
-    pub fn encrypt_to_key<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    pub fn encrypt_to_key_with_rng<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
@@ -343,7 +343,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
 
 impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// Encrypt to a public key
-    pub fn encrypt_to_key<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    pub fn encrypt_to_key_with_rng<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
@@ -361,7 +361,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     }
 
     /// Encrypt to a password.
-    pub fn encrypt_with_password<RAND>(
+    pub fn encrypt_with_password_with_rng<RAND>(
         mut self,
         mut rng: RAND,
         s2k: StringToKey,
@@ -461,7 +461,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out to a writer.
-    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<()>
+    pub fn to_writer_with_rng<RAND, W>(self, rng: RAND, out: W) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
@@ -539,7 +539,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data not as binary, but ascii armor encoded.
-    pub fn to_armored_writer<RAND, W>(
+    pub fn to_armored_writer_with_rng<RAND, W>(
         self,
         rng: RAND,
         opts: ArmorOptions<'_>,
@@ -563,9 +563,9 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
 
             if let Some(crc_hasher) = crc_hasher {
                 let mut tee = TeeWriter::new(crc_hasher, &mut enc);
-                self.to_writer(rng, &mut tee)?;
+                self.to_writer_with_rng(rng, &mut tee)?;
             } else {
-                self.to_writer(rng, &mut enc)?;
+                self.to_writer_with_rng(rng, &mut enc)?;
             }
         }
 
@@ -577,7 +577,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
+    pub fn to_file_with_rng<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         P: AsRef<Path>,
@@ -594,7 +594,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
             .open(out_path)?;
         let mut out_file = BufWriter::new(out_file);
 
-        self.to_writer(rng, &mut out_file)?;
+        self.to_writer_with_rng(rng, &mut out_file)?;
 
         out_file.flush()?;
 
@@ -602,7 +602,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_armored_file<RAND, P>(
+    pub fn to_armored_file_with_rng<RAND, P>(
         self,
         rng: RAND,
         out_path: P,
@@ -624,7 +624,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
             .open(out_path)?;
         let mut out_file = BufWriter::new(out_file);
 
-        self.to_armored_writer(rng, opts, &mut out_file)?;
+        self.to_armored_writer_with_rng(rng, opts, &mut out_file)?;
 
         out_file.flush()?;
 
@@ -632,22 +632,26 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a `Vec<u8>`.
-    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
+    pub fn to_vec_with_rng<RAND>(self, rng: RAND) -> Result<Vec<u8>>
     where
         RAND: Rng + CryptoRng,
     {
         let mut out = Vec::new();
-        self.to_writer(rng, &mut out)?;
+        self.to_writer_with_rng(rng, &mut out)?;
         Ok(out)
     }
 
     /// Write the data as ascii armored data, directly to a `String`.
-    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
+    pub fn to_armored_string_with_rng<RAND>(
+        self,
+        rng: RAND,
+        opts: ArmorOptions<'_>,
+    ) -> Result<String>
     where
         RAND: Rng + CryptoRng,
     {
         let mut out = Vec::new();
-        self.to_armored_writer(rng, opts, &mut out)?;
+        self.to_armored_writer_with_rng(rng, opts, &mut out)?;
         let out = std::string::String::from_utf8(out).expect("ascii armor is utf8");
         Ok(out)
     }
@@ -1212,7 +1216,8 @@ mod tests {
             std::fs::write(&plaintext_file, &buf).unwrap();
 
             // encrypt it
-            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+            let s2k =
+                crate::types::StringToKey::new_iterated_with_rng(&mut rng, Default::default(), 2);
 
             let builder = Builder::from_file(&plaintext_file)
                 .partial_chunk_size(chunk_size)
@@ -1221,7 +1226,7 @@ mod tests {
                 .encrypt_with_password(s2k, &"hello world".into())
                 .unwrap();
 
-            builder.to_file(&mut rng, &encrypted_file).unwrap();
+            builder.to_file_with_rng(&mut rng, &encrypted_file).unwrap();
 
             // decrypt it
             let encrypted_file_data = std::fs::read(&encrypted_file).unwrap();
@@ -1257,7 +1262,8 @@ mod tests {
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
             // encrypt it
-            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+            let s2k =
+                crate::types::StringToKey::new_iterated_with_rng(&mut rng, Default::default(), 2);
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
                 .partial_chunk_size(chunk_size)
@@ -1266,7 +1272,7 @@ mod tests {
                 .encrypt_with_password(s2k, &"hello world".into())
                 .unwrap();
 
-            let encrypted = builder.to_vec(&mut rng).unwrap();
+            let encrypted = builder.to_vec_with_rng(&mut rng).unwrap();
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).unwrap();
@@ -1297,7 +1303,11 @@ mod tests {
                 rng.fill(&mut buf[..]);
 
                 // encrypt it
-                let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+                let s2k = crate::types::StringToKey::new_iterated_with_rng(
+                    &mut rng,
+                    Default::default(),
+                    2,
+                );
 
                 let mut builder = Builder::from_bytes("plaintext.txt", buf.clone());
                 if let Some(chunk_size) = chunk_size {
@@ -1308,7 +1318,7 @@ mod tests {
                     .encrypt_with_password(s2k, &"hello world".into())
                     .unwrap();
 
-                let encrypted = builder.to_vec(&mut rng).unwrap();
+                let encrypted = builder.to_vec_with_rng(&mut rng).unwrap();
 
                 // decrypt it
                 log::info!("parsing");
@@ -1344,7 +1354,8 @@ mod tests {
             rng.fill(&mut buf[..]);
 
             // encrypt it
-            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+            let s2k =
+                crate::types::StringToKey::new_iterated_with_rng(&mut rng, Default::default(), 2);
 
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .partial_chunk_size(chunk_size)
@@ -1353,7 +1364,7 @@ mod tests {
                 .encrypt_with_password(s2k, &"hello world".into())
                 .expect("encryption");
 
-            let encrypted = builder.to_vec(&mut rng).expect("writing");
+            let encrypted = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -1389,7 +1400,7 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap();
 
-            let encoded = builder.to_vec(&mut rng).expect("writing");
+            let encoded = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encoded.into()).expect("reading");
@@ -1429,10 +1440,10 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap()
                 .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key_with_rng(&mut rng, &pkey)
                 .expect("encryption");
 
-            let encrypted = builder.to_vec(&mut rng).expect("writing");
+            let encrypted = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -1472,18 +1483,19 @@ mod tests {
             let mut buf = vec![0u8; file_size];
             rng.fill(&mut buf[..]);
 
-            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+            let s2k =
+                crate::types::StringToKey::new_iterated_with_rng(&mut rng, Default::default(), 2);
 
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .partial_chunk_size(chunk_size)
                 .unwrap()
                 .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key_with_rng(&mut rng, &pkey)
                 .expect("encryption")
                 .encrypt_with_password(s2k, &"hello world".into())
                 .expect("encryption sym");
 
-            let encrypted = builder.to_vec(&mut rng).expect("writing");
+            let encrypted = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
 
@@ -1535,7 +1547,7 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap();
 
-            let encoded = builder.to_vec(&mut rng).expect("writing");
+            let encoded = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encoded.into()).expect("reading");
@@ -1579,10 +1591,10 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap()
                 .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key_with_rng(&mut rng, &pkey)
                 .expect("encryption");
 
-            let encrypted = builder.to_vec(&mut rng).expect("writing");
+            let encrypted = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -1629,10 +1641,10 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap()
                 .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key_with_rng(&mut rng, &pkey)
                 .expect("encryption");
 
-            let encrypted = builder.to_vec(&mut rng).expect("writing");
+            let encrypted = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -1685,7 +1697,10 @@ mod tests {
 
             let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-            let signed = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
+            let signed = builder
+                .sign(sig_config)
+                .to_vec_with_rng(&mut rng)
+                .expect("writing");
             let message = Message::from_bytes(signed.into()).expect("reading");
 
             // verify signature
@@ -1747,12 +1762,15 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap()
                 .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key_with_rng(&mut rng, &pkey)
                 .expect("encryption");
 
             let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
+            let encrypted = builder
+                .sign(sig_config)
+                .to_vec_with_rng(&mut rng)
+                .expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
 
@@ -1804,7 +1822,8 @@ mod tests {
             rng.fill(&mut buf[..]);
 
             // encrypt it
-            let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
+            let s2k =
+                crate::types::StringToKey::new_iterated_with_rng(&mut rng, Default::default(), 2);
 
             let builder = Builder::from_reader("plaintext.txt", &buf[..])
                 .partial_chunk_size(chunk_size)
@@ -1815,10 +1834,10 @@ mod tests {
                     AeadAlgorithm::Gcm,
                     ChunkSize::default(),
                 )
-                .encrypt_with_password(&mut rng, s2k, &"hello world".into())
+                .encrypt_with_password_with_rng(&mut rng, s2k, &"hello world".into())
                 .expect("encryption");
 
-            let encrypted = builder.to_vec(&mut rng).expect("writing");
+            let encrypted = builder.to_vec_with_rng(&mut rng).expect("writing");
 
             // decrypt it
             let message = Message::from_bytes(encrypted.into()).expect("reading");
@@ -1869,12 +1888,15 @@ mod tests {
                     AeadAlgorithm::Gcm,
                     ChunkSize::default(),
                 )
-                .encrypt_to_key(&mut rng, &pkey)
+                .encrypt_to_key_with_rng(&mut rng, &pkey)
                 .expect("encryption");
 
             let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
+            let encrypted = builder
+                .sign(sig_config)
+                .to_vec_with_rng(&mut rng)
+                .expect("writing");
 
             let message = Message::from_bytes(encrypted.into()).expect("reading");
 
@@ -1964,7 +1986,7 @@ mod tests {
                         AeadAlgorithm::Gcm,
                         ChunkSize::default(),
                     )
-                    .encrypt_to_key(&mut rng, &pkey1)?
+                    .encrypt_to_key_with_rng(&mut rng, &pkey1)?
                     .sign(SigningConfig::new(
                         &*skey1,
                         Password::empty(),
@@ -1978,7 +2000,7 @@ mod tests {
 
                 let message = match encoding {
                     Encoding::Armor(opts) => {
-                        let encrypted = builder.to_armored_string(&mut rng, opts)?;
+                        let encrypted = builder.to_armored_string_with_rng(&mut rng, opts)?;
 
                         println!("{}", encrypted);
 
@@ -1986,7 +2008,7 @@ mod tests {
                         message
                     }
                     Encoding::Binary => {
-                        let encrypted = builder.to_vec(&mut rng)?;
+                        let encrypted = builder.to_vec_with_rng(&mut rng)?;
 
                         println!("{}", hex::encode(&encrypted));
                         Message::from_bytes(encrypted.into())?

@@ -616,7 +616,7 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Generate a new session key.
-    pub fn new_session_key<R: Rng + CryptoRng>(self, mut rng: R) -> Zeroizing<Vec<u8>> {
+    pub fn new_session_key_with_rng<R: Rng + CryptoRng>(self, mut rng: R) -> Zeroizing<Vec<u8>> {
         let mut session_key = Zeroizing::new(vec![0u8; self.key_size()]);
         rng.fill_bytes(&mut session_key);
         session_key

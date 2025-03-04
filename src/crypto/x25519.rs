@@ -36,7 +36,7 @@ impl Eq for SecretKey {}
 
 impl SecretKey {
     /// Generate an X25519 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(mut rng: R) -> Self {
         let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
         rng.fill_bytes(&mut *secret_key_bytes);
 
@@ -258,7 +258,7 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
-        let skey = SecretKey::generate(&mut rng);
+        let skey = SecretKey::generate_with_rng(&mut rng);
         let pub_params: X25519PublicParams = (&skey).into();
 
         for text_size in (8..=248).step_by(8) {

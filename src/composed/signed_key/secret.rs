@@ -486,7 +486,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         msg.verify(pri.public_key())?;
 
         // set passphrase with default s2k
-        pri.set_password(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
+        pri.set_password_with_rng(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing with pw
         let msg = Message::Literal(lit.clone()).sign(
@@ -503,7 +503,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         // set passphrase with Cfb s2k (default for KeyVersion::V4)
         pri.set_password_with_s2k(
             &ANNEX_A_5_PASSPHRASE.into(),
-            S2kParams::new_default(&mut rng, KeyVersion::V4),
+            S2kParams::new_default_with_rng(&mut rng, KeyVersion::V4),
         )?;
 
         // try signing with pw

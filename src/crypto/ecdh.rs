@@ -116,7 +116,7 @@ impl From<&SecretKey> for EcdhPublicParams {
 
 impl SecretKey {
     /// Generate an ECDH KeyPair.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
         match curve {
             ECCCurve::Curve25519 => {
                 let mut secret_key_bytes =
@@ -587,7 +587,7 @@ mod tests {
         ] {
             let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-            let skey = SecretKey::generate(&mut rng, &curve).unwrap();
+            let skey = SecretKey::generate_with_rng(&mut rng, &curve).unwrap();
             let pub_params: EcdhPublicParams = (&skey).into();
 
             for text_size in 1..=239 {

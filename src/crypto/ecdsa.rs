@@ -70,7 +70,7 @@ impl TryFrom<&SecretKey> for EcdsaPublicParams {
 
 impl SecretKey {
     /// Generate an ECDSA `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
                 let secret = p256::SecretKey::random(&mut rng);

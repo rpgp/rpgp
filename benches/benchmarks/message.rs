@@ -65,7 +65,7 @@ fn bench_message(c: &mut Criterion) {
                 let mut bytes = vec![0u8; size];
                 rng.fill_bytes(&mut bytes);
 
-                let s2k = StringToKey::new_default(&mut rng);
+                let s2k = StringToKey::new_default_with_rng(&mut rng);
                 let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
                 b.iter(|| {
@@ -94,7 +94,7 @@ fn bench_message(c: &mut Criterion) {
                 let mut rng = rand::thread_rng();
                 rng.fill_bytes(&mut bytes);
 
-                let s2k = StringToKey::new_default(&mut rng);
+                let s2k = StringToKey::new_default_with_rng(&mut rng);
                 let message = Message::new_literal_bytes("test", &bytes)
                     .unwrap()
                     .encrypt_with_password_seipdv1(
@@ -161,7 +161,7 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
+                    let signed_key = key.sign_with_rng(&mut rng, &Password::empty()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
@@ -194,7 +194,7 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
+                    let signed_key = key.sign_with_rng(&mut rng, &Password::empty()).unwrap();
 
                     let message = Message::new_literal_bytes("test", &bytes)
                         .unwrap()

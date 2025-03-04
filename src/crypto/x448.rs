@@ -26,7 +26,7 @@ impl From<&SecretKey> for X448PublicParams {
 
 impl SecretKey {
     /// Generate an X448 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(mut rng: R) -> Self {
         let mut secret_key_bytes = Zeroizing::new([0u8; 56]);
         rng.fill_bytes(&mut *secret_key_bytes);
         let secret = x448::Secret::from(*secret_key_bytes); // does clamping
@@ -201,7 +201,7 @@ mod tests {
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
-        let skey = SecretKey::generate(&mut rng);
+        let skey = SecretKey::generate_with_rng(&mut rng);
         let pub_params: X448PublicParams = (&skey).into();
 
         for text_size in (8..=248).step_by(8) {

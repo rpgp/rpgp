@@ -13,7 +13,7 @@
 //! use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 //! use pgp::errors::Result;
 //! use pgp::packet::{KeyFlags, UserAttribute, UserId};
-//! use pgp::types::{CompressionAlgorithm, PublicKeyTrait, SecretKeyTrait, Password};
+//! use pgp::types::{CompressionAlgorithm, Password, PublicKeyTrait, SecretKeyTrait};
 //! use rand::thread_rng;
 //! use smallvec::*;
 //!
@@ -34,7 +34,7 @@
 //!     .expect("Failed to generate a plain key.");
 //! let passwd_fn = Password::empty();
 //! let signed_secret_key = secret_key
-//!     .sign(&mut thread_rng(), &passwd_fn)
+//!     .sign_with_rng(&mut thread_rng(), &passwd_fn)
 //!     .expect("Must be able to sign its own metadata");
 //! let public_key = signed_secret_key.public_key();
 //! ```

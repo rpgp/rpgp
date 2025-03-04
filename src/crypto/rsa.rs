@@ -32,7 +32,7 @@ impl SecretKey {
     /// Generate an RSA `SecretKey`.
     ///
     /// Errors on unsupported `bit_size`s.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, bit_size: usize) -> Result<Self> {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(mut rng: R, bit_size: usize) -> Result<Self> {
         let key = RsaPrivateKey::new(&mut rng, bit_size)?;
 
         Ok(SecretKey(key))
@@ -177,10 +177,10 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
     use rand::SeedableRng;
+
+    use super::*;
 
     prop_compose! {
         pub fn key_gen()(seed: u64) -> RsaPrivateKey {

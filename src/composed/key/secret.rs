@@ -38,7 +38,7 @@ impl SecretKey {
         }
     }
 
-    pub fn sign<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
+    pub fn sign_with_rng<R>(self, mut rng: R, key_pw: &Password) -> Result<SignedSecretKey>
     where
         R: CryptoRng + Rng,
     {

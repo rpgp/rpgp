@@ -65,7 +65,7 @@ impl SecretKey {
     /// Generate an EdDSA `SecretKey`.
     ///
     /// `mode` picks between supported EdDSA key formats and curves
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(mut rng: R) -> Self {
         let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
         rng.fill_bytes(&mut *bytes);
         let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);

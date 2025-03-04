@@ -167,11 +167,11 @@ impl SecretKeyParamsBuilder {
 }
 
 impl SecretKeyParams {
-    pub fn generate<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
+    pub fn generate_with_rng<R: Rng + CryptoRng>(self, mut rng: R) -> Result<SecretKey> {
         let passphrase = self.passphrase;
         let s2k = self
             .s2k
-            .unwrap_or_else(|| S2kParams::new_default(&mut rng, self.version));
+            .unwrap_or_else(|| S2kParams::new_default_with_rng(&mut rng, self.version));
         let (public_params, secret_params) = self.key_type.generate(&mut rng)?;
         let pub_key = PubKeyInner::new(
             self.version,
@@ -213,9 +213,9 @@ impl SecretKeyParams {
                 .into_iter()
                 .map(|subkey| {
                     let passphrase = subkey.passphrase;
-                    let s2k = subkey
-                        .s2k
-                        .unwrap_or_else(|| S2kParams::new_default(&mut rng, subkey.version));
+                    let s2k = subkey.s2k.unwrap_or_else(|| {
+                        S2kParams::new_default_with_rng(&mut rng, subkey.version)
+                    });
                     let (public_params, secret_params) = subkey.key_type.generate(&mut rng)?;
                     let mut keyflags = KeyFlags::default();
                     keyflags.set_certify(subkey.can_certify);
@@ -309,25 +309,25 @@ impl KeyType {
     ) -> Result<(PublicParams, types::SecretParams)> {
         let (pub_params, plain) = match self {
             KeyType::Rsa(bit_size) => {
-                let secret = rsa::SecretKey::generate(rng, *bit_size as usize)?;
+                let secret = rsa::SecretKey::generate_with_rng(rng, *bit_size as usize)?;
                 let public_params = PublicParams::RSA((&secret).into());
                 let secret_params = PlainSecretParams::RSA(secret);
                 (public_params, secret_params)
             }
             KeyType::ECDH(curve) => {
-                let secret = ecdh::SecretKey::generate(rng, curve)?;
+                let secret = ecdh::SecretKey::generate_with_rng(rng, curve)?;
                 let public_params = PublicParams::ECDH((&secret).into());
                 let secret_params = PlainSecretParams::ECDH(secret);
                 (public_params, secret_params)
             }
             KeyType::EdDSALegacy => {
-                let secret = eddsa::SecretKey::generate(rng);
+                let secret = eddsa::SecretKey::generate_with_rng(rng);
                 let public_params = PublicParams::EdDSALegacy((&secret).into());
                 let secret_params = PlainSecretParams::EdDSALegacy(secret);
                 (public_params, secret_params)
             }
             KeyType::ECDSA(curve) => {
-                let secret = ecdsa::SecretKey::generate(rng, curve)?;
+                let secret = ecdsa::SecretKey::generate_with_rng(rng, curve)?;
                 let public_params = PublicParams::ECDSA(
                     (&secret).try_into().expect("must not generate unuspported"),
                 );
@@ -335,26 +335,26 @@ impl KeyType {
                 (public_params, secret_params)
             }
             KeyType::Dsa(key_size) => {
-                let secret = dsa::SecretKey::generate(rng, (*key_size).into());
+                let secret = dsa::SecretKey::generate_with_rng(rng, (*key_size).into());
                 let public_params = PublicParams::DSA((&secret).into());
                 let secret_params = PlainSecretParams::DSA(secret);
                 (public_params, secret_params)
             }
             KeyType::Ed25519 => {
-                let secret = eddsa::SecretKey::generate(rng);
+                let secret = eddsa::SecretKey::generate_with_rng(rng);
                 let public_params = PublicParams::Ed25519((&secret).into());
                 let secret_params = PlainSecretParams::EdDSA(secret);
                 (public_params, secret_params)
             }
             KeyType::X25519 => {
-                let secret = x25519::SecretKey::generate(rng);
+                let secret = x25519::SecretKey::generate_with_rng(rng);
                 let public_params = PublicParams::X25519((&secret).into());
                 let secret_params = PlainSecretParams::X25519(secret);
                 (public_params, secret_params)
             }
             #[cfg(feature = "unstable-curve448")]
             KeyType::X448 => {
-                let secret = crate::crypto::x448::SecretKey::generate(rng);
+                let secret = crate::crypto::x448::SecretKey::generate_with_rng(rng);
                 let public_params = PublicParams::X448((&secret).into());
                 let secret_params = PlainSecretParams::X448(secret);
                 (public_params, secret_params)
@@ -441,7 +441,7 @@ mod tests {
             .build()
             .unwrap();
         let key_enc = key_params_enc
-            .generate(&mut rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key, encrypted");
 
         let key_params_plain = key_params
@@ -457,14 +457,14 @@ mod tests {
             .build()
             .unwrap();
         let key_plain = key_params_plain
-            .generate(&mut rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
         let signed_key_enc = key_enc
-            .sign(&mut rng, &"hello".into())
+            .sign_with_rng(&mut rng, &"hello".into())
             .expect("failed to sign key");
         let signed_key_plain = key_plain
-            .sign(&mut rng, &"".into())
+            .sign_with_rng(&mut rng, &"".into())
             .expect("failed to sign key");
 
         let armor_enc = signed_key_enc
@@ -575,10 +575,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate(&mut rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign_with_rng(&mut rng, &"".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -685,10 +687,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate(&mut rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign_with_rng(&mut rng, &"".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -770,10 +774,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate(&mut rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign_with_rng(&mut rng, &"".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
@@ -924,10 +930,12 @@ mod tests {
             .unwrap();
 
         let key = key_params
-            .generate(&mut rng)
+            .generate_with_rng(&mut rng)
             .expect("failed to generate secret key");
 
-        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+        let signed_key = key
+            .sign_with_rng(&mut rng, &"".into())
+            .expect("failed to sign key");
 
         let armor = signed_key
             .to_armored_string(None.into())
