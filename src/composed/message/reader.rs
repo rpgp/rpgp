@@ -286,6 +286,74 @@ impl<R: BufRead> PacketBodyReader<R> {
 }
 
 #[derive(derive_more::Debug)]
+pub enum SymEncryptedProtectedDataReader<R: BufRead> {
+    Header {
+        source: PacketBodyReader<R>,
+        buffer: BytesMut,
+    },
+    Body {
+        source: PacketBodyReader<R>,
+        buffer: BytesMut,
+        config: crate::packet::SymEncryptedProtectedDataConfig,
+    },
+    Done {
+        source: PacketBodyReader<R>,
+    },
+    Error,
+}
+
+impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
+    pub fn new(source: PacketBodyReader<R>) -> io::Result<Self> {
+        debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedProtectedData);
+
+        Ok(Self::Header {
+            source,
+            buffer: BytesMut::with_capacity(1024),
+        })
+    }
+
+    pub fn packet_header(&self) -> PacketHeader {
+        match self {
+            Self::Header { source, .. } => source.packet_header(),
+            Self::Body { source, .. } => source.packet_header(),
+            Self::Done { source, .. } => source.packet_header(),
+            Self::Error => panic!("error state"),
+        }
+    }
+}
+
+#[derive(derive_more::Debug)]
+pub enum SymEncryptedDataReader<R: BufRead> {
+    Body {
+        source: PacketBodyReader<R>,
+        buffer: BytesMut,
+    },
+    Done {
+        source: PacketBodyReader<R>,
+    },
+    Error,
+}
+
+impl<R: BufRead> SymEncryptedDataReader<R> {
+    pub fn new(source: PacketBodyReader<R>) -> io::Result<Self> {
+        debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedData);
+
+        Ok(Self::Body {
+            source,
+            buffer: BytesMut::with_capacity(1024),
+        })
+    }
+
+    pub fn packet_header(&self) -> PacketHeader {
+        match self {
+            Self::Body { source, .. } => source.packet_header(),
+            Self::Done { source, .. } => source.packet_header(),
+            Self::Error => panic!("error state"),
+        }
+    }
+}
+
+#[derive(derive_more::Debug)]
 pub struct CompressedDataReader<R: BufRead> {
     state: CompressedReaderState<R>,
 }

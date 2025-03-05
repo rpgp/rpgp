@@ -30,7 +30,10 @@ use crate::types::{
     Password, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 
-use super::reader::{CompressedDataReader, LiteralDataReader};
+use super::reader::{
+    CompressedDataReader, LiteralDataReader, SymEncryptedDataReader,
+    SymEncryptedProtectedDataReader,
+};
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 /// Encrypted Message | Signed Message | Compressed Message | Literal Message.
@@ -58,7 +61,7 @@ pub enum Message<'a> {
     Encrypted {
         /// ESK Sequence: ESK | ESK Sequence, ESK.
         esk: Vec<Esk>,
-        edata: Edata,
+        edata: Edata<'a>,
     },
 }
 
@@ -127,75 +130,26 @@ impl From<Esk> for Packet {
 /// Encrypted Data:
 /// Symmetrically Encrypted Data Packet |
 /// Symmetrically Encrypted Integrity Protected Data Packet
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Edata {
-    SymEncryptedData(SymEncryptedData),
-    SymEncryptedProtectedData(SymEncryptedProtectedData),
+#[derive(Debug)]
+pub enum Edata<'a> {
+    SymEncryptedData {
+        reader: SymEncryptedDataReader<Box<dyn BufRead + 'a>>,
+    },
+    SymEncryptedProtectedData {
+        reader: SymEncryptedProtectedDataReader<Box<dyn BufRead + 'a>>,
+    },
 }
 
-impl Serialize for Edata {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+impl<'a> Edata<'a> {
+    pub fn packet_header(&self) -> PacketHeader {
         match self {
-            Edata::SymEncryptedData(d) => d.to_writer_with_header(writer),
-            Edata::SymEncryptedProtectedData(d) => d.to_writer_with_header(writer),
-        }
-    }
-
-    fn write_len(&self) -> usize {
-        match self {
-            Edata::SymEncryptedData(d) => d.write_len_with_header(),
-            Edata::SymEncryptedProtectedData(d) => d.write_len_with_header(),
-        }
-    }
-}
-
-impl_try_from_into!(
-    Edata,
-    SymEncryptedData => SymEncryptedData,
-    SymEncryptedProtectedData => SymEncryptedProtectedData
-);
-
-impl TryFrom<Packet> for Edata {
-    type Error = Error;
-
-    fn try_from(other: Packet) -> Result<Edata> {
-        match other {
-            Packet::SymEncryptedData(d) => Ok(Edata::SymEncryptedData(d)),
-            Packet::SymEncryptedProtectedData(d) => Ok(Edata::SymEncryptedProtectedData(d)),
-            _ => Err(format_err!("not a valid edata packet: {:?}", other)),
-        }
-    }
-}
-
-impl From<Edata> for Packet {
-    fn from(other: Edata) -> Packet {
-        match other {
-            Edata::SymEncryptedData(d) => Packet::SymEncryptedData(d),
-            Edata::SymEncryptedProtectedData(d) => Packet::SymEncryptedProtectedData(d),
-        }
-    }
-}
-
-impl Edata {
-    pub fn data(&self) -> &[u8] {
-        match self {
-            Edata::SymEncryptedData(d) => d.data(),
-            Edata::SymEncryptedProtectedData(d) => d.data().as_ref(),
+            Self::SymEncryptedData { reader } => reader.packet_header(),
+            Self::SymEncryptedProtectedData { reader } => reader.packet_header(),
         }
     }
 
     pub fn tag(&self) -> Tag {
-        match self {
-            Edata::SymEncryptedData(_) => Tag::SymEncryptedData,
-            Edata::SymEncryptedProtectedData(_) => Tag::SymEncryptedProtectedData,
-        }
-    }
-
-    fn version(&self) -> Option<usize> {
-        match self {
-            Edata::SymEncryptedData(_) => None,
-            Edata::SymEncryptedProtectedData(d) => Some(d.version()),
-        }
+        self.packet_header().tag()
     }
 
     /// Transform decrypted data into a message.
@@ -206,73 +160,74 @@ impl Edata {
         Ok(message)
     }
 
-    pub fn decrypt(&self, key: PlainSessionKey) -> Result<Message> {
-        let protected = self.tag() == Tag::SymEncryptedProtectedData;
-        debug!("decrypting protected = {:?}", protected);
+    pub fn decrypt(self, key: PlainSessionKey) -> Result<Message<'a>> {
+        todo!()
+        // let protected = self.tag() == Tag::SymEncryptedProtectedData;
+        // debug!("decrypting protected = {:?}", protected);
 
-        match key {
-            PlainSessionKey::V3_4 { sym_alg, ref key } => {
-                ensure!(
-                    sym_alg != SymmetricKeyAlgorithm::Plaintext,
-                    "session key algorithm cannot be plaintext"
-                );
+        // match key {
+        //     PlainSessionKey::V3_4 { sym_alg, ref key } => {
+        //         ensure!(
+        //             sym_alg != SymmetricKeyAlgorithm::Plaintext,
+        //             "session key algorithm cannot be plaintext"
+        //         );
 
-                match self {
-                    Self::SymEncryptedProtectedData(p) => {
-                        ensure_eq!(
-                            self.version(),
-                            Some(1),
-                            "Version mismatch between key and integrity packet"
-                        );
-                        let data = p.decrypt(key, Some(sym_alg))?;
-                        Self::process_decrypted(data.into())
-                    }
-                    Self::SymEncryptedData(p) => {
-                        ensure_eq!(
-                            self.version(),
-                            None,
-                            "Version mismatch between key and integrity packet"
-                        );
-                        let mut prefix = BytesMut::from(p.data());
-                        let mut data = prefix.split_off(sym_alg.cfb_prefix_size());
-                        sym_alg.decrypt(key, &mut prefix, &mut data)?;
-                        Self::process_decrypted(data.freeze())
-                    }
-                }
-            }
-            PlainSessionKey::V5 { .. } => match self {
-                Self::SymEncryptedProtectedData(_p) => {
-                    ensure_eq!(
-                        self.version(),
-                        Some(2),
-                        "Version mismatch between key and integrity packet"
-                    );
-                    unimplemented_err!("V5 decryption");
-                }
-                Self::SymEncryptedData(_) => {
-                    bail!("invalid packet combination");
-                }
-            },
-            PlainSessionKey::V6 { ref key } => match self {
-                Self::SymEncryptedProtectedData(p) => {
-                    ensure_eq!(
-                        self.version(),
-                        Some(2),
-                        "Version mismatch between key and integrity packet"
-                    );
+        //         match self {
+        //             Self::SymEncryptedProtectedData(p) => {
+        //                 ensure_eq!(
+        //                     self.version(),
+        //                     Some(1),
+        //                     "Version mismatch between key and integrity packet"
+        //                 );
+        //                 let data = p.decrypt(key, Some(sym_alg))?;
+        //                 Self::process_decrypted(data.into())
+        //             }
+        //             Self::SymEncryptedData(p) => {
+        //                 ensure_eq!(
+        //                     self.version(),
+        //                     None,
+        //                     "Version mismatch between key and integrity packet"
+        //                 );
+        //                 let mut prefix = BytesMut::from(p.data());
+        //                 let mut data = prefix.split_off(sym_alg.cfb_prefix_size());
+        //                 sym_alg.decrypt(key, &mut prefix, &mut data)?;
+        //                 Self::process_decrypted(data.freeze())
+        //             }
+        //         }
+        //     }
+        //     PlainSessionKey::V5 { .. } => match self {
+        //         Self::SymEncryptedProtectedData(_p) => {
+        //             ensure_eq!(
+        //                 self.version(),
+        //                 Some(2),
+        //                 "Version mismatch between key and integrity packet"
+        //             );
+        //             unimplemented_err!("V5 decryption");
+        //         }
+        //         Self::SymEncryptedData(_) => {
+        //             bail!("invalid packet combination");
+        //         }
+        //     },
+        //     PlainSessionKey::V6 { ref key } => match self {
+        //         Self::SymEncryptedProtectedData(p) => {
+        //             ensure_eq!(
+        //                 self.version(),
+        //                 Some(2),
+        //                 "Version mismatch between key and integrity packet"
+        //             );
 
-                    let decrypted_packets = p.decrypt(key, None)?;
-                    Self::process_decrypted(decrypted_packets.into())
-                }
-                Self::SymEncryptedData(_) => {
-                    bail!("invalid packet combination");
-                }
-            },
-        }
+        //             let decrypted_packets = p.decrypt(key, None)?;
+        //             Self::process_decrypted(decrypted_packets.into())
+        //         }
+        //         Self::SymEncryptedData(_) => {
+        //             bail!("invalid packet combination");
+        //         }
+        //     },
+        // }
     }
 }
 
-impl Message<'_> {
+impl<'a> Message<'a> {
     /// Decompresses the data if compressed.
     pub fn decompress(self) -> Result<Self> {
         match self {
@@ -287,7 +242,7 @@ impl Message<'_> {
     /// they are decompressed and checked for signatures to verify.
     ///
     /// Decompresses up to one layer of compressed data.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify(self, key: &impl PublicKeyTrait) -> Result<()> {
         self.verify_internal(key, true)
     }
 
@@ -296,7 +251,7 @@ impl Message<'_> {
     ///
     /// If `decompress` is true and the message is compressed,
     /// the message is decompressed and verified.
-    fn verify_internal(&self, key: &impl PublicKeyTrait, decompress: bool) -> Result<()> {
+    fn verify_internal(self, key: &impl PublicKeyTrait, decompress: bool) -> Result<()> {
         todo!();
         // this needs a different structure, as verifying consumes the message now
 
@@ -387,15 +342,15 @@ impl Message<'_> {
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt(
-        &self,
+        self,
         key_pws: &[Password],
         keys: &[&SignedSecretKey],
-    ) -> Result<(Message, Vec<KeyId>)> {
+    ) -> Result<(Message<'a>, Vec<KeyId>)> {
         match self {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
             }
-            Message::Signed { message, .. } => message.as_ref().decrypt(key_pws, keys),
+            Message::Signed { message, .. } => message.decrypt(key_pws, keys),
             Message::Encrypted { esk, edata, .. } => {
                 let valid_keys =
                     keys.iter()
@@ -507,7 +462,7 @@ impl Message<'_> {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt_with_password(&self, msg_pw: &Password) -> Result<Message> {
+    pub fn decrypt_with_password(self, msg_pw: &Password) -> Result<Message<'a>> {
         match self {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
@@ -515,7 +470,7 @@ impl Message<'_> {
             Message::Signed { message, .. } => message.decrypt_with_password(msg_pw),
             Message::Encrypted { esk, edata, .. } => {
                 // TODO: handle multiple passwords
-                let skesk = esk.iter().find_map(|esk| match esk {
+                let skesk = esk.into_iter().find_map(|esk| match esk {
                     Esk::SymKeyEncryptedSessionKey(k) => Some(k),
                     _ => None,
                 });
@@ -523,7 +478,7 @@ impl Message<'_> {
                 ensure!(skesk.is_some(), "message is not password protected");
 
                 let session_key =
-                    decrypt_session_key_with_password(skesk.expect("checked above"), msg_pw)?;
+                    decrypt_session_key_with_password(&skesk.expect("checked above"), msg_pw)?;
                 edata.decrypt(session_key)
             }
         }
