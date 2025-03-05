@@ -45,11 +45,12 @@ pub enum Message<'a> {
         reader: CompressedDataReader<Box<dyn BufRead + 'a>>,
     },
     /// Signed Message: Signature Packet, OpenPGP Message | One-Pass Signed Message.
+    /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
     Signed {
         /// The actual signature
         signature: Signature,
         /// Nested message
-        message: Option<Box<Message<'a>>>,
+        message: Box<Message<'a>>,
         /// for signature packets that contain a one pass message
         one_pass_signature: Option<OnePassSignature>,
     },
@@ -276,10 +277,7 @@ impl Message<'_> {
     pub fn decompress(self) -> Result<Self> {
         match self {
             Message::Compressed { reader } => Message::from_bytes(reader.decompress()?),
-            Message::Signed {
-                message: Some(message),
-                ..
-            } => message.decompress(),
+            Message::Signed { message, .. } => message.decompress(),
             _ => Ok(self),
         }
     }
@@ -397,10 +395,7 @@ impl Message<'_> {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
             }
-            Message::Signed { message, .. } => match message {
-                Some(message) => message.as_ref().decrypt(key_pws, keys),
-                None => bail!("not encrypted"),
-            },
+            Message::Signed { message, .. } => message.as_ref().decrypt(key_pws, keys),
             Message::Encrypted { esk, edata, .. } => {
                 let valid_keys =
                     keys.iter()
@@ -517,10 +512,7 @@ impl Message<'_> {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
             }
-            Message::Signed { message, .. } => match message {
-                Some(ref message) => message.decrypt_with_password(msg_pw),
-                None => bail!("not encrypted"),
-            },
+            Message::Signed { message, .. } => message.decrypt_with_password(msg_pw),
             Message::Encrypted { esk, edata, .. } => {
                 // TODO: handle multiple passwords
                 let skesk = esk.iter().find_map(|esk| match esk {

@@ -1674,7 +1674,7 @@ mod tests {
             message.verify(&*skey.public_key()).expect("signed");
 
             let Message::Signed {
-                message: Some(mut decrypted),
+                message: mut decrypted,
                 ..
             } = message
             else {
@@ -1749,7 +1749,7 @@ mod tests {
             next.verify(&*skey.public_key()).expect("signed");
 
             let Message::Signed {
-                message: Some(mut decrypted),
+                message: mut decrypted,
                 ..
             } = next
             else {
@@ -1868,7 +1868,7 @@ mod tests {
             decompressed.verify(&*skey.public_key()).expect("signed");
 
             let Message::Signed {
-                message: Some(mut decrypted),
+                message: mut decrypted,
                 ..
             } = decompressed
             else {
@@ -1982,7 +1982,7 @@ mod tests {
 
                 let inner = match decompressed {
                     Message::Signed {
-                        message: Some(ref mut message),
+                        message: ref mut message,
                         one_pass_signature: Some(ops),
                         ..
                     } => {
@@ -1992,7 +1992,7 @@ mod tests {
                         message.verify(&*skey2.public_key())?;
 
                         let Message::Signed {
-                            message: Some(inner_message),
+                            message: inner_message,
                             one_pass_signature: Some(ops),
                             ..
                         } = message.as_mut()
