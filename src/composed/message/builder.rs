@@ -1622,7 +1622,7 @@ mod tests {
                 .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
-            assert!(matches!(decrypted, Message::Compressed(_)));
+            assert!(decrypted.is_compressed());
 
             let mut decrypted = decrypted.decompress().expect("decompression");
 

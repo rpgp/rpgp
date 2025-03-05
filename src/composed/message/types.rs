@@ -30,7 +30,7 @@ use crate::types::{
     Password, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
 
-use super::reader::LiteralDataReader;
+use super::reader::{CompressedDataReader, LiteralDataReader};
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 /// Encrypted Message | Signed Message | Compressed Message | Literal Message.
@@ -41,7 +41,9 @@ pub enum Message<'a> {
         reader: LiteralDataReader<Box<dyn BufRead + 'a>>,
     },
     /// Compressed Message: Compressed Data Packet.
-    Compressed(CompressedData),
+    Compressed {
+        reader: CompressedDataReader<Box<dyn BufRead + 'a>>,
+    },
     /// Signed Message: Signature Packet, OpenPGP Message | One-Pass Signed Message.
     Signed {
         /// The actual signature
@@ -273,10 +275,7 @@ impl Message<'_> {
     /// Decompresses the data if compressed.
     pub fn decompress(self) -> Result<Self> {
         match self {
-            Message::Compressed(data) => {
-                let dec = data.decompress()?;
-                Message::from_bytes(BufReader::new(dec))
-            }
+            Message::Compressed { reader } => Message::from_bytes(reader.decompress()?),
             Message::Signed {
                 message: Some(message),
                 ..
@@ -300,89 +299,91 @@ impl Message<'_> {
     /// If `decompress` is true and the message is compressed,
     /// the message is decompressed and verified.
     fn verify_internal(&self, key: &impl PublicKeyTrait, decompress: bool) -> Result<()> {
-        match self {
-            Message::Signed {
-                signature, message, ..
-            } => {
-                if let Some(ref message) = message {
-                    match **message {
-                        Message::Literal { .. } => {
-                            todo!()
-                            // signature.verify(key, data.data())
-                        }
-                        Message::Signed { ref message, .. } => {
-                            // TODO: add api to verify the inner messages
+        todo!();
+        // this needs a different structure, as verifying consumes the message now
 
-                            // We need to search for the inner most non signed message for the data
-                            let Some(ref message) = message else {
-                                unimplemented_err!("no message, what to do?");
-                            };
-                            let mut current_message = message;
-                            // Limit nesting
-                            for _ in 0..1024 {
-                                match **current_message {
-                                    Message::Literal { .. } => {
-                                        todo!()
-                                        // return signature.verify(key, data.data());
-                                    }
-                                    Message::Compressed(ref data) => {
-                                        if decompress {
-                                            let dec = data.decompress()?;
-                                            let msg = Message::from_bytes(BufReader::new(dec))?;
-                                            return msg.verify_internal(key, false);
-                                        } else {
-                                            bail!("Recursive decompression not allowed");
-                                        }
-                                    }
-                                    Message::Encrypted { .. } => {
-                                        todo!()
-                                        // let data = message.to_bytes()?;
-                                        // return signature.verify(key, &data[..]);
-                                    }
-                                    Message::Signed { ref message, .. } => {
-                                        let Some(message) = message else {
-                                            unimplemented_err!("no message, what to do?");
-                                        };
-                                        current_message = message;
-                                    }
-                                }
-                            }
-                            bail!("More than 1024 nested signed messages are not supported");
-                        }
-                        Message::Compressed(ref data) => {
-                            debug!("verifying compressed message");
-                            if decompress {
-                                let dec = data.decompress()?;
-                                let msg = Message::from_bytes(BufReader::new(dec))?;
-                                msg.verify_internal(key, false)
-                            } else {
-                                bail!("Recursive decompression not allowed");
-                            }
-                        }
-                        Message::Encrypted { .. } => {
-                            debug!("verifying encrypted message");
-                            // let data = message.to_bytes()?;
-                            // signature.verify(key, &data[..])
-                            todo!()
-                        }
-                    }
-                } else {
-                    unimplemented_err!("no message, what to do?");
-                }
-            }
-            Message::Compressed(data) => {
-                debug!("verifying compressed message");
-                if decompress {
-                    let dec = data.decompress()?;
-                    let msg = Message::from_bytes(BufReader::new(dec))?;
-                    msg.verify_internal(key, false)
-                } else {
-                    bail!("Recursive decompression not allowed");
-                }
-            }
-            // We don't know how to verify a signature for other Message types, and shouldn't return Ok
-            _ => unsupported_err!("Unexpected message format: {self:?}"),
-        }
+        // match self {
+        //     Message::Signed {
+        //         signature, message, ..
+        //     } => {
+        //         if let Some(ref message) = message {
+        //             match **message {
+        //                 Message::Literal { .. } => {
+        //                     todo!()
+        //                     // signature.verify(key, data.data())
+        //                 }
+        //                 Message::Signed { ref message, .. } => {
+        //                     // TODO: add api to verify the inner messages
+
+        //                     // We need to search for the inner most non signed message for the data
+        //                     let Some(ref message) = message else {
+        //                         unimplemented_err!("no message, what to do?");
+        //                     };
+        //                     let mut current_message = message;
+        //                     // Limit nesting
+        //                     for _ in 0..1024 {
+        //                         match **current_message {
+        //                             Message::Literal { .. } => {
+        //                                 todo!()
+        //                                 // return signature.verify(key, data.data());
+        //                             }
+        //                             Message::Compressed { reader } => {
+        //                                 if decompress {
+        //                                     let dec = reader.decompress()?;
+        //                                     let msg = Message::from_bytes(dec)?;
+        //                                     return msg.verify_internal(key, false);
+        //                                 } else {
+        //                                     bail!("Recursive decompression not allowed");
+        //                                 }
+        //                             }
+        //                             Message::Encrypted { .. } => {
+        //                                 todo!()
+        //                                 // let data = message.to_bytes()?;
+        //                                 // return signature.verify(key, &data[..]);
+        //                             }
+        //                             Message::Signed { ref message, .. } => {
+        //                                 let Some(message) = message else {
+        //                                     unimplemented_err!("no message, what to do?");
+        //                                 };
+        //                                 current_message = message;
+        //                             }
+        //                         }
+        //                     }
+        //                     bail!("More than 1024 nested signed messages are not supported");
+        //                 }
+        //                 Message::Compressed { reader } => {
+        //                     debug!("verifying compressed message");
+        //                     if decompress {
+        //                         let dec = reader.decompress()?;
+        //                         let msg = Message::from_bytes(dec)?;
+        //                         msg.verify_internal(key, false)
+        //                     } else {
+        //                         bail!("Recursive decompression not allowed");
+        //                     }
+        //                 }
+        //                 Message::Encrypted { .. } => {
+        //                     debug!("verifying encrypted message");
+        //                     // let data = message.to_bytes()?;
+        //                     // signature.verify(key, &data[..])
+        //                     todo!()
+        //                 }
+        //             }
+        //         } else {
+        //             unimplemented_err!("no message, what to do?");
+        //         }
+        //     }
+        //     Message::Compressed { reader } => {
+        //         debug!("verifying compressed message");
+        //         if decompress {
+        //             let msg = Message::from_bytes(reader.decompress()?)?;
+        //             msg.verify_internal(key, false)
+        //         } else {
+        //             bail!("Recursive decompression not allowed");
+        //         }
+        //     }
+        //     // We don't know how to verify a signature for other Message types, and shouldn't return Ok
+        //     _ => unsupported_err!("Unexpected message format: {self:?}"),
+        // }
     }
 
     /// Decrypt the message using the given key.
@@ -548,7 +549,7 @@ impl Message<'_> {
 
     /// Is this a compressed message?
     pub fn is_compressed(&self) -> bool {
-        matches!(self, Message::Compressed(_))
+        matches!(self, Message::Compressed { .. })
     }
 
     pub fn is_literal(&self) -> bool {

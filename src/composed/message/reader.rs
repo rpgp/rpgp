@@ -74,27 +74,14 @@ impl<R: Read> MessageReader<R> {
     }
 
     pub fn get_literal_reader(&mut self) -> LiteralDataReader<&'_ mut Source<R>> {
-        LiteralDataReader {
-            state: LiteralReaderState::Header {
-                source: &mut self.source,
-            },
-        }
+        todo!()
     }
 
     pub fn get_literal_decompress_reader(
         &mut self,
         decompress: bool,
-    ) -> LiteralDataReader<CompressedReader<&'_ mut Source<R>>> {
-        LiteralDataReader {
-            state: LiteralReaderState::Header {
-                source: CompressedReader {
-                    state: CompressedReaderState::Header {
-                        source: &mut self.source,
-                        decompress,
-                    },
-                },
-            },
-        }
+    ) -> LiteralDataReader<CompressedDataReader<&'_ mut Source<R>>> {
+        todo!()
     }
 }
 
@@ -298,36 +285,69 @@ impl<R: BufRead> PacketBodyReader<R> {
     }
 }
 
-#[derive(Debug)]
-pub struct CompressedReader<R: BufRead> {
+#[derive(derive_more::Debug)]
+pub struct CompressedDataReader<R: BufRead> {
     state: CompressedReaderState<R>,
 }
 
-#[derive(Debug)]
+impl<R: BufRead> CompressedDataReader<R> {
+    pub fn new(source: PacketBodyReader<R>, decompress: bool) -> io::Result<Self> {
+        debug_assert_eq!(source.packet_header().tag(), Tag::CompressedData);
+
+        let source = if decompress {
+            let dec = Decompressor::from_reader(source)?;
+            MaybeDecompress::Decompress(dec)
+        } else {
+            MaybeDecompress::Raw(source)
+        };
+
+        Ok(Self {
+            state: CompressedReaderState::Body {
+                source,
+                buffer: BytesMut::with_capacity(1024),
+            },
+        })
+    }
+
+    /// Enables decompression
+    pub fn decompress(self) -> io::Result<Self> {
+        match self.state {
+            CompressedReaderState::Body { mut source, buffer } => Ok(Self {
+                state: CompressedReaderState::Body {
+                    source: source.decompress()?,
+                    buffer,
+                },
+            }),
+            CompressedReaderState::Done { .. } => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "already finished",
+            )),
+            CompressedReaderState::Error => {
+                Err(io::Error::new(io::ErrorKind::InvalidInput, "errored"))
+            }
+        }
+    }
+}
+
+#[derive(derive_more::Debug)]
 enum CompressedReaderState<R: BufRead> {
-    Header {
-        source: R,
-        decompress: bool,
-    },
     Body {
         source: MaybeDecompress<PacketBodyReader<R>>,
         buffer: BytesMut,
     },
     Done {
-        packet_header: PacketHeader,
-        source: R,
+        source: PacketBodyReader<R>,
     },
     Error,
 }
 
-impl<R: BufRead> BufRead for CompressedReader<R> {
+impl<R: BufRead> BufRead for CompressedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self.state {
             CompressedReaderState::Body { ref mut buffer, .. } => Ok(&buffer[..]),
             CompressedReaderState::Done { .. } => Ok(&[][..]),
             CompressedReaderState::Error => panic!("CompressedReader errored"),
-            CompressedReaderState::Header { .. } => unreachable!("invalid state"),
         }
     }
 
@@ -337,13 +357,12 @@ impl<R: BufRead> BufRead for CompressedReader<R> {
                 buffer.advance(amt);
             }
             CompressedReaderState::Error => panic!("CompressedReader errored"),
-            CompressedReaderState::Header { .. } => unreachable!("invalid state: header"),
             CompressedReaderState::Done { .. } => {}
         }
     }
 }
 
-impl<R: BufRead> Read for CompressedReader<R> {
+impl<R: BufRead> Read for CompressedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self.state {
@@ -358,7 +377,7 @@ impl<R: BufRead> Read for CompressedReader<R> {
     }
 }
 
-impl<R: BufRead> CompressedReader<R> {
+impl<R: BufRead> CompressedDataReader<R> {
     fn fill_inner(&mut self) -> io::Result<()> {
         if matches!(self.state, CompressedReaderState::Done { .. }) {
             return Ok(());
@@ -366,35 +385,6 @@ impl<R: BufRead> CompressedReader<R> {
 
         loop {
             match std::mem::replace(&mut self.state, CompressedReaderState::Error) {
-                CompressedReaderState::Header {
-                    mut source,
-                    decompress,
-                } => {
-                    let packet_header = PacketHeader::from_reader(&mut source)?;
-                    if packet_header.tag() != Tag::CompressedData {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("unexpected tag: {:?}", packet_header.tag()),
-                        ));
-                    }
-
-                    debug!(
-                        "compressed data: header {:?}",
-                        packet_header.packet_length()
-                    );
-                    let inner_source = PacketBodyReader::new(packet_header, source);
-                    let source = if decompress {
-                        let dec = Decompressor::from_reader(inner_source)?;
-                        MaybeDecompress::Decompress(dec)
-                    } else {
-                        MaybeDecompress::Raw(inner_source)
-                    };
-
-                    self.state = CompressedReaderState::Body {
-                        source,
-                        buffer: BytesMut::with_capacity(1024),
-                    }
-                }
                 CompressedReaderState::Body {
                     mut source,
                     mut buffer,
@@ -410,25 +400,14 @@ impl<R: BufRead> CompressedReader<R> {
 
                     if read == 0 {
                         let source = source.into_inner();
-                        let packet_header = source.packet_header();
-                        let source = source.into_inner();
-                        self.state = CompressedReaderState::Done {
-                            packet_header,
-                            source,
-                        };
+                        self.state = CompressedReaderState::Done { source };
                     } else {
                         self.state = CompressedReaderState::Body { source, buffer };
                     }
                     return Ok(());
                 }
-                CompressedReaderState::Done {
-                    packet_header,
-                    source,
-                } => {
-                    self.state = CompressedReaderState::Done {
-                        packet_header,
-                        source,
-                    };
+                CompressedReaderState::Done { source } => {
+                    self.state = CompressedReaderState::Done { source };
                     return Ok(());
                 }
                 CompressedReaderState::Error => {
@@ -447,8 +426,20 @@ pub struct LiteralDataReader<R: BufRead> {
 
 #[derive(derive_more::Debug)]
 enum MaybeDecompress<R: BufRead> {
-    Raw(R),
+    Raw(#[debug("R")] R),
     Decompress(Decompressor<R>),
+}
+
+impl<R: BufRead> MaybeDecompress<R> {
+    fn decompress(self) -> io::Result<Self> {
+        match self {
+            Self::Raw(r) => Ok(Self::Decompress(Decompressor::from_reader(r)?)),
+            Self::Decompress(_) => {
+                // already decompressing
+                Ok(self)
+            }
+        }
+    }
 }
 
 impl<R: BufRead> MaybeDecompress<R> {
@@ -486,10 +477,6 @@ impl<R: BufRead> Read for MaybeDecompress<R> {
 
 #[derive(derive_more::Debug)]
 enum LiteralReaderState<R: BufRead> {
-    Header {
-        #[debug("source")]
-        source: R,
-    },
     LiteralHeader {
         source: PacketBodyReader<R>,
     },
@@ -499,12 +486,18 @@ enum LiteralReaderState<R: BufRead> {
         header: LiteralDataHeader,
     },
     Done {
-        #[debug("source")]
-        source: R,
-        packet_header: PacketHeader,
+        source: PacketBodyReader<R>,
         header: LiteralDataHeader,
     },
     Error,
+}
+impl<R: BufRead> LiteralDataReader<R> {
+    pub fn new(source: PacketBodyReader<R>) -> Self {
+        debug_assert_eq!(source.packet_header().tag(), Tag::LiteralData);
+        Self {
+            state: LiteralReaderState::LiteralHeader { source },
+        }
+    }
 }
 
 #[derive(derive_more::Debug)]
@@ -560,19 +553,6 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
 
         loop {
             match std::mem::replace(&mut self.state, LiteralReaderState::Error) {
-                LiteralReaderState::Header { mut source } => {
-                    debug!("literal packet: header");
-                    let packet_header = PacketHeader::from_reader(&mut source)?;
-                    if packet_header.tag() != Tag::LiteralData {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!("unexpected tag: {:?}", packet_header.tag()),
-                        ));
-                    }
-
-                    let source = PacketBodyReader::new(packet_header, source);
-                    self.state = LiteralReaderState::LiteralHeader { source };
-                }
                 LiteralReaderState::LiteralHeader { mut source } => {
                     debug!("literal packet: literal header");
                     let header = LiteralDataHeader::from_reader(&mut source)?;
@@ -600,13 +580,7 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
 
                         if read == 0 {
                             // done reading the source
-                            let packet_header = source.packet_header();
-                            let source = source.into_inner();
-                            self.state = LiteralReaderState::Done {
-                                source,
-                                packet_header,
-                                header,
-                            };
+                            self.state = LiteralReaderState::Done { source, header };
                             continue;
                         }
                     }
@@ -621,17 +595,9 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
 
                     return Ok(to_write);
                 }
-                LiteralReaderState::Done {
-                    source,
-                    packet_header,
-                    header,
-                } => {
+                LiteralReaderState::Done { source, header } => {
                     debug!("literal packet: done");
-                    self.state = LiteralReaderState::Done {
-                        source,
-                        packet_header,
-                        header,
-                    };
+                    self.state = LiteralReaderState::Done { source, header };
                     return Ok(0);
                 }
                 LiteralReaderState::Error => {
@@ -651,6 +617,14 @@ impl<R: BufRead> LiteralDataReader<R> {
     }
 }
 
+#[derive(Debug)]
+struct DebugPacketBodyReader(PacketBodyReader<Box<dyn BufRead>>);
+#[derive(Debug)]
+struct DebugMaybeDecompress(MaybeDecompress<PacketBodyReader<Box<dyn BufRead>>>);
+
+#[derive(Debug)]
+struct DebugB(CompressedReaderState<Box<dyn BufRead>>);
+
 #[cfg(test)]
 mod tests {
     use rand::SeedableRng;
@@ -662,9 +636,6 @@ mod tests {
     use crate::packet::DataMode;
     use crate::types::CompressionAlgorithm;
     use crate::util::test::{check_strings, random_string, ChaosReader};
-
-    #[derive(Debug)]
-    struct DebugPacketBodyReader(PacketBodyReader<Box<dyn BufRead>>);
 
     #[test]
     fn test_read_literal_data_no_compression() -> TestResult {

@@ -31,11 +31,11 @@ pub struct CompressedData {
 /// Structure to decompress a given reader.
 #[derive(derive_more::Debug)]
 pub enum Decompressor<R> {
-    Uncompressed(R),
-    Zip(BufReader<DeflateDecoder<R>>),
-    Zlib(BufReader<ZlibDecoder<R>>),
+    Uncompressed(#[debug("R")] R),
+    Zip(#[debug("DeflateDecoder")] BufReader<DeflateDecoder<R>>),
+    Zlib(#[debug("ZlibDecoder")] BufReader<ZlibDecoder<R>>),
     #[cfg(feature = "bzip2")]
-    Bzip2(#[debug("BufReader")] BufReader<BzDecoder<R>>),
+    Bzip2(#[debug("BzDecoder")] BufReader<BzDecoder<R>>),
 }
 
 impl<R: BufRead> Decompressor<R> {
