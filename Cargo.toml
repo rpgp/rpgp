@@ -17,6 +17,10 @@ exclude = ["tests/tests/*"]
 edition = "2021"
 rust-version = "1.83"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+bench = false
+
 [dependencies]
 aes = "0.8.4"
 aead = { version = "0.5", features = ["bytes"] }
@@ -101,7 +105,6 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = [
 ] }
 bytes = "1.9.0"
 bytes-utils = "0.1.4"
-memmap2 = { version = "0.9.5", optional = true }
 bzip2 = { version = "0.5.0", default-features = false, features = [
     "libbz2-rs-sys",
 ], optional = true }
@@ -129,12 +132,11 @@ escape_string = "0.1.2"
 testresult = "0.4.1"
 
 [features]
-default = ["mmap", "bzip2"]
+default = ["bzip2"]
 bzip2 = ["dep:bzip2"]
 asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 unstable-curve448 = ["dep:x448"]
-mmap = ["dep:memmap2"]
 
 [profile.bench]
 debug = 2
@@ -142,6 +144,3 @@ debug = 2
 [[bench]]
 name = "benches_main"
 harness = false
-
-[lib]
-bench = false

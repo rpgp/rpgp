@@ -7,7 +7,6 @@
 //! [signing and verifying with external hashing]: crate::composed::signed_key
 //! [packet based signing and verifying]: crate::packet
 
-#![cfg_attr(not(feature = "mmap"), forbid(unsafe_code))]
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
 #![allow(clippy::missing_const_for_fn, clippy::type_complexity)]
 

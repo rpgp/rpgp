@@ -113,14 +113,14 @@ pub trait Deserializable: Sized {
         Ok(Self::from_packets(packets))
     }
 
-    /// Parse a single binary encoded composition, using mmap.
+    /// Parse a single binary encoded composition.
     fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut el = Self::from_file_many(path)?;
         el.next()
             .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
     }
 
-    /// Ready binary packets from the given file, using mmap.
+    /// Ready binary packets from the given file.
     fn from_file_many<P: AsRef<Path>>(path: P) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
         let file = std::fs::File::open(path)?;
         Self::from_bytes_many(BufReader::new(file))
