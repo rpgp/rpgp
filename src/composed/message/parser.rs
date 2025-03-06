@@ -49,16 +49,42 @@ fn next<'a>(
                 //     data: Edata::SEDP(packet),
                 // })));
             }
-            Tag::Signature | Tag::OnePassSignature => {
+            Tag::Signature => {
                 // (b) Signed Message
                 //   (1) Signature Packet, OpenPGP Message
                 //      - Signature Packet
                 //      - OpenPGP Message
+                let signature =
+                    crate::packet::Signature::try_from_reader(packet.packet_header(), &mut packet)?;
+                packets = crate::packet::PacketParser::new(packet.into_inner());
+                let Some(inner_message) = next(packets)? else {
+                    bail!("missing next packet");
+                };
+                let message = Message::Signed {
+                    signature,
+                    message: Box::new(inner_message),
+                };
+                return Ok(Some(message));
+            }
+            Tag::OnePassSignature => {
                 //   (2) One-Pass Signed Message.
                 //      - OPS
                 //      - OpenPgp Message
                 //      - Signature Packet
-                todo!()
+                let one_pass_signature = crate::packet::OnePassSignature::try_from_reader(
+                    packet.packet_header(),
+                    &mut packet,
+                )?;
+                packets = crate::packet::PacketParser::new(packet.into_inner());
+                let Some(inner_message) = next(packets)? else {
+                    bail!("missing next packet");
+                };
+                let message = Message::SignedOnePass {
+                    one_pass_signature,
+                    message: Box::new(inner_message),
+                    signature: None,
+                };
+                return Ok(Some(message));
             }
             Tag::CompressedData => {
                 // (c) Compressed Message

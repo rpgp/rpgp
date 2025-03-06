@@ -36,15 +36,22 @@ pub enum Message<'a> {
     Compressed {
         reader: CompressedDataReader<Box<dyn BufRead + 'a>>,
     },
-    /// Signed Message: Signature Packet, OpenPGP Message | One-Pass Signed Message.
-    /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
+    /// Signed Message: Signature Packet, OpenPGP Message
     Signed {
         /// The actual signature
         signature: Signature,
         /// Nested message
         message: Box<Message<'a>>,
+    },
+    /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
+    SignedOnePass {
         /// for signature packets that contain a one pass message
-        one_pass_signature: Option<OnePassSignature>,
+        one_pass_signature: OnePassSignature,
+        /// Nested message
+        message: Box<Message<'a>>,
+        /// The actual signature
+        /// This is only `Some` when the full message has been read
+        signature: Option<Signature>,
     },
     /// Encrypted Message: Encrypted Data | ESK Sequence, Encrypted Data.
     Encrypted {
@@ -387,6 +394,7 @@ impl<'a> Message<'a> {
                 bail!("not encrypted");
             }
             Message::Signed { message, .. } => message.decrypt(key_pws, keys),
+            Message::SignedOnePass { message, .. } => message.decrypt(key_pws, keys),
             Message::Encrypted { esk, edata, .. } => {
                 let valid_keys =
                     keys.iter()
@@ -504,6 +512,7 @@ impl<'a> Message<'a> {
                 bail!("not encrypted");
             }
             Message::Signed { message, .. } => message.decrypt_with_password(msg_pw),
+            Message::SignedOnePass { message, .. } => message.decrypt_with_password(msg_pw),
             Message::Encrypted { esk, edata, .. } => {
                 // TODO: handle multiple passwords
                 let skesk = esk.into_iter().find_map(|esk| match esk {
@@ -526,12 +535,11 @@ impl<'a> Message<'a> {
 
     /// Check if this message is a signature, that was signed with a one pass signature.
     pub fn is_one_pass_signed(&self) -> bool {
-        match self {
-            Message::Signed {
-                one_pass_signature, ..
-            } => one_pass_signature.is_some(),
-            _ => false,
-        }
+        matches!(self, Message::SignedOnePass { .. })
+    }
+
+    pub fn is_signed(&self) -> bool {
+        matches!(self, Message::SignedOnePass { .. } | Message::Signed { .. })
     }
 
     /// Is this a compressed message?
@@ -552,6 +560,7 @@ impl<'a> Message<'a> {
             Self::Literal { reader } => reader.data_header(),
             Self::Compressed { .. } => None,
             Self::Signed { message, .. } => message.literal_data_header(),
+            Self::SignedOnePass { message, .. } => message.literal_data_header(),
             Self::Encrypted { .. } => None,
         }
     }
@@ -561,6 +570,7 @@ impl<'a> Message<'a> {
             Self::Literal { reader } => reader.packet_header(),
             Self::Compressed { reader } => reader.packet_header(),
             Self::Signed { message, .. } => message.packet_header(),
+            Self::SignedOnePass { message, .. } => message.packet_header(),
             Self::Encrypted { edata, .. } => edata.packet_header(),
         }
     }
@@ -586,6 +596,7 @@ impl Read for Message<'_> {
             Self::Literal { reader } => reader.read(buf),
             Self::Compressed { reader } => reader.read(buf),
             Self::Signed { message, .. } => message.read(buf),
+            Self::SignedOnePass { message, .. } => message.read(buf),
             Self::Encrypted { edata, .. } => edata.read(buf),
         }
     }
@@ -597,6 +608,7 @@ impl BufRead for Message<'_> {
             Self::Literal { reader } => reader.fill_buf(),
             Self::Compressed { reader } => reader.fill_buf(),
             Self::Signed { message, .. } => message.fill_buf(),
+            Self::SignedOnePass { message, .. } => message.fill_buf(),
             Self::Encrypted { edata, .. } => edata.fill_buf(),
         }
     }
@@ -605,6 +617,7 @@ impl BufRead for Message<'_> {
             Self::Literal { reader } => reader.consume(amt),
             Self::Compressed { reader } => reader.consume(amt),
             Self::Signed { message, .. } => message.consume(amt),
+            Self::SignedOnePass { message, .. } => message.consume(amt),
             Self::Encrypted { edata, .. } => edata.consume(amt),
         }
     }

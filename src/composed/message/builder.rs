@@ -1986,9 +1986,9 @@ mod tests {
                 // decompressed.verify(&*skey1.public_key())?;
 
                 let inner = match decompressed {
-                    Message::Signed {
-                        message: mut message,
-                        one_pass_signature: Some(ops),
+                    Message::SignedOnePass {
+                        mut message,
+                        one_pass_signature: ops,
                         ..
                     } => {
                         assert!(ops.is_nested(), "outer OPS must be nested");
@@ -1997,9 +1997,9 @@ mod tests {
                         // TODO
                         // message.verify(&*skey2.public_key())?;
 
-                        let Message::Signed {
+                        let Message::SignedOnePass {
                             message: inner_message,
-                            one_pass_signature: Some(ops),
+                            one_pass_signature: ops,
                             ..
                         } = *message
                         else {
