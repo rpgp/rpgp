@@ -1962,4 +1962,99 @@ mod tests {
         }
         Ok(())
     }
+
+    #[test]
+    fn utf8_reader_partial_size_compression_zip_roundtrip_no_encryption_seipdv2_sign_twice(
+    ) -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey1, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let (skey2, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/bob@autocrypt.example.sec.asc",
+        )?)?;
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            for encoding in [
+                Encoding::Binary,
+                Encoding::Armor(ArmorOptions {
+                    headers: None,
+                    include_checksum: true,
+                }),
+                Encoding::Armor(ArmorOptions {
+                    headers: None,
+                    include_checksum: false,
+                }),
+            ] {
+                println!("-- Size: {} encoding: {:?}", file_size, encoding);
+
+                // Generate data
+                let buf = random_string(&mut rng, file_size);
+                let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+                let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                    .data_mode(DataMode::Utf8)
+                    .compression(CompressionAlgorithm::ZIP)
+                    .partial_chunk_size(chunk_size)?
+                    .sign(SigningConfig::new(
+                        &*skey1,
+                        Password::empty(),
+                        HashAlgorithm::Sha256,
+                    ))
+                    .sign(SigningConfig::new(
+                        &*skey2,
+                        Password::empty(),
+                        HashAlgorithm::Sha512,
+                    ));
+
+                let message = match encoding {
+                    Encoding::Armor(opts) => {
+                        let encrypted = builder.to_armored_string(&mut rng, opts)?;
+
+                        println!("{}", encrypted);
+
+                        let (message, _) = Message::from_armor(std::io::Cursor::new(encrypted))?;
+                        message
+                    }
+                    Encoding::Binary => {
+                        let encrypted = builder.to_vec(&mut rng)?;
+
+                        println!("{}", hex::encode(&encrypted));
+                        Message::from_bytes(std::io::Cursor::new(encrypted))?
+                    }
+                };
+
+                assert!(message.is_compressed());
+
+                let mut decompressed = message.decompress()?;
+
+                check_strings(
+                    decompressed.as_data_string().unwrap(),
+                    normalize_lines(&buf, LineBreak::Crlf),
+                );
+
+                let res =
+                    decompressed.verify_nested(&[&*skey1.public_key(), &*skey2.public_key()])?;
+                assert_eq!(res.len(), 2);
+                let VerificationResult::Valid(ref sig1) = res[0] else {
+                    panic!("invalid sig1");
+                };
+                assert_eq!(sig1.hash_alg(), HashAlgorithm::Sha256);
+
+                let VerificationResult::Valid(ref sig2) = res[1] else {
+                    panic!("invalid sig2");
+                };
+                assert_eq!(sig2.hash_alg(), HashAlgorithm::Sha512);
+
+                assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
+            }
+        }
+        Ok(())
+    }
 }

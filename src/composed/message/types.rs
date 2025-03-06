@@ -19,9 +19,10 @@ use crate::types::{
     CompressionAlgorithm, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength,
     Password, PkeskVersion, PublicKeyTrait, SecretKeyTrait, StringToKey, Tag,
 };
+use crate::util::fill_buffer;
 
 use super::reader::{
-    CompressedDataReader, LiteralDataReader, SymEncryptedDataReader,
+    CompressedDataReader, LiteralDataReader, PacketBodyReader, SymEncryptedDataReader,
     SymEncryptedProtectedDataReader,
 };
 
@@ -121,8 +122,21 @@ impl<'a> SignatureBodyReader<'a> {
         }
     }
 
+    pub fn into_inner(self) -> PacketBodyReader<Box<dyn BufRead + 'a>> {
+        match self {
+            Self::Init { source, .. } => source.into_inner(),
+            Self::Body { source, .. } => source.into_inner(),
+            Self::Done { source, .. } => source.into_inner(),
+            Self::Error => panic!("error state"),
+        }
+    }
+
     fn fill_inner(&mut self) -> io::Result<()> {
         todo!()
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self, Self::Done { .. })
     }
 
     fn decompress(self) -> Result<Self> {
@@ -291,8 +305,140 @@ impl<'a> SignatureOnePassReader<'a> {
         }
     }
 
+    pub fn into_inner(self) -> PacketBodyReader<Box<dyn BufRead + 'a>> {
+        match self {
+            Self::Init { source, .. } => source.into_inner(),
+            Self::Body { source, .. } => source.into_inner(),
+            Self::Done { source, .. } => source.into_inner(),
+            Self::Error => panic!("error state"),
+        }
+    }
+
     fn fill_inner(&mut self) -> io::Result<()> {
-        todo!()
+        if matches!(self, Self::Done { .. }) {
+            return Ok(());
+        }
+
+        loop {
+            match std::mem::replace(self, Self::Error) {
+                Self::Init {
+                    mut hasher,
+                    mut source,
+                } => {
+                    debug!("SignatureOnePassReader init");
+                    let mut buffer = BytesMut::zeroed(1024);
+                    let read = fill_buffer(&mut source, &mut buffer, None)?;
+                    buffer.truncate(read);
+
+                    if read == 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "missing signature",
+                        ));
+                    }
+
+                    // TODO: normalize line endings..
+                    hasher.update(&buffer[..read]);
+
+                    *self = Self::Body {
+                        source,
+                        hasher,
+                        buffer,
+                    };
+                }
+                Self::Body {
+                    mut hasher,
+                    mut source,
+                    mut buffer,
+                } => {
+                    debug!("SignatureOnePassReader body");
+
+                    if buffer.has_remaining() {
+                        *self = Self::Body {
+                            hasher,
+                            source,
+                            buffer,
+                        };
+                        return Ok(());
+                    }
+
+                    buffer.resize(1024, 0);
+                    let read = fill_buffer(&mut source, &mut buffer, None)?;
+                    buffer.truncate(read);
+
+                    // TODO: normalize line endings
+                    hasher.update(&buffer[..read]);
+
+                    if read == 0 {
+                        debug!("SignatureOnePassReader finish");
+
+                        let (reader, parts) = source.into_parts();
+
+                        // read the signature
+                        let mut packets = crate::packet::PacketParser::new(reader);
+                        let Some(packet) = packets.next() else {
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                "missing signature packet",
+                            ));
+                        };
+                        let packet = packet.map_err(|e| {
+                            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+                        })?;
+
+                        let Packet::Signature(signature) = packet else {
+                            return Err(io::Error::new(
+                                io::ErrorKind::UnexpectedEof,
+                                format!(
+                                    "missing signature packet, found {:?} instead",
+                                    packet.tag()
+                                ),
+                            ));
+                        };
+
+                        // calculate final hash
+                        let len =
+                            signature
+                                .config
+                                .hash_signature_data(&mut hasher)
+                                .map_err(|e| {
+                                    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+                                })?;
+                        hasher.update(&signature.config.trailer(len).map_err(|e| {
+                            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+                        })?);
+                        let hash = hasher.finalize();
+
+                        // reconstruct message source
+                        let reader = packets.into_inner();
+                        let source = parts.into_message(reader);
+
+                        *self = Self::Done {
+                            signature,
+                            hash,
+                            source: Box::new(source),
+                        };
+                    }
+                }
+                Self::Done {
+                    hash,
+                    source,
+                    signature,
+                } => {
+                    *self = Self::Done {
+                        hash,
+                        source,
+                        signature,
+                    };
+                    return Ok(());
+                }
+                Self::Error => panic!("error state"),
+            }
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self, Self::Done { .. })
     }
 
     fn decompress(self) -> Result<Self> {
@@ -344,6 +490,168 @@ impl<'a> SignatureOnePassReader<'a> {
             _ => {
                 bail!("cannot decrypt message that has already been read from");
             }
+        }
+    }
+}
+
+enum MessageParts {
+    Literal {
+        packet_header: PacketHeader,
+        header: LiteralDataHeader,
+    },
+    Compressed {
+        packet_header: PacketHeader,
+    },
+    Signed {
+        packet_header: PacketHeader,
+        signature: Signature,
+    },
+    SignedOnePass {
+        packet_header: PacketHeader,
+        one_pass_signature: OnePassSignature,
+        hash: Box<[u8]>,
+        signature: Signature,
+        parts: Box<MessageParts>,
+    },
+    Encrypted {
+        packet_header: PacketHeader,
+        esk: Vec<Esk>,
+        is_protected: bool,
+    },
+}
+
+impl<'a> Message<'a> {
+    fn into_parts(self) -> (Box<dyn BufRead + 'a>, MessageParts) {
+        match self {
+            Message::Literal { reader } => {
+                assert!(reader.is_done());
+                let packet_header = reader.packet_header();
+                let header = reader.data_header().unwrap().clone();
+                (
+                    reader.into_inner().into_inner(),
+                    MessageParts::Literal {
+                        packet_header,
+                        header,
+                    },
+                )
+            }
+            Message::Compressed { reader } => {
+                assert!(reader.is_done());
+                let packet_header = reader.packet_header();
+                (
+                    reader.into_inner().into_inner(),
+                    MessageParts::Compressed { packet_header },
+                )
+            }
+            Message::Signed { signature, reader } => {
+                assert!(reader.is_done());
+                let reader = reader.into_inner();
+                let packet_header = reader.packet_header();
+                (
+                    reader.into_inner(),
+                    MessageParts::Signed {
+                        packet_header,
+                        signature,
+                    },
+                )
+            }
+            Message::SignedOnePass {
+                one_pass_signature,
+                reader,
+            } => {
+                let SignatureOnePassReader::Done {
+                    hash,
+                    source,
+                    signature,
+                } = reader
+                else {
+                    panic!("invalid state");
+                };
+
+                let packet_header = source.packet_header();
+                let (reader, parts) = source.into_parts();
+                (
+                    reader,
+                    MessageParts::SignedOnePass {
+                        packet_header,
+                        one_pass_signature,
+                        hash,
+                        signature,
+                        parts: Box::new(parts),
+                    },
+                )
+            }
+            Message::Encrypted { esk, edata } => match edata {
+                Edata::SymEncryptedData { reader } => {
+                    let packet_header = reader.packet_header();
+                    assert!(reader.is_done());
+                    (
+                        reader.into_inner().into_inner(),
+                        MessageParts::Encrypted {
+                            packet_header,
+                            esk,
+                            is_protected: false,
+                        },
+                    )
+                }
+                Edata::SymEncryptedProtectedData { reader } => {
+                    assert!(reader.is_done());
+                    let packet_header = reader.packet_header();
+                    (
+                        reader.into_inner().into_inner(),
+                        MessageParts::Encrypted {
+                            packet_header,
+                            esk,
+                            is_protected: true,
+                        },
+                    )
+                }
+            },
+        }
+    }
+}
+
+impl MessageParts {
+    fn into_message<'a>(self, reader: Box<dyn BufRead + 'a>) -> Message<'a> {
+        match self {
+            MessageParts::Literal {
+                packet_header,
+                header,
+            } => Message::Literal {
+                reader: LiteralDataReader::new_done(
+                    PacketBodyReader::new_done(packet_header, reader),
+                    header,
+                ),
+            },
+            MessageParts::Compressed { packet_header } => Message::Compressed {
+                reader: CompressedDataReader::new_done(PacketBodyReader::new_done(
+                    packet_header,
+                    reader,
+                )),
+            },
+            MessageParts::Signed {
+                packet_header,
+                signature,
+            } => todo!(),
+            MessageParts::SignedOnePass {
+                packet_header,
+                one_pass_signature,
+                hash,
+                signature,
+                parts,
+            } => Message::SignedOnePass {
+                one_pass_signature,
+                reader: SignatureOnePassReader::Done {
+                    hash,
+                    source: Box::new(parts.into_message(reader)),
+                    signature,
+                },
+            },
+            MessageParts::Encrypted {
+                packet_header,
+                esk,
+                is_protected,
+            } => todo!(),
         }
     }
 }
@@ -1010,6 +1318,10 @@ impl<'a> Message<'a> {
         matches!(self, Message::SignedOnePass { .. })
     }
 
+    pub fn is_encrypted(&self) -> bool {
+        matches!(self, Message::Encrypted { .. })
+    }
+
     pub fn is_signed(&self) -> bool {
         matches!(self, Message::SignedOnePass { .. } | Message::Signed { .. })
     }
@@ -1059,6 +1371,19 @@ impl<'a> Message<'a> {
         let mut out = String::new();
         self.read_to_string(&mut out)?;
         Ok(out)
+    }
+
+    fn into_inner(self) -> PacketBodyReader<Box<dyn BufRead + 'a>> {
+        match self {
+            Self::Literal { reader } => reader.into_inner(),
+            Self::Compressed { reader } => reader.into_inner(),
+            Self::Signed { reader, .. } => reader.into_inner(),
+            Self::SignedOnePass { reader, .. } => reader.into_inner(),
+            Self::Encrypted { edata, .. } => match edata {
+                Edata::SymEncryptedData { reader } => reader.into_inner(),
+                Edata::SymEncryptedProtectedData { reader } => reader.into_inner(),
+            },
+        }
     }
 }
 

@@ -76,6 +76,17 @@ impl<R: BufRead> PacketBodyReader<R> {
         }
     }
 
+    pub fn new_done(packet_header: PacketHeader, source: R) -> Self {
+        Self {
+            packet_header,
+            state: PacketBodyReaderState::Done { source },
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self.state, PacketBodyReaderState::Done { .. })
+    }
+
     pub fn into_inner(self) -> R {
         match self.state {
             PacketBodyReaderState::Header { source } => source,
@@ -234,6 +245,19 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
         })
     }
 
+    pub fn is_done(&self) -> bool {
+        matches!(self, Self::Done { .. })
+    }
+
+    pub fn into_inner(self) -> PacketBodyReader<R> {
+        match self {
+            Self::Header { source, .. } => source,
+            Self::Body { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Error => panic!("error state"),
+        }
+    }
+
     pub fn packet_header(&self) -> PacketHeader {
         match self {
             Self::Header { source, .. } => source.packet_header(),
@@ -298,6 +322,18 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
         })
     }
 
+    pub fn is_done(&self) -> bool {
+        matches!(self, Self::Done { .. })
+    }
+
+    pub fn into_inner(self) -> PacketBodyReader<R> {
+        match self {
+            Self::Body { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Error => panic!("error state"),
+        }
+    }
+
     pub fn packet_header(&self) -> PacketHeader {
         match self {
             Self::Body { source, .. } => source.packet_header(),
@@ -331,6 +367,24 @@ impl<R: BufRead> CompressedDataReader<R> {
         })
     }
 
+    pub fn new_done(source: PacketBodyReader<R>) -> Self {
+        Self {
+            state: CompressedReaderState::Done { source },
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self.state, CompressedReaderState::Done { .. })
+    }
+
+    pub fn into_inner(self) -> PacketBodyReader<R> {
+        match self.state {
+            CompressedReaderState::Body { source, .. } => source.into_inner(),
+            CompressedReaderState::Done { source, .. } => source,
+            CompressedReaderState::Error => panic!("error state"),
+        }
+    }
+
     pub fn packet_header(&self) -> PacketHeader {
         match self.state {
             CompressedReaderState::Body { ref source, .. } => match source {
@@ -345,7 +399,7 @@ impl<R: BufRead> CompressedDataReader<R> {
     /// Enables decompression
     pub fn decompress(self) -> io::Result<Self> {
         match self.state {
-            CompressedReaderState::Body { mut source, buffer } => Ok(Self {
+            CompressedReaderState::Body { source, buffer } => Ok(Self {
                 state: CompressedReaderState::Body {
                     source: source.decompress()?,
                     buffer,
@@ -536,6 +590,24 @@ impl<R: BufRead> LiteralDataReader<R> {
         })
     }
 
+    pub fn new_done(source: PacketBodyReader<R>, header: LiteralDataHeader) -> Self {
+        Self {
+            state: LiteralReaderState::Done { source, header },
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        matches!(self.state, LiteralReaderState::Done { .. })
+    }
+
+    pub fn into_inner(self) -> PacketBodyReader<R> {
+        match self.state {
+            LiteralReaderState::Body { source, .. } => source,
+            LiteralReaderState::Done { source, .. } => source,
+            LiteralReaderState::Error => panic!("error state"),
+        }
+    }
+
     pub fn packet_header(&self) -> PacketHeader {
         match self.state {
             LiteralReaderState::Body { ref source, .. } => source.packet_header(),
@@ -681,6 +753,7 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
 impl<R: BufRead> LiteralDataReader<R> {
     pub fn data_header(&self) -> Option<&LiteralDataHeader> {
         match self.state {
+            LiteralReaderState::Body { ref header, .. } => Some(header),
             LiteralReaderState::Done { ref header, .. } => Some(header),
             _ => None,
         }

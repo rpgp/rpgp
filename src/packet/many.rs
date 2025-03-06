@@ -19,6 +19,10 @@ impl<R: BufRead> PacketParser<R> {
             is_done: false,
         }
     }
+
+    pub fn into_inner(self) -> R {
+        self.reader
+    }
 }
 
 impl<R: BufRead> Iterator for PacketParser<R> {
