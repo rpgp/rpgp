@@ -1962,14 +1962,14 @@ mod tests {
 
                         println!("{}", encrypted);
 
-                        let (message, _) = Message::from_armor(encrypted.as_bytes())?;
+                        let (message, _) = Message::from_armor(std::io::Cursor::new(encrypted))?;
                         message
                     }
                     Encoding::Binary => {
                         let encrypted = builder.to_vec(&mut rng)?;
 
                         println!("{}", hex::encode(&encrypted));
-                        Message::from_bytes(&encrypted[..])?
+                        Message::from_bytes(std::io::Cursor::new(encrypted))?
                     }
                 };
 

@@ -12,27 +12,27 @@ use crate::{
 /// A flexible representation of what can be represented in an armor file.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum Any {
+pub enum Any<'a> {
     Cleartext(CleartextSignedMessage),
     PublicKey(SignedPublicKey),
     SecretKey(SignedSecretKey),
-    Message(Message<'static>), // TODO: fixme
+    Message(Message<'a>),
     Signature(StandaloneSignature),
 }
 
-impl Any {
+impl<'a> Any<'a> {
     /// Parse armored ascii data.
-    pub fn from_armor(bytes: impl Read) -> Result<(Self, armor::Headers)> {
+    pub fn from_armor<R: Read + 'a>(bytes: R) -> Result<(Self, armor::Headers)> {
         Self::from_armor_buf(BufReader::new(bytes))
     }
 
     /// Parse a single armor encoded composition.
-    pub fn from_string(input: &str) -> Result<(Self, armor::Headers)> {
+    pub fn from_string(input: &'a str) -> Result<(Self, armor::Headers)> {
         Self::from_armor_buf(input.as_bytes())
     }
 
     /// Parse armored ascii data.
-    pub fn from_armor_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
+    pub fn from_armor_buf<R: BufRead + 'a>(input: R) -> Result<(Self, armor::Headers)> {
         let dearmor = armor::Dearmor::new(input);
         let limit = dearmor.max_buffer_limit();
         let (typ, headers, has_leading_data, rest) = dearmor.read_only_header()?;
