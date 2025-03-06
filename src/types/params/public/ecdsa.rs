@@ -1,12 +1,11 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
-use bytes::Buf;
 use elliptic_curve::sec1::ToEncodedPoint;
 
 use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::MpiBytes;
 
@@ -35,15 +34,15 @@ pub enum EcdsaPublicParams {
 
 impl EcdsaPublicParams {
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ec>
-    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // a one-octet size of the following field
         let curve_len = i.read_u8()?;
         // octets representing a curve OID
-        let curve = ecc_curve_from_oid(&i.read_take(curve_len.into())?)
+        let curve = ecc_curve_from_oid(&i.take_bytes(curve_len.into())?)
             .ok_or_else(|| format_err!("invalid curve"))?;
 
         // MPI of an EC point representing a public key
-        let p = MpiBytes::from_buf(&mut i)?;
+        let p = MpiBytes::try_from_reader(&mut i)?;
         let params = EcdsaPublicParams::try_from_mpi(p, curve)?;
         Ok(params)
     }
@@ -222,7 +221,7 @@ mod tests {
         fn params_roundtrip(params: EcdsaPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = EcdsaPublicParams::try_from_buf(&mut &buf[..])?;
+            let new_params = EcdsaPublicParams::try_from_reader(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

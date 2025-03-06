@@ -1,6 +1,4 @@
-use std::io;
-
-use bytes::Buf;
+use std::io::{self, BufRead};
 
 use crate::errors::Result;
 use crate::ser::Serialize;
@@ -17,11 +15,11 @@ pub struct DsaPublicParams {
 impl Eq for DsaPublicParams {}
 
 impl DsaPublicParams {
-    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
-        let p = MpiBytes::from_buf(&mut i)?;
-        let q = MpiBytes::from_buf(&mut i)?;
-        let g = MpiBytes::from_buf(&mut i)?;
-        let y = MpiBytes::from_buf(&mut i)?;
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
+        let p = MpiBytes::try_from_reader(&mut i)?;
+        let q = MpiBytes::try_from_reader(&mut i)?;
+        let g = MpiBytes::try_from_reader(&mut i)?;
+        let y = MpiBytes::try_from_reader(&mut i)?;
 
         let params = DsaPublicParams::try_from_mpi(p, q, g, y)?;
         Ok(params)
@@ -98,7 +96,7 @@ mod tests {
         fn params_roundtrip(params: DsaPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = DsaPublicParams::try_from_buf(&mut &buf[..])?;
+            let new_params = DsaPublicParams::try_from_reader(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

@@ -1,4 +1,5 @@
-use bytes::Buf;
+use std::io::BufRead;
+
 use log::debug;
 use rand::{CryptoRng, Rng};
 
@@ -51,7 +52,7 @@ impl SecretKey {
     }
 
     /// Parses a `SecretKey` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(Tag::SecretKey, packet_header.tag(), "invalid tag");
 
         let details = crate::packet::secret_key_parser::parse(input)?;
@@ -123,7 +124,7 @@ impl SecretSubkey {
     }
 
     /// Parses a `SecretSubkey` packet from the given slice.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(Tag::SecretSubkey, packet_header.tag(), "invalid tag");
 
         let details = crate::packet::secret_key_parser::parse(input)?;

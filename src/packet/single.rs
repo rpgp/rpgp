@@ -19,11 +19,12 @@ impl Packet {
                 OnePassSignature::try_from_reader(packet_header, body).map(Into::into)
             }
 
-            // Tag::SecretKey => SecretKey::try_from_reader(packet_header, body).map(Into::into),
-            // Tag::SecretSubkey => SecretSubkey::try_from_reader(packet_header, body).map(Into::into),
+            Tag::SecretKey => SecretKey::try_from_reader(packet_header, body).map(Into::into),
+            Tag::SecretSubkey => SecretSubkey::try_from_reader(packet_header, body).map(Into::into),
 
-            // Tag::PublicKey => PublicKey::try_from_reader(packet_header, body).map(Into::into),
-            // Tag::PublicSubkey => PublicSubkey::try_from_reader(packet_header, body).map(Into::into),
+            Tag::PublicKey => PublicKey::try_from_reader(packet_header, body).map(Into::into),
+            Tag::PublicSubkey => PublicSubkey::try_from_reader(packet_header, body).map(Into::into),
+
             Tag::PublicKeyEncryptedSessionKey => {
                 PublicKeyEncryptedSessionKey::try_from_reader(packet_header, body).map(Into::into)
             }
@@ -71,7 +72,6 @@ impl Packet {
                 )
             }
             Tag::Other(other) => unimplemented_err!("Unknown packet type: {}", other),
-            _ => todo!(),
         };
 
         match res {

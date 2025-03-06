@@ -12,7 +12,6 @@ use crate::errors::Result;
 use crate::line_writer::LineBreak;
 use crate::normalize_lines::{normalize_lines, NormalizedReader};
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{PacketHeaderVersion, PacketLength, Tag};

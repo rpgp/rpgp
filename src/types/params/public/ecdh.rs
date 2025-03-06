@@ -1,13 +1,13 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 
 use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::MpiBytes;
 
@@ -150,17 +150,17 @@ impl EcdhPublicParams {
     }
 
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ecd>
-    pub fn try_from_buf<B: Buf>(mut i: B, len: Option<usize>) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B, len: Option<usize>) -> Result<Self> {
         // a one-octet size of the following field
         // octets representing a curve OID
         let curve_len = i.read_u8()?;
-        let curve_raw = i.read_take(curve_len.into())?;
+        let curve_raw = i.take_bytes(curve_len.into())?;
         let curve = ecc_curve_from_oid(&curve_raw).ok_or_else(|| format_err!("invalid curve"))?;
 
         match curve {
             ECCCurve::Curve25519 | ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 => {
                 // MPI of an EC point representing a public key
-                let p = MpiBytes::from_buf(&mut i)?;
+                let p = MpiBytes::try_from_reader(&mut i)?;
 
                 // a one-octet size of the following fields
                 let _len2 = i.read_u8()?;
@@ -180,7 +180,7 @@ impl EcdhPublicParams {
             }
             _ => {
                 let data = if let Some(pub_len) = len {
-                    i.read_take(pub_len)?
+                    i.take_bytes(pub_len)?.freeze()
                 } else {
                     Bytes::default()
                 };
@@ -281,7 +281,7 @@ pub(super) mod tests {
         fn params_roundtrip(params: EcdhPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = EcdhPublicParams::try_from_buf(&mut &buf[..], None)?;
+            let new_params = EcdhPublicParams::try_from_reader(&mut &buf[..], None)?;
             prop_assert_eq!(params, new_params);
         }
     }
