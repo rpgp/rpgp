@@ -1,5 +1,5 @@
 use log::debug;
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;

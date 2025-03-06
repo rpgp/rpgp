@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
@@ -6,6 +6,7 @@ use num_bigint::BigUint;
 
 use crate::errors::{Error, Result};
 use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 /// Number of bits we accept when reading or writing MPIs.
@@ -48,6 +49,25 @@ impl MpiBytes {
         let len_bytes = (len_bits + 7) >> 3;
 
         let n = i.read_take(usize::from(len_bytes))?;
+        let n_stripped = strip_leading_zeros(&n);
+        let n_stripped = n.slice_ref(n_stripped);
+
+        Ok(MpiBytes(n_stripped))
+    }
+
+    /// Parses the given buffer as an MPI.
+    ///
+    /// The buffer is expected to be length-prefixed.
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
+        let len_bits = i.read_be_u16()?;
+
+        if len_bits > MAX_EXTERN_MPI_BITS {
+            return Err(Error::InvalidInput);
+        }
+
+        let len_bytes = (len_bits + 7) >> 3;
+
+        let n = i.take_bytes(usize::from(len_bytes))?.freeze();
         let n_stripped = strip_leading_zeros(&n);
         let n_stripped = n.slice_ref(n_stripped);
 

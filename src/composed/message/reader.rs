@@ -1,6 +1,6 @@
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, Read};
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BytesMut};
 use log::debug;
 
 use crate::packet::{Decompressor, LiteralDataHeader, PacketHeader};
@@ -525,7 +525,7 @@ enum LiteralReaderState<R: BufRead> {
 impl<R: BufRead> LiteralDataReader<R> {
     pub fn new(mut source: PacketBodyReader<R>) -> io::Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::LiteralData);
-        let header = LiteralDataHeader::from_reader(&mut source)?;
+        let header = LiteralDataHeader::try_from_reader(&mut source)?;
 
         Ok(Self {
             state: LiteralReaderState::Body {
@@ -697,6 +697,8 @@ struct DebugB(CompressedReaderState<Box<dyn BufRead>>);
 
 #[cfg(test)]
 mod tests {
+    use std::io::BufReader;
+
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
     use testresult::TestResult;

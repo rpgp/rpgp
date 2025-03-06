@@ -1,28 +1,17 @@
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, Read};
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, Bytes};
 #[cfg(feature = "bzip2")]
 use bzip2::write::BzEncoder;
-use chrono::SubsecRound;
-use flate2::write::{DeflateEncoder, ZlibEncoder};
-use flate2::Compression;
 use log::{debug, warn};
-use rand::{CryptoRng, Rng};
 
 use crate::armor;
 use crate::composed::message::decrypt::*;
-use crate::composed::shared::Deserializable;
 use crate::composed::signed_key::SignedSecretKey;
-use crate::composed::StandaloneSignature;
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
-    ChunkSize, CompressedData, LiteralData, LiteralDataHeader, OnePassSignature, Packet,
-    PacketHeader, PacketTrait, PublicKeyEncryptedSessionKey, Signature, SignatureConfig,
-    SignatureType, SignatureVersionSpecific, Subpacket, SubpacketData, SymEncryptedData,
-    SymEncryptedProtectedData, SymKeyEncryptedSessionKey,
+    LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
+    PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{

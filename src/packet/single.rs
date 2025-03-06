@@ -1,6 +1,5 @@
 use std::io::BufRead;
 
-use bytes::Buf;
 use log::warn;
 
 use crate::errors::{Error, Result};
@@ -13,52 +12,46 @@ use crate::packet::{
 use crate::types::Tag;
 
 impl Packet {
-    pub fn from_reader<R: BufRead>(packet_header: PacketHeader, mut body: R) -> Result<Self> {
-        todo!()
-    }
-
-    pub fn from_bytes<B: Buf + std::fmt::Debug>(
-        packet_header: PacketHeader,
-        mut body: B,
-    ) -> Result<Self> {
+    pub fn from_reader<R: BufRead>(packet_header: PacketHeader, body: R) -> Result<Self> {
         let res: Result<Self> = match packet_header.tag() {
-            Tag::Signature => Signature::from_buf(packet_header, &mut body).map(Into::into),
-            Tag::OnePassSignature => {
-                OnePassSignature::from_buf(packet_header, &mut body).map(Into::into)
-            }
+            // Tag::Signature => Signature::try_from_reader(packet_header, body).map(Into::into),
+            // Tag::OnePassSignature => {
+            //     OnePassSignature::try_from_reader(packet_header, body).map(Into::into)
+            // }
 
-            Tag::SecretKey => SecretKey::from_buf(packet_header, &mut body).map(Into::into),
-            Tag::SecretSubkey => SecretSubkey::from_buf(packet_header, &mut body).map(Into::into),
+            // Tag::SecretKey => SecretKey::try_from_reader(packet_header, body).map(Into::into),
+            // Tag::SecretSubkey => SecretSubkey::try_from_reader(packet_header, body).map(Into::into),
 
-            Tag::PublicKey => PublicKey::from_buf(packet_header, &mut body).map(Into::into),
-            Tag::PublicSubkey => PublicSubkey::from_buf(packet_header, &mut body).map(Into::into),
+            // Tag::PublicKey => PublicKey::try_from_reader(packet_header, body).map(Into::into),
+            // Tag::PublicSubkey => PublicSubkey::try_from_reader(packet_header, body).map(Into::into),
 
-            Tag::PublicKeyEncryptedSessionKey => {
-                PublicKeyEncryptedSessionKey::from_buf(packet_header, &mut body).map(Into::into)
-            }
-            Tag::SymKeyEncryptedSessionKey => {
-                SymKeyEncryptedSessionKey::from_buf(packet_header, &mut body).map(Into::into)
-            }
-
-            Tag::LiteralData => LiteralData::from_buf(packet_header, &mut body).map(Into::into),
+            // Tag::PublicKeyEncryptedSessionKey => {
+            //     PublicKeyEncryptedSessionKey::try_from_reader(packet_header, body).map(Into::into)
+            // }
+            // Tag::SymKeyEncryptedSessionKey => {
+            //     SymKeyEncryptedSessionKey::try_from_reader(packet_header, body).map(Into::into)
+            // }
+            Tag::LiteralData => LiteralData::try_from_reader(packet_header, body).map(Into::into),
             Tag::CompressedData => {
-                CompressedData::from_buf(packet_header, &mut body).map(Into::into)
+                CompressedData::try_from_reader(packet_header, body).map(Into::into)
             }
             Tag::SymEncryptedData => {
-                SymEncryptedData::from_buf(packet_header, &mut body).map(Into::into)
+                SymEncryptedData::try_from_reader(packet_header, body).map(Into::into)
             }
             Tag::SymEncryptedProtectedData => {
-                SymEncryptedProtectedData::from_buf(packet_header, &mut body).map(Into::into)
+                SymEncryptedProtectedData::try_from_reader(packet_header, body).map(Into::into)
             }
 
-            Tag::Marker => Marker::from_buf(packet_header, &mut body).map(Into::into),
-            Tag::Trust => Trust::from_buf(packet_header, &mut body).map(Into::into),
-            Tag::UserId => UserId::from_buf(packet_header, &mut body).map(Into::into),
-            Tag::UserAttribute => UserAttribute::from_buf(packet_header, &mut body).map(Into::into),
-            Tag::ModDetectionCode => {
-                ModDetectionCode::from_buf(packet_header, &mut body).map(Into::into)
+            Tag::Marker => Marker::try_from_reader(packet_header, body).map(Into::into),
+            Tag::Trust => Trust::try_from_reader(packet_header, body).map(Into::into),
+            Tag::UserId => UserId::try_from_reader(packet_header, body).map(Into::into),
+            Tag::UserAttribute => {
+                UserAttribute::try_from_reader(packet_header, body).map(Into::into)
             }
-            Tag::Padding => Padding::from_buf(packet_header, &mut body).map(Into::into),
+            // Tag::ModDetectionCode => {
+            //     ModDetectionCode::try_from_reader(packet_header, body).map(Into::into)
+            // }
+            Tag::Padding => Padding::try_from_reader(packet_header, body).map(Into::into),
             Tag::Other(20) => {
                 unimplemented_err!("GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported")
             }
@@ -79,6 +72,7 @@ impl Packet {
                 )
             }
             Tag::Other(other) => unimplemented_err!("Unknown packet type: {}", other),
+            _ => todo!(),
         };
 
         match res {
@@ -87,12 +81,7 @@ impl Packet {
                 Err(Error::PacketIncomplete { source })
             }
             Err(err) => {
-                warn!(
-                    "invalid packet: {:#?} {:?}\n{:?}",
-                    err,
-                    packet_header.tag(),
-                    body
-                );
+                warn!("invalid packet: {:#?} {:?}", err, packet_header.tag(),);
                 Err(Error::InvalidPacketContent {
                     source: Box::new(err),
                 })

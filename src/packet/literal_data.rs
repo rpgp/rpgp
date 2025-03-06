@@ -68,13 +68,13 @@ impl LiteralDataHeader {
 }
 
 impl LiteralDataHeader {
-    pub fn from_reader<R: BufRead>(mut r: R) -> io::Result<Self> {
+    pub fn try_from_reader<R: BufRead>(mut r: R) -> io::Result<Self> {
         // Mode
         let mode = r.read_u8().map(DataMode::from)?;
 
         // Name
         let name_len = r.read_u8()?;
-        let file_name = r.read_take_fixed(name_len.into())?;
+        let file_name = r.take_bytes(name_len.into())?;
 
         // Created
         let created = r.read_be_u32()?;
@@ -148,32 +148,15 @@ impl LiteralData {
         })
     }
 
-    /// Parses a `LiteralData` packet from the given buf.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
-        // Mode
-        let mode = data.read_u8().map(DataMode::from)?;
-
-        // Name
-        let name_len = data.read_u8()?;
-        let name = data.read_take(name_len.into())?;
-
-        // Created
-        let created = data.read_be_u32()?;
-        let created = Utc
-            .timestamp_opt(created.into(), 0)
-            .single()
-            .ok_or_else(|| format_err!("invalid created field"))?;
-
-        let data = data.rest();
+    /// Parses a `LiteralData` packet from the given reader.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
+        let header = LiteralDataHeader::try_from_reader(&mut data)?;
+        let data = data.rest()?;
 
         Ok(LiteralData {
             packet_header,
-            header: LiteralDataHeader {
-                mode,
-                created,
-                file_name: name,
-            },
-            data,
+            header,
+            data: data.freeze(),
         })
     }
 
@@ -695,7 +678,7 @@ mod tests {
         fn packet_roundtrip(packet: LiteralData) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = LiteralData::from_buf(packet.packet_header, &mut &buf[..]).unwrap();
+            let new_packet = LiteralData::try_from_reader(packet.packet_header, &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
     }

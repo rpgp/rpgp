@@ -117,13 +117,13 @@ impl<R: BufRead> Read for Decompressor<R> {
 
 impl CompressedData {
     /// Parses a `CompressedData` packet from the given `Buf`.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
         let alg = input.read_u8().map(CompressionAlgorithm::from)?;
 
         Ok(CompressedData {
             packet_header,
             compression_algorithm: alg,
-            compressed_data: input.copy_to_bytes(input.remaining()),
+            compressed_data: input.rest()?.freeze(),
         })
     }
 
@@ -570,7 +570,7 @@ mod tests {
         fn packet_roundtrip(packet: CompressedData) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = CompressedData::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
+            let new_packet = CompressedData::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             assert_eq!(packet, new_packet);
         }
     }

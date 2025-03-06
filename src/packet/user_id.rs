@@ -1,6 +1,7 @@
+use std::io::BufRead;
 use std::{io, str};
 
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
@@ -8,6 +9,7 @@ use crate::errors::Result;
 use crate::packet::{
     PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
 };
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
     KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SecretKeyTrait,
@@ -27,10 +29,12 @@ pub struct UserId {
 
 impl UserId {
     /// Parses a `UserId` packet from the given buffer.
-    pub fn from_buf(packet_header: PacketHeader, mut input: impl Buf) -> Result<Self> {
-        let len = input.remaining();
-        let id = input.copy_to_bytes(len);
-        Ok(UserId { packet_header, id })
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+        let id = input.rest()?;
+        Ok(UserId {
+            packet_header,
+            id: id.freeze(),
+        })
     }
 
     /// Creates a `UserId` from the given string.
@@ -214,7 +218,7 @@ mod tests {
         fn packet_roundtrip(user_id: UserId) {
             let mut buf = Vec::new();
             user_id.to_writer(&mut buf).unwrap();
-            let new_user_id = UserId::from_buf(user_id.packet_header, &mut &buf[..]).unwrap();
+            let new_user_id = UserId::try_from_reader(user_id.packet_header, &mut &buf[..]).unwrap();
             prop_assert_eq!(user_id, new_user_id);
         }
     }

@@ -1,11 +1,11 @@
-use std::io;
+use std::io::{self, BufRead};
 
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use rand::{CryptoRng, RngCore};
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{PacketHeaderVersion, PacketLength, Tag};
 
@@ -27,8 +27,8 @@ pub struct Padding {
 
 impl Padding {
     /// Parses a `Padding` packet from the given slice.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
-        let data = input.rest();
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+        let data = input.rest()?.freeze();
 
         Ok(Padding {
             packet_header,
@@ -87,15 +87,14 @@ mod tests {
     #[test]
     fn test_padding_roundtrip() {
         let packet_raw = hex::decode("d50ec5a293072991628147d72c8f86b7").expect("valid hex");
-        let mut to_parse = &mut &packet_raw[..];
-        let header = PacketHeader::from_buf(&mut to_parse).expect("parse");
+        let mut to_parse = std::io::Cursor::new(&packet_raw);
+        let header = PacketHeader::try_from_reader(&mut to_parse).expect("parse");
 
-        let PacketLength::Fixed(len) = header.packet_length() else {
+        let PacketLength::Fixed(_len) = header.packet_length() else {
             panic!("invalid parse result");
         };
-        assert_eq!(to_parse.remaining(), len as usize);
-        let rest = to_parse.rest();
-        let full_packet = Packet::from_bytes(header, rest).expect("body parse");
+
+        let full_packet = Packet::from_reader(header, &mut to_parse).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
@@ -133,7 +132,7 @@ mod tests {
         fn packet_roundtrip(padding: Padding) {
             let mut buf = Vec::new();
             padding.to_writer(&mut buf).unwrap();
-            let new_padding = Padding::from_buf(padding.packet_header, &mut &buf[..]).unwrap();
+            let new_padding = Padding::try_from_reader(padding.packet_header, &mut &buf[..]).unwrap();
             assert_eq!(padding, new_padding);
         }
     }

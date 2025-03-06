@@ -1,7 +1,7 @@
 use log::debug;
 use std::io::BufRead;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::packet::{Packet, PacketHeader};
 use crate::reader::PacketBodyReader;
 
@@ -29,10 +29,14 @@ impl<R: BufRead> Iterator for PacketParser<R> {
             return None;
         }
 
-        let header = match PacketHeader::from_reader(&mut self.reader) {
+        let header = match PacketHeader::try_from_reader(&mut self.reader) {
             Ok(header) => header,
             Err(err) => {
                 self.is_done = true;
+                if err.kind() == std::io::ErrorKind::UnexpectedEof {
+                    return None;
+                }
+
                 return Some(Err(err.into()));
             }
         };
@@ -55,9 +59,13 @@ impl<R: BufRead> PacketParser<R> {
             return None;
         }
 
-        let header = match PacketHeader::from_reader(&mut self.reader) {
+        let header = match PacketHeader::try_from_reader(&mut self.reader) {
             Ok(header) => header,
             Err(err) => {
+                if err.kind() == std::io::ErrorKind::UnexpectedEof {
+                    return None;
+                }
+
                 self.is_done = true;
                 return Some(Err(err.into()));
             }
@@ -73,7 +81,7 @@ impl<R: BufRead> PacketParser<R> {
             return None;
         }
 
-        let header = match PacketHeader::from_reader(&mut self.reader) {
+        let header = match PacketHeader::try_from_reader(&mut self.reader) {
             Ok(header) => header,
             Err(err) => {
                 self.is_done = true;

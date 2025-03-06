@@ -1,4 +1,4 @@
-use std::io::{self, Read};
+use std::io::{self, BufRead, Read};
 
 use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes, BytesMut};
@@ -11,7 +11,7 @@ use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::Tag;
 use crate::util::fill_buffer;
@@ -76,7 +76,7 @@ impl ChunkSize {
 
 impl SymEncryptedProtectedData {
     /// Parses a `SymEncryptedProtectedData` packet from the given buf.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
         ensure_eq!(
             packet_header.tag(),
             Tag::SymEncryptedProtectedData,
@@ -109,12 +109,12 @@ impl SymEncryptedProtectedData {
                 ))
             }
         };
-        let data = data.rest();
+        let data = data.rest()?;
 
         Ok(SymEncryptedProtectedData {
             packet_header,
             config,
-            data,
+            data: data.freeze(),
         })
     }
 
@@ -592,8 +592,9 @@ mod tests {
                 enc.to_writer(&mut buffer).unwrap();
                 assert_eq!(buffer.len(), enc.write_len());
 
-                let back = SymEncryptedProtectedData::from_buf(enc.packet_header, &mut &buffer[..])
-                    .unwrap();
+                let back =
+                    SymEncryptedProtectedData::try_from_reader(enc.packet_header, &mut &buffer[..])
+                        .unwrap();
                 assert_eq!(enc, back);
             }
         }

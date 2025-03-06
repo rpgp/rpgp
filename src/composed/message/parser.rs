@@ -1,18 +1,15 @@
+#![allow(dead_code)]
 use std::io::{BufRead, BufReader, Read};
 use std::iter::Peekable;
 use std::path::Path;
 
-use log::debug;
-
 use crate::armor::BlockType;
 use crate::composed::message::Message;
-use crate::composed::Deserializable;
 use crate::errors::{Error, Result};
-use crate::packet::{Packet, PacketTrait};
-use crate::types::{PkeskVersion, SkeskVersion, Tag};
-use crate::{Edata, Esk};
+use crate::packet::Packet;
+use crate::types::Tag;
 
-use super::reader::{CompressedDataReader, LiteralDataReader, PacketBodyReader};
+use super::reader::{CompressedDataReader, LiteralDataReader};
 
 pub struct MessageParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
@@ -407,7 +404,6 @@ mod bla {
     use crate::errors::Result;
     use crate::reader::PacketBodyReader;
     use crate::types::Tag;
-    use gat_lending_iterator::LendingIterator;
     use std::io::{BufRead, Read};
 
     // OpenPGP Message:

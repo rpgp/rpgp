@@ -65,7 +65,7 @@ impl PacketHeader {
     }
 
     /// Parse a single packet header from the given reader.
-    pub fn from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
+    pub fn try_from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
         let header = r.read_u8()?;
 
         let first_two_bits = header & 0b1100_0000;
@@ -412,7 +412,7 @@ mod tests {
         fn packet_roundtrip_reader(header: PacketHeader) {
             let mut buf = Vec::new();
             header.to_writer(&mut buf).unwrap();
-            let new_header = PacketHeader::from_reader(&mut &buf[..]).unwrap();
+            let new_header = PacketHeader::try_from_reader(&mut &buf[..]).unwrap();
             prop_assert_eq!(header, new_header);
         }
 

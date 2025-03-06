@@ -1,5 +1,7 @@
+use std::io::BufRead;
+
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
 use smallvec::SmallVec;
 
@@ -9,7 +11,7 @@ use crate::crypto::{
 };
 use crate::errors::Result;
 use crate::packet::{KeyFlags, Notation, RevocationCode, Signature};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, Fingerprint, KeyId, RevocationKey};
 
@@ -153,7 +155,7 @@ pub enum SubpacketLength {
 
 impl SubpacketLength {
     /// Parses a subpacket length from the given buffer.
-    pub(crate) fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
+    pub(crate) fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         let olen = i.read_u8()?;
         let len = match olen {
             // One-Octet Lengths
@@ -328,7 +330,7 @@ mod tests {
         assert_eq!(len.len(), 192);
 
         // test that parsing (254, 255) encodes correctly
-        let len = SubpacketLength::from_buf(&mut &[254, 255][..]).unwrap();
+        let len = SubpacketLength::try_from_reader(&mut &[254, 255][..]).unwrap();
         assert!(matches!(len, SubpacketLength::Two(_)));
         assert_eq!(len.len(), MAX_TWO_BYTE);
 
@@ -354,7 +356,7 @@ mod tests {
         fn subpacket_length_packet_roundtrip(len: SubpacketLength) {
             let mut buf = Vec::new();
             len.to_writer(&mut buf).unwrap();
-            let new_len = SubpacketLength::from_buf(&mut &buf[..]).unwrap();
+            let new_len = SubpacketLength::try_from_reader(&mut &buf[..]).unwrap();
             assert_eq!(len, new_len);
         }
     }

@@ -1,7 +1,7 @@
 use std::cmp;
 use std::io::{BufRead, Read, Result};
 
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 
 pub trait BufReadParsing: BufRead + Sized {
     fn read_u8(&mut self) -> Result<u8> {
@@ -26,6 +26,11 @@ pub trait BufReadParsing: BufRead + Sized {
         let arr = self.read_array::<4>()?;
 
         Ok(u32::from_be_bytes(arr))
+    }
+
+    fn has_remaining(&mut self) -> Result<bool> {
+        let has_remaining = !self.fill_buf()?.is_empty();
+        Ok(has_remaining)
     }
 
     fn read_array<const C: usize>(&mut self) -> Result<[u8; C]> {
@@ -53,7 +58,7 @@ pub trait BufReadParsing: BufRead + Sized {
         Ok(arr)
     }
 
-    fn read_take_fixed(&mut self, size: usize) -> Result<BytesMut> {
+    fn take_bytes(&mut self, size: usize) -> Result<BytesMut> {
         let mut arr = BytesMut::zeroed(size);
         let mut read = 0;
 
@@ -83,23 +88,34 @@ pub trait BufReadParsing: BufRead + Sized {
         Take { inner: self, limit }
     }
 
-    fn rest(&mut self) -> &mut Self {
-        self
+    fn rest(&mut self) -> Result<BytesMut> {
+        let out = BytesMut::new();
+        let mut writer = out.writer();
+        std::io::copy(self, &mut writer)?;
+        Ok(writer.into_inner())
     }
 
-    // fn read_tag(&mut self, tag: &[u8]) -> Result<()> {
-    //     self.ensure_remaining(tag.len())?;
-    //     let read = self.copy_to_bytes(tag.len());
-    //     if tag != read {
-    //         return Err(Error::TagMissmatch {
-    //             context: "todo",
-    //             expected: tag.to_vec(),
-    //             found: read,
-    //             backtrace: snafu::GenerateImplicitData::generate(),
-    //         });
-    //     }
-    //     Ok(())
-    // }
+    /// Drain the data in this reader, to make sure all is consumed.
+    fn drain(&mut self) -> Result<()> {
+        let mut out = std::io::sink();
+        std::io::copy(self, &mut out)?;
+        Ok(())
+    }
+
+    fn read_tag(&mut self, tag: &[u8]) -> Result<()> {
+        let found_tag = self.take_bytes(tag.len())?;
+        if tag != &found_tag {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "expected {}, found {}",
+                    hex::encode(tag),
+                    hex::encode(&found_tag)
+                ),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl<B: BufRead> BufReadParsing for B {}
