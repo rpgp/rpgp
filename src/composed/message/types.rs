@@ -1,4 +1,4 @@
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 
 use bytes::{Buf, Bytes, BytesMut};
 #[cfg(feature = "bzip2")]
@@ -138,6 +138,31 @@ pub enum Edata<'a> {
     SymEncryptedProtectedData {
         reader: SymEncryptedProtectedDataReader<Box<dyn BufRead + 'a>>,
     },
+}
+
+impl BufRead for Edata<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::SymEncryptedData { reader } => reader.fill_buf(),
+            Self::SymEncryptedProtectedData { reader } => reader.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::SymEncryptedData { reader } => reader.consume(amt),
+            Self::SymEncryptedProtectedData { reader } => reader.consume(amt),
+        }
+    }
+}
+
+impl Read for Edata<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::SymEncryptedData { reader } => reader.read(buf),
+            Self::SymEncryptedProtectedData { reader } => reader.read(buf),
+        }
+    }
 }
 
 impl<'a> Edata<'a> {
@@ -534,21 +559,65 @@ impl<'a> Message<'a> {
 
     /// If this is a literal message, returns the literal data header
     pub fn literal_data_header(&self) -> Option<&LiteralDataHeader> {
-        todo!()
+        match self {
+            Self::Literal { reader } => reader.data_header(),
+            Self::Compressed { .. } => None,
+            Self::Signed { message, .. } => message.literal_data_header(),
+            Self::Encrypted { .. } => None,
+        }
     }
 
     pub fn packet_header(&self) -> PacketHeader {
-        todo!()
+        match self {
+            Self::Literal { reader } => reader.packet_header(),
+            Self::Compressed { reader } => reader.packet_header(),
+            Self::Signed { message, .. } => message.packet_header(),
+            Self::Encrypted { edata, .. } => edata.packet_header(),
+        }
     }
 
     /// Consumes the reader and reads into a vec.
-    pub fn as_data_vec(&mut self) -> Vec<u8> {
-        todo!()
+    pub fn as_data_vec(&mut self) -> io::Result<Vec<u8>> {
+        let mut out = Vec::new();
+        self.read_to_end(&mut out)?;
+        Ok(out)
     }
 
     /// Consumes the reader and reads into a string.
-    pub fn as_data_string(&mut self) -> Result<String> {
-        todo!()
+    pub fn as_data_string(&mut self) -> io::Result<String> {
+        let mut out = String::new();
+        self.read_to_string(&mut out)?;
+        Ok(out)
+    }
+}
+
+impl Read for Message<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Literal { reader } => reader.read(buf),
+            Self::Compressed { reader } => reader.read(buf),
+            Self::Signed { message, .. } => message.read(buf),
+            Self::Encrypted { edata, .. } => edata.read(buf),
+        }
+    }
+}
+
+impl BufRead for Message<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::Literal { reader } => reader.fill_buf(),
+            Self::Compressed { reader } => reader.fill_buf(),
+            Self::Signed { message, .. } => message.fill_buf(),
+            Self::Encrypted { edata, .. } => edata.fill_buf(),
+        }
+    }
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Literal { reader } => reader.consume(amt),
+            Self::Compressed { reader } => reader.consume(amt),
+            Self::Signed { message, .. } => message.consume(amt),
+            Self::Encrypted { edata, .. } => edata.consume(amt),
+        }
     }
 }
 

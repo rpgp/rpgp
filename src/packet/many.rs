@@ -272,7 +272,7 @@ mod tests {
                 Message::from_armor_file(msg_file).expect("failed to parse message");
 
             assert!(message.is_literal());
-            assert_eq!(message.as_data_vec(), TEXT.as_bytes());
+            assert_eq!(message.as_data_vec().unwrap(), TEXT.as_bytes());
         }
 
         // Literal Data Packet with illegal first partial length of 256 bytes

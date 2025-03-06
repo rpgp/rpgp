@@ -73,7 +73,7 @@ fn decrypt_rpgp_cur(enc_msg: &str, keyfile: &str) -> Vec<u8> {
 
     let (mut dec, _) = enc_msg.decrypt(&["".into()], &[&ssk]).unwrap();
 
-    dec.as_data_vec()
+    dec.as_data_vec().unwrap()
 }
 
 fn encrypt_rpgp_0_10(msg: &[u8], keyfile: &str) -> String {

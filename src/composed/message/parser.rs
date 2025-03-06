@@ -73,7 +73,7 @@ fn next<'a>(
             Tag::LiteralData => {
                 // (d) Literal Message
                 //   - Literal Packet
-                let reader = LiteralDataReader::new(packet);
+                let reader = LiteralDataReader::new(packet)?;
                 let message = Message::Literal { reader };
                 return Ok(Some(message));
             }

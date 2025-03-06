@@ -1234,7 +1234,7 @@ mod tests {
             assert!(decrypted.is_literal());
 
             assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-            assert_eq!(&decrypted.as_data_vec(), &buf);
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1275,7 +1275,7 @@ mod tests {
             assert!(decrypted.is_literal());
 
             assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-            assert_eq!(&decrypted.as_data_vec(), &buf);
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1317,7 +1317,7 @@ mod tests {
                 assert!(decrypted.is_literal());
 
                 assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-                assert_eq!(&decrypted.as_data_vec(), &buf);
+                assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
             }
         }
     }
@@ -1358,7 +1358,7 @@ mod tests {
             assert!(decrypted.is_literal());
 
             assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-            assert_eq!(&decrypted.as_data_vec(), &buf);
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1389,7 +1389,7 @@ mod tests {
             assert!(decrypted.is_literal());
 
             assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-            assert_eq!(&decrypted.as_data_vec(), &buf);
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1433,7 +1433,7 @@ mod tests {
             assert!(decrypted.is_literal());
 
             assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-            assert_eq!(&decrypted.as_data_vec(), &buf);
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1483,7 +1483,7 @@ mod tests {
                 assert!(decrypted.is_literal());
 
                 assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-                assert_eq!(&decrypted.as_data_vec(), &buf);
+                assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
             }
             // TODO
             // // decrypt it - password
@@ -1811,7 +1811,7 @@ mod tests {
             assert!(decrypted.is_literal());
 
             assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-            assert_eq!(&decrypted.as_data_vec(), &buf);
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 

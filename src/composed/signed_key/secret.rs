@@ -456,8 +456,7 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         //     HashAlgorithm::Sha256,
         // )?;
         // msg.verify(&ssk.primary_key.public_key())?;
-
-        Ok(())
+        // Ok(())
     }
 
     #[test]

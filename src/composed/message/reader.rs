@@ -1,89 +1,11 @@
 use std::io::{self, BufRead, BufReader, Read};
-use std::path::Path;
 
 use bytes::{Buf, Bytes, BytesMut};
 use log::debug;
 
-use super::DummyReader;
 use crate::packet::{Decompressor, LiteralDataHeader, PacketHeader};
 use crate::types::{PacketLength, Tag};
 use crate::util::fill_buffer;
-
-/// Efficiently parse messages.
-pub struct MessageReader<R = DummyReader> {
-    source: Source<R>,
-}
-
-pub enum Source<R = DummyReader> {
-    Bytes(bytes::buf::Reader<Bytes>),
-    File(BufReader<std::fs::File>),
-    Reader(BufReader<R>),
-}
-
-impl<R: Read> Read for Source<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Bytes(ref mut r) => r.read(buf),
-            Self::File(ref mut r) => r.read(buf),
-            Self::Reader(ref mut r) => r.read(buf),
-        }
-    }
-}
-
-impl<R: Read> BufRead for Source<R> {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        match self {
-            Self::Bytes(ref mut r) => r.fill_buf(),
-            Self::File(ref mut r) => r.fill_buf(),
-            Self::Reader(ref mut r) => r.fill_buf(),
-        }
-    }
-
-    fn consume(&mut self, amt: usize) {
-        match self {
-            Self::Bytes(ref mut r) => r.consume(amt),
-            Self::File(ref mut r) => r.consume(amt),
-            Self::Reader(ref mut r) => r.consume(amt),
-        }
-    }
-}
-
-impl MessageReader<DummyReader> {
-    /// Source the data from the given file path.
-    pub fn from_file(path: impl AsRef<Path>) -> io::Result<Self> {
-        let file = std::fs::File::open(path)?;
-        let source = Source::File(BufReader::new(file));
-
-        Ok(Self { source })
-    }
-
-    /// Source the data from the given byte buffer.
-    pub fn from_bytes(bytes: impl Into<Bytes>) -> Self {
-        let reader = bytes.into().reader();
-        let source = Source::Bytes(reader);
-
-        Self { source }
-    }
-}
-
-impl<R: Read> MessageReader<R> {
-    pub fn from_reader(reader: R) -> Self {
-        let source = Source::Reader(BufReader::new(reader));
-
-        Self { source }
-    }
-
-    pub fn get_literal_reader(&mut self) -> LiteralDataReader<&'_ mut Source<R>> {
-        todo!()
-    }
-
-    pub fn get_literal_decompress_reader(
-        &mut self,
-        decompress: bool,
-    ) -> LiteralDataReader<CompressedDataReader<&'_ mut Source<R>>> {
-        todo!()
-    }
-}
 
 #[derive(derive_more::Debug)]
 pub struct PacketBodyReader<R: BufRead> {
@@ -322,6 +244,22 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
     }
 }
 
+impl<R: BufRead> BufRead for SymEncryptedProtectedDataReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        todo!()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        todo!()
+    }
+}
+
+impl<R: BufRead> Read for SymEncryptedProtectedDataReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        todo!()
+    }
+}
+
 #[derive(derive_more::Debug)]
 pub enum SymEncryptedDataReader<R: BufRead> {
     Body {
@@ -332,6 +270,22 @@ pub enum SymEncryptedDataReader<R: BufRead> {
         source: PacketBodyReader<R>,
     },
     Error,
+}
+
+impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        todo!()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        todo!()
+    }
+}
+
+impl<R: BufRead> Read for SymEncryptedDataReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        todo!()
+    }
 }
 
 impl<R: BufRead> SymEncryptedDataReader<R> {
@@ -375,6 +329,17 @@ impl<R: BufRead> CompressedDataReader<R> {
                 buffer: BytesMut::with_capacity(1024),
             },
         })
+    }
+
+    pub fn packet_header(&self) -> PacketHeader {
+        match self.state {
+            CompressedReaderState::Body { ref source, .. } => match source {
+                MaybeDecompress::Raw(r) => r.packet_header(),
+                MaybeDecompress::Decompress(r) => r.get_ref().packet_header(),
+            },
+            CompressedReaderState::Done { ref source, .. } => source.packet_header(),
+            CompressedReaderState::Error => panic!("error state"),
+        }
     }
 
     /// Enables decompression
@@ -545,9 +510,6 @@ impl<R: BufRead> Read for MaybeDecompress<R> {
 
 #[derive(derive_more::Debug)]
 enum LiteralReaderState<R: BufRead> {
-    LiteralHeader {
-        source: PacketBodyReader<R>,
-    },
     Body {
         source: PacketBodyReader<R>,
         buffer: BytesMut,
@@ -559,11 +521,78 @@ enum LiteralReaderState<R: BufRead> {
     },
     Error,
 }
+
 impl<R: BufRead> LiteralDataReader<R> {
-    pub fn new(source: PacketBodyReader<R>) -> Self {
+    pub fn new(mut source: PacketBodyReader<R>) -> io::Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::LiteralData);
-        Self {
-            state: LiteralReaderState::LiteralHeader { source },
+        let header = LiteralDataHeader::from_reader(&mut source)?;
+
+        Ok(Self {
+            state: LiteralReaderState::Body {
+                source,
+                buffer: BytesMut::with_capacity(1024),
+                header,
+            },
+        })
+    }
+
+    pub fn packet_header(&self) -> PacketHeader {
+        match self.state {
+            LiteralReaderState::Body { ref source, .. } => source.packet_header(),
+            LiteralReaderState::Done { ref source, .. } => source.packet_header(),
+            LiteralReaderState::Error => panic!("error state"),
+        }
+    }
+
+    fn fill_inner(&mut self) -> io::Result<()> {
+        if matches!(self.state, LiteralReaderState::Done { .. }) {
+            return Ok(());
+        }
+
+        loop {
+            match std::mem::replace(&mut self.state, LiteralReaderState::Error) {
+                LiteralReaderState::Body {
+                    mut source,
+                    mut buffer,
+                    header,
+                } => {
+                    debug!("literal packet: body");
+                    if buffer.has_remaining() {
+                        self.state = LiteralReaderState::Body {
+                            source,
+                            header,
+                            buffer,
+                        };
+                        return Ok(());
+                    }
+
+                    debug!("literal packet: filling buffer");
+                    buffer.resize(1024, 0);
+                    let read = fill_buffer(&mut source, &mut buffer, None)?;
+
+                    buffer.truncate(read);
+
+                    if read == 0 {
+                        // done reading the source
+                        self.state = LiteralReaderState::Done { source, header };
+                    } else {
+                        self.state = LiteralReaderState::Body {
+                            source,
+                            header,
+                            buffer,
+                        };
+                    }
+                    return Ok(());
+                }
+                LiteralReaderState::Done { source, header } => {
+                    debug!("literal packet: done");
+                    self.state = LiteralReaderState::Done { source, header };
+                    return Ok(());
+                }
+                LiteralReaderState::Error => {
+                    panic!("LiteralReader errored");
+                }
+            }
         }
     }
 }
@@ -613,65 +642,38 @@ impl<R: BufRead> LimitedSource<R> {
     }
 }
 
+impl<R: BufRead> BufRead for LiteralDataReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.fill_inner()?;
+        match self.state {
+            LiteralReaderState::Body { ref mut buffer, .. } => Ok(&buffer[..]),
+            LiteralReaderState::Done { .. } => Ok(&[][..]),
+            LiteralReaderState::Error => panic!("LiteralReader errored"),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self.state {
+            LiteralReaderState::Body { ref mut buffer, .. } => {
+                buffer.advance(amt);
+            }
+            LiteralReaderState::Error => panic!("LiteralReader errored"),
+            LiteralReaderState::Done { .. } => {}
+        }
+    }
+}
+
 impl<R: BufRead> Read for LiteralDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if matches!(self.state, LiteralReaderState::Done { .. }) {
-            return Ok(0);
-        }
-
-        loop {
-            match std::mem::replace(&mut self.state, LiteralReaderState::Error) {
-                LiteralReaderState::LiteralHeader { mut source } => {
-                    debug!("literal packet: literal header");
-                    let header = LiteralDataHeader::from_reader(&mut source)?;
-
-                    self.state = LiteralReaderState::Body {
-                        source,
-                        buffer: BytesMut::with_capacity(1024),
-                        header,
-                    }
-                }
-                LiteralReaderState::Body {
-                    mut source,
-                    mut buffer,
-                    header,
-                } => {
-                    debug!("literal packet: body");
-
-                    if !buffer.has_remaining() {
-                        debug!("literal packet: filling buffer");
-
-                        buffer.resize(1024, 0);
-                        let read = fill_buffer(&mut source, &mut buffer, None)?;
-
-                        buffer.truncate(read);
-
-                        if read == 0 {
-                            // done reading the source
-                            self.state = LiteralReaderState::Done { source, header };
-                            continue;
-                        }
-                    }
-                    let to_write = buffer.remaining().min(buf.len());
-                    buffer.copy_to_slice(&mut buf[..to_write]);
-
-                    self.state = LiteralReaderState::Body {
-                        source,
-                        buffer,
-                        header,
-                    };
-
-                    return Ok(to_write);
-                }
-                LiteralReaderState::Done { source, header } => {
-                    debug!("literal packet: done");
-                    self.state = LiteralReaderState::Done { source, header };
-                    return Ok(0);
-                }
-                LiteralReaderState::Error => {
-                    panic!("LiteralReader errored");
-                }
+        self.fill_inner()?;
+        match self.state {
+            LiteralReaderState::Body { ref mut buffer, .. } => {
+                let to_write = buffer.remaining().min(buf.len());
+                buffer.copy_to_slice(&mut buf[..to_write]);
+                Ok(to_write)
             }
+            LiteralReaderState::Done { .. } => Ok(0),
+            _ => unreachable!("invalid state"),
         }
     }
 }
@@ -704,6 +706,7 @@ mod tests {
     use crate::packet::DataMode;
     use crate::types::CompressionAlgorithm;
     use crate::util::test::{check_strings, random_string, ChaosReader};
+    use crate::Message;
 
     #[test]
     fn test_read_literal_data_no_compression() -> TestResult {
@@ -726,16 +729,15 @@ mod tests {
                         .to_vec(&mut rng)?
                 };
 
-                let mut reader = ChaosReader::new(rng.clone(), message.clone());
-                let mut msg_reader = MessageReader::from_reader(&mut reader);
-                let mut lit_reader = msg_reader.get_literal_reader();
+                let reader = ChaosReader::new(rng.clone(), message.clone());
+                let mut reader = BufReader::new(reader);
+                let mut msg = Message::from_bytes(&mut reader).unwrap();
 
                 let mut out = String::new();
-                lit_reader.read_to_string(&mut out)?;
-
+                msg.read_to_string(&mut out)?;
                 check_strings(out, buf);
 
-                let header = lit_reader.data_header().unwrap();
+                let header = msg.literal_data_header().unwrap();
                 assert_eq!(header.file_name(), &b""[..]);
                 assert_eq!(header.mode(), DataMode::Binary);
             }
@@ -765,16 +767,17 @@ mod tests {
                         .compression(CompressionAlgorithm::ZIP)
                         .to_vec(&mut rng)?
                 };
-                let mut reader = ChaosReader::new(rng.clone(), message.clone());
-                let mut msg_reader = MessageReader::from_reader(&mut reader);
-                let mut lit_reader = msg_reader.get_literal_decompress_reader(true);
+                let reader = ChaosReader::new(rng.clone(), message.clone());
+                let mut reader = BufReader::new(reader);
+                let message = Message::from_bytes(&mut reader)?;
+                let mut decompressed_message = message.decompress()?;
 
                 let mut out = String::new();
-                lit_reader.read_to_string(&mut out)?;
+                decompressed_message.read_to_string(&mut out)?;
 
                 check_strings(out, buf);
 
-                let header = lit_reader.data_header().unwrap();
+                let header = decompressed_message.literal_data_header().unwrap();
                 assert_eq!(header.file_name(), &b""[..]);
                 assert_eq!(header.mode(), DataMode::Binary);
             }

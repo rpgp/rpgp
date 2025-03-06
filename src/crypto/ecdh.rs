@@ -643,7 +643,7 @@ mod tests {
                 .decrypt(&[Password::empty()], &[&decrypt_key])
                 .expect("failed to init decryption");
 
-            let data = msg.as_data_vec();
+            let data = msg.as_data_vec().unwrap();
 
             assert_eq!(data, "hello\n".as_bytes());
         }
