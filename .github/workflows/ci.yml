@@ -48,6 +48,9 @@ jobs:
     - name: tests
       run: cargo nextest run --lib --bins --tests --all
 
+    - name: doc tests
+      run: cargo test --doc
+
     - name: asm
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
