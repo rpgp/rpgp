@@ -223,6 +223,10 @@ impl OnePassSignature {
     pub fn typ(&self) -> SignatureType {
         self.typ
     }
+
+    pub fn version_specific(&self) -> &OpsVersionSpecific {
+        &self.version_specific
+    }
 }
 
 const WRITE_LEN_OVERHEAD: usize = 5;

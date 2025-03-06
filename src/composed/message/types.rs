@@ -1,8 +1,9 @@
 use std::io::{self, BufRead, Read};
 
-use bytes::{Buf, Bytes};
+use bytes::{Buf, Bytes, BytesMut};
 #[cfg(feature = "bzip2")]
 use bzip2::write::BzEncoder;
+use digest::DynDigest;
 use log::{debug, warn};
 
 use crate::armor;
@@ -10,8 +11,8 @@ use crate::composed::message::decrypt::*;
 use crate::composed::signed_key::SignedSecretKey;
 use crate::errors::{Error, Result};
 use crate::packet::{
-    LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
-    PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
+    LiteralDataHeader, OnePassSignature, OpsVersionSpecific, Packet, PacketHeader, PacketTrait,
+    PublicKeyEncryptedSessionKey, Signature, SignatureVersionSpecific, SymKeyEncryptedSessionKey,
 };
 use crate::ser::Serialize;
 use crate::types::{
@@ -40,18 +41,13 @@ pub enum Message<'a> {
     Signed {
         /// The actual signature
         signature: Signature,
-        /// Nested message
-        message: Box<Message<'a>>,
+        reader: SignatureBodyReader<'a>,
     },
     /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
     SignedOnePass {
         /// for signature packets that contain a one pass message
         one_pass_signature: OnePassSignature,
-        /// Nested message
-        message: Box<Message<'a>>,
-        /// The actual signature
-        /// This is only `Some` when the full message has been read
-        signature: Option<Signature>,
+        reader: SignatureOnePassReader<'a>,
     },
     /// Encrypted Message: Encrypted Data | ESK Sequence, Encrypted Data.
     Encrypted {
@@ -59,6 +55,422 @@ pub enum Message<'a> {
         esk: Vec<Esk>,
         edata: Edata<'a>,
     },
+}
+
+#[derive(derive_more::Debug)]
+pub enum SignatureBodyReader<'a> {
+    Init {
+        /// Running hasher
+        #[debug("hasher")]
+        hasher: Box<dyn DynDigest>,
+        /// Data source
+        source: Box<Message<'a>>,
+    },
+    Body {
+        /// Running hasher
+        #[debug("hasher")]
+        hasher: Box<dyn DynDigest>,
+        /// Data source
+        source: Box<Message<'a>>,
+        buffer: BytesMut,
+    },
+    Done {
+        /// Finalized hash
+        hash: Box<[u8]>,
+        /// Data source
+        source: Box<Message<'a>>,
+    },
+    Error,
+}
+
+impl<'a> SignatureBodyReader<'a> {
+    pub(crate) fn new(sig: &Signature, source: Box<Message<'a>>) -> Result<Self> {
+        let mut hasher = sig.config.hash_alg.new_hasher()?;
+        if let SignatureVersionSpecific::V6 { ref salt, .. } = sig.config.version_specific {
+            // Salt size must match the expected length for the hash algorithm that is used
+            //
+            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+            ensure_eq!(
+                sig.config.hash_alg.salt_len(),
+                Some(salt.len()),
+                "Illegal salt length {} for a V6 Signature using {:?}",
+                salt.len(),
+                sig.config.hash_alg,
+            );
+
+            hasher.update(salt.as_ref());
+        }
+
+        Ok(Self::Init { hasher, source })
+    }
+
+    pub fn hash(&self) -> Option<&[u8]> {
+        match self {
+            Self::Done { hash, .. } => Some(&hash),
+            Self::Error => panic!("error state"),
+            _ => None,
+        }
+    }
+
+    pub fn get_ref(&self) -> &Box<Message<'a>> {
+        match self {
+            Self::Init { source, .. } => source,
+            Self::Body { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    fn fill_inner(&mut self) -> io::Result<()> {
+        todo!()
+    }
+
+    fn decompress(self) -> Result<Self> {
+        match self {
+            Self::Init { hasher, source } => {
+                let source = source.decompress()?;
+                Ok(Self::Init {
+                    hasher,
+                    source: Box::new(source),
+                })
+            }
+            _ => {
+                bail!("cannot decompress message that has already been read from");
+            }
+        }
+    }
+
+    fn decrypt(
+        self,
+        key_pws: &[Password],
+        keys: &[&SignedSecretKey],
+    ) -> Result<(Self, Vec<Fingerprint>)> {
+        match self {
+            Self::Init { hasher, source } => {
+                let (source, fps) = source.decrypt(key_pws, keys)?;
+                Ok((
+                    Self::Init {
+                        hasher,
+                        source: Box::new(source),
+                    },
+                    fps,
+                ))
+            }
+            _ => {
+                bail!("cannot decrypt message that has already been read from");
+            }
+        }
+    }
+
+    fn decrypt_with_password(self, msg_pw: &Password) -> Result<Self> {
+        match self {
+            Self::Init { hasher, source } => {
+                let source = source.decrypt_with_password(msg_pw)?;
+                Ok(Self::Init {
+                    hasher,
+                    source: Box::new(source),
+                })
+            }
+            _ => {
+                bail!("cannot decrypt message that has already been read from");
+            }
+        }
+    }
+}
+
+impl BufRead for SignatureBodyReader<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.fill_inner()?;
+        match self {
+            Self::Init { .. } => panic!("invalid state"),
+            Self::Body { buffer, .. } => Ok(&buffer[..]),
+            Self::Done { .. } => Ok(&[][..]),
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Init { .. } => panic!("invalid state"),
+            Self::Body { buffer, .. } => {
+                buffer.advance(amt);
+            }
+            Self::Done { .. } => {}
+            Self::Error => panic!("error state"),
+        }
+    }
+}
+
+impl Read for SignatureBodyReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.fill_inner()?;
+        match self {
+            Self::Init { .. } => panic!("invalid state"),
+            Self::Body { buffer, .. } => {
+                let to_write = buffer.remaining().min(buf.len());
+                buffer.copy_to_slice(&mut buf[..to_write]);
+                Ok(to_write)
+            }
+            Self::Done { .. } => Ok(0),
+            Self::Error => panic!("error state"),
+        }
+    }
+}
+
+#[derive(derive_more::Debug)]
+pub enum SignatureOnePassReader<'a> {
+    Init {
+        /// Running hasher
+        #[debug("hasher")]
+        hasher: Box<dyn DynDigest>,
+        /// Data source
+        source: Box<Message<'a>>,
+    },
+    Body {
+        /// Running hasher
+        #[debug("hasher")]
+        hasher: Box<dyn DynDigest>,
+        /// Data source
+        source: Box<Message<'a>>,
+        buffer: BytesMut,
+    },
+    Done {
+        /// Finalized hash
+        hash: Box<[u8]>,
+        /// Data source
+        source: Box<Message<'a>>,
+        /// Final signature,
+        signature: Signature,
+    },
+    Error,
+}
+
+impl<'a> SignatureOnePassReader<'a> {
+    pub(crate) fn new(ops: &OnePassSignature, source: Box<Message<'a>>) -> Result<Self> {
+        let mut hasher = ops.hash_algorithm().new_hasher()?;
+        if let OpsVersionSpecific::V6 { salt, .. } = ops.version_specific() {
+            // Salt size must match the expected length for the hash algorithm that is used
+            //
+            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+            ensure_eq!(
+                ops.hash_algorithm().salt_len(),
+                Some(salt.len()),
+                "Illegal salt length {} for a V6 Signature using {:?}",
+                salt.len(),
+                ops.hash_algorithm(),
+            );
+
+            hasher.update(salt.as_ref());
+        }
+
+        Ok(Self::Init { hasher, source })
+    }
+
+    pub fn hash(&self) -> Option<&[u8]> {
+        match self {
+            Self::Done { hash, .. } => Some(&hash),
+            Self::Error => panic!("error state"),
+            _ => None,
+        }
+    }
+
+    pub fn signature(&self) -> Option<&Signature> {
+        match self {
+            Self::Done { signature, .. } => Some(signature),
+            Self::Error => panic!("error state"),
+            _ => None,
+        }
+    }
+
+    pub fn get_ref(&self) -> &Box<Message<'a>> {
+        match self {
+            Self::Init { source, .. } => source,
+            Self::Body { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    fn fill_inner(&mut self) -> io::Result<()> {
+        todo!()
+    }
+
+    fn decompress(self) -> Result<Self> {
+        match self {
+            Self::Init { hasher, source } => {
+                let source = source.decompress()?;
+                Ok(Self::Init {
+                    hasher,
+                    source: Box::new(source),
+                })
+            }
+            _ => {
+                bail!("cannot decompress message that has already been read from");
+            }
+        }
+    }
+
+    fn decrypt(
+        self,
+        key_pws: &[Password],
+        keys: &[&SignedSecretKey],
+    ) -> Result<(Self, Vec<Fingerprint>)> {
+        match self {
+            Self::Init { hasher, source } => {
+                let (source, fps) = source.decrypt(key_pws, keys)?;
+                Ok((
+                    Self::Init {
+                        hasher,
+                        source: Box::new(source),
+                    },
+                    fps,
+                ))
+            }
+            _ => {
+                bail!("cannot decrypt message that has already been read from");
+            }
+        }
+    }
+
+    fn decrypt_with_password(self, msg_pw: &Password) -> Result<Self> {
+        match self {
+            Self::Init { hasher, source } => {
+                let source = source.decrypt_with_password(msg_pw)?;
+                Ok(Self::Init {
+                    hasher,
+                    source: Box::new(source),
+                })
+            }
+            _ => {
+                bail!("cannot decrypt message that has already been read from");
+            }
+        }
+    }
+}
+
+impl BufRead for SignatureOnePassReader<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.fill_inner()?;
+        match self {
+            Self::Init { .. } => panic!("invalid state"),
+            Self::Body { buffer, .. } => Ok(&buffer[..]),
+            Self::Done { .. } => Ok(&[][..]),
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Init { .. } => panic!("invalid state"),
+            Self::Body { buffer, .. } => {
+                buffer.advance(amt);
+            }
+            Self::Done { .. } => {}
+            Self::Error => panic!("error state"),
+        }
+    }
+}
+
+impl Read for SignatureOnePassReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.fill_inner()?;
+        match self {
+            Self::Init { .. } => panic!("invalid state"),
+            Self::Body { buffer, .. } => {
+                let to_write = buffer.remaining().min(buf.len());
+                buffer.copy_to_slice(&mut buf[..to_write]);
+                Ok(to_write)
+            }
+            Self::Done { .. } => Ok(0),
+            Self::Error => panic!("error state"),
+        }
+    }
+}
+
+#[derive(derive_more::Debug)]
+pub enum SignatureVerifier {
+    Hashing {
+        /// Running hasher
+        #[debug("hasher")]
+        hasher: Box<dyn DynDigest>,
+    },
+    Hashed {
+        /// Finalized hash
+        hash: Box<[u8]>,
+    },
+    Error,
+}
+
+impl SignatureVerifier {
+    pub fn is_done(&self) -> bool {
+        matches!(self, Self::Hashed { .. })
+    }
+
+    pub fn hash(&self) -> Option<&[u8]> {
+        let Self::Hashed { hash } = self else {
+            return None;
+        };
+        Some(hash.as_ref())
+    }
+
+    pub(crate) fn from_one_pass(ops: &OnePassSignature) -> Result<Self> {
+        let mut hasher = ops.hash_algorithm().new_hasher()?;
+        if let OpsVersionSpecific::V6 { salt, .. } = ops.version_specific() {
+            // Salt size must match the expected length for the hash algorithm that is used
+            //
+            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+            ensure_eq!(
+                ops.hash_algorithm().salt_len(),
+                Some(salt.len()),
+                "Illegal salt length {} for a V6 Signature using {:?}",
+                salt.len(),
+                ops.hash_algorithm(),
+            );
+
+            hasher.update(salt.as_ref());
+        }
+
+        Ok(Self::Hashing { hasher })
+    }
+
+    pub(crate) fn from_signature(sig: &Signature) -> Result<Self> {
+        let mut hasher = sig.config.hash_alg.new_hasher()?;
+        if let SignatureVersionSpecific::V6 { ref salt, .. } = sig.config.version_specific {
+            // Salt size must match the expected length for the hash algorithm that is used
+            //
+            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+            ensure_eq!(
+                sig.config.hash_alg.salt_len(),
+                Some(salt.len()),
+                "Illegal salt length {} for a V6 Signature using {:?}",
+                salt.len(),
+                sig.config.hash_alg,
+            );
+
+            hasher.update(salt.as_ref());
+        }
+
+        Ok(Self::Hashing { hasher })
+    }
+
+    fn finalize(&mut self, sig: &Signature) -> Result<()> {
+        match std::mem::replace(self, Self::Error) {
+            Self::Hashing { mut hasher } => {
+                // Add trailer
+                let len = sig.config.hash_signature_data(&mut hasher)?;
+                hasher.update(&sig.config.trailer(len)?);
+                let hash = hasher.finalize();
+
+                *self = Self::Hashed { hash };
+                Ok(())
+            }
+            Self::Hashed { hash } => {
+                *self = Self::Hashed { hash };
+                Ok(())
+            }
+            Self::Error => panic!("error state"),
+        }
+    }
 }
 
 /// Encrypted Session Key
@@ -249,13 +661,12 @@ impl<'a> Edata<'a> {
 }
 
 /// The result of signature verification
-pub struct VerificationResult {
-    /// None, if no signature was found for this key
-    pub signature: Option<Signature>,
-    /// Is this signature valid against hte key?
-    pub is_valid: bool,
-    /// The fingerprint of the key that matched
-    pub key: Fingerprint,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VerificationResult {
+    /// This signature was found to be valid against the key.
+    Valid(Signature),
+    /// The signature was invalid
+    Invalid,
 }
 
 impl<'a> Message<'a> {
@@ -263,123 +674,157 @@ impl<'a> Message<'a> {
     pub fn decompress(self) -> Result<Self> {
         match self {
             Message::Compressed { reader } => Message::from_bytes(reader.decompress()?),
-            Message::Signed { message, .. } => message.decompress(),
-            _ => Ok(self),
+            Message::Signed { signature, reader } => Ok(Message::Signed {
+                signature,
+                reader: reader.decompress()?,
+            }),
+            Message::SignedOnePass {
+                one_pass_signature,
+                reader,
+            } => Ok(Message::SignedOnePass {
+                one_pass_signature,
+                reader: reader.decompress()?,
+            }),
+            Message::Encrypted { .. } => Ok(self),
+            Message::Literal { .. } => Ok(self),
         }
     }
 
+    /// Recursively find all signatures found in this message and attempt to verify
+    /// them against the passed in keys.
+    ///
+    /// Only signed and one pass signed messages can be verified.
+    /// The message must have been read to the end before calling this.
+    ///
+    /// The current recursion limit is `1024`.
+    pub fn verify_nested(&self, keys: &[&dyn PublicKeyTrait]) -> Result<Vec<VerificationResult>> {
+        let mut out = vec![VerificationResult::Invalid; keys.len()];
+
+        let mut current_message = self;
+        // do not recurse arbitrarily deep
+        for _ in 0..1024 {
+            match current_message {
+                Message::SignedOnePass { reader, .. } => {
+                    for (key, res) in keys.iter().zip(out.iter_mut()) {
+                        match current_message.verify(*key) {
+                            Ok(sig) => {
+                                *res = VerificationResult::Valid(sig.clone());
+                            }
+                            Err(_err) => {
+                                // no match
+                            }
+                        }
+                    }
+
+                    current_message = reader.get_ref();
+                }
+                Message::Signed { reader, .. } => {
+                    for (key, res) in keys.iter().zip(out.iter_mut()) {
+                        match current_message.verify(*key) {
+                            Ok(sig) => {
+                                *res = VerificationResult::Valid(sig.clone());
+                            }
+                            Err(_err) => {
+                                // no match
+                            }
+                        }
+                    }
+
+                    current_message = reader.get_ref();
+                }
+                Message::Literal { .. } => {
+                    break;
+                }
+                Message::Compressed { .. } => {
+                    bail!("message must be decompressed before verifying");
+                }
+                Message::Encrypted { .. } => {
+                    bail!("message must be decrypted before verifying");
+                }
+            }
+        }
+
+        Ok(out)
+    }
+
     /// Verify this message.
-    /// For signed messages this verifies the signature and for compressed messages
-    /// they are decompressed and checked for signatures to verify.
     ///
-    /// Decompresses up to one layer of compressed data.
-    pub fn verify<K: PublicKeyTrait>(self, key: &K) -> Result<Signature> {
-        let mut results = self.verify_many(&[key])?;
-        let res = results.pop().expect("by construction");
-        debug_assert_eq!(res.key, key.fingerprint());
-
-        ensure!(res.is_valid, "invalid signature");
-        let Some(signature) = res.signature else {
-            bail!("no matching signature found for {:?}", res.key);
-        };
-        Ok(signature)
-    }
-
-    pub fn verify_many(self, keys: &[&dyn PublicKeyTrait]) -> Result<Vec<VerificationResult>> {
-        todo!()
-    }
-
-    /// Verifies this message.
-    /// For signed messages this verifies the signature.
+    /// Only signed and one pass signed messages can be verified.
+    /// The message must have been read to the end before calling this.
     ///
-    /// If `decompress` is true and the message is compressed,
-    /// the message is decompressed and verified.
-    fn verify_internal(self, key: &impl PublicKeyTrait, decompress: bool) -> Result<()> {
-        todo!();
-        // this needs a different structure, as verifying consumes the message now
+    /// If the signature is valid, returns the matching signature.
+    pub fn verify(&self, key: &dyn PublicKeyTrait) -> Result<&Signature> {
+        match self {
+            Message::SignedOnePass { reader, .. } => {
+                let Some(calculated_hash) = reader.hash() else {
+                    bail!("cannot verify message before reading it to the end");
+                };
+                let Some(signature) = reader.signature() else {
+                    bail!("cannot verify message before reading the final signature packet");
+                };
 
-        // match self {
-        //     Message::Signed {
-        //         signature, message, ..
-        //     } => {
-        //         if let Some(ref message) = message {
-        //             match **message {
-        //                 Message::Literal { .. } => {
-        //                     todo!()
-        //                     // signature.verify(key, data.data())
-        //                 }
-        //                 Message::Signed { ref message, .. } => {
-        //                     // TODO: add api to verify the inner messages
+                // Check that the high 16 bits of the hash from the signature packet match with the hash we
+                // just calculated.
+                //
+                // "When verifying a version 6 signature, an implementation MUST reject the signature if
+                // these octets do not match the first two octets of the computed hash."
+                //
+                // (See https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures)
+                //
+                // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
+                // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
+                ensure_eq!(
+                    &signature.signed_hash_value,
+                    &calculated_hash[0..2],
+                    "signature: invalid signed hash value"
+                );
+                key.verify_signature(
+                    signature.config.hash_alg,
+                    calculated_hash,
+                    &signature.signature,
+                )?;
+                Ok(signature)
+            }
+            Message::Signed {
+                signature, reader, ..
+            } => {
+                let Some(calculated_hash) = reader.hash() else {
+                    bail!("cannot verify message before reading it to the end");
+                };
 
-        //                     // We need to search for the inner most non signed message for the data
-        //                     let Some(ref message) = message else {
-        //                         unimplemented_err!("no message, what to do?");
-        //                     };
-        //                     let mut current_message = message;
-        //                     // Limit nesting
-        //                     for _ in 0..1024 {
-        //                         match **current_message {
-        //                             Message::Literal { .. } => {
-        //                                 todo!()
-        //                                 // return signature.verify(key, data.data());
-        //                             }
-        //                             Message::Compressed { reader } => {
-        //                                 if decompress {
-        //                                     let dec = reader.decompress()?;
-        //                                     let msg = Message::from_bytes(dec)?;
-        //                                     return msg.verify_internal(key, false);
-        //                                 } else {
-        //                                     bail!("Recursive decompression not allowed");
-        //                                 }
-        //                             }
-        //                             Message::Encrypted { .. } => {
-        //                                 todo!()
-        //                                 // let data = message.to_bytes()?;
-        //                                 // return signature.verify(key, &data[..]);
-        //                             }
-        //                             Message::Signed { ref message, .. } => {
-        //                                 let Some(message) = message else {
-        //                                     unimplemented_err!("no message, what to do?");
-        //                                 };
-        //                                 current_message = message;
-        //                             }
-        //                         }
-        //                     }
-        //                     bail!("More than 1024 nested signed messages are not supported");
-        //                 }
-        //                 Message::Compressed { reader } => {
-        //                     debug!("verifying compressed message");
-        //                     if decompress {
-        //                         let dec = reader.decompress()?;
-        //                         let msg = Message::from_bytes(dec)?;
-        //                         msg.verify_internal(key, false)
-        //                     } else {
-        //                         bail!("Recursive decompression not allowed");
-        //                     }
-        //                 }
-        //                 Message::Encrypted { .. } => {
-        //                     debug!("verifying encrypted message");
-        //                     // let data = message.to_bytes()?;
-        //                     // signature.verify(key, &data[..])
-        //                     todo!()
-        //                 }
-        //             }
-        //         } else {
-        //             unimplemented_err!("no message, what to do?");
-        //         }
-        //     }
-        //     Message::Compressed { reader } => {
-        //         debug!("verifying compressed message");
-        //         if decompress {
-        //             let msg = Message::from_bytes(reader.decompress()?)?;
-        //             msg.verify_internal(key, false)
-        //         } else {
-        //             bail!("Recursive decompression not allowed");
-        //         }
-        //     }
-        //     // We don't know how to verify a signature for other Message types, and shouldn't return Ok
-        //     _ => unsupported_err!("Unexpected message format: {self:?}"),
-        // }
+                // Check that the high 16 bits of the hash from the signature packet match with the hash we
+                // just calculated.
+                //
+                // "When verifying a version 6 signature, an implementation MUST reject the signature if
+                // these octets do not match the first two octets of the computed hash."
+                //
+                // (See https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures)
+                //
+                // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
+                // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
+                ensure_eq!(
+                    &signature.signed_hash_value,
+                    &calculated_hash[0..2],
+                    "signature: invalid signed hash value"
+                );
+                key.verify_signature(
+                    signature.config.hash_alg,
+                    calculated_hash,
+                    &signature.signature,
+                )?;
+
+                Ok(signature)
+            }
+            Message::Compressed { .. } => {
+                bail!("message must be decompressed before verifying");
+            }
+            Message::Encrypted { .. } => {
+                bail!("message must be decrypted before verifying");
+            }
+            Message::Literal { .. } => {
+                bail!("message was not signed");
+            }
+        }
     }
 
     /// Decrypt the message using the given key.
@@ -393,8 +838,23 @@ impl<'a> Message<'a> {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
             }
-            Message::Signed { message, .. } => message.decrypt(key_pws, keys),
-            Message::SignedOnePass { message, .. } => message.decrypt(key_pws, keys),
+            Message::Signed { reader, signature } => {
+                let (reader, fps) = reader.decrypt(key_pws, keys)?;
+                Ok((Message::Signed { signature, reader }, fps))
+            }
+            Message::SignedOnePass {
+                reader,
+                one_pass_signature,
+            } => {
+                let (reader, fps) = reader.decrypt(key_pws, keys)?;
+                Ok((
+                    Message::SignedOnePass {
+                        one_pass_signature,
+                        reader,
+                    },
+                    fps,
+                ))
+            }
             Message::Encrypted { esk, edata, .. } => {
                 let valid_keys =
                     keys.iter()
@@ -509,10 +969,22 @@ impl<'a> Message<'a> {
     pub fn decrypt_with_password(self, msg_pw: &Password) -> Result<Message<'a>> {
         match self {
             Message::Compressed { .. } | Message::Literal { .. } => {
-                bail!("not encrypted");
+                bail!("message is not encrypted");
             }
-            Message::Signed { message, .. } => message.decrypt_with_password(msg_pw),
-            Message::SignedOnePass { message, .. } => message.decrypt_with_password(msg_pw),
+            Message::Signed { reader, signature } => {
+                let reader = reader.decrypt_with_password(msg_pw)?;
+                Ok(Message::Signed { reader, signature })
+            }
+            Message::SignedOnePass {
+                reader,
+                one_pass_signature,
+            } => {
+                let reader = reader.decrypt_with_password(msg_pw)?;
+                Ok(Message::SignedOnePass {
+                    reader,
+                    one_pass_signature,
+                })
+            }
             Message::Encrypted { esk, edata, .. } => {
                 // TODO: handle multiple passwords
                 let skesk = esk.into_iter().find_map(|esk| match esk {
@@ -559,8 +1031,8 @@ impl<'a> Message<'a> {
         match self {
             Self::Literal { reader } => reader.data_header(),
             Self::Compressed { .. } => None,
-            Self::Signed { message, .. } => message.literal_data_header(),
-            Self::SignedOnePass { message, .. } => message.literal_data_header(),
+            Self::Signed { reader, .. } => reader.get_ref().literal_data_header(),
+            Self::SignedOnePass { reader, .. } => reader.get_ref().literal_data_header(),
             Self::Encrypted { .. } => None,
         }
     }
@@ -569,8 +1041,8 @@ impl<'a> Message<'a> {
         match self {
             Self::Literal { reader } => reader.packet_header(),
             Self::Compressed { reader } => reader.packet_header(),
-            Self::Signed { message, .. } => message.packet_header(),
-            Self::SignedOnePass { message, .. } => message.packet_header(),
+            Self::Signed { reader, .. } => reader.get_ref().packet_header(),
+            Self::SignedOnePass { reader, .. } => reader.get_ref().packet_header(),
             Self::Encrypted { edata, .. } => edata.packet_header(),
         }
     }
@@ -595,8 +1067,8 @@ impl Read for Message<'_> {
         match self {
             Self::Literal { reader } => reader.read(buf),
             Self::Compressed { reader } => reader.read(buf),
-            Self::Signed { message, .. } => message.read(buf),
-            Self::SignedOnePass { message, .. } => message.read(buf),
+            Self::Signed { reader, .. } => reader.read(buf),
+            Self::SignedOnePass { reader, .. } => reader.read(buf),
             Self::Encrypted { edata, .. } => edata.read(buf),
         }
     }
@@ -607,8 +1079,8 @@ impl BufRead for Message<'_> {
         match self {
             Self::Literal { reader } => reader.fill_buf(),
             Self::Compressed { reader } => reader.fill_buf(),
-            Self::Signed { message, .. } => message.fill_buf(),
-            Self::SignedOnePass { message, .. } => message.fill_buf(),
+            Self::Signed { reader, .. } => reader.fill_buf(),
+            Self::SignedOnePass { reader, .. } => reader.fill_buf(),
             Self::Encrypted { edata, .. } => edata.fill_buf(),
         }
     }
@@ -616,8 +1088,8 @@ impl BufRead for Message<'_> {
         match self {
             Self::Literal { reader } => reader.consume(amt),
             Self::Compressed { reader } => reader.consume(amt),
-            Self::Signed { message, .. } => message.consume(amt),
-            Self::SignedOnePass { message, .. } => message.consume(amt),
+            Self::Signed { reader, .. } => reader.consume(amt),
+            Self::SignedOnePass { reader, .. } => reader.consume(amt),
             Self::Encrypted { edata, .. } => edata.consume(amt),
         }
     }

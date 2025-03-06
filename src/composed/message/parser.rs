@@ -10,6 +10,7 @@ use crate::packet::Packet;
 use crate::types::Tag;
 
 use super::reader::{CompressedDataReader, LiteralDataReader};
+use super::{SignatureBodyReader, SignatureOnePassReader, SignatureVerifier};
 
 pub struct MessageParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
@@ -60,10 +61,9 @@ fn next<'a>(
                 let Some(inner_message) = next(packets)? else {
                     bail!("missing next packet");
                 };
-                let message = Message::Signed {
-                    signature,
-                    message: Box::new(inner_message),
-                };
+                let verifier = SignatureVerifier::from_signature(&signature)?;
+                let reader = SignatureBodyReader::new(&signature, Box::new(inner_message))?;
+                let message = Message::Signed { signature, reader };
                 return Ok(Some(message));
             }
             Tag::OnePassSignature => {
@@ -79,10 +79,13 @@ fn next<'a>(
                 let Some(inner_message) = next(packets)? else {
                     bail!("missing next packet");
                 };
+
+                let reader =
+                    SignatureOnePassReader::new(&one_pass_signature, Box::new(inner_message))?;
+                let verifier = SignatureVerifier::from_one_pass(&one_pass_signature)?;
                 let message = Message::SignedOnePass {
                     one_pass_signature,
-                    message: Box::new(inner_message),
-                    signature: None,
+                    reader,
                 };
                 return Ok(Some(message));
             }

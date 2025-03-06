@@ -1187,7 +1187,7 @@ mod tests {
     use crate::line_writer::LineBreak;
     use crate::normalize_lines::normalize_lines;
     use crate::util::test::{check_strings, random_string, ChaosReader};
-    use crate::{Deserializable, Message, SignedSecretKey};
+    use crate::{Deserializable, Message, SignedSecretKey, VerificationResult};
 
     #[test]
     fn binary_file_fixed_size_no_compression_roundtrip_password_seipdv1() {
@@ -1668,29 +1668,18 @@ mod tests {
             let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
             let signed = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
-            let message = Message::from_bytes(&signed[..]).expect("reading");
+            let mut message = Message::from_bytes(&signed[..]).expect("reading");
+
+            check_strings(
+                message.as_data_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
 
             // verify signature
             assert!(message.is_one_pass_signed());
-            // TODO
-            // message.verify(&*skey.public_key()).expect("signed");
+            message.verify(&*skey.public_key()).expect("signed");
 
-            let Message::Signed {
-                message: mut decrypted,
-                ..
-            } = message
-            else {
-                panic!("unexpected message: {:?}", message);
-            };
-
-            assert!(decrypted.is_literal());
-
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-
-            check_strings(
-                decrypted.as_data_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
-            );
+            assert_eq!(message.literal_data_header().unwrap().file_name(), "");
         }
     }
 
@@ -1743,30 +1732,18 @@ mod tests {
                 .decrypt(&[Password::empty()], &[&skey])
                 .expect("decryption");
 
-            let next = decrypted.decompress().expect("decompression");
-
-            // verify signature
-            dbg!(&next);
-            assert!(next.is_one_pass_signed());
-            // TODO
-            // next.verify(&*skey.public_key()).expect("signed");
-
-            let Message::Signed {
-                message: mut decrypted,
-                ..
-            } = next
-            else {
-                panic!("unexpected message: {:?}", next);
-            };
-
-            assert!(decrypted.is_literal());
-
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            let mut message = decrypted.decompress().expect("decompression");
 
             check_strings(
-                decrypted.as_data_string().unwrap(),
+                message.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
+            // verify signature
+            dbg!(&message);
+            assert!(message.is_one_pass_signed());
+            message.verify(&*skey.public_key()).expect("signed");
+
+            assert_eq!(message.literal_data_header().unwrap().file_name(), "");
         }
     }
 
@@ -1864,29 +1841,18 @@ mod tests {
                 .expect("decryption");
 
             assert!(decrypted.is_compressed());
-            let decompressed = decrypted.decompress().expect("decompression");
+            let mut decompressed = decrypted.decompress().expect("decompression");
 
             // verify signature
             assert!(decompressed.is_one_pass_signed());
-            // TODO
-            // decompressed.verify(&*skey.public_key()).expect("signed");
-
-            let Message::Signed {
-                message: mut decrypted,
-                ..
-            } = decompressed
-            else {
-                panic!("unexpected message: {:?}", decompressed);
-            };
-
-            assert!(decrypted.is_literal());
-
-            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
 
             check_strings(
-                decrypted.as_data_string().unwrap(),
+                decompressed.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
+            decompressed.verify(&*skey.public_key()).expect("signed");
+
+            assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
         }
     }
 
@@ -1980,48 +1946,18 @@ mod tests {
 
                 let mut decompressed = decrypted.decompress()?;
 
-                // verify signature outer
-                assert!(decompressed.is_one_pass_signed());
-                // TODO
-                // decompressed.verify(&*skey1.public_key())?;
-
-                let inner = match decompressed {
-                    Message::SignedOnePass {
-                        mut message,
-                        one_pass_signature: ops,
-                        ..
-                    } => {
-                        assert!(ops.is_nested(), "outer OPS must be nested");
-
-                        assert!(message.is_one_pass_signed());
-                        // TODO
-                        // message.verify(&*skey2.public_key())?;
-
-                        let Message::SignedOnePass {
-                            message: inner_message,
-                            one_pass_signature: ops,
-                            ..
-                        } = *message
-                        else {
-                            panic!("unexpected message: {:?}", message);
-                        };
-                        assert!(!ops.is_nested(), "innner OPS must not be nested");
-                        inner_message
-                    }
-                    _ => {
-                        panic!("invalid structure");
-                    }
-                };
-
-                let mut decrypted = *inner;
-                assert!(decrypted.is_literal());
-
-                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-
                 check_strings(
-                    decrypted.as_data_string().unwrap(),
+                    decompressed.as_data_string().unwrap(),
                     normalize_lines(&buf, LineBreak::Crlf),
                 );
+
+                let res =
+                    decompressed.verify_nested(&[&*skey1.public_key(), &*skey2.public_key()])?;
+                assert_eq!(res.len(), 2);
+                assert!(matches!(res[0], VerificationResult::Valid(_)));
+                assert!(matches!(res[1], VerificationResult::Valid(_)));
+
+                assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
             }
         }
         Ok(())
