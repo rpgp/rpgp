@@ -752,34 +752,66 @@ mod tests {
 
         for file_size in (1..1024 * 10).step_by(100) {
             for is_partial in [true, false] {
-                println!("--- size: {file_size}, is_partial: {is_partial}");
-                let buf = random_string(&mut rng, file_size);
+                for is_armor in [true, false] {
+                    println!(
+                        "--- size: {file_size}, is_partial: {is_partial}, is_armor: {is_armor}"
+                    );
+                    let buf = random_string(&mut rng, file_size);
 
-                let message = if is_partial {
-                    Builder::from_reader("test.txt", buf.as_bytes())
-                        .data_mode(DataMode::Binary)
-                        .compression(CompressionAlgorithm::ZIP)
-                        .partial_chunk_size(512)?
-                        .to_vec(&mut rng)?
-                } else {
-                    Builder::from_bytes("test.txt", buf.clone())
-                        .data_mode(DataMode::Binary)
-                        .compression(CompressionAlgorithm::ZIP)
-                        .to_vec(&mut rng)?
-                };
-                let reader = ChaosReader::new(rng.clone(), message.clone());
-                let mut reader = BufReader::new(reader);
-                let message = Message::from_bytes(&mut reader)?;
-                let mut decompressed_message = message.decompress()?;
+                    if is_armor {
+                        let message = if is_partial {
+                            Builder::from_reader("test.txt", buf.as_bytes())
+                                .data_mode(DataMode::Binary)
+                                .compression(CompressionAlgorithm::ZIP)
+                                .partial_chunk_size(512)?
+                                .to_armored_string(&mut rng, Default::default())?
+                        } else {
+                            Builder::from_bytes("test.txt", buf.clone())
+                                .data_mode(DataMode::Binary)
+                                .compression(CompressionAlgorithm::ZIP)
+                                .to_armored_string(&mut rng, Default::default())?
+                        };
+                        let reader = ChaosReader::new(rng.clone(), message.clone());
+                        let mut reader = BufReader::new(reader);
+                        let (message, _) = Message::from_armor(&mut reader)?;
 
-                let mut out = String::new();
-                decompressed_message.read_to_string(&mut out)?;
+                        let mut decompressed_message = message.decompress()?;
+                        let mut out = String::new();
+                        decompressed_message.read_to_string(&mut out)?;
 
-                check_strings(out, buf);
+                        check_strings(out, buf);
 
-                let header = decompressed_message.literal_data_header().unwrap();
-                assert_eq!(header.file_name(), &b""[..]);
-                assert_eq!(header.mode(), DataMode::Binary);
+                        let header = decompressed_message.literal_data_header().unwrap();
+                        assert_eq!(header.file_name(), &b""[..]);
+                        assert_eq!(header.mode(), DataMode::Binary);
+                    } else {
+                        let message = if is_partial {
+                            Builder::from_reader("test.txt", buf.as_bytes())
+                                .data_mode(DataMode::Binary)
+                                .compression(CompressionAlgorithm::ZIP)
+                                .partial_chunk_size(512)?
+                                .to_vec(&mut rng)?
+                        } else {
+                            Builder::from_bytes("test.txt", buf.clone())
+                                .data_mode(DataMode::Binary)
+                                .compression(CompressionAlgorithm::ZIP)
+                                .to_vec(&mut rng)?
+                        };
+                        let reader = ChaosReader::new(rng.clone(), message.clone());
+                        let mut reader = BufReader::new(reader);
+                        let message = Message::from_bytes(&mut reader)?;
+
+                        let mut decompressed_message = message.decompress()?;
+                        let mut out = String::new();
+                        decompressed_message.read_to_string(&mut out)?;
+
+                        check_strings(out, buf);
+
+                        let header = decompressed_message.literal_data_header().unwrap();
+                        assert_eq!(header.file_name(), &b""[..]);
+                        assert_eq!(header.mode(), DataMode::Binary);
+                    }
+                }
             }
         }
         Ok(())
