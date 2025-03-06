@@ -160,7 +160,7 @@ jobs:
         override: true
 
     - name: Cache cargo registry
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: ~/.cargo/registry
         key: wasm32-${{ matrix.rust }}-cargo-registry-${{ hashFiles('**/Cargo.toml') }}
