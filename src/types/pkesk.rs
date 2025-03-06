@@ -1,10 +1,12 @@
+use std::io::BufRead;
+
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 use super::MpiBytes;
@@ -46,26 +48,30 @@ pub enum PkeskBytes {
 }
 
 impl PkeskBytes {
-    pub fn from_buf<B: Buf>(alg: &PublicKeyAlgorithm, version: u8, mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(
+        alg: &PublicKeyAlgorithm,
+        version: u8,
+        mut i: B,
+    ) -> Result<Self> {
         match alg {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSASign
             | PublicKeyAlgorithm::RSAEncrypt => {
-                let mpi = MpiBytes::from_buf(&mut i)?;
+                let mpi = MpiBytes::try_from_reader(&mut i)?;
                 Ok(PkeskBytes::Rsa { mpi })
             }
             PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
-                let first = MpiBytes::from_buf(&mut i)?;
-                let second = MpiBytes::from_buf(&mut i)?;
+                let first = MpiBytes::try_from_reader(&mut i)?;
+                let second = MpiBytes::try_from_reader(&mut i)?;
                 Ok(PkeskBytes::Elgamal { first, second })
             }
             PublicKeyAlgorithm::ECDSA
             | PublicKeyAlgorithm::DSA
             | PublicKeyAlgorithm::DiffieHellman => Ok(PkeskBytes::Other),
             PublicKeyAlgorithm::ECDH => {
-                let public_point = MpiBytes::from_buf(&mut i)?;
+                let public_point = MpiBytes::try_from_reader(&mut i)?;
                 let session_key_len = i.read_u8()?;
-                let session_key = i.read_take(session_key_len.into())?;
+                let session_key = i.take_bytes(session_key_len.into())?.freeze();
 
                 Ok(PkeskBytes::Ecdh {
                     public_point,
@@ -93,7 +99,7 @@ impl PkeskBytes {
                 let skey_len = if version == 3 { len - 1 } else { len };
 
                 // The encrypted session key.
-                let esk = i.read_take(skey_len.into())?;
+                let esk = i.take_bytes(skey_len.into())?.freeze();
 
                 Ok(PkeskBytes::X25519 {
                     ephemeral: ephemeral_public,

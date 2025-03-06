@@ -1,14 +1,14 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use rand::{CryptoRng, Rng};
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::KeyVersion;
 
@@ -418,7 +418,7 @@ impl StringToKey {
     }
 
     /// Parses the identifier from the given buffer.
-    pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         let typ = i.read_u8()?;
 
         match typ {
@@ -434,7 +434,7 @@ impl StringToKey {
                 Ok(StringToKey::Salted { hash_alg, salt })
             }
             2 => {
-                let unknown = i.rest();
+                let unknown = i.rest()?.freeze();
                 Ok(StringToKey::Reserved { unknown })
             }
             3 => {
@@ -457,11 +457,11 @@ impl StringToKey {
                 Ok(StringToKey::Argon2 { salt, t, p, m_enc })
             }
             100..=110 => {
-                let unknown = i.rest();
+                let unknown = i.rest()?.freeze();
                 Ok(StringToKey::Private { typ, unknown })
             }
             _ => {
-                let unknown = i.rest();
+                let unknown = i.rest()?.freeze();
                 Ok(StringToKey::Other { typ, unknown })
             }
         }
@@ -770,7 +770,7 @@ mod tests {
         fn packet_roundtrip(s2k: StringToKey) {
             let mut buf = Vec::new();
             s2k.to_writer(&mut buf).unwrap();
-            let new_s2k = StringToKey::from_buf(&mut &buf[..]).unwrap();
+            let new_s2k = StringToKey::try_from_reader(&mut &buf[..]).unwrap();
             assert_eq!(s2k, new_s2k);
         }
     }

@@ -516,7 +516,6 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         //     HashAlgorithm::Sha256,
         // )?;
         // msg.verify(pri.public_key())?;
-
-        Ok(())
+        // Ok(())
     }
 }

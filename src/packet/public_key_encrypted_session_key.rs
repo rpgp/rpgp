@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 use rand::{CryptoRng, Rng};
@@ -9,7 +9,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
@@ -49,8 +49,8 @@ pub enum PublicKeyEncryptedSessionKey {
 }
 
 impl PublicKeyEncryptedSessionKey {
-    /// Parses a `PublicKeyEncryptedSessionKey` packet from the given buffer.
-    pub fn from_buf<B: bytes::Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+    /// Parses a `PublicKeyEncryptedSessionKey` packet.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         ensure_eq!(
             packet_header.tag(),
             Tag::PublicKeyEncryptedSessionKey,
@@ -69,7 +69,7 @@ impl PublicKeyEncryptedSessionKey {
                 let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
                 // key algorithm specific data
-                let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
+                let values = PkeskBytes::try_from_reader(&pk_algo, version, &mut i)?;
 
                 Ok(PublicKeyEncryptedSessionKey::V3 {
                     packet_header,
@@ -93,7 +93,7 @@ impl PublicKeyEncryptedSessionKey {
                         // The fingerprint of the public key or subkey to which the session key is encrypted.
                         // Note that the length N of the fingerprint for a version 4 key is 20 octets;
                         // for a version 6 key N is 32.
-                        let fp = i.read_take((len - 1).into())?;
+                        let fp = i.take_bytes((len - 1).into())?;
                         let fp = Fingerprint::new(v, &fp)?;
 
                         Some(fp)
@@ -104,7 +104,7 @@ impl PublicKeyEncryptedSessionKey {
                 let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
                 // A series of values comprising the encrypted session key. This is algorithm-specific.
-                let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
+                let values = PkeskBytes::try_from_reader(&pk_algo, version, &mut i)?;
 
                 Ok(PublicKeyEncryptedSessionKey::V6 {
                     packet_header,
@@ -498,7 +498,7 @@ mod tests {
         ) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = PublicKeyEncryptedSessionKey::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
+            let new_packet = PublicKeyEncryptedSessionKey::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
     }

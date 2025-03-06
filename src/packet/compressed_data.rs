@@ -9,7 +9,6 @@ use log::debug;
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, PacketHeaderVersion, PacketLength, Tag};

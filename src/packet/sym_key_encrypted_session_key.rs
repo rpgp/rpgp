@@ -1,7 +1,7 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use log::debug;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
@@ -10,7 +10,7 @@ use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{Password, SkeskVersion, StringToKey, Tag};
 use crate::PlainSessionKey;
@@ -85,8 +85,8 @@ impl AeadProps {
 }
 
 impl SymKeyEncryptedSessionKey {
-    /// Parses a `SymKeyEncryptedSessionKey` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+    /// Parses a `SymKeyEncryptedSessionKey` packet.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         ensure_eq!(
             packet_header.tag(),
             Tag::SymKeyEncryptedSessionKey,
@@ -346,33 +346,38 @@ impl SymKeyEncryptedSessionKey {
     }
 }
 
-fn parse_v4<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v4<B: BufRead>(
+    packet_header: PacketHeader,
+    mut i: B,
+) -> Result<SymKeyEncryptedSessionKey> {
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
-    let s2k = StringToKey::from_buf(&mut i)?;
+    let s2k = StringToKey::try_from_reader(&mut i)?;
 
     Ok(SymKeyEncryptedSessionKey::V4 {
         packet_header,
         sym_algorithm: sym_alg,
         s2k,
-        encrypted_key: i.rest(),
+        encrypted_key: i.rest()?.freeze(),
     })
 }
 
-fn parse_v5<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v5<B: BufRead>(
+    packet_header: PacketHeader,
+    mut i: B,
+) -> Result<SymKeyEncryptedSessionKey> {
     let _count = i.read_u8()?;
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
     let aead = i.read_u8().map(AeadAlgorithm::from)?;
     let s2k_len = i.read_u8()?;
-    let s2k_data = i.read_take(s2k_len.into())?;
-    let s2k = StringToKey::from_buf(s2k_data)?;
-    let iv = i.read_take(aead.iv_size())?;
-    let l = i.remaining();
+    let s2k_data = i.read_take(s2k_len.into());
+    let s2k = StringToKey::try_from_reader(s2k_data)?;
+    let iv = i.take_bytes(aead.iv_size())?;
     let aead_tag_size = aead.tag_size().unwrap_or_default();
+    let esk = i.rest()?;
 
-    if l < aead_tag_size {
+    if esk.len() < aead_tag_size {
         return Err(Error::InvalidInput);
     }
-    let esk = i.read_take(l)?;
 
     let aead = match aead {
         AeadAlgorithm::Eax => AeadProps::Eax {
@@ -392,24 +397,26 @@ fn parse_v5<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncry
         sym_algorithm: sym_alg,
         aead,
         s2k,
-        encrypted_key: esk,
+        encrypted_key: esk.freeze(),
     })
 }
 
-fn parse_v6<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v6<B: BufRead>(
+    packet_header: PacketHeader,
+    mut i: B,
+) -> Result<SymKeyEncryptedSessionKey> {
     let _count = i.read_u8()?;
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
     let aead = i.read_u8().map(AeadAlgorithm::from)?;
     let s2k_len = i.read_u8()?;
-    let s2k_data = i.read_take(s2k_len.into())?;
-    let s2k = StringToKey::from_buf(s2k_data)?;
-    let iv = i.read_take(aead.iv_size())?;
-    let l = i.remaining();
+    let s2k_data = i.read_take(s2k_len.into());
+    let s2k = StringToKey::try_from_reader(s2k_data)?;
+    let iv = i.take_bytes(aead.iv_size())?;
     let aead_tag_size = aead.tag_size().unwrap_or_default();
-    if l < aead_tag_size {
+    let esk = i.rest()?;
+    if esk.len() < aead_tag_size {
         return Err(Error::InvalidInput);
     }
-    let esk = i.read_take(l)?;
 
     let aead = match aead {
         AeadAlgorithm::Eax => AeadProps::Eax {
@@ -429,7 +436,7 @@ fn parse_v6<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncry
         sym_algorithm: sym_alg,
         aead,
         s2k,
-        encrypted_key: esk,
+        encrypted_key: esk.freeze(),
     })
 }
 
@@ -683,7 +690,7 @@ mod tests {
         fn packet_roundtrip(packet: SymKeyEncryptedSessionKey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = SymKeyEncryptedSessionKey::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
+            let new_packet = SymKeyEncryptedSessionKey::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             assert_eq!(packet, new_packet);
         }
     }

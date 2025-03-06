@@ -14,23 +14,22 @@ use crate::types::Tag;
 impl Packet {
     pub fn from_reader<R: BufRead>(packet_header: PacketHeader, body: R) -> Result<Self> {
         let res: Result<Self> = match packet_header.tag() {
-            // Tag::Signature => Signature::try_from_reader(packet_header, body).map(Into::into),
-            // Tag::OnePassSignature => {
-            //     OnePassSignature::try_from_reader(packet_header, body).map(Into::into)
-            // }
+            Tag::Signature => Signature::try_from_reader(packet_header, body).map(Into::into),
+            Tag::OnePassSignature => {
+                OnePassSignature::try_from_reader(packet_header, body).map(Into::into)
+            }
 
             // Tag::SecretKey => SecretKey::try_from_reader(packet_header, body).map(Into::into),
             // Tag::SecretSubkey => SecretSubkey::try_from_reader(packet_header, body).map(Into::into),
 
             // Tag::PublicKey => PublicKey::try_from_reader(packet_header, body).map(Into::into),
             // Tag::PublicSubkey => PublicSubkey::try_from_reader(packet_header, body).map(Into::into),
-
-            // Tag::PublicKeyEncryptedSessionKey => {
-            //     PublicKeyEncryptedSessionKey::try_from_reader(packet_header, body).map(Into::into)
-            // }
-            // Tag::SymKeyEncryptedSessionKey => {
-            //     SymKeyEncryptedSessionKey::try_from_reader(packet_header, body).map(Into::into)
-            // }
+            Tag::PublicKeyEncryptedSessionKey => {
+                PublicKeyEncryptedSessionKey::try_from_reader(packet_header, body).map(Into::into)
+            }
+            Tag::SymKeyEncryptedSessionKey => {
+                SymKeyEncryptedSessionKey::try_from_reader(packet_header, body).map(Into::into)
+            }
             Tag::LiteralData => LiteralData::try_from_reader(packet_header, body).map(Into::into),
             Tag::CompressedData => {
                 CompressedData::try_from_reader(packet_header, body).map(Into::into)
@@ -48,9 +47,9 @@ impl Packet {
             Tag::UserAttribute => {
                 UserAttribute::try_from_reader(packet_header, body).map(Into::into)
             }
-            // Tag::ModDetectionCode => {
-            //     ModDetectionCode::try_from_reader(packet_header, body).map(Into::into)
-            // }
+            Tag::ModDetectionCode => {
+                ModDetectionCode::try_from_reader(packet_header, body).map(Into::into)
+            }
             Tag::Padding => Padding::try_from_reader(packet_header, body).map(Into::into),
             Tag::Other(20) => {
                 unimplemented_err!("GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported")

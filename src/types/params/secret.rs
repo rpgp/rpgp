@@ -1,13 +1,12 @@
-use std::io;
+use std::io::{self, BufRead};
 
-use bytes::Buf;
 use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::types::*;
 
 /// A list of params that are used to represent the values of possibly encrypted key,
@@ -90,7 +89,7 @@ impl SecretParams {
 }
 
 /// Parse possibly encrypted private fields of a key.
-fn parse_secret_fields<B: Buf>(
+fn parse_secret_fields<B: BufRead>(
     key_ver: KeyVersion,
     alg: PublicKeyAlgorithm,
     public_params: &PublicParams,
@@ -102,7 +101,8 @@ fn parse_secret_fields<B: Buf>(
 
     let s2k_usage = i.read_u8().map(S2kUsage::from)?;
 
-    let s2k_len = if key_ver == KeyVersion::V6 && s2k_usage != S2kUsage::Unprotected {
+    // TODO: use s2k_len
+    let _s2k_len = if key_ver == KeyVersion::V6 && s2k_usage != S2kUsage::Unprotected {
         // Only for a version 6 packet where the secret key material is encrypted (that is,
         // where the previous octet is not zero), a 1-octet scalar octet count of the
         // cumulative length of all the following conditionally included S2K parameter fields.
@@ -115,25 +115,12 @@ fn parse_secret_fields<B: Buf>(
         None
     };
 
-    // expected length of the remaining data after consuming the conditionally included
-    // s2k parameter fields
-    let after_s2k = match s2k_len {
-        Some(len) => {
-            let len = len as usize;
-            if i.remaining() < len {
-                return Err(crate::errors::Error::InvalidInput);
-            }
-            Some(i.remaining() - len)
-        }
-        None => None,
-    };
-
     let enc_params = match s2k_usage {
         // 0 is no encryption
         S2kUsage::Unprotected => S2kParams::Unprotected,
         // symmetric key algorithm
         S2kUsage::LegacyCfb(sym_alg) => {
-            let iv = i.read_take(sym_alg.block_size())?;
+            let iv = i.take_bytes(sym_alg.block_size())?.freeze();
             S2kParams::LegacyCfb { sym_alg, iv }
         }
         S2kUsage::Aead => {
@@ -148,7 +135,7 @@ fn parse_secret_fields<B: Buf>(
                 None
             };
 
-            let s2k = StringToKey::from_buf(&mut i)?;
+            let s2k = StringToKey::try_from_reader(&mut i)?;
 
             // if we got a length field (in v6), check that it contained a consistent value
             if let Some(len) = len {
@@ -161,7 +148,7 @@ fn parse_secret_fields<B: Buf>(
                 }
             }
 
-            let nonce = i.read_take(aead_mode.nonce_size())?;
+            let nonce = i.take_bytes(aead_mode.nonce_size())?.freeze();
 
             S2kParams::Aead {
                 sym_alg,
@@ -182,7 +169,7 @@ fn parse_secret_fields<B: Buf>(
                 None
             };
 
-            let s2k = StringToKey::from_buf(&mut i)?;
+            let s2k = StringToKey::try_from_reader(&mut i)?;
 
             // if we got a length field (in v6), check that it contained a consistent value
             if let Some(len) = len {
@@ -195,31 +182,25 @@ fn parse_secret_fields<B: Buf>(
                 }
             }
 
-            let iv = i.read_take(sym_alg.block_size())?;
+            let iv = i.take_bytes(sym_alg.block_size())?.freeze();
             S2kParams::Cfb { sym_alg, s2k, iv }
         }
         S2kUsage::MalleableCfb => {
             let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
-            let s2k = StringToKey::from_buf(&mut i)?;
-            let iv = i.read_take(sym_alg.block_size())?;
+            let s2k = StringToKey::try_from_reader(&mut i)?;
+            let iv = i.take_bytes(sym_alg.block_size())?.freeze();
 
             S2kParams::Cfb { sym_alg, s2k, iv }
         }
     };
 
-    if let Some(after_s2k) = after_s2k {
-        if i.remaining() != after_s2k {
-            bail!("Unexpected length of S2K parameter fields");
-        }
-    }
-
     match s2k_usage {
         S2kUsage::Unprotected => {
-            let params = PlainSecretParams::try_from_buf(i, key_ver, alg, public_params)?;
+            let params = PlainSecretParams::try_from_reader(i, key_ver, alg, public_params)?;
             Ok(SecretParams::Plain(params))
         }
         _ => {
-            let params = EncryptedSecretParams::new(i.rest(), enc_params);
+            let params = EncryptedSecretParams::new(i.rest()?.freeze(), enc_params);
             Ok(SecretParams::Encrypted(params))
         }
     }

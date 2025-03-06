@@ -1,9 +1,9 @@
 use std::hash::Hasher;
-use std::io;
+use std::io::{self, BufRead};
 
 use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use hkdf::Hkdf;
 use num_bigint::ModInverse;
 use sha2::Sha256;
@@ -15,7 +15,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, elgamal, rsa, x25519, Decryptor};
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::PkeskBytes;
 use crate::types::*;
@@ -48,21 +48,21 @@ pub(crate) fn pad_key<const SIZE: usize>(val: &[u8]) -> Result<[u8; SIZE]> {
 
 impl PlainSecretParams {
     /// Skips the checksum, because it already has been checked.
-    pub fn try_from_buf_no_checksum<B: Buf>(
+    pub fn try_from_reader_no_checksum<B: BufRead>(
         mut i: B,
         _version: KeyVersion,
         alg: PublicKeyAlgorithm,
         public_params: &PublicParams,
     ) -> Result<Self> {
-        let params = Self::try_from_buf_inner(&mut i, alg, public_params)?;
+        let params = Self::try_from_reader_inner(&mut i, alg, public_params)?;
         ensure!(
-            !i.has_remaining(),
+            !i.has_remaining()?,
             "failed to process full secret key material"
         );
         Ok(params)
     }
 
-    fn try_from_buf_inner<B: Buf>(
+    fn try_from_reader_inner<B: BufRead>(
         mut i: B,
         alg: PublicKeyAlgorithm,
         public_params: &PublicParams,
@@ -74,46 +74,46 @@ impl PlainSecretParams {
                 | PublicKeyAlgorithm::RSASign,
                 PublicParams::RSA(pub_params),
             ) => {
-                let d = MpiBytes::from_buf(&mut i)?;
-                let p = MpiBytes::from_buf(&mut i)?;
-                let q = MpiBytes::from_buf(&mut i)?;
-                let u = MpiBytes::from_buf(&mut i)?;
+                let d = MpiBytes::try_from_reader(&mut i)?;
+                let p = MpiBytes::try_from_reader(&mut i)?;
+                let q = MpiBytes::try_from_reader(&mut i)?;
+                let u = MpiBytes::try_from_reader(&mut i)?;
 
                 let key = crate::crypto::rsa::SecretKey::try_from_mpi(pub_params, d, p, q, u)?;
                 Self::RSA(key)
             }
             (PublicKeyAlgorithm::DSA, PublicParams::DSA(pub_params)) => {
-                let secret = MpiBytes::from_buf(i)?;
+                let secret = MpiBytes::try_from_reader(i)?;
 
                 let key = crate::crypto::dsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::DSA(key)
             }
             (PublicKeyAlgorithm::Elgamal, PublicParams::Elgamal(pub_params)) => {
-                let x = MpiBytes::from_buf(i)?;
+                let x = MpiBytes::try_from_reader(i)?;
                 ensure!(!pub_params.is_encrypt_only(), "inconsistent key state");
                 let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
                 Self::Elgamal(key)
             }
             (PublicKeyAlgorithm::ElgamalEncrypt, PublicParams::Elgamal(pub_params)) => {
-                let x = MpiBytes::from_buf(i)?;
+                let x = MpiBytes::try_from_reader(i)?;
                 ensure!(pub_params.is_encrypt_only(), "inconsistent key state");
                 let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
                 Self::Elgamal(key)
             }
             (PublicKeyAlgorithm::ECDH, PublicParams::ECDH(pub_params)) => {
-                let secret = MpiBytes::from_buf(i)?;
+                let secret = MpiBytes::try_from_reader(i)?;
 
                 let key = crate::crypto::ecdh::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::ECDH(key)
             }
             (PublicKeyAlgorithm::ECDSA, PublicParams::ECDSA(pub_params)) => {
-                let secret = MpiBytes::from_buf(i)?;
+                let secret = MpiBytes::try_from_reader(i)?;
 
                 let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::ECDSA(key)
             }
             (PublicKeyAlgorithm::EdDSALegacy, PublicParams::EdDSALegacy(_pub_params)) => {
-                let secret = MpiBytes::from_buf(i)?;
+                let secret = MpiBytes::try_from_reader(i)?;
 
                 const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
                 let secret = pad_key::<SIZE>(secret.as_ref())?;
@@ -144,18 +144,18 @@ impl PlainSecretParams {
         Ok(params)
     }
 
-    pub fn try_from_buf<B: Buf>(
+    pub fn try_from_reader<B: BufRead>(
         mut i: B,
         version: KeyVersion,
         alg: PublicKeyAlgorithm,
         public_params: &PublicParams,
     ) -> Result<Self> {
-        let params = Self::try_from_buf_inner(&mut i, alg, public_params)?;
+        let params = Self::try_from_reader_inner(&mut i, alg, public_params)?;
         if version == KeyVersion::V3 || version == KeyVersion::V4 {
             let checksum = i.read_array::<2>()?;
             params.compare_checksum_simple(&checksum)?;
             ensure!(
-                !i.has_remaining(),
+                !i.has_remaining()?,
                 "failed to process full secret key material"
             );
         }
@@ -707,7 +707,7 @@ mod tests {
             let mut buf = Vec::new();
             secret_params.to_writer(&mut buf, KeyVersion::V3)?;
             let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_buf(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
+            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
             prop_assert_eq!(secret_params, new_params);
         }
         #[test]
@@ -718,7 +718,7 @@ mod tests {
             let mut buf = Vec::new();
             secret_params.to_writer(&mut buf, KeyVersion::V4)?;
             let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_buf(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
+            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
             prop_assert_eq!(secret_params, new_params);
         }
 
@@ -730,7 +730,7 @@ mod tests {
             let mut buf = Vec::new();
             secret_params.to_writer(&mut buf, KeyVersion::V6)?;
             let public_params = PublicParams::try_from(&secret_params)?;
-            let new_params = PlainSecretParams::try_from_buf(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
+            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
             prop_assert_eq!(secret_params, new_params);
         }
     }

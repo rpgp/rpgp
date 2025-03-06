@@ -2,7 +2,7 @@ use std::io;
 use std::io::Write;
 
 use byteorder::WriteBytesExt;
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 use digest::Digest;
 use zeroize::ZeroizeOnDrop;
 
@@ -126,7 +126,12 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::try_from_buf(plaintext, pub_key.version(), alg, params)
+                PlainSecretParams::try_from_reader(
+                    plaintext.reader(),
+                    pub_key.version(),
+                    alg,
+                    params,
+                )
             }
             S2kParams::Aead {
                 sym_alg,
@@ -159,8 +164,8 @@ impl EncryptedSecretParams {
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut ciphertext)?;
 
                         // "decrypt" now contains the decrypted key material
-                        PlainSecretParams::try_from_buf_no_checksum(
-                            &mut ciphertext,
+                        PlainSecretParams::try_from_reader_no_checksum(
+                            ciphertext.reader(),
                             pub_key.version(),
                             alg,
                             pub_key.public_params(),
@@ -191,8 +196,8 @@ impl EncryptedSecretParams {
                 if expected_sha1 != calculated_sha1 {
                     return Err(Error::InvalidInput);
                 }
-                PlainSecretParams::try_from_buf_no_checksum(
-                    &mut plaintext,
+                PlainSecretParams::try_from_reader_no_checksum(
+                    plaintext.reader(),
                     pub_key.version(),
                     alg,
                     params,
@@ -208,7 +213,12 @@ impl EncryptedSecretParams {
                     return Err(Error::InvalidInput);
                 }
 
-                PlainSecretParams::try_from_buf(plaintext, pub_key.version(), alg, params)
+                PlainSecretParams::try_from_reader(
+                    plaintext.reader(),
+                    pub_key.version(),
+                    alg,
+                    params,
+                )
             }
         }
     }
