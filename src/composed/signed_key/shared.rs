@@ -1,15 +1,17 @@
-use std::fmt;
 use std::io;
 
 use chrono::Duration;
 use log::warn;
 use smallvec::SmallVec;
+use snafu::Snafu;
 
 use crate::composed::key::KeyDetails;
 use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
 use crate::errors::Result;
 use crate::packet::KeyFlags;
+use crate::packet::PacketTrait;
 use crate::ser::Serialize;
+use crate::types::PacketLength;
 use crate::types::{PublicKeyTrait, SignedUser, SignedUserAttribute};
 use crate::{packet, ArmorOptions};
 
@@ -72,7 +74,10 @@ impl SignedKeyDetails {
             .cloned()
     }
 
-    fn verify_users(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_users<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for user in &self.users {
             user.verify(key)?;
         }
@@ -80,7 +85,10 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_attributes(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_attributes<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for attr in &self.user_attributes {
             attr.verify(key)?;
         }
@@ -88,7 +96,10 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_revocation_signatures(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_revocation_signatures<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for sig in &self.revocation_signatures {
             sig.verify_key(key)?;
         }
@@ -96,7 +107,10 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    fn verify_direct_signatures(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    fn verify_direct_signatures<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         for sig in &self.direct_signatures {
             sig.verify_key(key)?;
         }
@@ -104,7 +118,10 @@ impl SignedKeyDetails {
         Ok(())
     }
 
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         self.verify_users(key)?;
         self.verify_attributes(key)?;
         self.verify_revocation_signatures(key)?;
@@ -172,11 +189,11 @@ impl SignedKeyDetails {
 impl Serialize for SignedKeyDetails {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         for sig in &self.revocation_signatures {
-            packet::write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         for sig in &self.direct_signatures {
-            packet::write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         for user in &self.users {
@@ -188,6 +205,30 @@ impl Serialize for SignedKeyDetails {
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 0;
+        for sig in &self.revocation_signatures {
+            let len = sig.write_len().try_into().expect("signature size");
+            sum += PacketLength::fixed_encoding_len(len);
+            sum += len as usize;
+        }
+
+        for sig in &self.direct_signatures {
+            let len = sig.write_len().try_into().expect("signature size");
+            sum += PacketLength::fixed_encoding_len(len);
+            sum += len as usize;
+        }
+
+        for user in &self.users {
+            sum += user.write_len();
+        }
+
+        for attr in &self.user_attributes {
+            sum += attr.write_len();
+        }
+        sum
     }
 }
 
@@ -266,14 +307,9 @@ impl PublicOrSecret {
 
 /// Error returned when trying to convert `PublicOrSecret` key
 /// into the wrong type.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Snafu)]
+#[snafu(display("Attempt to convert PublicOrSecret key to the wrong type"))]
 pub struct TryFromPublicOrSecretError;
-
-impl fmt::Display for TryFromPublicOrSecretError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Attempt to convert PublicOrSecret key to the wrong type")
-    }
-}
 
 impl TryFrom<PublicOrSecret> for SignedPublicKey {
     type Error = TryFromPublicOrSecretError;
@@ -302,6 +338,13 @@ impl Serialize for PublicOrSecret {
         match self {
             PublicOrSecret::Public(k) => k.to_writer(writer),
             PublicOrSecret::Secret(k) => k.to_writer(writer),
+        }
+    }
+
+    fn write_len(&self) -> usize {
+        match self {
+            PublicOrSecret::Public(k) => k.write_len(),
+            PublicOrSecret::Secret(k) => k.write_len(),
         }
     }
 }

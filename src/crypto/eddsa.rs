@@ -14,13 +14,12 @@
 
 use rand::{CryptoRng, Rng};
 use signature::{Signer as _, Verifier};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::types::{Ed25519PublicParams, EddsaLegacyPublicParams, MpiBytes};
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
 /// between curve Ed25519 and Ed448 (TODO: not yet implemented)
@@ -37,40 +36,56 @@ pub enum Mode {
 }
 
 /// Secret key for EdDSA with Curve25519, the only combination we currently support.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct SecretKey {
     /// The secret point.
     #[debug("..")]
-    pub secret: [u8; 32],
-    #[debug("{}", hex::encode(oid))]
-    pub oid: Vec<u8>,
+    #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
+    pub secret: ed25519_dalek::SigningKey,
+}
+
+impl From<&SecretKey> for Ed25519PublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self {
+            key: value.secret.verifying_key(),
+        }
+    }
+}
+
+impl From<&SecretKey> for EddsaLegacyPublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self::Ed25519 {
+            key: value.secret.verifying_key(),
+        }
+    }
+}
+
+impl SecretKey {
+    /// Generate an EdDSA `SecretKey`.
+    ///
+    /// `mode` picks between supported EdDSA key formats and curves
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
+        rng.fill_bytes(&mut *bytes);
+        let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);
+
+        SecretKey { secret }
+    }
+
+    pub(crate) fn try_from_bytes(raw_secret: [u8; 32]) -> Result<Self> {
+        let secret = ed25519_dalek::SigningKey::from(raw_secret);
+        Ok(Self { secret })
+    }
+
+    pub(crate) fn as_mpi(&self) -> MpiBytes {
+        MpiBytes::from_slice(&self.secret.to_bytes())
+    }
 }
 
 impl Signer for SecretKey {
-    fn sign(
-        &self,
-        _hash: HashAlgorithm,
-        digest: &[u8],
-        pub_params: &PublicParams,
-    ) -> Result<Vec<Vec<u8>>> {
-        let curve = match pub_params {
-            PublicParams::EdDSALegacy { curve, q } => {
-                ensure_eq!(q.len(), 33, "invalid Q (len)");
-                ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
-
-                curve
-            }
-            PublicParams::Ed25519 { .. } => &ECCCurve::Ed25519,
-            _ => bail!("invalid public params"),
-        };
-
-        if curve != &ECCCurve::Ed25519 {
-            unsupported_err!("curve {:?} for EdDSA", curve.to_string());
-        }
-
-        let key = ed25519_dalek::SigningKey::from_bytes(&self.secret);
-
-        let signature = key.sign(digest);
+    fn sign(&self, _hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let signature = self.secret.sign(digest);
         let bytes = signature.to_bytes();
 
         let r = bytes[..32].to_vec();
@@ -80,72 +95,34 @@ impl Signer for SecretKey {
     }
 }
 
-/// Generate an EdDSA KeyPair.
-///
-/// `mode` picks between supported EdDSA key formats and curves
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    mode: Mode,
-) -> (PublicParams, PlainSecretParams) {
-    let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
-    rng.fill_bytes(&mut *bytes);
-
-    let secret = ed25519_dalek::SigningKey::from_bytes(&bytes);
-    drop(bytes); // we're done with this slice, zeroize it
-
-    let public = ed25519_dalek::VerifyingKey::from(&secret);
-
-    match mode {
-        Mode::EdDSALegacy => {
-            // public key
-            let mut q = Vec::with_capacity(33);
-            q.push(0x40);
-            q.extend_from_slice(&public.to_bytes());
-
-            // secret key
-            let p = Mpi::from_slice(&secret.to_bytes());
-
-            (
-                PublicParams::EdDSALegacy {
-                    curve: ECCCurve::Ed25519,
-                    q: Mpi::from_raw(q),
-                },
-                PlainSecretParams::EdDSALegacy(p),
-            )
-        }
-        Mode::Ed25519 => (
-            PublicParams::Ed25519 {
-                public: public.to_bytes(),
-            },
-            PlainSecretParams::Ed25519(secret.to_bytes()),
-        ),
-    }
-}
-
 /// Verify an EdDSA signature.
 pub fn verify(
-    curve: &ECCCurve,
-    public: &[u8],
+    key: &ed25519_dalek::VerifyingKey,
     hash: HashAlgorithm,
     hashed: &[u8],
     sig_bytes: &[u8],
 ) -> Result<()> {
-    match *curve {
-        ECCCurve::Ed25519 => {
-            let Some(digest_size) = hash.digest_size() else {
-                bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
-            };
-            ensure!(
-                digest_size * 8 >= 256,
-                "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
-                hash,
-            );
+    let Some(digest_size) = hash.digest_size() else {
+        bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
+    };
+    ensure!(
+        digest_size * 8 >= 256,
+        "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
+        hash,
+    );
 
-            let pk: ed25519_dalek::VerifyingKey = public.try_into()?;
-            let sig = sig_bytes.try_into()?;
+    let sig = sig_bytes.try_into()?;
 
-            Ok(pk.verify(hashed, &sig)?)
+    Ok(key.verify(hashed, &sig)?)
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    prop_compose! {
+        pub fn key_gen()(bytes: [u8; 32]) -> ed25519_dalek::SigningKey {
+            ed25519_dalek::SigningKey::from_bytes(&bytes)
         }
-        _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
     }
 }

@@ -13,7 +13,7 @@
 //! use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
 //! use pgp::errors::Result;
 //! use pgp::packet::{KeyFlags, UserAttribute, UserId};
-//! use pgp::types::{CompressionAlgorithm, PublicKeyTrait, SecretKeyTrait};
+//! use pgp::types::{CompressionAlgorithm, PublicKeyTrait, SecretKeyTrait, Password};
 //! use rand::thread_rng;
 //! use smallvec::*;
 //!
@@ -24,7 +24,7 @@
 //!     .can_sign(true)
 //!     .primary_user_id("Me <me@example.com>".into())
 //!     .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
-//!     .preferred_hash_algorithms(smallvec![HashAlgorithm::SHA2_256])
+//!     .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha256])
 //!     .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB]);
 //! let secret_key_params = key_params
 //!     .build()
@@ -32,9 +32,9 @@
 //! let secret_key = secret_key_params
 //!     .generate(thread_rng())
 //!     .expect("Failed to generate a plain key.");
-//! let passwd_fn = || String::new();
+//! let passwd_fn = Password::empty();
 //! let signed_secret_key = secret_key
-//!     .sign(&mut thread_rng(), passwd_fn)
+//!     .sign(&mut thread_rng(), &passwd_fn)
 //!     .expect("Must be able to sign its own metadata");
 //! let public_key = signed_secret_key.public_key();
 //! ```
