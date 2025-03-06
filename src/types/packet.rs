@@ -1,12 +1,10 @@
 use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::Buf;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::errors::Result;
-use crate::parsing::BufParsing;
 use crate::parsing_reader::BufReadParsing;
 
 /// Represents the packet length.
@@ -29,29 +27,7 @@ impl PacketLength {
         }
     }
 
-    pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
-        let olen = i.read_u8()?;
-        let len = match olen {
-            // One-Octet Lengths
-            0..=191 => PacketLength::Fixed(olen.into()),
-            // Two-Octet Lengths
-            192..=223 => {
-                let a = i.read_u8()?;
-                let l = ((olen as u32 - 192) << 8) + 192 + a as u32;
-                PacketLength::Fixed(l)
-            }
-            // Partial Body Lengths
-            224..=254 => PacketLength::Partial(1 << (olen as usize & 0x1F)),
-            // Five-Octet Lengths
-            255 => {
-                let len = i.read_be_u32()?;
-                PacketLength::Fixed(len)
-            }
-        };
-        Ok(len)
-    }
-
-    pub fn from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
+    pub fn try_from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
         let olen = r.read_u8()?;
         let len = match olen {
             // One-Octet Lengths

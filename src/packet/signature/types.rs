@@ -2,7 +2,7 @@ use std::io::{BufRead, Read};
 
 use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
 use digest::DynDigest;
 use log::debug;

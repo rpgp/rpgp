@@ -165,7 +165,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                             LimitedSource::Partial(r) => {
                                 // new round
                                 let mut source = r.into_inner();
-                                let packet_length = PacketLength::from_reader(&mut source)?;
+                                let packet_length = PacketLength::try_from_reader(&mut source)?;
 
                                 let source = match packet_length {
                                     PacketLength::Fixed(len) => {
