@@ -1,5 +1,5 @@
 use log::debug;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
@@ -37,6 +37,22 @@ pub enum PlainSessionKey {
         #[debug("..")]
         key: Vec<u8>,
     },
+
+    /// If the version is unknown, it will be matched to the packets
+    Unknown {
+        sym_alg: SymmetricKeyAlgorithm,
+        #[debug("..")]
+        key: Vec<u8>,
+    },
+}
+
+impl PlainSessionKey {
+    pub fn unknown(sym_alg: SymmetricKeyAlgorithm, key: impl AsRef<[u8]>) -> Self {
+        Self::Unknown {
+            sym_alg,
+            key: key.as_ref().to_vec(),
+        }
+    }
 }
 
 /// Decrypts session key from SKESK packet.

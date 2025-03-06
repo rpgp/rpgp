@@ -75,22 +75,6 @@ pub enum Esk {
     SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey),
 }
 
-impl Serialize for Esk {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            Esk::PublicKeyEncryptedSessionKey(k) => k.to_writer_with_header(writer),
-            Esk::SymKeyEncryptedSessionKey(k) => k.to_writer_with_header(writer),
-        }
-    }
-
-    fn write_len(&self) -> usize {
-        match self {
-            Esk::PublicKeyEncryptedSessionKey(k) => k.write_len_with_header(),
-            Esk::SymKeyEncryptedSessionKey(k) => k.write_len_with_header(),
-        }
-    }
-}
-
 impl_try_from_into!(
     Esk,
     PublicKeyEncryptedSessionKey => PublicKeyEncryptedSessionKey,
@@ -123,6 +107,22 @@ impl From<Esk> for Packet {
         match other {
             Esk::PublicKeyEncryptedSessionKey(k) => Packet::PublicKeyEncryptedSessionKey(k),
             Esk::SymKeyEncryptedSessionKey(k) => Packet::SymKeyEncryptedSessionKey(k),
+        }
+    }
+}
+
+impl Serialize for Esk {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.to_writer_with_header(writer),
+            Esk::SymKeyEncryptedSessionKey(k) => k.to_writer_with_header(writer),
+        }
+    }
+
+    fn write_len(&self) -> usize {
+        match self {
+            Esk::PublicKeyEncryptedSessionKey(k) => k.write_len_with_header(),
+            Esk::SymKeyEncryptedSessionKey(k) => k.write_len_with_header(),
         }
     }
 }
@@ -227,6 +227,16 @@ impl<'a> Edata<'a> {
     }
 }
 
+/// The result of signature verification
+pub struct VerificationResult {
+    /// None, if no signature was found for this key
+    pub signature: Option<Signature>,
+    /// Is this signature valid against hte key?
+    pub is_valid: bool,
+    /// The fingerprint of the key that matched
+    pub key: Fingerprint,
+}
+
 impl<'a> Message<'a> {
     /// Decompresses the data if compressed.
     pub fn decompress(self) -> Result<Self> {
@@ -242,8 +252,20 @@ impl<'a> Message<'a> {
     /// they are decompressed and checked for signatures to verify.
     ///
     /// Decompresses up to one layer of compressed data.
-    pub fn verify(self, key: &impl PublicKeyTrait) -> Result<()> {
-        self.verify_internal(key, true)
+    pub fn verify<K: PublicKeyTrait>(self, key: &K) -> Result<Signature> {
+        let mut results = self.verify_many(&[key])?;
+        let res = results.pop().expect("by construction");
+        debug_assert_eq!(res.key, key.fingerprint());
+
+        ensure!(res.is_valid, "invalid signature");
+        let Some(signature) = res.signature else {
+            bail!("no matching signature found for {:?}", res.key);
+        };
+        Ok(signature)
+    }
+
+    pub fn verify_many(self, keys: &[&dyn PublicKeyTrait]) -> Result<Vec<VerificationResult>> {
+        todo!()
     }
 
     /// Verifies this message.
@@ -345,7 +367,7 @@ impl<'a> Message<'a> {
         self,
         key_pws: &[Password],
         keys: &[&SignedSecretKey],
-    ) -> Result<(Message<'a>, Vec<KeyId>)> {
+    ) -> Result<(Message<'a>, Vec<Fingerprint>)> {
         match self {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("not encrypted");
@@ -419,13 +441,13 @@ impl<'a> Message<'a> {
                             let session_key = ek.unlock(key_pw, |pub_params, priv_key| {
                                 priv_key.decrypt(pub_params, values, typ, &ek.public_key())
                             })?;
-                            Ok((ek.key_id(), session_key))
+                            Ok((ek.fingerprint(), session_key))
                         } else if let Some(ek) = encoding_subkey {
                             let values = pkesk.values()?;
                             let session_key = ek.unlock(key_pw, |pub_params, priv_key| {
                                 priv_key.decrypt(pub_params, values, typ, &ek.public_key())
                             })?;
-                            Ok((ek.key_id(), session_key))
+                            Ok((ek.fingerprint(), session_key))
                         } else {
                             unreachable!("either a key or a subkey were found");
                         }
@@ -482,6 +504,10 @@ impl<'a> Message<'a> {
                 edata.decrypt(session_key)
             }
         }
+    }
+
+    pub fn decrypt_with_session_key(self, session_key: PlainSessionKey) -> Result<Message<'a>> {
+        todo!()
     }
 
     /// Check if this message is a signature, that was signed with a one pass signature.
