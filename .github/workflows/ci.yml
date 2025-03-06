@@ -48,6 +48,9 @@ jobs:
     - name: tests
       run: cargo nextest run --lib --bins --tests --all
 
+    - name: doc tests
+      run: cargo test --doc
+
     - name: asm
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
@@ -157,7 +160,7 @@ jobs:
         override: true
 
     - name: Cache cargo registry
-      uses: actions/cache@v2
+      uses: actions/cache@v4
       with:
         path: ~/.cargo/registry
         key: wasm32-${{ matrix.rust }}-cargo-registry-${{ hashFiles('**/Cargo.toml') }}
