@@ -813,10 +813,10 @@ impl BufRead for Message<'_> {
 /// Like a key ring, but better, and more powerful, serving all your decryption needs.
 #[derive(Debug)]
 pub struct TheRing<'a> {
-    secret_keys: Vec<&'a SignedSecretKey>,
-    key_passwords: Vec<Password>,
-    message_password: Vec<Password>,
-    session_keys: Vec<PlainSessionKey>,
+    pub secret_keys: Vec<&'a SignedSecretKey>,
+    pub key_passwords: Vec<Password>,
+    pub message_password: Vec<Password>,
+    pub session_keys: Vec<PlainSessionKey>,
 }
 
 impl<'a> TheRing<'a> {
@@ -826,16 +826,16 @@ impl<'a> TheRing<'a> {
         abort_early: bool,
     ) -> Result<(Option<PlainSessionKey>, RingResult)> {
         let mut result = RingResult {
-            secret_keys: vec![EncryptionResult::Unchecked; self.secret_keys.len()],
-            message_password: vec![EncryptionResult::Unchecked; self.message_password.len()],
-            session_keys: vec![EncryptionResult::Unchecked; self.session_keys.len()],
+            secret_keys: vec![InnerRingResult::Unchecked; self.secret_keys.len()],
+            message_password: vec![InnerRingResult::Unchecked; self.message_password.len()],
+            session_keys: vec![InnerRingResult::Unchecked; self.session_keys.len()],
         };
 
         if abort_early {
             // Do we have a session key already?
             if !self.session_keys.is_empty() {
                 let session_key = self.session_keys.remove(0);
-                result.session_keys[0] = EncryptionResult::Ok;
+                result.session_keys[0] = InnerRingResult::Ok;
                 return Ok((Some(session_key), result));
             }
         }
@@ -855,7 +855,7 @@ impl<'a> TheRing<'a> {
 
         for esk in &pkesks {
             for (i, key) in self.secret_keys.iter().enumerate() {
-                result.secret_keys[i] = EncryptionResult::NoMatch;
+                result.secret_keys[i] = InnerRingResult::NoMatch;
 
                 let typ = match esk.version() {
                     PkeskVersion::V3 => EskType::V3_4,
@@ -881,17 +881,17 @@ impl<'a> TheRing<'a> {
                                     )
                                 }) {
                                     Ok(Ok(session_key)) => {
-                                        result.secret_keys[i] = EncryptionResult::Ok;
+                                        result.secret_keys[i] = InnerRingResult::Ok;
                                         pkesk_session_keys.push((i, session_key));
                                         break;
                                     }
                                     Ok(Err(_err)) => {
-                                        result.secret_keys[i] = EncryptionResult::Invalid;
+                                        result.secret_keys[i] = InnerRingResult::Invalid;
                                         break;
                                     }
                                     Err(_err) => {
                                         // ..
-                                        result.secret_keys[i] = EncryptionResult::InvalidPassword;
+                                        result.secret_keys[i] = InnerRingResult::InvalidPassword;
                                     }
                                 }
                             }
@@ -905,11 +905,11 @@ impl<'a> TheRing<'a> {
                                 &key.primary_key.public_key(),
                             ) {
                                 Ok(session_key) => {
-                                    result.secret_keys[i] = EncryptionResult::Ok;
+                                    result.secret_keys[i] = InnerRingResult::Ok;
                                     pkesk_session_keys.push((i, session_key));
                                 }
                                 Err(_err) => {
-                                    result.secret_keys[i] = EncryptionResult::Invalid;
+                                    result.secret_keys[i] = InnerRingResult::Invalid;
                                 }
                             }
                         }
@@ -1005,13 +1005,13 @@ impl<'a> TheRing<'a> {
 /// This is what happens if you use `TheRing`.
 #[derive(Debug)]
 pub struct RingResult {
-    secret_keys: Vec<EncryptionResult>,
-    message_password: Vec<EncryptionResult>,
-    session_keys: Vec<EncryptionResult>,
+    secret_keys: Vec<InnerRingResult>,
+    message_password: Vec<InnerRingResult>,
+    session_keys: Vec<InnerRingResult>,
 }
 
 #[derive(Debug, Clone)]
-pub enum EncryptionResult {
+pub enum InnerRingResult {
     /// Value was not checked, due to either an earlier error
     /// or another mechanism already matching
     Unchecked,
