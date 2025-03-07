@@ -125,19 +125,6 @@ impl<'a> SigningConfig<'a> {
     }
 }
 
-/// Configures the version specific parts of
-/// the Symmetric Encrypted and Integrity Data Packet.
-pub enum Seipd {
-    /// Version 1
-    V1 { sym_alg: SymmetricKeyAlgorithm },
-    /// Version 2
-    V2 {
-        sym_alg: SymmetricKeyAlgorithm,
-        aead: AeadAlgorithm,
-        chunk_size: ChunkSize,
-    },
-}
-
 /// The default chunk size for partial packets.
 pub const DEFAULT_PARTIAL_CHUNK_SIZE: u32 = 1024 * 512;
 

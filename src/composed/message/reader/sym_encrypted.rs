@@ -45,6 +45,10 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
         })
     }
 
+    pub(crate) fn new_done(source: PacketBodyReader<R>) -> Self {
+        Self::Done { source }
+    }
+
     pub fn is_done(&self) -> bool {
         matches!(self, Self::Done { .. })
     }

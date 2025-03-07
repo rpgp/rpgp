@@ -9,7 +9,8 @@ use crate::composed::signed_key::SignedSecretKey;
 use crate::errors::{Error, Result};
 use crate::packet::{
     LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
-    PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
+    PublicKeyEncryptedSessionKey, Signature, SymEncryptedProtectedDataConfig,
+    SymKeyEncryptedSessionKey,
 };
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
@@ -61,11 +62,11 @@ pub(crate) enum MessageParts {
         packet_header: PacketHeader,
     },
     Signed {
-        packet_header: PacketHeader,
         signature: Signature,
+        hash: Box<[u8]>,
+        parts: Box<MessageParts>,
     },
     SignedOnePass {
-        packet_header: PacketHeader,
         one_pass_signature: OnePassSignature,
         hash: Box<[u8]>,
         signature: Signature,
@@ -74,7 +75,7 @@ pub(crate) enum MessageParts {
     Encrypted {
         packet_header: PacketHeader,
         esk: Vec<Esk>,
-        is_protected: bool,
+        config: Option<SymEncryptedProtectedDataConfig>,
     },
 }
 
@@ -103,13 +104,16 @@ impl<'a> Message<'a> {
             }
             Message::Signed { signature, reader } => {
                 assert!(reader.is_done());
-                let reader = reader.into_inner();
-                let packet_header = reader.packet_header();
+                let SignatureBodyReader::Done { hash, source } = reader else {
+                    panic!("invalid state");
+                };
+                let (reader, parts) = source.into_parts();
                 (
-                    reader.into_inner(),
+                    reader,
                     MessageParts::Signed {
-                        packet_header,
                         signature,
+                        hash,
+                        parts: Box::new(parts),
                     },
                 )
             }
@@ -126,12 +130,10 @@ impl<'a> Message<'a> {
                     panic!("invalid state");
                 };
 
-                let packet_header = source.packet_header();
                 let (reader, parts) = source.into_parts();
                 (
                     reader,
                     MessageParts::SignedOnePass {
-                        packet_header,
                         one_pass_signature,
                         hash,
                         signature,
@@ -148,19 +150,20 @@ impl<'a> Message<'a> {
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
-                            is_protected: false,
+                            config: None,
                         },
                     )
                 }
                 Edata::SymEncryptedProtectedData { reader } => {
                     assert!(reader.is_done());
                     let packet_header = reader.packet_header();
+                    let config = Some(reader.config().clone());
                     (
                         reader.into_inner().into_inner(),
                         MessageParts::Encrypted {
                             packet_header,
                             esk,
-                            is_protected: true,
+                            config,
                         },
                     )
                 }
@@ -188,28 +191,50 @@ impl MessageParts {
                 )),
             },
             MessageParts::Signed {
-                packet_header,
                 signature,
-            } => todo!(),
+                parts,
+                hash,
+            } => {
+                let source = parts.into_message(reader);
+                Message::Signed {
+                    signature,
+                    reader: SignatureBodyReader::Done {
+                        source: Box::new(source),
+                        hash,
+                    },
+                }
+            }
             MessageParts::SignedOnePass {
-                packet_header,
                 one_pass_signature,
                 hash,
                 signature,
                 parts,
-            } => Message::SignedOnePass {
-                one_pass_signature,
-                reader: SignatureOnePassReader::Done {
-                    hash,
-                    source: Box::new(parts.into_message(reader)),
-                    signature,
-                },
-            },
+            } => {
+                let source = parts.into_message(reader);
+                Message::SignedOnePass {
+                    one_pass_signature,
+                    reader: SignatureOnePassReader::Done {
+                        hash,
+                        source: Box::new(source),
+                        signature,
+                    },
+                }
+            }
             MessageParts::Encrypted {
                 packet_header,
                 esk,
-                is_protected,
-            } => todo!(),
+                config,
+            } => {
+                let reader = PacketBodyReader::new_done(packet_header, reader);
+                let edata = if let Some(config) = config {
+                    let reader = SymEncryptedProtectedDataReader::new_done(config, reader);
+                    Edata::SymEncryptedProtectedData { reader }
+                } else {
+                    let reader = SymEncryptedDataReader::new_done(reader);
+                    Edata::SymEncryptedData { reader }
+                };
+                Message::Encrypted { esk, edata }
+            }
         }
     }
 }

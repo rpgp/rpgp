@@ -36,6 +36,13 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
         })
     }
 
+    pub(crate) fn new_done(
+        config: SymEncryptedProtectedDataConfig,
+        source: PacketBodyReader<R>,
+    ) -> Self {
+        Self::Done { source, config }
+    }
+
     pub fn config(&self) -> &SymEncryptedProtectedDataConfig {
         match self {
             Self::Body { config, .. } => config,
