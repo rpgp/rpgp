@@ -5,12 +5,13 @@ use std::path::Path;
 
 use crate::armor::BlockType;
 use crate::composed::message::Message;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::packet::Packet;
+use crate::parsing_reader::BufReadParsing;
 use crate::types::Tag;
 
 use super::reader::{CompressedDataReader, LiteralDataReader};
-use super::{SignatureBodyReader, SignatureOnePassReader, SignatureVerifier};
+use super::{SignatureBodyReader, SignatureOnePassReader};
 
 pub struct MessageParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
@@ -61,7 +62,6 @@ fn next<'a>(
                 let Some(inner_message) = next(packets)? else {
                     bail!("missing next packet");
                 };
-                let verifier = SignatureVerifier::from_signature(&signature)?;
                 let reader = SignatureBodyReader::new(&signature, Box::new(inner_message))?;
                 let message = Message::Signed { signature, reader };
                 return Ok(Some(message));
@@ -82,7 +82,6 @@ fn next<'a>(
 
                 let reader =
                     SignatureOnePassReader::new(&one_pass_signature, Box::new(inner_message))?;
-                let verifier = SignatureVerifier::from_one_pass(&one_pass_signature)?;
                 let message = Message::SignedOnePass {
                     one_pass_signature,
                     reader,
@@ -105,14 +104,12 @@ fn next<'a>(
             }
             Tag::Padding => {
                 // drain reader
-                let mut sink = std::io::sink();
-                std::io::copy(&mut packet, &mut sink)?;
+                packet.drain()?;
                 packets = crate::packet::PacketParser::new(packet.into_inner());
             }
             Tag::Marker => {
                 // drain reader
-                let mut sink = std::io::sink();
-                std::io::copy(&mut packet, &mut sink)?;
+                packet.drain()?;
                 packets = crate::packet::PacketParser::new(packet.into_inner());
             }
             _ => {
@@ -380,225 +377,21 @@ impl<'a> Message<'a> {
     }
 }
 
-struct MessageState {
-    /// List of all message types seen so far
-    types: Vec<MessageType>,
-}
-
-impl MessageState {
-    /// Inserts the typ, if it is valid to apper, otherwise errors
-    fn try_push(&mut self, typ: MessageType) -> Result<()> {
-        match typ {
-            MessageType::Marker => Ok(()),
-            MessageType::Padding => Ok(()),
-            _ => todo!(),
-        }
-    }
-}
-
-enum MessageType {
-    PublicKeyEncryptedSessionKey,
-    SymKeyEncryptedSessionKey,
-    LiteralData,
-    CompressedData,
-    SymEncryptedData,
-    SymEncryptedProtectedData,
-    Signature,
-    OnePassSignature,
-    Marker,
-    Padding,
-}
-
-impl TryFrom<Tag> for MessageType {
-    type Error = Error;
-
-    fn try_from(tag: Tag) -> std::result::Result<Self, Self::Error> {
-        match tag {
-            Tag::PublicKeyEncryptedSessionKey => Ok(Self::PublicKeyEncryptedSessionKey),
-            Tag::SymKeyEncryptedSessionKey => Ok(Self::SymKeyEncryptedSessionKey),
-            Tag::LiteralData => Ok(Self::LiteralData),
-            Tag::CompressedData => Ok(Self::CompressedData),
-            Tag::SymEncryptedData => Ok(Self::SymEncryptedData),
-            Tag::SymEncryptedProtectedData => Ok(Self::SymEncryptedProtectedData),
-            Tag::Signature => Ok(Self::Signature),
-            Tag::OnePassSignature => Ok(Self::OnePassSignature),
-            Tag::Marker => Ok(Self::Marker),
-            Tag::Padding => Ok(Self::Padding),
-            _ => Err(format_err!("unexpected message packet {:?}", tag)),
-        }
-    }
-}
-
-mod bla {
-    use crate::errors::Result;
-    use crate::reader::PacketBodyReader;
-    use crate::types::Tag;
-    use std::io::{BufRead, Read};
-
-    // OpenPGP Message:
-    // Encrypted Message | Signed Message | Compressed Message | Literal Message.
-    enum M<'a, R> {
-        Encrypted(EM<R>),
-        Signed(SM<'a, R>),
-        Compressed(CM<R>),
-        Literal(LM<'a>),
-    }
-
-    // Compressed Message:
-    // Compressed Data Packet.
-    struct CM<R>(R);
-
-    // Literal Message:
-    // Literal Data Packet.
-    struct LM<'a>(Box<dyn BufRead + 'a>);
-
-    // ESK:
-    // Public Key Encrypted Session Key Packet | Symmetric Key Encrypted Session Key Packet.
-    enum Esk {
-        Pkesk,
-        Skesk,
-    }
-
-    // ESK Sequence:
-    // ESK | ESK Sequence, ESK.
-
-    // Encrypted Data:
-    // Symmetrically Encrypted Data Packet | Symmetrically Encrypted and Integrity Protected Data Packet.
-    enum Edata<R> {
-        SEDP(R),
-        SEAIPDP(R),
-    }
-
-    // Encrypted Message:
-    // Encrypted Data | ESK Sequence, Encrypted Data.
-    struct EM<R> {
-        esk_sequence: Vec<Esk>, // maybe empty
-        data: Edata<R>,
-    }
-
-    // One-Pass Signed Message:
-    // One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
-    struct OpSig;
-    struct Sig;
-
-    // Signed Message:
-    // Signature Packet, OpenPGP Message | One-Pass Signed Message.
-    struct SM<'a, R> {
-        ops: Option<OpSig>,
-        message: Box<M<'a, R>>,
-        sig: Sig,
-    }
-    // Optionally Padded Message:
-    // OpenPGP Message | OpenPGP Message, Padding Packet
-
-    struct Decryptor<R> {
-        source: EM<R>,
-        key: (),
-    }
-
-    impl<R: BufRead> Read for Decryptor<R> {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            todo!()
-        }
-    }
-    impl<R: BufRead> BufRead for Decryptor<R> {
-        fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
-            todo!()
-        }
-
-        fn consume(&mut self, amt: usize) {
-            todo!()
-        }
-    }
-
-    fn parse_until_literal<'a, R: BufRead + 'a>(source: R, key: ()) -> Result<LM<'a>> {
-        let packet_parser = crate::packet::PacketParser::new(source);
-        match parse(packet_parser)? {
-            Some(M::Encrypted(e)) => {
-                let dec = Decryptor { source: e, key };
-                parse_until_literal(dec, key)
-            }
-            Some(M::Signed(s)) => {
-                todo!()
-            }
-            Some(M::Compressed(c)) => {
-                todo!()
-            }
-            Some(M::Literal(l)) => Ok(l),
-            None => bail!("no literal packet found"),
-        }
-    }
-
-    /// parses a single message level
-    fn parse<'a, R: BufRead + 'a>(
-        mut packets: crate::packet::PacketParser<R>,
-    ) -> Result<Option<M<'a, PacketBodyReader<R>>>> {
-        loop {
-            let Some(packet) = packets.next_owned() else {
-                return Ok(None);
-            };
-            let mut packet = packet?;
-
-            // Handle 1 OpenPGP Message per loop iteration
-            let tag = packet.packet_header().tag();
-
-            match tag {
-                Tag::SymKeyEncryptedSessionKey | Tag::PublicKeyEncryptedSessionKey => {
-                    // (a) Encrypted Message:
-                    //   - ESK Seq
-                    //   - Encrypted Data -> OpenPGP Message
-
-                    // example
-                    let mut packet_buf = Vec::new();
-                    packet.read_to_end(&mut packet_buf)?;
-                    packets = crate::packet::PacketParser::new(packet.into_inner());
-                    let Some(packet) = packets.next_owned() else {
-                        bail!("missing next packet");
-                    };
-
-                    let packet = packet?;
-                    return Ok(Some(M::Encrypted(EM {
-                        esk_sequence: vec![Esk::Pkesk],
-                        data: Edata::SEDP(packet),
-                    })));
-                }
-                Tag::Signature | Tag::OnePassSignature => {
-                    // (b) Signed Message
-                    //   (1) Signature Packet, OpenPGP Message
-                    //      - Signature Packet
-                    //      - OpenPGP Message
-                    //   (2) One-Pass Signed Message.
-                    //      - OPS
-                    //      - OpenPgp Message
-                    //      - Signature Packet
-                    todo!()
-                }
-                Tag::CompressedData => {
-                    // (c) Compressed Message
-                    //   - Compressed Packet
-                    return Ok(Some(M::Compressed(CM(packet))));
-                }
-                Tag::LiteralData => {
-                    // (d) Literal Message
-                    //   - Literal Packet
-                    return Ok(Some(M::Literal(LM(Box::new(packet)))));
-                }
-                Tag::Padding => {
-                    // drain reader
-                    let mut sink = std::io::sink();
-                    std::io::copy(&mut packet, &mut sink)?;
-                    packets = crate::packet::PacketParser::new(packet.into_inner());
-                }
-                Tag::Marker => {
-                    // drain reader
-                    let mut sink = std::io::sink();
-                    std::io::copy(&mut packet, &mut sink)?;
-                    packets = crate::packet::PacketParser::new(packet.into_inner());
-                }
-                _ => {
-                    bail!("unexpected packet type: {:?}", tag);
-                }
-            }
-        }
-    }
-}
+// recursive read
+// fn parse_until_literal<'a, R: BufRead + 'a>(source: R, key: ()) -> Result<LM<'a>> {
+//     let packet_parser = crate::packet::PacketParser::new(source);
+//     match parse(packet_parser)? {
+//         Some(M::Encrypted(e)) => {
+//             let dec = Decryptor { source: e, key };
+//             parse_until_literal(dec, key)
+//         }
+//         Some(M::Signed(s)) => {
+//             todo!()
+//         }
+//         Some(M::Compressed(c)) => {
+//             todo!()
+//         }
+//         Some(M::Literal(l)) => Ok(l),
+//         None => bail!("no literal packet found"),
+//     }
+// }
