@@ -10,8 +10,9 @@ use crate::packet::Packet;
 use crate::parsing_reader::BufReadParsing;
 use crate::types::Tag;
 
-use super::reader::{CompressedDataReader, LiteralDataReader};
-use super::{SignatureBodyReader, SignatureOnePassReader};
+use super::reader::{
+    CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
+};
 
 pub struct MessageParser<I: Sized + Iterator<Item = Result<Packet>>> {
     source: Peekable<I>,
