@@ -181,21 +181,6 @@ impl SymmetricKeyAlgorithm {
         prefix: &mut [u8],
         ciphertext: &mut Vec<u8>,
     ) -> Result<()> {
-        #[inline]
-        fn calculate_sha1_unchecked<I, T>(data: I) -> [u8; 20]
-        where
-            T: AsRef<[u8]>,
-            I: IntoIterator<Item = T>,
-        {
-            use sha1::{Digest, Sha1};
-
-            let mut digest = Sha1::new();
-            for chunk in data {
-                digest.update(chunk.as_ref());
-            }
-            digest.finalize().into()
-        }
-
         debug!("protected decrypt");
 
         let iv_vec = vec![0u8; self.block_size()];
@@ -475,6 +460,54 @@ impl SymmetricKeyAlgorithm {
             )),
             SymmetricKeyAlgorithm::Camellia256 => Ok(StreamEncryptor::Camellia256(
                 StreamEncryptorInner::new(rng, plaintext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
+            }
+        }
+    }
+
+    /// Protected decryption stream
+    pub fn stream_decryptor<R>(self, key: &[u8], ciphertext: R) -> Result<StreamDecryptor<R>>
+    where
+        R: std::io::BufRead,
+    {
+        match self {
+            SymmetricKeyAlgorithm::Plaintext => {
+                bail!("'Plaintext' is not a legal cipher for encrypted data")
+            }
+            SymmetricKeyAlgorithm::IDEA => Ok(StreamDecryptor::Idea(StreamDecryptorInner::new(
+                ciphertext, self, key,
+            )?)),
+            SymmetricKeyAlgorithm::TripleDES => Ok(StreamDecryptor::TripleDes(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::CAST5 => Ok(StreamDecryptor::Cast5(StreamDecryptorInner::new(
+                ciphertext, self, key,
+            )?)),
+            SymmetricKeyAlgorithm::Blowfish => Ok(StreamDecryptor::Blowfish(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::AES128 => Ok(StreamDecryptor::Aes128(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::AES192 => Ok(StreamDecryptor::Aes192(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::AES256 => Ok(StreamDecryptor::Aes256(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::Twofish => Ok(StreamDecryptor::Twofish(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::Camellia128 => Ok(StreamDecryptor::Camellia128(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::Camellia192 => Ok(StreamDecryptor::Camellia192(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
+            )),
+            SymmetricKeyAlgorithm::Camellia256 => Ok(StreamDecryptor::Camellia256(
+                StreamDecryptorInner::new(ciphertext, self, key)?,
             )),
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
@@ -882,6 +915,346 @@ where
             }
         }
     }
+}
+
+#[derive(Debug)]
+pub enum StreamDecryptor<R>
+where
+    R: std::io::BufRead,
+{
+    Idea(StreamDecryptorInner<Idea, R>),
+    TripleDes(StreamDecryptorInner<TdesEde3, R>),
+    Cast5(StreamDecryptorInner<Cast5, R>),
+    Blowfish(StreamDecryptorInner<Blowfish, R>),
+    Aes128(StreamDecryptorInner<Aes128, R>),
+    Aes192(StreamDecryptorInner<Aes192, R>),
+    Aes256(StreamDecryptorInner<Aes256, R>),
+    Twofish(StreamDecryptorInner<Twofish, R>),
+    Camellia128(StreamDecryptorInner<Camellia128, R>),
+    Camellia192(StreamDecryptorInner<Camellia192, R>),
+    Camellia256(StreamDecryptorInner<Camellia256, R>),
+}
+
+impl<R> std::io::BufRead for StreamDecryptor<R>
+where
+    R: std::io::BufRead,
+{
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        match self {
+            Self::Idea(i) => i.fill_buf(),
+            Self::TripleDes(i) => i.fill_buf(),
+            Self::Cast5(i) => i.fill_buf(),
+            Self::Blowfish(i) => i.fill_buf(),
+            Self::Aes128(i) => i.fill_buf(),
+            Self::Aes192(i) => i.fill_buf(),
+            Self::Aes256(i) => i.fill_buf(),
+            Self::Twofish(i) => i.fill_buf(),
+            Self::Camellia128(i) => i.fill_buf(),
+            Self::Camellia192(i) => i.fill_buf(),
+            Self::Camellia256(i) => i.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Idea(i) => i.consume(amt),
+            Self::TripleDes(i) => i.consume(amt),
+            Self::Cast5(i) => i.consume(amt),
+            Self::Blowfish(i) => i.consume(amt),
+            Self::Aes128(i) => i.consume(amt),
+            Self::Aes192(i) => i.consume(amt),
+            Self::Aes256(i) => i.consume(amt),
+            Self::Twofish(i) => i.consume(amt),
+            Self::Camellia128(i) => i.consume(amt),
+            Self::Camellia192(i) => i.consume(amt),
+            Self::Camellia256(i) => i.consume(amt),
+        }
+    }
+}
+
+impl<R> std::io::Read for StreamDecryptor<R>
+where
+    R: std::io::BufRead,
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Idea(i) => i.read(buf),
+            Self::TripleDes(i) => i.read(buf),
+            Self::Cast5(i) => i.read(buf),
+            Self::Blowfish(i) => i.read(buf),
+            Self::Aes128(i) => i.read(buf),
+            Self::Aes192(i) => i.read(buf),
+            Self::Aes256(i) => i.read(buf),
+            Self::Twofish(i) => i.read(buf),
+            Self::Camellia128(i) => i.read(buf),
+            Self::Camellia192(i) => i.read(buf),
+            Self::Camellia256(i) => i.read(buf),
+        }
+    }
+}
+
+impl<R> StreamDecryptor<R>
+where
+    R: std::io::BufRead,
+{
+    pub fn into_inner(self) -> R {
+        match self {
+            Self::Idea(i) => i.into_inner(),
+            Self::TripleDes(i) => i.into_inner(),
+            Self::Cast5(i) => i.into_inner(),
+            Self::Blowfish(i) => i.into_inner(),
+            Self::Aes128(i) => i.into_inner(),
+            Self::Aes192(i) => i.into_inner(),
+            Self::Aes256(i) => i.into_inner(),
+            Self::Twofish(i) => i.into_inner(),
+            Self::Camellia128(i) => i.into_inner(),
+            Self::Camellia192(i) => i.into_inner(),
+            Self::Camellia256(i) => i.into_inner(),
+        }
+    }
+
+    pub fn get_ref(&self) -> &R {
+        match self {
+            Self::Idea(i) => i.get_ref(),
+            Self::TripleDes(i) => i.get_ref(),
+            Self::Cast5(i) => i.get_ref(),
+            Self::Blowfish(i) => i.get_ref(),
+            Self::Aes128(i) => i.get_ref(),
+            Self::Aes192(i) => i.get_ref(),
+            Self::Aes256(i) => i.get_ref(),
+            Self::Twofish(i) => i.get_ref(),
+            Self::Camellia128(i) => i.get_ref(),
+            Self::Camellia192(i) => i.get_ref(),
+            Self::Camellia256(i) => i.get_ref(),
+        }
+    }
+}
+
+#[derive(derive_more::Debug)]
+pub enum StreamDecryptorInner<M, R>
+where
+    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufDecryptor<M>: KeyIvInit,
+    R: std::io::BufRead,
+{
+    Prefix {
+        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
+        hasher: Sha1,
+        #[debug("BufDecryptor")]
+        decryptor: BufDecryptor<M>,
+        prefix: BytesMut,
+        #[debug("source")]
+        source: R,
+    },
+    Data {
+        hasher: Sha1,
+        #[debug("BufDecryptor")]
+        decryptor: BufDecryptor<M>,
+        buffer: BytesMut,
+        #[debug("source")]
+        source: R,
+    },
+    Done {
+        source: R,
+    },
+    Unknown,
+}
+
+impl<M, R> StreamDecryptorInner<M, R>
+where
+    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufDecryptor<M>: KeyIvInit,
+    R: std::io::BufRead,
+{
+    fn new(source: R, alg: SymmetricKeyAlgorithm, key: &[u8]) -> Result<Self> {
+        debug!("protected decrypt stream");
+
+        let bs = alg.block_size();
+
+        // checksum over unencrypted data
+        let hasher = Sha1::default();
+
+        // IV is all zeroes
+        let iv_vec = vec![0u8; bs];
+
+        let encryptor = BufDecryptor::<M>::new_from_slices(key, &iv_vec)?;
+        let prefix_len = bs + 2;
+
+        Ok(Self::Prefix {
+            hasher,
+            decryptor: encryptor,
+            prefix: BytesMut::with_capacity(prefix_len),
+            source,
+        })
+    }
+
+    fn into_inner(self) -> R {
+        match self {
+            Self::Prefix { source, .. } => source,
+            Self::Data { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Unknown => panic!("error state"),
+        }
+    }
+
+    fn get_ref(&self) -> &R {
+        match self {
+            Self::Prefix { source, .. } => source,
+            Self::Data { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Unknown => panic!("error state"),
+        }
+    }
+
+    fn buffer_size() -> usize {
+        let block_size = <M as BlockSizeUser>::block_size();
+        block_size * 2
+    }
+
+    fn fill_inner(&mut self) -> std::io::Result<()> {
+        loop {
+            match std::mem::replace(self, Self::Unknown) {
+                Self::Prefix {
+                    mut hasher,
+                    decryptor: mut encryptor,
+                    mut prefix,
+                    mut source,
+                } => {
+                    let bs = <M as BlockSizeUser>::block_size();
+
+                    // reading the prefix
+                    let read = fill_buffer(&mut source, &mut prefix, Some(bs + 2))?;
+                    if read < bs + 2 {
+                        todo!() // error out
+                    }
+
+                    // quick check
+                    encryptor.decrypt(&mut prefix);
+                    if prefix[bs] != prefix[bs - 2] || prefix[bs + 1] != prefix[bs - 1] {
+                        todo!()
+                        // prefix error
+                    }
+
+                    hasher.update(&prefix);
+
+                    *self = Self::Data {
+                        hasher,
+                        decryptor: encryptor,
+                        buffer: BytesMut::with_capacity(Self::buffer_size()),
+                        source,
+                    };
+                    // continue to data
+                }
+                Self::Data {
+                    mut hasher,
+                    decryptor: mut encryptor,
+                    mut buffer,
+                    mut source,
+                } => {
+                    if buffer.has_remaining() {
+                        *self = Self::Data {
+                            hasher,
+                            decryptor: encryptor,
+                            buffer,
+                            source,
+                        };
+
+                        return Ok(());
+                    }
+
+                    // fill buffer
+                    let buf_size = Self::buffer_size();
+                    buffer.resize(buf_size, 0);
+                    let read = fill_buffer(&mut source, &mut buffer, Some(buf_size))?;
+                    buffer.truncate(read);
+
+                    encryptor.decrypt(&mut buffer);
+
+                    if read < buf_size {
+                        // last read
+
+                        // grab the MDC from the end
+
+                        const MDC_LEN: usize = 22;
+                        // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+                        let mdc = buffer.split_off(buffer.len() - MDC_LEN);
+
+                        hasher.update(&buffer);
+                        hasher.update(&mdc[..2]);
+                        let sha1: [u8; 20] = hasher.finalize().into();
+
+                        if mdc[0] != 0xD3 || // Invalid MDC tag
+                            mdc[1] != 0x14 || // Invalid MDC length
+                            mdc[2..] != sha1[..]
+                        {
+                            todo!()
+                            // return Err(Error::MdcError);
+                        }
+
+                        *self = Self::Done { source };
+                    } else {
+                        hasher.update(&buffer);
+
+                        *self = Self::Data {
+                            hasher,
+                            decryptor: encryptor,
+                            buffer,
+                            source,
+                        };
+                    }
+                    return Ok(());
+                }
+                Self::Done { source } => {
+                    *self = Self::Done { source };
+                    return Ok(());
+                }
+                Self::Unknown => panic!("error state"),
+            }
+        }
+    }
+}
+
+impl<M, R> std::io::BufRead for StreamDecryptorInner<M, R>
+where
+    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufDecryptor<M>: KeyIvInit,
+    R: std::io::BufRead,
+{
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        self.fill_inner()?;
+        todo!()
+    }
+
+    fn consume(&mut self, amt: usize) {
+        todo!()
+    }
+}
+
+impl<M, R> std::io::Read for StreamDecryptorInner<M, R>
+where
+    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufDecryptor<M>: KeyIvInit,
+    R: std::io::BufRead,
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.fill_inner()?;
+        todo!()
+    }
+}
+
+#[inline]
+fn calculate_sha1_unchecked<I, T>(data: I) -> [u8; 20]
+where
+    T: AsRef<[u8]>,
+    I: IntoIterator<Item = T>,
+{
+    use sha1::{Digest, Sha1};
+
+    let mut digest = Sha1::new();
+    for chunk in data {
+        digest.update(chunk.as_ref());
+    }
+    digest.finalize().into()
 }
 
 #[cfg(test)]

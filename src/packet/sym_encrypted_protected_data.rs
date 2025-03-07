@@ -546,10 +546,8 @@ impl<R: io::Read> io::Read for StreamEncryptor<R> {
 }
 
 #[derive(Debug)]
-pub enum StreamDecryptor {
-    V1 {
-        sym_alg: SymmetricKeyAlgorithm,
-    },
+pub enum StreamDecryptor<R: BufRead> {
+    V1(crate::crypto::sym::StreamDecryptor<R>),
     V2 {
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
@@ -565,9 +563,49 @@ pub enum StreamDecryptor {
     },
 }
 
-impl StreamDecryptor {
-    pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8]) -> Result<Self> {
-        todo!()
+impl<R: BufRead> BufRead for StreamDecryptor<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::V1(r) => r.fill_buf(),
+            Self::V2 { .. } => todo!(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::V1(r) => r.consume(amt),
+            Self::V2 { .. } => todo!(),
+        }
+    }
+}
+
+impl<R: BufRead> Read for StreamDecryptor<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::V1(r) => r.read(buf),
+            Self::V2 { .. } => todo!(),
+        }
+    }
+}
+
+impl<R: BufRead> StreamDecryptor<R> {
+    pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8], source: R) -> Result<Self> {
+        let decryptor = sym_alg.stream_decryptor(key, source)?;
+        Ok(Self::V1(decryptor))
+    }
+
+    pub fn into_inner(self) -> R {
+        match self {
+            Self::V1(r) => r.into_inner(),
+            Self::V2 { .. } => todo!(),
+        }
+    }
+
+    pub fn get_ref(&self) -> &R {
+        match self {
+            Self::V1(r) => r.get_ref(),
+            Self::V2 { .. } => todo!(),
+        }
     }
 
     pub fn buffer_size(&self) -> usize {
@@ -668,6 +706,7 @@ impl StreamDecryptor {
         chunk_size: ChunkSize,
         salt: &[u8; 32],
         key: &[u8],
+        source: R,
     ) -> Result<Self> {
         // Initial key material is the session key.
         let ikm = key;

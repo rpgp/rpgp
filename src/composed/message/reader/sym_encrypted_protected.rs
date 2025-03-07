@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Read};
 
-use bytes::{Buf, BytesMut};
+use bytes::Buf;
 
 use crate::crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm};
 use crate::errors::Result;
@@ -17,16 +17,61 @@ pub enum SymEncryptedProtectedDataReader<R: BufRead> {
         config: SymEncryptedProtectedDataConfig,
     },
     Body {
-        source: PacketBodyReader<R>,
-        buffer: BytesMut,
         config: SymEncryptedProtectedDataConfig,
-        decryptor: Option<StreamDecryptor>,
+        decryptor: MaybeDecryptor<PacketBodyReader<R>>,
     },
     Done {
         source: PacketBodyReader<R>,
         config: SymEncryptedProtectedDataConfig,
     },
     Error,
+}
+
+#[derive(derive_more::Debug)]
+enum MaybeDecryptor<R: BufRead> {
+    Raw(#[debug("R")] R),
+    Decryptor(StreamDecryptor<R>),
+}
+
+impl<R: BufRead> MaybeDecryptor<R> {
+    fn into_inner(self) -> R {
+        match self {
+            Self::Raw(r) => r,
+            Self::Decryptor(r) => r.into_inner(),
+        }
+    }
+
+    fn get_ref(&self) -> &R {
+        match self {
+            Self::Raw(r) => r,
+            Self::Decryptor(r) => r.get_ref(),
+        }
+    }
+}
+
+impl<R: BufRead> BufRead for MaybeDecryptor<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::Raw(r) => r.fill_buf(),
+            Self::Decryptor(r) => r.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Raw(r) => r.consume(amt),
+            Self::Decryptor(r) => r.consume(amt),
+        }
+    }
+}
+
+impl<R: BufRead> Read for MaybeDecryptor<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Raw(r) => r.read(buf),
+            Self::Decryptor(r) => r.read(buf),
+        }
+    }
 }
 
 impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
@@ -53,7 +98,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                             PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
                         };
 
-                        StreamDecryptor::v1(*sym_alg, &session_key)?
+                        StreamDecryptor::v1(*sym_alg, &session_key, source)?
                     }
                     SymEncryptedProtectedDataConfig::V2 {
                         sym_alg,
@@ -85,30 +130,18 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                             "Unexpected session key length for {:?}",
                             sym_alg
                         );
-                        StreamDecryptor::v2(sym_alg, aead, chunk_size, &salt, &session_key)?
+                        StreamDecryptor::v2(sym_alg, aead, chunk_size, &salt, &session_key, source)?
                     }
                 };
 
                 *self = Self::Body {
-                    source,
-                    buffer: BytesMut::with_capacity(1024),
                     config,
-                    decryptor: Some(decryptor),
+                    decryptor: MaybeDecryptor::Decryptor(decryptor),
                 };
                 Ok(())
             }
-            Self::Body {
-                source,
-                buffer,
-                config,
-                decryptor,
-            } => {
-                *self = Self::Body {
-                    source,
-                    buffer,
-                    config,
-                    decryptor,
-                };
+            Self::Body { config, decryptor } => {
+                *self = Self::Body { config, decryptor };
                 bail!("cannot decrypt after starting to read")
             }
             Self::Done { source, config } => {
@@ -142,7 +175,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
     pub fn into_inner(self) -> PacketBodyReader<R> {
         match self {
             Self::Init { source, .. } => source,
-            Self::Body { source, .. } => source,
+            Self::Body { decryptor, .. } => decryptor.into_inner(),
             Self::Done { source, .. } => source,
             Self::Error => panic!("error state"),
         }
@@ -151,7 +184,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
     pub fn packet_header(&self) -> PacketHeader {
         match self {
             Self::Init { source, .. } => source.packet_header(),
-            Self::Body { source, .. } => source.packet_header(),
+            Self::Body { decryptor, .. } => decryptor.get_ref().packet_header(),
             Self::Done { source, .. } => source.packet_header(),
             Self::Error => panic!("error state"),
         }
@@ -166,43 +199,22 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
             match std::mem::replace(self, Self::Error) {
                 Self::Init { mut source, config } => {
                     *self = Self::Body {
-                        source,
-                        buffer: BytesMut::with_capacity(1024),
                         config,
-                        decryptor: None,
+                        decryptor: MaybeDecryptor::Raw(source),
                     }
                 }
                 Self::Body {
-                    mut source,
-                    mut buffer,
                     config,
                     mut decryptor,
                 } => {
-                    if buffer.has_remaining() {
-                        *self = Self::Body {
-                            source,
-                            buffer,
+                    let buf = decryptor.fill_buf()?;
+                    if buf.is_empty() {
+                        *self = Self::Done {
+                            source: decryptor.into_inner(),
                             config,
-                            decryptor,
                         };
-                        return Ok(());
-                    }
-
-                    buffer.resize(1024, 0);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-                    buffer.truncate(read);
-
-                    // decrypt data in the buffer
-
-                    if read == 0 {
-                        *self = Self::Done { source, config };
                     } else {
-                        *self = Self::Body {
-                            source,
-                            buffer,
-                            config,
-                            decryptor,
-                        };
+                        *self = Self::Body { config, decryptor };
                     }
                     return Ok(());
                 }
@@ -223,7 +235,8 @@ impl<R: BufRead> BufRead for SymEncryptedProtectedDataReader<R> {
         self.fill_inner()?;
         match self {
             Self::Init { .. } => panic!("invalid state"),
-            Self::Body { ref mut buffer, .. } => Ok(&buffer[..]),
+            Self::Body { decryptor, .. } => decryptor.fill_buf(),
+
             Self::Done { .. } => Ok(&[][..]),
             Self::Error => panic!("error state"),
         }
@@ -232,9 +245,7 @@ impl<R: BufRead> BufRead for SymEncryptedProtectedDataReader<R> {
     fn consume(&mut self, amt: usize) {
         match self {
             Self::Init { .. } => panic!("invalid state"),
-            Self::Body { ref mut buffer, .. } => {
-                buffer.advance(amt);
-            }
+            Self::Body { decryptor, .. } => decryptor.consume(amt),
             Self::Done { .. } => {}
             Self::Error => panic!("error state"),
         }
@@ -246,11 +257,7 @@ impl<R: BufRead> Read for SymEncryptedProtectedDataReader<R> {
         self.fill_inner()?;
         match self {
             Self::Init { .. } => panic!("invalid state"),
-            Self::Body { ref mut buffer, .. } => {
-                let to_write = buffer.remaining().min(buf.len());
-                buffer.copy_to_slice(&mut buf[..to_write]);
-                Ok(to_write)
-            }
+            Self::Body { decryptor, .. } => decryptor.read(buf),
             Self::Done { .. } => Ok(0),
             Self::Error => unreachable!("error state "),
         }
