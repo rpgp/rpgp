@@ -548,7 +548,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::ArmorOptions;
+    use crate::{ArmorOptions, MessageBuilder};
 
     #[test]
     #[ignore]
@@ -673,18 +673,17 @@ mod tests {
             let (msg, header) = Message::from_armor_file(filename).expect("failed to load msg");
 
             dbg!(&header);
-            let decrypted = msg
+            let mut decrypted = msg
                 .decrypt_with_password(&"password".into())
                 .expect("decrypt argon2 skesk");
 
-            // let Message::Literal(data) = decrypted else {
-            //     panic!("expected literal data")
-            // };
+            let data = decrypted.as_data_vec().unwrap();
+            assert_eq!(data, b"Hello, world!");
 
-            // assert_eq!(data.data(), b"Hello, world!");
-
-            // // roundtrip
-            // let armored = msg
+            // roundtrip
+            // TODO: how?
+            // let armored = MessageBuilder::from_bytes(&data[..])
+            //     .seipd_v1(&mut rng, )
             //     .to_armored_string(ArmorOptions {
             //         headers: Some(&header),
             //         include_checksum: false, // No checksum on v6
@@ -700,7 +699,6 @@ mod tests {
             //     .replace('\r', "\n");
 
             // assert_eq!(armored, orig_armored);
-            todo!()
         }
     }
 
@@ -727,17 +725,14 @@ mod tests {
         println!("reading {}", filename);
         let (msg, header) = Message::from_armor_file(filename).expect("parse");
 
-        let decrypted = msg
+        let mut decrypted = msg
             .decrypt_with_password(&"password".into())
             .expect("decrypt");
 
-        todo!()
-        // let Message::Literal(data) = decrypted else {
-        //     panic!("expected literal data")
-        // };
+        let data = decrypted.as_data_vec().unwrap();
+        assert_eq!(data, b"Hello, world!");
 
-        // assert_eq!(data.data(), b"Hello, world!");
-
+        // TODO: how?
         // // roundtrip
         // let armored = msg
         //     .to_armored_string(ArmorOptions {

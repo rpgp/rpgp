@@ -105,7 +105,7 @@ pub trait Encryption: PartialEq {
 
 /// Configures a signing key and how to use it.
 #[derive(Debug)]
-pub struct SigningConfig<'a> {
+struct SigningConfig<'a> {
     /// The key to sign with
     key: &'a dyn SecretKeyTrait,
     /// A password to unlock it
@@ -116,10 +116,7 @@ pub struct SigningConfig<'a> {
 
 impl<'a> SigningConfig<'a> {
     /// Create a new signing configuration.
-    pub fn new<K>(key: &'a K, key_pw: Password, hash: HashAlgorithm) -> Self
-    where
-        K: SecretKeyTrait,
-    {
+    fn new(key: &'a dyn SecretKeyTrait, key_pw: Password, hash: HashAlgorithm) -> Self {
         Self {
             key,
             key_pw,
@@ -447,8 +444,14 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         self
     }
 
-    pub fn sign(mut self, signer: SigningConfig<'a>) -> Self {
-        self.signing.push(signer);
+    pub fn sign(
+        mut self,
+        key: &'a dyn SecretKeyTrait,
+        key_pw: Password,
+        hash_algorithm: HashAlgorithm,
+    ) -> Self {
+        self.signing
+            .push(SigningConfig::new(key, key_pw, hash_algorithm));
         self
     }
 
@@ -1665,9 +1668,10 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap();
 
-            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
-
-            let signed = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
+            let signed = builder
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
+                .to_vec(&mut rng)
+                .expect("writing");
             let mut message = Message::from_bytes(&signed[..]).expect("reading");
 
             check_strings(
@@ -1721,9 +1725,10 @@ mod tests {
                 .encrypt_to_key(&mut rng, &pkey)
                 .expect("encryption");
 
-            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
-
-            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
+            let encrypted = builder
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
+                .to_vec(&mut rng)
+                .expect("writing");
 
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
@@ -1829,9 +1834,10 @@ mod tests {
                 .encrypt_to_key(&mut rng, &pkey)
                 .expect("encryption");
 
-            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
-
-            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
+            let encrypted = builder
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
+                .to_vec(&mut rng)
+                .expect("writing");
 
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
@@ -1911,16 +1917,8 @@ mod tests {
                         ChunkSize::default(),
                     )
                     .encrypt_to_key(&mut rng, &pkey1)?
-                    .sign(SigningConfig::new(
-                        &*skey1,
-                        Password::empty(),
-                        HashAlgorithm::Sha256,
-                    ))
-                    .sign(SigningConfig::new(
-                        &*skey2,
-                        Password::empty(),
-                        HashAlgorithm::Sha512,
-                    ));
+                    .sign(&*skey1, Password::empty(), HashAlgorithm::Sha256)
+                    .sign(&*skey2, Password::empty(), HashAlgorithm::Sha512);
 
                 let message = match encoding {
                     Encoding::Armor(opts) => {
@@ -2002,16 +2000,8 @@ mod tests {
                     .data_mode(DataMode::Utf8)
                     .compression(CompressionAlgorithm::ZIP)
                     .partial_chunk_size(chunk_size)?
-                    .sign(SigningConfig::new(
-                        &*skey1,
-                        Password::empty(),
-                        HashAlgorithm::Sha256,
-                    ))
-                    .sign(SigningConfig::new(
-                        &*skey2,
-                        Password::empty(),
-                        HashAlgorithm::Sha512,
-                    ));
+                    .sign(&*skey1, Password::empty(), HashAlgorithm::Sha256)
+                    .sign(&*skey2, Password::empty(), HashAlgorithm::Sha512);
 
                 let message = match encoding {
                     Encoding::Armor(opts) => {

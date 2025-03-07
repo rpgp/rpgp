@@ -359,16 +359,14 @@ impl From<SignedSecretSubKey> for SignedPublicSubKey {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use bytes::Bytes;
-    use packet::LiteralData;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::crypto::hash::HashAlgorithm;
     use crate::types::{KeyVersion, Password, S2kParams};
-    use crate::SigningConfig;
-    use crate::{composed::shared::Deserializable, Message};
+
+    use crate::{composed::shared::Deserializable, Message, MessageBuilder};
 
     #[test]
     fn test_v6_annex_a_4() -> Result<()> {
@@ -400,12 +398,8 @@ k0mXubZvyl4GBg==
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let pri = &ssk.primary_key;
 
-        let signed = crate::composed::message::Builder::from_bytes("", &b"Hello world"[..])
-            .sign(SigningConfig::new(
-                pri,
-                Password::empty(),
-                HashAlgorithm::Sha256,
-            ))
+        let signed = crate::MessageBuilder::from_bytes("", &b"Hello world"[..])
+            .sign(pri, Password::empty(), HashAlgorithm::Sha256)
             .to_armored_string(&mut rng, ArmorOptions::default())?;
 
         eprintln!("{}", signed);
@@ -444,19 +438,17 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
-
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-        todo!();
-        // let msg = Message::Literal(lit).sign(
-        //     &mut rng,
-        //     &ssk.primary_key,
-        //     &ANNEX_A_5_PASSPHRASE.into(),
-        //     HashAlgorithm::Sha256,
-        // )?;
-        // msg.verify(&ssk.primary_key.public_key())?;
-        // Ok(())
+        let msg = MessageBuilder::from_bytes("", &b"Hello world"[..])
+            .sign(
+                &ssk.primary_key,
+                ANNEX_A_5_PASSPHRASE.into(),
+                HashAlgorithm::Sha256,
+            )
+            .to_vec(&mut rng)?;
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(&ssk.primary_key.public_key())?;
+        Ok(())
     }
 
     #[test]
@@ -464,7 +456,8 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
     fn secret_key_protection_v6() -> Result<()> {
         let _ = pretty_env_logger::try_init();
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
+        let file_name = "";
+        let text = b"Hello world";
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
@@ -476,46 +469,41 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         // remove passphrase
         pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
-        todo!();
+        // try signing without pw
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, Password::empty(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
 
-        // // try signing without pw
-        // let msg = Message::Literal(lit.clone()).sign(
-        //     &mut rng,
-        //     &pri,
-        //     &Password::empty(),
-        //     HashAlgorithm::Sha256,
-        // )?;
-        // msg.verify(pri.public_key())?;
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
 
-        // // set passphrase with default s2k
-        // pri.set_password(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
+        // set passphrase with default s2k
+        pri.set_password(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
 
-        // // try signing with pw
-        // let msg = Message::Literal(lit.clone()).sign(
-        //     &mut rng,
-        //     &pri,
-        //     &ANNEX_A_5_PASSPHRASE.into(),
-        //     HashAlgorithm::Sha256,
-        // )?;
-        // msg.verify(pri.public_key())?;
+        // try signing with pw
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
 
-        // // remove passphrase
-        // pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
 
-        // // set passphrase with Cfb s2k (default for KeyVersion::V4)
-        // pri.set_password_with_s2k(
-        //     &ANNEX_A_5_PASSPHRASE.into(),
-        //     S2kParams::new_default(&mut rng, KeyVersion::V4),
-        // )?;
+        // remove passphrase
+        pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
-        // // try signing with pw
-        // let msg = Message::Literal(lit).sign(
-        //     &mut rng,
-        //     &pri,
-        //     &ANNEX_A_5_PASSPHRASE.into(),
-        //     HashAlgorithm::Sha256,
-        // )?;
-        // msg.verify(pri.public_key())?;
-        // Ok(())
+        // set passphrase with Cfb s2k (default for KeyVersion::V4)
+        pri.set_password_with_s2k(
+            &ANNEX_A_5_PASSPHRASE.into(),
+            S2kParams::new_default(&mut rng, KeyVersion::V4),
+        )?;
+
+        // try signing with pw
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
+
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
+        Ok(())
     }
 }

@@ -26,11 +26,10 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
     use testresult::TestResult;
 
-    use crate::message::Builder;
     use crate::packet::DataMode;
     use crate::types::CompressionAlgorithm;
     use crate::util::test::{check_strings, random_string, ChaosReader};
-    use crate::Message;
+    use crate::{Message, MessageBuilder};
 
     #[test]
     fn test_read_literal_data_no_compression() -> TestResult {
@@ -43,12 +42,12 @@ mod tests {
 
                 let buf = random_string(&mut rng, file_size);
                 let message = if is_partial {
-                    Builder::from_reader("test.txt", buf.as_bytes())
+                    MessageBuilder::from_reader("test.txt", buf.as_bytes())
                         .data_mode(DataMode::Binary)
                         .partial_chunk_size(512)?
                         .to_vec(&mut rng)?
                 } else {
-                    Builder::from_bytes("test.txt", buf.clone())
+                    MessageBuilder::from_bytes("test.txt", buf.clone())
                         .data_mode(DataMode::Binary)
                         .to_vec(&mut rng)?
                 };
@@ -84,13 +83,13 @@ mod tests {
 
                     if is_armor {
                         let message = if is_partial {
-                            Builder::from_reader("test.txt", buf.as_bytes())
+                            MessageBuilder::from_reader("test.txt", buf.as_bytes())
                                 .data_mode(DataMode::Binary)
                                 .compression(CompressionAlgorithm::ZIP)
                                 .partial_chunk_size(512)?
                                 .to_armored_string(&mut rng, Default::default())?
                         } else {
-                            Builder::from_bytes("test.txt", buf.clone())
+                            MessageBuilder::from_bytes("test.txt", buf.clone())
                                 .data_mode(DataMode::Binary)
                                 .compression(CompressionAlgorithm::ZIP)
                                 .to_armored_string(&mut rng, Default::default())?
@@ -110,13 +109,13 @@ mod tests {
                         assert_eq!(header.mode(), DataMode::Binary);
                     } else {
                         let message = if is_partial {
-                            Builder::from_reader("test.txt", buf.as_bytes())
+                            MessageBuilder::from_reader("test.txt", buf.as_bytes())
                                 .data_mode(DataMode::Binary)
                                 .compression(CompressionAlgorithm::ZIP)
                                 .partial_chunk_size(512)?
                                 .to_vec(&mut rng)?
                         } else {
-                            Builder::from_bytes("test.txt", buf.clone())
+                            MessageBuilder::from_bytes("test.txt", buf.clone())
                                 .data_mode(DataMode::Binary)
                                 .compression(CompressionAlgorithm::ZIP)
                                 .to_vec(&mut rng)?

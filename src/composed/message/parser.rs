@@ -1,11 +1,9 @@
 use std::io::{BufRead, BufReader};
-use std::iter::Peekable;
 use std::path::Path;
 
 use crate::armor::BlockType;
 use crate::composed::message::Message;
 use crate::errors::Result;
-use crate::packet::Packet;
 use crate::parsing_reader::BufReadParsing;
 use crate::types::{PkeskVersion, SkeskVersion, Tag};
 use crate::{Edata, Esk};
@@ -13,10 +11,6 @@ use crate::{Edata, Esk};
 use super::reader::{
     CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
 };
-
-pub struct MessageParser<I: Sized + Iterator<Item = Result<Packet>>> {
-    source: Peekable<I>,
-}
 
 /// Parses a single message level
 fn next<'a>(

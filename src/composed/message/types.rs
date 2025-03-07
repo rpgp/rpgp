@@ -11,6 +11,7 @@ use crate::packet::{
     LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
     PublicKeyEncryptedSessionKey, Signature, SymKeyEncryptedSessionKey,
 };
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{EskType, Fingerprint, KeyDetails, Password, PkeskVersion, PublicKeyTrait, Tag};
 
@@ -520,6 +521,13 @@ impl<'a> Message<'a> {
         }
 
         Ok(out)
+    }
+
+    /// Reads the contents and discards it, then verifies the message.
+    pub fn verify_read(&mut self, key: &dyn PublicKeyTrait) -> Result<&Signature> {
+        self.drain()?;
+        let sig = self.verify(key)?;
+        Ok(sig)
     }
 
     /// Verify this message.

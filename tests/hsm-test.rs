@@ -10,7 +10,7 @@ use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
 use pgp::types::{EcdhPublicParams, Fingerprint, Password, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyDetails, KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
-use pgp::{packet, Deserializable, Esk};
+use pgp::{packet, Esk};
 use pgp::{Message, SignedPublicKey, SignedSecretKey};
 
 #[derive(Debug, Clone)]
@@ -363,19 +363,15 @@ fn card_decrypt() {
 
         let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
 
-        let decrypted = edata
+        let mut decrypted = edata
             .decrypt(pgp::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })
             .unwrap();
 
-        todo!()
-        // if let Message::Literal(data) = decrypted {
-        //     assert_eq!(data.data(), b"foo bar")
-        // } else {
-        //     panic!()
-        // }
+        let data = decrypted.as_data_vec().unwrap();
+        assert_eq!(data, b"foo bar")
     }
 }
 
