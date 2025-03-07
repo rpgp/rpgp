@@ -418,7 +418,15 @@ impl<'a> SignatureOnePassReader<'a> {
                             hash,
                             source: Box::new(source),
                         };
+                    } else {
+                        *self = Self::Body {
+                            hasher,
+                            source,
+                            buffer,
+                        }
                     }
+
+                    return Ok(());
                 }
                 Self::Done {
                     hash,
