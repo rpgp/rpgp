@@ -341,7 +341,8 @@ fn test_parse_openpgp_sample_rsa_private() {
         }
         Ok(())
     })
-    .expect("failed to unlock");
+    .expect("failed to unlock")
+    .unwrap();
 
     let pub_key = pkey.public_key();
     assert_eq!(pub_key.key_id(), pkey.key_id());
@@ -737,7 +738,7 @@ fn encrypted_private_key() {
             }
             Ok(())
         },
-    ).unwrap();
+    ).unwrap().unwrap();
 }
 
 fn get_test_fingerprint(filename: &str) -> (serde_json::Value, SignedPublicKey) {
@@ -883,7 +884,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
             match parsed {
                 PublicOrSecret::Secret(sec) => {
-                    sec.unlock(&pw.into(), |_, _| Ok(())).unwrap();
+                    sec.unlock(&pw.into(), |_, _| Ok(())).unwrap().unwrap();
                 }
                 PublicOrSecret::Public(_) => {
                     // Nothing todo
@@ -1160,6 +1161,7 @@ fn private_ecc2_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     /*
@@ -1185,6 +1187,7 @@ fn private_ecc3_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1205,6 +1208,7 @@ fn private_x25519_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();

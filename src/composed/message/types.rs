@@ -14,7 +14,10 @@ use crate::packet::{
 };
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
-use crate::types::{EskType, Fingerprint, KeyDetails, Password, PkeskVersion, PublicKeyTrait, Tag};
+use crate::types::{
+    EskType, Fingerprint, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretKeyTrait,
+    SecretParams, Tag,
+};
 
 use super::reader::{
     CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
@@ -642,175 +645,62 @@ impl<'a> Message<'a> {
         key_pws: &[Password],
         keys: &[&SignedSecretKey],
     ) -> Result<(Message<'a>, Vec<Fingerprint>)> {
-        match self {
-            Message::Compressed { .. } | Message::Literal { .. } => {
-                bail!("not encrypted");
-            }
-            Message::Signed { reader, signature } => {
-                let (reader, fps) = reader.decrypt(key_pws, keys)?;
-                Ok((Message::Signed { signature, reader }, fps))
-            }
-            Message::SignedOnePass {
-                reader,
-                one_pass_signature,
-            } => {
-                let (reader, fps) = reader.decrypt(key_pws, keys)?;
-                Ok((
-                    Message::SignedOnePass {
-                        one_pass_signature,
-                        reader,
-                    },
-                    fps,
-                ))
-            }
-            Message::Encrypted { esk, edata, .. } => {
-                let valid_keys =
-                    keys.iter()
-                        .zip(key_pws.iter())
-                        .filter_map(|(key, key_pw)| {
-                            // search for a packet with a key id that we have and that key.
-                            let mut packet = None;
-                            let mut encoding_key = None;
-                            let mut encoding_subkey = None;
-
-                            for esk_packet in esk.iter().filter_map(|k| match k {
-                                Esk::PublicKeyEncryptedSessionKey(k) => Some(k),
-                                _ => None,
-                            }) {
-                                debug!("esk packet: {:?}", esk_packet);
-                                debug!("{:?}", key.key_id());
-                                debug!(
-                                    "{:?}",
-                                    key.secret_subkeys
-                                        .iter()
-                                        .map(|k| k.key_id())
-                                        .collect::<Vec<_>>()
-                                );
-
-                                // find the matching key or subkey
-
-                                if esk_packet.match_identity(&key.primary_key.public_key()) {
-                                    encoding_key = Some(&key.primary_key);
-                                }
-
-                                if encoding_key.is_none() {
-                                    encoding_subkey = key.secret_subkeys.iter().find(|subkey| {
-                                        esk_packet.match_identity(&subkey.public_key())
-                                    });
-                                }
-
-                                if encoding_key.is_some() || encoding_subkey.is_some() {
-                                    packet = Some(esk_packet);
-                                    break;
-                                }
-                            }
-
-                            packet.map(|packet| (packet, encoding_key, encoding_subkey, key_pw))
-                        })
-                        .collect::<Vec<_>>();
-
-                if valid_keys.is_empty() {
-                    return Err(Error::MissingKey);
-                }
-
-                let session_keys = valid_keys
-                    .iter()
-                    .map(|(pkesk, encoding_key, encoding_subkey, key_pw)| {
-                        let typ = match pkesk.version() {
-                            PkeskVersion::V3 => EskType::V3_4,
-                            PkeskVersion::V6 => EskType::V6,
-                            PkeskVersion::Other(v) => {
-                                unimplemented_err!("Unexpected PKESK version {}", v)
-                            }
-                        };
-
-                        if let Some(ek) = encoding_key {
-                            debug!("decrypt session key");
-
-                            let values = pkesk.values()?;
-                            let session_key = ek.unlock(key_pw, |pub_params, priv_key| {
-                                priv_key.decrypt(pub_params, values, typ, &ek.public_key())
-                            })?;
-                            Ok((ek.fingerprint(), session_key))
-                        } else if let Some(ek) = encoding_subkey {
-                            let values = pkesk.values()?;
-                            let session_key = ek.unlock(key_pw, |pub_params, priv_key| {
-                                priv_key.decrypt(pub_params, values, typ, &ek.public_key())
-                            })?;
-                            Ok((ek.fingerprint(), session_key))
-                        } else {
-                            unreachable!("either a key or a subkey were found");
-                        }
-                    })
-                    .filter(|res| match res {
-                        Ok(_) => true,
-                        Err(err) => {
-                            warn!("failed to decrypt session_key for key: {:?}", err);
-                            false
-                        }
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-
-                ensure!(!session_keys.is_empty(), "failed to decrypt session key");
-
-                // make sure all the keys are the same, otherwise we are in a bad place
-                let session_key = {
-                    let (_key_id, k0) = &session_keys[0];
-                    if !session_keys.iter().skip(1).all(|(_, k)| k0 == k) {
-                        bail!("found inconsistent session keys, possible message corruption");
-                    }
-
-                    // TODO: avoid cloning
-                    k0.clone()
-                };
-
-                let ids = session_keys.into_iter().map(|(k, _)| k).collect();
-                let msg = edata.decrypt(session_key)?;
-
-                Ok((msg, ids))
-            }
-        }
+        todo!()
     }
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt_with_password(self, msg_pw: &Password) -> Result<Message<'a>> {
+        todo!()
+    }
+
+    pub fn decrypt_with_session_key(self, session_key: PlainSessionKey) -> Result<Message<'a>> {
+        todo!()
+    }
+
+    /// The most powerful and flexible way to decrypt. Give it all you know, and maybe something will come of it.
+    ///
+    /// If `abort_early` is true, the first available session key will be used, even if it might be wrong, or missmatch
+    /// with others.
+    /// If it is set to false, all provided keys, and passwords will be checked and compared.
+    /// In this case, if there are different session keys found, it will error out.
+    pub fn decrypt_the_ring(
+        self,
+        ring: TheRing<'_>,
+        abort_early: bool,
+    ) -> Result<(Message<'a>, RingResult)> {
         match self {
             Message::Compressed { .. } | Message::Literal { .. } => {
-                bail!("message is not encrypted");
+                bail!("even the ring can not decrypt plaintext");
             }
             Message::Signed { reader, signature } => {
-                let reader = reader.decrypt_with_password(msg_pw)?;
-                Ok(Message::Signed { reader, signature })
+                let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
+                Ok((Message::Signed { signature, reader }, res))
             }
             Message::SignedOnePass {
                 reader,
                 one_pass_signature,
             } => {
-                let reader = reader.decrypt_with_password(msg_pw)?;
-                Ok(Message::SignedOnePass {
-                    reader,
-                    one_pass_signature,
-                })
+                let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
+                Ok((
+                    Message::SignedOnePass {
+                        one_pass_signature,
+                        reader,
+                    },
+                    res,
+                ))
             }
-            Message::Encrypted { esk, edata, .. } => {
-                // TODO: handle multiple passwords
-                let skesk = esk.into_iter().find_map(|esk| match esk {
-                    Esk::SymKeyEncryptedSessionKey(k) => Some(k),
-                    _ => None,
-                });
+            Message::Encrypted { esk, edata } => {
+                // Lets go and find things, with which we can decrypt
+                let (session_key, result) = ring.find_session_key(esk, abort_early)?;
+                let Some(session_key) = session_key else {
+                    return Err(Error::MissingKey);
+                };
 
-                ensure!(skesk.is_some(), "message is not password protected");
-
-                let session_key =
-                    decrypt_session_key_with_password(&skesk.expect("checked above"), msg_pw)?;
-                edata.decrypt(session_key)
+                let decrypted = edata.decrypt(session_key)?;
+                Ok((decrypted, result))
             }
         }
-    }
-
-    pub fn decrypt_with_session_key(self, session_key: PlainSessionKey) -> Result<Message<'a>> {
-        todo!()
     }
 
     /// Check if this message is a signature, that was signed with a one pass signature.
@@ -918,6 +808,224 @@ impl BufRead for Message<'_> {
             Self::Encrypted { edata, .. } => edata.consume(amt),
         }
     }
+}
+
+/// Like a key ring, but better, and more powerful, serving all your decryption needs.
+#[derive(Debug)]
+pub struct TheRing<'a> {
+    secret_keys: Vec<&'a SignedSecretKey>,
+    key_passwords: Vec<Password>,
+    message_password: Vec<Password>,
+    session_keys: Vec<PlainSessionKey>,
+}
+
+impl<'a> TheRing<'a> {
+    fn find_session_key(
+        mut self,
+        esk: Vec<Esk>,
+        abort_early: bool,
+    ) -> Result<(Option<PlainSessionKey>, RingResult)> {
+        let mut result = RingResult {
+            secret_keys: vec![EncryptionResult::Unchecked; self.secret_keys.len()],
+            message_password: vec![EncryptionResult::Unchecked; self.message_password.len()],
+            session_keys: vec![EncryptionResult::Unchecked; self.session_keys.len()],
+        };
+
+        if abort_early {
+            // Do we have a session key already?
+            if !self.session_keys.is_empty() {
+                let session_key = self.session_keys.remove(0);
+                result.session_keys[0] = EncryptionResult::Ok;
+                return Ok((Some(session_key), result));
+            }
+        }
+
+        // Search ESKs
+
+        let mut pkesks = Vec::new();
+        let mut skesks = Vec::new();
+        for esk in esk {
+            match esk {
+                Esk::PublicKeyEncryptedSessionKey(k) => pkesks.push(k),
+                Esk::SymKeyEncryptedSessionKey(k) => skesks.push(k),
+            }
+        }
+
+        let mut pkesk_session_keys = Vec::new();
+
+        for esk in &pkesks {
+            for (i, key) in self.secret_keys.iter().enumerate() {
+                result.secret_keys[i] = EncryptionResult::NoMatch;
+
+                let typ = match esk.version() {
+                    PkeskVersion::V3 => EskType::V3_4,
+                    PkeskVersion::V6 => EskType::V6,
+                    PkeskVersion::Other(v) => {
+                        unimplemented_err!("Unexpected PKESK version {}", v)
+                    }
+                };
+
+                // check primary key
+                if esk.match_identity(&key.primary_key) {
+                    let values = esk.values()?;
+                    match key.primary_key.secret_params() {
+                        SecretParams::Encrypted(_) => {
+                            // unlock
+                            for pw in &self.key_passwords {
+                                match key.unlock(pw, |pub_params, sec_params| {
+                                    sec_params.decrypt(
+                                        pub_params,
+                                        values,
+                                        typ,
+                                        &key.primary_key.public_key(),
+                                    )
+                                }) {
+                                    Ok(Ok(session_key)) => {
+                                        result.secret_keys[i] = EncryptionResult::Ok;
+                                        pkesk_session_keys.push((i, session_key));
+                                        break;
+                                    }
+                                    Ok(Err(_err)) => {
+                                        result.secret_keys[i] = EncryptionResult::Invalid;
+                                        break;
+                                    }
+                                    Err(_err) => {
+                                        // ..
+                                        result.secret_keys[i] = EncryptionResult::InvalidPassword;
+                                    }
+                                }
+                            }
+                        }
+                        SecretParams::Plain(sec_params) => {
+                            // already unlocked
+                            match sec_params.decrypt(
+                                key.primary_key.public_key().public_params(),
+                                values,
+                                typ,
+                                &key.primary_key.public_key(),
+                            ) {
+                                Ok(session_key) => {
+                                    result.secret_keys[i] = EncryptionResult::Ok;
+                                    pkesk_session_keys.push((i, session_key));
+                                }
+                                Err(_err) => {
+                                    result.secret_keys[i] = EncryptionResult::Invalid;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // search subkeys
+                    todo!()
+                }
+            }
+        }
+
+        // search password based esks
+        let mut skesk_session_keys: Vec<(usize, PlainSessionKey)> = Vec::new();
+
+        // TODO
+
+        // compare all session keys
+        let (is_pkesk_consistent, pkesk_session_key) = if pkesk_session_keys.is_empty() {
+            (true, None)
+        } else {
+            let sk = pkesk_session_keys.remove(0);
+
+            let mut is_consistent = true;
+
+            for (i, key) in pkesk_session_keys {
+                if key != sk.1 {
+                    is_consistent = false;
+                    break;
+                }
+            }
+
+            (is_consistent, Some(sk))
+        };
+
+        let (is_skesk_consistent, skesk_session_key) = if skesk_session_keys.is_empty() {
+            (true, None)
+        } else {
+            let sk = skesk_session_keys.remove(0);
+
+            let mut is_consistent = true;
+
+            for (i, key) in skesk_session_keys {
+                if key != sk.1 {
+                    is_consistent = false;
+                    break;
+                }
+            }
+
+            (is_consistent, Some(sk))
+        };
+
+        let (is_sks_consistent, sks_session_key) = if self.session_keys.is_empty() {
+            (true, None)
+        } else {
+            let sk = self.session_keys.remove(0);
+
+            let mut is_consistent = true;
+
+            for (i, key) in self.session_keys.iter().enumerate() {
+                if key != &sk {
+                    is_consistent = false;
+                    break;
+                }
+            }
+
+            (is_consistent, Some(sk))
+        };
+
+        // TODO: the above fails to handle the fact that PlainSessionKey::Unknown will not compare correctly
+
+        let is_consistent = is_sks_consistent && is_skesk_consistent && is_pkesk_consistent;
+
+        if !is_consistent {
+            bail!("inconsistent session keys detected");
+        }
+
+        if let Some((_, session_key)) = pkesk_session_key {
+            return Ok((Some(session_key), result));
+        }
+
+        if let Some((_, session_key)) = skesk_session_key {
+            return Ok((Some(session_key), result));
+        }
+
+        if let Some(session_key) = sks_session_key {
+            return Ok((Some(session_key), result));
+        }
+
+        Ok((None, result))
+    }
+}
+
+/// This is what happens if you use `TheRing`.
+#[derive(Debug)]
+pub struct RingResult {
+    secret_keys: Vec<EncryptionResult>,
+    message_password: Vec<EncryptionResult>,
+    session_keys: Vec<EncryptionResult>,
+}
+
+#[derive(Debug, Clone)]
+pub enum EncryptionResult {
+    /// Value was not checked, due to either an earlier error
+    /// or another mechanism already matching
+    Unchecked,
+    /// No matching ESK packet has been found
+    NoMatch,
+    /// Unlocking the secret key failed, due to the provided password being invalid.
+    InvalidPassword,
+    /// Multiple session keys have been found, and they do not match.
+    InconsistentSessionKey,
+    /// Decryption of the ESK has failed.
+    Invalid,
+    /// A session key was successfully produced
+    /// The actual encrypted data decryption process can still fail.
+    Ok,
 }
 
 /// Options for generating armored content.

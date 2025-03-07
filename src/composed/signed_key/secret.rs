@@ -195,9 +195,10 @@ impl SignedSecretKey {
     ) -> Result<PlainSessionKey> {
         debug!("decrypt session key");
 
-        self.unlock(key_pw, |pub_params, priv_key| {
+        let key = self.unlock(key_pw, |pub_params, priv_key| {
             priv_key.decrypt(pub_params, values, typ, self.primary_key.public_key())
-        })
+        })??;
+        Ok(key)
     }
 }
 
@@ -300,9 +301,10 @@ impl SignedSecretSubKey {
     ) -> Result<PlainSessionKey> {
         debug!("decrypt session key");
 
-        self.unlock(key_pw, |pub_params, priv_key| {
+        let key = self.unlock(key_pw, |pub_params, priv_key| {
             priv_key.decrypt(pub_params, values, typ, self.key.public_key())
-        })
+        })??;
+        Ok(key)
     }
 }
 

@@ -12,7 +12,7 @@ use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
+    EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
     PublicParams, Tag,
 };
 
@@ -209,7 +209,7 @@ impl PublicKeyEncryptedSessionKey {
     /// Check if a Key matches with this PKESK's target
     /// - for v3: is PKESK key id the wildcard, or does it match the key id of `pkey`?
     /// - for v6: is PKESK fingerprint the wildcard (represented as `None`), or does it match the fingerprint of `pkey`?
-    pub fn match_identity(&self, pkey: &impl PublicKeyTrait) -> bool {
+    pub fn match_identity(&self, pkey: &impl KeyDetails) -> bool {
         match self {
             Self::V3 { id, .. } => id.is_wildcard() || (id == &pkey.key_id()),
             Self::V6 { fingerprint, .. } => {

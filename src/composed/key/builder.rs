@@ -487,10 +487,12 @@ mod tests {
 
         signed_key2_enc
             .unlock(&"hello".into(), |_, _| Ok(()))
-            .expect("failed to unlock parsed key (enc)");
+            .expect("failed to unlock parsed key (enc)")
+            .unwrap();
         signed_key2_plain
             .unlock(&"".into(), |_, _| Ok(()))
-            .expect("failed to unlock parsed key (plain)");
+            .expect("failed to unlock parsed key (plain)")
+            .unwrap();
 
         assert_eq!(signed_key_plain, signed_key2_plain);
 

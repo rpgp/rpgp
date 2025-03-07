@@ -91,16 +91,16 @@ impl SecretKey {
         sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
         match self.secret_params {
-            SecretParams::Plain(ref k) => work(pub_params, k),
+            SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
             SecretParams::Encrypted(ref k) => {
                 let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
-                work(pub_params, &plain)
+                Ok(work(pub_params, &plain))
             }
         }
     }
@@ -162,16 +162,16 @@ impl SecretSubkey {
         sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
         match self.secret_params {
-            SecretParams::Plain(ref k) => work(pub_params, k),
+            SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
             SecretParams::Encrypted(ref k) => {
                 let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
-                work(pub_params, &plain)
+                Ok(work(pub_params, &plain))
             }
         }
     }
@@ -193,7 +193,7 @@ impl SecretKeyTrait for SecretKey {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
             signature.replace(sig);
             Ok(())
-        })?;
+        })??;
 
         signature.ok_or_else(|| unreachable!())
     }
@@ -247,7 +247,7 @@ impl SecretKeyTrait for SecretSubkey {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
             signature.replace(sig);
             Ok(())
-        })?;
+        })??;
 
         signature.ok_or_else(|| unreachable!())
     }
