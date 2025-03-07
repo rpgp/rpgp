@@ -38,6 +38,35 @@ pub enum Config {
     },
 }
 
+impl Config {
+    pub fn try_from_reader<R: BufRead>(mut data: R) -> Result<Self> {
+        let version = data.read_u8()?;
+        match version {
+            0x01 => Ok(Self::V1),
+            0x02 => {
+                let sym_alg = data.read_u8().map(SymmetricKeyAlgorithm::from)?;
+                let aead = data.read_u8().map(AeadAlgorithm::from)?;
+                let chunk_size = data
+                    .read_u8()?
+                    .try_into()
+                    .map_err(|_| Error::InvalidInput)?;
+                let salt = data.read_array::<32>()?;
+
+                Ok(Self::V2 {
+                    sym_alg,
+                    aead,
+                    chunk_size,
+                    salt,
+                })
+            }
+            _ => Err(format_err!(
+                "unknown SymEncryptedProtectedData version {}",
+                version
+            )),
+        }
+    }
+}
+
 /// Allowed chunk sizes.
 /// The range is from 64B to 4 MiB.
 ///
@@ -83,32 +112,7 @@ impl SymEncryptedProtectedData {
             "invalid tag"
         );
 
-        let version = data.read_u8()?;
-        let config = match version {
-            0x01 => Config::V1,
-            0x02 => {
-                let sym_alg = data.read_u8().map(SymmetricKeyAlgorithm::from)?;
-                let aead = data.read_u8().map(AeadAlgorithm::from)?;
-                let chunk_size = data
-                    .read_u8()?
-                    .try_into()
-                    .map_err(|_| Error::InvalidInput)?;
-                let salt = data.read_array::<32>()?;
-
-                Config::V2 {
-                    sym_alg,
-                    aead,
-                    chunk_size,
-                    salt,
-                }
-            }
-            _ => {
-                return Err(format_err!(
-                    "unknown SymEncryptedProtectedData version {}",
-                    version
-                ))
-            }
-        };
+        let config = Config::try_from_reader(&mut data)?;
         let data = data.rest()?;
 
         Ok(SymEncryptedProtectedData {

@@ -2,36 +2,46 @@ use std::io::{self, BufRead, Read};
 
 use bytes::BytesMut;
 
+use crate::errors::Result;
 use crate::packet::PacketHeader;
+use crate::packet::SymEncryptedProtectedDataConfig;
 use crate::types::Tag;
 
 use super::PacketBodyReader;
 
 #[derive(derive_more::Debug)]
 pub enum SymEncryptedProtectedDataReader<R: BufRead> {
-    Header {
-        source: PacketBodyReader<R>,
-        buffer: BytesMut,
-    },
     Body {
         source: PacketBodyReader<R>,
         buffer: BytesMut,
-        config: crate::packet::SymEncryptedProtectedDataConfig,
+        config: SymEncryptedProtectedDataConfig,
     },
     Done {
         source: PacketBodyReader<R>,
+        config: SymEncryptedProtectedDataConfig,
     },
     Error,
 }
 
 impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
-    pub fn new(source: PacketBodyReader<R>) -> io::Result<Self> {
+    pub fn new(mut source: PacketBodyReader<R>) -> Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedProtectedData);
 
-        Ok(Self::Header {
+        let config = SymEncryptedProtectedDataConfig::try_from_reader(&mut source)?;
+
+        Ok(Self::Body {
             source,
             buffer: BytesMut::with_capacity(1024),
+            config,
         })
+    }
+
+    pub fn config(&self) -> &SymEncryptedProtectedDataConfig {
+        match self {
+            Self::Body { config, .. } => config,
+            Self::Done { config, .. } => config,
+            Self::Error => panic!("error state"),
+        }
     }
 
     pub fn is_done(&self) -> bool {
@@ -40,7 +50,6 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
 
     pub fn into_inner(self) -> PacketBodyReader<R> {
         match self {
-            Self::Header { source, .. } => source,
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
             Self::Error => panic!("error state"),
@@ -49,7 +58,6 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
 
     pub fn packet_header(&self) -> PacketHeader {
         match self {
-            Self::Header { source, .. } => source.packet_header(),
             Self::Body { source, .. } => source.packet_header(),
             Self::Done { source, .. } => source.packet_header(),
             Self::Error => panic!("error state"),

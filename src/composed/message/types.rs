@@ -223,6 +223,25 @@ pub enum Esk {
     SymKeyEncryptedSessionKey(SymKeyEncryptedSessionKey),
 }
 
+impl Esk {
+    pub fn try_from_reader<'a>(
+        packet: &mut PacketBodyReader<Box<dyn BufRead + 'a>>,
+    ) -> Result<Self> {
+        let packet_header = packet.packet_header();
+        match packet_header.tag() {
+            Tag::PublicKeyEncryptedSessionKey => {
+                let esk = PublicKeyEncryptedSessionKey::try_from_reader(packet_header, packet)?;
+                Ok(Self::PublicKeyEncryptedSessionKey(esk))
+            }
+            Tag::SymKeyEncryptedSessionKey => {
+                let esk = SymKeyEncryptedSessionKey::try_from_reader(packet_header, packet)?;
+                Ok(Self::SymKeyEncryptedSessionKey(esk))
+            }
+            _ => unreachable!("must not called with other tags"),
+        }
+    }
+}
+
 impl_try_from_into!(
     Esk,
     PublicKeyEncryptedSessionKey => PublicKeyEncryptedSessionKey,
@@ -286,6 +305,22 @@ pub enum Edata<'a> {
     SymEncryptedProtectedData {
         reader: SymEncryptedProtectedDataReader<Box<dyn BufRead + 'a>>,
     },
+}
+
+impl<'a> Edata<'a> {
+    pub fn try_from_reader(reader: PacketBodyReader<Box<dyn BufRead + 'a>>) -> Result<Self> {
+        match reader.packet_header().tag() {
+            Tag::SymEncryptedData => {
+                let reader = SymEncryptedDataReader::new(reader)?;
+                Ok(Self::SymEncryptedData { reader })
+            }
+            Tag::SymEncryptedProtectedData => {
+                let reader = SymEncryptedProtectedDataReader::new(reader)?;
+                Ok(Self::SymEncryptedProtectedData { reader })
+            }
+            _ => unreachable!("must not be called with a different tag"),
+        }
+    }
 }
 
 impl BufRead for Edata<'_> {

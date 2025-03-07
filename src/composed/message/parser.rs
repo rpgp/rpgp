@@ -1,5 +1,4 @@
-#![allow(dead_code)]
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufRead, BufReader};
 use std::iter::Peekable;
 use std::path::Path;
 
@@ -8,7 +7,8 @@ use crate::composed::message::Message;
 use crate::errors::Result;
 use crate::packet::Packet;
 use crate::parsing_reader::BufReadParsing;
-use crate::types::Tag;
+use crate::types::{PkeskVersion, SkeskVersion, Tag};
+use crate::{Edata, Esk};
 
 use super::reader::{
     CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
@@ -37,20 +37,60 @@ fn next<'a>(
                 //   - ESK Seq
                 //   - Encrypted Data -> OpenPGP Message
 
-                // example
-                let mut packet_buf = Vec::new();
-                packet.read_to_end(&mut packet_buf)?;
-                packets = crate::packet::PacketParser::new(packet.into_inner());
-                let Some(packet) = packets.next_owned() else {
-                    bail!("missing next packet");
-                };
+                let mut esks = Vec::new();
+                let esk = Esk::try_from_reader(&mut packet)?;
+                esks.push(esk);
 
-                todo!()
-                // let packet = packet?;
-                // return Ok(Some(M::Encrypted(EM {
-                //     esk_sequence: vec![Esk::Pkesk],
-                //     data: Edata::SEDP(packet),
-                // })));
+                packets = crate::packet::PacketParser::new(packet.into_inner());
+                // Read ESKs unit we find the Encrypted Data
+                loop {
+                    let Some(packet) = packets.next_owned() else {
+                        bail!("missing encrypted data packet");
+                    };
+
+                    let mut packet = packet?;
+                    let tag = packet.packet_header().tag();
+                    match tag {
+                        Tag::SymKeyEncryptedSessionKey | Tag::PublicKeyEncryptedSessionKey => {
+                            let esk = Esk::try_from_reader(&mut packet)?;
+                            esks.push(esk);
+                            packets = crate::packet::PacketParser::new(packet.into_inner());
+                        }
+                        Tag::SymEncryptedData | Tag::SymEncryptedProtectedData => {
+                            let edata = Edata::try_from_reader(packet)?;
+                            let esk = match edata {
+                                Edata::SymEncryptedData { .. } => {
+                                    esk_filter(esks, PkeskVersion::V3, SkeskVersion::V4)
+                                }
+                                Edata::SymEncryptedProtectedData { ref reader } => {
+                                    match reader.config() {
+                                        crate::packet::SymEncryptedProtectedDataConfig::V1 => {
+                                            esk_filter(esks, PkeskVersion::V3, SkeskVersion::V4)
+                                        }
+                                        crate::packet::SymEncryptedProtectedDataConfig::V2 {
+                                            ..
+                                        } => esk_filter(esks, PkeskVersion::V6, SkeskVersion::V6),
+                                    }
+                                }
+                            };
+
+                            return Ok(Some(Message::Encrypted { esk, edata }));
+                        }
+                        Tag::Padding => {
+                            // drain reader
+                            packet.drain()?;
+                            packets = crate::packet::PacketParser::new(packet.into_inner());
+                        }
+                        Tag::Marker => {
+                            // drain reader
+                            packet.drain()?;
+                            packets = crate::packet::PacketParser::new(packet.into_inner());
+                        }
+                        _ => {
+                            bail!("unexpected tag in an encrypted message: {:?}", tag);
+                        }
+                    }
+                }
             }
             Tag::Signature => {
                 // (b) Signed Message
@@ -119,109 +159,21 @@ fn next<'a>(
         }
     }
 }
-// fn next<I: Iterator<Item = Result<Packet>>>(packets: &mut Peekable<I>) -> Option<Result<Message>> {
-// while let Some(res) = packets.by_ref().next() {
-//     let packet = match res {
-//         Ok(packet) => packet,
-//         Err(err) => return Some(Err(err)),
-//     };
 
-//     debug!("{:?}: ", packet);
-//     let tag = packet.tag();
-
-//     match tag {
-//         Tag::LiteralData => {
-//             todo!()
-//             // return match packet.try_into() {
-//             //     Ok(data) => {
-//             //         todo!()
-//             //         // Some(Ok(Message::Literal(data)))
-//             //     }
-//             //     Err(err) => Some(Err(err)),
-//             // };
-//         }
-//         Tag::CompressedData => {
-//             return match packet.try_into() {
-//                 Ok(data) => Some(Ok(Message::Compressed(data))),
-//                 Err(err) => Some(Err(err)),
-//             };
-//         }
-//         //    ESK :- Public-Key Encrypted Session Key Packet |
-//         //           Symmetric-Key Encrypted Session Key Packet.
-//         Tag::PublicKeyEncryptedSessionKey | Tag::SymKeyEncryptedSessionKey => {
-//             return match packet.try_into() {
-//                 Ok(p) => {
-//                     let mut esk: Vec<Esk> = vec![p];
-
-//                     // while ESK take em
-//                     while let Some(res) = packets.next_if(|res| {
-//                         res.as_ref().is_ok_and(|p| {
-//                             p.tag() == Tag::PublicKeyEncryptedSessionKey
-//                                 || p.tag() == Tag::SymKeyEncryptedSessionKey
-//                         })
-//                     }) {
-//                         match res {
-//                             Ok(packet) => esk.push(packet.try_into().expect("peeked")),
-//                             Err(e) => return Some(Err(e)),
-//                         }
-//                     }
-
-//                     // we expect exactly one edata after the ESKs
-//                     let edata = match packets.next() {
-//                         Some(Ok(p))
-//                             if p.tag() == Tag::SymEncryptedData
-//                                 || p.tag() == Tag::SymEncryptedProtectedData =>
-//                         {
-//                             Edata::try_from(p).expect("peeked")
-//                         }
-//                         Some(Ok(p)) => {
-//                             return Some(Err(format_err!(
-//                                 "Expected encrypted data packet, but found {:?}",
-//                                 p
-//                             )));
-//                         }
-//                         None => {
-//                             return Some(Err(format_err!("Missing encrypted data packet")));
-//                         }
-//                         Some(Err(e)) => return Some(Err(e)),
-//                     };
-
-//                     // Drop PKESK and SKESK with versions that are not aligned with the encryption container
-//                     fn esk_filter(
-//                         esk: Vec<Esk>,
-//                         pkesk_allowed: PkeskVersion,
-//                         skesk_allowed: SkeskVersion,
-//                     ) -> Vec<Esk> {
-//                         esk.into_iter()
-//                             .filter(|esk| match esk {
-//                                 Esk::PublicKeyEncryptedSessionKey(pkesk) => {
-//                                     pkesk.version() == pkesk_allowed
-//                                 }
-//                                 Esk::SymKeyEncryptedSessionKey(skesk) => {
-//                                     skesk.version() == skesk_allowed
-//                                 }
-//                             })
-//                             .collect()
-//                     }
-
-//                     // An implementation processing an Encrypted Message MUST discard any
-//                     // preceding ESK packet with a version that does not align with the
-//                     // version of the payload.
-//                     // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-10.3.2.1-7)
-//                     let esk = match edata {
-//                         Edata::SymEncryptedData(_) => {
-//                             esk_filter(esk, PkeskVersion::V3, SkeskVersion::V4)
-//                         }
-//                         Edata::SymEncryptedProtectedData(ref p) if p.version() == 1 => {
-//                             esk_filter(esk, PkeskVersion::V3, SkeskVersion::V4)
-//                         }
-//                         Edata::SymEncryptedProtectedData(ref p) if p.version() == 2 => {
-//                             esk_filter(esk, PkeskVersion::V6, SkeskVersion::V6)
-//                         }
-//                         _ => {
-//                             return Some(Err(format_err!("Unsupported Edata variant")));
-//                         }
-//                     };
+/// Drop PKESK and SKESK with versions that are not aligned with the encryption container
+///
+/// An implementation processing an Encrypted Message MUST discard any
+/// preceding ESK packet with a version that does not align with the
+/// version of the payload.
+/// See <https://www.rfc-editor.org/rfc/rfc9580.html#section-10.3.2.1-7>
+fn esk_filter(esk: Vec<Esk>, pkesk_allowed: PkeskVersion, skesk_allowed: SkeskVersion) -> Vec<Esk> {
+    esk.into_iter()
+        .filter(|esk| match esk {
+            Esk::PublicKeyEncryptedSessionKey(pkesk) => pkesk.version() == pkesk_allowed,
+            Esk::SymKeyEncryptedSessionKey(skesk) => skesk.version() == skesk_allowed,
+        })
+        .collect()
+}
 
 //                     Some(Ok(Message::Encrypted { esk, edata }))
 //                 }
@@ -377,22 +329,3 @@ impl<'a> Message<'a> {
         )
     }
 }
-
-// recursive read
-// fn parse_until_literal<'a, R: BufRead + 'a>(source: R, key: ()) -> Result<LM<'a>> {
-//     let packet_parser = crate::packet::PacketParser::new(source);
-//     match parse(packet_parser)? {
-//         Some(M::Encrypted(e)) => {
-//             let dec = Decryptor { source: e, key };
-//             parse_until_literal(dec, key)
-//         }
-//         Some(M::Signed(s)) => {
-//             todo!()
-//         }
-//         Some(M::Compressed(c)) => {
-//             todo!()
-//         }
-//         Some(M::Literal(l)) => Ok(l),
-//         None => bail!("no literal packet found"),
-//     }
-// }
