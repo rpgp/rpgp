@@ -545,6 +545,156 @@ impl<R: io::Read> io::Read for StreamEncryptor<R> {
     }
 }
 
+#[derive(Debug)]
+pub enum StreamDecryptor {
+    V1 {
+        sym_alg: SymmetricKeyAlgorithm,
+    },
+    V2 {
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: ChunkSize,
+        chunk_size_expanded: usize,
+        aead_tag_size: usize,
+        /// how many bytes have been written
+        written: usize,
+        chunk_index: usize,
+        nonce: Vec<u8>,
+        message_key: Zeroizing<Vec<u8>>,
+        info: [u8; 5],
+    },
+}
+
+impl StreamDecryptor {
+    pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8]) -> Result<Self> {
+        todo!()
+    }
+
+    pub fn buffer_size(&self) -> usize {
+        match self {
+            Self::V1 { .. } => {
+                todo!()
+            }
+            Self::V2 {
+                chunk_size_expanded,
+                aead_tag_size,
+                ..
+            } => chunk_size_expanded + aead_tag_size,
+        }
+    }
+
+    fn decrypt(&mut self, buf: &mut BytesMut) -> Result<()> {
+        match self {
+            Self::V1 { .. } => todo!(),
+            Self::V2 {
+                sym_alg,
+                aead,
+                chunk_size_expanded,
+                aead_tag_size,
+                written,
+                chunk_index,
+                nonce,
+                message_key,
+                info,
+                ..
+            } => {
+                let full_chunk_size = *chunk_size_expanded + *aead_tag_size;
+                ensure_eq!(buf.len(), full_chunk_size, "buffer has the wrong size");
+                aead.decrypt_in_place(sym_alg, &message_key, &nonce, &*info, buf)?;
+                *written += buf.len();
+
+                // Update nonce to include the next chunk index
+                *chunk_index += 1;
+                let l = nonce.len() - 8;
+                nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Decrpyt the final chunk of data
+    pub fn decrypt_last(&mut self, buf: &mut BytesMut) -> Result<()> {
+        match self {
+            Self::V1 { .. } => todo!(),
+            Self::V2 {
+                aead_tag_size,
+                chunk_size_expanded,
+                written,
+                chunk_index,
+                nonce,
+                info,
+                message_key,
+                aead,
+                sym_alg,
+                ..
+            } => {
+                ensure!(buf.len() >= *aead_tag_size, "last chunk size missmatch");
+
+                let mut final_auth_tag = buf.split_off(buf.len() - *aead_tag_size);
+
+                let full_chunk_size = *chunk_size_expanded + *aead_tag_size;
+                aead.decrypt_in_place(sym_alg, &message_key, &nonce, &*info, buf)?;
+                *written += buf.len();
+
+                // Update nonce to include the next chunk index
+                *chunk_index += 1;
+                let l = nonce.len() - 8;
+                nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
+
+                // verify final auth tag
+
+                // Associated data is extended with number of plaintext octets.
+                let size = *written as u64;
+                let mut final_info = info.to_vec();
+                final_info.extend_from_slice(&size.to_be_bytes());
+
+                // Update final nonce
+                aead.decrypt_in_place(
+                    sym_alg,
+                    &message_key,
+                    &nonce,
+                    &final_info,
+                    &mut final_auth_tag,
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn v2(
+        sym_alg: SymmetricKeyAlgorithm,
+        aead: AeadAlgorithm,
+        chunk_size: ChunkSize,
+        salt: &[u8; 32],
+        key: &[u8],
+    ) -> Result<Self> {
+        // Initial key material is the session key.
+        let ikm = key;
+        let chunk_size_expanded: usize = chunk_size.as_byte_size().try_into()?;
+
+        let (info, message_key, nonce) = aead_setup(sym_alg, aead, chunk_size, &salt[..], ikm)?;
+
+        // There are n chunks, n auth tags + 1 final auth tag
+        let Some(aead_tag_size) = aead.tag_size() else {
+            unsupported_err!("AEAD mode: {:?}", aead);
+        };
+
+        Ok(Self::V2 {
+            sym_alg,
+            aead,
+            chunk_size,
+            nonce,
+            written: 0,
+            chunk_index: 0,
+            info,
+            message_key,
+            aead_tag_size,
+            chunk_size_expanded,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]

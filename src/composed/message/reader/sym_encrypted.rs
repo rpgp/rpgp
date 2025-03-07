@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Read};
 
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 
 use crate::packet::PacketHeader;
 use crate::types::Tag;
@@ -17,22 +17,6 @@ pub enum SymEncryptedDataReader<R: BufRead> {
         source: PacketBodyReader<R>,
     },
     Error,
-}
-
-impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        todo!()
-    }
-
-    fn consume(&mut self, amt: usize) {
-        todo!()
-    }
-}
-
-impl<R: BufRead> Read for SymEncryptedDataReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        todo!()
-    }
 }
 
 impl<R: BufRead> SymEncryptedDataReader<R> {
@@ -66,6 +50,46 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
             Self::Body { source, .. } => source.packet_header(),
             Self::Done { source, .. } => source.packet_header(),
             Self::Error => panic!("error state"),
+        }
+    }
+
+    fn fill_inner(&mut self) -> io::Result<()> {
+        todo!()
+    }
+}
+
+impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.fill_inner()?;
+        match self {
+            Self::Body { ref mut buffer, .. } => Ok(&buffer[..]),
+            Self::Done { .. } => Ok(&[][..]),
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Body { ref mut buffer, .. } => {
+                buffer.advance(amt);
+            }
+            Self::Done { .. } => {}
+            Self::Error => panic!("error state"),
+        }
+    }
+}
+
+impl<R: BufRead> Read for SymEncryptedDataReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.fill_inner()?;
+        match self {
+            Self::Body { ref mut buffer, .. } => {
+                let to_write = buffer.remaining().min(buf.len());
+                buffer.copy_to_slice(&mut buf[..to_write]);
+                Ok(to_write)
+            }
+            Self::Done { .. } => Ok(0),
+            Self::Error => unreachable!("error state "),
         }
     }
 }
