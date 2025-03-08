@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::fs::File;
-use std::io::Read;
 
 use chrono::{DateTime, Utc};
 use pgp::crypto::checksum;
@@ -363,7 +362,6 @@ fn card_decrypt() {
         };
 
         let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
-
         edata
             .decrypt(&pgp::PlainSessionKey::V3_4 {
                 key: session_key,
@@ -371,8 +369,9 @@ fn card_decrypt() {
             })
             .unwrap();
 
-        let mut data = Vec::new();
-        edata.read_to_end(&mut data).unwrap();
+        let mut message = Message::from_bytes(edata).unwrap();
+        let data = message.as_data_vec().unwrap();
+
         assert_eq!(data, b"foo bar")
     }
 }
