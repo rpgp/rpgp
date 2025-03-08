@@ -49,7 +49,7 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
     }
 
     pub fn decrypt(&mut self, session_key: &PlainSessionKey) -> Result<()> {
-        let (sym_alg, key) = match session_key {
+        let (_sym_alg, _key) = match session_key {
             PlainSessionKey::V3_4 { sym_alg, key } | PlainSessionKey::Unknown { sym_alg, key } => {
                 (*sym_alg, key)
             }

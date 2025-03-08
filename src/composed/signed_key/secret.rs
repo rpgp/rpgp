@@ -404,8 +404,8 @@ k0mXubZvyl4GBg==
 
         eprintln!("{}", signed);
 
-        let (message, _) = Message::from_armor(signed.as_bytes())?;
-        message.verify(&pri.public_key())?;
+        let (mut message, _) = Message::from_armor(signed.as_bytes())?;
+        message.verify_read(&pri.public_key())?;
 
         Ok(())
     }
