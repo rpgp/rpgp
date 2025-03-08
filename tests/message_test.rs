@@ -11,8 +11,9 @@ extern crate log;
 
 use std::fs::File;
 
+use pgp::cleartext::CleartextSignedMessage;
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
-use pgp::types::KeyDetails;
+use pgp::types::{KeyDetails, KeyId, Password};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -331,4 +332,169 @@ fn binary_msg_password() {
         decompressed.literal_data_header().unwrap().file_name(),
         "README.md"
     );
+}
+
+/// Tests that decompressing compression quine does not result in stack overflow.
+/// quine.out comes from <https://mumble.net/~campbell/misc/pgp-quine/>
+/// See <https://mumble.net/~campbell/2013/10/08/compression> for details.
+#[test]
+fn test_compression_quine() {
+    // Public key does not matter as the message is not signed.
+    let (skey, _headers) = SignedSecretKey::from_armor_single(
+        std::fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+    )
+    .unwrap();
+    let pkey = skey.public_key();
+
+    let msg = Message::from_file("./tests/quine.out").unwrap();
+    let res = msg.decompress();
+    assert!(res.is_err());
+
+    let msg = Message::from_file("./tests/quine.out").unwrap();
+    assert!(msg.verify(&*pkey).is_err());
+}
+
+#[test]
+fn test_text_signature_normalization() {
+    // Test verifying an inlined signed message.
+    //
+    // The signature type is 0x01 ("Signature of a canonical text document").
+    //
+    // The literal data packet (which is in binary mode) contains the output of:
+    // echo -en "foo\nbar\r\nbaz"
+    //
+    // RFC 9580 mandates that the hash for signature type 0x01 has to be calculated over normalized line endings,
+    // so the hash for this message is calculated over "foo\r\nbar\r\nbaz".
+    //
+    // So it must also be verified against a hash digest over this normalized format.
+    let (signed_msg, _header) =
+        Message::from_armor_file("./tests/unit-tests/text_signature_normalization.msg").unwrap();
+
+    let (skey, _headers) = SignedSecretKey::from_armor_single(
+        std::fs::File::open("./tests/unit-tests/text_signature_normalization_alice.key").unwrap(),
+    )
+    .unwrap();
+
+    // Manually find the signing subkey
+    let signing = skey
+        .secret_subkeys
+        .iter()
+        .find(|key| key.key_id() == KeyId::from([0x64, 0x35, 0x7E, 0xB6, 0xBB, 0x55, 0xDE, 0x12]))
+        .unwrap();
+
+    // And transform it into a public subkey for signature verification
+    let verify = signing.public_key();
+
+    // verify the signature with alice's signing subkey
+    signed_msg.verify(&verify).expect("signature seems bad");
+}
+
+// Sample Version 6 Certificate (Transferable Public Key)
+// https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-version-6-certificat
+const ANNEX_A_3: &str = "-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+xioGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laPCsQYf
+GwoAAABCBYJjh3/jAwsJBwUVCg4IDAIWAAKbAwIeCSIhBssYbE8GCaaX5NUt+mxy
+KwwfHifBilZwj2Ul7Ce62azJBScJAgcCAAAAAK0oIBA+LX0ifsDm185Ecds2v8lw
+gyU2kCcUmKfvBXbAf6rhRYWzuQOwEn7E/aLwIwRaLsdry0+VcallHhSu4RN6HWaE
+QsiPlR4zxP/TP7mhfVEe7XWPxtnMUMtf15OyA51YBM4qBmOHf+MZAAAAIIaTJINn
++eUBXbki+PSAld2nhJh/LVmFsS+60WyvXkQ1wpsGGBsKAAAALAWCY4d/4wKbDCIh
+BssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce62azJAAAAAAQBIKbpGG2dWTX8
+j+VjFM21J0hqWlEg+bdiojWnKfA5AQpWUWtnNwDEM0g12vYxoWM8Y81W+bHBw805
+I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUrk0mXubZvyl4GBg==
+-----END PGP PUBLIC KEY BLOCK-----";
+
+// Sample Version 6 Secret Key (Transferable Secret Key)
+// https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-version-6-secret-key
+const ANNEX_A_4: &str = "-----BEGIN PGP PRIVATE KEY BLOCK-----
+
+xUsGY4d/4xsAAAAg+U2nu0jWCmHlZ3BqZYfQMxmZu52JGggkLq2EVD34laMAGXKB
+exK+cH6NX1hs5hNhIB00TrJmosgv3mg1ditlsLfCsQYfGwoAAABCBYJjh3/jAwsJ
+BwUVCg4IDAIWAAKbAwIeCSIhBssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce6
+2azJBScJAgcCAAAAAK0oIBA+LX0ifsDm185Ecds2v8lwgyU2kCcUmKfvBXbAf6rh
+RYWzuQOwEn7E/aLwIwRaLsdry0+VcallHhSu4RN6HWaEQsiPlR4zxP/TP7mhfVEe
+7XWPxtnMUMtf15OyA51YBMdLBmOHf+MZAAAAIIaTJINn+eUBXbki+PSAld2nhJh/
+LVmFsS+60WyvXkQ1AE1gCk95TUR3XFeibg/u/tVY6a//1q0NWC1X+yui3O24wpsG
+GBsKAAAALAWCY4d/4wKbDCIhBssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce6
+2azJAAAAAAQBIKbpGG2dWTX8j+VjFM21J0hqWlEg+bdiojWnKfA5AQpWUWtnNwDE
+M0g12vYxoWM8Y81W+bHBw805I8kWVkXU6vFOi+HWvv/ira7ofJu16NnoUkhclkUr
+k0mXubZvyl4GBg==
+-----END PGP PRIVATE KEY BLOCK-----";
+
+/// Verify Cleartext Signed Message
+///
+/// Test data from RFC 9580, see
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-cleartext-signed-mes
+#[test]
+fn test_v6_annex_a_6() {
+    let (ssk, _) = SignedPublicKey::from_string(ANNEX_A_3).expect("SSK from armor");
+
+    let msg = "-----BEGIN PGP SIGNED MESSAGE-----
+
+What we need from the grocery store:
+
+- - tofu
+- - vegetables
+- - noodles
+
+-----BEGIN PGP SIGNATURE-----
+
+wpgGARsKAAAAKQWCY5ijYyIhBssYbE8GCaaX5NUt+mxyKwwfHifBilZwj2Ul7Ce6
+2azJAAAAAGk2IHZJX1AhiJD39eLuPBgiUU9wUA9VHYblySHkBONKU/usJ9BvuAqo
+/FvLFuGWMbKAdA+epq7V4HOtAPlBWmU8QOd6aud+aSunHQaaEJ+iTFjP2OMW0KBr
+NK2ay45cX1IVAQ==
+-----END PGP SIGNATURE-----";
+
+    let (msg, _) = CleartextSignedMessage::from_string(msg).unwrap();
+
+    msg.verify(&ssk).expect("verify");
+}
+
+/// Verify Inline Signed Message
+///
+/// Test data from RFC 9580, see
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-inline-signed-messag
+#[test]
+fn test_v6_annex_a_7() {
+    let (ssk, _) = SignedPublicKey::from_string(ANNEX_A_3).expect("SSK from armor");
+
+    let msg = "-----BEGIN PGP MESSAGE-----
+
+xEYGAQobIHZJX1AhiJD39eLuPBgiUU9wUA9VHYblySHkBONKU/usyxhsTwYJppfk
+1S36bHIrDB8eJ8GKVnCPZSXsJ7rZrMkBy0p1AAAAAABXaGF0IHdlIG5lZWQgZnJv
+bSB0aGUgZ3JvY2VyeSBzdG9yZToKCi0gdG9mdQotIHZlZ2V0YWJsZXMKLSBub29k
+bGVzCsKYBgEbCgAAACkFgmOYo2MiIQbLGGxPBgmml+TVLfpscisMHx4nwYpWcI9l
+JewnutmsyQAAAABpNiB2SV9QIYiQ9/Xi7jwYIlFPcFAPVR2G5ckh5ATjSlP7rCfQ
+b7gKqPxbyxbhljGygHQPnqau1eBzrQD5QVplPEDnemrnfmkrpx0GmhCfokxYz9jj
+FtCgazStmsuOXF9SFQE=
+-----END PGP MESSAGE-----";
+
+    let (mut msg, _) = Message::from_string(msg).unwrap();
+
+    msg.verify_read(&ssk).expect("verify");
+}
+
+/// Decrypt an X25519-AEAD-OCB Encrypted Packet Sequence
+///
+/// Test data from RFC 9580, see
+/// https://www.rfc-editor.org/rfc/rfc9580.html#name-sample-x25519-aead-ocb-encr
+#[test]
+fn test_v6_annex_a_8() {
+    let (ssk, _) = SignedSecretKey::from_string(ANNEX_A_4).expect("SSK from armor");
+
+    // A.8. Sample X25519-AEAD-OCB Decryption
+    let msg = "-----BEGIN PGP MESSAGE-----
+
+wV0GIQYSyD8ecG9jCP4VGkF3Q6HwM3kOk+mXhIjR2zeNqZMIhRmHzxjV8bU/gXzO
+WgBM85PMiVi93AZfJfhK9QmxfdNnZBjeo1VDeVZheQHgaVf7yopqR6W1FT6NOrfS
+aQIHAgZhZBZTW+CwcW1g4FKlbExAf56zaw76/prQoN+bAzxpohup69LA7JW/Vp0l
+yZnuSj3hcFj0DfqLTGgr4/u717J+sPWbtQBfgMfG9AOIwwrUBqsFE9zW+f1zdlYo
+bhF30A+IitsxxA==
+-----END PGP MESSAGE-----";
+
+    let (message, _) = Message::from_string(msg).expect("ok");
+    let mut dec = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let decrypted = dec.as_data_string().unwrap();
+    assert_eq!(&decrypted, "Hello, world!");
 }
