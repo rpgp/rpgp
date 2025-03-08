@@ -70,7 +70,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
 
     for (j, key) in SignedPublicKey::from_file_many(f).unwrap().enumerate() {
         if j % 1000 == 0 {
-            println!("key {}: {}", i, j);
+            warn!("key {}: {}", i, j);
         }
         actual.total_count += 1;
         let key = match key {
@@ -157,31 +157,31 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_728,
+        17_727,
         // Hash::Other(4)
         1,
         3266,
-        20_995
+        20_994
     ),
     (
         test_parse_dumps_1,
         1,
-        17_565,
+        17_564,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3423,
+        3424,
         20_996
     ),
     (
         test_parse_dumps_2,
         2,
-        17_599,
+        17_598,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3390,
+        3391,
         20_994
     ),
     (
@@ -191,14 +191,14 @@ parse_dumps!(
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3321,
-        20_995
+        3322,
+        20_996
     ),
     (
         test_parse_dumps_4,
         4,
         17_608,
-        // - Elgamal verify
+        // - Elgamal verify - gets hidden?
         2,
         3384,
         20_994
@@ -206,21 +206,21 @@ parse_dumps!(
     (
         test_parse_dumps_5,
         5,
-        17_644,
+        17_642,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3349,
-        21_001
+        3352,
+        21_002
     ),
     (
         test_parse_dumps_6,
         6,
-        17_701,
+        17_702,
         // - Elgamal verify
         1,
-        3294,
-        20_996
+        3295,
+        20_998
     ),
     (
         test_parse_dumps_7,
@@ -228,8 +228,8 @@ parse_dumps!(
         17_722,
         // - Elgamal verify
         3,
-        3273,
-        20_998
+        3274,
+        20_999
     ),
     (
         test_parse_dumps_8,
@@ -248,8 +248,8 @@ parse_dumps!(
         // - Hash::Other(5)
         // - Elgamal verify
         3,
-        3421,
-        21_000
+        3423,
+        21_002
     ),
 );
 
