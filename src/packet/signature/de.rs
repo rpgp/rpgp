@@ -229,7 +229,8 @@ fn subpackets<B: BufRead>(packet_version: PacketHeaderVersion, mut i: B) -> Resu
 
         let mut body = i.read_take(len);
         let packet = subpacket(typ, is_critical, packet_len, packet_version, &mut body)?;
-        if body.has_remaining()? {
+
+        if !body.rest()?.is_empty() {
             warn!("failed to fully process subpacket: {:?}", typ);
             if is_critical {
                 bail!("invalid subpacket: {:?}", typ);
