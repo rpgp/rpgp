@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::armor::BlockType;
 use crate::composed::message::Message;
+use crate::composed::shared::is_binary;
 use crate::errors::Result;
 use crate::parsing_reader::BufReadParsing;
 use crate::types::{PkeskVersion, SkeskVersion, Tag};
@@ -312,6 +313,19 @@ impl<'a> Message<'a> {
             | BlockType::PrivateKeyOpenssh => {
                 unimplemented_err!("key format {:?}", typ);
             }
+        }
+    }
+
+    /// Parse from a reader which might contain ASCII amored data or binary data.
+    pub fn from_reader<R: BufRead + 'a>(
+        mut source: R,
+    ) -> Result<(Self, Option<crate::armor::Headers>)> {
+        if is_binary(&mut source)? {
+            let msg = Self::from_bytes(source)?;
+            Ok((msg, None))
+        } else {
+            let (msg, headers) = Self::from_armor(source)?;
+            Ok((msg, Some(headers)))
         }
     }
 
