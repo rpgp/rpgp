@@ -59,13 +59,13 @@ impl<'a> SignatureBodyReader<'a> {
 
     pub fn hash(&self) -> Option<&[u8]> {
         match self {
-            Self::Done { hash, .. } => Some(&hash),
+            Self::Done { hash, .. } => Some(hash),
             Self::Error => panic!("error state"),
             _ => None,
         }
     }
 
-    pub fn get_ref(&self) -> &Box<Message<'a>> {
+    pub fn get_ref(&self) -> &Message<'a> {
         match self {
             Self::Init { source, .. } => source,
             Self::Body { source, .. } => source,

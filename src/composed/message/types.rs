@@ -25,6 +25,7 @@ use super::reader::{
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 /// Encrypted Message | Signed Message | Compressed Message | Literal Message.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Message<'a> {
     /// Literal Message: Literal Data Packet.
     Literal {
@@ -84,9 +85,9 @@ impl<'a> Message<'a> {
     pub(crate) fn into_parts(self) -> (Box<dyn BufRead + 'a>, MessageParts) {
         match self {
             Message::Literal { reader } => {
-                assert!(reader.is_done());
+                debug_assert!(reader.is_done());
                 let packet_header = reader.packet_header();
-                let header = reader.data_header().unwrap().clone();
+                let header = reader.data_header().clone();
                 (
                     reader.into_inner().into_inner(),
                     MessageParts::Literal {
@@ -325,6 +326,7 @@ impl Serialize for Esk {
 /// Symmetrically Encrypted Data Packet |
 /// Symmetrically Encrypted Integrity Protected Data Packet
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Edata<'a> {
     SymEncryptedData {
         reader: SymEncryptedDataReader<Box<dyn BufRead + 'a>>,
@@ -375,7 +377,7 @@ impl Read for Edata<'_> {
     }
 }
 
-impl<'a> Edata<'a> {
+impl Edata<'_> {
     pub fn packet_header(&self) -> PacketHeader {
         match self {
             Self::SymEncryptedData { reader } => reader.packet_header(),
@@ -674,17 +676,15 @@ impl<'a> Message<'a> {
         matches!(self, Message::Compressed { .. })
     }
 
+    /// Is this a literal message?
     pub fn is_literal(&self) -> bool {
-        match self {
-            Message::Literal { .. } => true,
-            _ => false,
-        }
+        matches!(self, Message::Literal { .. })
     }
 
     /// If this is a literal message, returns the literal data header
     pub fn literal_data_header(&self) -> Option<&LiteralDataHeader> {
         match self {
-            Self::Literal { reader } => reader.data_header(),
+            Self::Literal { reader } => Some(reader.data_header()),
             Self::Compressed { .. } => None,
             Self::Signed { reader, .. } => reader.get_ref().literal_data_header(),
             Self::SignedOnePass { reader, .. } => reader.get_ref().literal_data_header(),
@@ -772,7 +772,7 @@ pub struct TheRing<'a> {
     pub session_keys: Vec<PlainSessionKey>,
 }
 
-impl<'a> TheRing<'a> {
+impl TheRing<'_> {
     fn find_session_key(
         mut self,
         esk: &[Esk],
@@ -945,7 +945,7 @@ impl<'a> TheRing<'a> {
 
             let mut is_consistent = true;
 
-            for (_i, key) in self.session_keys.iter().enumerate() {
+            for key in self.session_keys.iter() {
                 if key != &sk {
                     is_consistent = false;
                     break;

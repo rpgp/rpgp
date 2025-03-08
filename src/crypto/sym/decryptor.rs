@@ -22,6 +22,7 @@ const MDC_LEN: usize = 22;
 const BUFFER_SIZE: usize = 512;
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum StreamDecryptor<R>
 where
     R: BufRead,

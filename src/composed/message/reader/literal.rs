@@ -65,49 +65,47 @@ impl<R: BufRead> LiteralDataReader<R> {
             return Ok(());
         }
 
-        loop {
-            match std::mem::replace(self, Self::Error) {
-                Self::Body {
-                    mut source,
-                    mut buffer,
-                    header,
-                } => {
-                    debug!("literal packet: body");
-                    if buffer.has_remaining() {
-                        *self = Self::Body {
-                            source,
-                            header,
-                            buffer,
-                        };
-                        return Ok(());
-                    }
-
-                    debug!("literal packet: filling buffer");
-                    buffer.resize(1024, 0);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-
-                    buffer.truncate(read);
-
-                    if read == 0 {
-                        // done reading the source
-                        *self = Self::Done { source, header };
-                    } else {
-                        *self = Self::Body {
-                            source,
-                            header,
-                            buffer,
-                        };
-                    }
+        match std::mem::replace(self, Self::Error) {
+            Self::Body {
+                mut source,
+                mut buffer,
+                header,
+            } => {
+                debug!("literal packet: body");
+                if buffer.has_remaining() {
+                    *self = Self::Body {
+                        source,
+                        header,
+                        buffer,
+                    };
                     return Ok(());
                 }
-                Self::Done { source, header } => {
-                    debug!("literal packet: done");
+
+                debug!("literal packet: filling buffer");
+                buffer.resize(1024, 0);
+                let read = fill_buffer(&mut source, &mut buffer, None)?;
+
+                buffer.truncate(read);
+
+                if read == 0 {
+                    // done reading the source
                     *self = Self::Done { source, header };
-                    return Ok(());
+                } else {
+                    *self = Self::Body {
+                        source,
+                        header,
+                        buffer,
+                    };
                 }
-                Self::Error => {
-                    panic!("LiteralReader errored");
-                }
+                Ok(())
+            }
+            Self::Done { source, header } => {
+                debug!("literal packet: done");
+                *self = Self::Done { source, header };
+                Ok(())
+            }
+            Self::Error => {
+                panic!("LiteralReader errored");
             }
         }
     }
@@ -150,11 +148,11 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
 }
 
 impl<R: BufRead> LiteralDataReader<R> {
-    pub fn data_header(&self) -> Option<&LiteralDataHeader> {
+    pub fn data_header(&self) -> &LiteralDataHeader {
         match self {
-            Self::Body { ref header, .. } => Some(header),
-            Self::Done { ref header, .. } => Some(header),
-            _ => None,
+            Self::Body { ref header, .. } => header,
+            Self::Done { ref header, .. } => header,
+            Self::Error => panic!("error state"),
         }
     }
 }

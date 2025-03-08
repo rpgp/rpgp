@@ -134,36 +134,34 @@ impl<R: BufRead> CompressedDataReader<R> {
             return Ok(());
         }
 
-        loop {
-            match std::mem::replace(&mut self.state, CompressedReaderState::Error) {
-                CompressedReaderState::Body {
-                    mut source,
-                    mut buffer,
-                } => {
-                    if buffer.has_remaining() {
-                        self.state = CompressedReaderState::Body { source, buffer };
-                        return Ok(());
-                    }
-
-                    buffer.resize(1024, 0);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-                    buffer.truncate(read);
-
-                    if read == 0 {
-                        let source = source.into_inner();
-                        self.state = CompressedReaderState::Done { source };
-                    } else {
-                        self.state = CompressedReaderState::Body { source, buffer };
-                    }
+        match std::mem::replace(&mut self.state, CompressedReaderState::Error) {
+            CompressedReaderState::Body {
+                mut source,
+                mut buffer,
+            } => {
+                if buffer.has_remaining() {
+                    self.state = CompressedReaderState::Body { source, buffer };
                     return Ok(());
                 }
-                CompressedReaderState::Done { source } => {
+
+                buffer.resize(1024, 0);
+                let read = fill_buffer(&mut source, &mut buffer, None)?;
+                buffer.truncate(read);
+
+                if read == 0 {
+                    let source = source.into_inner();
                     self.state = CompressedReaderState::Done { source };
-                    return Ok(());
+                } else {
+                    self.state = CompressedReaderState::Body { source, buffer };
                 }
-                CompressedReaderState::Error => {
-                    panic!("CompressedReader errored");
-                }
+                Ok(())
+            }
+            CompressedReaderState::Done { source } => {
+                self.state = CompressedReaderState::Done { source };
+                Ok(())
+            }
+            CompressedReaderState::Error => {
+                panic!("CompressedReader errored");
             }
         }
     }

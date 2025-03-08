@@ -105,7 +105,7 @@ pub trait BufReadParsing: BufRead + Sized {
 
     fn read_tag(&mut self, tag: &[u8]) -> Result<()> {
         let found_tag = self.take_bytes(tag.len())?;
-        if tag != &found_tag {
+        if tag != found_tag {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(

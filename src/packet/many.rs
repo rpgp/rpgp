@@ -54,7 +54,7 @@ impl<R: BufRead> Iterator for PacketParser<R> {
                 // not bailing, we are just skipping incomplete bodies
                 Some(Err(Error::PacketIncomplete { source }))
             }
-            Err(err) => Some(Err(err.into())),
+            Err(err) => Some(Err(err)),
         }
     }
 }
@@ -224,8 +224,7 @@ mod tests {
                 (offset, tag, line)
             })
             .filter(|(offset, _, _)| {
-                let list = vec![
-                    // skip certain packages we are not (yet) parsing
+                let list = [
                     "1193538",  // invalid mpi
                     "9218758",  // invalid packet length
                     "8240010",  // invalid packet length
@@ -237,7 +236,7 @@ mod tests {
                     "9745167",  // MPI_NULL
                     "9797527",  // MPI_NULL
                     "19045846", // invalid packet length
-                    "19047047", // invalid packet length
+                    "19047047",
                 ];
                 if list.contains(&offset.as_str()) {
                     warn!("skipping {}", offset);

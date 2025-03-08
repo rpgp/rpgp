@@ -329,6 +329,7 @@ impl PacketTrait for SymEncryptedProtectedData {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum StreamDecryptor<R: BufRead> {
     V1(crate::crypto::sym::StreamDecryptor<R>),
     V2(crate::crypto::aead::StreamDecryptor<R>),

@@ -8,6 +8,7 @@ use crate::PlainSessionKey;
 use super::PacketBodyReader;
 
 #[derive(derive_more::Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum SymEncryptedProtectedDataReader<R: BufRead> {
     Init {
         source: PacketBodyReader<R>,
@@ -25,6 +26,7 @@ pub enum SymEncryptedProtectedDataReader<R: BufRead> {
 }
 
 #[derive(derive_more::Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum MaybeDecryptor<R: BufRead> {
     Raw(#[debug("R")] R),
     Decryptor(StreamDecryptor<R>),
@@ -95,7 +97,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                             PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
                         };
 
-                        StreamDecryptor::v1(*sym_alg, &session_key, source)?
+                        StreamDecryptor::v1(*sym_alg, session_key, source)?
                     }
                     SymEncryptedProtectedDataConfig::V2 {
                         sym_alg,
@@ -127,7 +129,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                             "Unexpected session key length for {:?}",
                             sym_alg
                         );
-                        StreamDecryptor::v2(sym_alg, aead, chunk_size, &salt, &session_key, source)?
+                        StreamDecryptor::v2(sym_alg, aead, chunk_size, &salt, session_key, source)?
                     }
                 };
 
