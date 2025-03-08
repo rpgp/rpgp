@@ -548,7 +548,6 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::{ArmorOptions, MessageBuilder};
 
     #[test]
     #[ignore]
@@ -665,7 +664,7 @@ mod tests {
             "./tests/unit-tests/argon2/aes256.msg",
         ];
 
-        use crate::{composed::Deserializable, Message};
+        use crate::Message;
 
         for filename in MSGS {
             println!("reading {}", filename);
@@ -720,7 +719,7 @@ mod tests {
     fn aead_skesk_msg(filename: &str) {
         let _ = pretty_env_logger::try_init();
 
-        use crate::{composed::Deserializable, Message};
+        use crate::Message;
 
         println!("reading {}", filename);
         let (msg, header) = Message::from_armor_file(filename).expect("parse");

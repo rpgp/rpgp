@@ -45,7 +45,7 @@ fn try_decrypt(keyfile: &str, msg_file: &str) {
 
     // load seipdv1 msg, decrypt
     let (message, _) = Message::from_armor_file(msg_file).expect("ok");
-    let (mut dec, _) = message.decrypt(&["".into()], &[&ssk]).expect("decrypt");
+    let mut dec = message.decrypt(&"".into(), &ssk).expect("decrypt");
 
     let decrypted = dec.as_data_string().unwrap();
 
@@ -109,7 +109,7 @@ fn rfc9580_seipdv1_roundtrip() {
             .unwrap();
 
         let msg = Message::from_bytes(&enc[..]).unwrap();
-        let (mut dec, _) = msg.decrypt(&["".into()], &[&ssk]).expect("decrypt");
+        let mut dec = msg.decrypt(&"".into(), &ssk).expect("decrypt");
 
         let data = dec.as_data_string().unwrap();
         assert_eq!(data, MSG);
@@ -141,7 +141,7 @@ fn rfc9580_seipdv2_roundtrip() {
             .unwrap();
 
         let msg = Message::from_bytes(&enc[..]).unwrap();
-        let (mut dec, _) = msg.decrypt(&["".into()], &[&ssk]).expect("decrypt");
+        let mut dec = msg.decrypt(&"".into(), &ssk).expect("decrypt");
 
         let data = dec.as_data_string().unwrap();
         assert_eq!(data, MSG);

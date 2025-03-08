@@ -71,7 +71,7 @@ fn decrypt_rpgp_cur(enc_msg: &str, keyfile: &str) -> Vec<u8> {
         pgp::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
             .expect("failed to read key");
 
-    let (mut dec, _) = enc_msg.decrypt(&["".into()], &[&ssk]).unwrap();
+    let mut dec = enc_msg.decrypt(&"".into(), &ssk).unwrap();
 
     dec.as_data_vec().unwrap()
 }

@@ -5,7 +5,7 @@ use crate::packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConf
 use crate::types::Tag;
 use crate::PlainSessionKey;
 
-use super::{fill_buffer, PacketBodyReader};
+use super::PacketBodyReader;
 
 #[derive(derive_more::Debug)]
 pub enum SymEncryptedProtectedDataReader<R: BufRead> {

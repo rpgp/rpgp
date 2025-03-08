@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::fs::File;
+use std::io::Read;
 
 use chrono::{DateTime, Utc};
 use pgp::crypto::checksum;
@@ -351,7 +352,7 @@ fn card_decrypt() {
 
         let (message, _headers) = Message::from_armor_file(msgfile).unwrap();
 
-        let Message::Encrypted { esk, edata } = message else {
+        let Message::Encrypted { esk, mut edata } = message else {
             panic!("not encrypted");
         };
 
@@ -363,14 +364,15 @@ fn card_decrypt() {
 
         let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
 
-        let mut decrypted = edata
-            .decrypt(pgp::PlainSessionKey::V3_4 {
+        edata
+            .decrypt(&pgp::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })
             .unwrap();
 
-        let data = decrypted.as_data_vec().unwrap();
+        let mut data = Vec::new();
+        edata.read_to_end(&mut data).unwrap();
         assert_eq!(data, b"foo bar")
     }
 }

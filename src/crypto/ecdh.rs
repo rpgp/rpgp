@@ -639,8 +639,8 @@ mod tests {
             let (message, _headers) =
                 Message::from_armor_file(msg_file).expect("failed to parse message");
 
-            let (mut msg, _ids) = message
-                .decrypt(&[Password::empty()], &[&decrypt_key])
+            let mut msg = message
+                .decrypt(&Password::empty(), &decrypt_key)
                 .expect("failed to init decryption");
 
             let data = msg.as_data_vec().unwrap();

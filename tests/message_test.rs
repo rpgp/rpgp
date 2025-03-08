@@ -77,10 +77,9 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
 
     match &message {
         Message::Encrypted { .. } => {
-            let (decrypted, ids) = message
-                .decrypt(&[details.passphrase.into()], &[&decrypt_key])
+            let decrypted = message
+                .decrypt(&details.passphrase.into(), &decrypt_key)
                 .expect("failed to init decryption");
-            assert_eq!(ids.len(), 1);
 
             if let Some(verify_key) = verify_key {
                 decrypted
@@ -257,9 +256,8 @@ fn msg_large_indeterminate_len() {
         SignedSecretKey::from_armor_single(&mut key_file).expect("failed to parse key");
 
     let decrypted = message
-        .decrypt(&["moon".into()], &[&decrypt_key])
-        .expect("failed to decrypt message")
-        .0;
+        .decrypt(&"moon".into(), &decrypt_key)
+        .expect("failed to decrypt message");
 
     //     let raw = match decrypted {
     //         Message::Literal(data) => data,

@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Read};
 
-use bytes::{Buf, Bytes};
+use log::debug;
 
 use crate::armor;
 use crate::composed::message::decrypt::*;
@@ -13,10 +13,7 @@ use crate::packet::{
 };
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
-use crate::types::{
-    EskType, Fingerprint, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretKeyTrait,
-    SecretParams, Tag,
-};
+use crate::types::{EskType, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag};
 
 use super::reader::{
     CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
@@ -388,78 +385,21 @@ impl<'a> Edata<'a> {
         self.packet_header().tag()
     }
 
-    /// Transform decrypted data into a message.
-    /// Bails if the packets contain no message or multiple messages.
-    fn process_decrypted(packet_data: Bytes) -> Result<Message<'static>> {
-        let message = Message::from_bytes(packet_data.reader())?;
+    pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
+        let protected = self.tag() == Tag::SymEncryptedProtectedData;
+        debug!("decrypting protected = {:?}", protected);
 
-        Ok(message)
-    }
+        match self {
+            Self::SymEncryptedProtectedData { reader } => {
+                reader.decrypt(key)?;
+            }
+            Self::SymEncryptedData { reader } => {
+                todo!();
+                // reader.decrypt();
+            }
+        }
 
-    pub fn decrypt(self, key: PlainSessionKey) -> Result<Message<'a>> {
-        todo!()
-        // let protected = self.tag() == Tag::SymEncryptedProtectedData;
-        // debug!("decrypting protected = {:?}", protected);
-
-        // match key {
-        //     PlainSessionKey::V3_4 { sym_alg, ref key } => {
-        //         ensure!(
-        //             sym_alg != SymmetricKeyAlgorithm::Plaintext,
-        //             "session key algorithm cannot be plaintext"
-        //         );
-
-        //         match self {
-        //             Self::SymEncryptedProtectedData(p) => {
-        //                 ensure_eq!(
-        //                     self.version(),
-        //                     Some(1),
-        //                     "Version mismatch between key and integrity packet"
-        //                 );
-        //                 let data = p.decrypt(key, Some(sym_alg))?;
-        //                 Self::process_decrypted(data.into())
-        //             }
-        //             Self::SymEncryptedData(p) => {
-        //                 ensure_eq!(
-        //                     self.version(),
-        //                     None,
-        //                     "Version mismatch between key and integrity packet"
-        //                 );
-        //                 let mut prefix = BytesMut::from(p.data());
-        //                 let mut data = prefix.split_off(sym_alg.cfb_prefix_size());
-        //                 sym_alg.decrypt(key, &mut prefix, &mut data)?;
-        //                 Self::process_decrypted(data.freeze())
-        //             }
-        //         }
-        //     }
-        //     PlainSessionKey::V5 { .. } => match self {
-        //         Self::SymEncryptedProtectedData(_p) => {
-        //             ensure_eq!(
-        //                 self.version(),
-        //                 Some(2),
-        //                 "Version mismatch between key and integrity packet"
-        //             );
-        //             unimplemented_err!("V5 decryption");
-        //         }
-        //         Self::SymEncryptedData(_) => {
-        //             bail!("invalid packet combination");
-        //         }
-        //     },
-        //     PlainSessionKey::V6 { ref key } => match self {
-        //         Self::SymEncryptedProtectedData(p) => {
-        //             ensure_eq!(
-        //                 self.version(),
-        //                 Some(2),
-        //                 "Version mismatch between key and integrity packet"
-        //             );
-
-        //             let decrypted_packets = p.decrypt(key, None)?;
-        //             Self::process_decrypted(decrypted_packets.into())
-        //         }
-        //         Self::SymEncryptedData(_) => {
-        //             bail!("invalid packet combination");
-        //         }
-        //     },
-        // }
+        Ok(())
     }
 }
 
@@ -639,22 +579,34 @@ impl<'a> Message<'a> {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
-    pub fn decrypt(
-        self,
-        key_pws: &[Password],
-        keys: &[&SignedSecretKey],
-    ) -> Result<(Message<'a>, Vec<Fingerprint>)> {
-        todo!()
+    pub fn decrypt(self, key_pw: &Password, key: &SignedSecretKey) -> Result<Message<'a>> {
+        let ring = TheRing {
+            secret_keys: vec![key],
+            key_passwords: vec![key_pw],
+            ..Default::default()
+        };
+        let (msg, _) = self.decrypt_the_ring(ring, true)?;
+        Ok(msg)
     }
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt_with_password(self, msg_pw: &Password) -> Result<Message<'a>> {
-        todo!()
+        let ring = TheRing {
+            message_password: vec![msg_pw],
+            ..Default::default()
+        };
+        let (msg, _) = self.decrypt_the_ring(ring, true)?;
+        Ok(msg)
     }
 
     pub fn decrypt_with_session_key(self, session_key: PlainSessionKey) -> Result<Message<'a>> {
-        todo!()
+        let ring = TheRing {
+            session_keys: vec![session_key],
+            ..Default::default()
+        };
+        let (msg, _) = self.decrypt_the_ring(ring, true)?;
+        Ok(msg)
     }
 
     /// The most powerful and flexible way to decrypt. Give it all you know, and maybe something will come of it.
@@ -689,15 +641,16 @@ impl<'a> Message<'a> {
                     res,
                 ))
             }
-            Message::Encrypted { esk, edata } => {
+            Message::Encrypted { esk, mut edata } => {
                 // Lets go and find things, with which we can decrypt
-                let (session_key, result) = ring.find_session_key(esk, abort_early)?;
+                let (session_key, result) = ring.find_session_key(&esk, abort_early)?;
                 let Some(session_key) = session_key else {
                     return Err(Error::MissingKey);
                 };
 
-                let decrypted = edata.decrypt(session_key)?;
-                Ok((decrypted, result))
+                edata.decrypt(&session_key)?;
+                let message = Message::from_bytes(edata)?;
+                Ok((message, result))
             }
         }
     }
@@ -810,18 +763,18 @@ impl BufRead for Message<'_> {
 }
 
 /// Like a key ring, but better, and more powerful, serving all your decryption needs.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TheRing<'a> {
     pub secret_keys: Vec<&'a SignedSecretKey>,
-    pub key_passwords: Vec<Password>,
-    pub message_password: Vec<Password>,
+    pub key_passwords: Vec<&'a Password>,
+    pub message_password: Vec<&'a Password>,
     pub session_keys: Vec<PlainSessionKey>,
 }
 
 impl<'a> TheRing<'a> {
     fn find_session_key(
         mut self,
-        esk: Vec<Esk>,
+        esk: &[Esk],
         abort_early: bool,
     ) -> Result<(Option<PlainSessionKey>, RingResult)> {
         let mut result = RingResult {
@@ -923,7 +876,22 @@ impl<'a> TheRing<'a> {
         // search password based esks
         let mut skesk_session_keys: Vec<(usize, PlainSessionKey)> = Vec::new();
 
-        // TODO
+        for esk in skesks {
+            for (i, pw) in self.message_password.iter().enumerate() {
+                result.message_password[i] = InnerRingResult::Invalid;
+
+                match decrypt_session_key_with_password(esk, pw) {
+                    Ok(session_key) => {
+                        skesk_session_keys.push((i, session_key));
+                        result.message_password[i] = InnerRingResult::Ok;
+                        break;
+                    }
+                    Err(_err) => {
+                        result.message_password[i] = InnerRingResult::Invalid;
+                    }
+                }
+            }
+        }
 
         // compare all session keys
         let (is_pkesk_consistent, pkesk_session_key) = if pkesk_session_keys.is_empty() {

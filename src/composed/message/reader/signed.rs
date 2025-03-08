@@ -6,8 +6,8 @@ use log::debug;
 
 use crate::errors::Result;
 use crate::packet::{Signature, SignatureVersionSpecific};
-use crate::types::{Fingerprint, Password};
-use crate::{Message, RingResult, SignedSecretKey, TheRing};
+use crate::types::Password;
+use crate::{Message, RingResult, TheRing};
 
 use super::PacketBodyReader;
 
@@ -103,28 +103,6 @@ impl<'a> SignatureBodyReader<'a> {
             }
             _ => {
                 bail!("cannot decompress message that has already been read from");
-            }
-        }
-    }
-
-    pub(crate) fn decrypt(
-        self,
-        key_pws: &[Password],
-        keys: &[&SignedSecretKey],
-    ) -> Result<(Self, Vec<Fingerprint>)> {
-        match self {
-            Self::Init { hasher, source } => {
-                let (source, fps) = source.decrypt(key_pws, keys)?;
-                Ok((
-                    Self::Init {
-                        hasher,
-                        source: Box::new(source),
-                    },
-                    fps,
-                ))
-            }
-            _ => {
-                bail!("cannot decrypt message that has already been read from");
             }
         }
     }

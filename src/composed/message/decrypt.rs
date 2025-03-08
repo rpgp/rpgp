@@ -87,7 +87,6 @@ pub fn decrypt_session_key_with_password(
         .s2k()
         .derive_key(&msg_pw.read(), packet_algorithm.key_size())?;
 
-    debug!("derived key: {}", hex::encode(&key));
     if packet.encrypted_key().is_empty() {
         // There is no encrypted session key.
         //

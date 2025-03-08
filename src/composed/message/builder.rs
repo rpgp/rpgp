@@ -1416,8 +1416,8 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
-            let (mut decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let mut decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
             assert!(decrypted.is_literal());
@@ -1467,8 +1467,7 @@ mod tests {
 
             // decrypt it - public
             {
-                let (mut decrypted, _key_ids) =
-                    message.decrypt(&["".into()], &[&skey]).expect("decryption");
+                let mut decrypted = message.decrypt(&"".into(), &skey).expect("decryption");
 
                 assert!(decrypted.is_literal());
 
@@ -1560,8 +1559,7 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
-            let (mut decrypted, _key_ids) =
-                message.decrypt(&["".into()], &[&skey]).expect("decryption");
+            let mut decrypted = message.decrypt(&"".into(), &skey).expect("decryption");
 
             assert!(decrypted.is_literal());
 
@@ -1609,8 +1607,8 @@ mod tests {
 
             // decrypt it
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
             assert!(decrypted.is_compressed());
@@ -1720,8 +1718,8 @@ mod tests {
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
             // decrypt it
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
             let mut message = decrypted.decompress().expect("decompression");
@@ -1829,8 +1827,8 @@ mod tests {
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
             // decrypt it
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
             assert!(decrypted.is_compressed());
@@ -1925,7 +1923,7 @@ mod tests {
                 };
 
                 // decrypt it
-                let (decrypted, _key_ids) = message.decrypt(&[Password::empty()], &[&skey1])?;
+                let decrypted = message.decrypt(&Password::empty(), &skey1)?;
 
                 assert!(decrypted.is_compressed());
 
