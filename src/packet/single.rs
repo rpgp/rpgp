@@ -74,13 +74,23 @@ impl Packet {
             Tag::Other(other) => unimplemented_err!("Unknown packet type: {}", other),
         };
 
+        if let Err(ref err) = res {
+            log::info!("error {:#?}", err);
+        }
         match res {
             Ok(res) => Ok(res),
             Err(Error::PacketParsing { source }) if source.is_incomplete() => {
                 Err(Error::PacketIncomplete { source })
             }
+            Err(Error::IO { source, backtrace })
+                if source.kind() == std::io::ErrorKind::UnexpectedEof =>
+            {
+                Err(Error::PacketIncomplete {
+                    source: crate::parsing::Error::UnexpectedEof { source, backtrace },
+                })
+            }
             Err(err) => {
-                warn!("invalid packet: {:#?} {:?}", err, packet_header.tag(),);
+                warn!("invalid packet: {:#?} {:?}", err, packet_header.tag());
                 Err(Error::InvalidPacketContent {
                     source: Box::new(err),
                 })

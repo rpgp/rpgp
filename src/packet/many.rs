@@ -1,8 +1,9 @@
 use log::debug;
 use std::io::BufRead;
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::packet::{Packet, PacketHeader};
+use crate::parsing_reader::BufReadParsing;
 use crate::reader::PacketBodyReader;
 
 pub struct PacketParser<R: BufRead> {
@@ -45,12 +46,26 @@ impl<R: BufRead> Iterator for PacketParser<R> {
             }
         };
 
-        debug!("found header: {header:?}");
-        let body = PacketBodyReader::new(header, &mut self.reader);
-        match Packet::from_reader(header, body) {
+        log::warn!("found header: {header:?}");
+        let mut body = PacketBodyReader::new(header, &mut self.reader);
+        match Packet::from_reader(header, &mut body) {
             Ok(packet) => Some(Ok(packet)),
+            Err(Error::PacketParsing { source }) if source.is_incomplete() => {
+                debug!("incomplete packet for: {:?}", source);
+                // not bailing, we are just skipping incomplete bodies
+
+                if let Err(err) = body.drain() {
+                    self.is_done = true;
+                    return Some(Err(err.into()));
+                }
+
+                Some(Err(Error::PacketIncomplete { source }))
+            }
             Err(err) => {
-                self.is_done = true;
+                if let Err(err) = body.drain() {
+                    self.is_done = true;
+                    return Some(Err(err.into()));
+                }
                 Some(Err(err.into()))
             }
         }

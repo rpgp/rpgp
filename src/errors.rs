@@ -15,7 +15,7 @@ pub use crate::parsing::{Error as ParsingError, RemainingError};
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
     #[snafu(display("invalid input"))]
-    InvalidInput,
+    InvalidInput { backtrace: Option<Backtrace> },
     #[snafu(display("invalid armor wrappers"))]
     InvalidArmorWrappers,
     #[snafu(display("invalid crc24 checksum"))]

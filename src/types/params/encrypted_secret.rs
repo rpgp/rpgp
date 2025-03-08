@@ -7,7 +7,7 @@ use digest::Digest;
 use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::checksum;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, InvalidInputSnafu, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -123,7 +123,7 @@ impl EncryptedSecretParams {
 
                 // Checksum
                 if plaintext.len() < 2 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
                 PlainSecretParams::try_from_reader(
@@ -146,7 +146,7 @@ impl EncryptedSecretParams {
                         };
 
                         if self.data.len() < tag_size {
-                            return Err(Error::InvalidInput);
+                            return Err(InvalidInputSnafu.build());
                         }
 
                         // derive key
@@ -187,13 +187,13 @@ impl EncryptedSecretParams {
                 // Check SHA-1 hash if it is present.
                 // See <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.3-3.5.1> for details.
                 if plaintext.len() < 20 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
                 let (plaintext, expected_sha1) = plaintext.as_ref().split_at(self.data.len() - 20);
                 let calculated_sha1 = checksum::calculate_sha1([plaintext])?;
                 if expected_sha1 != calculated_sha1 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
                 PlainSecretParams::try_from_reader_no_checksum(
                     plaintext.reader(),
@@ -209,7 +209,7 @@ impl EncryptedSecretParams {
                 let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
                 if plaintext.len() < 2 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
                 PlainSecretParams::try_from_reader(

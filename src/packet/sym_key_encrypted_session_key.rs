@@ -8,7 +8,7 @@ use sha2::Sha256;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, InvalidInputSnafu, Result};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
@@ -376,7 +376,7 @@ fn parse_v5<B: BufRead>(
     let esk = i.rest()?;
 
     if esk.len() < aead_tag_size {
-        return Err(Error::InvalidInput);
+        return Err(InvalidInputSnafu.build());
     }
 
     let aead = match aead {
@@ -415,7 +415,7 @@ fn parse_v6<B: BufRead>(
     let aead_tag_size = aead.tag_size().unwrap_or_default();
     let esk = i.rest()?;
     if esk.len() < aead_tag_size {
-        return Err(Error::InvalidInput);
+        return Err(InvalidInputSnafu.build());
     }
 
     let aead = match aead {

@@ -20,6 +20,12 @@ pub enum Error {
         context: &'static str,
         backtrace: Option<Backtrace>,
     },
+    #[snafu(transparent)]
+    UnexpectedEof {
+        source: std::io::Error,
+        #[snafu(backtrace)]
+        backtrace: Option<Backtrace>,
+    },
 }
 
 impl Error {
@@ -28,6 +34,7 @@ impl Error {
         match self {
             Self::TooShort { .. } => true,
             Self::TagMissmatch { .. } => false,
+            Self::UnexpectedEof { .. } => true,
         }
     }
 }

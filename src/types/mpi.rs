@@ -4,7 +4,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
 use num_bigint::BigUint;
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, InvalidInputSnafu, Result};
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
@@ -42,7 +42,7 @@ impl MpiBytes {
         let len_bits = i.read_be_u16()?;
 
         if len_bits > MAX_EXTERN_MPI_BITS {
-            return Err(Error::InvalidInput);
+            return Err(InvalidInputSnafu.build());
         }
 
         let len_bytes = (len_bits + 7) >> 3;

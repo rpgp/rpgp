@@ -1334,7 +1334,7 @@ fn test_encrypted_key() {
         .err()
         .unwrap();
 
-    assert!(matches!(res, pgp::errors::Error::InvalidInput));
+    assert!(matches!(res, pgp::errors::Error::InvalidInput { .. }));
     let _signed_key = unsigned_pubkey
         .sign(&mut rng, &*key, &*key.public_key(), &"123".into())
         .unwrap();

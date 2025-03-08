@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, Result};
+use crate::errors::{Error, InvalidInputSnafu, Result};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
@@ -49,7 +49,7 @@ impl Config {
                 let chunk_size = data
                     .read_u8()?
                     .try_into()
-                    .map_err(|_| Error::InvalidInput)?;
+                    .map_err(|_| InvalidInputSnafu.build())?;
                 let salt = data.read_array::<32>()?;
 
                 Ok(Self::V2 {
@@ -258,7 +258,7 @@ impl SymEncryptedProtectedData {
                     unsupported_err!("AEAD mode: {:?}", aead);
                 };
                 if data.len() < aead_tag_size {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
                 let offset = data.len() - aead_tag_size;
                 let mut final_auth_tag = data.split_off(offset);

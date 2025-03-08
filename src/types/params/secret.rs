@@ -5,7 +5,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::parsing_reader::BufReadParsing;
 use crate::types::*;
 
@@ -108,7 +108,7 @@ fn parse_secret_fields<B: BufRead>(
         // cumulative length of all the following conditionally included S2K parameter fields.
         let len = i.read_u8()?;
         if len == 0 {
-            return Err(crate::errors::Error::InvalidInput);
+            return Err(InvalidInputSnafu.build());
         }
         Some(len)
     } else {
