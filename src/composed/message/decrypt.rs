@@ -53,6 +53,14 @@ impl PlainSessionKey {
             key: key.as_ref().to_vec(),
         }
     }
+
+    pub fn sym_algorithm(&self) -> Option<SymmetricKeyAlgorithm> {
+        match self {
+            Self::V3_4 { sym_alg, .. } => Some(*sym_alg),
+            Self::V5 { .. } | Self::V6 { .. } => None,
+            Self::Unknown { sym_alg, .. } => Some(*sym_alg),
+        }
+    }
 }
 
 /// Decrypts session key from SKESK packet.

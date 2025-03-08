@@ -5,6 +5,7 @@ use log::debug;
 use crate::armor;
 use crate::composed::message::decrypt::*;
 use crate::composed::signed_key::SignedSecretKey;
+use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
 use crate::packet::{
     LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
@@ -800,7 +801,14 @@ impl TheRing<'_> {
         for esk in esk {
             match esk {
                 Esk::PublicKeyEncryptedSessionKey(k) => pkesks.push(k),
-                Esk::SymKeyEncryptedSessionKey(k) => skesks.push(k),
+                Esk::SymKeyEncryptedSessionKey(k) => {
+                    ensure!(
+                        k.sym_algorithm() != SymmetricKeyAlgorithm::Plaintext,
+                        "SKESK must not use plaintext"
+                    );
+
+                    skesks.push(k)
+                }
             }
         }
 
@@ -1042,7 +1050,6 @@ mod tests {
 
     use super::*;
     use crate::crypto::aead::{AeadAlgorithm, ChunkSize};
-    use crate::crypto::sym::SymmetricKeyAlgorithm;
     use crate::types::{CompressionAlgorithm, StringToKey};
     use crate::{Deserializable, MessageBuilder};
 
@@ -1374,53 +1381,54 @@ mod tests {
         password_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES256);
     }
 
-    //     #[test]
-    //     fn test_no_plaintext_decryption() {
-    //         // Invalid message "encrypted" with plaintext algorithm.
-    //         // Generated with the Python script below.
-    //         let msg_raw = b"\xc3\x04\x04\x00\x00\x08\xd2-\x01\x00\x00\xcb\x12b\x00\x00\x00\x00\x00Hello world!\xd3\x14\xc3\xadw\x022\x05\x0ek'k\x8d\x12\xaa8\r'\x8d\xc0\x82)";
-    //         /*
-    //                 import hashlib
-    //                 import sys
-    //                 data = (
-    //                     b"\xc3"  # PTag = 11000011, new packet format, tag 3 = SKESK
-    //                     b"\x04"  # Packet length, 4
-    //                     b"\x04"  # Version number, 4
-    //                     b"\x00"  # Algorithm, plaintext
-    //                     b"\x00\x08"  # S2K specifier, Simple S2K, SHA256
-    //                     b"\xd2"  # PTag = 1101 0010, new packet format, tag 18 = SEIPD
-    //                     b"\x2d"  # Packet length, 45
-    //                     b"\x01"  # Version number, 1
-    //                 )
-    //                 inner_data = (
-    //                     b"\x00\x00"  # IV
-    //                     b"\xcb"  # PTag = 11001011, new packet format, tag 11 = literal data packet
-    //                     b"\x12"  # Packet length, 18
-    //                     b"\x62"  # Binary data ('b')
-    //                     b"\x00"  # No filename, empty filename length
-    //                     b"\x00\x00\x00\x00"  # Date
-    //                     b"Hello world!"
-    //                 )
-    //                 data += inner_data
-    //                 data += (
-    //                     b"\xd3"  # Modification Detection Code packet, tag 19
-    //                     b"\x14"  # MDC packet length, 20 bytes
-    //                 )
-    //                 data += hashlib.new("SHA1", inner_data + b"\xd3\x14").digest()
-    //                 print(data)
-    //         */
-    //         let msg = Message::from_bytes(&msg_raw[..]).unwrap();
+    #[test]
+    fn test_no_plaintext_decryption() {
+        // Invalid message "encrypted" with plaintext algorithm.
+        // Generated with the Python script below.
+        let msg_raw = b"\xc3\x04\x04\x00\x00\x08\xd2-\x01\x00\x00\xcb\x12b\x00\x00\x00\x00\x00Hello world!\xd3\x14\xc3\xadw\x022\x05\x0ek'k\x8d\x12\xaa8\r'\x8d\xc0\x82)";
+        /*
+                import hashlib
+                import sys
+                data = (
+                    b"\xc3"  # PTag = 11000011, new packet format, tag 3 = SKESK
+                    b"\x04"  # Packet length, 4
+                    b"\x04"  # Version number, 4
+                    b"\x00"  # Algorithm, plaintext
+                    b"\x00\x08"  # S2K specifier, Simple S2K, SHA256
+                    b"\xd2"  # PTag = 1101 0010, new packet format, tag 18 = SEIPD
+                    b"\x2d"  # Packet length, 45
+                    b"\x01"  # Version number, 1
+                )
+                inner_data = (
+                    b"\x00\x00"  # IV
+                    b"\xcb"  # PTag = 11001011, new packet format, tag 11 = literal data packet
+                    b"\x12"  # Packet length, 18
+                    b"\x62"  # Binary data ('b')
+                    b"\x00"  # No filename, empty filename length
+                    b"\x00\x00\x00\x00"  # Date
+                    b"Hello world!"
+                )
+                data += inner_data
+                data += (
+                    b"\xd3"  # Modification Detection Code packet, tag 19
+                    b"\x14"  # MDC packet length, 20 bytes
+                )
+                data += hashlib.new("SHA1", inner_data + b"\xd3\x14").digest()
+                print(data)
+        */
+        let msg = Message::from_bytes(&msg_raw[..]).unwrap();
 
-    //         // Before the fix message eventually decrypted to
-    //         //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
-    //         // where "48656c6c6f20776f726c6421" is an encoded "Hello world!" string.
-    //         assert!(msg
-    //             .decrypt_with_password(&"foobarbaz".into())
-    //             .err()
-    //             .unwrap()
-    //             .to_string()
-    //             .contains("plaintext"));
-    //     }
+        // Before the fix message eventually decrypted to
+        //   Literal(LiteralData { packet_version: New, mode: Binary, created: 1970-01-01T00:00:00Z, file_name: "", data: "48656c6c6f20776f726c6421" })
+        // where "48656c6c6f20776f726c6421" is an encoded "Hello world!" string.
+        dbg!(&msg);
+        let decrypted_err = msg
+            .decrypt_with_password(&"foobarbaz".into())
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(decrypted_err.contains("plaintext"), "{}", decrypted_err);
+    }
 
     //     #[test]
     //     fn test_x25519_signing_string() {
