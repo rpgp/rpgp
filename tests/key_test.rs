@@ -1139,6 +1139,7 @@ fn private_ecc1_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1252,7 +1253,8 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         if unlock {
             let sk: SignedSecretKey = parsed.clone().try_into().unwrap();
             sk.unlock(&"".into(), |_, _| Ok(()))
-                .expect("failed to unlock key");
+                .expect("failed to unlock key")
+                .unwrap();
 
             let pub_key = sk.public_key();
             assert_eq!(pub_key.key_id(), sk.key_id());

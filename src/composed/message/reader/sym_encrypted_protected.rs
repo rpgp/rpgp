@@ -25,7 +25,7 @@ pub enum SymEncryptedProtectedDataReader<R: BufRead> {
 }
 
 #[derive(derive_more::Debug)]
-enum MaybeDecryptor<R: BufRead> {
+pub enum MaybeDecryptor<R: BufRead> {
     Raw(#[debug("R")] R),
     Decryptor(StreamDecryptor<R>),
 }
@@ -194,7 +194,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
 
         loop {
             match std::mem::replace(self, Self::Error) {
-                Self::Init { mut source, config } => {
+                Self::Init { source, config } => {
                     *self = Self::Body {
                         config,
                         decryptor: MaybeDecryptor::Raw(source),

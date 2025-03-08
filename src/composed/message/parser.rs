@@ -291,7 +291,7 @@ impl<'a> Message<'a> {
 
         match typ {
             // Standard PGP types
-            BlockType::Message | BlockType::MultiPartMessage(_, _) => {
+            BlockType::File | BlockType::Message | BlockType::MultiPartMessage(_, _) => {
                 let headers = dearmor.headers.clone(); // FIXME: avoid clone
 
                 if !Self::matches_block_type(typ) {
@@ -304,7 +304,6 @@ impl<'a> Message<'a> {
             | BlockType::PrivateKey
             | BlockType::Signature
             | BlockType::CleartextMessage
-            | BlockType::File
             | BlockType::PublicKeyPKCS1(_)
             | BlockType::PublicKeyPKCS8
             | BlockType::PublicKeyOpenssh

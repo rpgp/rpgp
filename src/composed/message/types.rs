@@ -393,8 +393,8 @@ impl<'a> Edata<'a> {
             Self::SymEncryptedProtectedData { reader } => {
                 reader.decrypt(key)?;
             }
-            Self::SymEncryptedData { reader } => {
-                todo!();
+            Self::SymEncryptedData { .. } => {
+                todo!("sym encrypted data");
                 // reader.decrypt();
             }
         }
@@ -913,7 +913,7 @@ impl<'a> TheRing<'a> {
 
             let mut is_consistent = true;
 
-            for (i, key) in pkesk_session_keys {
+            for (_i, key) in pkesk_session_keys {
                 if key != sk.1 {
                     is_consistent = false;
                     break;
@@ -930,7 +930,7 @@ impl<'a> TheRing<'a> {
 
             let mut is_consistent = true;
 
-            for (i, key) in skesk_session_keys {
+            for (_i, key) in skesk_session_keys {
                 if key != sk.1 {
                     is_consistent = false;
                     break;
@@ -947,7 +947,7 @@ impl<'a> TheRing<'a> {
 
             let mut is_consistent = true;
 
-            for (i, key) in self.session_keys.iter().enumerate() {
+            for (_i, key) in self.session_keys.iter().enumerate() {
                 if key != &sk {
                     is_consistent = false;
                     break;

@@ -6,7 +6,6 @@ use log::debug;
 
 use crate::errors::Result;
 use crate::packet::{Signature, SignatureVersionSpecific};
-use crate::types::Password;
 use crate::{Message, RingResult, TheRing};
 
 use super::PacketBodyReader;
@@ -122,21 +121,6 @@ impl<'a> SignatureBodyReader<'a> {
                     },
                     fps,
                 ))
-            }
-            _ => {
-                bail!("cannot decrypt message that has already been read from");
-            }
-        }
-    }
-
-    pub(crate) fn decrypt_with_password(self, msg_pw: &Password) -> Result<Self> {
-        match self {
-            Self::Init { hasher, source } => {
-                let source = source.decrypt_with_password(msg_pw)?;
-                Ok(Self::Init {
-                    hasher,
-                    source: Box::new(source),
-                })
             }
             _ => {
                 bail!("cannot decrypt message that has already been read from");

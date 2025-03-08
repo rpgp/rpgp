@@ -129,12 +129,12 @@ impl PkeskBytes {
                 let skey_len = if version == 3 { len - 1 } else { len };
 
                 // The encrypted session key.
-                let esk = i.read_take(skey_len.into())?;
+                let session_key = i.take_bytes(skey_len.into())?.freeze();
 
                 Ok(PkeskBytes::X448 {
                     ephemeral: ephemeral_public,
                     sym_alg,
-                    session_key: esk,
+                    session_key,
                 })
             }
             #[cfg(not(feature = "unstable-curve448"))]

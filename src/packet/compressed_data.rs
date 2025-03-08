@@ -127,10 +127,8 @@ impl CompressedData {
     }
 
     /// Create the structure from the raw compressed data.
-    pub(crate) fn from_compressed(
-        alg: CompressionAlgorithm,
-        data: impl Into<Bytes>,
-    ) -> Result<Self> {
+    #[cfg(test)]
+    fn from_compressed(alg: CompressionAlgorithm, data: impl Into<Bytes>) -> Result<Self> {
         let compressed_data = data.into();
         let len = 1 + compressed_data.len();
         let packet_header = PacketHeader::new_fixed(Tag::CompressedData, len.try_into()?);

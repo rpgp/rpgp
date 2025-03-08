@@ -657,7 +657,6 @@ impl<R: BufRead> StreamDecryptor<R> {
             Self::V1 { .. } => todo!(),
             Self::V2 {
                 aead_tag_size,
-                chunk_size_expanded,
                 written,
                 chunk_index,
                 nonce,
@@ -671,7 +670,6 @@ impl<R: BufRead> StreamDecryptor<R> {
 
                 let mut final_auth_tag = buf.split_off(buf.len() - *aead_tag_size);
 
-                let full_chunk_size = *chunk_size_expanded + *aead_tag_size;
                 aead.decrypt_in_place(sym_alg, &message_key, &nonce, &*info, buf)?;
                 *written += buf.len();
 
@@ -706,7 +704,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         chunk_size: ChunkSize,
         salt: &[u8; 32],
         key: &[u8],
-        source: R,
+        _source: R,
     ) -> Result<Self> {
         // Initial key material is the session key.
         let ikm = key;

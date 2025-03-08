@@ -722,7 +722,7 @@ mod tests {
         use crate::Message;
 
         println!("reading {}", filename);
-        let (msg, header) = Message::from_armor_file(filename).expect("parse");
+        let (msg, _header) = Message::from_armor_file(filename).expect("parse");
 
         let mut decrypted = msg
             .decrypt_with_password(&"password".into())

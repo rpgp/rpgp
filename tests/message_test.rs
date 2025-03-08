@@ -10,7 +10,6 @@ extern crate pretty_env_logger;
 extern crate log;
 
 use std::fs::File;
-use std::io::Read;
 
 use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
 use pgp::types::KeyDetails;
@@ -28,7 +27,7 @@ struct Testcase {
     keyid: Option<String>,
 }
 
-fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
+fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
     let _ = pretty_env_logger::try_init();
 
     // TODO: verify filename
@@ -69,9 +68,9 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
 
     let file_name = entry.replace(".json", ".asc");
     let cipher_file_path = format!("{base_path}/{file_name}");
-    let mut cipher_file = File::open(&cipher_file_path).unwrap();
+    // let cipher_file = File::open(&cipher_file_path).unwrap();
 
-    let (message, headers) =
+    let (message, _headers) =
         Message::from_armor_file(cipher_file_path).expect("failed to parse message");
     info!("message: {:?}", &message);
 
@@ -81,45 +80,23 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
                 .decrypt(&details.passphrase.into(), &decrypt_key)
                 .expect("failed to init decryption");
 
-            if let Some(verify_key) = verify_key {
-                decrypted
-                    .verify(&verify_key.primary_key)
-                    .expect("message verification failed");
-            }
+            let mut msg = decrypted.decompress().expect("compression");
+            let data = msg.as_data_string().unwrap();
 
+            // TODO: figure out how to do roundtrips
             // serialize and check we get the same thing
-            todo!();
             // let serialized = decrypted.to_armored_bytes(None.into()).unwrap();
-
             // // and parse them again
             // let (decrypted2, _headers) =
             //     Message::from_armor(&serialized[..]).expect("failed to parse round2");
             // assert_eq!(decrypted, decrypted2);
 
-            // let raw = match decrypted {
-            //     Message::Literal(data) => data,
-            //     Message::Compressed(data) => {
-            //         let mut bytes = Vec::new();
-            //         data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
-            //         let m = Message::from_bytes(&bytes[..]).unwrap();
+            assert_eq!(data, details.textcontent.unwrap_or_default());
 
-            //         // serialize and check we get the same thing
-            //         let serialized = m.to_armored_bytes(None.into()).unwrap();
-
-            //         // and parse them again
-            //         let (m2, _headers) = Message::from_armor_single(&serialized[..])
-            //             .expect("failed to parse round3");
-            //         assert_eq!(m, m2);
-
-            //         m.get_literal().unwrap().clone()
-            //     }
-            //     _ => panic!("unexpected message type: {decrypted:?}"),
-            // };
-
-            // assert_eq!(
-            //     ::std::str::from_utf8(raw.data()).unwrap(),
-            //     details.textcontent.unwrap_or_default()
-            // );
+            if let Some(verify_key) = verify_key {
+                msg.verify(&verify_key.primary_key)
+                    .expect("message verification failed");
+            }
         }
         Message::Signed { signature, .. } => {
             println!("signature: {signature:?}");
@@ -130,9 +107,9 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
         }
     }
 
+    // TODO: how to roundtrip?
     // // serialize and check we get the same thing
     // let serialized = message.to_armored_string(Some(&headers).into()).unwrap();
-
     // if is_normalized {
     //     let mut cipher_file = File::open(&cipher_file_path).unwrap();
     //     let mut expected_bytes = String::new();
@@ -140,7 +117,6 @@ fn test_parse_msg(entry: &str, base_path: &str, is_normalized: bool) {
     //     // normalize read in line endings to unix
     //     assert_eq!(serialized, expected_bytes.replace("\r\n", "\n"));
     // }
-
     // // and parse them again
     // let (message2, headers2) =
     //     Message::from_armor(serialized.as_bytes()).expect("failed to parse round2");
@@ -259,84 +235,75 @@ fn msg_large_indeterminate_len() {
         .decrypt(&"moon".into(), &decrypt_key)
         .expect("failed to decrypt message");
 
-    //     let raw = match decrypted {
-    //         Message::Literal(data) => data,
-    //         Message::Compressed(data) => {
-    //             let mut bytes = Vec::new();
-    //             data.decompress().unwrap().read_to_end(&mut bytes).unwrap();
-    //             let m = Message::from_bytes(&bytes[..]).unwrap();
+    let mut msg = decrypted.decompress().unwrap();
+    let raw = msg.as_data_string().unwrap();
 
-    //             m.get_literal().unwrap().clone()
-    //         }
-    //         _ => panic!("unexpected message type: {decrypted:?}"),
-    //     };
+    assert_eq!(
+        raw,
+        "Content-Type: text/plain; charset=us-ascii
+    Autocrypt-Gossip: addr=deltabot@codespeak.net; keydata=
+      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
+      I=
+    Autocrypt-Gossip: addr=holger@merlinux.eu; keydata=
+      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
+      1CvHBWNRmnPMaFMeSpgJ
 
-    //     assert_eq!(
-    //         ::std::str::from_utf8(raw.data()).unwrap(),
-    //         "Content-Type: text/plain; charset=us-ascii
-    // Autocrypt-Gossip: addr=deltabot@codespeak.net; keydata=
-    //   xsDNBFur7GMBDACeGJhpeP4xGZCUQcjFj1pPSXjWeFlezAo5Jkw5VivJoJRByJxO2dzg9HtAIYcgg2
-    //   WR6b57rx/v9CyU6Ev653j4DMLghoKdyC/kGm/44pi9At4hXtXzgfp6ixKNuJnMfRC3fe0G5oRQY40c
-    //   1AdaPDpfYaKT+dlFQLZpFXr+Jz+Y8Br717NXAYJUUOAWnH0oRkI1EfdttwF7kki0gLB93BvVc2hmE5
-    //   xMiWEUHV+OlyqYeIJEtopGiqRRAKKZXmwkiQktiUTB+SaixAReXJmJQ1LW6lzceV7eqPC+NIUplv0N
-    //   fTI4YcFCAbZr1Jl1Wo70oEXOidrH4LEOGLKlj9z6FoPRnPu3PhpHbCE0emimADSnc17t5m935emnMk
-    //   6Bo0zl6ODzaqAYti6TMxCOcYtL+ypERweaprgL3BqQF7au7abCGM1QuOWObInQRLkO+hoXbSTIUhBo
-    //   Ount8oa/BVwoWcxQaupI45IvT3TvTfFrW52zyxKTbfrA3MEi0SwBB4ZK4t8AEQEAAc0YPGRlbHRhYm
-    //   90QGNvZGVzcGVhay5uZXQ+wsD8BBMBCAAmBQJbq+xjBQkAAAAAAhkBAhsDBgsJBwMCAQYVCAkKCwIC
-    //   FgICHgEACgkQouc5Q3Wnbc/I+Qv9EDxYA1buPKfN42OcIhCnnMfc/r4uCtXjJri+/gxHRjkpPMWW9o
-    //   /sRMPWKiFV9UUYeDKkln1Eh4mdI/RdyO6Q47znsBcwJzyddZoFD6VeSi3+oRM1q1ykDlczJZ639mfO
-    //   eVH+ebPGUX/3apMPSUlflphQ1PKJo6Nwm6/oTfi+XQWwdj8IhHh801XEdqUlizVAWNAsy50COI5a+F
-    //   Kxslfz6I1ce5ezsHNUCtVw0YP6/+YaeIsv+nazB1038jgjpeVJz2Xt4svWTpkgFF/LLeEXgdcZnI8Z
-    //   u+IWdPSzz434YAynr68VdTjJoc2B+YPfqP38lkqnPAqaavwq/5/NLwJ6WCyVa/HCEu7OiYVEkXC4JX
-    //   ZD4xdejrWG9p4JVQcwUv1rewbVqBMQ30ZlsBMAmEOh4+wkML+U+00/9LlQEv2wsLZMQ1OQVjxfncGb
-    //   /tsOOavm25jhQnytwyM2j3eItnNni93Echqa0Fb3vQIB5ZrRtFVx15LomgsNWPHJN/BSeGuBzsDNBF
-    //   ur7GMBDADPo8r8T2sDHaJ7NnVxxh5+dc9jgQkKdMmAba+RyJ2k0w5G4zKYQ5IZ1LEK5hXMkJ8dOOPW
-    //   lUxvMqD732C2AwllLden4ZZNnMG/sXBNJXFcIOHMjG+Q8SzJ1q5tOQsqXGZ3+MRR9mfvJ8KLfaWWyY
-    //   +I2Ow5gCkrueo/mTkCnVjOzQltuqUi6aG0f8B44A5+S0EfA4tFF0b0zJgReH4DfhQV7g+nUgbCmb3w
-    //   EdRnrXL01JkDw5Zjy1Fx9QYNYzXk1hzWZugU9pSrMw7Sx4Zox+wWVCYTKfBvuJVVgNUDqv+B7RejeP
-    //   OnMm2bI+AG3DgAOTaeTLa0xOqYF3n7tegFJTLCXYG9wUO8M76jttAjb8J3l9D/wiM+F+UPQcBFdRYZ
-    //   JySUITyakgt8BrKzhtTKj/7lPdMYp+jglFFvvspnCZ3OJt0fHc9r58fFIdpuF/Wb7kEQkemoAZev2t
-    //   1ZIEhFQFDFwWzJA3ymiRLwV/51JeH41N9TvKbG+bSxybIGIjZ26ccAEQEAAcLA5QQYAQgADwUCW6vs
-    //   YwUJAAAAAAIbDAAKCRCi5zlDdadtz9U0C/0f+DIxh2IKK64MyWsCmv7BHIHEETtrXwQtYL9edOqrd2
-    //   ty3f+QZ0MDS6/9f0/h4BWNa2WOxpUlamilAW1q2+JvLwKwwm7RVSOfmpJ0fVJn+d6E2LW8iz7rELza
-    //   +6/SIivXkBHxZK9ykMdk4k1QlT6dA32mHzR+O7qL42htifHlzU7RTZio29oF0wOC2MHX96qMFXKS6z
-    //   4s/6syEdrV4OZsyGo+/IrQubahrDE7/vDEHU0ez2AzmZuptJ6P3XcbzvEN1qwvrWO11DE22aCj7Iuv
-    //   OoWICXyPb0u5DjSeejj5YoJ9frBiOSN5a/2Np4EII/3BY16cKDMEcE8104vIVEhmjzUWEWRP+BfUQm
-    //   wU1xKr4A8VD/4iJzTOJr8wmsmyUyfrBJ378AoJrw3buuaOMxGX58RkN7Nv0djnfnmpwr73hmLlw9sr
-    //   BS0T8vAI6psuMcmu/Oh2MUfnExZdYryW+/zOYWnGeEOi0ZiP/0KEZ5ePlchn/DlE549gB2Ht+U97na
-    //   I=
-    // Autocrypt-Gossip: addr=holger@merlinux.eu; keydata=
-    //   mQENBFHjpUYBCADtXtH0nIjMpuaWgOvcg6/bBJKhDW9mosTOYH1XaArGG2REhgTh8CyU27qPG+1NKO
-    //   qm5VT4JWfG91TgvBQdx37ejiLxK9pkqkDMSSHCd5+6lPpgYOTueejToVHTRcHLp2fv7DOJ1s+G05TX
-    //   T6gesTVvCyNXpGJN/RXbfF5XOBb4Q+5rp7t9ygjb9F97zkeT6YKAAtYqnZNUvamfmNK+vKFyhwhWJX
-    //   0Fb6qP3cvlxh4kXbeVdRjlf1Bg17OVcS1uUTI51W67x7vKgOWSUx1gpArq/YYg43o0kcnzj1mEUdjw
-    //   gu7qAOwoq3b9tHefG971/3/zbPC6lpli7oUV7cfdmSZPABEBAAG0ImhvbGdlciBrcmVrZWwgPGhvbG
-    //   dlckBtZXJsaW51eC5ldT6JATsEEwECACUCGwMGCwkIBwMCBhUIAgkKCwQWAgMBAh4BAheABQJR5XTc
-    //   AhkBAAoJEI47A6J5t3LWGFYH/iG8e2Rn6D/Z5q7vAF00SCkRYzhDqVEx7bX/YazmfiUQImjBnbZZa5
-    //   zCQZSDYjAZdwNKBUpdG8Xlc+TI5qLBNEiapOPUYUaaJuG6GtaRF0E36yqvh//VDnCpeeurpn4EhyFB
-    //   2SeoMqNxVhv0gdzUi8jp9fHlWNvvYgeTU2y3+9EXGLgayoDPEoUSSF8AOSa3SkgzDnTWNTOVrHJ5UV
-    //   j2mZTW6HBYPfnKmu/3aERlDH0pOYHBT1bzT6JRBvADZsEln8OM2ODyMjFNiUb7IHbpQb2JETFdMY54
-    //   E6gT7pCwleE/K3yovWsUdrJo6YruU2xdlCIWf3qfUQ5xcXUsTitOjky0H2hvbGdlciBrcmVrZWwgPG
-    //   hwa0B0cmlsbGtlLm5ldD6JATgEEwECACIFAlHlXhICGwMGCwkIBwMCBhUIAgkKCwQWAgMBAh4BAheA
-    //   AAoJEI47A6J5t3LWYKsIAOU6h2W9lQIKJVgRQMXRjk6vS6QIl3t0we/N9u52YBcE2iGYiyC9a5+VTv
-    //   Z4OTDWV6gx8KYFnK6V5PYL6+CZJ/qfsImWwnb6Rp0nGulPjxEhiVjNakQryVZhcXKE8lhMhWYPRxUG
-    //   gEb3VtOI7HUFVVnhLiakfr8ULe7b5O4EWiYPFxO+5kr44Xvxc3mHrKbfHGuJUxKlAiiQeoiCA/E2cD
-    //   SMq3qEcrzE9UeW/1qn1pIxx/tGhMSSR7TKQkzTBUyEepY/wh1JHGXIsd7L0bmowG0YF+I5tG4FOZjj
-    //   kzDPayR5zYyvu/A8L3ynP9lwloJCkyKGVQv9c/nCJCNgimgTiWe5AQ0EUeOlRgEIANjZCj/cBHinl1
-    //   8SLdY8VsruEEiFBTgOZn7lWOFcF4bSoJm6bzXckBgPp8yd77MEn7HsfMe9tJuriNvAVl8Ybxqum543
-    //   +KtJg1oZ9qv8RQ8OCXRjwNl7dxh41lKmyomFSKhyhmCxLkIwoh+XD2vTiD/w7j9QCtBzQ+UsHLWG4w
-    //   XHkZ7SfOkVE8EVN/ygqOFeOVRmozckm7pv71JOYlVGO+Gk265ZO3hlstPJgWIbe28S46lDX4wmyJw7
-    //   tIuu7zeKTbINztMOUV79S7N2uNE5dt18EtlQb+k4l6JWvpZM+URiPGfLSgCi51njVkSELORW/OrMAJ
-    //   JImPt7eY/7dtVL6ekAEQEAAYkBHwQYAQIACQUCUeOlRgIbDAAKCRCOOwOiebdy1pp6B/9mMHozAVOS
-    //   oVhnj4QmlTGlRJxs6tHgTkJ47RlqmRRjYpY4G36rs21KPH++w5E8eLFpQwI6EZ+3yBiNQ7lpRhPmAo
-    //   8jP38zvvmT3a1WmvVIBbmwDcGpVvlE6kk3djiJ2jOPfvpwPG42A4trOyvuZtJ38nvzyyuwtg3OhHfX
-    //   dhjEPzJDSJeUZuRgz+aE7+38edwFi3jwb8gOB3QhrrKo4fL1nMHrrgZK4+n8so5Np4OhX0RBkfy8Jj
-    //   idxg9xawubYJDHcjc242Wl/gcAIUcnQZ4tEFOL55SCgih1LtlQLsrdnkJgnGI7VepNL1MwMXnAvfIb
-    //   1CvHBWNRmnPMaFMeSpgJ
-
-    // test1
-    // "
-    //     );
+    test1
+    "
+    );
 }
 
 #[test]

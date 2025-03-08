@@ -107,7 +107,7 @@ where
 }
 
 #[derive(derive_more::Debug)]
-enum StreamEncryptorInner<M, R>
+pub enum StreamEncryptorInner<M, R>
 where
     M: BlockDecrypt + BlockEncryptMut + BlockCipher,
     BufEncryptor<M>: KeyIvInit,

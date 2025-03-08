@@ -132,14 +132,6 @@ pub struct Take<'a, T> {
     limit: usize,
 }
 
-impl<T> Take<'_, T> {
-    /// Returns the number of bytes that can be read before this instance will
-    /// return EOF.
-    pub fn limit(&self) -> usize {
-        self.limit
-    }
-}
-
 impl<T: Read> Read for Take<'_, T> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         // Don't call into inner reader at all at EOF because it may still block
