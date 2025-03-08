@@ -1405,3 +1405,16 @@ fn load_adsk_sec() {
     println!("key_flags {:?}", key_flags);
     assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
 }
+
+/// This contains a key with an unknown algorithm.
+#[test]
+fn key_pub_regression1() {
+    let _ = pretty_env_logger::try_init();
+
+    let original = std::fs::read_to_string("tests/key_pub_regression1.asc").unwrap();
+
+    let (key, _headers) =
+        pgp::composed::SignedPublicKey::from_armor_single(original.as_bytes()).expect("parsing");
+
+    dbg!(&key);
+}

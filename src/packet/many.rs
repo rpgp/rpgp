@@ -234,7 +234,6 @@ mod tests {
                     "38521947", // RSA public exponent too large
                     "32162244", // Invalid DSA key
                     "43825283", // Invalid DSA key
-                    "12688657", // ??
                     "9745167",  // MPI_NULL
                     "9797527",  // MPI_NULL
                     "19045846", // invalid packet length

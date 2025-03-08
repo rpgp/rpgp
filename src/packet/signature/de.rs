@@ -1,7 +1,7 @@
 use std::io::BufRead;
 use std::str;
 
-use bytes::{Buf, Bytes};
+use bytes::Buf;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::{debug, warn};
 use smallvec::SmallVec;
@@ -344,7 +344,8 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         }
         _ => {
             // don't assume format, could be non-MPI
-            Ok(SignatureBytes::Native(Bytes::new()))
+            let rest = i.rest()?.freeze();
+            Ok(SignatureBytes::Native(rest))
         }
     }
 }
