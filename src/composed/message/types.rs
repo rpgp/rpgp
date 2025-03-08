@@ -1,7 +1,6 @@
 use std::io::{self, BufRead, Read};
 
 use bytes::{Buf, Bytes};
-use log::{debug, warn};
 
 use crate::armor;
 use crate::composed::message::decrypt::*;

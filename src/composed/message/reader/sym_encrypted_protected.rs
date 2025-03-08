@@ -1,10 +1,7 @@
 use std::io::{self, BufRead, Read};
 
-use bytes::Buf;
-
-use crate::crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm};
 use crate::errors::Result;
-use crate::packet::{ChunkSize, PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig};
+use crate::packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig};
 use crate::types::Tag;
 use crate::PlainSessionKey;
 
