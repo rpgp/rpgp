@@ -12,14 +12,14 @@ use zeroize::Zeroizing;
 
 use super::ArmorOptions;
 use crate::armor;
-use crate::crypto::aead::AeadAlgorithm;
+use crate::crypto::aead::{AeadAlgorithm, ChunkSize};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::{LineBreak, LineWriter};
 use crate::normalize_lines::NormalizedReader;
 use crate::packet::{
-    ChunkSize, CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
+    CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
     MaybeNormalizedReader, OnePassSignature, PacketHeader, PacketTrait,
     PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType, SignatureVersionSpecific,
     Subpacket, SubpacketData, SymEncryptedProtectedData, SymEncryptedProtectedDataConfig,

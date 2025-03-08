@@ -395,9 +395,8 @@ impl<'a> Edata<'a> {
             Self::SymEncryptedProtectedData { reader } => {
                 reader.decrypt(key)?;
             }
-            Self::SymEncryptedData { .. } => {
-                todo!("sym encrypted data");
-                // reader.decrypt();
+            Self::SymEncryptedData { reader } => {
+                reader.decrypt(key)?;
             }
         }
 

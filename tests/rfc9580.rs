@@ -1,8 +1,8 @@
 use std::fs::File;
 
+use pgp::crypto::aead::ChunkSize;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
-use pgp::packet::ChunkSize;
 use pgp::types::KeyVersion;
 use pgp::MessageBuilder;
 use pgp::{
