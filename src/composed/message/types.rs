@@ -13,7 +13,9 @@ use crate::packet::{
 };
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
-use crate::types::{EskType, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag};
+use crate::types::{
+    EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag,
+};
 
 use super::reader::{
     CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
@@ -806,6 +808,7 @@ impl<'a> TheRing<'a> {
         let mut pkesk_session_keys = Vec::new();
 
         for esk in &pkesks {
+            debug!("checking esk: {:?}/{:?}", esk.id(), esk.fingerprint());
             for (i, key) in self.secret_keys.iter().enumerate() {
                 result.secret_keys[i] = InnerRingResult::NoMatch;
 
@@ -818,30 +821,26 @@ impl<'a> TheRing<'a> {
                 };
 
                 macro_rules! try_key {
-                    ($skey:expr, $values:expr) => {
+                    ($skey:expr, $pkey:expr, $values:expr) => {
+                        debug!("found matching key {:?}, trying to decrypt", $skey.key_id());
                         match $skey.secret_params() {
                             SecretParams::Encrypted(_) => {
                                 // unlock
                                 for pw in &self.key_passwords {
-                                    match key.unlock(pw, |pub_params, sec_params| {
-                                        sec_params.decrypt(
-                                            pub_params,
-                                            $values,
-                                            typ,
-                                            &$skey.public_key(),
-                                        )
-                                    }) {
+                                    match $skey.decrypt_session_key(pw, $values, typ) {
                                         Ok(Ok(session_key)) => {
+                                            debug!("decrypted session key");
                                             result.secret_keys[i] = InnerRingResult::Ok;
                                             pkesk_session_keys.push((i, session_key));
                                             break;
                                         }
-                                        Ok(Err(_err)) => {
+                                        Ok(Err(err)) => {
+                                            debug!("failed to decrypt session key: {:?}", err);
                                             result.secret_keys[i] = InnerRingResult::Invalid;
                                             break;
                                         }
-                                        Err(_err) => {
-                                            // ..
+                                        Err(err) => {
+                                            debug!("failed to unlock key: {:?}", err);
                                             result.secret_keys[i] =
                                                 InnerRingResult::InvalidPassword;
                                         }
@@ -850,17 +849,15 @@ impl<'a> TheRing<'a> {
                             }
                             SecretParams::Plain(sec_params) => {
                                 // already unlocked
-                                match sec_params.decrypt(
-                                    $skey.public_key().public_params(),
-                                    $values,
-                                    typ,
-                                    &$skey.public_key(),
-                                ) {
+                                debug!("key is already unlocked");
+                                match sec_params.decrypt($pkey.public_params(), $values, typ, $pkey)
+                                {
                                     Ok(session_key) => {
                                         result.secret_keys[i] = InnerRingResult::Ok;
                                         pkesk_session_keys.push((i, session_key));
                                     }
-                                    Err(_err) => {
+                                    Err(err) => {
+                                        debug!("failed to decrypt session key: {:?}", err);
                                         result.secret_keys[i] = InnerRingResult::Invalid;
                                     }
                                 }
@@ -870,15 +867,17 @@ impl<'a> TheRing<'a> {
                 }
 
                 // check primary key
-                if esk.match_identity(&key.primary_key) {
+                debug!("checking primary key: {:?}", key.primary_key.key_id());
+                if esk.match_identity(key.primary_key.public_key()) {
                     let values = esk.values()?;
-                    try_key!(key.primary_key, values);
+                    try_key!(key, key.primary_key.public_key(), values);
                 } else {
                     // search subkeys
                     for subkey in &key.secret_subkeys {
-                        if esk.match_identity(&**subkey) {
+                        debug!("checking subkey: {:?}", subkey.key_id());
+                        if esk.match_identity(&subkey.public_key()) {
                             let values = esk.values()?;
-                            try_key!(subkey, values);
+                            try_key!(subkey, subkey.key.public_key(), values);
                         }
                     }
                 }

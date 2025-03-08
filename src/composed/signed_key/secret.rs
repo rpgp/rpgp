@@ -192,13 +192,12 @@ impl SignedSecretKey {
         key_pw: &Password,
         values: &PkeskBytes,
         typ: EskType,
-    ) -> Result<PlainSessionKey> {
+    ) -> Result<Result<PlainSessionKey>> {
         debug!("decrypt session key");
 
-        let key = self.unlock(key_pw, |pub_params, priv_key| {
+        self.unlock(key_pw, |pub_params, priv_key| {
             priv_key.decrypt(pub_params, values, typ, self.primary_key.public_key())
-        })??;
-        Ok(key)
+        })
     }
 }
 
@@ -298,13 +297,12 @@ impl SignedSecretSubKey {
         key_pw: &Password,
         values: &PkeskBytes,
         typ: EskType,
-    ) -> Result<PlainSessionKey> {
+    ) -> Result<Result<PlainSessionKey>> {
         debug!("decrypt session key");
 
-        let key = self.unlock(key_pw, |pub_params, priv_key| {
+        self.unlock(key_pw, |pub_params, priv_key| {
             priv_key.decrypt(pub_params, values, typ, self.key.public_key())
-        })??;
-        Ok(key)
+        })
     }
 }
 
