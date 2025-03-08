@@ -1177,7 +1177,9 @@ mod tests {
     use crate::line_writer::LineBreak;
     use crate::normalize_lines::normalize_lines;
     use crate::util::test::{check_strings, random_string, ChaosReader};
-    use crate::{Deserializable, Message, SignedSecretKey, VerificationResult};
+    use crate::{
+        Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
+    };
 
     #[test]
     fn binary_file_fixed_size_no_compression_roundtrip_password_seipdv1() {
@@ -1465,27 +1467,28 @@ mod tests {
 
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
-            // decrypt it - public
-            {
-                let mut decrypted = message.decrypt(&"".into(), &skey).expect("decryption");
+            // decrypt it - public and password
+            let key_pw = Password::empty();
+            let message_pw = Password::from("hello world");
+            let ring = TheRing {
+                secret_keys: vec![&skey],
+                key_passwords: vec![&key_pw],
+                message_password: vec![&message_pw],
+                ..Default::default()
+            };
 
-                assert!(decrypted.is_literal());
+            let (mut decrypted, result) =
+                message.decrypt_the_ring(ring, false).expect("decryption");
+            assert!(decrypted.is_literal());
 
-                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-                assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
-            }
-            // TODO
-            // // decrypt it - password
-            // {
-            //     let mut decrypted = message
-            //         .decrypt_with_password(&"hello world".into())
-            //         .expect("decryption sym");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
 
-            //     assert!(decrypted.is_literal());
+            dbg!(&result);
 
-            //     assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
-            //     assert_eq!(&decrypted.as_data_vec(), &buf);
-            // }
+            assert_eq!(result.secret_keys, vec![InnerRingResult::Ok]);
+            assert_eq!(result.message_password, vec![InnerRingResult::Ok]);
+            assert!(result.session_keys.is_empty());
         }
     }
 

@@ -817,58 +817,70 @@ impl<'a> TheRing<'a> {
                     }
                 };
 
+                macro_rules! try_key {
+                    ($skey:expr, $values:expr) => {
+                        match $skey.secret_params() {
+                            SecretParams::Encrypted(_) => {
+                                // unlock
+                                for pw in &self.key_passwords {
+                                    match key.unlock(pw, |pub_params, sec_params| {
+                                        sec_params.decrypt(
+                                            pub_params,
+                                            $values,
+                                            typ,
+                                            &$skey.public_key(),
+                                        )
+                                    }) {
+                                        Ok(Ok(session_key)) => {
+                                            result.secret_keys[i] = InnerRingResult::Ok;
+                                            pkesk_session_keys.push((i, session_key));
+                                            break;
+                                        }
+                                        Ok(Err(_err)) => {
+                                            result.secret_keys[i] = InnerRingResult::Invalid;
+                                            break;
+                                        }
+                                        Err(_err) => {
+                                            // ..
+                                            result.secret_keys[i] =
+                                                InnerRingResult::InvalidPassword;
+                                        }
+                                    }
+                                }
+                            }
+                            SecretParams::Plain(sec_params) => {
+                                // already unlocked
+                                match sec_params.decrypt(
+                                    $skey.public_key().public_params(),
+                                    $values,
+                                    typ,
+                                    &$skey.public_key(),
+                                ) {
+                                    Ok(session_key) => {
+                                        result.secret_keys[i] = InnerRingResult::Ok;
+                                        pkesk_session_keys.push((i, session_key));
+                                    }
+                                    Err(_err) => {
+                                        result.secret_keys[i] = InnerRingResult::Invalid;
+                                    }
+                                }
+                            }
+                        }
+                    };
+                }
+
                 // check primary key
                 if esk.match_identity(&key.primary_key) {
                     let values = esk.values()?;
-                    match key.primary_key.secret_params() {
-                        SecretParams::Encrypted(_) => {
-                            // unlock
-                            for pw in &self.key_passwords {
-                                match key.unlock(pw, |pub_params, sec_params| {
-                                    sec_params.decrypt(
-                                        pub_params,
-                                        values,
-                                        typ,
-                                        &key.primary_key.public_key(),
-                                    )
-                                }) {
-                                    Ok(Ok(session_key)) => {
-                                        result.secret_keys[i] = InnerRingResult::Ok;
-                                        pkesk_session_keys.push((i, session_key));
-                                        break;
-                                    }
-                                    Ok(Err(_err)) => {
-                                        result.secret_keys[i] = InnerRingResult::Invalid;
-                                        break;
-                                    }
-                                    Err(_err) => {
-                                        // ..
-                                        result.secret_keys[i] = InnerRingResult::InvalidPassword;
-                                    }
-                                }
-                            }
-                        }
-                        SecretParams::Plain(sec_params) => {
-                            // already unlocked
-                            match sec_params.decrypt(
-                                key.primary_key.public_key().public_params(),
-                                values,
-                                typ,
-                                &key.primary_key.public_key(),
-                            ) {
-                                Ok(session_key) => {
-                                    result.secret_keys[i] = InnerRingResult::Ok;
-                                    pkesk_session_keys.push((i, session_key));
-                                }
-                                Err(_err) => {
-                                    result.secret_keys[i] = InnerRingResult::Invalid;
-                                }
-                            }
-                        }
-                    }
+                    try_key!(key.primary_key, values);
                 } else {
                     // search subkeys
-                    todo!()
+                    for subkey in &key.secret_subkeys {
+                        if esk.match_identity(&**subkey) {
+                            let values = esk.values()?;
+                            try_key!(subkey, values);
+                        }
+                    }
                 }
             }
         }
@@ -972,12 +984,12 @@ impl<'a> TheRing<'a> {
 /// This is what happens if you use `TheRing`.
 #[derive(Debug)]
 pub struct RingResult {
-    secret_keys: Vec<InnerRingResult>,
-    message_password: Vec<InnerRingResult>,
-    session_keys: Vec<InnerRingResult>,
+    pub secret_keys: Vec<InnerRingResult>,
+    pub message_password: Vec<InnerRingResult>,
+    pub session_keys: Vec<InnerRingResult>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InnerRingResult {
     /// Value was not checked, due to either an earlier error
     /// or another mechanism already matching
