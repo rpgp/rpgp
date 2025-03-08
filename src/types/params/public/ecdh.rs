@@ -39,6 +39,24 @@ pub enum EcdhPublicParams {
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
     },
+    #[cfg_attr(test, proptest(skip))]
+    Brainpool256 {
+        p: MpiBytes,
+        hash: HashAlgorithm,
+        alg_sym: SymmetricKeyAlgorithm,
+    },
+    #[cfg_attr(test, proptest(skip))]
+    Brainpool384 {
+        p: MpiBytes,
+        hash: HashAlgorithm,
+        alg_sym: SymmetricKeyAlgorithm,
+    },
+    #[cfg_attr(test, proptest(skip))]
+    Brainpool512 {
+        p: MpiBytes,
+        hash: HashAlgorithm,
+        alg_sym: SymmetricKeyAlgorithm,
+    },
 
     /// Public parameters for a curve that we don't know about (which might not use Mpi representation).
     #[cfg_attr(test, proptest(skip))]
@@ -72,6 +90,18 @@ impl Serialize for EcdhPublicParams {
             }
             Self::P521 { p, hash, alg_sym } => {
                 let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
+                p.to_writer(writer)?;
+                Some((hash, alg_sym))
+            }
+            Self::Brainpool256 { p, hash, alg_sym } => {
+                p.to_writer(writer)?;
+                Some((hash, alg_sym))
+            }
+            Self::Brainpool384 { p, hash, alg_sym } => {
+                p.to_writer(writer)?;
+                Some((hash, alg_sym))
+            }
+            Self::Brainpool512 { p, hash, alg_sym } => {
                 p.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
@@ -119,6 +149,18 @@ impl Serialize for EcdhPublicParams {
                 sum += self.curve().oid().len();
                 sum += p.write_len();
             }
+            Self::Brainpool256 { p, .. } => {
+                sum += self.curve().oid().len();
+                sum += p.write_len();
+            }
+            Self::Brainpool384 { p, .. } => {
+                sum += self.curve().oid().len();
+                sum += p.write_len();
+            }
+            Self::Brainpool512 { p, .. } => {
+                sum += self.curve().oid().len();
+                sum += p.write_len();
+            }
             Self::Unsupported { curve, opaque, .. } => {
                 let oid = curve.oid();
                 sum += oid.len();
@@ -145,6 +187,9 @@ impl EcdhPublicParams {
             Self::P256 { .. } => ECCCurve::P256,
             Self::P384 { .. } => ECCCurve::P384,
             Self::P521 { .. } => ECCCurve::P521,
+            Self::Brainpool256 { .. } => ECCCurve::BrainpoolP256r1,
+            Self::Brainpool384 { .. } => ECCCurve::BrainpoolP384r1,
+            Self::Brainpool512 { .. } => ECCCurve::BrainpoolP512r1,
             Self::Unsupported { curve, .. } => curve.clone(),
         }
     }
@@ -158,7 +203,13 @@ impl EcdhPublicParams {
         let curve = ecc_curve_from_oid(&curve_raw).ok_or_else(|| format_err!("invalid curve"))?;
 
         match curve {
-            ECCCurve::Curve25519 | ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 => {
+            ECCCurve::Curve25519
+            | ECCCurve::P256
+            | ECCCurve::P384
+            | ECCCurve::P521
+            | ECCCurve::BrainpoolP256r1
+            | ECCCurve::BrainpoolP384r1
+            | ECCCurve::BrainpoolP512r1 => {
                 // MPI of an EC point representing a public key
                 let p = MpiBytes::try_from_reader(&mut i)?;
 
@@ -223,6 +274,9 @@ impl EcdhPublicParams {
                 let p = p521::PublicKey::from_sec1_bytes(p.as_ref())?;
                 Ok(EcdhPublicParams::P521 { p, hash, alg_sym })
             }
+            ECCCurve::BrainpoolP256r1 => Ok(EcdhPublicParams::Brainpool256 { p, hash, alg_sym }),
+            ECCCurve::BrainpoolP384r1 => Ok(EcdhPublicParams::Brainpool384 { p, hash, alg_sym }),
+            ECCCurve::BrainpoolP512r1 => Ok(EcdhPublicParams::Brainpool512 { p, hash, alg_sym }),
             _ => bail!("unexpected ecdh curve: {:?}", curve),
         }
     }

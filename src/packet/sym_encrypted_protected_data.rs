@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, InvalidInputSnafu, Result};
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::packet::{PacketHeader, PacketTrait};
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;

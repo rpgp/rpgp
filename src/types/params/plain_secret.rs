@@ -309,6 +309,11 @@ impl PlainSecretParams {
                     EcdhPublicParams::P256 { hash, alg_sym, .. } => (hash, alg_sym),
                     EcdhPublicParams::P384 { hash, alg_sym, .. } => (hash, alg_sym),
                     EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Brainpool256 { .. }
+                    | EcdhPublicParams::Brainpool384 { .. }
+                    | EcdhPublicParams::Brainpool512 { .. } => {
+                        unsupported_err!("brainpool is not supported");
+                    }
                     EcdhPublicParams::Unsupported { curve, .. } => {
                         unsupported_err!("curve {} is not supported", curve);
                     }

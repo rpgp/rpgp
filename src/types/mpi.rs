@@ -4,7 +4,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
 use num_bigint::BigUint;
 
-use crate::errors::{Error, InvalidInputSnafu, Result};
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 

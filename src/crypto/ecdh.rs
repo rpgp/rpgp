@@ -184,6 +184,11 @@ impl SecretKey {
 
                 Ok(SecretKey::P521 { secret })
             }
+            EcdhPublicParams::Brainpool256 { .. }
+            | EcdhPublicParams::Brainpool384 { .. }
+            | EcdhPublicParams::Brainpool512 { .. } => {
+                unsupported_err!("brainpool curve {:?} for ECDH")
+            }
             EcdhPublicParams::Unsupported { ref curve, .. } => {
                 unsupported_err!("curve {:?} for ECDH", curve)
             }

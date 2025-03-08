@@ -36,7 +36,7 @@ use crate::ser::Serialize;
 /// however, in RFC 9580, native encoding is used for the modern Ed25519 and Ed448 signatures.
 ///
 /// This type can represent both flavors of cryptographic signature data.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 pub enum SignatureBytes {
     /// A cryptographic signature that is represented as a set of [Mpi]s.
     ///
@@ -46,7 +46,7 @@ pub enum SignatureBytes {
     /// A cryptographic signature that is represented in native format.
     ///
     /// This format was introduced in RFC 9580 and is currently only used for Ed25519 and Ed448.
-    Native(Bytes),
+    Native(#[debug("{}", hex::encode(_0))] Bytes),
 }
 
 impl SignatureBytes {

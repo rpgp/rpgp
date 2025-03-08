@@ -96,10 +96,11 @@ pub trait BufReadParsing: BufRead + Sized {
     }
 
     /// Drain the data in this reader, to make sure all is consumed.
-    fn drain(&mut self) -> Result<()> {
+    /// Returns how many bytes have been drained
+    fn drain(&mut self) -> Result<u64> {
         let mut out = std::io::sink();
-        std::io::copy(self, &mut out)?;
-        Ok(())
+        let copied = std::io::copy(self, &mut out)?;
+        Ok(copied)
     }
 
     fn read_tag(&mut self, tag: &[u8]) -> Result<()> {

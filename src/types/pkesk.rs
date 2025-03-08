@@ -115,7 +115,7 @@ impl PkeskBytes {
                 // A one-octet size of the following fields.
                 let len = i.read_u8()?;
                 if len == 0 {
-                    return Err(crate::errors::Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
                 // The one-octet algorithm identifier, if it was passed (in the case of a v3 PKESK packet).

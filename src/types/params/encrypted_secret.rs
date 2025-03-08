@@ -7,7 +7,7 @@ use digest::Digest;
 use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::checksum;
-use crate::errors::{Error, InvalidInputSnafu, Result};
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 

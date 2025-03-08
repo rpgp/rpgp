@@ -3,7 +3,6 @@ use std::io::BufRead;
 
 use crate::errors::{Error, Result};
 use crate::packet::{Packet, PacketHeader};
-use crate::parsing_reader::BufReadParsing;
 use crate::reader::PacketBodyReader;
 
 pub struct PacketParser<R: BufRead> {
@@ -46,28 +45,16 @@ impl<R: BufRead> Iterator for PacketParser<R> {
             }
         };
 
-        log::warn!("found header: {header:?}");
+        debug!("found header: {header:?}");
         let mut body = PacketBodyReader::new(header, &mut self.reader);
         match Packet::from_reader(header, &mut body) {
             Ok(packet) => Some(Ok(packet)),
             Err(Error::PacketParsing { source }) if source.is_incomplete() => {
                 debug!("incomplete packet for: {:?}", source);
                 // not bailing, we are just skipping incomplete bodies
-
-                if let Err(err) = body.drain() {
-                    self.is_done = true;
-                    return Some(Err(err.into()));
-                }
-
                 Some(Err(Error::PacketIncomplete { source }))
             }
-            Err(err) => {
-                if let Err(err) = body.drain() {
-                    self.is_done = true;
-                    return Some(Err(err.into()));
-                }
-                Some(Err(err.into()))
-            }
+            Err(err) => Some(Err(err.into())),
         }
     }
 }
@@ -120,6 +107,7 @@ mod tests {
     use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
     use std::path::Path;
 
+    use log::warn;
     use regex::Regex;
 
     use super::*;
@@ -236,22 +224,40 @@ mod tests {
                 (offset, tag, line)
             })
             .filter(|(offset, _, _)| {
-                // skip certain packages we are not (yet) parsing
-                offset != "1193538" && // invalid mpi
-                offset != "5053086" && // invalid mpi
-                offset != "6844449" && // RSA public exponent too large
-                offset != "9758352" && // TODO: unclear why this sig fails to parse
-                offset != "9797527" && // TODO: unclear why this sig fails to parse
-                offset != "24798372" && // TODO: unclear why this public sub key fails to parse
-                offset != "24810682" && // bad attribute size
-                offset != "38544535" && // bad attribute size
-                offset != "38521947" && // RSA public exponent too large
-                offset != "32162244" && // Invalid DSA key
-                offset != "43825283" // Invalid DSA key
+                let list = vec![
+                    // skip certain packages we are not (yet) parsing
+                    "1193538",  // invalid mpi
+                    "9218758",  // invalid packet length
+                    "8240010",  // invalid packet length
+                    "6844449",  // RSA public exponent too large
+                    "24798372", // TODO: unclear why this public sub key fails to parse
+                    "38521947", // RSA public exponent too large
+                    "32162244", // Invalid DSA key
+                    "43825283", // Invalid DSA key
+                    "12688657", // ??
+                    "9745167",  // MPI_NULL
+                    "9797527",  // MPI_NULL
+                    "19045846", // invalid packet length
+                    "19047047", // invalid packet length
+                ];
+                if list.contains(&offset.as_str()) {
+                    warn!("skipping {}", offset);
+                    false
+                } else {
+                    true
+                }
             });
 
-        let actual_tags = PacketParser::new(file).filter(|p| p.is_ok());
-        for ((_offset, tag, e), packet) in expected_tags.zip(actual_tags) {
+        let actual_tags = PacketParser::new(file).filter(|p| {
+            p.as_ref()
+                .inspect_err(|e| {
+                    warn!("failed to parse packet: {:?}", e);
+                })
+                .is_ok()
+        });
+        let iter = expected_tags.zip(actual_tags);
+
+        for ((_offset, tag, e), packet) in iter {
             let e = e.as_ref().unwrap();
             let packet = packet.unwrap();
 

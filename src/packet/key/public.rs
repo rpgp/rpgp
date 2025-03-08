@@ -649,6 +649,13 @@ impl PublicKeyTrait for PubKeyInner {
             ) => {
                 bail!("ECDH ({:?}) can not be used for verify operations", params,);
             }
+            PublicParams::ECDH(
+                EcdhPublicParams::Brainpool256 { .. }
+                | EcdhPublicParams::Brainpool384 { .. }
+                | EcdhPublicParams::Brainpool512 { .. },
+            ) => {
+                bail!("ECDH (unsupported: brainpool) can not be used for verify operations");
+            }
             PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
                 bail!(
                     "ECDH (unsupported: {:?}) can not be used for verify operations",

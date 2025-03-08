@@ -68,6 +68,7 @@ fn v3_parser<B: BufRead>(
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, &mut i)?;
+    debug!("signature data {:?}", sig);
 
     match version {
         SignatureVersion::V2 => Ok(Signature::v2(
@@ -136,6 +137,7 @@ fn v4_parser<B: BufRead>(
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, i)?;
+    debug!("signature data {:?}", sig);
 
     Ok(Signature::v4(
         packet_header,
@@ -200,6 +202,7 @@ fn v6_parser<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Signat
 
     // The SignatureBytes comprising the signature.
     let sig = actual_signature(&pub_alg, i)?;
+    debug!("signature data {:?}", sig);
     Ok(Signature::v6(
         packet_header,
         typ,
@@ -215,6 +218,7 @@ fn v6_parser<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Signat
 
 fn subpackets<B: BufRead>(packet_version: PacketHeaderVersion, mut i: B) -> Result<Vec<Subpacket>> {
     let mut packets = Vec::new();
+
     while i.has_remaining()? {
         // the subpacket length (1, 2, or 5 octets)
         let packet_len = SubpacketLength::try_from_reader(&mut i)?;
@@ -229,6 +233,7 @@ fn subpackets<B: BufRead>(packet_version: PacketHeaderVersion, mut i: B) -> Resu
 
         let mut body = i.read_take(len);
         let packet = subpacket(typ, is_critical, packet_len, packet_version, &mut body)?;
+        debug!("found subpacket {:?}", packet);
 
         if !body.rest()?.is_empty() {
             warn!("failed to fully process subpacket: {:?}", typ);
@@ -301,13 +306,13 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
     match typ {
         PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
             let v = MpiBytes::try_from_reader(&mut i)?;
-            Ok(SignatureBytes::Mpis(vec![v.to_owned()]))
+            Ok(SignatureBytes::Mpis(vec![v]))
         }
         PublicKeyAlgorithm::DSA | PublicKeyAlgorithm::ECDSA | &PublicKeyAlgorithm::EdDSALegacy => {
             let a = MpiBytes::try_from_reader(&mut i)?;
             let b = MpiBytes::try_from_reader(&mut i)?;
 
-            Ok(SignatureBytes::Mpis(vec![a.to_owned(), b.to_owned()]))
+            Ok(SignatureBytes::Mpis(vec![a, b]))
         }
 
         &PublicKeyAlgorithm::Ed25519 => {
@@ -315,6 +320,11 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
             Ok(SignatureBytes::Native(sig.freeze()))
         }
 
+        &PublicKeyAlgorithm::Elgamal => {
+            let a = MpiBytes::try_from_reader(&mut i)?;
+            let b = MpiBytes::try_from_reader(&mut i)?;
+            Ok(SignatureBytes::Mpis(vec![a, b]))
+        }
         &PublicKeyAlgorithm::Private100
         | &PublicKeyAlgorithm::Private101
         | &PublicKeyAlgorithm::Private102
@@ -327,7 +337,10 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         | &PublicKeyAlgorithm::Private109
         | &PublicKeyAlgorithm::Private110 => {
             let v = MpiBytes::try_from_reader(&mut i)?;
-            Ok(SignatureBytes::Mpis(vec![v.to_owned()]))
+            Ok(SignatureBytes::Mpis(vec![v]))
+        }
+        PublicKeyAlgorithm::ElgamalEncrypt => {
+            bail!("invalid signature algorithm, encryption only elgamal");
         }
         _ => {
             // don't assume format, could be non-MPI

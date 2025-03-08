@@ -202,6 +202,11 @@ impl FakeHsm {
                     | EcdhPublicParams::P256 { hash, alg_sym, .. }
                     | EcdhPublicParams::P384 { hash, alg_sym, .. }
                     | EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Brainpool256 { .. }
+                    | EcdhPublicParams::Brainpool384 { .. }
+                    | EcdhPublicParams::Brainpool512 { .. } => {
+                        panic!("unsupported params: {:?}", params);
+                    }
                     EcdhPublicParams::Unsupported { .. } => {
                         panic!("unsupported params: {:?}", params);
                     }
