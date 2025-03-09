@@ -191,6 +191,7 @@ impl SignatureConfig {
         Ok(SignatureHasher {
             hasher,
             config: self,
+            last_was_cr: false,
         })
     }
 
@@ -632,6 +633,7 @@ impl SignatureConfig {
 pub struct SignatureHasher {
     hasher: Box<dyn DynDigest>,
     config: SignatureConfig,
+    last_was_cr: bool,
 }
 
 impl SignatureHasher {
@@ -640,7 +642,17 @@ impl SignatureHasher {
     where
         K: SecretKeyTrait + ?Sized,
     {
-        let Self { config, mut hasher } = self;
+        let Self {
+            config,
+            mut hasher,
+            last_was_cr: _,
+        } = self;
+
+        if config.typ == SignatureType::Text && self.last_was_cr {
+            // edge case: last character in data stream was a CR, we add a normalizing LF
+            hasher.update(b"\n");
+        }
+
         ensure!(
             (config.version() == SignatureVersion::V4 && key.version() == KeyVersion::V4)
                 || (config.version() == SignatureVersion::V6 && key.version() == KeyVersion::V6),
@@ -667,8 +679,35 @@ impl SignatureHasher {
     }
 
     /// Update the internal hasher.
+    ///
+    /// Normalize line-endings on the fly for SignatureType::Text
     pub(crate) fn update(&mut self, buf: &[u8]) {
-        self.hasher.update(buf);
+        if self.config.typ == SignatureType::Text {
+            for b in buf {
+                if self.last_was_cr {
+                    if *b == b'\n' {
+                        // previous was a CR, followed now by a LF -> just hash the LF
+                        self.hasher.update(b"\n");
+
+                        self.last_was_cr = false;
+                    } else {
+                        // previous was a CR, not followed by a LF -> insert a LF
+                        self.hasher.update(&[b'\n', *b]);
+                        self.last_was_cr = *b == b'\r';
+                    }
+                } else if *b == b'\n' {
+                    // a LF, which was not preceded by a CR
+                    self.hasher.update(b"\r\n");
+                } else if *b == b'\r' {
+                    self.hasher.update(&[*b]);
+                    self.last_was_cr = true;
+                } else {
+                    self.hasher.update(&[*b]);
+                }
+            }
+        } else {
+            self.hasher.update(buf);
+        }
     }
 }
 
