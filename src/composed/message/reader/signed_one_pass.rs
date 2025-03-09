@@ -22,7 +22,7 @@ pub struct NormalizingHasher {
 }
 
 impl NormalizingHasher {
-    fn new(hasher: Box<dyn DynDigest>, text_mode: bool) -> Self {
+    pub(crate) fn new(hasher: Box<dyn DynDigest>, text_mode: bool) -> Self {
         Self {
             hasher,
             text_mode,
@@ -30,7 +30,7 @@ impl NormalizingHasher {
         }
     }
 
-    fn done(mut self) -> Box<dyn DynDigest> {
+    pub(crate) fn done(mut self) -> Box<dyn DynDigest> {
         if self.text_mode && self.last_was_cr {
             self.hasher.update(b"\n")
         }
@@ -38,7 +38,7 @@ impl NormalizingHasher {
         self.hasher
     }
 
-    fn hash_buf(&mut self, buffer: &[u8]) {
+    pub(crate) fn hash_buf(&mut self, buffer: &[u8]) {
         if buffer.is_empty() {
             return;
         }
@@ -110,22 +110,13 @@ impl NormalizingHasher {
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
     Init {
-        // /// Running hasher
-        // #[debug("hasher")]
-        // hasher: Box<dyn DynDigest>,
         /// Running hasher
-        #[debug("hasher")]
         norm_hasher: NormalizingHasher,
-
         /// Data source
         source: Box<Message<'a>>,
     },
     Body {
-        // /// Running hasher
-        // #[debug("hasher")]
-        // hasher: Box<dyn DynDigest>,
         /// Running hasher
-        #[debug("hasher")]
         norm_hasher: NormalizingHasher,
         /// Data source
         source: Box<Message<'a>>,
@@ -161,11 +152,10 @@ impl<'a> SignatureOnePassReader<'a> {
         }
 
         let text_mode = ops.typ() == SignatureType::Text;
-
-        let hasher = NormalizingHasher::new(hasher, text_mode);
+        let norm_hasher = NormalizingHasher::new(hasher, text_mode);
 
         Ok(Self::Init {
-            norm_hasher: hasher,
+            norm_hasher,
             source,
         })
     }
