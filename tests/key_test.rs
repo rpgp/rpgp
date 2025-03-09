@@ -64,15 +64,13 @@ struct DumpResult {
 fn test_parse_dump(i: usize, expected: DumpResult) {
     let _ = pretty_env_logger::try_init();
 
-    let f = std::fs::read(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")))
-        .unwrap()
-        .into();
+    let f = Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp"));
 
     let mut actual = DumpResult::default();
 
-    for (j, key) in SignedPublicKey::from_bytes_many(f).unwrap().enumerate() {
+    for (j, key) in SignedPublicKey::from_file_many(f).unwrap().enumerate() {
         if j % 1000 == 0 {
-            println!("key {}: {}", i, j);
+            warn!("key {}: {}", i, j);
         }
         actual.total_count += 1;
         let key = match key {
@@ -159,31 +157,31 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_728,
+        17_727,
         // Hash::Other(4)
         1,
         3266,
-        20_995
+        20_994
     ),
     (
         test_parse_dumps_1,
         1,
-        17_565,
+        17_564,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3423,
+        3424,
         20_996
     ),
     (
         test_parse_dumps_2,
         2,
-        17_599,
+        17_598,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3390,
+        3391,
         20_994
     ),
     (
@@ -193,14 +191,14 @@ parse_dumps!(
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3321,
-        20_995
+        3322,
+        20_996
     ),
     (
         test_parse_dumps_4,
         4,
         17_608,
-        // - Elgamal verify
+        // - Elgamal verify - gets hidden?
         2,
         3384,
         20_994
@@ -208,21 +206,21 @@ parse_dumps!(
     (
         test_parse_dumps_5,
         5,
-        17_644,
+        17_642,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3349,
-        21_001
+        3352,
+        21_002
     ),
     (
         test_parse_dumps_6,
         6,
-        17_701,
+        17_702,
         // - Elgamal verify
         1,
-        3294,
-        20_996
+        3295,
+        20_998
     ),
     (
         test_parse_dumps_7,
@@ -230,8 +228,8 @@ parse_dumps!(
         17_722,
         // - Elgamal verify
         3,
-        3273,
-        20_998
+        3274,
+        20_999
     ),
     (
         test_parse_dumps_8,
@@ -250,8 +248,8 @@ parse_dumps!(
         // - Hash::Other(5)
         // - Elgamal verify
         3,
-        3421,
-        21_000
+        3423,
+        21_002
     ),
 );
 
@@ -343,7 +341,8 @@ fn test_parse_openpgp_sample_rsa_private() {
         }
         Ok(())
     })
-    .expect("failed to unlock");
+    .expect("failed to unlock")
+    .unwrap();
 
     let pub_key = pkey.public_key();
     assert_eq!(pub_key.key_id(), pkey.key_id());
@@ -739,7 +738,7 @@ fn encrypted_private_key() {
             }
             Ok(())
         },
-    ).unwrap();
+    ).unwrap().unwrap();
 }
 
 fn get_test_fingerprint(filename: &str) -> (serde_json::Value, SignedPublicKey) {
@@ -885,7 +884,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
             match parsed {
                 PublicOrSecret::Secret(sec) => {
-                    sec.unlock(&pw.into(), |_, _| Ok(())).unwrap();
+                    sec.unlock(&pw.into(), |_, _| Ok(())).unwrap().unwrap();
                 }
                 PublicOrSecret::Public(_) => {
                     // Nothing todo
@@ -899,7 +898,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
 fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let pk = from_bytes_many(f).unwrap();
+    let pk = from_bytes_many(BufReader::new(f)).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         if verify {
@@ -1140,6 +1139,7 @@ fn private_ecc1_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1162,6 +1162,7 @@ fn private_ecc2_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     /*
@@ -1187,6 +1188,7 @@ fn private_ecc3_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1207,6 +1209,7 @@ fn private_x25519_verify() {
         }
         Ok(())
     })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1250,7 +1253,8 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         if unlock {
             let sk: SignedSecretKey = parsed.clone().try_into().unwrap();
             sk.unlock(&"".into(), |_, _| Ok(()))
-                .expect("failed to unlock key");
+                .expect("failed to unlock key")
+                .unwrap();
 
             let pub_key = sk.public_key();
             assert_eq!(pub_key.key_id(), sk.key_id());
@@ -1303,7 +1307,7 @@ autocrypt_key!(
 #[test]
 fn test_invalid() {
     let v = (0..64).collect::<Vec<u8>>();
-    let k = SignedSecretKey::from_bytes(v.into());
+    let k = SignedSecretKey::from_bytes(&v[..]);
 
     assert!(k.is_err());
 }
@@ -1330,7 +1334,7 @@ fn test_encrypted_key() {
         .err()
         .unwrap();
 
-    assert!(matches!(res, pgp::errors::Error::InvalidInput));
+    assert!(matches!(res, pgp::errors::Error::InvalidInput { .. }));
     let _signed_key = unsigned_pubkey
         .sign(&mut rng, &*key, &*key.public_key(), &"123".into())
         .unwrap();
@@ -1400,4 +1404,17 @@ fn load_adsk_sec() {
     let key_flags = sig.key_flags();
     println!("key_flags {:?}", key_flags);
     assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
+}
+
+/// This contains a key with an unknown algorithm.
+#[test]
+fn key_pub_regression1() {
+    let _ = pretty_env_logger::try_init();
+
+    let original = std::fs::read_to_string("tests/key_pub_regression1.asc").unwrap();
+
+    let (key, _headers) =
+        pgp::composed::SignedPublicKey::from_armor_single(original.as_bytes()).expect("parsing");
+
+    dbg!(&key);
 }

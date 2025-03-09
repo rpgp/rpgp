@@ -1,36 +1,32 @@
 use aes::{Aes128, Aes192, Aes256};
 use blowfish::Blowfish;
-use bytes::{Buf, Bytes, BytesMut};
 use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
 use cfb_mode::cipher::{AsyncStreamCipher, KeyIvInit};
 use cfb_mode::{BufDecryptor, BufEncryptor, Decryptor, Encryptor};
-use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut, BlockSizeUser};
+use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut};
 use des::TdesEde3;
 use idea::Idea;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
-use sha1::{Digest, Sha1};
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
-use crate::util::fill_buffer;
 
-fn decrypt<MODE>(
-    key: &[u8],
-    iv: &[u8],
-    prefix: &mut [u8],
-    data: &mut [u8],
-    resync: bool,
-) -> Result<()>
+mod decryptor;
+mod encryptor;
+
+pub use self::decryptor::StreamDecryptor;
+pub use self::encryptor::StreamEncryptor;
+
+fn decrypt<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
     MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
     BufDecryptor<MODE>: KeyIvInit,
 {
     let mut mode = BufDecryptor::<MODE>::new_from_slices(key, iv)?;
-    mode.decrypt(prefix);
 
     // We do not do use "quick check" here.
     // See the "Security Considerations" section
@@ -38,20 +34,35 @@ where
     // and the paper <https://eprint.iacr.org/2005/033>
     // for details.
 
-    if resync {
-        unsupported_err!("CFB resync is disabled");
-    }
+    mode.decrypt(prefix);
+
     mode.decrypt(data);
     Ok(())
 }
 
-fn encrypt<MODE>(
-    key: &[u8],
-    iv: &[u8],
-    prefix: &mut [u8],
-    data: &mut [u8],
-    resync: bool,
-) -> Result<()>
+/// Legacy format using custom resync
+fn decrypt_resync<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
+where
+    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufDecryptor<MODE>: KeyIvInit,
+{
+    let mut mode = BufDecryptor::<MODE>::new_from_slices(key, iv)?;
+
+    // We do not do use "quick check" here.
+    // See the "Security Considerations" section
+    // in <https://www.rfc-editor.org/rfc/rfc9580.html#name-risks-of-a-quick-check-orac>
+    // and the paper <https://eprint.iacr.org/2005/033>
+    // for details.
+
+    let encrypted_prefix = prefix[2..].to_vec();
+    mode.decrypt(prefix);
+    mode = BufDecryptor::<MODE>::new_from_slices(key, &encrypted_prefix)?;
+
+    mode.decrypt(data);
+    Ok(())
+}
+
+fn encrypt<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where
     MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
     BufEncryptor<MODE>: KeyIvInit,
@@ -59,11 +70,26 @@ where
     let mut mode = BufEncryptor::<MODE>::new_from_slices(key, iv)?;
     mode.encrypt(prefix);
 
-    if resync {
-        unsupported_err!("CFB resync is disabled");
-    } else {
-        mode.encrypt(data);
-    }
+    mode.encrypt(data);
+
+    Ok(())
+}
+
+/// Legacy format using OpengPGP CFB Mode
+///
+/// <https://datatracker.ietf.org/doc/html/rfc4880.html#section-13.9>
+fn encrypt_resync<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
+where
+    MODE: BlockDecrypt + BlockEncryptMut + BlockCipher,
+    BufEncryptor<MODE>: KeyIvInit,
+{
+    let mut mode = BufEncryptor::<MODE>::new_from_slices(key, iv)?;
+    mode.encrypt(prefix);
+
+    // resync
+    mode = BufEncryptor::<MODE>::new_from_slices(key, &prefix[2..])?;
+    mode.encrypt(data);
+
     Ok(())
 }
 
@@ -166,7 +192,7 @@ impl SymmetricKeyAlgorithm {
     pub fn decrypt(self, key: &[u8], prefix: &mut [u8], ciphertext: &mut [u8]) -> Result<()> {
         debug!("unprotected decrypt");
         let iv_vec = vec![0u8; self.block_size()];
-        self.decrypt_with_iv(key, &iv_vec, prefix, ciphertext, true)?;
+        self.decrypt_with_iv_resync(key, &iv_vec, prefix, ciphertext)?;
         Ok(())
     }
 
@@ -181,25 +207,10 @@ impl SymmetricKeyAlgorithm {
         prefix: &mut [u8],
         ciphertext: &mut Vec<u8>,
     ) -> Result<()> {
-        #[inline]
-        fn calculate_sha1_unchecked<I, T>(data: I) -> [u8; 20]
-        where
-            T: AsRef<[u8]>,
-            I: IntoIterator<Item = T>,
-        {
-            use sha1::{Digest, Sha1};
-
-            let mut digest = Sha1::new();
-            for chunk in data {
-                digest.update(chunk.as_ref());
-            }
-            digest.finalize().into()
-        }
-
         debug!("protected decrypt");
 
         let iv_vec = vec![0u8; self.block_size()];
-        self.decrypt_with_iv(key, &iv_vec, prefix, ciphertext, false)?;
+        self.decrypt_with_iv(key, &iv_vec, prefix, ciphertext)?;
 
         // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
         const MDC_LEN: usize = 22;
@@ -230,14 +241,12 @@ impl SymmetricKeyAlgorithm {
     /// (128 bits), the IV is 18 octets long, and octets 17 and 18 replicate
     /// octets 15 and 16.  Those extra two octets are an easy check for a
     /// correct key.
-    #[allow(clippy::complexity)]
-    pub fn decrypt_with_iv<'a>(
+    pub fn decrypt_with_iv(
         self,
         key: &[u8],
         iv_vec: &[u8],
         encrypted_prefix: &mut [u8],
         encrypted_data: &mut [u8],
-        resync: bool,
     ) -> Result<()> {
         let bs = self.block_size();
         let ciphertext_len = encrypted_prefix.len() + encrypted_data.len();
@@ -248,37 +257,94 @@ impl SymmetricKeyAlgorithm {
                 bail!("'Plaintext' is not a legal cipher for encrypted data")
             }
             SymmetricKeyAlgorithm::IDEA => {
-                decrypt::<Idea>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Idea>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::TripleDES => {
-                decrypt::<TdesEde3>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<TdesEde3>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::CAST5 => {
-                decrypt::<Cast5>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Cast5>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::Blowfish => {
-                decrypt::<Blowfish>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Blowfish>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::AES128 => {
-                decrypt::<Aes128>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Aes128>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::AES192 => {
-                decrypt::<Aes192>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Aes192>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::AES256 => {
-                decrypt::<Aes256>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Aes256>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::Twofish => {
-                decrypt::<Twofish>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Twofish>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::Camellia128 => {
-                decrypt::<Camellia128>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Camellia128>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::Camellia192 => {
-                decrypt::<Camellia192>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?;
+                decrypt::<Camellia192>(key, iv_vec, encrypted_prefix, encrypted_data)?;
             }
             SymmetricKeyAlgorithm::Camellia256 => {
-                decrypt::<Camellia256>(key, iv_vec, encrypted_prefix, encrypted_data, resync)?
+                decrypt::<Camellia256>(key, iv_vec, encrypted_prefix, encrypted_data)?
+            }
+            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Applies the legacy resyncing
+    pub fn decrypt_with_iv_resync(
+        self,
+        key: &[u8],
+        iv_vec: &[u8],
+        encrypted_prefix: &mut [u8],
+        encrypted_data: &mut [u8],
+    ) -> Result<()> {
+        let bs = self.block_size();
+        let ciphertext_len = encrypted_prefix.len() + encrypted_data.len();
+        ensure!(bs + 2 < ciphertext_len, "invalid ciphertext");
+
+        match self {
+            SymmetricKeyAlgorithm::Plaintext => {
+                bail!("'Plaintext' is not a legal cipher for encrypted data")
+            }
+            SymmetricKeyAlgorithm::IDEA => {
+                decrypt_resync::<Idea>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::TripleDES => {
+                decrypt_resync::<TdesEde3>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::CAST5 => {
+                decrypt_resync::<Cast5>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::Blowfish => {
+                decrypt_resync::<Blowfish>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::AES128 => {
+                decrypt_resync::<Aes128>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::AES192 => {
+                decrypt_resync::<Aes192>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::AES256 => {
+                decrypt_resync::<Aes256>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::Twofish => {
+                decrypt_resync::<Twofish>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::Camellia128 => {
+                decrypt_resync::<Camellia128>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::Camellia192 => {
+                decrypt_resync::<Camellia192>(key, iv_vec, encrypted_prefix, encrypted_data)?;
+            }
+            SymmetricKeyAlgorithm::Camellia256 => {
+                decrypt_resync::<Camellia256>(key, iv_vec, encrypted_prefix, encrypted_data)?
             }
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 unimplemented_err!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
@@ -369,7 +435,7 @@ impl SymmetricKeyAlgorithm {
         // plaintext
         ciphertext[prefix_len..].copy_from_slice(plaintext);
 
-        self.encrypt_with_iv(key, &iv_vec, &mut ciphertext, true)?;
+        self.encrypt_with_iv_resync(key, &iv_vec, &mut ciphertext)?;
 
         Ok(ciphertext)
     }
@@ -414,7 +480,7 @@ impl SymmetricKeyAlgorithm {
         // IV is all zeroes
         let iv_vec = vec![0u8; self.block_size()];
 
-        self.encrypt_with_iv(key, &iv_vec, &mut ciphertext, false)?;
+        self.encrypt_with_iv(key, &iv_vec, &mut ciphertext)?;
 
         Ok(ciphertext)
     }
@@ -439,64 +505,31 @@ impl SymmetricKeyAlgorithm {
         R: Rng + CryptoRng,
         I: std::io::Read,
     {
-        match self {
-            SymmetricKeyAlgorithm::Plaintext => {
-                bail!("'Plaintext' is not a legal cipher for encrypted data")
-            }
-            SymmetricKeyAlgorithm::IDEA => Ok(StreamEncryptor::Idea(StreamEncryptorInner::new(
-                rng, plaintext, self, key,
-            )?)),
-            SymmetricKeyAlgorithm::TripleDES => Ok(StreamEncryptor::TripleDes(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::CAST5 => Ok(StreamEncryptor::Cast5(StreamEncryptorInner::new(
-                rng, plaintext, self, key,
-            )?)),
-            SymmetricKeyAlgorithm::Blowfish => Ok(StreamEncryptor::Blowfish(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::AES128 => Ok(StreamEncryptor::Aes128(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::AES192 => Ok(StreamEncryptor::Aes192(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::AES256 => Ok(StreamEncryptor::Aes256(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::Twofish => Ok(StreamEncryptor::Twofish(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::Camellia128 => Ok(StreamEncryptor::Camellia128(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::Camellia192 => Ok(StreamEncryptor::Camellia192(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::Camellia256 => Ok(StreamEncryptor::Camellia256(
-                StreamEncryptorInner::new(rng, plaintext, self, key)?,
-            )),
-            SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
-                bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
-            }
-        }
+        StreamEncryptor::new(rng, self, key, plaintext)
     }
 
-    pub fn encrypt_protected_stream<R, I, O>(
+    /// Protected decryption stream
+    pub fn stream_decryptor_protected<R>(
         self,
-        rng: R,
         key: &[u8],
-        plaintext: I,
-        mut ciphertext: O,
-    ) -> Result<()>
+        ciphertext: R,
+    ) -> Result<StreamDecryptor<R>>
     where
-        R: Rng + CryptoRng,
-        I: std::io::Read,
-        O: std::io::Write,
+        R: std::io::BufRead,
     {
-        let mut encryptor = self.stream_encryptor(rng, key, plaintext)?;
-        std::io::copy(&mut encryptor, &mut ciphertext)?;
-        Ok(())
+        StreamDecryptor::new(self, true, key, ciphertext)
+    }
+
+    /// Unprotected decryption stream
+    pub fn stream_decryptor_unprotected<R>(
+        self,
+        key: &[u8],
+        ciphertext: R,
+    ) -> Result<StreamDecryptor<R>>
+    where
+        R: std::io::BufRead,
+    {
+        StreamDecryptor::new(self, false, key, ciphertext)
     }
 
     /// Encrypt the data using CFB mode, without padding. Overwrites the input.
@@ -505,13 +538,62 @@ impl SymmetricKeyAlgorithm {
     /// prefixes the plaintext with BS+2 octets of random data, such that
     /// octets BS+1 and BS+2 match octets BS-1 and BS. It does a CFB
     /// resynchronization after encrypting those BS+2 octets.
-    #[allow(clippy::cognitive_complexity)] // FIXME
-    pub fn encrypt_with_iv(
+    pub fn encrypt_with_iv(self, key: &[u8], iv_vec: &[u8], ciphertext: &mut [u8]) -> Result<()> {
+        let bs = self.block_size();
+
+        let (prefix, data) = ciphertext.split_at_mut(bs + 2);
+
+        {
+            match self {
+                SymmetricKeyAlgorithm::Plaintext => {
+                    bail!("'Plaintext' is not a legal cipher for encrypted data")
+                }
+                SymmetricKeyAlgorithm::IDEA => {
+                    encrypt::<Idea>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::TripleDES => {
+                    encrypt::<TdesEde3>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::CAST5 => {
+                    encrypt::<Cast5>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::Blowfish => {
+                    encrypt::<Blowfish>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::AES128 => {
+                    encrypt::<Aes128>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::AES192 => {
+                    encrypt::<Aes192>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::AES256 => encrypt::<Aes256>(key, iv_vec, prefix, data)?,
+                SymmetricKeyAlgorithm::Twofish => {
+                    encrypt::<Twofish>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::Camellia128 => {
+                    encrypt::<Camellia128>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::Camellia192 => {
+                    encrypt::<Camellia192>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::Camellia256 => {
+                    encrypt::<Camellia256>(key, iv_vec, prefix, data)?;
+                }
+                SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
+                    bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Uses legacy resycing
+    pub fn encrypt_with_iv_resync(
         self,
         key: &[u8],
         iv_vec: &[u8],
         ciphertext: &mut [u8],
-        resync: bool,
     ) -> Result<()> {
         let bs = self.block_size();
 
@@ -523,37 +605,37 @@ impl SymmetricKeyAlgorithm {
                     bail!("'Plaintext' is not a legal cipher for encrypted data")
                 }
                 SymmetricKeyAlgorithm::IDEA => {
-                    encrypt::<Idea>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Idea>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::TripleDES => {
-                    encrypt::<TdesEde3>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<TdesEde3>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::CAST5 => {
-                    encrypt::<Cast5>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Cast5>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::Blowfish => {
-                    encrypt::<Blowfish>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Blowfish>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::AES128 => {
-                    encrypt::<Aes128>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Aes128>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::AES192 => {
-                    encrypt::<Aes192>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Aes192>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::AES256 => {
-                    encrypt::<Aes256>(key, iv_vec, prefix, data, resync)?
+                    encrypt_resync::<Aes256>(key, iv_vec, prefix, data)?
                 }
                 SymmetricKeyAlgorithm::Twofish => {
-                    encrypt::<Twofish>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Twofish>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::Camellia128 => {
-                    encrypt::<Camellia128>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Camellia128>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::Camellia192 => {
-                    encrypt::<Camellia192>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Camellia192>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::Camellia256 => {
-                    encrypt::<Camellia256>(key, iv_vec, prefix, data, resync)?;
+                    encrypt_resync::<Camellia256>(key, iv_vec, prefix, data)?;
                 }
                 SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                     bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(self))
@@ -623,292 +705,107 @@ impl SymmetricKeyAlgorithm {
     }
 }
 
-pub enum StreamEncryptor<R>
+#[inline]
+fn calculate_sha1_unchecked<I, T>(data: I) -> [u8; 20]
 where
-    R: std::io::Read,
+    T: AsRef<[u8]>,
+    I: IntoIterator<Item = T>,
 {
-    Idea(StreamEncryptorInner<Idea, R>),
-    TripleDes(StreamEncryptorInner<TdesEde3, R>),
-    Cast5(StreamEncryptorInner<Cast5, R>),
-    Blowfish(StreamEncryptorInner<Blowfish, R>),
-    Aes128(StreamEncryptorInner<Aes128, R>),
-    Aes192(StreamEncryptorInner<Aes192, R>),
-    Aes256(StreamEncryptorInner<Aes256, R>),
-    Twofish(StreamEncryptorInner<Twofish, R>),
-    Camellia128(StreamEncryptorInner<Camellia128, R>),
-    Camellia192(StreamEncryptorInner<Camellia192, R>),
-    Camellia256(StreamEncryptorInner<Camellia256, R>),
-}
+    use sha1::{Digest, Sha1};
 
-impl<R> std::io::Read for StreamEncryptor<R>
-where
-    R: std::io::Read,
-{
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Self::Idea(ref mut i) => i.read(buf),
-            Self::TripleDes(ref mut i) => i.read(buf),
-            Self::Cast5(ref mut i) => i.read(buf),
-            Self::Blowfish(ref mut i) => i.read(buf),
-            Self::Aes128(ref mut i) => i.read(buf),
-            Self::Aes192(ref mut i) => i.read(buf),
-            Self::Aes256(ref mut i) => i.read(buf),
-            Self::Twofish(ref mut i) => i.read(buf),
-            Self::Camellia128(ref mut i) => i.read(buf),
-            Self::Camellia192(ref mut i) => i.read(buf),
-            Self::Camellia256(ref mut i) => i.read(buf),
-        }
+    let mut digest = Sha1::new();
+    for chunk in data {
+        digest.update(chunk.as_ref());
     }
-}
-
-#[derive(derive_more::Debug)]
-pub enum StreamEncryptorInner<M, R>
-where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
-    BufEncryptor<M>: KeyIvInit,
-    R: std::io::Read,
-{
-    Prefix {
-        // We use regular sha1 for MDC, not sha1_checked. Collisions are not currently a concern with MDC.
-        hasher: Sha1,
-        #[debug("BufEncryptor")]
-        encryptor: BufEncryptor<M>,
-        prefix: Bytes,
-        #[debug("source")]
-        source: R,
-    },
-    Data {
-        hasher: Sha1,
-        #[debug("BufEncryptor")]
-        encryptor: BufEncryptor<M>,
-        buffer: BytesMut,
-        /// set to `None` once the source is fully read
-        #[debug("source: remaining? {}", source.is_some())]
-        source: Option<R>,
-    },
-    Mdc {
-        mdc: Bytes,
-    },
-    Done,
-    Unknown,
-}
-
-impl<M, R> StreamEncryptorInner<M, R>
-where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
-    BufEncryptor<M>: KeyIvInit,
-    R: std::io::Read,
-{
-    fn new<RAND>(mut rng: RAND, source: R, alg: SymmetricKeyAlgorithm, key: &[u8]) -> Result<Self>
-    where
-        RAND: Rng + CryptoRng,
-    {
-        debug!("protected encrypt stream");
-
-        let bs = alg.block_size();
-        let mut prefix = vec![0u8; bs + 2];
-
-        // prefix
-        rng.fill_bytes(&mut prefix[..bs]);
-
-        // add quick check
-        prefix[bs] = prefix[bs - 2];
-        prefix[bs + 1] = prefix[bs - 1];
-
-        // checksum over unencrypted data
-        let mut hasher = Sha1::default();
-
-        // IV is all zeroes
-        let iv_vec = vec![0u8; bs];
-
-        let mut encryptor = BufEncryptor::<M>::new_from_slices(key, &iv_vec)?;
-
-        // pre ingest prefix and encrypt it
-        hasher.update(&prefix);
-        encryptor.encrypt(&mut prefix);
-
-        Ok(Self::Prefix {
-            hasher,
-            encryptor,
-            prefix: prefix.into(),
-            source,
-        })
-    }
-
-    fn buffer_size() -> usize {
-        let block_size = <M as BlockSizeUser>::block_size();
-        block_size * 2
-    }
-}
-
-impl<M, R> std::io::Read for StreamEncryptorInner<M, R>
-where
-    M: BlockDecrypt + BlockEncryptMut + BlockCipher,
-    BufEncryptor<M>: KeyIvInit,
-    R: std::io::Read,
-{
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match std::mem::replace(self, Self::Unknown) {
-            Self::Prefix {
-                mut hasher,
-                mut encryptor,
-                mut prefix,
-                mut source,
-            } => {
-                // Prefix
-                let to_write = buf.len().min(prefix.remaining());
-                prefix.copy_to_slice(&mut buf[..to_write]);
-
-                if prefix.has_remaining() {
-                    *self = Self::Prefix {
-                        hasher,
-                        encryptor,
-                        prefix,
-                        source,
-                    };
-                } else {
-                    // prefix written, transition to data
-                    let mut buffer = BytesMut::zeroed(Self::buffer_size());
-
-                    // fill buffer
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
-                    let source = if read < buffer.len() {
-                        // done reading
-                        // shorten buffer accordingly
-                        buffer.truncate(read);
-                        None
-                    } else {
-                        Some(source)
-                    };
-
-                    // encrypt it
-                    hasher.update(&buffer);
-                    encryptor.encrypt(&mut buffer);
-
-                    *self = Self::Data {
-                        hasher,
-                        encryptor,
-                        buffer,
-                        source,
-                    };
-                }
-
-                Ok(to_write)
-            }
-            Self::Data {
-                mut hasher,
-                mut encryptor,
-                mut buffer,
-                source,
-            } => {
-                let to_write = buf.len().min(buffer.remaining());
-                buffer.copy_to_slice(&mut buf[..to_write]);
-
-                if buffer.has_remaining() {
-                    *self = Self::Data {
-                        hasher,
-                        encryptor,
-                        buffer,
-                        source,
-                    };
-                } else {
-                    // needs filling
-                    let (mdc, source) = if let Some(mut source) = source {
-                        // fill buffer
-                        buffer.resize(Self::buffer_size(), 0);
-                        let read = fill_buffer(&mut source, &mut buffer, None)?;
-                        let source = if read < buffer.len() {
-                            // done reading
-                            // shorten buffer accordingly
-                            buffer.truncate(read);
-                            None
-                        } else {
-                            Some(source)
-                        };
-                        if buffer.is_empty() {
-                            // nothing left
-                            (true, source)
-                        } else {
-                            // encrypt it
-                            hasher.update(&buffer);
-                            encryptor.encrypt(&mut buffer);
-                            (false, source)
-                        }
-                    } else {
-                        (true, source)
-                    };
-
-                    if mdc {
-                        // source is fully read, move on to Mdc
-                        // mdc header
-                        let mdc_header = [0xD3, 0x14];
-                        hasher.update(mdc_header);
-
-                        let mut mdc = BytesMut::zeroed(22);
-                        mdc[..2].copy_from_slice(&mdc_header);
-
-                        // mdc body
-                        let checksum = &hasher.finalize()[..20];
-                        mdc[2..22].copy_from_slice(checksum);
-
-                        encryptor.encrypt(&mut mdc[..]);
-                        *self = Self::Mdc { mdc: mdc.freeze() };
-                    } else {
-                        *self = Self::Data {
-                            hasher,
-                            encryptor,
-                            buffer,
-                            source,
-                        };
-                    };
-                }
-                Ok(to_write)
-            }
-            Self::Mdc { mut mdc } => {
-                let to_write = buf.len().min(mdc.remaining());
-                mdc.copy_to_slice(&mut buf[..to_write]);
-
-                if mdc.has_remaining() {
-                    *self = Self::Mdc { mdc };
-                } else {
-                    *self = Self::Done;
-                }
-
-                Ok(to_write)
-            }
-            Self::Done => Ok(0),
-            Self::Unknown => {
-                panic!("encryption panicked");
-            }
-        }
-    }
+    digest.finalize().into()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use log::info;
-    use rand::SeedableRng;
+    use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
 
-    macro_rules! roundtrip {
+    macro_rules! roundtrip_unprotected {
         ($name:ident, $alg:path) => {
             #[test]
             fn $name() {
                 pretty_env_logger::try_init().ok();
 
-                let mut rng = ChaCha8Rng::seed_from_u64(0);
+                let mut data_rng = ChaCha8Rng::seed_from_u64(0);
+
+                const MAX_SIZE: usize = 2048;
+
+                // Unprotected
+                for i in 1..MAX_SIZE {
+                    info!("Size {}", i);
+                    let mut data = vec![0u8; i];
+                    data_rng.fill(&mut data[..]);
+                    let mut key = vec![0u8; $alg.key_size()];
+                    data_rng.fill(&mut key[..]);
+
+                    info!("unprotected encrypt");
+                    let mut rng = ChaCha8Rng::seed_from_u64(8);
+                    let ciphertext = $alg.encrypt(&mut rng, &key, &data).unwrap();
+                    assert_ne!(data, ciphertext);
+
+                    {
+                        info!("unprotected decrypt");
+                        let mut ciphertext = ciphertext.clone();
+                        let mut plaintext = ciphertext.split_off($alg.cfb_prefix_size());
+                        let mut prefix = ciphertext;
+                        $alg.decrypt(&key, &mut prefix, &mut plaintext).unwrap();
+                        assert_eq!(
+                            hex::encode(&data),
+                            hex::encode(&plaintext),
+                            "unprotected decrypt"
+                        );
+                    }
+
+                    {
+                        info!("unprotected decrypt streaming");
+                        dbg!(ciphertext.len(), $alg.cfb_prefix_size());
+                        let mut input = std::io::Cursor::new(&ciphertext);
+                        let mut decryptor =
+                            $alg.stream_decryptor_unprotected(&key, &mut input).unwrap();
+                        let mut plaintext = Vec::new();
+                        decryptor.read_to_end(&mut plaintext).unwrap();
+                        assert_eq!(
+                            hex::encode(&data),
+                            hex::encode(&plaintext),
+                            "stream decrypt failed"
+                        );
+                    }
+                }
+            }
+        };
+    }
+
+    macro_rules! roundtrip_protected {
+        ($name:ident, $alg:path) => {
+            #[test]
+            fn $name() {
+                pretty_env_logger::try_init().ok();
+
+                let mut data_rng = ChaCha8Rng::seed_from_u64(0);
+
+                const MAX_SIZE: usize = 2048;
 
                 // Protected
-                for i in 1..1024 {
+                for i in 1..MAX_SIZE {
                     info!("Size {}", i);
-                    let data = (0..i).map(|_| rng.gen()).collect::<Vec<_>>();
-                    let key = (0..$alg.key_size()).map(|_| rng.gen()).collect::<Vec<_>>();
+                    let mut data = vec![0u8; i];
+                    data_rng.fill(&mut data[..]);
+                    let mut key = vec![0u8; $alg.key_size()];
+                    data_rng.fill(&mut key[..]);
 
                     info!("encrypt");
                     let mut rng = ChaCha8Rng::seed_from_u64(8);
-                    let mut ciphertext = $alg.encrypt_protected(&mut rng, &key, &data).unwrap();
+                    let ciphertext = $alg.encrypt_protected(&mut rng, &key, &data).unwrap();
                     assert_ne!(data, ciphertext, "failed to encrypt");
 
                     {
@@ -918,47 +815,98 @@ mod tests {
                         assert_eq!(len, ciphertext.len(), "failed to encrypt");
                         let mut output = Vec::new();
                         let mut rng = ChaCha8Rng::seed_from_u64(8);
-                        $alg.encrypt_protected_stream(&mut rng, &key, &mut input, &mut output)
-                            .unwrap();
+                        let mut encryptor =
+                            $alg.stream_encryptor(&mut rng, &key, &mut input).unwrap();
+                        encryptor.read_to_end(&mut output).unwrap();
+
                         assert_eq!(output.len(), len, "output length mismatch");
                         assert_eq!(ciphertext, output, "output mismatch");
                     }
 
-                    info!("decrypt");
-                    let mut plaintext = ciphertext.split_off($alg.cfb_prefix_size());
-                    let mut prefix = ciphertext;
-                    $alg.decrypt_protected(&key, &mut prefix, &mut plaintext)
-                        .unwrap();
-                    assert_eq!(data, plaintext, "decrypt failed");
+                    {
+                        info!("decrypt");
+                        let mut ciphertext = ciphertext.clone();
+                        let mut plaintext = ciphertext.split_off($alg.cfb_prefix_size());
+                        let mut prefix = ciphertext;
+                        $alg.decrypt_protected(&key, &mut prefix, &mut plaintext)
+                            .unwrap();
+                        assert_eq!(data, plaintext, "decrypt failed");
+                    }
+                    {
+                        info!("decrypt streaming");
+                        dbg!(ciphertext.len(), $alg.cfb_prefix_size());
+                        let mut input = std::io::Cursor::new(&ciphertext);
+                        let mut decryptor =
+                            $alg.stream_decryptor_protected(&key, &mut input).unwrap();
+                        let mut plaintext = Vec::new();
+                        decryptor.read_to_end(&mut plaintext).unwrap();
+                        assert_eq!(
+                            hex::encode(&data),
+                            hex::encode(&plaintext),
+                            "stream decrypt failed"
+                        );
+                    }
                 }
-
-                // Unprotected
-                // resync is not implemented yet
-                // {
-                //     let data = vec![2u8; 256];
-                //     let key = vec![1u8; $alg.key_size()];
-
-                //     let mut ciphertext = $alg.encrypt(&key, &data).unwrap();
-                //     assert_ne!(data, ciphertext);
-
-                //     let plaintext = $alg.decrypt(&key, &mut ciphertext).unwrap();
-                //     assert_eq!(data, plaintext);
-                // }
             }
         };
     }
 
-    roundtrip!(roundtrip_aes128, SymmetricKeyAlgorithm::AES128);
-    roundtrip!(roundtrip_aes192, SymmetricKeyAlgorithm::AES192);
-    roundtrip!(roundtrip_aes256, SymmetricKeyAlgorithm::AES256);
-    roundtrip!(roundtrip_tripledes, SymmetricKeyAlgorithm::TripleDES);
-    roundtrip!(roundtrip_blowfish, SymmetricKeyAlgorithm::Blowfish);
-    roundtrip!(roundtrip_twofish, SymmetricKeyAlgorithm::Twofish);
-    roundtrip!(roundtrip_cast5, SymmetricKeyAlgorithm::CAST5);
-    roundtrip!(roundtrip_idea, SymmetricKeyAlgorithm::IDEA);
-    roundtrip!(roundtrip_camellia128, SymmetricKeyAlgorithm::Camellia128);
-    roundtrip!(roundtrip_camellia192, SymmetricKeyAlgorithm::Camellia192);
-    roundtrip!(roundtrip_camellia256, SymmetricKeyAlgorithm::Camellia256);
+    roundtrip_protected!(roundtrip_protected_aes128, SymmetricKeyAlgorithm::AES128);
+    roundtrip_protected!(roundtrip_protected_aes192, SymmetricKeyAlgorithm::AES192);
+    roundtrip_protected!(roundtrip_protected_aes256, SymmetricKeyAlgorithm::AES256);
+    roundtrip_protected!(
+        roundtrip_protected_tripledes,
+        SymmetricKeyAlgorithm::TripleDES
+    );
+    roundtrip_protected!(
+        roundtrip_protected_blowfish,
+        SymmetricKeyAlgorithm::Blowfish
+    );
+    roundtrip_protected!(roundtrip_protected_twofish, SymmetricKeyAlgorithm::Twofish);
+    roundtrip_protected!(roundtrip_protected_cast5, SymmetricKeyAlgorithm::CAST5);
+    roundtrip_protected!(roundtrip_protected_idea, SymmetricKeyAlgorithm::IDEA);
+    roundtrip_protected!(
+        roundtrip_protected_camellia128,
+        SymmetricKeyAlgorithm::Camellia128
+    );
+    roundtrip_protected!(
+        roundtrip_protected_camellia192,
+        SymmetricKeyAlgorithm::Camellia192
+    );
+    roundtrip_protected!(
+        roundtrip_protected_camellia256,
+        SymmetricKeyAlgorithm::Camellia256
+    );
+
+    roundtrip_unprotected!(roundtrip_unprotected_aes128, SymmetricKeyAlgorithm::AES128);
+    roundtrip_unprotected!(roundtrip_unprotected_aes192, SymmetricKeyAlgorithm::AES192);
+    roundtrip_unprotected!(roundtrip_unprotected_aes256, SymmetricKeyAlgorithm::AES256);
+    roundtrip_unprotected!(
+        roundtrip_unprotected_tripledes,
+        SymmetricKeyAlgorithm::TripleDES
+    );
+    roundtrip_unprotected!(
+        roundtrip_unprotected_blowfish,
+        SymmetricKeyAlgorithm::Blowfish
+    );
+    roundtrip_unprotected!(
+        roundtrip_unprotected_twofish,
+        SymmetricKeyAlgorithm::Twofish
+    );
+    roundtrip_unprotected!(roundtrip_unprotected_cast5, SymmetricKeyAlgorithm::CAST5);
+    roundtrip_unprotected!(roundtrip_unprotected_idea, SymmetricKeyAlgorithm::IDEA);
+    roundtrip_unprotected!(
+        roundtrip_unprotected_camellia128,
+        SymmetricKeyAlgorithm::Camellia128
+    );
+    roundtrip_unprotected!(
+        roundtrip_unprotected_camellia192,
+        SymmetricKeyAlgorithm::Camellia192
+    );
+    roundtrip_unprotected!(
+        roundtrip_unprotected_camellia256,
+        SymmetricKeyAlgorithm::Camellia256
+    );
 
     #[test]
     pub fn decrypt_without_enough_ciphertext() {

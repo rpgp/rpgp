@@ -105,7 +105,7 @@ pub use self::signature::subpacket::{Subpacket, SubpacketData, SubpacketLength, 
 pub use self::signature::*;
 pub use self::sym_encrypted_data::*;
 pub use self::sym_encrypted_protected_data::{
-    ChunkSize, Config as SymEncryptedProtectedDataConfig, SymEncryptedProtectedData,
+    Config as SymEncryptedProtectedDataConfig, StreamDecryptor, SymEncryptedProtectedData,
 };
 pub use self::sym_key_encrypted_session_key::*;
 pub use self::trust::*;

@@ -46,7 +46,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedSecretKeyPar
     type Item = Result<SignedSecretKey>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match super::key_parser::next::<I, packet::SecretKey>(&mut self.inner, Tag::SecretKey, true)
+        match super::key_parser::next::<_, packet::SecretKey>(&mut self.inner, Tag::SecretKey, true)
         {
             Some(Err(err)) => Some(Err(err)),
             None => None,
@@ -192,7 +192,7 @@ impl SignedSecretKey {
         key_pw: &Password,
         values: &PkeskBytes,
         typ: EskType,
-    ) -> Result<PlainSessionKey> {
+    ) -> Result<Result<PlainSessionKey>> {
         debug!("decrypt session key");
 
         self.unlock(key_pw, |pub_params, priv_key| {
@@ -297,7 +297,7 @@ impl SignedSecretSubKey {
         key_pw: &Password,
         values: &PkeskBytes,
         typ: EskType,
-    ) -> Result<PlainSessionKey> {
+    ) -> Result<Result<PlainSessionKey>> {
         debug!("decrypt session key");
 
         self.unlock(key_pw, |pub_params, priv_key| {
@@ -359,15 +359,14 @@ impl From<SignedSecretSubKey> for SignedPublicSubKey {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use bytes::Bytes;
-    use packet::LiteralData;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::crypto::hash::HashAlgorithm;
     use crate::types::{KeyVersion, Password, S2kParams};
-    use crate::{composed::shared::Deserializable, Message};
+
+    use crate::{composed::shared::Deserializable, Message, MessageBuilder};
 
     #[test]
     fn test_v6_annex_a_4() -> Result<()> {
@@ -396,22 +395,17 @@ k0mXubZvyl4GBg==
 
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
-        let msg = Message::Literal(lit);
-
-        let pri = ssk.primary_key;
-
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let signed = msg.sign(&mut rng, &pri, &Password::empty(), HashAlgorithm::Sha256)?;
+        let pri = &ssk.primary_key;
 
-        signed.verify(&pri.public_key())?;
+        let signed = crate::MessageBuilder::from_bytes("", &b"Hello world"[..])
+            .sign(pri, Password::empty(), HashAlgorithm::Sha256)
+            .to_armored_string(&mut rng, ArmorOptions::default())?;
 
-        let mut sink = vec![];
-        signed
-            .to_armored_writer(&mut sink, ArmorOptions::default())
-            .expect("FIXME");
+        eprintln!("{}", signed);
 
-        eprintln!("{}", String::from_utf8_lossy(&sink));
+        let (mut message, _) = Message::from_armor(signed.as_bytes())?;
+        message.verify_read(&pri.public_key())?;
 
         Ok(())
     }
@@ -444,18 +438,16 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
-
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let msg = Message::Literal(lit).sign(
-            &mut rng,
-            &ssk.primary_key,
-            &ANNEX_A_5_PASSPHRASE.into(),
-            HashAlgorithm::Sha256,
-        )?;
-
-        msg.verify(&ssk.primary_key.public_key())?;
-
+        let msg = MessageBuilder::from_bytes("", &b"Hello world"[..])
+            .sign(
+                &ssk.primary_key,
+                ANNEX_A_5_PASSPHRASE.into(),
+                HashAlgorithm::Sha256,
+            )
+            .to_vec(&mut rng)?;
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(&ssk.primary_key.public_key())?;
         Ok(())
     }
 
@@ -464,7 +456,8 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
     fn secret_key_protection_v6() -> Result<()> {
         let _ = pretty_env_logger::try_init();
 
-        let lit = LiteralData::from_bytes("", Bytes::from_static(b"Hello world"))?;
+        let file_name = "";
+        let text = b"Hello world";
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
@@ -477,25 +470,23 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing without pw
-        let msg = Message::Literal(lit.clone()).sign(
-            &mut rng,
-            &pri,
-            &Password::empty(),
-            HashAlgorithm::Sha256,
-        )?;
-        msg.verify(pri.public_key())?;
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, Password::empty(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
+
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
 
         // set passphrase with default s2k
         pri.set_password(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing with pw
-        let msg = Message::Literal(lit.clone()).sign(
-            &mut rng,
-            &pri,
-            &ANNEX_A_5_PASSPHRASE.into(),
-            HashAlgorithm::Sha256,
-        )?;
-        msg.verify(pri.public_key())?;
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
+
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
 
         // remove passphrase
         pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
@@ -507,14 +498,12 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         )?;
 
         // try signing with pw
-        let msg = Message::Literal(lit).sign(
-            &mut rng,
-            &pri,
-            &ANNEX_A_5_PASSPHRASE.into(),
-            HashAlgorithm::Sha256,
-        )?;
-        msg.verify(pri.public_key())?;
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
 
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
         Ok(())
     }
 }

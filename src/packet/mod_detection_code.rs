@@ -1,10 +1,8 @@
-use std::io;
-
-use bytes::Buf;
+use std::io::{self, BufRead};
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 /// Modification Detection Code Packet
@@ -28,8 +26,8 @@ pub struct ModDetectionCode {
 }
 
 impl ModDetectionCode {
-    /// Parses a `ModDetectionCode` packet from the given slice.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+    /// Parses a `ModDetectionCode` packet.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
         let hash = input.read_array::<20>()?;
 
         Ok(ModDetectionCode {
@@ -74,7 +72,7 @@ mod tests {
         fn packet_roundtrip(packet: ModDetectionCode) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = ModDetectionCode::from_buf(packet.packet_header, &mut &buf[..]).unwrap();
+            let new_packet = ModDetectionCode::try_from_reader(packet.packet_header, &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
     }
