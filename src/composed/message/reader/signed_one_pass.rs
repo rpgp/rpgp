@@ -13,24 +13,38 @@ use crate::packet::{
 use crate::util::fill_buffer;
 use crate::{Message, RingResult, TheRing};
 
-struct NormalizingHasher<'a> {
-    hasher: &'a mut Box<dyn DynDigest>,
+#[derive(derive_more::Debug)]
+pub struct NormalizingHasher {
+    #[debug("hasher")]
+    hasher: Box<dyn DynDigest>,
     text_mode: bool,
     last_was_cr: bool,
 }
 
-impl<'a> NormalizingHasher<'a> {
-    fn new(hasher: &'a mut Box<dyn DynDigest>, text_mode: bool, last_was_cr: bool) -> Self {
+impl NormalizingHasher {
+    fn new(hasher: Box<dyn DynDigest>, text_mode: bool) -> Self {
         Self {
             hasher,
             text_mode,
-            last_was_cr,
+            last_was_cr: false,
         }
     }
 
+    fn done(mut self) -> Box<dyn DynDigest> {
+        if self.text_mode && self.last_was_cr {
+            self.hasher.update(b"\n")
+        }
+
+        self.hasher
+    }
+
     fn hash_buf(&mut self, buffer: &[u8]) {
+        if buffer.is_empty() {
+            return;
+        }
+
         if !self.text_mode {
-            self.hasher.update(&buffer);
+            self.hasher.update(buffer);
         } else {
             if self.last_was_cr && buffer[0] != b'\n' {
                 self.hasher.update(b"\n");
@@ -69,7 +83,7 @@ impl<'a> NormalizingHasher<'a> {
                                 buf = &[];
                                 self.last_was_cr = true;
                             }
-                            _ => unreachable!(),
+                            _ => unreachable!("buf.position gave us either a '\n or a '\r'"),
                         }
                     }
                     None => {
@@ -85,26 +99,26 @@ impl<'a> NormalizingHasher<'a> {
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
     Init {
+        // /// Running hasher
+        // #[debug("hasher")]
+        // hasher: Box<dyn DynDigest>,
         /// Running hasher
         #[debug("hasher")]
-        hasher: Box<dyn DynDigest>,
+        norm_hasher: NormalizingHasher,
+
         /// Data source
         source: Box<Message<'a>>,
-        /// If Text Mode, then line endings are normalized during hashing
-        text_mode: bool,
     },
     Body {
+        // /// Running hasher
+        // #[debug("hasher")]
+        // hasher: Box<dyn DynDigest>,
         /// Running hasher
         #[debug("hasher")]
-        hasher: Box<dyn DynDigest>,
+        norm_hasher: NormalizingHasher,
         /// Data source
         source: Box<Message<'a>>,
         buffer: BytesMut,
-
-        /// If Text Mode, then line endings are normalized during hashing
-        text_mode: bool,
-        /// true if the last byte that was fed into the hasher was a `\r`
-        last_was_cr: bool,
     },
     Done {
         /// Finalized hash
@@ -137,10 +151,11 @@ impl<'a> SignatureOnePassReader<'a> {
 
         let text_mode = ops.typ() == SignatureType::Text;
 
+        let hasher = NormalizingHasher::new(hasher, text_mode);
+
         Ok(Self::Init {
-            hasher,
+            norm_hasher: hasher,
             source,
-            text_mode,
         })
     }
 
@@ -186,9 +201,8 @@ impl<'a> SignatureOnePassReader<'a> {
         loop {
             match std::mem::replace(self, Self::Error) {
                 Self::Init {
-                    mut hasher,
+                    mut norm_hasher,
                     mut source,
-                    text_mode,
                 } => {
                     debug!("SignatureOnePassReader init");
                     let mut buffer = BytesMut::zeroed(1024);
@@ -202,34 +216,26 @@ impl<'a> SignatureOnePassReader<'a> {
                         ));
                     }
 
-                    let mut nh = NormalizingHasher::new(&mut hasher, text_mode, false);
-                    nh.hash_buf(&buffer[..read]);
-                    let last_was_cr = nh.last_was_cr;
+                    norm_hasher.hash_buf(&buffer[..read]);
 
                     *self = Self::Body {
+                        norm_hasher,
                         source,
-                        hasher,
                         buffer,
-                        text_mode,
-                        last_was_cr,
                     };
                 }
                 Self::Body {
-                    mut hasher,
+                    mut norm_hasher,
                     mut source,
                     mut buffer,
-                    text_mode,
-                    last_was_cr,
                 } => {
                     debug!("SignatureOnePassReader body");
 
                     if buffer.has_remaining() {
                         *self = Self::Body {
-                            hasher,
+                            norm_hasher,
                             source,
                             buffer,
-                            text_mode,
-                            last_was_cr,
                         };
                         return Ok(());
                     }
@@ -238,12 +244,12 @@ impl<'a> SignatureOnePassReader<'a> {
                     let read = fill_buffer(&mut source, &mut buffer, None)?;
                     buffer.truncate(read);
 
-                    let mut nh = NormalizingHasher::new(&mut hasher, text_mode, false);
-                    nh.hash_buf(&buffer[..read]);
-                    let last_was_cr = nh.last_was_cr;
+                    norm_hasher.hash_buf(&buffer[..read]);
 
                     if read == 0 {
                         debug!("SignatureOnePassReader finish");
+
+                        let mut hasher = norm_hasher.done();
 
                         let (reader, parts) = source.into_parts();
 
@@ -293,11 +299,9 @@ impl<'a> SignatureOnePassReader<'a> {
                         };
                     } else {
                         *self = Self::Body {
-                            hasher,
+                            norm_hasher,
                             source,
                             buffer,
-                            text_mode,
-                            last_was_cr,
                         }
                     }
 
@@ -327,15 +331,13 @@ impl<'a> SignatureOnePassReader<'a> {
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
             Self::Init {
-                hasher,
+                norm_hasher: hasher,
                 source,
-                text_mode,
             } => {
                 let source = source.decompress()?;
                 Ok(Self::Init {
-                    hasher,
+                    norm_hasher: hasher,
                     source: Box::new(source),
-                    text_mode,
                 })
             }
             _ => {
@@ -351,16 +353,14 @@ impl<'a> SignatureOnePassReader<'a> {
     ) -> Result<(Self, RingResult)> {
         match self {
             Self::Init {
-                hasher,
+                norm_hasher: hasher,
                 source,
-                text_mode,
             } => {
                 let (source, fps) = source.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Self::Init {
-                        hasher,
+                        norm_hasher: hasher,
                         source: Box::new(source),
-                        text_mode,
                     },
                     fps,
                 ))
