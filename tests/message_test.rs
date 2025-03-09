@@ -334,6 +334,24 @@ fn binary_msg_password() {
     );
 }
 
+/// Tests decryption of a message that uses the Wildcard KeyID "0000000000000000" is its PKESK.
+///
+/// Test message comes from the "Recipient IDs" test in the OpenPGP interoperability test suite.
+#[test]
+fn wildcard_id_decrypt() {
+    let (skey, _headers) = SignedSecretKey::from_armor_single(
+        std::fs::File::open("./tests/draft-bre-openpgp-samples-00/bob.sec.asc").unwrap(),
+    )
+    .unwrap();
+
+    let (msg, _) = Message::from_armor_file("./tests/wildcard.msg").expect("msg");
+
+    let mut dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+
+    let decrypted = dec.as_data_string().unwrap();
+    assert_eq!(&decrypted, "Hello World :)");
+}
+
 /// Tests that decompressing compression quine does not result in stack overflow.
 /// quine.out comes from <https://mumble.net/~campbell/misc/pgp-quine/>
 /// See <https://mumble.net/~campbell/2013/10/08/compression> for details.
