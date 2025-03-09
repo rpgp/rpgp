@@ -334,6 +334,54 @@ fn binary_msg_password() {
     );
 }
 
+/// Tests decryption of a message that uses the Wildcard KeyID "0000000000000000" is its PKESK.
+///
+/// Test message comes from the "Recipient IDs" test in the OpenPGP interoperability test suite.
+#[test]
+fn wildcard_id_decrypt() {
+    let (skey, _headers) = SignedSecretKey::from_armor_single(
+        std::fs::File::open("./tests/draft-bre-openpgp-samples-00/bob.sec.asc").unwrap(),
+    )
+    .unwrap();
+
+    let (msg, _) = Message::from_armor_file("./tests/wildcard.msg").expect("msg");
+
+    let mut dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+
+    let decrypted = dec.as_data_string().unwrap();
+    assert_eq!(&decrypted, "Hello World :)");
+}
+
+/// Tests decryption of a message that is encrypted to a symmetrical secret.
+#[test]
+fn skesk_decrypt() {
+    let (msg, _) = Message::from_armor_file("./tests/sym-password.msg").expect("msg");
+
+    let mut dec = msg
+        .decrypt_with_password(&Password::from("password"))
+        .expect("decrypt_with_password");
+
+    let decrypted = dec.as_data_string().unwrap();
+    assert_eq!(&decrypted, "hello world");
+}
+
+/// Tests decryption of a message that was encrypted by PGP 6.5.8 to a v3 RSA key.
+/// The message uses a historical SED encryption container.
+#[test]
+fn pgp6_decrypt() {
+    let (skey, _headers) = SignedSecretKey::from_armor_single(
+        std::fs::File::open("./tests/pgp6/alice.sec.asc").unwrap(),
+    )
+    .unwrap();
+
+    let (msg, _) = Message::from_armor_file("./tests/pgp6/hello.msg").expect("msg");
+
+    let mut dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+
+    let decrypted = dec.as_data_string().unwrap();
+    assert_eq!(&decrypted, "hello world\n");
+}
+
 /// Tests that decompressing compression quine does not result in stack overflow.
 /// quine.out comes from <https://mumble.net/~campbell/misc/pgp-quine/>
 /// See <https://mumble.net/~campbell/2013/10/08/compression> for details.

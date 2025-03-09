@@ -2,6 +2,10 @@ use std::io::{self, BufRead, Read};
 
 use log::{debug, warn};
 
+use super::reader::{
+    CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
+    SignatureOnePassReader, SymEncryptedDataReader, SymEncryptedProtectedDataReader,
+};
 use crate::armor;
 use crate::composed::message::decrypt::*;
 use crate::composed::signed_key::SignedSecretKey;
@@ -16,11 +20,6 @@ use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
     EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag,
-};
-
-use super::reader::{
-    CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
-    SignatureOnePassReader, SymEncryptedDataReader, SymEncryptedProtectedDataReader,
 };
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
@@ -882,14 +881,13 @@ impl TheRing<'_> {
                 if esk.match_identity(key.primary_key.public_key()) {
                     let values = esk.values()?;
                     try_key!(key, key.primary_key.public_key(), values);
-                } else {
-                    // search subkeys
-                    for subkey in &key.secret_subkeys {
-                        debug!("checking subkey: {:?}", subkey.key_id());
-                        if esk.match_identity(&subkey.public_key()) {
-                            let values = esk.values()?;
-                            try_key!(subkey, subkey.key.public_key(), values);
-                        }
+                }
+                // search subkeys
+                for subkey in &key.secret_subkeys {
+                    debug!("checking subkey: {:?}", subkey.key_id());
+                    if esk.match_identity(&subkey.public_key()) {
+                        let values = esk.values()?;
+                        try_key!(subkey, subkey.key.public_key(), values);
                     }
                 }
             }
