@@ -13,6 +13,75 @@ use crate::packet::{
 use crate::util::fill_buffer;
 use crate::{Message, RingResult, TheRing};
 
+struct NormalizingHasher<'a> {
+    hasher: &'a mut Box<dyn DynDigest>,
+    text_mode: bool,
+    last_was_cr: bool,
+}
+
+impl<'a> NormalizingHasher<'a> {
+    fn new(hasher: &'a mut Box<dyn DynDigest>, text_mode: bool, last_was_cr: bool) -> Self {
+        Self {
+            hasher,
+            text_mode,
+            last_was_cr,
+        }
+    }
+
+    fn hash_buf(&mut self, buffer: &[u8]) {
+        if !self.text_mode {
+            self.hasher.update(&buffer);
+        } else {
+            if self.last_was_cr && buffer[0] != b'\n' {
+                self.hasher.update(b"\n");
+                self.last_was_cr = false;
+            }
+
+            let mut buf = buffer;
+            while !buf.is_empty() {
+                match buf.position(|c| c == b'\r' || c == b'\n') {
+                    Some(pos) => {
+                        // consume all bytes before line-break-related position
+
+                        self.hasher.update(&buf[..pos]);
+                        buf = &buf[pos..];
+
+                        // handle this line-break related context
+                        let only_one = buf.len() == 1;
+                        match (buf[0], only_one) {
+                            (b'\n', _) => {
+                                self.hasher.update(b"\r\n");
+                                buf = &buf[1..];
+                            }
+                            (b'\r', false) => {
+                                self.hasher.update(b"\r\n");
+
+                                // we are guaranteed to have at least two bytes
+                                if buf[1] == b'\n' {
+                                    buf = &buf[2..];
+                                } else {
+                                    buf = &buf[1..];
+                                }
+                            }
+                            (b'\r', true) => {
+                                // we only have this one '\r' byte left
+                                self.hasher.update(b"\r");
+                                buf = &[];
+                                self.last_was_cr = true;
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    None => {
+                        self.hasher.update(buf);
+                        buf = &[]
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
     Init {
@@ -133,58 +202,9 @@ impl<'a> SignatureOnePassReader<'a> {
                         ));
                     }
 
-                    let mut last_was_cr = false;
-
-                    if !text_mode {
-                        hasher.update(&buffer[..read]);
-                    } else {
-                        if last_was_cr && buffer[0] != b'\n' {
-                            hasher.update(b"\n");
-                            last_was_cr = false;
-                        }
-
-                        let mut buf = &buffer[..read];
-                        while !buf.is_empty() {
-                            match buf.position(|c| c == b'\r' || c == b'\n') {
-                                Some(pos) => {
-                                    // consume all bytes before line-break-related position
-
-                                    hasher.update(&buf[..pos]);
-                                    buf = &buf[pos..];
-
-                                    // handle this line-break related context
-                                    let only_one = buf.len() == 1;
-                                    match (buf[0], only_one) {
-                                        (b'\n', _) => {
-                                            hasher.update(b"\r\n");
-                                            buf = &buf[1..];
-                                        }
-                                        (b'\r', false) => {
-                                            hasher.update(b"\r\n");
-
-                                            // we are guaranteed to have at least two bytes
-                                            if buf[1] == b'\n' {
-                                                buf = &buf[2..];
-                                            } else {
-                                                buf = &buf[1..];
-                                            }
-                                        }
-                                        (b'\r', true) => {
-                                            // we only have this one '\r' byte left
-                                            hasher.update(b"\r");
-                                            buf = &[];
-                                            last_was_cr = true;
-                                        }
-                                        _ => unreachable!(),
-                                    }
-                                }
-                                None => {
-                                    hasher.update(buf);
-                                    buf = &[]
-                                }
-                            }
-                        }
-                    }
+                    let mut nh = NormalizingHasher::new(&mut hasher, text_mode, false);
+                    nh.hash_buf(&buffer[..read]);
+                    let last_was_cr = nh.last_was_cr;
 
                     *self = Self::Body {
                         source,
@@ -199,7 +219,7 @@ impl<'a> SignatureOnePassReader<'a> {
                     mut source,
                     mut buffer,
                     text_mode,
-                    mut last_was_cr,
+                    last_was_cr,
                 } => {
                     debug!("SignatureOnePassReader body");
 
@@ -218,56 +238,9 @@ impl<'a> SignatureOnePassReader<'a> {
                     let read = fill_buffer(&mut source, &mut buffer, None)?;
                     buffer.truncate(read);
 
-                    if !text_mode {
-                        hasher.update(&buffer[..read]);
-                    } else {
-                        if last_was_cr && buffer[0] != b'\n' {
-                            hasher.update(b"\n");
-                            last_was_cr = false;
-                        }
-
-                        let mut buf = &buffer[..read];
-                        while !buf.is_empty() {
-                            match buf.position(|c| c == b'\r' || c == b'\n') {
-                                Some(pos) => {
-                                    // consume all bytes before line-break-related position
-
-                                    hasher.update(&buf[..pos]);
-                                    buf = &buf[pos..];
-
-                                    // handle this line-break related context
-                                    let only_one = buf.len() == 1;
-                                    match (buf[0], only_one) {
-                                        (b'\n', _) => {
-                                            hasher.update(b"\r\n");
-                                            buf = &buf[1..];
-                                        }
-                                        (b'\r', false) => {
-                                            hasher.update(b"\r\n");
-
-                                            // we are guaranteed to have at least two bytes
-                                            if buf[1] == b'\n' {
-                                                buf = &buf[2..];
-                                            } else {
-                                                buf = &buf[1..];
-                                            }
-                                        }
-                                        (b'\r', true) => {
-                                            // we only have this one '\r' byte left
-                                            hasher.update(b"\r");
-                                            buf = &[];
-                                            last_was_cr = true;
-                                        }
-                                        _ => unreachable!(),
-                                    }
-                                }
-                                None => {
-                                    hasher.update(buf);
-                                    buf = &[]
-                                }
-                            }
-                        }
-                    }
+                    let mut nh = NormalizingHasher::new(&mut hasher, text_mode, false);
+                    nh.hash_buf(&buffer[..read]);
+                    let last_was_cr = nh.last_was_cr;
 
                     if read == 0 {
                         debug!("SignatureOnePassReader finish");
