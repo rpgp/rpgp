@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Read};
 use bytes::{Buf, BytesMut};
 use digest::DynDigest;
 use log::debug;
+use nom::InputIter;
 
 use super::PacketBodyReader;
 use crate::errors::Result;
@@ -137,27 +138,50 @@ impl<'a> SignatureOnePassReader<'a> {
                     if !text_mode {
                         hasher.update(&buffer[..read]);
                     } else {
-                        // text mode, normalize line endings..
-                        for b in &buffer[..read] {
-                            if last_was_cr {
-                                if *b == b'\n' {
-                                    // previous was a CR, followed now by a LF -> just hash the LF
-                                    hasher.update(b"\n");
+                        if last_was_cr && buffer[0] != b'\n' {
+                            hasher.update(b"\n");
+                            last_was_cr = false;
+                        }
 
-                                    last_was_cr = false;
-                                } else {
-                                    // previous was a CR, not followed by a LF -> insert a LF
-                                    hasher.update(&[b'\n', *b]);
-                                    last_was_cr = *b == b'\r';
+                        let mut buf = &buffer[..read];
+                        while !buf.is_empty() {
+                            match buf.position(|c| c == b'\r' || c == b'\n') {
+                                Some(pos) => {
+                                    // consume all bytes before line-break-related position
+
+                                    hasher.update(&buf[..pos]);
+                                    buf = &buf[pos..];
+
+                                    // handle this line-break related context
+                                    let only_one = buf.len() == 1;
+                                    match (buf[0], only_one) {
+                                        (b'\n', _) => {
+                                            hasher.update(b"\r\n");
+                                            buf = &buf[1..];
+                                        }
+                                        (b'\r', false) => {
+                                            hasher.update(b"\r\n");
+
+                                            // we are guaranteed to have at least two bytes
+                                            if buf[1] == b'\n' {
+                                                buf = &buf[2..];
+                                            } else {
+                                                buf = &buf[1..];
+                                            }
+                                        }
+                                        (b'\r', true) => {
+                                            // we only have this one '\r' byte left
+                                            hasher.update(b"\r");
+                                            buf = &[];
+                                            last_was_cr = true;
+                                        }
+                                        _ => unreachable!(),
+                                    }
                                 }
-                            } else if *b == b'\n' {
-                                // a LF, which was not preceded by a CR
-                                hasher.update(b"\r\n");
-                            } else if *b == b'\r' {
-                                hasher.update(&[*b]);
-                                last_was_cr = true;
-                            } else {
-                                hasher.update(&[*b]);
+                                None => {
+                                    hasher.update(buf);
+                                    buf = &[]
+                                }
                             }
                         }
                     }
@@ -197,27 +221,50 @@ impl<'a> SignatureOnePassReader<'a> {
                     if !text_mode {
                         hasher.update(&buffer[..read]);
                     } else {
-                        // text mode, normalize line endings..
-                        for b in &buffer[..read] {
-                            if last_was_cr {
-                                if *b == b'\n' {
-                                    // previous was a CR, followed now by a LF -> just hash the LF
-                                    hasher.update(b"\n");
+                        if last_was_cr && buffer[0] != b'\n' {
+                            hasher.update(b"\n");
+                            last_was_cr = false;
+                        }
 
-                                    last_was_cr = false;
-                                } else {
-                                    // previous was a CR, not followed by a LF -> insert a LF
-                                    hasher.update(&[b'\n', *b]);
-                                    last_was_cr = *b == b'\r';
+                        let mut buf = &buffer[..read];
+                        while !buf.is_empty() {
+                            match buf.position(|c| c == b'\r' || c == b'\n') {
+                                Some(pos) => {
+                                    // consume all bytes before line-break-related position
+
+                                    hasher.update(&buf[..pos]);
+                                    buf = &buf[pos..];
+
+                                    // handle this line-break related context
+                                    let only_one = buf.len() == 1;
+                                    match (buf[0], only_one) {
+                                        (b'\n', _) => {
+                                            hasher.update(b"\r\n");
+                                            buf = &buf[1..];
+                                        }
+                                        (b'\r', false) => {
+                                            hasher.update(b"\r\n");
+
+                                            // we are guaranteed to have at least two bytes
+                                            if buf[1] == b'\n' {
+                                                buf = &buf[2..];
+                                            } else {
+                                                buf = &buf[1..];
+                                            }
+                                        }
+                                        (b'\r', true) => {
+                                            // we only have this one '\r' byte left
+                                            hasher.update(b"\r");
+                                            buf = &[];
+                                            last_was_cr = true;
+                                        }
+                                        _ => unreachable!(),
+                                    }
                                 }
-                            } else if *b == b'\n' {
-                                // a LF, which was not preceded by a CR
-                                hasher.update(b"\r\n");
-                            } else if *b == b'\r' {
-                                hasher.update(&[*b]);
-                                last_was_cr = true;
-                            } else {
-                                hasher.update(&[*b]);
+                                None => {
+                                    hasher.update(buf);
+                                    buf = &[]
+                                }
                             }
                         }
                     }
