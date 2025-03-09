@@ -1,5 +1,6 @@
 use std::io::{self, BufRead, Read};
 
+use super::PacketBodyReader;
 use crate::errors::Result;
 use crate::packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig};
 use crate::types::Tag;
@@ -99,7 +100,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                                 unsupported_err!("v5 is not supported");
                             }
                             PlainSessionKey::V6 { .. } => {
-                                bail!("missmatch between session key and edata config");
+                                bail!("mismatch between session key and edata config");
                             }
                             PlainSessionKey::Unknown { sym_alg, key } => (sym_alg, key),
                         };
@@ -114,7 +115,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                     } => {
                         let (sym_alg_session_key, session_key) = match session_key {
                             PlainSessionKey::V3_4 { .. } => {
-                                bail!("missmatch between session key and edata config");
+                                bail!("mismatch between session key and edata config");
                             }
                             PlainSessionKey::V5 { .. } => {
                                 unsupported_err!("v5 is not supported");
@@ -126,7 +127,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                             ensure_eq!(
                                 sym_alg,
                                 *sym_alg_session_key,
-                                "missmatching symmetric key algorithm"
+                                "mismatching symmetric key algorithm"
                             );
                         }
 

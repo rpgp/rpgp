@@ -99,11 +99,11 @@ impl<R: BufRead> StreamDecryptor<R> {
         Ok(())
     }
 
-    /// Decrpyt the final chunk of data
+    /// Decrypt the final chunk of data
     pub fn decrypt_last(&mut self) -> io::Result<()> {
         debug_assert!(
             self.buffer.len() >= self.aead_tag_size,
-            "last chunk size missmatch"
+            "last chunk size mismatch"
         );
 
         let mut final_auth_tag = self
