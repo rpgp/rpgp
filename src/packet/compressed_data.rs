@@ -30,9 +30,9 @@ pub struct CompressedData {
 /// Structure to decompress a given reader.
 #[derive(derive_more::Debug)]
 pub enum Decompressor<R> {
-    Uncompressed(#[debug("R")] R),
-    Zip(#[debug("DeflateDecoder")] BufReader<DeflateDecoder<R>>),
-    Zlib(#[debug("ZlibDecoder")] BufReader<ZlibDecoder<R>>),
+    Uncompressed(R),
+    Zip(BufReader<DeflateDecoder<R>>),
+    Zlib(BufReader<ZlibDecoder<R>>),
     #[cfg(feature = "bzip2")]
     Bzip2(#[debug("BzDecoder")] BufReader<BzDecoder<R>>),
 }
@@ -66,6 +66,16 @@ impl<R: BufRead> Decompressor<R> {
             Self::Zlib(r) => r.get_ref().get_ref(),
             #[cfg(feature = "bzip2")]
             Self::Bzip2(r) => r.get_ref().get_ref(),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        match self {
+            Self::Uncompressed(r) => r,
+            Self::Zip(r) => r.get_mut().get_mut(),
+            Self::Zlib(r) => r.get_mut().get_mut(),
+            #[cfg(feature = "bzip2")]
+            Self::Bzip2(r) => r.get_mut().get_mut(),
         }
     }
 

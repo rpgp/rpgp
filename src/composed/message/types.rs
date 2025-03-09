@@ -22,6 +22,9 @@ use crate::types::{
     EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag,
 };
 
+pub trait DebugBufRead: BufRead + std::fmt::Debug {}
+impl<T: BufRead + std::fmt::Debug> DebugBufRead for T {}
+
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 /// Encrypted Message | Signed Message | Compressed Message | Literal Message.
 #[derive(Debug)]
@@ -29,25 +32,37 @@ use crate::types::{
 pub enum Message<'a> {
     /// Literal Message: Literal Data Packet.
     Literal {
-        reader: LiteralDataReader<Box<dyn BufRead + 'a>>,
+        reader: LiteralDataReader<Box<dyn DebugBufRead + 'a>>,
+        /// is this a nested message?
+        is_nested: bool,
     },
     /// Compressed Message: Compressed Data Packet.
     Compressed {
-        reader: CompressedDataReader<Box<dyn BufRead + 'a>>,
+        reader: CompressedDataReader<Box<dyn DebugBufRead + 'a>>,
+        /// is this a nested message?
+        is_nested: bool,
     },
     /// Signed Message: Signature Packet, OpenPGP Message
-    Signed { reader: SignatureBodyReader<'a> },
+    Signed {
+        reader: SignatureBodyReader<'a>,
+        /// is this a nested message?
+        is_nested: bool,
+    },
     /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
     SignedOnePass {
         /// for signature packets that contain a one pass message
         one_pass_signature: OnePassSignature,
         reader: SignatureOnePassReader<'a>,
+        /// is this a nested message?
+        is_nested: bool,
     },
     /// Encrypted Message: Encrypted Data | ESK Sequence, Encrypted Data.
     Encrypted {
         /// ESK Sequence: ESK | ESK Sequence, ESK.
         esk: Vec<Esk>,
         edata: Edata<'a>,
+        /// is this a nested message?
+        is_nested: bool,
     },
 }
 
@@ -55,32 +70,37 @@ pub(crate) enum MessageParts {
     Literal {
         packet_header: PacketHeader,
         header: LiteralDataHeader,
+        is_nested: bool,
     },
     Compressed {
         packet_header: PacketHeader,
+        is_nested: bool,
     },
     Signed {
         signature: Signature,
         hash: Box<[u8]>,
         parts: Box<MessageParts>,
+        is_nested: bool,
     },
     SignedOnePass {
         one_pass_signature: OnePassSignature,
         hash: Box<[u8]>,
         signature: Signature,
         parts: Box<MessageParts>,
+        is_nested: bool,
     },
     Encrypted {
         packet_header: PacketHeader,
         esk: Vec<Esk>,
         config: Option<SymEncryptedProtectedDataConfig>,
+        is_nested: bool,
     },
 }
 
 impl<'a> Message<'a> {
-    pub(crate) fn into_parts(self) -> (Box<dyn BufRead + 'a>, MessageParts) {
+    pub(crate) fn into_parts(self) -> (Box<dyn DebugBufRead + 'a>, MessageParts) {
         match self {
-            Message::Literal { reader } => {
+            Message::Literal { reader, is_nested } => {
                 debug_assert!(reader.is_done());
                 let packet_header = reader.packet_header();
                 let header = reader.data_header().clone();
@@ -89,18 +109,22 @@ impl<'a> Message<'a> {
                     MessageParts::Literal {
                         packet_header,
                         header,
+                        is_nested,
                     },
                 )
             }
-            Message::Compressed { reader } => {
+            Message::Compressed { reader, is_nested } => {
                 assert!(reader.is_done());
                 let packet_header = reader.packet_header();
                 (
                     reader.into_inner().into_inner(),
-                    MessageParts::Compressed { packet_header },
+                    MessageParts::Compressed {
+                        packet_header,
+                        is_nested,
+                    },
                 )
             }
-            Message::Signed { reader } => {
+            Message::Signed { reader, is_nested } => {
                 assert!(reader.is_done());
                 let SignatureBodyReader::Done {
                     hash,
@@ -117,12 +141,14 @@ impl<'a> Message<'a> {
                         signature,
                         hash,
                         parts: Box::new(parts),
+                        is_nested,
                     },
                 )
             }
             Message::SignedOnePass {
                 one_pass_signature,
                 reader,
+                is_nested,
             } => {
                 let SignatureOnePassReader::Done {
                     hash,
@@ -141,10 +167,15 @@ impl<'a> Message<'a> {
                         hash,
                         signature,
                         parts: Box::new(parts),
+                        is_nested,
                     },
                 )
             }
-            Message::Encrypted { esk, edata } => match edata {
+            Message::Encrypted {
+                esk,
+                edata,
+                is_nested,
+            } => match edata {
                 Edata::SymEncryptedData { reader } => {
                     let packet_header = reader.packet_header();
                     assert!(reader.is_done());
@@ -154,6 +185,7 @@ impl<'a> Message<'a> {
                             packet_header,
                             esk,
                             config: None,
+                            is_nested,
                         },
                     )
                 }
@@ -167,6 +199,7 @@ impl<'a> Message<'a> {
                             packet_header,
                             esk,
                             config,
+                            is_nested,
                         },
                     )
                 }
@@ -176,27 +209,34 @@ impl<'a> Message<'a> {
 }
 
 impl MessageParts {
-    pub(crate) fn into_message<'a>(self, reader: Box<dyn BufRead + 'a>) -> Message<'a> {
+    pub(crate) fn into_message<'a>(self, reader: Box<dyn DebugBufRead + 'a>) -> Message<'a> {
         match self {
             MessageParts::Literal {
                 packet_header,
                 header,
+                is_nested,
             } => Message::Literal {
                 reader: LiteralDataReader::new_done(
                     PacketBodyReader::new_done(packet_header, reader),
                     header,
                 ),
+                is_nested,
             },
-            MessageParts::Compressed { packet_header } => Message::Compressed {
+            MessageParts::Compressed {
+                packet_header,
+                is_nested,
+            } => Message::Compressed {
                 reader: CompressedDataReader::new_done(PacketBodyReader::new_done(
                     packet_header,
                     reader,
                 )),
+                is_nested,
             },
             MessageParts::Signed {
                 signature,
                 parts,
                 hash,
+                is_nested,
             } => {
                 let source = parts.into_message(reader);
                 Message::Signed {
@@ -205,6 +245,7 @@ impl MessageParts {
                         hash,
                         signature,
                     },
+                    is_nested,
                 }
             }
             MessageParts::SignedOnePass {
@@ -212,6 +253,7 @@ impl MessageParts {
                 hash,
                 signature,
                 parts,
+                is_nested,
             } => {
                 let source = parts.into_message(reader);
                 Message::SignedOnePass {
@@ -221,12 +263,14 @@ impl MessageParts {
                         source: Box::new(source),
                         signature,
                     },
+                    is_nested,
                 }
             }
             MessageParts::Encrypted {
                 packet_header,
                 esk,
                 config,
+                is_nested,
             } => {
                 let reader = PacketBodyReader::new_done(packet_header, reader);
                 let edata = if let Some(config) = config {
@@ -236,7 +280,11 @@ impl MessageParts {
                     let reader = SymEncryptedDataReader::new_done(reader);
                     Edata::SymEncryptedData { reader }
                 };
-                Message::Encrypted { esk, edata }
+                Message::Encrypted {
+                    esk,
+                    edata,
+                    is_nested,
+                }
             }
         }
     }
@@ -254,7 +302,7 @@ pub enum Esk {
 
 impl Esk {
     pub fn try_from_reader<'a>(
-        packet: &mut PacketBodyReader<Box<dyn BufRead + 'a>>,
+        packet: &mut PacketBodyReader<Box<dyn DebugBufRead + 'a>>,
     ) -> Result<Self> {
         let packet_header = packet.packet_header();
         match packet_header.tag() {
@@ -330,15 +378,15 @@ impl Serialize for Esk {
 #[allow(clippy::large_enum_variant)]
 pub enum Edata<'a> {
     SymEncryptedData {
-        reader: SymEncryptedDataReader<Box<dyn BufRead + 'a>>,
+        reader: SymEncryptedDataReader<Box<dyn DebugBufRead + 'a>>,
     },
     SymEncryptedProtectedData {
-        reader: SymEncryptedProtectedDataReader<Box<dyn BufRead + 'a>>,
+        reader: SymEncryptedProtectedDataReader<Box<dyn DebugBufRead + 'a>>,
     },
 }
 
 impl<'a> Edata<'a> {
-    pub fn try_from_reader(reader: PacketBodyReader<Box<dyn BufRead + 'a>>) -> Result<Self> {
+    pub fn try_from_reader(reader: PacketBodyReader<Box<dyn DebugBufRead + 'a>>) -> Result<Self> {
         match reader.packet_header().tag() {
             Tag::SymEncryptedData => {
                 let reader = SymEncryptedDataReader::new(reader)?;
@@ -420,16 +468,21 @@ impl<'a> Message<'a> {
     /// Decompresses the data if compressed.
     pub fn decompress(self) -> Result<Self> {
         match self {
-            Message::Compressed { reader } => Message::from_bytes(reader.decompress()?),
-            Message::Signed { reader } => Ok(Message::Signed {
+            Message::Compressed { reader, is_nested } => {
+                Message::internal_from_bytes(reader.decompress()?, is_nested)
+            }
+            Message::Signed { reader, is_nested } => Ok(Message::Signed {
                 reader: reader.decompress()?,
+                is_nested,
             }),
             Message::SignedOnePass {
                 one_pass_signature,
                 reader,
+                is_nested,
             } => Ok(Message::SignedOnePass {
                 one_pass_signature,
                 reader: reader.decompress()?,
+                is_nested,
             }),
             Message::Encrypted { .. } => Ok(self),
             Message::Literal { .. } => Ok(self),
@@ -625,24 +678,30 @@ impl<'a> Message<'a> {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("even the ring can not decrypt plaintext");
             }
-            Message::Signed { reader } => {
+            Message::Signed { reader, is_nested } => {
                 let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
-                Ok((Message::Signed { reader }, res))
+                Ok((Message::Signed { reader, is_nested }, res))
             }
             Message::SignedOnePass {
                 reader,
                 one_pass_signature,
+                is_nested,
             } => {
                 let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Message::SignedOnePass {
                         one_pass_signature,
                         reader,
+                        is_nested,
                     },
                     res,
                 ))
             }
-            Message::Encrypted { esk, mut edata } => {
+            Message::Encrypted {
+                esk,
+                mut edata,
+                is_nested,
+            } => {
                 // Lets go and find things, with which we can decrypt
                 let (session_key, result) = ring.find_session_key(&esk, abort_early)?;
                 let Some(session_key) = session_key else {
@@ -650,7 +709,7 @@ impl<'a> Message<'a> {
                 };
 
                 edata.decrypt(&session_key)?;
-                let message = Message::from_bytes(edata)?;
+                let message = Message::internal_from_bytes(edata, is_nested)?;
                 Ok((message, result))
             }
         }
@@ -682,7 +741,7 @@ impl<'a> Message<'a> {
     /// If this is a literal message, returns the literal data header
     pub fn literal_data_header(&self) -> Option<&LiteralDataHeader> {
         match self {
-            Self::Literal { reader } => Some(reader.data_header()),
+            Self::Literal { reader, .. } => Some(reader.data_header()),
             Self::Compressed { .. } => None,
             Self::Signed { reader, .. } => reader.get_ref().literal_data_header(),
             Self::SignedOnePass { reader, .. } => reader.get_ref().literal_data_header(),
@@ -692,8 +751,8 @@ impl<'a> Message<'a> {
 
     pub fn packet_header(&self) -> PacketHeader {
         match self {
-            Self::Literal { reader } => reader.packet_header(),
-            Self::Compressed { reader } => reader.packet_header(),
+            Self::Literal { reader, .. } => reader.packet_header(),
+            Self::Compressed { reader, .. } => reader.packet_header(),
             Self::Signed { reader, .. } => reader.get_ref().packet_header(),
             Self::SignedOnePass { reader, .. } => reader.get_ref().packet_header(),
             Self::Encrypted { edata, .. } => edata.packet_header(),
@@ -714,10 +773,10 @@ impl<'a> Message<'a> {
         Ok(out)
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<Box<dyn BufRead + 'a>> {
+    pub fn into_inner(self) -> PacketBodyReader<Box<dyn DebugBufRead + 'a>> {
         match self {
-            Self::Literal { reader } => reader.into_inner(),
-            Self::Compressed { reader } => reader.into_inner(),
+            Self::Literal { reader, .. } => reader.into_inner(),
+            Self::Compressed { reader, .. } => reader.into_inner(),
             Self::Signed { reader, .. } => reader.into_inner(),
             Self::SignedOnePass { reader, .. } => reader.into_inner(),
             Self::Encrypted { edata, .. } => match edata {
@@ -726,34 +785,120 @@ impl<'a> Message<'a> {
             },
         }
     }
-}
 
-impl Read for Message<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    pub fn get_mut(&mut self) -> &mut PacketBodyReader<Box<dyn DebugBufRead + 'a>> {
         match self {
-            Self::Literal { reader } => reader.read(buf),
-            Self::Compressed { reader } => reader.read(buf),
-            Self::Signed { reader, .. } => reader.read(buf),
-            Self::SignedOnePass { reader, .. } => reader.read(buf),
-            Self::Encrypted { edata, .. } => edata.read(buf),
+            Self::Literal { reader, .. } => reader.get_mut(),
+            Self::Compressed { reader, .. } => reader.get_mut(),
+            Self::Signed { reader, .. } => reader.get_mut().get_mut(),
+            Self::SignedOnePass { reader, .. } => reader.get_mut().get_mut(),
+            Self::Encrypted { edata, .. } => match edata {
+                Edata::SymEncryptedData { reader } => reader.get_mut(),
+                Edata::SymEncryptedProtectedData { reader } => reader.get_mut(),
+            },
         }
     }
-}
 
-impl BufRead for Message<'_> {
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+    fn has_buffer_available(&mut self) -> io::Result<bool> {
+        let buf = self.fill_inner()?;
+        Ok(!buf.is_empty())
+    }
+
+    fn is_nested(&self) -> bool {
         match self {
-            Self::Literal { reader } => reader.fill_buf(),
-            Self::Compressed { reader } => reader.fill_buf(),
+            Self::Literal { is_nested, .. } => *is_nested,
+            Self::Compressed { is_nested, .. } => *is_nested,
+            Self::Encrypted { is_nested, .. } => *is_nested,
+            Self::Signed { is_nested, .. } => *is_nested,
+            Self::SignedOnePass { is_nested, .. } => *is_nested,
+        }
+    }
+
+    fn check_trailing_data(&mut self) -> io::Result<()> {
+        // if this is a nested message, the outer readers will verify trailing data
+        if self.is_nested() {
+            return Ok(());
+        }
+
+        // drain the inner reader to ensure no trailing data is contained
+        let inner_reader = self.get_mut().get_mut();
+        let mut parser = crate::packet::PacketParser::new(inner_reader);
+        match parser.next_ref() {
+            Some(Ok(packet)) => {
+                let tag = packet.packet_header().tag();
+                match tag {
+                    Tag::Padding | Tag::Marker => {
+                        debug!("ignoring trailing packet: {:?}", tag);
+                    }
+                    _ => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!(
+                                "unexpected trailing packet found: {:?}",
+                                packet.packet_header()
+                            ),
+                        ));
+                    }
+                }
+            }
+            Some(Err(err)) => {
+                warn!("failed to parse trailing data: {:?}", err);
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "unexpected trailing bytes found",
+                ));
+            }
+            None => {
+                // all good
+            }
+        }
+        Ok(())
+    }
+
+    fn fill_inner(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::Literal { reader, .. } => reader.fill_buf(),
+            Self::Compressed { reader, .. } => reader.fill_buf(),
             Self::Signed { reader, .. } => reader.fill_buf(),
             Self::SignedOnePass { reader, .. } => reader.fill_buf(),
             Self::Encrypted { edata, .. } => edata.fill_buf(),
         }
     }
+}
+
+impl Read for Message<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let read = match self {
+            Self::Literal { reader, .. } => reader.read(buf),
+            Self::Compressed { reader, .. } => reader.read(buf),
+            Self::Signed { reader, .. } => reader.read(buf),
+            Self::SignedOnePass { reader, .. } => reader.read(buf),
+            Self::Encrypted { edata, .. } => edata.read(buf),
+        }?;
+
+        if read == 0 {
+            self.check_trailing_data()?;
+        }
+
+        Ok(read)
+    }
+}
+
+impl BufRead for Message<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        // sad workaround because of comipler lifetime limits
+        if !self.has_buffer_available()? {
+            self.check_trailing_data()?;
+            return Ok(&[][..]);
+        }
+
+        self.fill_inner()
+    }
+
     fn consume(&mut self, amt: usize) {
         match self {
-            Self::Literal { reader } => reader.consume(amt),
-            Self::Compressed { reader } => reader.consume(amt),
+            Self::Literal { reader, .. } => reader.consume(amt),
+            Self::Compressed { reader, .. } => reader.consume(amt),
             Self::Signed { reader, .. } => reader.consume(amt),
             Self::SignedOnePass { reader, .. } => reader.consume(amt),
             Self::Encrypted { edata, .. } => edata.consume(amt),

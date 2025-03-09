@@ -22,7 +22,7 @@ pub enum Any<'a> {
 
 impl<'a> Any<'a> {
     /// Parse armored ascii data.
-    pub fn from_armor<R: Read + 'a>(bytes: R) -> Result<(Self, armor::Headers)> {
+    pub fn from_armor<R: std::fmt::Debug + Read + 'a>(bytes: R) -> Result<(Self, armor::Headers)> {
         Self::from_armor_buf(BufReader::new(bytes))
     }
 
@@ -32,7 +32,9 @@ impl<'a> Any<'a> {
     }
 
     /// Parse armored ascii data.
-    pub fn from_armor_buf<R: BufRead + 'a>(input: R) -> Result<(Self, armor::Headers)> {
+    pub fn from_armor_buf<R: BufRead + std::fmt::Debug + 'a>(
+        input: R,
+    ) -> Result<(Self, armor::Headers)> {
         let dearmor = armor::Dearmor::new(input);
         let limit = dearmor.max_buffer_limit();
         let (typ, headers, has_leading_data, rest) = dearmor.read_only_header()?;

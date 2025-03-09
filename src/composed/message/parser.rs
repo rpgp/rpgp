@@ -13,9 +13,12 @@ use super::reader::{
     CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
 };
 
+use super::DebugBufRead;
+
 /// Parses a single message level
-fn next<'a>(
-    mut packets: crate::packet::PacketParser<Box<dyn BufRead + 'a>>,
+pub(super) fn next<'a>(
+    mut packets: crate::packet::PacketParser<Box<dyn DebugBufRead + 'a>>,
+    is_nested: bool,
 ) -> Result<Option<Message<'a>>> {
     loop {
         let Some(packet) = packets.next_owned() else {
@@ -69,7 +72,11 @@ fn next<'a>(
                                 }
                             };
 
-                            return Ok(Some(Message::Encrypted { esk, edata }));
+                            return Ok(Some(Message::Encrypted {
+                                esk,
+                                edata,
+                                is_nested,
+                            }));
                         }
                         Tag::Padding => {
                             // drain reader
@@ -95,11 +102,11 @@ fn next<'a>(
                 let signature =
                     crate::packet::Signature::try_from_reader(packet.packet_header(), &mut packet)?;
                 packets = crate::packet::PacketParser::new(packet.into_inner());
-                let Some(inner_message) = next(packets)? else {
+                let Some(inner_message) = next(packets, true)? else {
                     bail!("missing next packet");
                 };
                 let reader = SignatureBodyReader::new(signature, Box::new(inner_message))?;
-                let message = Message::Signed { reader };
+                let message = Message::Signed { reader, is_nested };
                 return Ok(Some(message));
             }
             Tag::OnePassSignature => {
@@ -112,7 +119,7 @@ fn next<'a>(
                     &mut packet,
                 )?;
                 packets = crate::packet::PacketParser::new(packet.into_inner());
-                let Some(inner_message) = next(packets)? else {
+                let Some(inner_message) = next(packets, true)? else {
                     bail!("missing next packet");
                 };
 
@@ -121,6 +128,7 @@ fn next<'a>(
                 let message = Message::SignedOnePass {
                     one_pass_signature,
                     reader,
+                    is_nested,
                 };
                 return Ok(Some(message));
             }
@@ -128,14 +136,14 @@ fn next<'a>(
                 // (c) Compressed Message
                 //   - Compressed Packet
                 let reader = CompressedDataReader::new(packet, false)?;
-                let message = Message::Compressed { reader };
+                let message = Message::Compressed { reader, is_nested };
                 return Ok(Some(message));
             }
             Tag::LiteralData => {
                 // (d) Literal Message
                 //   - Literal Packet
                 let reader = LiteralDataReader::new(packet)?;
-                let message = Message::Literal { reader };
+                let message = Message::Literal { reader, is_nested };
                 return Ok(Some(message));
             }
             Tag::Padding => {
@@ -170,87 +178,13 @@ fn esk_filter(esk: Vec<Esk>, pkesk_allowed: PkeskVersion, skesk_allowed: SkeskVe
         .collect()
 }
 
-//                     Some(Ok(Message::Encrypted { esk, edata }))
-//                 }
-//                 Err(err) => Some(Err(err)),
-//             };
-//         }
-//         Tag::Signature => {
-//             return match packet.try_into() {
-//                 Ok(signature) => {
-//                     let message = match next(packets.by_ref()) {
-//                         Some(Ok(m)) => Some(Box::new(m)),
-//                         Some(Err(err)) => return Some(Err(err)),
-//                         None => None,
-//                     };
-
-//                     Some(Ok(Message::Signed {
-//                         message,
-//                         one_pass_signature: None,
-//                         signature,
-//                     }))
-//                 }
-//                 Err(err) => Some(Err(err)),
-//             };
-//         }
-//         Tag::OnePassSignature => {
-//             return match packet.try_into() {
-//                 Ok(p) => {
-//                     // TODO: check for `is_nested` marker on OnePassSignatures
-//                     let one_pass_signature = Some(p);
-
-//                     let message = match next(packets.by_ref()) {
-//                         Some(Ok(m)) => Some(Box::new(m)),
-//                         Some(Err(err)) => return Some(Err(err)),
-//                         None => None,
-//                     };
-
-//                     let signature = if let Some(res) = packets
-//                         .next_if(|res| res.as_ref().is_ok_and(|p| p.tag() == Tag::Signature))
-//                     {
-//                         match res {
-//                             Ok(packet) => packet.try_into().expect("peeked"),
-//                             Err(e) => return Some(Err(e)),
-//                         }
-//                     } else {
-//                         return Some(Err(format_err!(
-//                             "missing signature for, one pass signature"
-//                         )));
-//                     };
-
-//                     Some(Ok(Message::Signed {
-//                         message,
-//                         one_pass_signature,
-//                         signature,
-//                     }))
-//                 }
-//                 Err(err) => Some(Err(err)),
-//             };
-//         }
-//         Tag::Marker => {
-//             // Marker Packets are ignored
-//             // see https://www.rfc-editor.org/rfc/rfc9580.html#marker-packet
-//         }
-//         Tag::Padding => {
-//             // Padding Packets are ignored
-//             //
-//             // "Such a packet MUST be ignored when received."
-//             // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-5.14-2)
-//         }
-//         _ => {
-//             return Some(Err(format_err!("unexpected packet {:?}", tag)));
-//         }
-//     }
-// }
-
-//     None
-// }
-
 impl<'a> Message<'a> {
     /// Parse a composed message.
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages>
-    fn from_packets(packets: crate::packet::PacketParser<Box<dyn BufRead + 'a>>) -> Result<Self> {
-        match next(packets)? {
+    fn from_packets(
+        packets: crate::packet::PacketParser<Box<dyn DebugBufRead + 'a>>,
+    ) -> Result<Self> {
+        match next(packets, false)? {
             Some(message) => Ok(message),
             None => {
                 bail!("no valid OpenPGP message found");
@@ -259,9 +193,22 @@ impl<'a> Message<'a> {
     }
 
     /// Parses a message from the given bytes.
-    pub fn from_bytes<R: BufRead + 'a>(source: R) -> Result<Self> {
-        let parser = crate::packet::PacketParser::new(Box::new(source) as Box<dyn BufRead>);
+    pub fn from_bytes<R: BufRead + std::fmt::Debug + 'a>(source: R) -> Result<Self> {
+        let parser = crate::packet::PacketParser::new(Box::new(source) as Box<dyn DebugBufRead>);
         Self::from_packets(parser)
+    }
+
+    pub(crate) fn internal_from_bytes<R: BufRead + std::fmt::Debug + 'a>(
+        source: R,
+        is_nested: bool,
+    ) -> Result<Self> {
+        let packets = crate::packet::PacketParser::new(Box::new(source) as Box<dyn DebugBufRead>);
+        match next(packets, is_nested)? {
+            Some(message) => Ok(message),
+            None => {
+                bail!("no valid OpenPGP message found");
+            }
+        }
     }
 
     /// From armored file
@@ -282,7 +229,9 @@ impl<'a> Message<'a> {
     }
 
     /// Armored ascii data.
-    pub fn from_armor<R: BufRead + 'a>(input: R) -> Result<(Self, crate::armor::Headers)> {
+    pub fn from_armor<R: BufRead + std::fmt::Debug + 'a>(
+        input: R,
+    ) -> Result<(Self, crate::armor::Headers)> {
         let mut dearmor = crate::armor::Dearmor::new(input);
         dearmor.read_header()?;
         // Safe to unwrap, as read_header succeeded.
@@ -317,7 +266,7 @@ impl<'a> Message<'a> {
     }
 
     /// Parse from a reader which might contain ASCII amored data or binary data.
-    pub fn from_reader<R: BufRead + 'a>(
+    pub fn from_reader<R: BufRead + std::fmt::Debug + 'a>(
         mut source: R,
     ) -> Result<(Self, Option<crate::armor::Headers>)> {
         if is_binary(&mut source)? {

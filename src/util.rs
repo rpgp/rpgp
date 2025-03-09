@@ -101,6 +101,8 @@ pub(crate) mod test {
             })
             .collect()
     }
+
+    #[derive(Debug)]
     pub(crate) struct ChaosReader<R: Rng> {
         rng: R,
         source: Bytes,

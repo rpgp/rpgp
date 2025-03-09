@@ -17,6 +17,7 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::util::fill_buffer;
 
+#[derive(Debug)]
 pub enum StreamEncryptor<R>
 where
     R: std::io::Read,
@@ -119,7 +120,6 @@ where
         #[debug("BufEncryptor")]
         encryptor: BufEncryptor<M>,
         prefix: Bytes,
-        #[debug("source")]
         source: R,
     },
     Data {
@@ -128,7 +128,6 @@ where
         encryptor: BufEncryptor<M>,
         buffer: BytesMut,
         /// set to `None` once the source is fully read
-        #[debug("source: remaining? {}", source.is_some())]
         source: Option<R>,
     },
     Mdc {

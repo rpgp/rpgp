@@ -7,7 +7,7 @@ use crate::types::Tag;
 
 use super::{fill_buffer, PacketBodyReader};
 
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 pub struct CompressedDataReader<R: BufRead> {
     state: CompressedReaderState<R>,
 }
@@ -49,6 +49,14 @@ impl<R: BufRead> CompressedDataReader<R> {
         }
     }
 
+    pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
+        match &mut self.state {
+            CompressedReaderState::Body { source, .. } => source.get_mut(),
+            CompressedReaderState::Done { source, .. } => source,
+            CompressedReaderState::Error => panic!("error state"),
+        }
+    }
+
     pub fn packet_header(&self) -> PacketHeader {
         match self.state {
             CompressedReaderState::Body { ref source, .. } => match source {
@@ -80,7 +88,7 @@ impl<R: BufRead> CompressedDataReader<R> {
     }
 }
 
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 enum CompressedReaderState<R: BufRead> {
     Body {
         source: MaybeDecompress<PacketBodyReader<R>>,
@@ -167,9 +175,9 @@ impl<R: BufRead> CompressedDataReader<R> {
     }
 }
 
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 enum MaybeDecompress<R: BufRead> {
-    Raw(#[debug("R")] R),
+    Raw(R),
     Decompress(Decompressor<R>),
 }
 
@@ -190,6 +198,12 @@ impl<R: BufRead> MaybeDecompress<R> {
         match self {
             Self::Raw(r) => r,
             Self::Decompress(r) => r.into_inner(),
+        }
+    }
+    fn get_mut(&mut self) -> &mut R {
+        match self {
+            Self::Raw(r) => r,
+            Self::Decompress(r) => r.get_mut(),
         }
     }
 }

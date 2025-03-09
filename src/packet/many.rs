@@ -46,16 +46,20 @@ impl<R: BufRead> Iterator for PacketParser<R> {
         };
 
         debug!("found header: {header:?}");
-        let mut body = PacketBodyReader::new(header, &mut self.reader);
-        match Packet::from_reader(header, &mut body) {
-            Ok(packet) => Some(Ok(packet)),
-            Err(Error::PacketParsing { source }) if source.is_incomplete() => {
-                debug!("incomplete packet for: {:?}", source);
-                // not bailing, we are just skipping incomplete bodies
-                Some(Err(Error::PacketIncomplete { source }))
-            }
-            Err(err) => Some(Err(err)),
-        }
+        let res = PacketBodyReader::new(header, &mut self.reader)
+            .map_err(Error::from)
+            .and_then(|mut body| {
+                match Packet::from_reader(header, &mut body) {
+                    Ok(packet) => Ok(packet),
+                    Err(Error::PacketParsing { source }) if source.is_incomplete() => {
+                        debug!("incomplete packet for: {:?}", source);
+                        // not bailing, we are just skipping incomplete bodies
+                        Err(Error::PacketIncomplete { source })
+                    }
+                    Err(err) => Err(err),
+                }
+            });
+        Some(res)
     }
 }
 
@@ -78,8 +82,8 @@ impl<R: BufRead> PacketParser<R> {
         };
 
         debug!("found header: {header:?}");
-        let body = PacketBodyReader::new(header, &mut self.reader);
-        Some(Ok(body))
+        let body = PacketBodyReader::new(header, &mut self.reader).map_err(Into::into);
+        Some(body)
     }
 
     pub fn next_owned(mut self) -> Option<Result<PacketBodyReader<R>>> {
@@ -96,8 +100,8 @@ impl<R: BufRead> PacketParser<R> {
         };
 
         debug!("found header: {header:?}");
-        let body = PacketBodyReader::new(header, self.reader);
-        Some(Ok(body))
+        let body = PacketBodyReader::new(header, self.reader).map_err(Into::into);
+        Some(body)
     }
 }
 

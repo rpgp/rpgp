@@ -82,6 +82,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
                 .expect("failed to init decryption");
 
             let mut msg = decrypted.decompress().expect("compression");
+            dbg!(&msg);
             let data = msg.as_data_string().unwrap();
 
             // TODO: figure out how to do roundtrips
@@ -99,7 +100,7 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
                     .expect("message verification failed");
             }
         }
-        Message::Signed { reader } => {
+        Message::Signed { reader, .. } => {
             println!("signature: {:?}", reader.signature());
         }
         _ => {
@@ -549,4 +550,43 @@ bhF30A+IitsxxA==
 
     let decrypted = dec.as_data_string().unwrap();
     assert_eq!(&decrypted, "Hello, world!");
+}
+
+#[test]
+fn test_invalid_partial_messages() {
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) = SignedSecretKey::from_armor_file("./tests/partial_key.asc").expect("ssk");
+
+    // 512 bytes, f256 p128 f128
+    let (message, _) =
+        Message::from_armor_file("./tests/partial_invalid_two_fixed.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+
+    // 512 bytes, p512 f0 f0
+    let (message, _) =
+        Message::from_armor_file("./tests/partial_invalid_two_fixed_empty.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
 }

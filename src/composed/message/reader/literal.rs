@@ -10,7 +10,7 @@ use crate::util::fill_buffer;
 use super::PacketBodyReader;
 
 /// Read the underlying literal data.
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 pub enum LiteralDataReader<R: BufRead> {
     Body {
         source: PacketBodyReader<R>,
@@ -20,6 +20,7 @@ pub enum LiteralDataReader<R: BufRead> {
     Done {
         source: PacketBodyReader<R>,
         header: LiteralDataHeader,
+        buffer: BytesMut,
     },
     Error,
 }
@@ -37,14 +38,30 @@ impl<R: BufRead> LiteralDataReader<R> {
     }
 
     pub(crate) fn new_done(source: PacketBodyReader<R>, header: LiteralDataHeader) -> Self {
-        Self::Done { source, header }
+        Self::Done {
+            source,
+            header,
+            buffer: BytesMut::new(),
+        }
     }
 
     pub fn is_done(&self) -> bool {
-        matches!(self, Self::Done { .. })
+        match self {
+            Self::Done { buffer, .. } => !buffer.has_remaining(),
+            Self::Body { .. } => false,
+            Self::Error => panic!("error state"),
+        }
     }
 
     pub fn into_inner(self) -> PacketBodyReader<R> {
+        match self {
+            Self::Body { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
         match self {
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
@@ -61,7 +78,7 @@ impl<R: BufRead> LiteralDataReader<R> {
     }
 
     fn fill_inner(&mut self) -> io::Result<()> {
-        if matches!(self, Self::Done { .. }) {
+        if self.is_done() {
             return Ok(());
         }
 
@@ -71,7 +88,7 @@ impl<R: BufRead> LiteralDataReader<R> {
                 mut buffer,
                 header,
             } => {
-                debug!("literal packet: body");
+                debug!("body");
                 if buffer.has_remaining() {
                     *self = Self::Body {
                         source,
@@ -83,13 +100,16 @@ impl<R: BufRead> LiteralDataReader<R> {
 
                 debug!("literal packet: filling buffer");
                 buffer.resize(1024, 0);
-                let read = fill_buffer(&mut source, &mut buffer, None)?;
-
+                let read = fill_buffer(&mut source, &mut buffer, Some(1024))?;
                 buffer.truncate(read);
 
-                if read == 0 {
+                if read < 1024 {
                     // done reading the source
-                    *self = Self::Done { source, header };
+                    *self = Self::Done {
+                        source,
+                        header,
+                        buffer,
+                    };
                 } else {
                     *self = Self::Body {
                         source,
@@ -99,9 +119,17 @@ impl<R: BufRead> LiteralDataReader<R> {
                 }
                 Ok(())
             }
-            Self::Done { source, header } => {
+            Self::Done {
+                source,
+                header,
+                buffer,
+            } => {
                 debug!("literal packet: done");
-                *self = Self::Done { source, header };
+                *self = Self::Done {
+                    source,
+                    header,
+                    buffer,
+                };
                 Ok(())
             }
             Self::Error => {
@@ -115,19 +143,17 @@ impl<R: BufRead> BufRead for LiteralDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self {
-            Self::Body { ref mut buffer, .. } => Ok(&buffer[..]),
-            Self::Done { .. } => Ok(&[][..]),
+            Self::Body { buffer, .. } | Self::Done { buffer, .. } => Ok(&buffer[..]),
             Self::Error => panic!("LiteralReader errored"),
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self {
-            Self::Body { ref mut buffer, .. } => {
+            Self::Body { buffer, .. } | Self::Done { buffer, .. } => {
                 buffer.advance(amt);
             }
             Self::Error => panic!("LiteralReader errored"),
-            Self::Done { .. } => {}
         }
     }
 }
@@ -136,12 +162,11 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {
-            Self::Body { ref mut buffer, .. } => {
+            Self::Body { buffer, .. } | Self::Done { buffer, .. } => {
                 let to_write = buffer.remaining().min(buf.len());
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
-            Self::Done { .. } => Ok(0),
             _ => unreachable!("invalid state"),
         }
     }

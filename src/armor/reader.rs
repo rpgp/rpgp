@@ -333,6 +333,7 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
 }
 
 /// Streaming based ascii armor parsing.
+#[derive(derive_more::Debug)]
 pub struct Dearmor<R: BufRead> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
@@ -342,6 +343,7 @@ pub struct Dearmor<R: BufRead> {
     pub checksum: Option<u64>,
     /// Current state
     current_part: Part<R>,
+    #[debug("Crc24Hasher")]
     crc: crc24::Crc24Hasher,
     /// Maximum buffer limit
     max_buffer_limit: usize,

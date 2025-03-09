@@ -4,11 +4,12 @@ use bytes::{Buf, BytesMut};
 use log::debug;
 
 use crate::packet::PacketHeader;
+use crate::parsing_reader::BufReadParsing;
 use crate::types::{PacketLength, Tag};
 
 use super::{fill_buffer, LimitedReader};
 
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 pub struct PacketBodyReader<R: BufRead> {
     packet_header: PacketHeader,
     state: State<R>,
@@ -16,16 +17,12 @@ pub struct PacketBodyReader<R: BufRead> {
 
 #[derive(derive_more::Debug)]
 enum State<R: BufRead> {
-    Header {
-        #[debug("source")]
-        source: R,
-    },
     Body {
+        #[debug("{}", hex::encode(buffer))]
         buffer: BytesMut,
         source: LimitedReader<R>,
     },
     Done {
-        #[debug("source")]
         source: R,
     },
     Error,
@@ -37,7 +34,6 @@ impl<R: BufRead> BufRead for PacketBodyReader<R> {
         match self.state {
             State::Body { ref mut buffer, .. } => Ok(&buffer[..]),
             State::Done { .. } => Ok(&[][..]),
-            State::Header { .. } => unreachable!("invalid state: header"),
             State::Error => panic!("PacketBodyReader errored"),
         }
     }
@@ -48,7 +44,6 @@ impl<R: BufRead> BufRead for PacketBodyReader<R> {
                 buffer.advance(amt);
             }
             State::Error => panic!("PacketBodyreader errored"),
-            State::Header { .. } => unreachable!("invalid state: header"),
             State::Done { .. } => {}
         }
     }
@@ -70,11 +65,61 @@ impl<R: BufRead> Read for PacketBodyReader<R> {
 }
 
 impl<R: BufRead> PacketBodyReader<R> {
-    pub fn new(packet_header: PacketHeader, source: R) -> Self {
-        Self {
+    pub fn new(packet_header: PacketHeader, source: R) -> io::Result<Self> {
+        let source = match packet_header.packet_length() {
+            PacketLength::Fixed(len) => {
+                debug!("fixed packet {}", len);
+                LimitedReader::fixed(len as u64, source)
+            }
+            PacketLength::Indeterminate => {
+                debug!("indeterminate packet");
+                LimitedReader::Indeterminate(source)
+            }
+            PacketLength::Partial(len) => {
+                debug!("partial packet start {}", len);
+                // https://www.rfc-editor.org/rfc/rfc9580.html#name-partial-body-lengths
+                // "An implementation MAY use Partial Body Lengths for data packets, be
+                // they literal, compressed, or encrypted [...]
+                // Partial Body Lengths MUST NOT be used for any other packet types"
+                if !matches!(
+                    packet_header.tag(),
+                    Tag::LiteralData
+                        | Tag::CompressedData
+                        | Tag::SymEncryptedData
+                        | Tag::SymEncryptedProtectedData
+                ) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "Partial body length is not allowed for packet type {:?}",
+                            packet_header.tag()
+                        ),
+                    ));
+                }
+
+                // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
+                // "The first partial length MUST be at least 512 octets long."
+                if len < 512 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "Illegal first partial body length {} (shorter than 512 bytes)",
+                            len
+                        ),
+                    ));
+                }
+
+                LimitedReader::Partial(source.take(len as u64))
+            }
+        };
+
+        Ok(Self {
             packet_header,
-            state: State::Header { source },
-        }
+            state: State::Body {
+                source,
+                buffer: BytesMut::with_capacity(1024),
+            },
+        })
     }
 
     pub fn new_done(packet_header: PacketHeader, source: R) -> Self {
@@ -90,8 +135,15 @@ impl<R: BufRead> PacketBodyReader<R> {
 
     pub fn into_inner(self) -> R {
         match self.state {
-            State::Header { source } => source,
             State::Body { source, .. } => source.into_inner(),
+            State::Done { source } => source,
+            State::Error => panic!("PacketBodyReader errored"),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        match &mut self.state {
+            State::Body { source, .. } => source.get_mut(),
             State::Done { source } => source,
             State::Error => panic!("PacketBodyReader errored"),
         }
@@ -108,49 +160,6 @@ impl<R: BufRead> PacketBodyReader<R> {
 
         loop {
             match std::mem::replace(&mut self.state, State::Error) {
-                State::Header { source } => {
-                    let source = match self.packet_header.packet_length() {
-                        PacketLength::Fixed(len) => LimitedReader::Fixed(source.take(len as u64)),
-                        PacketLength::Indeterminate => LimitedReader::Indeterminate(source),
-                        PacketLength::Partial(len) => {
-                            // https://www.rfc-editor.org/rfc/rfc9580.html#name-partial-body-lengths
-                            // "An implementation MAY use Partial Body Lengths for data packets, be
-                            // they literal, compressed, or encrypted [...]
-                            // Partial Body Lengths MUST NOT be used for any other packet types"
-                            if !matches!(
-                                self.packet_header.tag(),
-                                Tag::LiteralData
-                                    | Tag::CompressedData
-                                    | Tag::SymEncryptedData
-                                    | Tag::SymEncryptedProtectedData
-                            ) {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidInput,
-                                    format!(
-                                        "Partial body length is not allowed for packet type {:?}",
-                                        self.packet_header.tag()
-                                    ),
-                                ));
-                            }
-
-                            // https://www.rfc-editor.org/rfc/rfc9580.html#section-4.2.1.4-5
-                            // "The first partial length MUST be at least 512 octets long."
-                            if len < 512 {
-                                return Err(io::Error::new(
-                                    io::ErrorKind::InvalidInput,
-                                    format!("Illegal first partial body length {} (shorter than 512 bytes)", len)
-                                ));
-                            }
-
-                            LimitedReader::Partial(source.take(len as u64))
-                        }
-                    };
-
-                    self.state = State::Body {
-                        source,
-                        buffer: BytesMut::with_capacity(1024),
-                    };
-                }
                 State::Body {
                     mut buffer,
                     mut source,
@@ -161,14 +170,18 @@ impl<R: BufRead> PacketBodyReader<R> {
                     }
 
                     buffer.resize(1024, 0);
-                    let read = fill_buffer(&mut source, &mut buffer, None)?;
+                    let read = fill_buffer(&mut source, &mut buffer, Some(1024))?;
                     buffer.truncate(read);
 
                     if read == 0 {
+                        debug!("body source done: {:?}", self.packet_header);
                         match source {
-                            LimitedReader::Fixed(r) => {
+                            LimitedReader::Fixed { mut reader } => {
+                                let rest = reader.rest()?;
+                                debug_assert!(rest.is_empty(), "{}", hex::encode(&rest));
+
                                 self.state = State::Done {
-                                    source: r.into_inner(),
+                                    source: reader.into_inner(),
                                 };
                             }
                             LimitedReader::Indeterminate(source) => {
@@ -183,7 +196,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                                     PacketLength::Fixed(len) => {
                                         // the last one
                                         debug!("fixed partial packet {}", len);
-                                        LimitedReader::Fixed(source.take(len as u64))
+                                        LimitedReader::fixed(len as u64, source)
                                     }
                                     PacketLength::Partial(len) => {
                                         // another one

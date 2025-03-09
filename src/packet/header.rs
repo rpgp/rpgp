@@ -230,15 +230,15 @@ impl Serialize for PacketHeader {
 }
 
 /// Old format packet header ("Legacy format")
-#[bitfield(u8, order = msb)]
+#[bitfield(u8, order = msb, debug = false)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct OldPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]
-    _padding: bool,
+    padding: bool,
     /// Version: 0
     #[bits(1, default = false)]
-    _version: bool,
+    version: bool,
     /// Packet Type ID
     #[bits(4)]
     tag: u8,
@@ -247,21 +247,42 @@ pub struct OldPacketHeader {
     length_type: u8,
 }
 
+impl std::fmt::Debug for OldPacketHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OldPacketHeader")
+            .field("padding", &(self.padding() as u8))
+            .field("version", &(self.version() as u8))
+            .field("tag", &Tag::from_bits(self.tag()))
+            .field("length_type", &self.length_type())
+            .finish()
+    }
+}
+
 /// Parses a new format packet header ("OpenPGP format")
 ///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers>
-#[bitfield(u8, order = msb)]
+#[bitfield(u8, order = msb, debug = false)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NewPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]
-    _padding: bool,
+    padding: bool,
     /// Version: 1
     #[bits(1, default = true)]
-    _version: bool,
+    version: bool,
     /// Packet Type ID
     #[bits(6)]
     tag: u8,
+}
+
+impl std::fmt::Debug for NewPacketHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NewPacketHeader")
+            .field("padding", &(self.padding() as u8))
+            .field("version", &(self.version() as u8))
+            .field("tag", &(Tag::from_bits(self.tag())))
+            .finish()
+    }
 }
 
 fn old_fixed_type(len: u32) -> u8 {

@@ -18,14 +18,16 @@ pub struct StreamDecryptor<R: BufRead> {
     /// how many bytes have been written
     written: usize,
     chunk_index: usize,
+    #[debug("{}", hex::encode(nonce))]
     nonce: Vec<u8>,
     #[debug("..")]
     message_key: Zeroizing<Vec<u8>>,
+    #[debug("{}", hex::encode(info))]
     info: [u8; 5],
-    #[debug("R")]
     source: R,
     /// finished reading from source?
     is_source_done: bool,
+    #[debug("{}", hex::encode(buffer))]
     buffer: BytesMut,
 }
 
@@ -71,6 +73,10 @@ impl<R: BufRead> StreamDecryptor<R> {
 
     pub fn get_ref(&self) -> &R {
         &self.source
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        &mut self.source
     }
 
     fn decrypt(&mut self) -> io::Result<()> {
@@ -149,8 +155,9 @@ impl<R: BufRead> StreamDecryptor<R> {
         }
 
         let current_len = self.buffer.remaining();
-        let to_read = 2 * self.full_chunk_size();
-        let buf_size = current_len + to_read;
+        let buf_size = 2 * self.full_chunk_size();
+        let to_read = buf_size - current_len;
+
         self.buffer.resize(buf_size, 0);
         let read = fill_buffer(
             &mut self.source,
@@ -199,6 +206,7 @@ impl<R: BufRead> Read for StreamDecryptor<R> {
         self.fill_inner()?;
         let to_write = self.remaining().min(buf.len());
         self.buffer.copy_to_slice(&mut buf[..to_write]);
+
         Ok(to_write)
     }
 }

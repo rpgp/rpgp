@@ -393,6 +393,13 @@ impl<R: BufRead> StreamDecryptor<R> {
             Self::V2(r) => r.get_ref(),
         }
     }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        match self {
+            Self::V1(r) => r.get_mut(),
+            Self::V2(r) => r.get_mut(),
+        }
+    }
 }
 
 #[cfg(test)]

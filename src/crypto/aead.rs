@@ -339,9 +339,127 @@ impl ChunkSize {
 mod tests {
     use super::*;
 
+    use std::io::Read;
+
+    use log::info;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
+
     #[test]
     fn test_chunk_size() {
         assert_eq!(ChunkSize::default().as_byte_size(), 4 * 1024);
         assert_eq!(ChunkSize::C64B.as_byte_size(), 64);
     }
+    macro_rules! roundtrip {
+        ($name:ident, $sym_alg:path, $aead:path) => {
+            #[test]
+            fn $name() {
+                pretty_env_logger::try_init().ok();
+
+                let mut data_rng = ChaCha8Rng::seed_from_u64(0);
+
+                const MAX_SIZE: usize = 2048;
+
+                // Protected
+                for i in 1..MAX_SIZE {
+                    info!("Size {}", i);
+                    let mut data = vec![0u8; i];
+                    data_rng.fill(&mut data[..]);
+
+                    let mut key = vec![0u8; $sym_alg.key_size()];
+                    data_rng.fill(&mut key[..]);
+
+                    let mut salt = [0u8; 32];
+                    data_rng.fill(&mut salt[..]);
+
+                    info!("encrypt");
+                    let mut ciphertext = Vec::new();
+
+                    {
+                        info!("encrypt streaming");
+                        let mut input = std::io::Cursor::new(&data);
+
+                        let mut encryptor = StreamEncryptor::new(
+                            $sym_alg,
+                            $aead,
+                            ChunkSize::default(),
+                            &key,
+                            &salt,
+                            &mut input,
+                        )
+                        .unwrap();
+                        encryptor.read_to_end(&mut ciphertext).unwrap();
+                    }
+
+                    {
+                        info!("decrypt streaming");
+                        let mut decryptor = StreamDecryptor::new(
+                            $sym_alg,
+                            $aead,
+                            ChunkSize::default(),
+                            &salt,
+                            &key,
+                            &ciphertext[..],
+                        )
+                        .unwrap();
+
+                        let mut plaintext = Vec::new();
+                        decryptor.read_to_end(&mut plaintext).unwrap();
+                        assert_eq!(
+                            hex::encode(&data),
+                            hex::encode(&plaintext),
+                            "stream decrypt failed"
+                        );
+                    }
+                }
+            }
+        };
+    }
+
+    roundtrip!(
+        roundtrip_aead_eax_aes128_gcm,
+        SymmetricKeyAlgorithm::AES128,
+        AeadAlgorithm::Gcm
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes192_gcm,
+        SymmetricKeyAlgorithm::AES192,
+        AeadAlgorithm::Gcm
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes256_gcm,
+        SymmetricKeyAlgorithm::AES256,
+        AeadAlgorithm::Gcm
+    );
+
+    roundtrip!(
+        roundtrip_aead_eax_aes128_eax,
+        SymmetricKeyAlgorithm::AES128,
+        AeadAlgorithm::Eax
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes192_eax,
+        SymmetricKeyAlgorithm::AES192,
+        AeadAlgorithm::Eax
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes256_eax,
+        SymmetricKeyAlgorithm::AES256,
+        AeadAlgorithm::Eax
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes128_ocb,
+        SymmetricKeyAlgorithm::AES128,
+        AeadAlgorithm::Ocb
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes192_ocb,
+        SymmetricKeyAlgorithm::AES192,
+        AeadAlgorithm::Ocb
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes256_ocb,
+        SymmetricKeyAlgorithm::AES256,
+        AeadAlgorithm::Ocb
+    );
 }

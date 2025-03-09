@@ -120,6 +120,23 @@ pub trait Deserializable: Sized {
             .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
     }
 
+    /// Parse a single armor encoded composition.
+    fn from_armor_file<P: AsRef<Path>>(path: P) -> Result<(Self, armor::Headers)> {
+        let (mut el, headers) = Self::from_armor_file_many(path)?;
+        let el = el
+            .next()
+            .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??;
+        Ok((el, headers))
+    }
+
+    /// Parse a single armor encoded composition.
+    fn from_armor_file_many<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<(Box<dyn Iterator<Item = Result<Self>>>, armor::Headers)> {
+        let file = std::fs::File::open(path)?;
+        Self::from_armor_many_buf(BufReader::new(file))
+    }
+
     /// Ready binary packets from the given file.
     fn from_file_many<P: AsRef<Path>>(path: P) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
         let file = std::fs::File::open(path)?;

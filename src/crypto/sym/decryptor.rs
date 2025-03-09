@@ -183,6 +183,22 @@ where
             Self::Camellia256(i) => i.get_ref(),
         }
     }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        match self {
+            Self::Idea(i) => i.get_mut(),
+            Self::TripleDes(i) => i.get_mut(),
+            Self::Cast5(i) => i.get_mut(),
+            Self::Blowfish(i) => i.get_mut(),
+            Self::Aes128(i) => i.get_mut(),
+            Self::Aes192(i) => i.get_mut(),
+            Self::Aes256(i) => i.get_mut(),
+            Self::Twofish(i) => i.get_mut(),
+            Self::Camellia128(i) => i.get_mut(),
+            Self::Camellia192(i) => i.get_mut(),
+            Self::Camellia256(i) => i.get_mut(),
+        }
+    }
 }
 
 #[derive(derive_more::Debug)]
@@ -213,7 +229,6 @@ where
         #[debug("BufDecryptor")]
         decryptor: BufDecryptor<M>,
         prefix: BytesMut,
-        #[debug("source")]
         source: R,
         protected: MaybeProtected,
     },
@@ -224,7 +239,6 @@ where
         #[debug("BufDecryptor")]
         decryptor: BufDecryptor<M>,
         buffer: BytesMut,
-        #[debug("source")]
         source: R,
         protected: MaybeProtected,
     },
@@ -280,6 +294,15 @@ where
     }
 
     fn get_ref(&self) -> &R {
+        match self {
+            Self::Prefix { source, .. } => source,
+            Self::Data { source, .. } => source,
+            Self::Done { source, .. } => source,
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    fn get_mut(&mut self) -> &mut R {
         match self {
             Self::Prefix { source, .. } => source,
             Self::Data { source, .. } => source,

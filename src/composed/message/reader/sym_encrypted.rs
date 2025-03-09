@@ -8,7 +8,7 @@ use crate::PlainSessionKey;
 
 use super::PacketBodyReader;
 
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum SymEncryptedDataReader<R: BufRead> {
     Init {
@@ -42,6 +42,15 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
         match self {
             Self::Init { source, .. } => source,
             Self::Body { decryptor, .. } => decryptor.into_inner(),
+            Self::Done { source, .. } => source,
+            Self::Error => panic!("error state"),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
+        match self {
+            Self::Init { source, .. } => source,
+            Self::Body { decryptor, .. } => decryptor.get_mut(),
             Self::Done { source, .. } => source,
             Self::Error => panic!("error state"),
         }
@@ -118,10 +127,10 @@ impl<R: BufRead> Read for SymEncryptedDataReader<R> {
     }
 }
 
-#[derive(derive_more::Debug)]
+#[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum MaybeDecryptor<R: BufRead> {
-    Raw(#[debug("R")] R),
+    Raw(R),
     Decryptor(StreamDecryptor<R>),
 }
 
@@ -137,6 +146,13 @@ impl<R: BufRead> MaybeDecryptor<R> {
         match self {
             Self::Raw(r) => r,
             Self::Decryptor(r) => r.get_ref(),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        match self {
+            Self::Raw(r) => r,
+            Self::Decryptor(r) => r.get_mut(),
         }
     }
 }

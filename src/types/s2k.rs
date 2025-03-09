@@ -728,6 +728,7 @@ mod tests {
             .decrypt_with_password(&"password".into())
             .expect("decrypt");
 
+        dbg!(&decrypted);
         let data = decrypted.as_data_vec().unwrap();
         assert_eq!(data, b"Hello, world!");
 

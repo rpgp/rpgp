@@ -356,7 +356,7 @@ fn card_decrypt() {
 
         let (message, _headers) = Message::from_armor_file(msgfile).unwrap();
 
-        let Message::Encrypted { esk, mut edata } = message else {
+        let Message::Encrypted { esk, mut edata, .. } = message else {
             panic!("not encrypted");
         };
 
