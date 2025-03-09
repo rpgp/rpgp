@@ -1,6 +1,5 @@
 use std::io::{self, BufRead, Read};
 
-use super::PacketBodyReader;
 use crate::errors::Result;
 use crate::packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig};
 use crate::types::Tag;
