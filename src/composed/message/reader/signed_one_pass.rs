@@ -1,29 +1,30 @@
 use std::io::{self, BufRead, Read};
 
 use bytes::{Buf, BytesMut};
-use digest::DynDigest;
 use log::debug;
 
 use crate::errors::Result;
+use crate::errors::Result;
 use crate::packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature};
+use crate::packet::{
+    OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType,
+};
 use crate::util::fill_buffer;
+use crate::util::{fill_buffer, NormalizingHasher};
 use crate::{DebugBufRead, Message, RingResult, TheRing};
-
-use super::PacketBodyReader;
+use crate::{Message, RingResult, TheRing};
 
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
     Init {
         /// Running hasher
-        #[debug("hasher")]
-        hasher: Box<dyn DynDigest>,
+        norm_hasher: NormalizingHasher,
         /// Data source
         source: Box<Message<'a>>,
     },
     Body {
         /// Running hasher
-        #[debug("hasher")]
-        hasher: Box<dyn DynDigest>,
+        norm_hasher: NormalizingHasher,
         /// Data source
         source: Box<Message<'a>>,
         buffer: BytesMut,
@@ -57,7 +58,13 @@ impl<'a> SignatureOnePassReader<'a> {
             hasher.update(salt.as_ref());
         }
 
-        Ok(Self::Init { hasher, source })
+        let text_mode = ops.typ() == SignatureType::Text;
+        let norm_hasher = NormalizingHasher::new(hasher, text_mode);
+
+        Ok(Self::Init {
+            norm_hasher,
+            source,
+        })
     }
 
     pub fn hash(&self) -> Option<&[u8]> {
@@ -111,7 +118,7 @@ impl<'a> SignatureOnePassReader<'a> {
         loop {
             match std::mem::replace(self, Self::Error) {
                 Self::Init {
-                    mut hasher,
+                    mut norm_hasher,
                     mut source,
                 } => {
                     debug!("SignatureOnePassReader init");
@@ -126,17 +133,16 @@ impl<'a> SignatureOnePassReader<'a> {
                         ));
                     }
 
-                    // TODO: normalize line endings..
-                    hasher.update(&buffer[..read]);
+                    norm_hasher.hash_buf(&buffer[..read]);
 
                     *self = Self::Body {
+                        norm_hasher,
                         source,
-                        hasher,
                         buffer,
                     };
                 }
                 Self::Body {
-                    mut hasher,
+                    mut norm_hasher,
                     mut source,
                     mut buffer,
                 } => {
@@ -144,7 +150,7 @@ impl<'a> SignatureOnePassReader<'a> {
 
                     if buffer.has_remaining() {
                         *self = Self::Body {
-                            hasher,
+                            norm_hasher,
                             source,
                             buffer,
                         };
@@ -155,11 +161,12 @@ impl<'a> SignatureOnePassReader<'a> {
                     let read = fill_buffer(&mut source, &mut buffer, None)?;
                     buffer.truncate(read);
 
-                    // TODO: normalize line endings
-                    hasher.update(&buffer[..read]);
+                    norm_hasher.hash_buf(&buffer[..read]);
 
                     if read == 0 {
                         debug!("SignatureOnePassReader finish");
+
+                        let mut hasher = norm_hasher.done();
 
                         let (reader, parts) = source.into_parts();
 
@@ -209,7 +216,7 @@ impl<'a> SignatureOnePassReader<'a> {
                         };
                     } else {
                         *self = Self::Body {
-                            hasher,
+                            norm_hasher,
                             source,
                             buffer,
                         }
@@ -240,10 +247,13 @@ impl<'a> SignatureOnePassReader<'a> {
 
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
-            Self::Init { hasher, source } => {
+            Self::Init {
+                norm_hasher,
+                source,
+            } => {
                 let source = source.decompress()?;
                 Ok(Self::Init {
-                    hasher,
+                    norm_hasher,
                     source: Box::new(source),
                 })
             }
@@ -259,11 +269,14 @@ impl<'a> SignatureOnePassReader<'a> {
         abort_early: bool,
     ) -> Result<(Self, RingResult)> {
         match self {
-            Self::Init { hasher, source } => {
+            Self::Init {
+                norm_hasher,
+                source,
+            } => {
                 let (source, fps) = source.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Self::Init {
-                        hasher,
+                        norm_hasher,
                         source: Box::new(source),
                     },
                     fps,

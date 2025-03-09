@@ -1,7 +1,6 @@
 use std::io::{self, BufRead, Read};
 
 use bytes::{Buf, BytesMut};
-use digest::DynDigest;
 use log::debug;
 
 use crate::errors::Result;
@@ -9,22 +8,25 @@ use crate::packet::{Signature, SignatureVersionSpecific};
 use crate::util::fill_buffer;
 use crate::{DebugBufRead, Message, RingResult, TheRing};
 
+use crate::errors::Result;
+use crate::packet::{Signature, SignatureType, SignatureVersionSpecific};
+use crate::util::{fill_buffer, NormalizingHasher};
+use crate::{Message, RingResult, TheRing};
+
 use super::PacketBodyReader;
 
 #[derive(derive_more::Debug)]
 pub enum SignatureBodyReader<'a> {
     Init {
         /// Running hasher
-        #[debug("hasher")]
-        hasher: Box<dyn DynDigest>,
+        norm_hasher: NormalizingHasher,
         /// Data source
         source: Box<Message<'a>>,
         signature: Signature,
     },
     Body {
         /// Running hasher
-        #[debug("hasher")]
-        hasher: Box<dyn DynDigest>,
+        norm_hasher: NormalizingHasher,
         /// Data source
         source: Box<Message<'a>>,
         buffer: BytesMut,
@@ -58,8 +60,11 @@ impl<'a> SignatureBodyReader<'a> {
             hasher.update(salt.as_ref());
         }
 
+        let text_mode = sig.typ() == SignatureType::Text;
+        let norm_hasher = NormalizingHasher::new(hasher, text_mode);
+
         Ok(Self::Init {
-            hasher,
+            norm_hasher,
             source,
             signature: sig,
         })
@@ -117,7 +122,7 @@ impl<'a> SignatureBodyReader<'a> {
         loop {
             match std::mem::replace(self, Self::Error) {
                 Self::Init {
-                    mut hasher,
+                    mut norm_hasher,
                     mut source,
                     signature,
                 } => {
@@ -134,17 +139,17 @@ impl<'a> SignatureBodyReader<'a> {
                     }
 
                     // TODO: normalize line endings..
-                    hasher.update(&buffer);
+                    norm_hasher.hash_buf(&buffer);
 
                     *self = Self::Body {
                         source,
-                        hasher,
+                        norm_hasher,
                         buffer,
                         signature,
                     };
                 }
                 Self::Body {
-                    mut hasher,
+                    mut norm_hasher,
                     mut source,
                     mut buffer,
                     signature,
@@ -153,7 +158,7 @@ impl<'a> SignatureBodyReader<'a> {
 
                     if buffer.has_remaining() {
                         *self = Self::Body {
-                            hasher,
+                            norm_hasher,
                             source,
                             buffer,
                             signature,
@@ -166,10 +171,12 @@ impl<'a> SignatureBodyReader<'a> {
                     buffer.truncate(read);
 
                     // TODO: normalize line endings
-                    hasher.update(&buffer);
+                    norm_hasher.hash_buf(&buffer);
 
                     if read == 0 {
                         debug!("SignatureReader finish");
+
+                        let mut hasher = norm_hasher.done();
 
                         // calculate final hash
                         let len =
@@ -191,7 +198,7 @@ impl<'a> SignatureBodyReader<'a> {
                         };
                     } else {
                         *self = Self::Body {
-                            hasher,
+                            norm_hasher,
                             source,
                             buffer,
                             signature,
@@ -224,13 +231,13 @@ impl<'a> SignatureBodyReader<'a> {
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
             Self::Init {
-                hasher,
+                norm_hasher,
                 source,
                 signature,
             } => {
                 let source = source.decompress()?;
                 Ok(Self::Init {
-                    hasher,
+                    norm_hasher,
                     source: Box::new(source),
                     signature,
                 })
@@ -248,14 +255,14 @@ impl<'a> SignatureBodyReader<'a> {
     ) -> Result<(Self, RingResult)> {
         match self {
             Self::Init {
-                hasher,
+                norm_hasher,
                 source,
                 signature,
             } => {
                 let (source, fps) = source.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Self::Init {
-                        hasher,
+                        norm_hasher,
                         source: Box::new(source),
                         signature,
                     },
