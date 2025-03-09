@@ -4,14 +4,9 @@ use bytes::{Buf, BytesMut};
 use log::debug;
 
 use crate::errors::Result;
-use crate::packet::{Signature, SignatureVersionSpecific};
-use crate::util::fill_buffer;
-use crate::{DebugBufRead, Message, RingResult, TheRing};
-
-use crate::errors::Result;
 use crate::packet::{Signature, SignatureType, SignatureVersionSpecific};
 use crate::util::{fill_buffer, NormalizingHasher};
-use crate::{Message, RingResult, TheRing};
+use crate::{DebugBufRead, Message, RingResult, TheRing};
 
 use super::PacketBodyReader;
 

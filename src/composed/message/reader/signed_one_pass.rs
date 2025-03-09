@@ -4,15 +4,13 @@ use bytes::{Buf, BytesMut};
 use log::debug;
 
 use crate::errors::Result;
-use crate::errors::Result;
-use crate::packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature};
 use crate::packet::{
     OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType,
 };
-use crate::util::fill_buffer;
 use crate::util::{fill_buffer, NormalizingHasher};
 use crate::{DebugBufRead, Message, RingResult, TheRing};
-use crate::{Message, RingResult, TheRing};
+
+use super::PacketBodyReader;
 
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
