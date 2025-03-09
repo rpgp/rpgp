@@ -1,6 +1,7 @@
 use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
+use bytes::Bytes;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
@@ -26,7 +27,7 @@ use crate::types::{
 ///   Protected Data Packets](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-1-symmetrically-enc).
 /// - V6 PKESK are used in combination with [version 2 Symmetrically Encrypted and Integrity
 ///   Protected Data Packets](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-2-symmetrically-enc).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum PublicKeyEncryptedSessionKey {
     V3 {
         packet_header: PacketHeader,
@@ -44,7 +45,10 @@ pub enum PublicKeyEncryptedSessionKey {
 
     Other {
         packet_header: PacketHeader,
+        #[debug("{:X}", version)]
         version: u8,
+        #[debug("{}", hex::encode(data))]
+        data: Bytes,
     },
 }
 
@@ -113,10 +117,14 @@ impl PublicKeyEncryptedSessionKey {
                     values,
                 })
             }
-            _ => Ok(PublicKeyEncryptedSessionKey::Other {
-                packet_header,
-                version,
-            }),
+            _ => {
+                let data = i.rest()?.freeze();
+                Ok(PublicKeyEncryptedSessionKey::Other {
+                    packet_header,
+                    version,
+                    data,
+                })
+            }
         }
     }
 
@@ -318,8 +326,9 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 }
                 *pk_algo
             }
-            PublicKeyEncryptedSessionKey::Other { version, .. } => {
+            PublicKeyEncryptedSessionKey::Other { version, data, .. } => {
                 writer.write_u8(*version)?;
+                writer.write_all(data)?;
                 return Ok(());
             }
         };
@@ -338,7 +347,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 values,
                 ..
             } => write_len_v6(values, fingerprint),
-            PublicKeyEncryptedSessionKey::Other { .. } => write_len_other(),
+            PublicKeyEncryptedSessionKey::Other { data, .. } => write_len_other(data.len()),
         }
     }
 }
@@ -353,8 +362,8 @@ impl PacketTrait for PublicKeyEncryptedSessionKey {
     }
 }
 
-fn write_len_other() -> usize {
-    1 + 1
+fn write_len_other(data_len: usize) -> usize {
+    1 + 1 + data_len
 }
 
 fn write_len_v3(id: &KeyId, values: &PkeskBytes) -> usize {

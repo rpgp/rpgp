@@ -1,6 +1,6 @@
 use std::io::{self, BufRead, Read};
 
-use log::debug;
+use log::{debug, warn};
 
 use crate::armor;
 use crate::composed::message::decrypt::*;
@@ -802,12 +802,15 @@ impl TheRing<'_> {
             match esk {
                 Esk::PublicKeyEncryptedSessionKey(k) => pkesks.push(k),
                 Esk::SymKeyEncryptedSessionKey(k) => {
-                    ensure!(
-                        k.sym_algorithm() != SymmetricKeyAlgorithm::Plaintext,
-                        "SKESK must not use plaintext"
-                    );
-
-                    skesks.push(k)
+                    if let Some(sym_alg) = k.sym_algorithm() {
+                        ensure!(
+                            sym_alg != SymmetricKeyAlgorithm::Plaintext,
+                            "SKESK must not use plaintext"
+                        );
+                        skesks.push(k)
+                    } else {
+                        warn!("skipping unsupported SKESK {:?}", k.version());
+                    }
                 }
             }
         }
@@ -823,7 +826,8 @@ impl TheRing<'_> {
                     PkeskVersion::V3 => EskType::V3_4,
                     PkeskVersion::V6 => EskType::V6,
                     PkeskVersion::Other(v) => {
-                        unimplemented_err!("Unexpected PKESK version {}", v)
+                        warn!("unexpected PKESK version {}", v);
+                        continue;
                     }
                 };
 
@@ -896,8 +900,6 @@ impl TheRing<'_> {
 
         for esk in skesks {
             for (i, pw) in self.message_password.iter().enumerate() {
-                result.message_password[i] = InnerRingResult::Invalid;
-
                 match decrypt_session_key_with_password(esk, pw) {
                     Ok(session_key) => {
                         skesk_session_keys.push((i, session_key));

@@ -45,6 +45,13 @@ pub enum SymKeyEncryptedSessionKey {
         #[debug("{}", hex::encode(encrypted_key))]
         encrypted_key: Bytes,
     },
+    Other {
+        packet_header: PacketHeader,
+        #[debug("{:X}", version)]
+        version: u8,
+        #[debug("{}", hex::encode(data))]
+        data: Bytes,
+    },
 }
 
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
@@ -98,29 +105,45 @@ impl SymKeyEncryptedSessionKey {
             4 => parse_v4(packet_header, i),
             5 => parse_v5(packet_header, i),
             6 => parse_v6(packet_header, i),
-            _ => unsupported_err!("SKESK version {}", version),
+            _ => {
+                let data = i.rest()?.freeze();
+                Ok(Self::Other {
+                    packet_header,
+                    version,
+                    data,
+                })
+            }
         }
     }
 
-    pub fn sym_algorithm(&self) -> SymmetricKeyAlgorithm {
+    pub fn sym_algorithm(&self) -> Option<SymmetricKeyAlgorithm> {
         match self {
             Self::V4 {
                 ref sym_algorithm, ..
-            } => *sym_algorithm,
+            } => Some(*sym_algorithm),
             Self::V5 {
                 ref sym_algorithm, ..
-            } => *sym_algorithm,
+            } => Some(*sym_algorithm),
             Self::V6 {
                 ref sym_algorithm, ..
-            } => *sym_algorithm,
+            } => Some(*sym_algorithm),
+            Self::Other { .. } => None,
         }
     }
 
-    pub fn s2k(&self) -> &StringToKey {
+    pub fn s2k(&self) -> Option<&StringToKey> {
         match self {
-            Self::V4 { ref s2k, .. } => s2k,
-            Self::V5 { ref s2k, .. } => s2k,
-            Self::V6 { ref s2k, .. } => s2k,
+            Self::V4 { ref s2k, .. } => Some(s2k),
+            Self::V5 { ref s2k, .. } => Some(s2k),
+            Self::V6 { ref s2k, .. } => Some(s2k),
+            Self::Other { .. } => None,
+        }
+    }
+
+    pub fn is_supported(&self) -> bool {
+        match self {
+            Self::V4 { .. } | Self::V6 { .. } | Self::V5 { .. } => true,
+            Self::Other { .. } => false,
         }
     }
 
@@ -129,19 +152,22 @@ impl SymKeyEncryptedSessionKey {
             Self::V4 { .. } => SkeskVersion::V4,
             Self::V5 { .. } => SkeskVersion::Other(5),
             Self::V6 { .. } => SkeskVersion::V6,
+            Self::Other { version, .. } => SkeskVersion::Other(*version),
         }
     }
 
     pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
         debug!("decrypt session key {:?}", self.version());
 
-        let mut decrypted_key: BytesMut = self.encrypted_key().clone().into();
+        let Some(decrypted_key) = self.encrypted_key() else {
+            unsupported_err!("SKESK {:?}", self.version());
+        };
 
+        let mut decrypted_key: BytesMut = decrypted_key.clone().into();
         match self {
             Self::V4 { sym_algorithm, .. } => {
                 let iv = vec![0u8; sym_algorithm.block_size()];
-                self.sym_algorithm()
-                    .decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
+                sym_algorithm.decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
 
                 let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
                 Ok(PlainSessionKey::V3_4 {
@@ -207,20 +233,24 @@ impl SymKeyEncryptedSessionKey {
                     key: decrypted_key.into(),
                 })
             }
+            Self::Other { version, .. } => {
+                unsupported_err!("SKESK version {}", version);
+            }
         }
     }
 
-    pub fn encrypted_key(&self) -> &Bytes {
+    pub fn encrypted_key(&self) -> Option<&Bytes> {
         match self {
             Self::V4 {
                 ref encrypted_key, ..
-            } => encrypted_key,
+            } => Some(encrypted_key),
             Self::V5 {
                 ref encrypted_key, ..
-            } => encrypted_key,
+            } => Some(encrypted_key),
             Self::V6 {
                 ref encrypted_key, ..
-            } => encrypted_key,
+            } => Some(encrypted_key),
+            Self::Other { .. } => None,
         }
     }
 
@@ -499,6 +529,14 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 writer.write_all(encrypted_key)?;
             }
+            SymKeyEncryptedSessionKey::Other {
+                packet_header: _,
+                version,
+                data,
+            } => {
+                writer.write_u8(*version)?;
+                writer.write_all(data)?;
+            }
         }
         Ok(())
     }
@@ -545,6 +583,10 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 sum += 1;
                 sum += encrypted_key.len();
             }
+            SymKeyEncryptedSessionKey::Other { data, .. } => {
+                sum += 1;
+                sum += data.len();
+            }
         }
         sum
     }
@@ -556,6 +598,7 @@ impl PacketTrait for SymKeyEncryptedSessionKey {
             SymKeyEncryptedSessionKey::V4 { packet_header, .. } => packet_header,
             SymKeyEncryptedSessionKey::V5 { packet_header, .. } => packet_header,
             SymKeyEncryptedSessionKey::V6 { packet_header, .. } => packet_header,
+            SymKeyEncryptedSessionKey::Other { packet_header, .. } => packet_header,
         }
     }
 }
