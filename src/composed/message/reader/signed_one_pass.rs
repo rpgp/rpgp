@@ -46,14 +46,26 @@ impl NormalizingHasher {
         if !self.text_mode {
             self.hasher.update(buffer);
         } else {
-            if self.last_was_cr && buffer[0] != b'\n' {
+            let mut buf = buffer;
+
+            if self.last_was_cr {
                 self.hasher.update(b"\n");
+
+                if buf[0] == b'\n' {
+                    buf = &buf[1..];
+                }
+
                 self.last_was_cr = false;
             }
 
-            let mut buf = buffer;
             while !buf.is_empty() {
                 match buf.position(|c| c == b'\r' || c == b'\n') {
+                    None => {
+                        // no line endings in sight, just hash the data
+                        self.hasher.update(buf);
+                        buf = &[]
+                    }
+
                     Some(pos) => {
                         // consume all bytes before line-break-related position
 
@@ -72,23 +84,22 @@ impl NormalizingHasher {
 
                                 // we are guaranteed to have at least two bytes
                                 if buf[1] == b'\n' {
+                                    // there was a '\n' in the stream, we consume it as well
                                     buf = &buf[2..];
                                 } else {
+                                    // this was a lone '\r', we have normalized it
                                     buf = &buf[1..];
                                 }
                             }
                             (b'\r', true) => {
-                                // we only have this one '\r' byte left
+                                // this one '\r' was the last thing in the buffer
                                 self.hasher.update(b"\r");
                                 buf = &[];
+
                                 self.last_was_cr = true;
                             }
                             _ => unreachable!("buf.position gave us either a '\n or a '\r'"),
                         }
-                    }
-                    None => {
-                        self.hasher.update(buf);
-                        buf = &[]
                     }
                 }
             }
