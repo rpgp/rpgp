@@ -4,12 +4,13 @@ use bytes::{Buf, BytesMut};
 use digest::DynDigest;
 use log::debug;
 
+use super::PacketBodyReader;
 use crate::errors::Result;
-use crate::packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature};
+use crate::packet::{
+    OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType,
+};
 use crate::util::fill_buffer;
 use crate::{Message, RingResult, TheRing};
-
-use super::PacketBodyReader;
 
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {
@@ -19,6 +20,8 @@ pub enum SignatureOnePassReader<'a> {
         hasher: Box<dyn DynDigest>,
         /// Data source
         source: Box<Message<'a>>,
+        /// If Text Mode, then line endings are normalized during hashing
+        text_mode: bool,
     },
     Body {
         /// Running hasher
@@ -27,6 +30,11 @@ pub enum SignatureOnePassReader<'a> {
         /// Data source
         source: Box<Message<'a>>,
         buffer: BytesMut,
+
+        /// If Text Mode, then line endings are normalized during hashing
+        text_mode: bool,
+        /// true if the last byte that was fed into the hasher was a `\r`
+        last_was_cr: bool,
     },
     Done {
         /// Finalized hash
@@ -57,7 +65,13 @@ impl<'a> SignatureOnePassReader<'a> {
             hasher.update(salt.as_ref());
         }
 
-        Ok(Self::Init { hasher, source })
+        let text_mode = ops.typ() == SignatureType::Text;
+
+        Ok(Self::Init {
+            hasher,
+            source,
+            text_mode,
+        })
     }
 
     pub fn hash(&self) -> Option<&[u8]> {
@@ -104,6 +118,7 @@ impl<'a> SignatureOnePassReader<'a> {
                 Self::Init {
                     mut hasher,
                     mut source,
+                    text_mode,
                 } => {
                     debug!("SignatureOnePassReader init");
                     let mut buffer = BytesMut::zeroed(1024);
@@ -117,19 +132,50 @@ impl<'a> SignatureOnePassReader<'a> {
                         ));
                     }
 
-                    // TODO: normalize line endings..
-                    hasher.update(&buffer[..read]);
+                    let mut last_was_cr = false;
+
+                    if !text_mode {
+                        hasher.update(&buffer[..read]);
+                    } else {
+                        // text mode, normalize line endings..
+                        for b in &buffer[..read] {
+                            if last_was_cr {
+                                if *b == b'\n' {
+                                    // previous was a CR, followed now by a LF -> just hash the LF
+                                    hasher.update(b"\n");
+
+                                    last_was_cr = false;
+                                } else {
+                                    // previous was a CR, not followed by a LF -> insert a LF
+                                    hasher.update(&[b'\n', *b]);
+                                    last_was_cr = *b == b'\r';
+                                }
+                            } else if *b == b'\n' {
+                                // a LF, which was not preceded by a CR
+                                hasher.update(b"\r\n");
+                            } else if *b == b'\r' {
+                                hasher.update(&[*b]);
+                                last_was_cr = true;
+                            } else {
+                                hasher.update(&[*b]);
+                            }
+                        }
+                    }
 
                     *self = Self::Body {
                         source,
                         hasher,
                         buffer,
+                        text_mode,
+                        last_was_cr,
                     };
                 }
                 Self::Body {
                     mut hasher,
                     mut source,
                     mut buffer,
+                    text_mode,
+                    mut last_was_cr,
                 } => {
                     debug!("SignatureOnePassReader body");
 
@@ -138,6 +184,8 @@ impl<'a> SignatureOnePassReader<'a> {
                             hasher,
                             source,
                             buffer,
+                            text_mode,
+                            last_was_cr,
                         };
                         return Ok(());
                     }
@@ -146,8 +194,33 @@ impl<'a> SignatureOnePassReader<'a> {
                     let read = fill_buffer(&mut source, &mut buffer, None)?;
                     buffer.truncate(read);
 
-                    // TODO: normalize line endings
-                    hasher.update(&buffer[..read]);
+                    if !text_mode {
+                        hasher.update(&buffer[..read]);
+                    } else {
+                        // text mode, normalize line endings..
+                        for b in &buffer[..read] {
+                            if last_was_cr {
+                                if *b == b'\n' {
+                                    // previous was a CR, followed now by a LF -> just hash the LF
+                                    hasher.update(b"\n");
+
+                                    last_was_cr = false;
+                                } else {
+                                    // previous was a CR, not followed by a LF -> insert a LF
+                                    hasher.update(&[b'\n', *b]);
+                                    last_was_cr = *b == b'\r';
+                                }
+                            } else if *b == b'\n' {
+                                // a LF, which was not preceded by a CR
+                                hasher.update(b"\r\n");
+                            } else if *b == b'\r' {
+                                hasher.update(&[*b]);
+                                last_was_cr = true;
+                            } else {
+                                hasher.update(&[*b]);
+                            }
+                        }
+                    }
 
                     if read == 0 {
                         debug!("SignatureOnePassReader finish");
@@ -203,6 +276,8 @@ impl<'a> SignatureOnePassReader<'a> {
                             hasher,
                             source,
                             buffer,
+                            text_mode,
+                            last_was_cr,
                         }
                     }
 
@@ -231,11 +306,16 @@ impl<'a> SignatureOnePassReader<'a> {
 
     pub(crate) fn decompress(self) -> Result<Self> {
         match self {
-            Self::Init { hasher, source } => {
+            Self::Init {
+                hasher,
+                source,
+                text_mode,
+            } => {
                 let source = source.decompress()?;
                 Ok(Self::Init {
                     hasher,
                     source: Box::new(source),
+                    text_mode,
                 })
             }
             _ => {
@@ -250,12 +330,17 @@ impl<'a> SignatureOnePassReader<'a> {
         abort_early: bool,
     ) -> Result<(Self, RingResult)> {
         match self {
-            Self::Init { hasher, source } => {
+            Self::Init {
+                hasher,
+                source,
+                text_mode,
+            } => {
                 let (source, fps) = source.decrypt_the_ring(ring, abort_early)?;
                 Ok((
                     Self::Init {
                         hasher,
                         source: Box::new(source),
+                        text_mode,
                     },
                     fps,
                 ))
