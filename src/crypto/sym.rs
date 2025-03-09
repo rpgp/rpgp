@@ -241,7 +241,7 @@ impl SymmetricKeyAlgorithm {
     /// (128 bits), the IV is 18 octets long, and octets 17 and 18 replicate
     /// octets 15 and 16.  Those extra two octets are an easy check for a
     /// correct key.
-    pub fn decrypt_with_iv<'a>(
+    pub fn decrypt_with_iv(
         self,
         key: &[u8],
         iv_vec: &[u8],
@@ -298,7 +298,7 @@ impl SymmetricKeyAlgorithm {
     }
 
     /// Applies the legacy resyncing
-    pub fn decrypt_with_iv_resync<'a>(
+    pub fn decrypt_with_iv_resync(
         self,
         key: &[u8],
         iv_vec: &[u8],

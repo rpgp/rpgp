@@ -417,7 +417,7 @@ fn test_text_signature_normalization() {
     // so the hash for this message is calculated over "foo\r\nbar\r\nbaz".
     //
     // So it must also be verified against a hash digest over this normalized format.
-    let (signed_msg, _header) =
+    let (mut signed_msg, _header) =
         Message::from_armor_file("./tests/unit-tests/text_signature_normalization.msg").unwrap();
 
     let (skey, _headers) = SignedSecretKey::from_armor_single(
@@ -436,7 +436,9 @@ fn test_text_signature_normalization() {
     let verify = signing.public_key();
 
     // verify the signature with alice's signing subkey
-    signed_msg.verify(&verify).expect("signature seems bad");
+    signed_msg
+        .verify_read(&verify)
+        .expect("signature seems bad");
 }
 
 // Sample Version 6 Certificate (Transferable Public Key)

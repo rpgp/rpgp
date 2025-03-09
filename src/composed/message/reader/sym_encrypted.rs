@@ -9,6 +9,7 @@ use crate::PlainSessionKey;
 use super::PacketBodyReader;
 
 #[derive(derive_more::Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum SymEncryptedDataReader<R: BufRead> {
     Init {
         source: PacketBodyReader<R>,
