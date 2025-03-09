@@ -352,6 +352,19 @@ fn wildcard_id_decrypt() {
     assert_eq!(&decrypted, "Hello World :)");
 }
 
+/// Tests decryption of a message that is encrypted to a symmetrical secret.
+#[test]
+fn skesk_decrypt() {
+    let (msg, _) = Message::from_armor_file("./tests/sym-password.msg").expect("msg");
+
+    let mut dec = msg
+        .decrypt_with_password(&Password::from("password"))
+        .expect("decrypt_with_password");
+
+    let decrypted = dec.as_data_string().unwrap();
+    assert_eq!(&decrypted, "hello world");
+}
+
 /// Tests that decompressing compression quine does not result in stack overflow.
 /// quine.out comes from <https://mumble.net/~campbell/misc/pgp-quine/>
 /// See <https://mumble.net/~campbell/2013/10/08/compression> for details.
