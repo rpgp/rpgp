@@ -362,7 +362,7 @@ impl<R: BufRead> Read for StreamDecryptor<R> {
 
 impl<R: BufRead> StreamDecryptor<R> {
     pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8], source: R) -> Result<Self> {
-        let decryptor = sym_alg.stream_decryptor(key, source)?;
+        let decryptor = sym_alg.stream_decryptor_protected(key, source)?;
         Ok(Self::V1(decryptor))
     }
 

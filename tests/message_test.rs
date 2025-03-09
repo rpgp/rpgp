@@ -99,8 +99,8 @@ fn test_parse_msg(entry: &str, base_path: &str, _is_normalized: bool) {
                     .expect("message verification failed");
             }
         }
-        Message::Signed { signature, .. } => {
-            println!("signature: {signature:?}");
+        Message::Signed { reader } => {
+            println!("signature: {:?}", reader.signature());
         }
         _ => {
             // TODO: some other checks?
@@ -375,8 +375,10 @@ fn pgp6_decrypt() {
     .unwrap();
 
     let (msg, _) = Message::from_armor_file("./tests/pgp6/hello.msg").expect("msg");
+    dbg!(&msg);
 
-    let mut dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+    let dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+    let mut dec = dec.decompress().expect("decompress");
 
     let decrypted = dec.as_data_string().unwrap();
     assert_eq!(&decrypted, "hello world\n");

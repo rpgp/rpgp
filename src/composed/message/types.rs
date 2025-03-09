@@ -36,11 +36,7 @@ pub enum Message<'a> {
         reader: CompressedDataReader<Box<dyn BufRead + 'a>>,
     },
     /// Signed Message: Signature Packet, OpenPGP Message
-    Signed {
-        /// The actual signature
-        signature: Signature,
-        reader: SignatureBodyReader<'a>,
-    },
+    Signed { reader: SignatureBodyReader<'a> },
     /// One-Pass Signed Message: One-Pass Signature Packet, OpenPGP Message, Corresponding Signature Packet.
     SignedOnePass {
         /// for signature packets that contain a one pass message
@@ -104,9 +100,14 @@ impl<'a> Message<'a> {
                     MessageParts::Compressed { packet_header },
                 )
             }
-            Message::Signed { signature, reader } => {
+            Message::Signed { reader } => {
                 assert!(reader.is_done());
-                let SignatureBodyReader::Done { hash, source } = reader else {
+                let SignatureBodyReader::Done {
+                    hash,
+                    source,
+                    signature,
+                } = reader
+                else {
                     panic!("invalid state");
                 };
                 let (reader, parts) = source.into_parts();
@@ -199,10 +200,10 @@ impl MessageParts {
             } => {
                 let source = parts.into_message(reader);
                 Message::Signed {
-                    signature,
                     reader: SignatureBodyReader::Done {
                         source: Box::new(source),
                         hash,
+                        signature,
                     },
                 }
             }
@@ -420,8 +421,7 @@ impl<'a> Message<'a> {
     pub fn decompress(self) -> Result<Self> {
         match self {
             Message::Compressed { reader } => Message::from_bytes(reader.decompress()?),
-            Message::Signed { signature, reader } => Ok(Message::Signed {
-                signature,
+            Message::Signed { reader } => Ok(Message::Signed {
                 reader: reader.decompress()?,
             }),
             Message::SignedOnePass {
@@ -538,9 +538,7 @@ impl<'a> Message<'a> {
                 )?;
                 Ok(signature)
             }
-            Message::Signed {
-                signature, reader, ..
-            } => {
+            Message::Signed { reader, .. } => {
                 let Some(calculated_hash) = reader.hash() else {
                     bail!("cannot verify message before reading it to the end");
                 };
@@ -556,17 +554,17 @@ impl<'a> Message<'a> {
                 // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
                 // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
                 ensure_eq!(
-                    &signature.signed_hash_value,
+                    &reader.signature().signed_hash_value,
                     &calculated_hash[0..2],
                     "signature: invalid signed hash value"
                 );
                 key.verify_signature(
-                    signature.config.hash_alg,
+                    reader.signature().config.hash_alg,
                     calculated_hash,
-                    &signature.signature,
+                    &reader.signature().signature,
                 )?;
 
-                Ok(signature)
+                Ok(reader.signature())
             }
             Message::Compressed { .. } => {
                 bail!("message must be decompressed before verifying");
@@ -627,9 +625,9 @@ impl<'a> Message<'a> {
             Message::Compressed { .. } | Message::Literal { .. } => {
                 bail!("even the ring can not decrypt plaintext");
             }
-            Message::Signed { reader, signature } => {
+            Message::Signed { reader } => {
                 let (reader, res) = reader.decrypt_the_ring(ring, abort_early)?;
-                Ok((Message::Signed { signature, reader }, res))
+                Ok((Message::Signed { reader }, res))
             }
             Message::SignedOnePass {
                 reader,

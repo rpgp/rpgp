@@ -98,8 +98,8 @@ fn next<'a>(
                 let Some(inner_message) = next(packets)? else {
                     bail!("missing next packet");
                 };
-                let reader = SignatureBodyReader::new(&signature, Box::new(inner_message))?;
-                let message = Message::Signed { signature, reader };
+                let reader = SignatureBodyReader::new(signature, Box::new(inner_message))?;
+                let message = Message::Signed { reader };
                 return Ok(Some(message));
             }
             Tag::OnePassSignature => {

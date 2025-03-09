@@ -102,43 +102,48 @@ impl<R> StreamDecryptor<R>
 where
     R: BufRead,
 {
-    pub fn new(alg: SymmetricKeyAlgorithm, key: &[u8], ciphertext: R) -> Result<Self> {
+    pub fn new(
+        alg: SymmetricKeyAlgorithm,
+        protected: bool,
+        key: &[u8],
+        ciphertext: R,
+    ) -> Result<Self> {
         match alg {
             SymmetricKeyAlgorithm::Plaintext => {
                 bail!("'Plaintext' is not a legal cipher for encrypted data")
             }
             SymmetricKeyAlgorithm::IDEA => Ok(StreamDecryptor::Idea(StreamDecryptorInner::new(
-                ciphertext, key,
+                protected, ciphertext, key,
             )?)),
             SymmetricKeyAlgorithm::TripleDES => Ok(StreamDecryptor::TripleDes(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::CAST5 => Ok(StreamDecryptor::Cast5(StreamDecryptorInner::new(
-                ciphertext, key,
+                protected, ciphertext, key,
             )?)),
             SymmetricKeyAlgorithm::Blowfish => Ok(StreamDecryptor::Blowfish(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::AES128 => Ok(StreamDecryptor::Aes128(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::AES192 => Ok(StreamDecryptor::Aes192(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::AES256 => Ok(StreamDecryptor::Aes256(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Twofish => Ok(StreamDecryptor::Twofish(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Camellia128 => Ok(StreamDecryptor::Camellia128(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Camellia192 => Ok(StreamDecryptor::Camellia192(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Camellia256 => Ok(StreamDecryptor::Camellia256(
-                StreamDecryptorInner::new(ciphertext, key)?,
+                StreamDecryptorInner::new(protected, ciphertext, key)?,
             )),
             SymmetricKeyAlgorithm::Private10 | SymmetricKeyAlgorithm::Other(_) => {
                 bail!("SymmetricKeyAlgorithm {} is unsupported", u8::from(alg))
@@ -179,6 +184,8 @@ where
     }
 }
 
+// TODO: cleanup state management between protected and non protected
+
 #[derive(derive_more::Debug)]
 pub enum StreamDecryptorInner<M, R>
 where
@@ -194,6 +201,9 @@ where
         prefix: BytesMut,
         #[debug("source")]
         source: R,
+        /// True if this uses MDC protection
+        protected: bool,
+        key: Vec<u8>,
     },
     Data {
         hasher: Sha1,
@@ -205,6 +215,7 @@ where
         buffer: BytesMut,
         #[debug("source")]
         source: R,
+        protected: bool,
     },
     Done {
         buffer: BytesMut,
@@ -219,7 +230,7 @@ where
     BufDecryptor<M>: KeyIvInit,
     R: BufRead,
 {
-    fn new(source: R, key: &[u8]) -> Result<Self> {
+    fn new(protected: bool, source: R, key: &[u8]) -> Result<Self> {
         debug!("protected decrypt stream");
 
         let bs = <M as BlockSizeUser>::block_size();
@@ -238,6 +249,8 @@ where
             decryptor: encryptor,
             prefix: BytesMut::zeroed(prefix_len),
             source,
+            protected,
+            key: key.to_vec(),
         })
     }
 
@@ -267,6 +280,8 @@ where
                     decryptor: mut encryptor,
                     mut prefix,
                     mut source,
+                    protected,
+                    key,
                 } => {
                     let bs = <M as BlockSizeUser>::block_size();
 
@@ -279,14 +294,23 @@ where
                         ));
                     }
 
-                    // quick check
-                    encryptor.decrypt(&mut prefix);
-                    if prefix[bs] != prefix[bs - 2] || prefix[bs + 1] != prefix[bs - 1] {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            "invalid quick check",
-                        ));
+                    if !protected {
+                        // legacy resyncing
+                        let encrypted_prefix = prefix[2..].to_vec();
+                        encryptor.decrypt(&mut prefix);
+                        encryptor = BufDecryptor::<M>::new_from_slices(&key, &encrypted_prefix)
+                            .map_err(|e| {
+                                io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
+                            })?;
+                    } else {
+                        encryptor.decrypt(&mut prefix);
                     }
+
+                    // We do not do use "quick check" here.
+                    // See the "Security Considerations" section
+                    // in <https://www.rfc-editor.org/rfc/rfc9580.html#name-risks-of-a-quick-check-orac>
+                    // and the paper <https://eprint.iacr.org/2005/033>
+                    // for details.
 
                     hasher.update(&prefix);
 
@@ -296,6 +320,7 @@ where
                         decryptor: encryptor,
                         buffer: BytesMut::with_capacity(BUFFER_SIZE),
                         source,
+                        protected,
                     };
                     // continue to data
                 }
@@ -305,17 +330,21 @@ where
                     mut decryptor,
                     mut buffer,
                     mut source,
+                    protected,
                 } => {
                     // need to keep at least a full mdc len in the buffer, to make sure we process
                     // that at the end, and to return it
 
-                    if buffer.remaining() > MDC_LEN {
+                    if protected && buffer.remaining() > MDC_LEN
+                        || !protected && buffer.has_remaining()
+                    {
                         *self = Self::Data {
                             hasher,
                             data_available,
                             decryptor,
                             buffer,
                             source,
+                            protected,
                         };
 
                         return Ok(());
@@ -334,37 +363,44 @@ where
                     if read < to_read {
                         // last read
 
-                        if buffer.remaining() < MDC_LEN {
-                            return Err(io::Error::new(
-                                io::ErrorKind::UnexpectedEof,
-                                "missing MDC",
-                            ));
-                        }
+                        if protected {
+                            if buffer.remaining() < MDC_LEN {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::UnexpectedEof,
+                                    "missing MDC",
+                                ));
+                            }
 
-                        // grab the MDC from the end
-                        // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
-                        let mdc = buffer.split_off(buffer.len() - MDC_LEN);
+                            // grab the MDC from the end
+                            // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
+                            let mdc = buffer.split_off(buffer.len() - MDC_LEN);
 
-                        hasher.update(&buffer);
-                        hasher.update(&mdc[..2]);
-                        let sha1: [u8; 20] = hasher.finalize().into();
+                            hasher.update(&buffer);
+                            hasher.update(&mdc[..2]);
+                            let sha1: [u8; 20] = hasher.finalize().into();
 
-                        if mdc[0] != 0xD3 || // Invalid MDC tag
+                            if mdc[0] != 0xD3 || // Invalid MDC tag
                             mdc[1] != 0x14 || // Invalid MDC length
                             mdc[2..] != sha1[..]
-                        {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                "invalid MDC ",
-                            ));
+                            {
+                                return Err(io::Error::new(
+                                    io::ErrorKind::InvalidInput,
+                                    "invalid MDC ",
+                                ));
+                            }
+                            *self = Self::Done { buffer, source };
+                        } else {
+                            hasher.update(&buffer);
+                            *self = Self::Done { buffer, source };
                         }
-
-                        *self = Self::Done { buffer, source };
                     } else {
-                        debug_assert!(buffer.len() >= MDC_LEN);
-
                         let start = data_available;
-                        let end = buffer.len() - MDC_LEN;
+                        let end = if protected {
+                            debug_assert!(buffer.len() >= MDC_LEN);
+                            buffer.len() - MDC_LEN
+                        } else {
+                            buffer.len()
+                        };
 
                         if start < end {
                             hasher.update(&buffer[start..end]);
@@ -377,6 +413,7 @@ where
                             decryptor,
                             buffer,
                             source,
+                            protected,
                         };
                     }
                     return Ok(());

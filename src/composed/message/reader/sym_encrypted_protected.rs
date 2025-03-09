@@ -33,14 +33,14 @@ pub enum MaybeDecryptor<R: BufRead> {
 }
 
 impl<R: BufRead> MaybeDecryptor<R> {
-    fn into_inner(self) -> R {
+    pub fn into_inner(self) -> R {
         match self {
             Self::Raw(r) => r,
             Self::Decryptor(r) => r.into_inner(),
         }
     }
 
-    fn get_ref(&self) -> &R {
+    pub fn get_ref(&self) -> &R {
         match self {
             Self::Raw(r) => r,
             Self::Decryptor(r) => r.get_ref(),
