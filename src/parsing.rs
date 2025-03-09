@@ -14,7 +14,7 @@ pub enum Error {
         source: RemainingError,
     },
     #[snafu(display("expected {}, found {}", debug_bytes(expected), debug_bytes(&found[..])))]
-    TagMissmatch {
+    TagMismatch {
         expected: Vec<u8>,
         found: Bytes,
         context: &'static str,
@@ -33,7 +33,7 @@ impl Error {
     pub fn is_incomplete(&self) -> bool {
         match self {
             Self::TooShort { .. } => true,
-            Self::TagMissmatch { .. } => false,
+            Self::TagMismatch { .. } => false,
             Self::UnexpectedEof { .. } => true,
         }
     }

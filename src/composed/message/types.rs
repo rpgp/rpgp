@@ -612,7 +612,7 @@ impl<'a> Message<'a> {
 
     /// The most powerful and flexible way to decrypt. Give it all you know, and maybe something will come of it.
     ///
-    /// If `abort_early` is true, the first available session key will be used, even if it might be wrong, or missmatch
+    /// If `abort_early` is true, the first available session key will be used, even if it might be wrong, or mismatch
     /// with others.
     /// If it is set to false, all provided keys, and passwords will be checked and compared.
     /// In this case, if there are different session keys found, it will error out.
