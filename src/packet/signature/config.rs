@@ -15,6 +15,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{Fingerprint, KeyId, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag};
+use crate::util::NormalizingHasher;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
@@ -188,10 +189,12 @@ impl SignatureConfig {
             hasher.update(salt.as_ref())
         }
 
+        let text_mode = self.typ == SignatureType::Text;
+        let norm_hasher = NormalizingHasher::new(hasher, text_mode);
+
         Ok(SignatureHasher {
-            hasher,
+            norm_hasher,
             config: self,
-            last_was_cr: false,
         })
     }
 
@@ -631,9 +634,8 @@ impl SignatureConfig {
 }
 
 pub struct SignatureHasher {
-    hasher: Box<dyn DynDigest>,
+    norm_hasher: NormalizingHasher,
     config: SignatureConfig,
-    last_was_cr: bool,
 }
 
 impl SignatureHasher {
@@ -644,14 +646,10 @@ impl SignatureHasher {
     {
         let Self {
             config,
-            mut hasher,
-            last_was_cr: _,
+            norm_hasher,
         } = self;
 
-        if config.typ == SignatureType::Text && self.last_was_cr {
-            // edge case: last character in data stream was a CR, we add a normalizing LF
-            hasher.update(b"\n");
-        }
+        let mut hasher = norm_hasher.done();
 
         ensure!(
             (config.version() == SignatureVersion::V4 && key.version() == KeyVersion::V4)
@@ -682,38 +680,13 @@ impl SignatureHasher {
     ///
     /// Normalize line-endings on the fly for SignatureType::Text
     pub(crate) fn update(&mut self, buf: &[u8]) {
-        if self.config.typ == SignatureType::Text {
-            for b in buf {
-                if self.last_was_cr {
-                    if *b == b'\n' {
-                        // previous was a CR, followed now by a LF -> just hash the LF
-                        self.hasher.update(b"\n");
-
-                        self.last_was_cr = false;
-                    } else {
-                        // previous was a CR, not followed by a LF -> insert a LF
-                        self.hasher.update(&[b'\n', *b]);
-                        self.last_was_cr = *b == b'\r';
-                    }
-                } else if *b == b'\n' {
-                    // a LF, which was not preceded by a CR
-                    self.hasher.update(b"\r\n");
-                } else if *b == b'\r' {
-                    self.hasher.update(&[*b]);
-                    self.last_was_cr = true;
-                } else {
-                    self.hasher.update(&[*b]);
-                }
-            }
-        } else {
-            self.hasher.update(buf);
-        }
+        self.norm_hasher.hash_buf(buf);
     }
 }
 
 impl std::io::Write for SignatureHasher {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.hasher.update(buf);
+        self.norm_hasher.hash_buf(buf); // FIXME: when is this used?
         Ok(buf.len())
     }
 

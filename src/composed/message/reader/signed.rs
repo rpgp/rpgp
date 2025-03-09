@@ -6,8 +6,7 @@ use log::debug;
 use super::PacketBodyReader;
 use crate::errors::Result;
 use crate::packet::{Signature, SignatureType, SignatureVersionSpecific};
-use crate::reader::signed_one_pass::NormalizingHasher;
-use crate::util::fill_buffer;
+use crate::util::{fill_buffer, NormalizingHasher};
 use crate::{Message, RingResult, TheRing};
 
 #[derive(derive_more::Debug)]
