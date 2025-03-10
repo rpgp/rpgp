@@ -590,3 +590,27 @@ fn test_invalid_partial_messages() {
         err
     );
 }
+
+#[test]
+fn test_invalid_multi_message() {
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) = SignedSecretKey::from_armor_file("./tests/partial_key.asc").expect("ssk");
+
+    // compressed, followed by literal
+    let (message, _) = Message::from_armor_file("./tests/multi_message_1.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    dbg!(&msg);
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    let err_string = err.to_string();
+    assert!(
+        err_string.contains("unexpected trailing") && err_string.contains("LiteralData"),
+        "found error: {}",
+        err_string
+    );
+}
