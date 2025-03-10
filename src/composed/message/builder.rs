@@ -12,14 +12,14 @@ use zeroize::Zeroizing;
 
 use super::ArmorOptions;
 use crate::armor;
-use crate::crypto::aead::AeadAlgorithm;
+use crate::crypto::aead::{AeadAlgorithm, ChunkSize};
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::{LineBreak, LineWriter};
 use crate::normalize_lines::NormalizedReader;
 use crate::packet::{
-    ChunkSize, CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
+    CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
     MaybeNormalizedReader, OnePassSignature, PacketHeader, PacketTrait,
     PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType, SignatureVersionSpecific,
     Subpacket, SubpacketData, SymEncryptedProtectedData, SymEncryptedProtectedDataConfig,
@@ -105,7 +105,7 @@ pub trait Encryption: PartialEq {
 
 /// Configures a signing key and how to use it.
 #[derive(Debug)]
-pub struct SigningConfig<'a> {
+struct SigningConfig<'a> {
     /// The key to sign with
     key: &'a dyn SecretKeyTrait,
     /// A password to unlock it
@@ -116,29 +116,13 @@ pub struct SigningConfig<'a> {
 
 impl<'a> SigningConfig<'a> {
     /// Create a new signing configuration.
-    pub fn new<K>(key: &'a K, key_pw: Password, hash: HashAlgorithm) -> Self
-    where
-        K: SecretKeyTrait,
-    {
+    fn new(key: &'a dyn SecretKeyTrait, key_pw: Password, hash: HashAlgorithm) -> Self {
         Self {
             key,
             key_pw,
             hash_algorithm: hash,
         }
     }
-}
-
-/// Configures the version specific parts of
-/// the Symmetric Encrypted and Integrity Data Packet.
-pub enum Seipd {
-    /// Version 1
-    V1 { sym_alg: SymmetricKeyAlgorithm },
-    /// Version 2
-    V2 {
-        sym_alg: SymmetricKeyAlgorithm,
-        aead: AeadAlgorithm,
-        chunk_size: ChunkSize,
-    },
 }
 
 /// The default chunk size for partial packets.
@@ -447,8 +431,14 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         self
     }
 
-    pub fn sign(mut self, signer: SigningConfig<'a>) -> Self {
-        self.signing.push(signer);
+    pub fn sign(
+        mut self,
+        key: &'a dyn SecretKeyTrait,
+        key_pw: Password,
+        hash_algorithm: HashAlgorithm,
+    ) -> Self {
+        self.signing
+            .push(SigningConfig::new(key, key_pw, hash_algorithm));
         self
     }
 
@@ -1187,7 +1177,9 @@ mod tests {
     use crate::line_writer::LineBreak;
     use crate::normalize_lines::normalize_lines;
     use crate::util::test::{check_strings, random_string, ChaosReader};
-    use crate::{Deserializable, Message, SignedSecretKey};
+    use crate::{
+        Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
+    };
 
     #[test]
     fn binary_file_fixed_size_no_compression_roundtrip_password_seipdv1() {
@@ -1224,19 +1216,17 @@ mod tests {
             builder.to_file(&mut rng, &encrypted_file).unwrap();
 
             // decrypt it
-            let encrypted_file_data = std::fs::read(&encrypted_file).unwrap();
-            let message = Message::from_bytes(encrypted_file_data.into()).unwrap();
+            let encrypted_file_data = BufReader::new(std::fs::File::open(&encrypted_file).unwrap());
+            let message = Message::from_bytes(encrypted_file_data).unwrap();
 
-            let decrypted = message
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .unwrap();
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1269,17 +1259,15 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).unwrap();
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).unwrap();
-            let decrypted = message
+            let message = Message::from_bytes(&encrypted[..]).unwrap();
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .unwrap();
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1312,18 +1300,16 @@ mod tests {
 
                 // decrypt it
                 log::info!("parsing");
-                let message = Message::from_bytes(encrypted.into()).unwrap();
+                let message = Message::from_bytes(&encrypted[..]).unwrap();
                 log::info!("decrypting");
-                let decrypted = message
+                let mut decrypted = message
                     .decrypt_with_password(&"hello world".into())
                     .unwrap();
 
-                let Message::Literal(l) = decrypted else {
-                    panic!("unexpected message: {:?}", decrypted);
-                };
+                assert!(decrypted.is_literal());
 
-                assert_eq!(l.file_name(), "");
-                assert_eq!(l.data(), &buf);
+                assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+                assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
             }
         }
     }
@@ -1356,17 +1342,15 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
-            let decrypted = message
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1392,14 +1376,12 @@ mod tests {
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encoded.into()).expect("reading");
+            let mut decrypted = Message::from_bytes(&encoded[..]).expect("reading");
 
-            let Message::Literal(l) = message else {
-                panic!("unexpected message: {:?}", message);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1435,17 +1417,15 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
+            let mut decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1485,33 +1465,30 @@ mod tests {
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
-            // decrypt it - public
-            {
-                let (decrypted, _key_ids) =
-                    message.decrypt(&["".into()], &[&skey]).expect("decryption");
+            // decrypt it - public and password
+            let key_pw = Password::empty();
+            let message_pw = Password::from("hello world");
+            let ring = TheRing {
+                secret_keys: vec![&skey],
+                key_passwords: vec![&key_pw],
+                message_password: vec![&message_pw],
+                ..Default::default()
+            };
 
-                let Message::Literal(l) = decrypted else {
-                    panic!("unexpected message: {:?}", decrypted);
-                };
+            let (mut decrypted, result) =
+                message.decrypt_the_ring(ring, false).expect("decryption");
+            assert!(decrypted.is_literal());
 
-                assert_eq!(l.file_name(), "");
-                assert_eq!(l.data(), &buf);
-            }
-            // decrypt it - password
-            {
-                let decrypted = message
-                    .decrypt_with_password(&"hello world".into())
-                    .expect("decryption sym");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
 
-                let Message::Literal(l) = decrypted else {
-                    panic!("unexpected message: {:?}", decrypted);
-                };
+            dbg!(&result);
 
-                assert_eq!(l.file_name(), "");
-                assert_eq!(l.data(), &buf);
-            }
+            assert_eq!(result.secret_keys, vec![InnerRingResult::Ok]);
+            assert_eq!(result.message_password, vec![InnerRingResult::Ok]);
+            assert!(result.session_keys.is_empty());
         }
     }
 
@@ -1538,15 +1515,14 @@ mod tests {
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encoded.into()).expect("reading");
+            let mut decrypted = Message::from_bytes(&encoded[..]).expect("reading");
 
-            let Message::Literal(l) = message else {
-                panic!("unexpected message: {:?}", message);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1585,17 +1561,15 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
-            let (decrypted, _key_ids) =
-                message.decrypt(&["".into()], &[&skey]).expect("decryption");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
+            let mut decrypted = message.decrypt(&"".into(), &skey).expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1635,22 +1609,21 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
+            let decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
-            assert!(matches!(decrypted, Message::Compressed(_)));
+            assert!(decrypted.is_compressed());
 
-            let decompressed = decrypted.decompress().expect("decompression");
+            let mut decrypted = decrypted.decompress().expect("decompression");
 
-            let Message::Literal(l) = decompressed else {
-                panic!("unexpected message: {:?}", decompressed);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+
             check_strings(
-                l.to_string().unwrap(),
+                decrypted.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
         }
@@ -1683,32 +1656,22 @@ mod tests {
                 .partial_chunk_size(chunk_size)
                 .unwrap();
 
-            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
+            let signed = builder
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
+                .to_vec(&mut rng)
+                .expect("writing");
+            let mut message = Message::from_bytes(&signed[..]).expect("reading");
 
-            let signed = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
-            let message = Message::from_bytes(signed.into()).expect("reading");
+            check_strings(
+                message.as_data_string().unwrap(),
+                normalize_lines(&buf, LineBreak::Crlf),
+            );
 
             // verify signature
             assert!(message.is_one_pass_signed());
             message.verify(&*skey.public_key()).expect("signed");
 
-            let Message::Signed {
-                message: Some(next_message),
-                ..
-            } = message
-            else {
-                panic!("unexpected message: {:?}", message);
-            };
-
-            let Message::Literal(l) = &*next_message else {
-                panic!("unexpected message: {:?}", next_message);
-            };
-
-            assert_eq!(l.file_name(), "");
-            check_strings(
-                l.to_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
-            );
+            assert_eq!(message.literal_data_header().unwrap().file_name(), "");
         }
     }
 
@@ -1750,41 +1713,30 @@ mod tests {
                 .encrypt_to_key(&mut rng, &pkey)
                 .expect("encryption");
 
-            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
+            let encrypted = builder
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
+                .to_vec(&mut rng)
+                .expect("writing");
 
-            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
-
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
             // decrypt it
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
-            let next = decrypted.decompress().expect("decompression");
+            let mut message = decrypted.decompress().expect("decompression");
 
-            // verify signature
-            dbg!(&next);
-            assert!(next.is_one_pass_signed());
-            next.verify(&*skey.public_key()).expect("signed");
-
-            let Message::Signed {
-                message: Some(next_message),
-                ..
-            } = next
-            else {
-                panic!("unexpected message: {:?}", next);
-            };
-
-            let Message::Literal(l) = &*next_message else {
-                panic!("unexpected message: {:?}", next_message);
-            };
-
-            assert_eq!(l.file_name(), "");
             check_strings(
-                l.to_string().unwrap(),
+                message.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
+            // verify signature
+            dbg!(&message);
+            assert!(message.is_one_pass_signed());
+            message.verify(&*skey.public_key()).expect("signed");
+
+            assert_eq!(message.literal_data_header().unwrap().file_name(), "");
         }
     }
 
@@ -1821,17 +1773,15 @@ mod tests {
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             // decrypt it
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
-            let decrypted = message
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
+            let mut decrypted = message
                 .decrypt_with_password(&"hello world".into())
                 .expect("decryption");
 
-            let Message::Literal(l) = decrypted else {
-                panic!("unexpected message: {:?}", decrypted);
-            };
+            assert!(decrypted.is_literal());
 
-            assert_eq!(l.file_name(), "");
-            assert_eq!(l.data(), &buf);
+            assert_eq!(decrypted.literal_data_header().unwrap().file_name(), "");
+            assert_eq!(&decrypted.as_data_vec().unwrap(), &buf);
         }
     }
 
@@ -1872,41 +1822,31 @@ mod tests {
                 .encrypt_to_key(&mut rng, &pkey)
                 .expect("encryption");
 
-            let sig_config = SigningConfig::new(&*skey, Password::empty(), HashAlgorithm::Sha256);
+            let encrypted = builder
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
+                .to_vec(&mut rng)
+                .expect("writing");
 
-            let encrypted = builder.sign(sig_config).to_vec(&mut rng).expect("writing");
-
-            let message = Message::from_bytes(encrypted.into()).expect("reading");
+            let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
             // decrypt it
-            let (decrypted, _key_ids) = message
-                .decrypt(&[Password::empty()], &[&skey])
+            let decrypted = message
+                .decrypt(&Password::empty(), &skey)
                 .expect("decryption");
 
             assert!(decrypted.is_compressed());
-            let decompressed = decrypted.decompress().expect("decompression");
+            let mut decompressed = decrypted.decompress().expect("decompression");
 
             // verify signature
             assert!(decompressed.is_one_pass_signed());
-            decompressed.verify(&*skey.public_key()).expect("signed");
 
-            let Message::Signed {
-                message: Some(inner_message),
-                ..
-            } = decompressed
-            else {
-                panic!("unexpected message: {:?}", decompressed);
-            };
-
-            let Message::Literal(l) = &*inner_message else {
-                panic!("unexpected message: {:?}", inner_message);
-            };
-
-            assert_eq!(l.file_name(), "");
             check_strings(
-                l.to_string().unwrap(),
+                decompressed.as_data_string().unwrap(),
                 normalize_lines(&buf, LineBreak::Crlf),
             );
+            decompressed.verify(&*skey.public_key()).expect("signed");
+
+            assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
         }
     }
 
@@ -1965,16 +1905,8 @@ mod tests {
                         ChunkSize::default(),
                     )
                     .encrypt_to_key(&mut rng, &pkey1)?
-                    .sign(SigningConfig::new(
-                        &*skey1,
-                        Password::empty(),
-                        HashAlgorithm::Sha256,
-                    ))
-                    .sign(SigningConfig::new(
-                        &*skey2,
-                        Password::empty(),
-                        HashAlgorithm::Sha512,
-                    ));
+                    .sign(&*skey1, Password::empty(), HashAlgorithm::Sha256)
+                    .sign(&*skey2, Password::empty(), HashAlgorithm::Sha512);
 
                 let message = match encoding {
                     Encoding::Armor(opts) => {
@@ -1982,64 +1914,123 @@ mod tests {
 
                         println!("{}", encrypted);
 
-                        let (message, _) = Message::from_armor_single(encrypted.as_bytes())?;
+                        let (message, _) = Message::from_armor(std::io::Cursor::new(encrypted))?;
                         message
                     }
                     Encoding::Binary => {
                         let encrypted = builder.to_vec(&mut rng)?;
 
                         println!("{}", hex::encode(&encrypted));
-                        Message::from_bytes(encrypted.into())?
+                        Message::from_bytes(std::io::Cursor::new(encrypted))?
                     }
                 };
 
                 // decrypt it
-                let (decrypted, _key_ids) = message.decrypt(&[Password::empty()], &[&skey1])?;
+                let decrypted = message.decrypt(&Password::empty(), &skey1)?;
 
                 assert!(decrypted.is_compressed());
 
-                let decompressed = decrypted.decompress()?;
+                let mut decompressed = decrypted.decompress()?;
 
-                // verify signature outer
-                assert!(decompressed.is_one_pass_signed());
-                decompressed.verify(&*skey1.public_key())?;
-
-                let inner = match decompressed {
-                    Message::Signed {
-                        message: Some(ref message),
-                        one_pass_signature: Some(ops),
-                        ..
-                    } => {
-                        assert!(ops.is_nested(), "outer OPS must be nested");
-
-                        assert!(message.is_one_pass_signed());
-                        message.verify(&*skey2.public_key())?;
-
-                        let Message::Signed {
-                            message: Some(inner_message),
-                            one_pass_signature: Some(ops),
-                            ..
-                        } = message.as_ref()
-                        else {
-                            panic!("unexpected message: {:?}", message);
-                        };
-                        assert!(!ops.is_nested(), "innner OPS must not be nested");
-                        inner_message
-                    }
-                    _ => {
-                        panic!("invalid structure: {:?}", message);
-                    }
-                };
-
-                let Message::Literal(l) = &**inner else {
-                    panic!("unexpected message: {:?}", inner);
-                };
-
-                assert_eq!(l.file_name(), "");
                 check_strings(
-                    l.to_string().unwrap(),
+                    decompressed.as_data_string().unwrap(),
                     normalize_lines(&buf, LineBreak::Crlf),
                 );
+
+                let res =
+                    decompressed.verify_nested(&[&*skey1.public_key(), &*skey2.public_key()])?;
+                assert_eq!(res.len(), 2);
+                assert!(matches!(res[0], VerificationResult::Valid(_)));
+                assert!(matches!(res[1], VerificationResult::Valid(_)));
+
+                assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn utf8_reader_partial_size_compression_zip_roundtrip_no_encryption_seipdv2_sign_twice(
+    ) -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey1, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let (skey2, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/bob@autocrypt.example.sec.asc",
+        )?)?;
+
+        let chunk_size = 512u32;
+        let max_file_size = 5 * chunk_size as usize + 100;
+
+        for file_size in (1..=max_file_size).step_by(10) {
+            for encoding in [
+                Encoding::Binary,
+                Encoding::Armor(ArmorOptions {
+                    headers: None,
+                    include_checksum: true,
+                }),
+                Encoding::Armor(ArmorOptions {
+                    headers: None,
+                    include_checksum: false,
+                }),
+            ] {
+                println!("-- Size: {} encoding: {:?}", file_size, encoding);
+
+                // Generate data
+                let buf = random_string(&mut rng, file_size);
+                let mut reader = ChaosReader::new(rng.clone(), buf.clone());
+
+                let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                    .data_mode(DataMode::Utf8)
+                    .compression(CompressionAlgorithm::ZIP)
+                    .partial_chunk_size(chunk_size)?
+                    .sign(&*skey1, Password::empty(), HashAlgorithm::Sha256)
+                    .sign(&*skey2, Password::empty(), HashAlgorithm::Sha512);
+
+                let message = match encoding {
+                    Encoding::Armor(opts) => {
+                        let encrypted = builder.to_armored_string(&mut rng, opts)?;
+
+                        println!("{}", encrypted);
+
+                        let (message, _) = Message::from_armor(std::io::Cursor::new(encrypted))?;
+                        message
+                    }
+                    Encoding::Binary => {
+                        let encrypted = builder.to_vec(&mut rng)?;
+
+                        println!("{}", hex::encode(&encrypted));
+                        Message::from_bytes(std::io::Cursor::new(encrypted))?
+                    }
+                };
+
+                assert!(message.is_compressed());
+
+                let mut decompressed = message.decompress()?;
+
+                check_strings(
+                    decompressed.as_data_string().unwrap(),
+                    normalize_lines(&buf, LineBreak::Crlf),
+                );
+
+                let res =
+                    decompressed.verify_nested(&[&*skey1.public_key(), &*skey2.public_key()])?;
+                assert_eq!(res.len(), 2);
+                let VerificationResult::Valid(ref sig1) = res[0] else {
+                    panic!("invalid sig1");
+                };
+                assert_eq!(sig1.hash_alg(), HashAlgorithm::Sha256);
+
+                let VerificationResult::Valid(ref sig2) = res[1] else {
+                    panic!("invalid sig2");
+                };
+                assert_eq!(sig2.hash_alg(), HashAlgorithm::Sha512);
+
+                assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
             }
         }
         Ok(())

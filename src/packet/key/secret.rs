@@ -1,4 +1,5 @@
-use bytes::Buf;
+use std::io::BufRead;
+
 use log::debug;
 use rand::{CryptoRng, Rng};
 
@@ -51,7 +52,7 @@ impl SecretKey {
     }
 
     /// Parses a `SecretKey` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(Tag::SecretKey, packet_header.tag(), "invalid tag");
 
         let details = crate::packet::secret_key_parser::parse(input)?;
@@ -90,16 +91,16 @@ impl SecretKey {
         sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
         match self.secret_params {
-            SecretParams::Plain(ref k) => work(pub_params, k),
+            SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
             SecretParams::Encrypted(ref k) => {
                 let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
-                work(pub_params, &plain)
+                Ok(work(pub_params, &plain))
             }
         }
     }
@@ -123,7 +124,7 @@ impl SecretSubkey {
     }
 
     /// Parses a `SecretSubkey` packet from the given slice.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
         ensure_eq!(Tag::SecretSubkey, packet_header.tag(), "invalid tag");
 
         let details = crate::packet::secret_key_parser::parse(input)?;
@@ -161,16 +162,16 @@ impl SecretSubkey {
         sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
-    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<T>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
         G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
         let pub_params = self.details.public_params();
         match self.secret_params {
-            SecretParams::Plain(ref k) => work(pub_params, k),
+            SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
             SecretParams::Encrypted(ref k) => {
                 let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
-                work(pub_params, &plain)
+                Ok(work(pub_params, &plain))
             }
         }
     }
@@ -192,7 +193,7 @@ impl SecretKeyTrait for SecretKey {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
             signature.replace(sig);
             Ok(())
-        })?;
+        })??;
 
         signature.ok_or_else(|| unreachable!())
     }
@@ -246,7 +247,7 @@ impl SecretKeyTrait for SecretSubkey {
             let sig = create_signature(pub_params, priv_key, hash, data)?;
             signature.replace(sig);
             Ok(())
-        })?;
+        })??;
 
         signature.ok_or_else(|| unreachable!())
     }

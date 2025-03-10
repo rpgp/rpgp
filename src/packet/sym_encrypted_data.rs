@@ -1,9 +1,10 @@
-use std::io;
+use std::io::{self, BufRead};
 
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 
 use crate::errors::Result;
 use crate::packet::PacketTrait;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 use super::PacketHeader;
@@ -24,10 +25,11 @@ pub struct SymEncryptedData {
 
 impl SymEncryptedData {
     /// Parses a `SymEncryptedData` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+        let data = input.rest()?;
         Ok(SymEncryptedData {
             packet_header,
-            data: input.copy_to_bytes(input.remaining()),
+            data: data.freeze(),
         })
     }
 

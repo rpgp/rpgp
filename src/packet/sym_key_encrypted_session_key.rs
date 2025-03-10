@@ -1,16 +1,16 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use log::debug;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
 use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, Result};
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{Password, SkeskVersion, StringToKey, Tag};
 use crate::PlainSessionKey;
@@ -44,6 +44,13 @@ pub enum SymKeyEncryptedSessionKey {
         aead: AeadProps,
         #[debug("{}", hex::encode(encrypted_key))]
         encrypted_key: Bytes,
+    },
+    Other {
+        packet_header: PacketHeader,
+        #[debug("{:X}", version)]
+        version: u8,
+        #[debug("{}", hex::encode(data))]
+        data: Bytes,
     },
 }
 
@@ -85,8 +92,8 @@ impl AeadProps {
 }
 
 impl SymKeyEncryptedSessionKey {
-    /// Parses a `SymKeyEncryptedSessionKey` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+    /// Parses a `SymKeyEncryptedSessionKey` packet.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         ensure_eq!(
             packet_header.tag(),
             Tag::SymKeyEncryptedSessionKey,
@@ -98,29 +105,45 @@ impl SymKeyEncryptedSessionKey {
             4 => parse_v4(packet_header, i),
             5 => parse_v5(packet_header, i),
             6 => parse_v6(packet_header, i),
-            _ => unsupported_err!("SKESK version {}", version),
+            _ => {
+                let data = i.rest()?.freeze();
+                Ok(Self::Other {
+                    packet_header,
+                    version,
+                    data,
+                })
+            }
         }
     }
 
-    pub fn sym_algorithm(&self) -> SymmetricKeyAlgorithm {
+    pub fn sym_algorithm(&self) -> Option<SymmetricKeyAlgorithm> {
         match self {
             Self::V4 {
                 ref sym_algorithm, ..
-            } => *sym_algorithm,
+            } => Some(*sym_algorithm),
             Self::V5 {
                 ref sym_algorithm, ..
-            } => *sym_algorithm,
+            } => Some(*sym_algorithm),
             Self::V6 {
                 ref sym_algorithm, ..
-            } => *sym_algorithm,
+            } => Some(*sym_algorithm),
+            Self::Other { .. } => None,
         }
     }
 
-    pub fn s2k(&self) -> &StringToKey {
+    pub fn s2k(&self) -> Option<&StringToKey> {
         match self {
-            Self::V4 { ref s2k, .. } => s2k,
-            Self::V5 { ref s2k, .. } => s2k,
-            Self::V6 { ref s2k, .. } => s2k,
+            Self::V4 { ref s2k, .. } => Some(s2k),
+            Self::V5 { ref s2k, .. } => Some(s2k),
+            Self::V6 { ref s2k, .. } => Some(s2k),
+            Self::Other { .. } => None,
+        }
+    }
+
+    pub fn is_supported(&self) -> bool {
+        match self {
+            Self::V4 { .. } | Self::V6 { .. } | Self::V5 { .. } => true,
+            Self::Other { .. } => false,
         }
     }
 
@@ -129,19 +152,22 @@ impl SymKeyEncryptedSessionKey {
             Self::V4 { .. } => SkeskVersion::V4,
             Self::V5 { .. } => SkeskVersion::Other(5),
             Self::V6 { .. } => SkeskVersion::V6,
+            Self::Other { version, .. } => SkeskVersion::Other(*version),
         }
     }
 
     pub fn decrypt(&self, key: &[u8]) -> Result<PlainSessionKey> {
         debug!("decrypt session key {:?}", self.version());
 
-        let mut decrypted_key: BytesMut = self.encrypted_key().clone().into();
+        let Some(decrypted_key) = self.encrypted_key() else {
+            unsupported_err!("SKESK {:?}", self.version());
+        };
 
+        let mut decrypted_key: BytesMut = decrypted_key.clone().into();
         match self {
             Self::V4 { sym_algorithm, .. } => {
                 let iv = vec![0u8; sym_algorithm.block_size()];
-                self.sym_algorithm()
-                    .decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
+                sym_algorithm.decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
 
                 let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
                 Ok(PlainSessionKey::V3_4 {
@@ -207,20 +233,24 @@ impl SymKeyEncryptedSessionKey {
                     key: decrypted_key.into(),
                 })
             }
+            Self::Other { version, .. } => {
+                unsupported_err!("SKESK version {}", version);
+            }
         }
     }
 
-    pub fn encrypted_key(&self) -> &Bytes {
+    pub fn encrypted_key(&self) -> Option<&Bytes> {
         match self {
             Self::V4 {
                 ref encrypted_key, ..
-            } => encrypted_key,
+            } => Some(encrypted_key),
             Self::V5 {
                 ref encrypted_key, ..
-            } => encrypted_key,
+            } => Some(encrypted_key),
             Self::V6 {
                 ref encrypted_key, ..
-            } => encrypted_key,
+            } => Some(encrypted_key),
+            Self::Other { .. } => None,
         }
     }
 
@@ -346,33 +376,38 @@ impl SymKeyEncryptedSessionKey {
     }
 }
 
-fn parse_v4<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v4<B: BufRead>(
+    packet_header: PacketHeader,
+    mut i: B,
+) -> Result<SymKeyEncryptedSessionKey> {
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
-    let s2k = StringToKey::from_buf(&mut i)?;
+    let s2k = StringToKey::try_from_reader(&mut i)?;
 
     Ok(SymKeyEncryptedSessionKey::V4 {
         packet_header,
         sym_algorithm: sym_alg,
         s2k,
-        encrypted_key: i.rest(),
+        encrypted_key: i.rest()?.freeze(),
     })
 }
 
-fn parse_v5<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v5<B: BufRead>(
+    packet_header: PacketHeader,
+    mut i: B,
+) -> Result<SymKeyEncryptedSessionKey> {
     let _count = i.read_u8()?;
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
     let aead = i.read_u8().map(AeadAlgorithm::from)?;
     let s2k_len = i.read_u8()?;
-    let s2k_data = i.read_take(s2k_len.into())?;
-    let s2k = StringToKey::from_buf(s2k_data)?;
-    let iv = i.read_take(aead.iv_size())?;
-    let l = i.remaining();
+    let s2k_data = i.read_take(s2k_len.into());
+    let s2k = StringToKey::try_from_reader(s2k_data)?;
+    let iv = i.take_bytes(aead.iv_size())?;
     let aead_tag_size = aead.tag_size().unwrap_or_default();
+    let esk = i.rest()?;
 
-    if l < aead_tag_size {
-        return Err(Error::InvalidInput);
+    if esk.len() < aead_tag_size {
+        return Err(InvalidInputSnafu.build());
     }
-    let esk = i.read_take(l)?;
 
     let aead = match aead {
         AeadAlgorithm::Eax => AeadProps::Eax {
@@ -392,24 +427,26 @@ fn parse_v5<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncry
         sym_algorithm: sym_alg,
         aead,
         s2k,
-        encrypted_key: esk,
+        encrypted_key: esk.freeze(),
     })
 }
 
-fn parse_v6<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncryptedSessionKey> {
+fn parse_v6<B: BufRead>(
+    packet_header: PacketHeader,
+    mut i: B,
+) -> Result<SymKeyEncryptedSessionKey> {
     let _count = i.read_u8()?;
     let sym_alg = i.read_u8().map(SymmetricKeyAlgorithm::from)?;
     let aead = i.read_u8().map(AeadAlgorithm::from)?;
     let s2k_len = i.read_u8()?;
-    let s2k_data = i.read_take(s2k_len.into())?;
-    let s2k = StringToKey::from_buf(s2k_data)?;
-    let iv = i.read_take(aead.iv_size())?;
-    let l = i.remaining();
+    let s2k_data = i.read_take(s2k_len.into());
+    let s2k = StringToKey::try_from_reader(s2k_data)?;
+    let iv = i.take_bytes(aead.iv_size())?;
     let aead_tag_size = aead.tag_size().unwrap_or_default();
-    if l < aead_tag_size {
-        return Err(Error::InvalidInput);
+    let esk = i.rest()?;
+    if esk.len() < aead_tag_size {
+        return Err(InvalidInputSnafu.build());
     }
-    let esk = i.read_take(l)?;
 
     let aead = match aead {
         AeadAlgorithm::Eax => AeadProps::Eax {
@@ -429,7 +466,7 @@ fn parse_v6<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<SymKeyEncry
         sym_algorithm: sym_alg,
         aead,
         s2k,
-        encrypted_key: esk,
+        encrypted_key: esk.freeze(),
     })
 }
 
@@ -492,6 +529,14 @@ impl Serialize for SymKeyEncryptedSessionKey {
 
                 writer.write_all(encrypted_key)?;
             }
+            SymKeyEncryptedSessionKey::Other {
+                packet_header: _,
+                version,
+                data,
+            } => {
+                writer.write_u8(*version)?;
+                writer.write_all(data)?;
+            }
         }
         Ok(())
     }
@@ -538,6 +583,10 @@ impl Serialize for SymKeyEncryptedSessionKey {
                 sum += 1;
                 sum += encrypted_key.len();
             }
+            SymKeyEncryptedSessionKey::Other { data, .. } => {
+                sum += 1;
+                sum += data.len();
+            }
         }
         sum
     }
@@ -549,6 +598,7 @@ impl PacketTrait for SymKeyEncryptedSessionKey {
             SymKeyEncryptedSessionKey::V4 { packet_header, .. } => packet_header,
             SymKeyEncryptedSessionKey::V5 { packet_header, .. } => packet_header,
             SymKeyEncryptedSessionKey::V6 { packet_header, .. } => packet_header,
+            SymKeyEncryptedSessionKey::Other { packet_header, .. } => packet_header,
         }
     }
 }
@@ -683,7 +733,7 @@ mod tests {
         fn packet_roundtrip(packet: SymKeyEncryptedSessionKey) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = SymKeyEncryptedSessionKey::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
+            let new_packet = SymKeyEncryptedSessionKey::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             assert_eq!(packet, new_packet);
         }
     }

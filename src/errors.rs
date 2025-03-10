@@ -15,7 +15,7 @@ pub use crate::parsing::{Error as ParsingError, RemainingError};
 #[snafu(visibility(pub(crate)))]
 pub enum Error {
     #[snafu(display("invalid input"))]
-    InvalidInput,
+    InvalidInput { backtrace: Option<Backtrace> },
     #[snafu(display("invalid armor wrappers"))]
     InvalidArmorWrappers,
     #[snafu(display("invalid crc24 checksum"))]
@@ -31,6 +31,8 @@ pub enum Error {
     NoMatchingPacket { backtrace: Option<Backtrace> },
     #[snafu(display("more than one matching packet was found"))]
     TooManyPackets,
+    #[snafu(display("packet contained more data than was parsable (trailing bytes {size})"))]
+    PacketTooLarge { size: u64 },
     #[snafu(transparent)]
     RSAError {
         source: rsa::errors::Error,

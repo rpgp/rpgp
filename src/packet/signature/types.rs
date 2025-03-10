@@ -1,8 +1,8 @@
-use std::io::Read;
+use std::io::{BufRead, Read};
 
 use bitfields::bitfield;
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
 use digest::DynDigest;
 use log::debug;
@@ -20,6 +20,7 @@ use crate::packet::{
     PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket, SubpacketData,
 };
 use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
     self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
@@ -882,8 +883,9 @@ impl Default for KeyFlags {
 
 impl KeyFlags {
     /// Parse the key flags from the given buffer.
-    pub fn from_buf<B: Buf>(mut buf: B) -> Result<Self> {
-        let remaining = buf.remaining();
+    pub fn try_from_reader<B: BufRead>(mut reader: B) -> Result<Self> {
+        let mut buf = reader.rest()?.freeze();
+        let remaining = buf.len();
 
         if remaining == 0 {
             return Ok(Self {
@@ -1146,7 +1148,7 @@ mod tests {
             println!("size {}", i);
             // I write this with pain...
             let source = BytesMut::zeroed(i).freeze();
-            let flags = KeyFlags::from_buf(&source[..]).unwrap();
+            let flags = KeyFlags::try_from_reader(&source[..]).unwrap();
             assert_eq!(&flags.to_bytes().unwrap(), &source);
         }
     }
@@ -1255,7 +1257,7 @@ mod tests {
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             proptest::collection::vec(0u8..255, 1..500)
-                .prop_map(|v| KeyFlags::from_buf(&mut &v[..]).unwrap())
+                .prop_map(|v| KeyFlags::try_from_reader(&mut &v[..]).unwrap())
                 .boxed()
         }
     }
@@ -1272,7 +1274,7 @@ mod tests {
         fn keyflags_packet_roundtrip(flags: KeyFlags) {
             let mut buf = Vec::new();
             flags.to_writer(&mut buf).unwrap();
-            let new_flags = KeyFlags::from_buf(&mut &buf[..]).unwrap();
+            let new_flags = KeyFlags::try_from_reader(&mut &buf[..]).unwrap();
             prop_assert_eq!(flags, new_flags);
         }
     }

@@ -1,6 +1,5 @@
-use std::io;
+use std::io::{self, BufRead};
 
-use bytes::Buf;
 use rsa::traits::PublicKeyParts;
 
 use crate::errors::Result;
@@ -15,9 +14,9 @@ pub struct RsaPublicParams {
 }
 
 impl RsaPublicParams {
-    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
-        let n = MpiBytes::from_buf(&mut i)?;
-        let e = MpiBytes::from_buf(&mut i)?;
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
+        let n = MpiBytes::try_from_reader(&mut i)?;
+        let e = MpiBytes::try_from_reader(&mut i)?;
 
         let params = RsaPublicParams::try_from_mpi(n, e)?;
         Ok(params)
@@ -87,7 +86,7 @@ mod tests {
         fn params_roundtrip(params: RsaPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = RsaPublicParams::try_from_buf(&mut &buf[..])?;
+            let new_params = RsaPublicParams::try_from_reader(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }
