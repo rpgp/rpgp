@@ -591,6 +591,22 @@ fn test_invalid_partial_messages() {
         "found error: {}",
         err
     );
+
+    // 512 bytes, p512 f1
+    let (message, _) =
+        Message::from_armor_file("./tests/partial_invalid_short_last.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
 }
 
 #[test]
