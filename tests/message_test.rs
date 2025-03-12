@@ -743,3 +743,49 @@ fn test_literal_eating_mdc() {
         err
     );
 }
+
+#[test]
+fn test_message_weird_signatures() {
+    // tests that check graceful handling of weird signatures
+    // from "Messages with unknown packets" in OpenPGP interoperability test suite
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    // "PKESK3 SEIPDv1 [OPS3[H99] Literal Sig4[H99]]" from the OpenPGP interoperability test suite
+    let (message, _) = Message::from_armor_file("./tests/message_other_hash.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+
+    // "PKESK3 SEIPDv1 [OPS3[P99] Literal Sig4[P99]]" from the OpenPGP interoperability test suite
+    let (message, _) = Message::from_armor_file("./tests/message_other_pub_algo.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+
+    // "PKESK3 SEIP [OPS23 OPS3 Literal Sig4 Sig23]" from the OpenPGP interoperability test suite
+    let (message, _) =
+        Message::from_armor_file("./tests/message_future_signature.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+}
