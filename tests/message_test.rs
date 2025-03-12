@@ -698,3 +698,28 @@ fn test_two_literals_first_compressed_explicit_decompression() {
         err
     );
 }
+
+#[test]
+fn test_literal_eating_mdc() {
+    // "Literal eating MDC" from the OpenPGP interoperability test suite
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) = Message::from_armor_file("./tests/literal_eating_mdc.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
