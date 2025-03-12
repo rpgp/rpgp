@@ -1616,7 +1616,7 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
         builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
@@ -1642,7 +1642,7 @@ mod tests {
         .unwrap();
 
         let pkey = skey.public_key();
-        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
         builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
@@ -1675,7 +1675,7 @@ mod tests {
         let pkey = skey.public_key();
 
         for _ in 0..100 {
-            let mut rng = ChaCha8Rng::seed_from_u64(0);
+            let rng = ChaCha8Rng::seed_from_u64(0);
 
             let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
             builder = builder.data_mode(DataMode::Utf8);
@@ -1709,7 +1709,7 @@ mod tests {
         let pkey = skey.public_key();
 
         for _ in 0..100 {
-            let mut rng = ChaCha8Rng::seed_from_u64(0);
+            let rng = ChaCha8Rng::seed_from_u64(0);
 
             let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
 
@@ -1742,7 +1742,7 @@ mod tests {
         let pkey = skey.public_key();
 
         for _ in 0..100 {
-            let mut rng = ChaCha8Rng::seed_from_u64(0);
+            let rng = ChaCha8Rng::seed_from_u64(0);
 
             let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
             builder = builder.compression(CompressionAlgorithm::ZLIB);
@@ -1757,7 +1757,7 @@ mod tests {
 
             // signed_msg.verify(&*pkey).unwrap();
 
-            let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
                 .unwrap()
                 .0;
             let mut decompressed = parsed.decompress().expect("decompress");
