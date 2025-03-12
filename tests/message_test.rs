@@ -665,3 +665,36 @@ fn test_two_literals_first_compressed() {
         err
     );
 }
+
+#[test]
+fn test_two_literals_first_compressed_explicit_decompression() {
+    // "Two literals, 1st compressed 1 times" from the OpenPGP interoperability test suite,
+    // Explicitly decompressing the compressed packet.
+
+    // FIXME: this test should probably error somewhere?
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) =
+        Message::from_armor_file("./tests/two_literals_first_compressed.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    if msg.is_compressed() {
+        msg = msg.decompress().unwrap();
+    }
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
