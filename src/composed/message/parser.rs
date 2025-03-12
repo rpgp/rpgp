@@ -1,6 +1,10 @@
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+use super::reader::{
+    CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
+};
+use super::DebugBufRead;
 use crate::armor::BlockType;
 use crate::composed::message::Message;
 use crate::composed::shared::is_binary;
@@ -8,12 +12,6 @@ use crate::errors::Result;
 use crate::parsing_reader::BufReadParsing;
 use crate::types::{PkeskVersion, SkeskVersion, Tag};
 use crate::{Edata, Esk};
-
-use super::reader::{
-    CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
-};
-
-use super::DebugBufRead;
 
 /// Parses a single message level
 pub(super) fn next<'a>(
@@ -265,7 +263,7 @@ impl<'a> Message<'a> {
         }
     }
 
-    /// Parse from a reader which might contain ASCII amored data or binary data.
+    /// Parse from a reader which might contain ASCII armored data or binary data.
     pub fn from_reader<R: BufRead + std::fmt::Debug + 'a>(
         mut source: R,
     ) -> Result<(Self, Option<crate::armor::Headers>)> {
