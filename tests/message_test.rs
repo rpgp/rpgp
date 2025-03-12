@@ -556,7 +556,9 @@ bhF30A+IitsxxA==
 fn test_invalid_partial_messages() {
     pretty_env_logger::try_init().ok();
 
-    let (ssk, _headers) = SignedSecretKey::from_armor_file("./tests/partial_key.asc").expect("ssk");
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
 
     // 512 bytes, f256 p128 f128
     let (message, _) =
@@ -595,7 +597,9 @@ fn test_invalid_partial_messages() {
 fn test_invalid_multi_message() {
     pretty_env_logger::try_init().ok();
 
-    let (ssk, _headers) = SignedSecretKey::from_armor_file("./tests/partial_key.asc").expect("ssk");
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
 
     // compressed, followed by literal
     let (message, _) = Message::from_armor_file("./tests/multi_message_1.asc").expect("ok");
