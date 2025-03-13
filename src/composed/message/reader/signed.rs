@@ -6,7 +6,7 @@ use log::debug;
 use crate::errors::Result;
 use crate::packet::{Signature, SignatureType, SignatureVersionSpecific};
 use crate::util::{fill_buffer, NormalizingHasher};
-use crate::{DebugBufRead, Message, RingResult, TheRing};
+use crate::{Message, MessageReader, RingResult, TheRing};
 
 use super::PacketBodyReader;
 
@@ -100,7 +100,7 @@ impl<'a> SignatureBodyReader<'a> {
         }
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<Box<dyn DebugBufRead + 'a>> {
+    pub fn into_inner(self) -> PacketBodyReader<MessageReader<'a>> {
         match self {
             Self::Init { source, .. } => source.into_inner(),
             Self::Body { source, .. } => source.into_inner(),

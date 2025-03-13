@@ -23,7 +23,54 @@ use crate::types::{
 };
 
 pub trait DebugBufRead: BufRead + std::fmt::Debug {}
+
 impl<T: BufRead + std::fmt::Debug> DebugBufRead for T {}
+
+/// The inner reader type in a nested message
+#[derive(Debug)]
+pub enum MessageReader<'a> {
+    Compressed(Box<CompressedDataReader<MessageReader<'a>>>),
+    Edata(Box<Edata<'a>>),
+    Reader(Box<dyn DebugBufRead + 'a>),
+}
+
+impl MessageReader<'_> {
+    pub fn get_mut(&mut self) -> &mut Self {
+        match self {
+            Self::Compressed(r) => r.get_mut().get_mut(),
+            Self::Edata(r) => r.get_mut().get_mut().get_mut(),
+            Self::Reader(_r) => self,
+        }
+    }
+}
+
+impl Read for MessageReader<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Compressed(r) => r.read(buf),
+            Self::Edata(r) => r.read(buf),
+            Self::Reader(r) => r.read(buf),
+        }
+    }
+}
+
+impl BufRead for MessageReader<'_> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::Compressed(r) => r.fill_buf(),
+            Self::Edata(r) => r.fill_buf(),
+            Self::Reader(r) => r.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::Compressed(r) => r.consume(amt),
+            Self::Edata(r) => r.consume(amt),
+            Self::Reader(r) => r.consume(amt),
+        }
+    }
+}
 
 /// An [OpenPGP message](https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages)
 /// Encrypted Message | Signed Message | Compressed Message | Literal Message.
@@ -32,13 +79,13 @@ impl<T: BufRead + std::fmt::Debug> DebugBufRead for T {}
 pub enum Message<'a> {
     /// Literal Message: Literal Data Packet.
     Literal {
-        reader: LiteralDataReader<Box<dyn DebugBufRead + 'a>>,
+        reader: LiteralDataReader<MessageReader<'a>>,
         /// is this a nested message?
         is_nested: bool,
     },
     /// Compressed Message: Compressed Data Packet.
     Compressed {
-        reader: CompressedDataReader<Box<dyn DebugBufRead + 'a>>,
+        reader: CompressedDataReader<MessageReader<'a>>,
         /// is this a nested message?
         is_nested: bool,
     },
@@ -98,7 +145,7 @@ pub(crate) enum MessageParts {
 }
 
 impl<'a> Message<'a> {
-    pub(crate) fn into_parts(self) -> (Box<dyn DebugBufRead + 'a>, MessageParts) {
+    pub(crate) fn into_parts(self) -> (MessageReader<'a>, MessageParts) {
         match self {
             Message::Literal { reader, is_nested } => {
                 debug_assert!(reader.is_done());
@@ -209,7 +256,7 @@ impl<'a> Message<'a> {
 }
 
 impl MessageParts {
-    pub(crate) fn into_message<'a>(self, reader: Box<dyn DebugBufRead + 'a>) -> Message<'a> {
+    pub(crate) fn into_message(self, reader: MessageReader<'_>) -> Message<'_> {
         match self {
             MessageParts::Literal {
                 packet_header,
@@ -301,9 +348,7 @@ pub enum Esk {
 }
 
 impl Esk {
-    pub fn try_from_reader<'a>(
-        packet: &mut PacketBodyReader<Box<dyn DebugBufRead + 'a>>,
-    ) -> Result<Self> {
+    pub fn try_from_reader(packet: &mut PacketBodyReader<MessageReader<'_>>) -> Result<Self> {
         let packet_header = packet.packet_header();
         match packet_header.tag() {
             Tag::PublicKeyEncryptedSessionKey => {
@@ -378,15 +423,15 @@ impl Serialize for Esk {
 #[allow(clippy::large_enum_variant)]
 pub enum Edata<'a> {
     SymEncryptedData {
-        reader: SymEncryptedDataReader<Box<dyn DebugBufRead + 'a>>,
+        reader: SymEncryptedDataReader<MessageReader<'a>>,
     },
     SymEncryptedProtectedData {
-        reader: SymEncryptedProtectedDataReader<Box<dyn DebugBufRead + 'a>>,
+        reader: SymEncryptedProtectedDataReader<MessageReader<'a>>,
     },
 }
 
 impl<'a> Edata<'a> {
-    pub fn try_from_reader(reader: PacketBodyReader<Box<dyn DebugBufRead + 'a>>) -> Result<Self> {
+    pub fn try_from_reader(reader: PacketBodyReader<MessageReader<'a>>) -> Result<Self> {
         match reader.packet_header().tag() {
             Tag::SymEncryptedData => {
                 let reader = SymEncryptedDataReader::new(reader)?;
@@ -426,7 +471,7 @@ impl Read for Edata<'_> {
     }
 }
 
-impl Edata<'_> {
+impl<'a> Edata<'a> {
     pub fn packet_header(&self) -> PacketHeader {
         match self {
             Self::SymEncryptedData { reader } => reader.packet_header(),
@@ -436,6 +481,13 @@ impl Edata<'_> {
 
     pub fn tag(&self) -> Tag {
         self.packet_header().tag()
+    }
+
+    pub fn get_mut(&mut self) -> &mut PacketBodyReader<MessageReader<'a>> {
+        match self {
+            Self::SymEncryptedData { reader } => reader.get_mut(),
+            Self::SymEncryptedProtectedData { reader } => reader.get_mut(),
+        }
     }
 
     pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
@@ -469,7 +521,8 @@ impl<'a> Message<'a> {
     pub fn decompress(self) -> Result<Self> {
         match self {
             Message::Compressed { reader, is_nested } => {
-                Message::internal_from_bytes(reader.decompress()?, is_nested)
+                let source = MessageReader::Compressed(Box::new(reader.decompress()?));
+                Message::internal_from_bytes(source, is_nested)
             }
             Message::Signed { reader, is_nested } => Ok(Message::Signed {
                 reader: reader.decompress()?,
@@ -709,7 +762,8 @@ impl<'a> Message<'a> {
                 };
 
                 edata.decrypt(&session_key)?;
-                let message = Message::internal_from_bytes(edata, is_nested)?;
+                let source = MessageReader::Edata(Box::new(edata));
+                let message = Message::internal_from_bytes(source, is_nested)?;
                 Ok((message, result))
             }
         }
@@ -773,7 +827,7 @@ impl<'a> Message<'a> {
         Ok(out)
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<Box<dyn DebugBufRead + 'a>> {
+    pub fn into_inner(self) -> PacketBodyReader<MessageReader<'a>> {
         match self {
             Self::Literal { reader, .. } => reader.into_inner(),
             Self::Compressed { reader, .. } => reader.into_inner(),
@@ -786,7 +840,7 @@ impl<'a> Message<'a> {
         }
     }
 
-    pub fn get_mut(&mut self) -> &mut PacketBodyReader<Box<dyn DebugBufRead + 'a>> {
+    pub fn get_mut(&mut self) -> &mut PacketBodyReader<MessageReader<'a>> {
         match self {
             Self::Literal { reader, .. } => reader.get_mut(),
             Self::Compressed { reader, .. } => reader.get_mut(),
@@ -819,39 +873,63 @@ impl<'a> Message<'a> {
         if self.is_nested() {
             return Ok(());
         }
+        debug!("checking trailing data");
 
         // drain the inner reader to ensure no trailing data is contained
-        let inner_reader = self.get_mut().get_mut();
-        let mut parser = crate::packet::PacketParser::new(inner_reader);
-        match parser.next_ref() {
-            Some(Ok(packet)) => {
-                let tag = packet.packet_header().tag();
-                match tag {
-                    Tag::Padding | Tag::Marker => {
-                        debug!("ignoring trailing packet: {:?}", tag);
-                    }
-                    _ => {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidInput,
-                            format!(
-                                "unexpected trailing packet found: {:?}",
-                                packet.packet_header()
-                            ),
-                        ));
+        let inner = self.get_mut().get_mut();
+
+        fn check_next_packet<R: DebugBufRead>(
+            mut parser: crate::packet::PacketParser<R>,
+        ) -> io::Result<()> {
+            match parser.next_ref() {
+                Some(Ok(packet)) => {
+                    let tag = packet.packet_header().tag();
+                    match tag {
+                        Tag::Padding | Tag::Marker => {
+                            debug!("ignoring trailing packet: {:?}", tag);
+                        }
+                        _ => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                format!(
+                                    "unexpected trailing packet found: {:?}",
+                                    packet.packet_header()
+                                ),
+                            ));
+                        }
                     }
                 }
+                Some(Err(err)) => {
+                    warn!("failed to parse trailing data: {:?}", err);
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "unexpected trailing bytes found",
+                    ));
+                }
+                None => {
+                    // all good
+                }
             }
-            Some(Err(err)) => {
-                warn!("failed to parse trailing data: {:?}", err);
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "unexpected trailing bytes found",
-                ));
+            Ok(())
+        }
+
+        match inner {
+            MessageReader::Compressed(r) => {
+                let inner_reader = r.get_mut().get_mut();
+                let parser = crate::packet::PacketParser::new(inner_reader);
+                check_next_packet(parser)?;
             }
-            None => {
-                // all good
+            MessageReader::Edata(e) => {
+                let inner_reader = e;
+                let parser = crate::packet::PacketParser::new(inner_reader);
+                check_next_packet(parser)?;
+            }
+            MessageReader::Reader(r) => {
+                let parser = crate::packet::PacketParser::new(r);
+                check_next_packet(parser)?;
             }
         }
+
         Ok(())
     }
 
@@ -1588,24 +1666,20 @@ mod tests {
         let pkey = skey.public_key();
         let rng = ChaCha8Rng::seed_from_u64(0);
 
-        let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-        builder = builder.data_mode(DataMode::Utf8);
-
-        // assert!(lit_msg.verify(&*pkey).is_err()); // Unsigned message shouldn't verify
-
-        builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+        let builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes())
+            .data_mode(DataMode::Utf8)
+            .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
         let armored = builder
             .to_armored_string(rng, ArmorOptions::default())
             .expect("serialize");
         // fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
 
-        let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
-            .unwrap()
-            .0;
+        let (mut parsed, _headers) = Message::from_armor(armored.as_bytes()).expect("parsing");
+
         let mut sink = vec![];
         parsed.read_to_end(&mut sink).expect("read message");
-        parsed.verify(&*pkey).unwrap();
+        parsed.verify(&*pkey).expect("verify");
     }
 
     #[test]
@@ -1653,8 +1727,6 @@ mod tests {
             .expect("serialize");
         // fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
 
-        // signed_msg.verify(&*pkey).unwrap();
-
         let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
             .unwrap()
             .0;
@@ -1667,6 +1739,8 @@ mod tests {
 
     #[test]
     fn test_rsa_signing_string() {
+        let _ = pretty_env_logger::try_init();
+
         let (skey, _headers) = SignedSecretKey::from_armor_single(
             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
                 .unwrap(),
@@ -1674,28 +1748,34 @@ mod tests {
         .unwrap();
         let pkey = skey.public_key();
 
-        for _ in 0..100 {
-            let rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-            let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-            builder = builder.data_mode(DataMode::Utf8);
+        let inputs = [
+            &b"hello world\r\n"[..],
+            &b"hello world\n"[..],
+            &b"hello world\r"[..],
+        ];
 
-            builder = builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
+        for input in inputs {
+            let builder = MessageBuilder::from_bytes("hello.txt", input)
+                .data_mode(DataMode::Utf8)
+                .sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
             let armored = builder
-                .to_armored_string(rng, ArmorOptions::default())
+                .to_armored_string(&mut rng, ArmorOptions::default())
                 .expect("serialize");
 
             // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
             // signed_msg.verify(&*pkey).unwrap();
 
-            let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
-                .unwrap()
-                .0;
+            let (mut parsed, _headers) =
+                Message::from_armor(BufReader::new(armored.as_bytes())).unwrap();
+
             let mut sink = vec![];
             parsed.read_to_end(&mut sink).expect("read message");
-            parsed.verify(&*pkey).unwrap();
+            assert_eq!(sink, input);
+            parsed.verify(&*pkey).expect("signature verification");
         }
     }
 
@@ -1708,28 +1788,26 @@ mod tests {
         .unwrap();
         let pkey = skey.public_key();
 
-        for _ in 0..100 {
-            let rng = ChaCha8Rng::seed_from_u64(0);
+        let rng = ChaCha8Rng::seed_from_u64(0);
 
-            let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+        let builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes()).sign(
+            &*skey,
+            Password::from("test"),
+            HashAlgorithm::Sha256,
+        );
 
-            builder = builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
+        let armored = builder
+            .to_armored_string(rng, ArmorOptions::default())
+            .expect("serialize");
 
-            let armored = builder
-                .to_armored_string(rng, ArmorOptions::default())
-                .expect("serialize");
+        // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
-            // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
+        let (mut parsed, _headers) =
+            Message::from_armor(BufReader::new(armored.as_bytes())).unwrap();
 
-            // signed_msg.verify(&*pkey).unwrap();
-
-            let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
-                .unwrap()
-                .0;
-            let mut sink = vec![];
-            parsed.read_to_end(&mut sink).expect("read message");
-            parsed.verify(&*pkey).unwrap();
-        }
+        let mut sink = vec![];
+        parsed.read_to_end(&mut sink).expect("read message");
+        parsed.verify(&*pkey).unwrap();
     }
 
     #[test]

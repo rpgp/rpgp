@@ -8,7 +8,7 @@ use crate::packet::{
     OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType,
 };
 use crate::util::{fill_buffer, NormalizingHasher};
-use crate::{DebugBufRead, Message, RingResult, TheRing};
+use crate::{Message, MessageReader, RingResult, TheRing};
 
 use super::PacketBodyReader;
 
@@ -99,7 +99,7 @@ impl<'a> SignatureOnePassReader<'a> {
         }
     }
 
-    pub fn into_inner(self) -> PacketBodyReader<Box<dyn DebugBufRead + 'a>> {
+    pub fn into_inner(self) -> PacketBodyReader<MessageReader<'a>> {
         match self {
             Self::Init { source, .. } => source.into_inner(),
             Self::Body { source, .. } => source.into_inner(),
@@ -191,6 +191,7 @@ impl<'a> SignatureOnePassReader<'a> {
                         };
 
                         // calculate final hash
+                        debug!("calculating final hash");
                         let len =
                             signature
                                 .config

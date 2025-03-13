@@ -43,7 +43,7 @@ pub enum Error {
         source: elliptic_curve::Error,
         backtrace: Option<Backtrace>,
     },
-    #[snafu(display("IO error"), context(false))]
+    #[snafu(display("IO error: {}", source), context(false))]
     IO {
         source: std::io::Error,
         backtrace: Option<Backtrace>,

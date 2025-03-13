@@ -4,7 +4,7 @@ use std::path::Path;
 use super::reader::{
     CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
 };
-use super::DebugBufRead;
+use super::{DebugBufRead, MessageReader};
 use crate::armor::BlockType;
 use crate::composed::message::Message;
 use crate::composed::shared::is_binary;
@@ -14,10 +14,10 @@ use crate::types::{PkeskVersion, SkeskVersion, Tag};
 use crate::{Edata, Esk};
 
 /// Parses a single message level
-pub(super) fn next<'a>(
-    mut packets: crate::packet::PacketParser<Box<dyn DebugBufRead + 'a>>,
+pub(super) fn next(
+    mut packets: crate::packet::PacketParser<MessageReader<'_>>,
     is_nested: bool,
-) -> Result<Option<Message<'a>>> {
+) -> Result<Option<Message<'_>>> {
     loop {
         let Some(packet) = packets.next_owned() else {
             return Ok(None);
@@ -179,9 +179,7 @@ fn esk_filter(esk: Vec<Esk>, pkesk_allowed: PkeskVersion, skesk_allowed: SkeskVe
 impl<'a> Message<'a> {
     /// Parse a composed message.
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-openpgp-messages>
-    fn from_packets(
-        packets: crate::packet::PacketParser<Box<dyn DebugBufRead + 'a>>,
-    ) -> Result<Self> {
+    fn from_packets(packets: crate::packet::PacketParser<MessageReader<'a>>) -> Result<Self> {
         match next(packets, false)? {
             Some(message) => Ok(message),
             None => {
@@ -192,15 +190,13 @@ impl<'a> Message<'a> {
 
     /// Parses a message from the given bytes.
     pub fn from_bytes<R: BufRead + std::fmt::Debug + 'a>(source: R) -> Result<Self> {
-        let parser = crate::packet::PacketParser::new(Box::new(source) as Box<dyn DebugBufRead>);
+        let source = MessageReader::Reader(Box::new(source) as Box<dyn DebugBufRead>);
+        let parser = crate::packet::PacketParser::new(source);
         Self::from_packets(parser)
     }
 
-    pub(crate) fn internal_from_bytes<R: BufRead + std::fmt::Debug + 'a>(
-        source: R,
-        is_nested: bool,
-    ) -> Result<Self> {
-        let packets = crate::packet::PacketParser::new(Box::new(source) as Box<dyn DebugBufRead>);
+    pub(crate) fn internal_from_bytes(source: MessageReader<'a>, is_nested: bool) -> Result<Self> {
+        let packets = crate::packet::PacketParser::new(source);
         match next(packets, is_nested)? {
             Some(message) => Ok(message),
             None => {
