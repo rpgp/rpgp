@@ -1187,12 +1187,15 @@ impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
 mod tests {
 
     use std::fs;
+    use std::io::BufReader;
 
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::crypto::aead::{AeadAlgorithm, ChunkSize};
+    use crate::crypto::hash::HashAlgorithm;
+    use crate::packet::DataMode;
     use crate::types::{CompressionAlgorithm, StringToKey};
     use crate::{Deserializable, MessageBuilder};
 
@@ -1573,162 +1576,194 @@ mod tests {
         assert!(decrypted_err.contains("plaintext"), "{}", decrypted_err);
     }
 
-    //     #[test]
-    //     fn test_x25519_signing_string() {
-    //         let _ = pretty_env_logger::try_init();
+    #[test]
+    fn test_x25519_signing_string() {
+        let _ = pretty_env_logger::try_init();
 
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-    //         )
-    //         .unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
 
-    //         let pkey = skey.public_key();
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let pkey = skey.public_key();
+        let rng = ChaCha8Rng::seed_from_u64(0);
 
-    //         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
-    //         assert!(lit_msg.verify(&*pkey).is_err()); // Unsigned message shouldn't verify
+        let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+        builder = builder.data_mode(DataMode::Utf8);
 
-    //         let signed_msg = lit_msg
-    //             .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
-    //             .unwrap();
+        // assert!(lit_msg.verify(&*pkey).is_err()); // Unsigned message shouldn't verify
 
-    //         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
+        builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-    //         signed_msg.verify(&*pkey).unwrap();
+        let armored = builder
+            .to_armored_string(rng, ArmorOptions::default())
+            .expect("serialize");
+        // fs::write("./message-string-signed-x25519.asc", &armored).unwrap();
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-    //         parsed.verify(&*pkey).unwrap();
-    //     }
+        let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            .unwrap()
+            .0;
+        let mut sink = vec![];
+        parsed.read_to_end(&mut sink).expect("read message");
+        parsed.verify(&*pkey).unwrap();
+    }
 
-    //     #[test]
-    //     fn test_x25519_signing_bytes() {
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-    //         )
-    //         .unwrap();
+    #[test]
+    fn test_x25519_signing_bytes() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
 
-    //         let pkey = skey.public_key();
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let pkey = skey.public_key();
+        let rng = ChaCha8Rng::seed_from_u64(0);
 
-    //         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
-    //         let signed_msg = lit_msg
-    //             .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
-    //             .unwrap();
+        let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+        builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-    //         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
+        let armored = builder
+            .to_armored_string(rng, ArmorOptions::default())
+            .expect("serialize");
+        // fs::write("./message-bytes-signed-x25519.asc", &armored).unwrap();
 
-    //         signed_msg.verify(&*pkey).unwrap();
+        let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            .unwrap()
+            .0;
+        let mut sink = vec![];
+        parsed.read_to_end(&mut sink).expect("read message");
+        parsed.verify(&*pkey).unwrap();
+    }
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-    //         parsed.verify(&*pkey).unwrap();
-    //     }
+    #[test]
+    fn test_x25519_signing_bytes_compressed() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
 
-    //     #[test]
-    //     fn test_x25519_signing_bytes_compressed() {
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-    //         )
-    //         .unwrap();
+        let pkey = skey.public_key();
+        let rng = ChaCha8Rng::seed_from_u64(0);
 
-    //         let pkey = skey.public_key();
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+        builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+        builder = builder.compression(CompressionAlgorithm::ZLIB);
 
-    //         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
-    //         let signed_msg = lit_msg
-    //             .sign(&mut rng, &*skey, &"".into(), HashAlgorithm::Sha256)
-    //             .unwrap();
-    //         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        let armored = builder
+            .to_armored_string(rng, ArmorOptions::default())
+            .expect("serialize");
+        // fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
 
-    //         let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-bytes-compressed-signed-x25519.asc", &armored).unwrap();
+        // signed_msg.verify(&*pkey).unwrap();
 
-    //         signed_msg.verify(&*pkey).unwrap();
+        let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            .unwrap()
+            .0;
+        let mut decompressed = parsed.decompress().expect("decompress");
+        let mut sink = vec![];
+        decompressed.read_to_end(&mut sink).expect("read message");
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-    //         parsed.verify(&*pkey).unwrap();
-    //     }
+        decompressed.verify(&*pkey).unwrap();
+    }
 
-    //     #[test]
-    //     fn test_rsa_signing_string() {
-    //         for _ in 0..100 {
-    //             let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //                 fs::File::open(
-    //                     "./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc",
-    //                 )
-    //                 .unwrap(),
-    //             )
-    //             .unwrap();
+    #[test]
+    fn test_rsa_signing_string() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+        let pkey = skey.public_key();
 
-    //             let pkey = skey.public_key();
-    //             let mut rng = ChaCha8Rng::seed_from_u64(0);
+        for _ in 0..100 {
+            let rng = ChaCha8Rng::seed_from_u64(0);
 
-    //             let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
-    //             let signed_msg = lit_msg
-    //                 .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
-    //                 .unwrap();
+            let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+            builder = builder.data_mode(DataMode::Utf8);
 
-    //             let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
-    //             // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
+            builder = builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
-    //             signed_msg.verify(&*pkey).unwrap();
+            let armored = builder
+                .to_armored_string(rng, ArmorOptions::default())
+                .expect("serialize");
 
-    //             let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-    //             parsed.verify(&*pkey).unwrap();
-    //         }
-    //     }
+            // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
-    //     #[test]
-    //     fn test_rsa_signing_bytes() {
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-    //                 .unwrap(),
-    //         )
-    //         .unwrap();
+            // signed_msg.verify(&*pkey).unwrap();
 
-    //         let pkey = skey.public_key();
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+            let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+                .unwrap()
+                .0;
+            let mut sink = vec![];
+            parsed.read_to_end(&mut sink).expect("read message");
+            parsed.verify(&*pkey).unwrap();
+        }
+    }
 
-    //         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
-    //         let signed_msg = lit_msg
-    //             .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
-    //             .unwrap();
+    #[test]
+    fn test_rsa_signing_bytes() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+        let pkey = skey.public_key();
 
-    //         let armored = signed_msg.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-bytes-signed-rsa.asc", &armored).unwrap();
+        for _ in 0..100 {
+            let rng = ChaCha8Rng::seed_from_u64(0);
 
-    //         signed_msg.verify(&*pkey).unwrap();
+            let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-    //         parsed.verify(&*pkey).unwrap();
-    //     }
+            builder = builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
-    //     #[test]
-    //     fn test_rsa_signing_bytes_compressed() {
-    //         let _ = pretty_env_logger::try_init();
+            let armored = builder
+                .to_armored_string(rng, ArmorOptions::default())
+                .expect("serialize");
 
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-    //                 .unwrap(),
-    //         )
-    //         .unwrap();
+            // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
 
-    //         let pkey = skey.public_key();
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+            // signed_msg.verify(&*pkey).unwrap();
 
-    //         let lit_msg = Message::new_literal_bytes("hello.txt", &b"hello world\n"[..]).unwrap();
-    //         let signed_msg = lit_msg
-    //             .sign(&mut rng, &*skey, &"test".into(), HashAlgorithm::Sha256)
-    //             .unwrap();
+            let mut parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+                .unwrap()
+                .0;
+            let mut sink = vec![];
+            parsed.read_to_end(&mut sink).expect("read message");
+            parsed.verify(&*pkey).unwrap();
+        }
+    }
 
-    //         let compressed_msg = signed_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
-    //         let armored = compressed_msg.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-bytes-compressed-signed-rsa.asc", &armored).unwrap();
+    #[test]
+    fn test_rsa_signing_bytes_compressed() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
+        let pkey = skey.public_key();
 
-    //         signed_msg.verify(&*pkey).unwrap();
+        for _ in 0..100 {
+            let rng = ChaCha8Rng::seed_from_u64(0);
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
-    //         parsed.verify(&*pkey).unwrap();
-    //     }
+            let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+            builder = builder.compression(CompressionAlgorithm::ZLIB);
+
+            builder = builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
+
+            let armored = builder
+                .to_armored_string(rng, ArmorOptions::default())
+                .expect("serialize");
+
+            // fs::write("./message-string-signed-rsa.asc", &armored).unwrap();
+
+            // signed_msg.verify(&*pkey).unwrap();
+
+            let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+                .unwrap()
+                .0;
+            let mut decompressed = parsed.decompress().expect("decompress");
+            let mut sink = vec![];
+            decompressed.read_to_end(&mut sink).expect("read message");
+            decompressed.verify(&*pkey).unwrap();
+        }
+    }
 }

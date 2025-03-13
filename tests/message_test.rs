@@ -556,7 +556,9 @@ bhF30A+IitsxxA==
 fn test_invalid_partial_messages() {
     pretty_env_logger::try_init().ok();
 
-    let (ssk, _headers) = SignedSecretKey::from_armor_file("./tests/partial_key.asc").expect("ssk");
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
 
     // 512 bytes, f256 p128 f128
     let (message, _) =
@@ -589,13 +591,31 @@ fn test_invalid_partial_messages() {
         "found error: {}",
         err
     );
+
+    // 512 bytes, p512 f1
+    let (message, _) =
+        Message::from_armor_file("./tests/partial_invalid_short_last.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
 }
 
 #[test]
 fn test_invalid_multi_message() {
     pretty_env_logger::try_init().ok();
 
-    let (ssk, _headers) = SignedSecretKey::from_armor_file("./tests/partial_key.asc").expect("ssk");
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
 
     // compressed, followed by literal
     let (message, _) = Message::from_armor_file("./tests/multi_message_1.asc").expect("ok");
@@ -613,4 +633,159 @@ fn test_invalid_multi_message() {
         "found error: {}",
         err_string
     );
+}
+
+#[test]
+fn test_two_messages() {
+    // "Two messages, concatenated" from the OpenPGP interoperability test suite
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) = Message::from_armor_file("./tests/two_messages.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
+
+#[test]
+fn test_two_literals_first_compressed() {
+    // "Two literals, 1st compressed 1 times" from the OpenPGP interoperability test suite
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) =
+        Message::from_armor_file("./tests/two_literals_first_compressed.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
+
+#[test]
+fn test_two_literals_first_compressed_explicit_decompression() {
+    // "Two literals, 1st compressed 1 times" from the OpenPGP interoperability test suite,
+    // Explicitly decompressing the compressed packet.
+
+    // FIXME: this test should probably error somewhere?
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) =
+        Message::from_armor_file("./tests/two_literals_first_compressed.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    if msg.is_compressed() {
+        msg = msg.decompress().unwrap();
+    }
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
+
+#[test]
+fn test_literal_eating_mdc() {
+    // "Literal eating MDC" from the OpenPGP interoperability test suite
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) = Message::from_armor_file("./tests/literal_eating_mdc.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
+
+#[test]
+fn test_message_weird_signatures() {
+    // tests that check graceful handling of weird signatures
+    // from "Messages with unknown packets" in OpenPGP interoperability test suite
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    // "PKESK3 SEIPDv1 [OPS3[H99] Literal Sig4[H99]]" from the OpenPGP interoperability test suite
+    let (message, _) = Message::from_armor_file("./tests/message_other_hash.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+
+    // "PKESK3 SEIPDv1 [OPS3[P99] Literal Sig4[P99]]" from the OpenPGP interoperability test suite
+    let (message, _) = Message::from_armor_file("./tests/message_other_pub_algo.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+
+    // "PKESK3 SEIP [OPS23 OPS3 Literal Sig4 Sig23]" from the OpenPGP interoperability test suite
+    let (message, _) =
+        Message::from_armor_file("./tests/message_future_signature.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
 }
