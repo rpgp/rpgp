@@ -8,3 +8,4 @@ cc b70d335b683f089f471cca651ba90a12f4004c2713fc1b5be6b34427a0649b58 # shrinks to
 cc 3a482e046fbd327b714f42d0457a1e6ae00f3ba0b0bdbd3cc85a91f1fe5773e3 # shrinks to header = Old { header: OldPacketHeader { _padding: 0, _version: 0, tag: 0, length_type: 0 }, length: Indeterminate }
 cc 80143b71d162ca5416c670ced1feaa78ee2868d28b0f7158428c403facb2cb59 # shrinks to version = Old, tag = UserAttribute, len = 1
 cc 967f451f21a66089eb813d8889a8e829d83ab0430f8154d137967e85f986d880 # shrinks to version = New, tag = UserAttribute, len = 1
+cc 6111f34ddc1266adb2631ba36838e0e78ddd53e33a384f0536ec4d510827221a # shrinks to version = Old, tag = PublicKeyEncryptedSessionKey, len = 1

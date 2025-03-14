@@ -1,6 +1,4 @@
-use std::io;
-
-use bytes::Buf;
+use std::io::{self, BufRead};
 
 use crate::errors::Result;
 use crate::ser::Serialize;
@@ -21,13 +19,13 @@ impl ElgamalPublicParams {
         self.encrypt_only
     }
 
-    pub fn try_from_buf<B: Buf>(mut i: B, encrypt_only: bool) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B, encrypt_only: bool) -> Result<Self> {
         // MPI of Elgamal prime p
-        let p = MpiBytes::from_buf(&mut i)?;
+        let p = MpiBytes::try_from_reader(&mut i)?;
         // MPI of Elgamal group generator g
-        let g = MpiBytes::from_buf(&mut i)?;
+        let g = MpiBytes::try_from_reader(&mut i)?;
         // MPI of Elgamal public key value y (= g**x mod p where x is secret)
-        let y = MpiBytes::from_buf(&mut i)?;
+        let y = MpiBytes::try_from_reader(&mut i)?;
 
         let params = ElgamalPublicParams {
             p,
@@ -77,7 +75,7 @@ mod tests {
         fn params_roundtrip(params: ElgamalPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = ElgamalPublicParams::try_from_buf(&mut &buf[..], false)?;
+            let new_params = ElgamalPublicParams::try_from_reader(&mut &buf[..], false)?;
             prop_assert_eq!(params, new_params);
         }
     }

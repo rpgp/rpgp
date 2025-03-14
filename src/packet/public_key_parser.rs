@@ -1,12 +1,13 @@
-use bytes::Buf;
+use std::io::BufRead;
+
 use chrono::{DateTime, TimeZone, Utc};
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::types::{KeyVersion, PublicParams};
 
-fn public_key_parser_v4_v6<B: Buf>(
+fn public_key_parser_v4_v6<B: BufRead>(
     key_ver: &KeyVersion,
     mut i: B,
 ) -> Result<(
@@ -31,32 +32,16 @@ fn public_key_parser_v4_v6<B: Buf>(
         None
     };
 
-    // If we got a pub_len, we expect to consume this amount of data, and have `expected_rest`
-    // left after `parse_pub_fields`
-    let expected_rest = match pub_len {
-        Some(len) => {
-            ensure!(i.remaining() >= len, "missing input");
-            Some(i.remaining() - len)
-        }
-        None => None,
+    let params = if let Some(pub_len) = pub_len {
+        PublicParams::try_from_reader(alg, Some(pub_len), i.read_take(pub_len))?
+    } else {
+        PublicParams::try_from_reader(alg, None, &mut i)?
     };
-
-    let params = PublicParams::try_from_buf(alg, pub_len, &mut i)?;
-
-    // consistency check for pub_len, if available
-    if let Some(expected_rest) = expected_rest {
-        ensure_eq!(
-            expected_rest,
-            i.remaining(),
-            "Inconsistent pub_len in secret key packet {:?}",
-            pub_len
-        );
-    }
 
     Ok((*key_ver, alg, created_at, None, params))
 }
 
-fn public_key_parser_v2_v3<B: Buf>(
+fn public_key_parser_v2_v3<B: BufRead>(
     key_ver: &KeyVersion,
     mut i: B,
 ) -> Result<(
@@ -72,7 +57,7 @@ fn public_key_parser_v2_v3<B: Buf>(
         .ok_or_else(|| format_err!("invalid created at timestamp"))?;
     let exp = i.read_be_u16()?;
     let alg = i.read_u8().map(PublicKeyAlgorithm::from)?;
-    let params = PublicParams::try_from_buf(alg, None, &mut i)?;
+    let params = PublicParams::try_from_reader(alg, None, &mut i)?;
 
     Ok((*key_ver, alg, created_at, Some(exp), params))
 }
@@ -80,7 +65,7 @@ fn public_key_parser_v2_v3<B: Buf>(
 /// Parse a public key packet (Tag 6)
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-public-key-packet-type-id-6
 #[allow(clippy::type_complexity)]
-pub(crate) fn parse<B: Buf>(
+pub(crate) fn parse<B: BufRead>(
     mut i: B,
 ) -> Result<(
     KeyVersion,

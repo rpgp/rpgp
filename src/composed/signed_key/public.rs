@@ -52,7 +52,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedPublicKeyPar
     type Item = Result<SignedPublicKey>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match super::key_parser::next::<I, packet::PublicKey>(
+        match super::key_parser::next::<_, packet::PublicKey>(
             &mut self.inner,
             Tag::PublicKey,
             false,

@@ -1,6 +1,7 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
+use bytes::Bytes;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
@@ -9,10 +10,10 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
+    EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
     PublicParams, Tag,
 };
 
@@ -26,7 +27,7 @@ use crate::types::{
 ///   Protected Data Packets](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-1-symmetrically-enc).
 /// - V6 PKESK are used in combination with [version 2 Symmetrically Encrypted and Integrity
 ///   Protected Data Packets](https://www.rfc-editor.org/rfc/rfc9580.html#name-version-2-symmetrically-enc).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(derive_more::Debug, Clone, PartialEq, Eq)]
 pub enum PublicKeyEncryptedSessionKey {
     V3 {
         packet_header: PacketHeader,
@@ -44,13 +45,16 @@ pub enum PublicKeyEncryptedSessionKey {
 
     Other {
         packet_header: PacketHeader,
+        #[debug("{:X}", version)]
         version: u8,
+        #[debug("{}", hex::encode(data))]
+        data: Bytes,
     },
 }
 
 impl PublicKeyEncryptedSessionKey {
-    /// Parses a `PublicKeyEncryptedSessionKey` packet from the given buffer.
-    pub fn from_buf<B: bytes::Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+    /// Parses a `PublicKeyEncryptedSessionKey` packet.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         ensure_eq!(
             packet_header.tag(),
             Tag::PublicKeyEncryptedSessionKey,
@@ -69,7 +73,7 @@ impl PublicKeyEncryptedSessionKey {
                 let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
                 // key algorithm specific data
-                let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
+                let values = PkeskBytes::try_from_reader(&pk_algo, version, &mut i)?;
 
                 Ok(PublicKeyEncryptedSessionKey::V3 {
                     packet_header,
@@ -93,7 +97,7 @@ impl PublicKeyEncryptedSessionKey {
                         // The fingerprint of the public key or subkey to which the session key is encrypted.
                         // Note that the length N of the fingerprint for a version 4 key is 20 octets;
                         // for a version 6 key N is 32.
-                        let fp = i.read_take((len - 1).into())?;
+                        let fp = i.take_bytes((len - 1).into())?;
                         let fp = Fingerprint::new(v, &fp)?;
 
                         Some(fp)
@@ -104,7 +108,7 @@ impl PublicKeyEncryptedSessionKey {
                 let pk_algo = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
                 // A series of values comprising the encrypted session key. This is algorithm-specific.
-                let values = PkeskBytes::from_buf(&pk_algo, version, &mut i)?;
+                let values = PkeskBytes::try_from_reader(&pk_algo, version, &mut i)?;
 
                 Ok(PublicKeyEncryptedSessionKey::V6 {
                     packet_header,
@@ -113,10 +117,14 @@ impl PublicKeyEncryptedSessionKey {
                     values,
                 })
             }
-            _ => Ok(PublicKeyEncryptedSessionKey::Other {
-                packet_header,
-                version,
-            }),
+            _ => {
+                let data = i.rest()?.freeze();
+                Ok(PublicKeyEncryptedSessionKey::Other {
+                    packet_header,
+                    version,
+                    data,
+                })
+            }
         }
     }
 
@@ -209,7 +217,7 @@ impl PublicKeyEncryptedSessionKey {
     /// Check if a Key matches with this PKESK's target
     /// - for v3: is PKESK key id the wildcard, or does it match the key id of `pkey`?
     /// - for v6: is PKESK fingerprint the wildcard (represented as `None`), or does it match the fingerprint of `pkey`?
-    pub fn match_identity(&self, pkey: &impl PublicKeyTrait) -> bool {
+    pub fn match_identity(&self, pkey: &impl KeyDetails) -> bool {
         match self {
             Self::V3 { id, .. } => id.is_wildcard() || (id == &pkey.key_id()),
             Self::V6 { fingerprint, .. } => {
@@ -318,8 +326,9 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 }
                 *pk_algo
             }
-            PublicKeyEncryptedSessionKey::Other { version, .. } => {
+            PublicKeyEncryptedSessionKey::Other { version, data, .. } => {
                 writer.write_u8(*version)?;
+                writer.write_all(data)?;
                 return Ok(());
             }
         };
@@ -338,7 +347,7 @@ impl Serialize for PublicKeyEncryptedSessionKey {
                 values,
                 ..
             } => write_len_v6(values, fingerprint),
-            PublicKeyEncryptedSessionKey::Other { .. } => write_len_other(),
+            PublicKeyEncryptedSessionKey::Other { data, .. } => write_len_other(data.len()),
         }
     }
 }
@@ -353,8 +362,8 @@ impl PacketTrait for PublicKeyEncryptedSessionKey {
     }
 }
 
-fn write_len_other() -> usize {
-    1 + 1
+fn write_len_other(data_len: usize) -> usize {
+    1 + 1 + data_len
 }
 
 fn write_len_v3(id: &KeyId, values: &PkeskBytes) -> usize {
@@ -498,7 +507,7 @@ mod tests {
         ) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = PublicKeyEncryptedSessionKey::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
+            let new_packet = PublicKeyEncryptedSessionKey::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
     }

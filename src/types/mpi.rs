@@ -1,11 +1,11 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
 use num_bigint::BigUint;
 
-use crate::errors::{Error, Result};
-use crate::parsing::BufParsing;
+use crate::errors::{InvalidInputSnafu, Result};
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 /// Number of bits we accept when reading or writing MPIs.
@@ -35,19 +35,19 @@ impl MpiBytes {
         self.0.is_empty()
     }
 
-    /// Parses the given buffer as an MPI.
+    /// Parses the given reader as an MPI.
     ///
     /// The buffer is expected to be length-prefixed.
-    pub fn from_buf<B: bytes::Buf>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         let len_bits = i.read_be_u16()?;
 
         if len_bits > MAX_EXTERN_MPI_BITS {
-            return Err(Error::InvalidInput);
+            return Err(InvalidInputSnafu.build());
         }
 
         let len_bytes = (len_bits + 7) >> 3;
 
-        let n = i.read_take(usize::from(len_bytes))?;
+        let n = i.take_bytes(usize::from(len_bytes))?.freeze();
         let n_stripped = strip_leading_zeros(&n);
         let n_stripped = n.slice_ref(n_stripped);
 
@@ -141,13 +141,13 @@ mod tests {
     fn test_mpi() {
         // Decode the number `511` (`0x1FF` in hex).
         assert_eq!(
-            MpiBytes::from_buf(&mut &[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
+            MpiBytes::try_from_reader(&mut &[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
             MpiBytes::from_slice(&[0x01, 0xFF][..])
         );
 
         // Decode the number `2^255 + 7`.
         assert_eq!(
-            MpiBytes::from_buf(
+            MpiBytes::try_from_reader(
                 &mut &[
                     0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07
@@ -181,7 +181,7 @@ mod tests {
 
             assert_eq!(&n_encoded, &hex::decode(encoded).unwrap());
 
-            let n_big2 = MpiBytes::from_buf(&mut &n_encoded[..]).unwrap();
+            let n_big2 = MpiBytes::try_from_reader(&mut &n_encoded[..]).unwrap();
             assert_eq!(n_big, n_big2.into());
         }
     }
@@ -207,7 +207,7 @@ mod tests {
             let mut buf = Vec::new();
             m.to_writer(&mut buf)?;
 
-            let m_back = MpiBytes::from_buf(&mut &buf[..])?;
+            let m_back = MpiBytes::try_from_reader(&mut &buf[..])?;
             prop_assert_eq!(m, m_back);
         }
     }
