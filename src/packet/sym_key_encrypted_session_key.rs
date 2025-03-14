@@ -3,6 +3,8 @@ use std::io::{self, BufRead};
 use byteorder::WriteBytesExt;
 use bytes::{Bytes, BytesMut};
 use log::debug;
+#[cfg(test)]
+use proptest::prelude::*;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
@@ -14,9 +16,6 @@ use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{Password, SkeskVersion, StringToKey, Tag};
 use crate::PlainSessionKey;
-
-#[cfg(test)]
-use proptest::prelude::*;
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>
@@ -170,10 +169,23 @@ impl SymKeyEncryptedSessionKey {
                 sym_algorithm.decrypt_with_iv_regular(key, &iv, &mut decrypted_key)?;
 
                 let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
-                Ok(PlainSessionKey::V3_4 {
-                    key: decrypted_key[1..].to_vec(),
-                    sym_alg,
-                })
+                let key = decrypted_key[1..].to_vec();
+
+                // v4 SKESK decryption doesn't guarantee integrity.
+                // Check plausibility of decrypted data.
+                match sym_alg.key_size() {
+                    // we don't know the supposed symmetric algorithm
+                    0 => Err(format_err!("Unsupported symmetric algorithm {:?}", sym_alg)),
+
+                    // the key length of the symmetric algorithm doesn't match the key we found
+                    size if size != key.len() => Err(format_err!(
+                        "Inconsistent key length {} for symmetric algorithm {:?}",
+                        key.len(),
+                        sym_alg
+                    )),
+
+                    _ => Ok(PlainSessionKey::V3_4 { key, sym_alg }),
+                }
             }
             Self::V5 {
                 sym_algorithm,
@@ -609,7 +621,6 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-
     use crate::crypto::hash::HashAlgorithm;
 
     fn non_weak_hash_alg_gen() -> impl Strategy<Value = HashAlgorithm> {
