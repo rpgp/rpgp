@@ -139,97 +139,97 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_704,
-        1, // Hash::Other(4)
-        3294,
+        20_771,
+        2, // Hash::Other(4)
+        226,
         20_999
     ),
     (
         test_parse_dumps_1,
         1,
-        17_542,
+        20_746,
         // - Hash::Other(4)
         // - Elgamal verify
-        8,
-        3450,
+        10,
+        244,
         21_000
     ),
     (
         test_parse_dumps_2,
         2,
-        17_583,
+        20_752,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
-        5,
-        3411,
+        6,
+        241,
         20_999
     ),
     (
         test_parse_dumps_3,
         3,
-        17_651,
+        20_755,
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3341,
+        237,
         20_998
     ),
     (
         test_parse_dumps_4,
         4,
-        17_583,
+        20_738,
         // - Elgamal verify
-        2,
-        3414,
+        4,
+        257,
         20_999
     ),
     (
         test_parse_dumps_5,
         5,
-        17_609,
+        20_730,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3382,
+        261,
         20_999
     ),
     (
         test_parse_dumps_6,
         6,
-        17_676,
+        20_757,
         // - Elgamal verify
-        1,
-        3323,
+        2,
+        241,
         21_000
     ),
     (
         test_parse_dumps_7,
         7,
-        17_688,
+        20_742,
         // - Elgamal verify
-        3,
-        3309,
+        4,
+        254,
         21_000
     ),
     (
         test_parse_dumps_8,
         8,
-        17_693,
+        20_731,
         // - Hash::Other(5)
         // - Elgamal verify
-        6,
-        3301,
+        8,
+        261,
         21_000
     ),
     (
         test_parse_dumps_9,
         9,
-        17_546,
+        20_764,
         // - Hash::Other(5)
         // - Elgamal verify
-        3,
-        3451,
+        5,
+        231,
         21_000
     ),
 );
