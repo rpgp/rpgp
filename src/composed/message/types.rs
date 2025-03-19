@@ -1347,7 +1347,7 @@ mod tests {
     //         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
     //         // fs::write("./message-rsa.asc", &armored).unwrap();
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+    //         let parsed = Message::from_armor(&armored[..]).unwrap().0;
 
     //         let decrypted = parsed.decrypt(&["test".into()], &[&skey]).unwrap().0;
 
@@ -1394,7 +1394,7 @@ mod tests {
     //         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
     //         // fs::write("./message-rsa.asc", &armored).unwrap();
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+    //         let parsed = Message::from_armor(&armored[..]).unwrap().0;
 
     //         let decrypted = parsed.decrypt(&["test".into()], &[&skey]).unwrap().0;
 
@@ -1422,7 +1422,7 @@ mod tests {
     //             let armored = encrypted.to_armored_bytes(None.into()).unwrap();
     //             // fs::write("./message-x25519.asc", &armored).unwrap();
 
-    //             let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+    //             let parsed = Message::from_armor(&armored[..]).unwrap().0;
 
     //             let decrypted = parsed.decrypt(&["".into()], &[&skey]).unwrap().0;
 
@@ -1531,7 +1531,7 @@ mod tests {
     //         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
     //         // fs::write("./message-password.asc", &armored).unwrap();
 
-    //         let parsed = Message::from_armor_single(&armored[..]).unwrap().0;
+    //         let parsed = Message::from_armor(&armored[..]).unwrap().0;
     //         let decrypted = parsed.decrypt_with_password(&"secret".into()).unwrap();
     //         assert_eq!(compressed_msg, decrypted);
     //     }

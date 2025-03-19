@@ -21,7 +21,7 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| black_box(Message::from_armor_single(&bytes[..]).unwrap()));
+        b.iter(|| black_box(Message::from_armor(&bytes[..]).unwrap()));
     });
 
     g.bench_function("parse_armored_x25519", |b| {
@@ -30,7 +30,7 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| black_box(Message::from_armor_single(&bytes[..]).unwrap()));
+        b.iter(|| black_box(Message::from_armor(&bytes[..]).unwrap()));
     });
 
     g.bench_function("rsa_decrypt", |b| {
@@ -43,13 +43,9 @@ fn bench_message(c: &mut Criterion) {
         let message_file = fs::read(message_file_path).unwrap();
 
         b.iter(|| {
-            let (message, _headers) = Message::from_armor_single(&message_file[..]).unwrap();
+            let (message, _headers) = Message::from_armor(&message_file[..]).unwrap();
 
-            black_box(
-                message
-                    .decrypt(&["test".into()], &[&decrypt_key][..])
-                    .unwrap(),
-            );
+            black_box(message.decrypt(&"test".into(), &decrypt_key).unwrap());
         });
     });
 

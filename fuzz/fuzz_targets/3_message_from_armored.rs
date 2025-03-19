@@ -11,7 +11,7 @@ fuzz_target!(|data: &[u8]| {
 
     // FUZZER RESULT this can panic on some inputs
     // finding RPG-7 in ROS report 2024, fixed with 0.14.1
-    let message_res = Message::from_armor_single(data);
+    let message_res = Message::from_armor(data);
 
     match message_res {
         Err(_) => return,
