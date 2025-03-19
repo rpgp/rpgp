@@ -964,7 +964,7 @@ impl Read for Message<'_> {
 
 impl BufRead for Message<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        // sad workaround because of comipler lifetime limits
+        // sad workaround because of compiler lifetime limits
         if !self.has_buffer_available()? {
             self.check_trailing_data()?;
             return Ok(&[][..]);
