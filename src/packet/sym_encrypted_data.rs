@@ -1,9 +1,13 @@
-use std::io;
+use std::io::{self, BufRead};
+
+use bytes::Bytes;
 
 use crate::errors::Result;
 use crate::packet::PacketTrait;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
-use crate::types::{Tag, Version};
+
+use super::PacketHeader;
 
 /// Symmetrically Encrypted Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-dat>
@@ -14,17 +18,18 @@ use crate::types::{Tag, Version};
 /// that a non-integrity-protected packet has been processed."
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct SymEncryptedData {
-    packet_version: Version,
+    packet_header: PacketHeader,
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    data: Bytes,
 }
 
 impl SymEncryptedData {
-    /// Parses a `SymEncryptedData` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    /// Parses a `SymEncryptedData` packet from the given buffer.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+        let data = input.rest()?;
         Ok(SymEncryptedData {
-            packet_version,
-            data: input.to_vec(),
+            packet_header,
+            data: data.freeze(),
         })
     }
 
@@ -38,14 +43,14 @@ impl Serialize for SymEncryptedData {
         writer.write_all(&self.data)?;
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        self.data.len()
+    }
 }
 
 impl PacketTrait for SymEncryptedData {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::SymEncryptedData
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }

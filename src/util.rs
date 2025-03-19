@@ -1,140 +1,26 @@
 //! # Utilities
 
-use std::ops::{Range, RangeFrom, RangeTo};
 use std::{hash, io};
 
-use byteorder::{BigEndian, WriteBytesExt};
-use nom::bytes::streaming::take_while1;
-use nom::character::is_alphanumeric;
-use nom::character::streaming::line_ending;
-use nom::combinator::map;
-use nom::multi::many0;
-use nom::number::streaming::{be_u32, be_u8};
-use nom::sequence::preceded;
-use nom::{error_position, Err, InputIter, InputLength, Slice};
+use digest::DynDigest;
+use nom::InputIter;
 
-use crate::errors::{self, IResult};
+pub(crate) fn fill_buffer<R: std::io::Read>(
+    mut source: R,
+    buffer: &mut [u8],
+    chunk_size: Option<usize>,
+) -> std::io::Result<usize> {
+    let mut offset = 0;
+    let chunk_size = chunk_size.unwrap_or(buffer.len());
+    loop {
+        let read = source.read(&mut buffer[offset..chunk_size])?;
+        offset += read;
 
-#[inline]
-pub fn u8_as_usize(a: u8) -> usize {
-    a as usize
-}
-
-#[inline]
-pub fn u16_as_usize(a: u16) -> usize {
-    a as usize
-}
-
-#[inline]
-pub fn u32_as_usize(a: u32) -> usize {
-    a as usize
-}
-
-#[inline]
-pub fn is_base64_token(c: u8) -> bool {
-    is_alphanumeric(c) || c == b'/' || c == b'+' || c == b'=' || c == b'\n' || c == b'\r'
-}
-
-pub fn prefixed(input: &[u8]) -> IResult<&[u8], &[u8]> {
-    preceded(many0(line_ending), take_while1(is_base64_token))(input)
-}
-
-/// Recognizes one or more body tokens
-pub fn base64_token(input: &[u8]) -> nom::IResult<&[u8], &[u8]> {
-    let input_length = input.input_len();
-    if input_length == 0 {
-        return Err(Err::Incomplete(nom::Needed::Unknown));
-    }
-
-    for (idx, item) in input.iter_indices() {
-        if !is_base64_token(item) {
-            if idx == 0 {
-                return Err(Err::Error(error_position!(
-                    input,
-                    nom::error::ErrorKind::AlphaNumeric
-                )));
-            } else {
-                return Ok((input.slice(idx..), input.slice(0..idx)));
-            }
+        if read == 0 || offset == chunk_size {
+            break;
         }
     }
-    Ok((input.slice(input_length..), input))
-}
-
-/// Returns the bit length of a given slice.
-#[inline]
-pub fn bit_size(val: &[u8]) -> usize {
-    if val.is_empty() {
-        0
-    } else {
-        (val.len() * 8) - val[0].leading_zeros() as usize
-    }
-}
-
-#[inline]
-pub fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
-    bytes
-        .iter()
-        .position(|b| b != &0)
-        .map_or(&[], |offset| &bytes[offset..])
-}
-
-#[inline]
-pub fn strip_leading_zeros_vec(bytes: &mut Vec<u8>) {
-    if let Some(offset) = bytes.iter_mut().position(|b| b != &0) {
-        bytes.drain(..offset);
-    }
-}
-
-/// Convert a slice into an array.
-pub fn clone_into_array<A, T>(slice: &[T]) -> A
-where
-    A: Sized + Default + AsMut<[T]>,
-    T: Clone,
-{
-    let mut a = Default::default();
-    <A as AsMut<[T]>>::as_mut(&mut a).clone_from_slice(slice);
-    a
-}
-
-// Parse a packet length.
-pub(crate) fn packet_length(i: &[u8]) -> IResult<&[u8], usize> {
-    let (i, olen) = be_u8(i)?;
-    match olen {
-        // One-Octet Lengths
-        0..=191 => Ok((i, olen as usize)),
-        // Two-Octet Lengths
-        192..=254 => map(be_u8, |a| ((olen as usize - 192) << 8) + 192 + a as usize)(i),
-        // Five-Octet Lengths
-        255 => map(be_u32, u32_as_usize)(i),
-    }
-}
-
-/// Write packet length, including the prefix for lengths larger or equal than 8384.
-pub fn write_packet_length(len: usize, writer: &mut impl io::Write) -> errors::Result<()> {
-    if len < 192 {
-        writer.write_u8(len.try_into()?)?;
-    } else if len < 8384 {
-        writer.write_u8((((len - 192) / 256) + 192) as u8)?;
-        writer.write_u8(((len - 192) % 256) as u8)?;
-    } else {
-        writer.write_u8(0xFF)?;
-        writer.write_u32::<BigEndian>(len as u32)?;
-    }
-
-    Ok(())
-}
-
-/// Return the length of the remaining input.
-// Adapted from https://github.com/Geal/nom/pull/684
-#[inline]
-pub fn rest_len<T>(input: T) -> IResult<T, usize>
-where
-    T: Slice<Range<usize>> + Slice<RangeFrom<usize>> + Slice<RangeTo<usize>>,
-    T: InputLength,
-{
-    let len = input.input_len();
-    Ok((input, len))
+    Ok(offset)
 }
 
 #[macro_export]
@@ -176,10 +62,22 @@ impl<'a, A, B> TeeWriter<'a, A, B> {
 
 impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.a.write(buf);
-        write_all(&mut self.b, buf)?;
+        let written = self.b.write(buf)?;
+        self.a.write(&buf[..written]);
 
-        Ok(buf.len())
+        Ok(written)
+    }
+
+    fn write_all(&mut self, mut buf: &[u8]) -> io::Result<()> {
+        while !buf.is_empty() {
+            match self.write(buf) {
+                Ok(0) => {}
+                Ok(n) => buf = &buf[n..],
+                Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -189,51 +87,150 @@ impl<A: hash::Hasher, B: io::Write> io::Write for TeeWriter<'_, A, B> {
     }
 }
 
-/// The same as the std lib, but doesn't choke on write 0. This is a hack, to be compatible with
-/// rust-base64.
-pub fn write_all(writer: &mut impl io::Write, mut buf: &[u8]) -> io::Result<()> {
-    while !buf.is_empty() {
-        match writer.write(buf) {
-            Ok(0) => {}
-            Ok(n) => buf = &buf[n..],
-            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
+#[cfg(test)]
+pub(crate) mod test {
+    use bytes::{Buf, Bytes};
+    use rand::Rng;
+
+    const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\
+                            abcdefghijklmnopqrstuvwxyz\
+                            0123456789)(*&^%$#@!~\r\n .,-!?\t";
+
+    pub(crate) fn random_string(rng: &mut impl Rng, size: usize) -> String {
+        (0..size)
+            .map(|_| {
+                let idx = rng.gen_range(0..CHARSET.len());
+                CHARSET[idx] as char
+            })
+            .collect()
+    }
+
+    #[derive(Debug)]
+    pub(crate) struct ChaosReader<R: Rng> {
+        rng: R,
+        source: Bytes,
+    }
+
+    impl<R: Rng> ChaosReader<R> {
+        pub(crate) fn new(rng: R, source: impl Into<Bytes>) -> Self {
+            Self {
+                rng,
+                source: source.into(),
+            }
         }
     }
-    Ok(())
+
+    impl<R: Rng> std::io::Read for ChaosReader<R> {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if !self.source.has_remaining() {
+                return Ok(0);
+            }
+            let max = buf.len().min(self.source.remaining());
+            let to_write: usize = self.rng.gen_range(1..=max);
+
+            self.source.copy_to_slice(&mut buf[..to_write]);
+            Ok(to_write)
+        }
+    }
+
+    pub(crate) fn check_strings(a: impl AsRef<str>, b: impl AsRef<str>) {
+        assert_eq!(
+            escape_string::escape(a.as_ref()),
+            escape_string::escape(b.as_ref())
+        );
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    #![allow(clippy::unwrap_used)]
+#[derive(derive_more::Debug)]
+pub struct NormalizingHasher {
+    #[debug("hasher")]
+    hasher: Box<dyn DynDigest>,
+    text_mode: bool,
+    last_was_cr: bool,
+}
 
-    use super::*;
-
-    #[test]
-    fn test_write_packet_len() {
-        let mut res = Vec::new();
-        write_packet_length(1173, &mut res).unwrap();
-        assert_eq!(hex::encode(res), "c3d5");
+impl NormalizingHasher {
+    pub(crate) fn new(hasher: Box<dyn DynDigest>, text_mode: bool) -> Self {
+        Self {
+            hasher,
+            text_mode,
+            last_was_cr: false,
+        }
     }
 
-    #[test]
-    fn test_write_packet_length() {
-        let mut res = Vec::new();
-        write_packet_length(12870, &mut res).unwrap();
-        assert_eq!(hex::encode(res), "ff00003246");
+    pub(crate) fn done(mut self) -> Box<dyn DynDigest> {
+        if self.text_mode && self.last_was_cr {
+            self.hasher.update(b"\n")
+        }
+
+        self.hasher
     }
 
-    #[test]
-    fn test_strip_leading_zeros_with_all_zeros() {
-        let buf = [0, 0, 0];
-        let stripped = strip_leading_zeros(&buf);
-        assert_eq!(stripped, &[]);
-    }
+    pub(crate) fn hash_buf(&mut self, buffer: &[u8]) {
+        if buffer.is_empty() {
+            return;
+        }
 
-    #[test]
-    fn test_strip_leading_zeros_vec() {
-        let mut vec = vec![0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-        strip_leading_zeros_vec(&mut vec);
-        assert_eq!(vec, vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        if !self.text_mode {
+            self.hasher.update(buffer);
+        } else {
+            let mut buf = buffer;
+
+            if self.last_was_cr {
+                self.hasher.update(b"\n");
+
+                if buf[0] == b'\n' {
+                    buf = &buf[1..];
+                }
+
+                self.last_was_cr = false;
+            }
+
+            while !buf.is_empty() {
+                match buf.position(|c| c == b'\r' || c == b'\n') {
+                    None => {
+                        // no line endings in sight, just hash the data
+                        self.hasher.update(buf);
+                        buf = &[]
+                    }
+
+                    Some(pos) => {
+                        // consume all bytes before line-break-related position
+
+                        self.hasher.update(&buf[..pos]);
+                        buf = &buf[pos..];
+
+                        // handle this line-break related context
+                        let only_one = buf.len() == 1;
+                        match (buf[0], only_one) {
+                            (b'\n', _) => {
+                                self.hasher.update(b"\r\n");
+                                buf = &buf[1..];
+                            }
+                            (b'\r', false) => {
+                                self.hasher.update(b"\r\n");
+
+                                // we are guaranteed to have at least two bytes
+                                if buf[1] == b'\n' {
+                                    // there was a '\n' in the stream, we consume it as well
+                                    buf = &buf[2..];
+                                } else {
+                                    // this was a lone '\r', we have normalized it
+                                    buf = &buf[1..];
+                                }
+                            }
+                            (b'\r', true) => {
+                                // this one '\r' was the last thing in the buffer
+                                self.hasher.update(b"\r");
+                                buf = &[];
+
+                                self.last_was_cr = true;
+                            }
+                            _ => unreachable!("buf.position gave us either a '\n or a '\r'"),
+                        }
+                    }
+                }
+            }
+        }
     }
 }

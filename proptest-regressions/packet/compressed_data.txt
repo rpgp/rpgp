@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3b5cc70ec33d8018cf17c22398db58a8c108cf5547a424aa207e6ff8d001a3a8 # shrinks to packet = CompressedData { packet_version: Old, compression_algorithm: Uncompressed, compressed_data:  }

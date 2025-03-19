@@ -5,8 +5,8 @@ use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 use pgp::composed::{Deserializable, Message, SignedSecretKey};
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::types::{SecretKeyTrait, StringToKey};
-use pgp::KeyType;
+use pgp::types::{Password, StringToKey};
+use pgp::{KeyType, MessageBuilder};
 use rand::{thread_rng, RngCore};
 
 use super::build_key;
@@ -21,7 +21,10 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| black_box(Message::from_armor_single(&bytes[..]).unwrap()));
+        b.iter(|| {
+            let (mut msg, _) = Message::from_armor(&bytes[..]).unwrap();
+            black_box(msg.as_data_vec().unwrap())
+        });
     });
 
     g.bench_function("parse_armored_x25519", |b| {
@@ -30,7 +33,10 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| black_box(Message::from_armor_single(&bytes[..]).unwrap()));
+        b.iter(|| {
+            let (mut msg, _) = Message::from_armor(&bytes[..]).unwrap();
+            black_box(msg.as_data_vec().unwrap())
+        });
     });
 
     g.bench_function("rsa_decrypt", |b| {
@@ -43,13 +49,9 @@ fn bench_message(c: &mut Criterion) {
         let message_file = fs::read(message_file_path).unwrap();
 
         b.iter(|| {
-            let (message, _headers) = Message::from_armor_single(&message_file[..]).unwrap();
+            let (message, _headers) = Message::from_armor(&message_file[..]).unwrap();
 
-            black_box(
-                message
-                    .decrypt(|| "test".to_string(), &[&decrypt_key][..])
-                    .unwrap(),
-            );
+            black_box(message.decrypt(&"test".into(), &decrypt_key).unwrap());
         });
     });
 
@@ -66,19 +68,15 @@ fn bench_message(c: &mut Criterion) {
                 rng.fill_bytes(&mut bytes);
 
                 let s2k = StringToKey::new_default(&mut rng);
-                let message = Message::new_literal_bytes("test", &bytes);
 
                 b.iter(|| {
-                    let res = message
-                        .encrypt_with_password_seipdv1(
-                            &mut rng,
-                            s2k.clone(),
-                            SymmetricKeyAlgorithm::default(),
-                            || "pw".into(),
-                        )
+                    let builder = MessageBuilder::from_reader("", &bytes[..]);
+                    let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
+                    let builder = builder
+                        .encrypt_with_password(s2k.clone(), &"pw".into())
                         .unwrap();
 
-                    black_box(res);
+                    black_box(builder.to_vec(&mut rng).unwrap());
                 });
             },
         );
@@ -95,21 +93,28 @@ fn bench_message(c: &mut Criterion) {
                 rng.fill_bytes(&mut bytes);
 
                 let s2k = StringToKey::new_default(&mut rng);
-                let message = Message::new_literal_bytes("test", &bytes)
-                    .encrypt_with_password_seipdv1(
-                        &mut rng,
-                        s2k,
-                        SymmetricKeyAlgorithm::default(),
-                        || "pw".into(),
-                    )
+
+                let builder = MessageBuilder::from_reader("", &bytes[..]);
+                let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
+                let builder = builder
+                    .encrypt_with_password(s2k.clone(), &"pw".into())
                     .unwrap();
 
+                let mut encrypted = vec![];
+                builder.to_writer(&mut rng, &mut encrypted).unwrap();
+
+                // encrypted message
+                let message = Message::from_bytes(&*encrypted).unwrap();
+
                 // sanity check
-                let res = message.decrypt_with_password(|| "pw".into()).unwrap();
-                assert_eq!(res.get_content().unwrap().unwrap(), bytes);
+                let mut res = message.decrypt_with_password(&"pw".into()).unwrap();
+                assert_eq!(res.as_data_vec().unwrap(), bytes);
 
                 b.iter(|| {
-                    let res = message.decrypt_with_password(|| "pw".into()).unwrap();
+                    // decryption consumes the message, we need a new one for each iteration
+                    let message = Message::from_bytes(&*encrypted).unwrap();
+
+                    let res = message.decrypt_with_password(&"pw".into()).unwrap();
                     black_box(res);
                 });
             },
@@ -160,20 +165,20 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, || "".into()).unwrap();
+                    let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
 
-                    let message = Message::new_literal_bytes("test", &bytes);
+                    // let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
                     b.iter(|| {
-                        let res = message
-                            .encrypt_to_keys_seipdv1(
-                                &mut rng,
-                                SymmetricKeyAlgorithm::AES128,
-                                &[&signed_key.secret_subkeys[0].public_key()],
-                            )
+                        let builder = MessageBuilder::from_reader("", &bytes[..]);
+                        let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+                        let builder = builder
+                            .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
                             .unwrap();
 
-                        black_box(res);
+                        let mut sink = vec![];
+                        builder.to_writer(&mut rng, &mut sink).unwrap();
+                        black_box(sink);
                     });
                 },
             );
@@ -193,22 +198,28 @@ fn bench_message(c: &mut Criterion) {
                     rng.fill_bytes(&mut bytes);
 
                     let key = build_key(kt1.clone(), kt2.clone());
-                    let signed_key = key.sign(&mut rng, || "".into()).unwrap();
+                    let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
 
-                    let message = Message::new_literal_bytes("test", &bytes)
-                        .encrypt_to_keys_seipdv1(
-                            &mut rng,
-                            sym,
-                            &[&signed_key.secret_subkeys[0].public_key()],
-                        )
+                    let builder = MessageBuilder::from_reader("", &bytes[..]);
+                    let builder = builder.seipd_v1(&mut rng, sym);
+                    let builder = builder
+                        .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
                         .unwrap();
 
+                    let mut encrypted = vec![];
+                    builder.to_writer(&mut rng, &mut encrypted).unwrap();
+
+                    // encrypted message
+                    let message = Message::from_bytes(&*encrypted).unwrap();
+
                     // sanity check
-                    let (res, _) = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
-                    assert_eq!(res.get_content().unwrap().unwrap(), bytes);
+                    let mut res = message.decrypt(&Password::empty(), &signed_key).unwrap();
+                    assert_eq!(res.as_data_vec().unwrap(), bytes);
 
                     b.iter(|| {
-                        let res = message.decrypt(|| "".into(), &[&signed_key]).unwrap();
+                        let message = Message::from_bytes(&*encrypted).unwrap();
+
+                        let res = message.decrypt(&Password::empty(), &signed_key).unwrap();
                         black_box(res);
                     });
                 },

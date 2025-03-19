@@ -19,7 +19,7 @@
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! # use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
-//! # use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm};
+//! # use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm, Password};
 //! # use rand::thread_rng;
 //! # use smallvec::*;
 //! #
@@ -33,25 +33,25 @@
 //! #     SymmetricKeyAlgorithm::AES256,
 //! # ])
 //! # .preferred_hash_algorithms(smallvec![
-//! #     HashAlgorithm::SHA2_256,
+//! #     HashAlgorithm::Sha256,
 //! # ])
 //! # .preferred_compression_algorithms(smallvec![
 //! #     CompressionAlgorithm::ZLIB,
 //! # ]);
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
 //! # let secret_key = secret_key_params.generate(thread_rng()).expect("Failed to generate a plain key.");
-//! # let passwd_fn = || String::new();
-//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), passwd_fn).expect("Must be able to sign its own metadata");
+//! # let passwd_fn = Password::empty();
+//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), &passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::Signature;
+//! use pgp::{Signature, packet::{PacketTrait, PacketHeader}, types::{PacketLength, Tag, KeyDetails as _}};
 //! use chrono;
 //!
 //! let now = chrono::Utc::now();
 //!
-//! let passwd_fn = || String::new();
+//! let passwd_fn = Password::empty();
 //!
 //! // simulate a digest, make sure it is a compliant produce with RFC 9580
 //! // i.e. depending on the version one needs a special suffix / prefix
@@ -66,25 +66,27 @@
 //!
 //! // creates the cryptographic core of the signature without any metadata
 //! let signature = signing_key
-//!     .create_signature(passwd_fn, HashAlgorithm::SHA2_256, digest)
+//!     .create_signature(&passwd_fn, HashAlgorithm::Sha256, digest)
 //!     .expect("Failed to crate signature");
 //!
 //! // the signature can already be verified
 //! verification_key
-//!     .verify_signature(HashAlgorithm::SHA2_256, digest, &signature)
+//!     .verify_signature(HashAlgorithm::Sha256, digest, &signature)
 //!     .expect("Failed to validate signature");
 //!
 //! // wraps the signature in the appropriate package fmt ready to be serialized
+//! let len = todo!();
+//! let packet_header = PacketHeader::new_fixed(Tag::Signature, len);
 //! let signature = Signature::v4(
-//!     types::Version::Old,
+//!     packet_header,
 //!     packet::SignatureType::Binary,
 //!     PublicKeyAlgorithm::RSA,
-//!     HashAlgorithm::SHA2_256,
+//!     HashAlgorithm::Sha256,
 //!     [digest[0], digest[1]],
 //!     signature,
 //!     vec![
-//!         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
-//!         packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
+//!         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)).unwrap(),
+//!         packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())).unwrap(),
 //!     ],
 //!     vec![],
 //! );
@@ -92,13 +94,12 @@
 //! // sign and and write the package (the package written here is NOT RFC 9580 compliant)
 //! let mut signature_bytes = Vec::with_capacity(1024);
 //!
-//! packet::write_packet(&mut signature_bytes, &signature)
-//!     .expect("Write must succeed");
+//! signature.to_writer_with_header(&mut signature_bytes).expect("Write must succeed");
 //!
 //!
 //! let raw_signature = signature.signature;
 //! verification_key
-//!     .verify_signature(HashAlgorithm::SHA2_256, digest, &raw_signature)
+//!     .verify_signature(HashAlgorithm::Sha256, digest, &raw_signature)
 //!     .expect("Verify must succeed");
 //! ```
 

@@ -1,21 +1,17 @@
 use std::io;
+use std::ops::Deref;
 
 use chrono::{DateTime, Utc};
-use log::warn;
+use log::{debug, warn};
 use rand::{CryptoRng, Rng};
 
 use crate::composed::key::{PublicKey, PublicSubkey};
 use crate::composed::signed_key::{SignedKeyDetails, SignedPublicSubKey};
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{self, write_packet, Packet, SignatureType};
+use crate::packet::{self, Packet, PacketTrait, SignatureType};
 use crate::ser::Serialize;
-use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
-    SecretKeyRepr, SecretKeyTrait, SignatureBytes, Tag,
-};
-use crate::{armor, ArmorOptions, SignedPublicKey};
+use crate::types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag};
+use crate::{armor, ArmorOptions, PlainSessionKey, SignedPublicKey};
 
 /// Represents a secret signed PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -50,7 +46,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedSecretKeyPar
     type Item = Result<SignedSecretKey>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match super::key_parser::next::<I, packet::SecretKey>(&mut self.inner, Tag::SecretKey, true)
+        match super::key_parser::next::<_, packet::SecretKey>(&mut self.inner, Tag::SecretKey, true)
         {
             Some(Err(err)) => Some(Err(err)),
             None => None,
@@ -111,12 +107,12 @@ impl SignedSecretKey {
     /// Get the secret key expiration as a date.
     pub fn expires_at(&self) -> Option<DateTime<Utc>> {
         let expiration = self.details.key_expiration_time()?;
-        Some(*self.primary_key.created_at() + expiration)
+        Some(*self.primary_key.public_key().created_at() + expiration)
     }
 
     fn verify_public_subkeys(&self) -> Result<()> {
         for subkey in &self.public_subkeys {
-            subkey.verify(&self.primary_key)?;
+            subkey.verify(self.primary_key.public_key())?;
         }
 
         Ok(())
@@ -124,14 +120,14 @@ impl SignedSecretKey {
 
     fn verify_secret_subkeys(&self) -> Result<()> {
         for subkey in &self.secret_subkeys {
-            subkey.verify(&self.primary_key)?;
+            subkey.verify(self.primary_key.public_key())?;
         }
 
         Ok(())
     }
 
     pub fn verify(&self) -> Result<()> {
-        self.details.verify(&self.primary_key)?;
+        self.details.verify(self.primary_key.public_key())?;
         self.verify_public_subkeys()?;
         self.verify_secret_subkeys()?;
 
@@ -164,11 +160,50 @@ impl SignedSecretKey {
         let res = String::from_utf8(self.to_armored_bytes(opts)?).map_err(|e| e.utf8_error())?;
         Ok(res)
     }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.primary_key.encrypt(rng, plain, typ)
+    }
+
+    pub fn public_key(&self) -> PublicKey {
+        let mut subkeys: Vec<PublicSubkey> = self
+            .public_subkeys
+            .iter()
+            .map(SignedPublicSubKey::as_unsigned)
+            .collect();
+        let sec_subkeys = self.secret_subkeys.iter().map(|k| k.public_key());
+        subkeys.extend(sec_subkeys);
+
+        PublicKey::new(
+            self.primary_key.public_key().clone(),
+            self.details.as_unsigned(),
+            subkeys,
+        )
+    }
+
+    /// Decrypts session key using this key.
+    pub fn decrypt_session_key(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        debug!("decrypt session key");
+
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.primary_key.public_key())
+        })
+    }
 }
 
 impl Serialize for SignedSecretKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.primary_key)?;
+        self.primary_key.to_writer_with_header(writer)?;
         self.details.to_writer(writer)?;
         for ps in &self.public_subkeys {
             ps.to_writer(writer)?;
@@ -180,101 +215,21 @@ impl Serialize for SignedSecretKey {
 
         Ok(())
     }
-}
 
-impl SecretKeyTrait for SignedSecretKey {
-    type PublicKey = PublicKey;
-    type Unlocked = SecretKeyRepr;
-
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
-    {
-        self.primary_key.unlock(pw, work)
-    }
-
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
-        self.primary_key.create_signature(key_pw, hash, data)
-    }
-
-    fn public_key(&self) -> Self::PublicKey {
-        let mut subkeys: Vec<PublicSubkey> = self
-            .public_subkeys
-            .iter()
-            .map(SignedPublicSubKey::as_unsigned)
-            .collect();
-        let sec_subkeys = self.secret_subkeys.iter().map(SecretKeyTrait::public_key);
-
-        subkeys.extend(sec_subkeys);
-
-        PublicKey::new(
-            self.primary_key.public_key(),
-            self.details.as_unsigned(),
-            subkeys,
-        )
+    fn write_len(&self) -> usize {
+        let mut sum = self.primary_key.write_len_with_header();
+        sum += self.details.write_len();
+        sum += self.public_subkeys.write_len();
+        sum += self.secret_subkeys.write_len();
+        sum
     }
 }
 
-impl PublicKeyTrait for SignedSecretKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.primary_key.verify_signature(hash, data, sig)
-    }
+impl Deref for SignedSecretKey {
+    type Target = packet::SecretKey;
 
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.primary_key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.primary_key.serialize_for_hashing(writer)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.primary_key.public_params()
-    }
-
-    fn version(&self) -> KeyVersion {
-        self.primary_key.version()
-    }
-
-    /// Returns the fingerprint of the associated primary key.
-    fn fingerprint(&self) -> Fingerprint {
-        self.primary_key.fingerprint()
-    }
-
-    /// Returns the Key ID of the associated primary key.
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.primary_key.algorithm()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.primary_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.primary_key.expiration()
+    fn deref(&self) -> &Self::Target {
+        &self.primary_key
     }
 }
 
@@ -304,74 +259,20 @@ impl SignedSecretSubKey {
         SignedSecretSubKey { key, signatures }
     }
 
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
 
         for sig in &self.signatures {
-            sig.verify_key_binding(key, &self.key)?;
+            sig.verify_key_binding(key, self.key.public_key())?;
         }
 
         Ok(())
     }
-}
 
-impl Serialize for SignedSecretSubKey {
-    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.key)?;
-        for sig in &self.signatures {
-            write_packet(writer, sig)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl SecretKeyTrait for SignedSecretSubKey {
-    type PublicKey = PublicSubkey;
-    type Unlocked = SecretKeyRepr;
-
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
-    {
-        self.key.unlock(pw, work)
-    }
-
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
-        self.key.create_signature(key_pw, hash, data)
-    }
-
-    fn public_key(&self) -> Self::PublicKey {
-        let keyflags = self
-            .signatures
-            .first()
-            .expect("invalid signed subkey")
-            .key_flags();
-
-        PublicSubkey::new(self.key.public_key(), keyflags)
-    }
-}
-
-impl PublicKeyTrait for SignedSecretSubKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],
@@ -380,36 +281,55 @@ impl PublicKeyTrait for SignedSecretSubKey {
         self.key.encrypt(rng, plain, typ)
     }
 
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.serialize_for_hashing(writer)
+    pub fn public_key(&self) -> PublicSubkey {
+        let keyflags = self
+            .signatures
+            .first()
+            .expect("invalid signed subkey")
+            .key_flags();
+
+        PublicSubkey::new(self.key.public_key().clone(), keyflags)
     }
 
-    fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
+    /// Decrypts session key using this key.
+    pub fn decrypt_session_key(
+        &self,
+        key_pw: &Password,
+        values: &PkeskBytes,
+        typ: EskType,
+    ) -> Result<Result<PlainSessionKey>> {
+        debug!("decrypt session key");
+
+        self.unlock(key_pw, |pub_params, priv_key| {
+            priv_key.decrypt(pub_params, values, typ, self.key.public_key())
+        })
+    }
+}
+
+impl Deref for SignedSecretSubKey {
+    type Target = packet::SecretSubkey;
+
+    fn deref(&self) -> &Self::Target {
+        &self.key
+    }
+}
+
+impl Serialize for SignedSecretSubKey {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.key.to_writer_with_header(writer)?;
+        for sig in &self.signatures {
+            sig.to_writer_with_header(writer)?;
+        }
+
+        Ok(())
     }
 
-    fn version(&self) -> KeyVersion {
-        self.key.version()
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        self.key.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.key.algorithm()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.key.expiration()
+    fn write_len(&self) -> usize {
+        let mut sum = self.key.write_len_with_header();
+        for sig in &self.signatures {
+            sum += sig.write_len_with_header()
+        }
+        sum
     }
 }
 
@@ -425,13 +345,13 @@ impl From<SignedSecretKey> for SignedPublicKey {
             .into_iter()
             .for_each(|key| subkeys.push(key.into()));
 
-        SignedPublicKey::new(primary, details, subkeys)
+        SignedPublicKey::new(primary.clone(), details, subkeys)
     }
 }
 
 impl From<SignedSecretSubKey> for SignedPublicSubKey {
     fn from(value: SignedSecretSubKey) -> Self {
-        SignedPublicSubKey::new(value.key.public_key(), value.signatures)
+        SignedPublicSubKey::new(value.key.public_key().clone(), value.signatures)
     }
 }
 
@@ -439,13 +359,14 @@ impl From<SignedSecretSubKey> for SignedPublicSubKey {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use packet::LiteralData;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::types::S2kParams;
-    use crate::{composed::shared::Deserializable, Message};
+    use crate::crypto::hash::HashAlgorithm;
+    use crate::types::{KeyVersion, Password, S2kParams};
+
+    use crate::{composed::shared::Deserializable, Message, MessageBuilder};
 
     #[test]
     fn test_v6_annex_a_4() -> Result<()> {
@@ -470,26 +391,21 @@ k0mXubZvyl4GBg==
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(tsk))?;
 
-        eprintln!("ssk: {:#02x?}", ssk);
+        // eprintln!("ssk: {:#02x?}", ssk);
 
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
-        let msg = Message::Literal(lit);
-
-        let pri = ssk.primary_key;
-
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let signed = msg.sign(&mut rng, &pri, String::default, HashAlgorithm::SHA2_256)?;
+        let pri = &ssk.primary_key;
 
-        signed.verify(&pri)?;
+        let signed = crate::MessageBuilder::from_bytes("", &b"Hello world"[..])
+            .sign(pri, Password::empty(), HashAlgorithm::Sha256)
+            .to_armored_string(&mut rng, ArmorOptions::default())?;
 
-        let mut sink = vec![];
-        signed
-            .to_armored_writer(&mut sink, ArmorOptions::default())
-            .expect("FIXME");
+        eprintln!("{}", signed);
 
-        eprintln!("{}", String::from_utf8_lossy(&sink));
+        let (mut message, _) = Message::from_armor(signed.as_bytes())?;
+        message.verify_read(&pri.public_key())?;
 
         Ok(())
     }
@@ -522,18 +438,16 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
         ssk.verify()?;
 
-        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
-
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let msg = Message::Literal(lit).sign(
-            &mut rng,
-            &ssk.primary_key,
-            || ANNEX_A_5_PASSPHRASE.to_string(),
-            HashAlgorithm::SHA2_256,
-        )?;
-
-        msg.verify(&ssk.primary_key)?;
-
+        let msg = MessageBuilder::from_bytes("", &b"Hello world"[..])
+            .sign(
+                &ssk.primary_key,
+                ANNEX_A_5_PASSPHRASE.into(),
+                HashAlgorithm::Sha256,
+            )
+            .to_vec(&mut rng)?;
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(&ssk.primary_key.public_key())?;
         Ok(())
     }
 
@@ -542,7 +456,8 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
     fn secret_key_protection_v6() -> Result<()> {
         let _ = pretty_env_logger::try_init();
 
-        let lit = LiteralData::from_bytes("".into(), "Hello world".as_bytes());
+        let file_name = "";
+        let text = b"Hello world";
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (ssk, _) = SignedSecretKey::from_armor_single(io::Cursor::new(ANNEX_A_5))?;
@@ -552,47 +467,43 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         let mut pri = ssk.primary_key;
 
         // remove passphrase
-        pri.remove_password(|| ANNEX_A_5_PASSPHRASE.to_string())?;
+        pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing without pw
-        let msg = Message::Literal(lit.clone()).sign(
-            &mut rng,
-            &pri,
-            String::default,
-            HashAlgorithm::SHA2_256,
-        )?;
-        msg.verify(&pri)?;
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, Password::empty(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
+
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
 
         // set passphrase with default s2k
-        pri.set_password(&mut rng, || ANNEX_A_5_PASSPHRASE.to_string())?;
+        pri.set_password(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing with pw
-        let msg = Message::Literal(lit.clone()).sign(
-            &mut rng,
-            &pri,
-            || ANNEX_A_5_PASSPHRASE.to_string(),
-            HashAlgorithm::SHA2_256,
-        )?;
-        msg.verify(&pri)?;
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
+
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
 
         // remove passphrase
-        pri.remove_password(|| ANNEX_A_5_PASSPHRASE.to_string())?;
+        pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
         // set passphrase with Cfb s2k (default for KeyVersion::V4)
         pri.set_password_with_s2k(
-            || ANNEX_A_5_PASSPHRASE.to_string(),
+            &ANNEX_A_5_PASSPHRASE.into(),
             S2kParams::new_default(&mut rng, KeyVersion::V4),
         )?;
 
         // try signing with pw
-        let msg = Message::Literal(lit).sign(
-            &mut rng,
-            &pri,
-            || ANNEX_A_5_PASSPHRASE.to_string(),
-            HashAlgorithm::SHA2_256,
-        )?;
-        msg.verify(&pri)?;
+        let msg = MessageBuilder::from_bytes(file_name, &text[..])
+            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
+            .to_vec(&mut rng)?;
 
+        let mut msg = Message::from_bytes(&msg[..])?;
+        msg.verify_read(pri.public_key())?;
         Ok(())
     }
 }

@@ -1,44 +1,57 @@
-use std::io;
+use std::io::{self, BufRead};
 
+use bytes::Bytes;
 use rand::{CryptoRng, RngCore};
 
 use crate::errors::Result;
-use crate::packet::PacketTrait;
+use crate::packet::{PacketHeader, PacketTrait};
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
-use crate::types::{Tag, Version};
+use crate::types::{PacketHeaderVersion, PacketLength, Tag};
+
+#[cfg(test)]
+use proptest::prelude::*;
 
 /// Padding Packet
 ///
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-padding-packet-type-id-21>
 #[derive(derive_more::Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct Padding {
-    packet_version: Version,
+    packet_header: PacketHeader,
     /// Random data.
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
+    data: Bytes,
 }
 
 impl Padding {
     /// Parses a `Padding` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+        let data = input.rest()?.freeze();
+
         Ok(Padding {
-            packet_version,
-            data: input.to_vec(),
+            packet_header,
+            data,
         })
     }
 
     /// Create a new padding packet of `size` in bytes.
-    pub fn new<R: CryptoRng + RngCore>(mut rng: R, packet_version: Version, size: usize) -> Self {
+    pub fn new<R: CryptoRng + RngCore>(
+        mut rng: R,
+        packet_version: PacketHeaderVersion,
+        size: usize,
+    ) -> Result<Self> {
         let mut data = vec![0u8; size];
         rng.fill_bytes(&mut data);
-        Padding {
-            packet_version,
-            data,
-        }
-    }
 
-    pub fn packet_version(&self) -> Version {
-        self.packet_version
+        let len = PacketLength::Fixed(data.len().try_into()?);
+        let packet_header = PacketHeader::from_parts(packet_version, Tag::Padding, len)?;
+
+        Ok(Padding {
+            packet_header,
+            data: data.into(),
+        })
     }
 }
 
@@ -48,39 +61,40 @@ impl Serialize for Padding {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        self.data.len()
+    }
 }
 
 impl PacketTrait for Padding {
-    fn packet_version(&self) -> Version {
-        self.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::Padding
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
-    use super::super::single;
     use super::*;
-    use crate::packet::Packet;
+
+    use crate::packet::{Packet, PacketHeader};
     use crate::types::PacketLength;
 
     #[test]
     fn test_padding_roundtrip() {
         let packet_raw = hex::decode("d50ec5a293072991628147d72c8f86b7").expect("valid hex");
-        let (rest, (version, tag, plen)) = single::parser(&packet_raw).expect("parse");
+        let mut to_parse = std::io::Cursor::new(&packet_raw);
+        let header = PacketHeader::try_from_reader(&mut to_parse).expect("parse");
 
-        let PacketLength::Fixed(len) = plen else {
+        let PacketLength::Fixed(_len) = header.packet_length() else {
             panic!("invalid parse result");
         };
-        assert_eq!(rest.len(), len);
 
-        let full_packet = single::body_parser(version, tag, &rest[..len]).expect("body parse");
+        let full_packet = Packet::from_reader(header, &mut to_parse).expect("body parse");
 
         let Packet::Padding(ref packet) = full_packet else {
             panic!("invalid packet: {:?}", full_packet);
@@ -98,10 +112,28 @@ mod tests {
     #[test]
     fn test_padding_new() {
         let mut rng = ChaCha20Rng::seed_from_u64(1);
-        let packet = Padding::new(&mut rng, Version::New, 20);
+        let packet = Padding::new(&mut rng, PacketHeaderVersion::New, 20).unwrap();
         assert_eq!(packet.data.len(), 20);
 
         let encoded = packet.to_bytes().expect("encode");
         assert_eq!(encoded, packet.data);
+    }
+
+    proptest! {
+        #[test]
+        fn write_len(padding: Padding) {
+            let mut buf = Vec::new();
+            padding.to_writer(&mut buf).unwrap();
+            assert_eq!(buf.len(), padding.write_len());
+        }
+
+
+        #[test]
+        fn packet_roundtrip(padding: Padding) {
+            let mut buf = Vec::new();
+            padding.to_writer(&mut buf).unwrap();
+            let new_padding = Padding::try_from_reader(padding.packet_header, &mut &buf[..]).unwrap();
+            assert_eq!(padding, new_padding);
+        }
     }
 }

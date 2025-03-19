@@ -15,13 +15,17 @@ categories = ["cryptography", "email"]
 exclude = ["tests/tests/*"]
 
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.83"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+bench = false
 
 [dependencies]
 aes = "0.8.4"
-argon2 = { version = "0.5", features = ["zeroize"] }
+aead = { version = "0.5", features = ["bytes"] }
+argon2 = { version = "0.5", features = ["zeroize", "std"] }
 base64 = ">=0.21.7, < 0.23"
-bitfield = "0.17"
 block-padding = "0.3"
 blowfish = "0.9"
 byteorder = "1.4"
@@ -44,7 +48,6 @@ elliptic-curve = "0.13"
 generic-array = "0.14.6"
 hex = "0.4"
 idea = "0.5"
-iter-read = "1"
 log = "0.4.22"
 md-5 = { version = "0.10.5", features = ["oid"] }
 nom = "7.0"
@@ -63,24 +66,52 @@ sha2 = { version = "0.10.6", features = ["oid"] }
 sha3 = { version = "0.10.5", features = ["oid"] }
 signature = "2.1"
 smallvec = "1.10.0"
-thiserror = "2.0"
 twofish = "0.7"
 zeroize = { version = "1.7", features = ["zeroize_derive"] }
 getrandom = { version = "0.2", optional = true }
-bstr = { version = "1.4.0", default-features = false, features = ["std"] }
 hkdf = "0.12.4"
 aes-gcm = "0.10.3"
 eax = "0.5.0"
 ocb3 = "0.1"
 aes-kw = { version = "0.2.1", features = ["std"] }
-derive_more = { version = "1.0.0-beta.6", features = ["debug"] }
+derive_more = { version = "1.0.0-beta.6", features = ["debug", "display"] }
 x448 = { version = "0.6", optional = true }
-buffer-redux = { version = "1.0.0", default-features = false}
-curve25519-dalek = { version = "4.1.3", default-features = false, features = ["alloc", "precomputed-tables", "zeroize"] }
-ed25519-dalek = { version = "2.0.0", default-features = false, features = ["std", "zeroize", "fast"] }
-flate2 = {version = "1.0", default-features = false, features = ["rust_backend"] }
-num-bigint = { version = "0.8.4", features = ["rand", "i128", "u64_digit", "prime", "zeroize"], package = "num-bigint-dig" }
-x25519-dalek = { version = "2.0.1", default-features = false, features = ["alloc", "precomputed-tables", "zeroize", "static_secrets"] }
+buffer-redux = { version = "1.0.0", default-features = false }
+curve25519-dalek = { version = "4.1.3", default-features = false, features = [
+    "alloc",
+    "precomputed-tables",
+    "zeroize",
+] }
+ed25519-dalek = { version = "2.1.1", default-features = false, features = [
+    "std",
+    "zeroize",
+    "fast",
+] }
+flate2 = { version = "1.0", default-features = false, features = [
+    "rust_backend",
+] }
+num-bigint = { version = "0.8.4", features = [
+    "rand",
+    "i128",
+    "u64_digit",
+    "prime",
+    "zeroize",
+], package = "num-bigint-dig" }
+x25519-dalek = { version = "2.0.1", default-features = false, features = [
+    "alloc",
+    "precomputed-tables",
+    "zeroize",
+    "static_secrets",
+] }
+bytes = "1.9.0"
+bytes-utils = "0.1.4"
+bzip2 = { version = "0.5.0", default-features = false, features = [
+    "libbz2-rs-sys",
+], optional = true }
+bitfields = "0.12.3"
+regex = "1.7"
+snafu = { version = "0.8.5", features = ["rust_1_81"] }
+
 
 [dev-dependencies]
 glob = "0.3"
@@ -89,14 +120,19 @@ pretty_assertions = "1"
 pretty_env_logger = "0.5"
 rand_chacha = "0.3"
 rand_xorshift = "0.3"
-regex = "1.7"
 rpgp_0_10 = { version = "=0.10.2", package = "pgp" }
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0"
 criterion = { version = "0.5", features = ["html_reports"] }
+tempfile = "3.14.0"
+proptest = { version = "1.6.0", features = ["proptest-macro"] }
+proptest-derive = "0.5.1"
+escape_string = "0.1.2"
+testresult = "0.4.1"
 
 [features]
-default = []
+default = ["bzip2"]
+bzip2 = ["dep:bzip2"]
 asm = ["sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
 unstable-curve448 = ["dep:x448"]
@@ -107,6 +143,3 @@ debug = 2
 [[bench]]
 name = "benches_main"
 harness = false
-
-[lib]
-bench = false

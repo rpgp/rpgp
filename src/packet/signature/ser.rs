@@ -2,13 +2,14 @@ use std::io;
 
 use byteorder::{BigEndian, WriteBytesExt};
 use chrono::Duration;
+use log::debug;
 
 use crate::errors::Result;
 use crate::packet::signature::types::*;
 use crate::packet::signature::SignatureConfig;
 use crate::packet::SignatureVersionSpecific;
+use crate::packet::{Subpacket, SubpacketData, SubpacketType};
 use crate::ser::Serialize;
-use crate::util::write_packet_length;
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -18,30 +19,86 @@ impl Serialize for Signature {
             SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
             SignatureVersion::V4 | SignatureVersion::V6 => self.to_writer_v4_v6(writer),
             SignatureVersion::V5 => {
-                bail!("v5 signature unsupported writer")
+                unsupported_err!("crate V5 signature")
             }
-            SignatureVersion::Other(version) => bail!("Unsupported signature version {}", version),
+            SignatureVersion::Other(version) => unsupported_err!("signature version {}", version),
+        }
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 1;
+        sum += match self.config.version() {
+            SignatureVersion::V2 | SignatureVersion::V3 => self.write_len_v3(),
+            SignatureVersion::V4 | SignatureVersion::V6 => self.write_len_v4_v6(),
+            SignatureVersion::V5 => {
+                panic!("v5 signature unsupported writer")
+            }
+            SignatureVersion::Other(version) => panic!("Unsupported signature version {}", version),
+        };
+        sum
+    }
+}
+
+/// Convert expiration time "Duration" data to OpenPGP u32 format.
+/// Use u32:MAX on overflow.
+fn duration_to_u32(d: &Duration) -> u32 {
+    u32::try_from(d.num_seconds()).unwrap_or(u32::MAX)
+}
+
+impl Subpacket {
+    pub fn typ(&self) -> SubpacketType {
+        match &self.data {
+            SubpacketData::SignatureCreationTime(_) => SubpacketType::SignatureCreationTime,
+            SubpacketData::SignatureExpirationTime(_) => SubpacketType::SignatureExpirationTime,
+            SubpacketData::KeyExpirationTime(_) => SubpacketType::KeyExpirationTime,
+            SubpacketData::Issuer(_) => SubpacketType::Issuer,
+            SubpacketData::PreferredSymmetricAlgorithms(_) => {
+                SubpacketType::PreferredSymmetricAlgorithms
+            }
+            SubpacketData::PreferredHashAlgorithms(_) => SubpacketType::PreferredHashAlgorithms,
+            SubpacketData::PreferredCompressionAlgorithms(_) => {
+                SubpacketType::PreferredCompressionAlgorithms
+            }
+            SubpacketData::KeyServerPreferences(_) => SubpacketType::KeyServerPreferences,
+            SubpacketData::KeyFlags(_) => SubpacketType::KeyFlags,
+            SubpacketData::Features(_) => SubpacketType::Features,
+            SubpacketData::RevocationReason(_, _) => SubpacketType::RevocationReason,
+            SubpacketData::IsPrimary(_) => SubpacketType::PrimaryUserId,
+            SubpacketData::Revocable(_) => SubpacketType::Revocable,
+            SubpacketData::EmbeddedSignature(_) => SubpacketType::EmbeddedSignature,
+            SubpacketData::PreferredKeyServer(_) => SubpacketType::PreferredKeyServer,
+            SubpacketData::Notation(_) => SubpacketType::Notation,
+            SubpacketData::RevocationKey(_) => SubpacketType::RevocationKey,
+            SubpacketData::SignersUserID(_) => SubpacketType::SignersUserID,
+            SubpacketData::PolicyURI(_) => SubpacketType::PolicyURI,
+            SubpacketData::TrustSignature(_, _) => SubpacketType::TrustSignature,
+            SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
+            SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
+            SubpacketData::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
+            SubpacketData::PreferredEncryptionModes(_) => SubpacketType::PreferredEncryptionModes,
+            SubpacketData::IntendedRecipientFingerprint(_) => {
+                SubpacketType::IntendedRecipientFingerprint
+            }
+            SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
+            SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
+            SubpacketData::Other(n, _) => SubpacketType::Other(*n),
+            SubpacketData::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
         }
     }
 }
 
-impl Subpacket {
-    /// Convert expiration time "Duration" data to OpenPGP u32 format.
-    /// Use u32:MAX on overflow.
-    fn duration_to_u32(d: &Duration) -> u32 {
-        u32::try_from(d.num_seconds()).unwrap_or(u32::MAX)
-    }
-
-    fn body_to_writer(&self, writer: &mut impl io::Write) -> Result<()> {
-        match &self.data {
+impl Serialize for SubpacketData {
+    fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        debug!("writing subpacket: {:?}", self);
+        match &self {
             SubpacketData::SignatureCreationTime(t) => {
                 writer.write_u32::<BigEndian>(t.timestamp().try_into()?)?;
             }
             SubpacketData::SignatureExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(Self::duration_to_u32(d))?;
+                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
             }
             SubpacketData::KeyExpirationTime(d) => {
-                writer.write_u32::<BigEndian>(Self::duration_to_u32(d))?;
+                writer.write_u32::<BigEndian>(duration_to_u32(d))?;
             }
             SubpacketData::Issuer(id) => {
                 writer.write_all(id.as_ref())?;
@@ -59,7 +116,7 @@ impl Subpacket {
                 writer.write_all(prefs)?;
             }
             SubpacketData::KeyFlags(flags) => {
-                writer.write_all(flags)?;
+                flags.to_writer(writer)?;
             }
             SubpacketData::Features(features) => {
                 writer.write_all(features)?;
@@ -155,8 +212,8 @@ impl Subpacket {
         Ok(())
     }
 
-    fn body_len(&self) -> Result<usize> {
-        let len = match &self.data {
+    fn write_len(&self) -> usize {
+        let len = match &self {
             SubpacketData::SignatureCreationTime(_) => 4,
             SubpacketData::SignatureExpirationTime(_) => 4,
             SubpacketData::KeyExpirationTime(_) => 4,
@@ -165,7 +222,7 @@ impl Subpacket {
             SubpacketData::PreferredHashAlgorithms(algs) => algs.len(),
             SubpacketData::PreferredCompressionAlgorithms(algs) => algs.len(),
             SubpacketData::KeyServerPreferences(prefs) => prefs.len(),
-            SubpacketData::KeyFlags(flags) => flags.len(),
+            SubpacketData::KeyFlags(flags) => flags.write_len(),
             SubpacketData::Features(features) => features.len(),
 
             SubpacketData::RevocationReason(_, reason) => {
@@ -174,12 +231,7 @@ impl Subpacket {
             }
             SubpacketData::IsPrimary(_) => 1,
             SubpacketData::Revocable(_) => 1,
-            SubpacketData::EmbeddedSignature(sig) => {
-                // TODO: find a more efficient way of doing this, if this gets expensive
-                let mut buf = Vec::new();
-                (*sig).to_writer(&mut buf)?;
-                buf.len()
-            }
+            SubpacketData::EmbeddedSignature(sig) => (*sig).write_len(),
             SubpacketData::PreferredKeyServer(server) => server.chars().count(),
             SubpacketData::Notation(n) => {
                 // 4 for the flags, 2 for the name length, 2 for the value length, m for the name, n for the value
@@ -203,57 +255,23 @@ impl Subpacket {
             SubpacketData::SignatureTarget(_, _, hash) => 2 + hash.len(),
         };
 
-        Ok(len)
-    }
-
-    pub fn typ(&self) -> SubpacketType {
-        match &self.data {
-            SubpacketData::SignatureCreationTime(_) => SubpacketType::SignatureCreationTime,
-            SubpacketData::SignatureExpirationTime(_) => SubpacketType::SignatureExpirationTime,
-            SubpacketData::KeyExpirationTime(_) => SubpacketType::KeyExpirationTime,
-            SubpacketData::Issuer(_) => SubpacketType::Issuer,
-            SubpacketData::PreferredSymmetricAlgorithms(_) => {
-                SubpacketType::PreferredSymmetricAlgorithms
-            }
-            SubpacketData::PreferredHashAlgorithms(_) => SubpacketType::PreferredHashAlgorithms,
-            SubpacketData::PreferredCompressionAlgorithms(_) => {
-                SubpacketType::PreferredCompressionAlgorithms
-            }
-            SubpacketData::KeyServerPreferences(_) => SubpacketType::KeyServerPreferences,
-            SubpacketData::KeyFlags(_) => SubpacketType::KeyFlags,
-            SubpacketData::Features(_) => SubpacketType::Features,
-            SubpacketData::RevocationReason(_, _) => SubpacketType::RevocationReason,
-            SubpacketData::IsPrimary(_) => SubpacketType::PrimaryUserId,
-            SubpacketData::Revocable(_) => SubpacketType::Revocable,
-            SubpacketData::EmbeddedSignature(_) => SubpacketType::EmbeddedSignature,
-            SubpacketData::PreferredKeyServer(_) => SubpacketType::PreferredKeyServer,
-            SubpacketData::Notation(_) => SubpacketType::Notation,
-            SubpacketData::RevocationKey(_) => SubpacketType::RevocationKey,
-            SubpacketData::SignersUserID(_) => SubpacketType::SignersUserID,
-            SubpacketData::PolicyURI(_) => SubpacketType::PolicyURI,
-            SubpacketData::TrustSignature(_, _) => SubpacketType::TrustSignature,
-            SubpacketData::RegularExpression(_) => SubpacketType::RegularExpression,
-            SubpacketData::ExportableCertification(_) => SubpacketType::ExportableCertification,
-            SubpacketData::IssuerFingerprint(_) => SubpacketType::IssuerFingerprint,
-            SubpacketData::PreferredEncryptionModes(_) => SubpacketType::PreferredEncryptionModes,
-            SubpacketData::IntendedRecipientFingerprint(_) => {
-                SubpacketType::IntendedRecipientFingerprint
-            }
-            SubpacketData::PreferredAeadAlgorithms(_) => SubpacketType::PreferredAead,
-            SubpacketData::Experimental(n, _) => SubpacketType::Experimental(*n),
-            SubpacketData::Other(n, _) => SubpacketType::Other(*n),
-            SubpacketData::SignatureTarget(_, _, _) => SubpacketType::SignatureTarget,
-        }
+        len
     }
 }
 
 impl Serialize for Subpacket {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet_length(1 + self.body_len()?, writer)?;
+        self.len.to_writer(writer)?;
         writer.write_u8(self.typ().as_u8(self.is_critical))?;
-        self.body_to_writer(writer)?;
+        self.data.to_writer(writer)?;
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = self.len.len();
+        sum += self.len.write_len();
+        sum
     }
 }
 
@@ -278,6 +296,23 @@ impl SignatureConfig {
         Ok(())
     }
 
+    pub(super) fn write_len_v3(&self) -> usize {
+        let mut sum = 1 + 1;
+
+        if let SignatureVersionSpecific::V2 { issuer, .. }
+        | SignatureVersionSpecific::V3 { issuer, .. } = &self.version_specific
+        {
+            sum += 4;
+            sum += issuer.as_ref().len();
+        } else {
+            panic!("expecting SignatureVersionSpecific::V3 for a v2/v3 signature")
+        }
+
+        sum += 1 + 1;
+
+        sum
+    }
+
     /// Serializes a v4 or v6 signature.
     fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         writer.write_u8(self.typ.into())?; // type
@@ -286,42 +321,62 @@ impl SignatureConfig {
         writer.write_u8(self.hash_alg.into())?; // hash algorithm
 
         // hashed subpackets
-        let mut hashed_subpackets = Vec::new();
-        for packet in &self.hashed_subpackets {
-            packet.to_writer(&mut hashed_subpackets)?;
-        }
-
+        let hashed_sub_len = self.hashed_subpackets.write_len();
         match self.version() {
-            SignatureVersion::V4 => {
-                writer.write_u16::<BigEndian>(hashed_subpackets.len().try_into()?)?
-            }
-            SignatureVersion::V6 => {
-                writer.write_u32::<BigEndian>(hashed_subpackets.len().try_into()?)?
-            }
+            SignatureVersion::V4 => writer.write_u16::<BigEndian>(hashed_sub_len.try_into()?)?,
+            SignatureVersion::V6 => writer.write_u32::<BigEndian>(hashed_sub_len.try_into()?)?,
             v => unimplemented_err!("signature version {:?}", v),
         }
 
-        writer.write_all(&hashed_subpackets)?;
+        for packet in &self.hashed_subpackets {
+            packet.to_writer(writer)?;
+        }
 
         // unhashed subpackets
-        let mut unhashed_subpackets = Vec::new();
-        for packet in &self.unhashed_subpackets {
-            packet.to_writer(&mut unhashed_subpackets)?;
-        }
+        let unhashed_sub_len = self.unhashed_subpackets.write_len();
 
         match self.version() {
-            SignatureVersion::V4 => {
-                writer.write_u16::<BigEndian>(unhashed_subpackets.len().try_into()?)?
-            }
-            SignatureVersion::V6 => {
-                writer.write_u32::<BigEndian>(unhashed_subpackets.len().try_into()?)?
-            }
+            SignatureVersion::V4 => writer.write_u16::<BigEndian>(unhashed_sub_len.try_into()?)?,
+            SignatureVersion::V6 => writer.write_u32::<BigEndian>(unhashed_sub_len.try_into()?)?,
             v => unimplemented_err!("signature version {:?}", v),
         }
 
-        writer.write_all(&unhashed_subpackets)?;
+        for packet in &self.unhashed_subpackets {
+            packet.to_writer(writer)?;
+        }
 
         Ok(())
+    }
+
+    pub(super) fn write_len_v4_v6(&self) -> usize {
+        let mut sum = 1 + 1 + 1;
+
+        // hashed subpackets
+        sum += self.hashed_subpackets.write_len();
+
+        match self.version() {
+            SignatureVersion::V4 => {
+                sum += 2;
+            }
+            SignatureVersion::V6 => {
+                sum += 4;
+            }
+            v => panic!("signature version {:?}", v),
+        }
+
+        // unhashed subpackets
+        sum += self.unhashed_subpackets.write_len();
+        match self.version() {
+            SignatureVersion::V4 => {
+                sum += 2;
+            }
+            SignatureVersion::V6 => {
+                sum += 4;
+            }
+            v => panic!("signature version {:?}", v),
+        }
+
+        sum
     }
 }
 
@@ -339,6 +394,13 @@ impl Signature {
         Ok(())
     }
 
+    fn write_len_v3(&self) -> usize {
+        let mut sum = self.config.write_len_v3();
+        sum += self.signed_hash_value.len();
+        sum += self.signature.write_len();
+        sum
+    }
+
     /// Serializes a v4 or v6 signature.
     fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         self.config.to_writer_v4_v6(writer)?;
@@ -348,6 +410,7 @@ impl Signature {
 
         // salt, if v6
         if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            debug!("writing salt {} bytes", salt.len());
             writer.write_u8(salt.len().try_into()?)?;
             writer.write_all(salt)?;
         }
@@ -357,6 +420,20 @@ impl Signature {
 
         Ok(())
     }
+
+    fn write_len_v4_v6(&self) -> usize {
+        let mut sum = self.config.write_len_v4_v6();
+        sum += self.signed_hash_value.len();
+
+        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
+            sum += 1;
+            sum += salt.len();
+        }
+
+        sum += self.signature.write_len();
+
+        sum
+    }
 }
 
 #[cfg(test)]
@@ -364,14 +441,16 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use std::fs::File;
-    use std::io::Read;
+    use std::io::{BufReader, Read};
     use std::path::Path;
 
     use super::*;
     use crate::packet::{Packet, PacketParser};
 
     fn test_roundtrip(name: &str) {
-        let f = File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap();
+        let f = BufReader::new(
+            std::fs::File::open(Path::new("./tests/openpgp/samplemsgs").join(name)).unwrap(),
+        );
 
         let packets: Vec<Packet> = PacketParser::new(f).collect::<Result<_>>().unwrap();
         let mut serialized = Vec::new();

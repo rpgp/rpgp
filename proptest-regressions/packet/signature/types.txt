@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 56a82bcb3ad0ebd59cfd785f9cde5fe8040e9d471b8efeb06197031305f1f292 # shrinks to flags = KeyFlags { known: KnownKeyFlags { _padding2: 0, timestamping: 0, adsk: 0, _padding1: 0, group: 0, _padding0: 0, authentication: 0, shared: 0, encrypt_storage: 0, encrypt_comms: 0, sign: 0, certify: 1 }, rest: None }
+cc 47c8ea6fdfa5485e28ed96f395e26d67079d97aaf108c0298ed4017dbea47783 # shrinks to flags = KeyFlags { known: KnownKeyFlags { _padding2: 0, timestamping: 0, adsk: 0, _padding1: 0, group: 0, _padding0: 0, authentication: 0, shared: 0, encrypt_storage: 0, encrypt_comms: 0, sign: 0, certify: 0 }, rest: Some(b"\0") }

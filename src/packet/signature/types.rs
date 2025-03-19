@@ -1,34 +1,37 @@
-use std::io::Read;
+use std::io::{BufRead, Read};
 
-use bitfield::bitfield;
-use bstr::{BStr, BString};
-use byteorder::{BigEndian, ByteOrder};
+use bitfields::bitfield;
+use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
-use iter_read::IterRead;
+use digest::DynDigest;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
-use smallvec::{smallvec, SmallVec};
 
 use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::hash::{HashAlgorithm, WriteHasher};
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
-use crate::normalize_lines::Normalized;
+use crate::normalize_lines::NormalizedReader;
 use crate::packet::signature::SignatureConfig;
-use crate::packet::{PacketTrait, SignatureVersionSpecific};
+use crate::packet::{
+    PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket, SubpacketData,
+};
+use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
-    self, CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, SignatureBytes,
-    Tag, Version,
+    self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
+    SignatureBytes, Tag,
 };
 
 /// Signature Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-signature-packet-type-id-2>
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct Signature {
-    packet_version: Version,
+    packet_header: PacketHeader,
 
     pub config: SignatureConfig,
     #[debug("{}", hex::encode(signed_hash_value))]
@@ -41,7 +44,7 @@ impl Signature {
     /// Note: This is a historical packet version!
     #[allow(clippy::too_many_arguments)]
     pub fn v2(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -51,7 +54,7 @@ impl Signature {
         signature: SignatureBytes,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -69,7 +72,7 @@ impl Signature {
     /// Note: This is a historical packet version!
     #[allow(clippy::too_many_arguments)]
     pub fn v3(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -79,7 +82,7 @@ impl Signature {
         signature: SignatureBytes,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -99,7 +102,7 @@ impl Signature {
     /// (and formerly in 4880 and 2440).
     #[allow(clippy::too_many_arguments)]
     pub fn v4(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -109,7 +112,7 @@ impl Signature {
         unhashed_subpackets: Vec<Subpacket>,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -128,7 +131,7 @@ impl Signature {
     /// OpenPGP v6 signatures are specified in RFC 9580 and only used with OpenPGP v6 keys.
     #[allow(clippy::too_many_arguments)]
     pub fn v6(
-        packet_version: Version,
+        packet_header: PacketHeader,
         typ: SignatureType,
         pub_alg: PublicKeyAlgorithm,
         hash_alg: HashAlgorithm,
@@ -139,7 +142,7 @@ impl Signature {
         salt: Vec<u8>,
     ) -> Self {
         Signature {
-            packet_version,
+            packet_header,
             config: SignatureConfig {
                 typ,
                 pub_alg,
@@ -157,13 +160,39 @@ impl Signature {
         config: SignatureConfig,
         signed_hash_value: [u8; 2],
         signature: SignatureBytes,
-    ) -> Self {
-        Signature {
-            packet_version: Default::default(),
+    ) -> Result<Self> {
+        let len = match config.version() {
+            SignatureVersion::V2 | SignatureVersion::V3 => {
+                let mut sum = 1;
+                sum += config.write_len_v3();
+                sum += 2; // signed hash value
+                sum += signature.write_len();
+                sum
+            }
+            SignatureVersion::V4 | SignatureVersion::V6 => {
+                let mut sum = 1;
+                sum += config.write_len_v4_v6();
+                sum += 2; // signed hash value
+                if let SignatureVersionSpecific::V6 { ref salt } = config.version_specific {
+                    sum += 1;
+                    sum += salt.len();
+                }
+                sum += signature.write_len();
+                sum
+            }
+            SignatureVersion::V5 => {
+                unsupported_err!("crate V5 signature")
+            }
+            SignatureVersion::Other(version) => unsupported_err!("signature version {}", version),
+        };
+        let packet_header = PacketHeader::new_fixed(Tag::Signature, len.try_into()?);
+
+        Ok(Signature {
+            packet_header,
             config,
             signed_hash_value,
             signature,
-        }
+        })
     }
 
     /// Returns what kind of signature this is.
@@ -256,17 +285,16 @@ impl Signature {
         }
 
         if matches!(self.typ(), SignatureType::Text) {
-            let normalized = Normalized::new(data.bytes().flat_map(|b| b.ok()), LineBreak::Crlf);
+            let normalized = NormalizedReader::new(data, LineBreak::Crlf);
 
-            self.config
-                .hash_data_to_sign(&mut *hasher, IterRead::new(normalized))?;
+            self.config.hash_data_to_sign(&mut hasher, normalized)?;
         } else {
-            self.config.hash_data_to_sign(&mut *hasher, data)?;
+            self.config.hash_data_to_sign(&mut hasher, data)?;
         }
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
 
         // Check that the high 16 bits of the hash from the signature packet match with the hash we
         // just calculated.
@@ -288,23 +316,25 @@ impl Signature {
     }
 
     /// Verifies a certification signature type (for self-signatures).
-    pub fn verify_certification(
-        &self,
-        key: &impl PublicKeyTrait,
-        tag: Tag,
-        id: &impl Serialize,
-    ) -> Result<()> {
+    pub fn verify_certification<P>(&self, key: &P, tag: Tag, id: &impl Serialize) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         self.verify_third_party_certification(&key, &key, tag, id)
     }
 
     /// Verifies a certification signature type (for third-party signatures).
-    pub fn verify_third_party_certification(
+    pub fn verify_third_party_certification<P, K>(
         &self,
-        signee: &impl PublicKeyTrait,
-        signer: &impl PublicKeyTrait,
+        signee: &P,
+        signer: &K,
         tag: Tag,
         id: &impl Serialize,
-    ) -> Result<()> {
+    ) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         let key_id = signee.key_id();
         debug!("verifying certification {:?} {:#?}", key_id, self);
 
@@ -324,16 +354,13 @@ impl Signature {
 
         // the key of the signee
         {
-            let mut key_buf = Vec::new();
             // TODO: this is different for V5
-            signee.serialize_for_hashing(&mut key_buf)?;
-            hasher.update(&key_buf);
+            serialize_for_hashing(signee, &mut hasher)?;
         }
 
         // the packet content
         {
-            let mut packet_buf = Vec::new();
-            id.to_writer(&mut packet_buf)?;
+            let packet_len = id.write_len();
 
             match self.config.version() {
                 SignatureVersion::V2 | SignatureVersion::V3 => {
@@ -347,7 +374,7 @@ impl Signature {
                     };
 
                     let mut prefix_buf = [prefix, 0u8, 0u8, 0u8, 0u8];
-                    BigEndian::write_u32(&mut prefix_buf[1..], packet_buf.len().try_into()?);
+                    BigEndian::write_u32(&mut prefix_buf[1..], packet_len.try_into()?);
 
                     // prefixes
                     hasher.update(&prefix_buf);
@@ -360,13 +387,13 @@ impl Signature {
                 }
             }
 
-            hasher.update(&packet_buf);
+            id.to_writer(&mut WriteHasher(&mut hasher))?;
         }
 
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
@@ -379,22 +406,22 @@ impl Signature {
     /// Verifies a key binding (which binds a subkey to the primary key).
     ///
     /// "Subkey Binding Signature (type ID 0x18)"
-    pub fn verify_key_binding(
-        &self,
-        signing_key: &impl PublicKeyTrait,
-        key: &impl PublicKeyTrait,
-    ) -> Result<()> {
+    pub fn verify_key_binding<P, K>(&self, signing_key: &P, key: &K) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         self.verify_key_binding_internal(signing_key, key, false)
     }
 
     /// Verifies a primary key binding signature, or "back signature" (which links the primary to a signing subkey).
     ///
     /// "Primary Key Binding Signature (type ID 0x19)"
-    pub fn verify_backwards_key_binding(
-        &self,
-        signing_key: &impl PublicKeyTrait,
-        key: &impl PublicKeyTrait,
-    ) -> Result<()> {
+    pub fn verify_backwards_key_binding<P, K>(&self, signing_key: &P, key: &K) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         self.verify_key_binding_internal(signing_key, key, true)
     }
 
@@ -402,12 +429,11 @@ impl Signature {
     ///
     /// - when backsig is false: verify a "Subkey Binding Signature (type ID 0x18)"
     /// - when backsig is true: verify a "Primary Key Binding Signature (type ID 0x19)"
-    fn verify_key_binding_internal(
-        &self,
-        signer: &impl PublicKeyTrait,
-        signee: &impl PublicKeyTrait,
-        backsig: bool,
-    ) -> Result<()> {
+    fn verify_key_binding_internal<P, K>(&self, signer: &P, signee: &K, backsig: bool) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         debug!(
             "verifying key binding: {:#?} - {:#?} - {:#?} (backsig: {})",
             self, signer, signee, backsig
@@ -427,31 +453,25 @@ impl Signature {
 
         // First key to hash
         {
-            let mut key_buf = Vec::new();
             if !backsig {
-                signer.serialize_for_hashing(&mut key_buf)?; // primary
+                serialize_for_hashing(signer, &mut hasher)?; // primary
             } else {
-                signee.serialize_for_hashing(&mut key_buf)?; // primary
+                serialize_for_hashing(signee, &mut hasher)?; // primary
             }
-
-            hasher.update(&key_buf);
         }
         // Second key to hash
         {
-            let mut key_buf = Vec::new();
             if !backsig {
-                signee.serialize_for_hashing(&mut key_buf)?; // subkey
+                serialize_for_hashing(signee, &mut hasher)?; // subkey
             } else {
-                signer.serialize_for_hashing(&mut key_buf)?; // subkey
+                serialize_for_hashing(signer, &mut hasher)?; // subkey
             }
-
-            hasher.update(&key_buf);
         }
 
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
@@ -462,7 +482,10 @@ impl Signature {
     }
 
     /// Verifies a direct key signature or a revocation.
-    pub fn verify_key(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify_key<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         debug!("verifying key (revocation): {:#?} - {:#?}", self, key);
 
         Self::check_signature_key_version_alignment(&key, &self.config)?;
@@ -479,17 +502,12 @@ impl Signature {
             hasher.update(salt.as_ref())
         }
 
-        {
-            let mut key_buf = Vec::new();
-            key.serialize_for_hashing(&mut key_buf)?;
-
-            hasher.update(&key_buf);
-        }
+        serialize_for_hashing(key, &mut hasher)?;
 
         let len = self.config.hash_signature_data(&mut hasher)?;
         hasher.update(&self.config.trailer(len)?);
 
-        let hash = &hasher.finish()[..];
+        let hash = &hasher.finalize()[..];
         ensure_eq!(
             &self.signed_hash_value,
             &hash[0..2],
@@ -584,7 +602,7 @@ impl Signature {
         self.config
             .hashed_subpackets()
             .find_map(|p| match &p.data {
-                SubpacketData::KeyFlags(d) => Some(d[..].into()),
+                SubpacketData::KeyFlags(flags) => Some(flags.clone()),
                 _ => None,
             })
             .unwrap_or_default()
@@ -607,9 +625,9 @@ impl Signature {
         })
     }
 
-    pub fn revocation_reason_string(&self) -> Option<&BStr> {
+    pub fn revocation_reason_string(&self) -> Option<&Bytes> {
         self.config.hashed_subpackets().find_map(|p| match &p.data {
-            SubpacketData::RevocationReason(_, reason) => Some(reason.as_ref()),
+            SubpacketData::RevocationReason(_, reason) => Some(reason),
             _ => None,
         })
     }
@@ -677,9 +695,9 @@ impl Signature {
     /// Note that the user id may not be valid utf-8, if it was created
     /// using a different encoding. But since the RFC describes every
     /// text as utf-8 it is up to the caller whether to error on non utf-8 data.
-    pub fn signers_userid(&self) -> Option<&BStr> {
+    pub fn signers_userid(&self) -> Option<&Bytes> {
         self.config.hashed_subpackets().find_map(|p| match &p.data {
-            SubpacketData::SignersUserID(d) => Some(d.as_ref()),
+            SubpacketData::SignersUserID(d) => Some(d),
             _ => None,
         })
     }
@@ -698,9 +716,9 @@ impl Signature {
         })
     }
 
-    pub fn regular_expression(&self) -> Option<&BStr> {
+    pub fn regular_expression(&self) -> Option<&Bytes> {
         self.config.hashed_subpackets().find_map(|p| match &p.data {
-            SubpacketData::RegularExpression(d) => Some(d.as_ref()),
+            SubpacketData::RegularExpression(d) => Some(d),
             _ => None,
         })
     }
@@ -737,6 +755,7 @@ impl Default for SignatureVersion {
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
 pub enum SignatureType {
     /// Signature of a binary document.
@@ -833,238 +852,212 @@ pub enum SignatureType {
     ThirdParty = 0x50,
 
     #[num_enum(catch_all)]
-    Other(u8),
+    Other(#[cfg_attr(test, proptest(strategy = "0x51u8.."))] u8),
 }
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone)]
-/// Available signature subpacket types
-pub enum SubpacketType {
-    SignatureCreationTime,
-    SignatureExpirationTime,
-    ExportableCertification,
-    TrustSignature,
-    RegularExpression,
-    Revocable,
-    KeyExpirationTime,
-    PreferredSymmetricAlgorithms,
-    RevocationKey,
-    Issuer,
-    Notation,
-    PreferredHashAlgorithms,
-    PreferredCompressionAlgorithms,
-    KeyServerPreferences,
-    PreferredKeyServer,
-    PrimaryUserId,
-    PolicyURI,
-    KeyFlags,
-    SignersUserID,
-    RevocationReason,
-    Features,
-    SignatureTarget,
-    EmbeddedSignature,
-    IssuerFingerprint,
-    PreferredEncryptionModes, // non-RFC, may only be 1: EAX, 2: OCB
-    IntendedRecipientFingerprint,
-    // AttestedCertifications, // non-RFC
-    // KeyBlock,               // non-RFC
-    PreferredAead,
-    Experimental(u8),
-    Other(u8),
+/// Key flags by default are only 1 byte large, but there are reserved
+/// extensions making them 2 bytes large.
+/// In addition the spec defines them to be arbitrarily large, but this is
+/// not yet used.
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-key-flags>
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct KeyFlags {
+    /// Handles the first two bytes.
+    known: KnownKeyFlags,
+    /// Any additional key flag bytes.
+    rest: Option<Bytes>,
+    /// Need to store this, to fully roundtrip..
+    original_len: usize,
 }
 
-impl SubpacketType {
-    pub fn as_u8(&self, is_critical: bool) -> u8 {
-        let raw: u8 = match self {
-            SubpacketType::SignatureCreationTime => 2,
-            SubpacketType::SignatureExpirationTime => 3,
-            SubpacketType::ExportableCertification => 4,
-            SubpacketType::TrustSignature => 5,
-            SubpacketType::RegularExpression => 6,
-            SubpacketType::Revocable => 7,
-            SubpacketType::KeyExpirationTime => 9,
-            SubpacketType::PreferredSymmetricAlgorithms => 11,
-            SubpacketType::RevocationKey => 12,
-            SubpacketType::Issuer => 16,
-            SubpacketType::Notation => 20,
-            SubpacketType::PreferredHashAlgorithms => 21,
-            SubpacketType::PreferredCompressionAlgorithms => 22,
-            SubpacketType::KeyServerPreferences => 23,
-            SubpacketType::PreferredKeyServer => 24,
-            SubpacketType::PrimaryUserId => 25,
-            SubpacketType::PolicyURI => 26,
-            SubpacketType::KeyFlags => 27,
-            SubpacketType::SignersUserID => 28,
-            SubpacketType::RevocationReason => 29,
-            SubpacketType::Features => 30,
-            SubpacketType::SignatureTarget => 31,
-            SubpacketType::EmbeddedSignature => 32,
-            SubpacketType::IssuerFingerprint => 33,
-            SubpacketType::PreferredEncryptionModes => 34,
-            SubpacketType::IntendedRecipientFingerprint => 35,
-            // SubpacketType::AttestedCertifications => 37,
-            // SubpacketType::KeyBlock => 38,
-            SubpacketType::PreferredAead => 39,
-            SubpacketType::Experimental(n) => *n,
-            SubpacketType::Other(n) => *n,
-        };
+impl Default for KeyFlags {
+    fn default() -> Self {
+        Self {
+            known: KnownKeyFlags::default(),
+            rest: None,
+            original_len: 1,
+        }
+    }
+}
 
-        if is_critical {
-            // set critical bit
-            raw | 0b1000_0000
+impl KeyFlags {
+    /// Parse the key flags from the given buffer.
+    pub fn try_from_reader<B: BufRead>(mut reader: B) -> Result<Self> {
+        let mut buf = reader.rest()?.freeze();
+        let remaining = buf.len();
+
+        if remaining == 0 {
+            return Ok(Self {
+                known: KnownKeyFlags::default(),
+                rest: None,
+                original_len: remaining,
+            });
+        }
+        if remaining == 1 {
+            let known = KnownKeyFlags::from_bits(buf.read_u8()? as u16);
+            return Ok(Self {
+                known,
+                rest: None,
+                original_len: remaining,
+            });
+        }
+        if remaining == 2 {
+            let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
+            return Ok(Self {
+                known,
+                rest: None,
+                original_len: remaining,
+            });
+        }
+        let known = KnownKeyFlags::from_bits(buf.read_le_u16()?);
+        let rest = Some(buf.rest());
+        Ok(Self {
+            known,
+            rest,
+            original_len: remaining,
+        })
+    }
+
+    pub fn set_certify(&mut self, val: bool) {
+        self.known.set_certify(val);
+    }
+    pub fn set_encrypt_comms(&mut self, val: bool) {
+        self.known.set_encrypt_comms(val);
+    }
+    pub fn set_encrypt_storage(&mut self, val: bool) {
+        self.known.set_encrypt_storage(val);
+    }
+    pub fn set_sign(&mut self, val: bool) {
+        self.known.set_sign(val);
+    }
+    pub fn set_shared(&mut self, val: bool) {
+        self.known.set_shared(val);
+    }
+    pub fn set_authentication(&mut self, val: bool) {
+        self.known.set_authentication(val);
+    }
+    pub fn set_group(&mut self, val: bool) {
+        self.known.set_group(val);
+    }
+
+    pub fn set_adsk(&mut self, val: bool) {
+        self.known.set_adsk(val);
+    }
+
+    pub fn set_timestamping(&mut self, val: bool) {
+        self.known.set_timestamping(val);
+    }
+
+    pub fn certify(&self) -> bool {
+        self.known.certify()
+    }
+
+    pub fn encrypt_comms(&self) -> bool {
+        self.known.encrypt_comms()
+    }
+
+    pub fn encrypt_storage(&self) -> bool {
+        self.known.encrypt_storage()
+    }
+
+    pub fn sign(&self) -> bool {
+        self.known.sign()
+    }
+
+    pub fn shared(&self) -> bool {
+        self.known.shared()
+    }
+
+    pub fn authentication(&self) -> bool {
+        self.known.authentication()
+    }
+
+    pub fn group(&self) -> bool {
+        self.known.group()
+    }
+
+    pub fn adsk(&self) -> bool {
+        self.known.adsk()
+    }
+
+    pub fn timestamping(&self) -> bool {
+        self.known.timestamping()
+    }
+}
+
+impl Serialize for KeyFlags {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        if self.original_len == 0 {
+            return Ok(());
+        }
+
+        let [a, b] = self.known.into_bits().to_le_bytes();
+        writer.write_u8(a)?;
+
+        if self.original_len > 1 || b != 0 {
+            writer.write_u8(b)?;
+        }
+
+        if let Some(ref rest) = self.rest {
+            writer.write_all(rest)?;
+        }
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        if self.original_len == 0 {
+            return 0;
+        }
+        let mut sum = 0;
+        let [_, b] = self.known.into_bits().to_le_bytes();
+        if self.original_len > 1 || b > 0 {
+            sum += 2;
         } else {
-            raw
+            sum += 1;
         }
-    }
 
-    #[inline]
-    pub fn from_u8(n: u8) -> (Self, bool) {
-        let is_critical = (n >> 7) == 1;
-        // remove critical bit
-        let n = n & 0b0111_1111;
-
-        let m = match n {
-            2 => SubpacketType::SignatureCreationTime,
-            3 => SubpacketType::SignatureExpirationTime,
-            4 => SubpacketType::ExportableCertification,
-            5 => SubpacketType::TrustSignature,
-            6 => SubpacketType::RegularExpression,
-            7 => SubpacketType::Revocable,
-            9 => SubpacketType::KeyExpirationTime,
-            11 => SubpacketType::PreferredSymmetricAlgorithms,
-            12 => SubpacketType::RevocationKey,
-            16 => SubpacketType::Issuer,
-            20 => SubpacketType::Notation,
-            21 => SubpacketType::PreferredHashAlgorithms,
-            22 => SubpacketType::PreferredCompressionAlgorithms,
-            23 => SubpacketType::KeyServerPreferences,
-            24 => SubpacketType::PreferredKeyServer,
-            25 => SubpacketType::PrimaryUserId,
-            26 => SubpacketType::PolicyURI,
-            27 => SubpacketType::KeyFlags,
-            28 => SubpacketType::SignersUserID,
-            29 => SubpacketType::RevocationReason,
-            30 => SubpacketType::Features,
-            31 => SubpacketType::SignatureTarget,
-            32 => SubpacketType::EmbeddedSignature,
-            33 => SubpacketType::IssuerFingerprint,
-            34 => SubpacketType::PreferredEncryptionModes,
-            35 => SubpacketType::IntendedRecipientFingerprint,
-            // 37 => SubpacketType::AttestedCertifications,
-            // 38 => SubpacketType::KeyBlock,
-            39 => SubpacketType::PreferredAead,
-            100..=110 => SubpacketType::Experimental(n),
-            _ => SubpacketType::Other(n),
-        };
-
-        (m, is_critical)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Subpacket {
-    pub is_critical: bool,
-    pub data: SubpacketData,
-}
-
-impl Subpacket {
-    /// Construct a new regular subpacket.
-    pub const fn regular(data: SubpacketData) -> Self {
-        Subpacket {
-            is_critical: false,
-            data,
+        if let Some(ref rest) = self.rest {
+            sum += rest.len();
         }
-    }
-
-    /// Construct a new critical subpacket.
-    pub const fn critical(data: SubpacketData) -> Self {
-        Subpacket {
-            is_critical: true,
-            data,
-        }
+        sum
     }
 }
 
-#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
-pub enum SubpacketData {
-    /// The time the signature was made.
-    SignatureCreationTime(DateTime<Utc>),
-    /// The time the signature will expire.
-    SignatureExpirationTime(Duration),
-    /// When the key is going to expire
-    KeyExpirationTime(Duration),
-    /// The OpenPGP Key ID of the key issuing the signature.
-    Issuer(KeyId),
-    /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
-    /// Renamed to "Preferred Symmetric Ciphers for v1 SEIPD" in RFC 9580
-    PreferredSymmetricAlgorithms(SmallVec<[SymmetricKeyAlgorithm; 8]>),
-    /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
-    PreferredHashAlgorithms(SmallVec<[HashAlgorithm; 8]>),
-    /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
-    PreferredCompressionAlgorithms(SmallVec<[CompressionAlgorithm; 8]>),
-    KeyServerPreferences(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 4]>),
-    KeyFlags(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
-    Features(#[debug("{}", hex::encode(_0))] SmallVec<[u8; 1]>),
-    RevocationReason(RevocationCode, BString),
-    IsPrimary(bool),
-    Revocable(bool),
-    EmbeddedSignature(Box<Signature>),
-    PreferredKeyServer(String),
-    Notation(Notation),
-    RevocationKey(types::RevocationKey),
-    SignersUserID(BString),
-    /// The URI of the policy under which the signature was issued
-    PolicyURI(String),
-    TrustSignature(u8, u8),
-    RegularExpression(BString),
-    ExportableCertification(bool),
-    IssuerFingerprint(Fingerprint),
-    PreferredEncryptionModes(SmallVec<[AeadAlgorithm; 2]>),
-    IntendedRecipientFingerprint(Fingerprint),
-    PreferredAeadAlgorithms(SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>),
-    Experimental(u8, #[debug("{}", hex::encode(_1))] SmallVec<[u8; 2]>),
-    Other(u8, #[debug("{}", hex::encode(_1))] Vec<u8>),
-    SignatureTarget(
-        PublicKeyAlgorithm,
-        HashAlgorithm,
-        #[debug("{}", hex::encode(_2))] Vec<u8>,
-    ),
-}
-
-bitfield! {
-    #[derive(Default, PartialEq, Eq, Copy, Clone)]
-    pub struct KeyFlags(u8);
-    impl Debug;
-
-    pub certify, set_certify: 0;
-    pub sign, set_sign: 1;
-    pub encrypt_comms, set_encrypt_comms: 2;
-    pub encrypt_storage, set_encrypt_storage: 3;
-    pub shared, set_shared: 4;
-    pub authentication, set_authentication: 5;
-    pub group, set_group: 7;
-}
-
-impl<'a> From<&'a [u8]> for KeyFlags {
-    fn from(other: &'a [u8]) -> Self {
-        if other.is_empty() {
-            Default::default()
-        } else {
-            KeyFlags(other[0])
-        }
-    }
-}
-
-impl From<KeyFlags> for SmallVec<[u8; 1]> {
-    fn from(flags: KeyFlags) -> Self {
-        smallvec![flags.0]
-    }
+#[bitfield(u16, order = lsb)]
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub struct KnownKeyFlags {
+    #[bits(1)]
+    certify: bool,
+    #[bits(1)]
+    sign: bool,
+    #[bits(1)]
+    encrypt_comms: bool,
+    #[bits(1)]
+    encrypt_storage: bool,
+    #[bits(1)]
+    shared: bool,
+    #[bits(1)]
+    authentication: bool,
+    #[bits(1)]
+    _padding0: u8,
+    #[bits(1)]
+    group: bool,
+    #[bits(2)]
+    _padding1: u8,
+    #[bits(1)]
+    adsk: bool,
+    #[bits(1)]
+    timestamping: bool,
+    #[bits(4)]
+    _padding2: u8,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Notation {
     pub readable: bool,
-    pub name: BString,
-    pub value: BString,
+    pub name: Bytes,
+    pub value: Bytes,
 }
 
 /// Codes for revocation reasons
@@ -1101,58 +1094,126 @@ pub enum RevocationCode {
 }
 
 impl PacketTrait for Signature {
-    fn packet_version(&self) -> Version {
-        self.packet_version
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
+    }
+}
+
+pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
+    key: &K,
+    hasher: &mut Box<dyn DynDigest>,
+) -> Result<()> {
+    let key_len = key.write_len();
+
+    let mut writer = WriteHasher(hasher);
+
+    // old style packet header for the key
+    match key.version() {
+        KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 => {
+            // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
+            // followed by a two-octet length of the key, and then the body of the key packet.
+            writer.write_u8(0x99)?;
+            writer.write_u16::<BigEndian>(key_len.try_into()?)?;
+        }
+
+        KeyVersion::V6 => {
+            // When a v6 signature is made over a key, the hash data starts with the salt
+            // [NOTE: the salt is hashed in packet/signature/config.rs],
+
+            // then octet 0x9B, followed by a four-octet length of the key,
+            // and then the body of the key packet.
+            writer.write_u8(0x9b)?;
+            writer.write_u32::<BigEndian>(key_len.try_into()?)?;
+        }
+
+        v => unimplemented_err!("key version {:?}", v),
     }
 
-    fn tag(&self) -> Tag {
-        Tag::Signature
-    }
+    key.to_writer(&mut writer)?;
+
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use bytes::BytesMut;
+
     use super::*;
+    use crate::packet::SubpacketType;
+
+    /// keyflags being all zeros..are special
+    #[test]
+    fn test_keyflags_crazy_versions() {
+        for i in 0..1024 {
+            println!("size {}", i);
+            // I write this with pain...
+            let source = BytesMut::zeroed(i).freeze();
+            let flags = KeyFlags::try_from_reader(&source[..]).unwrap();
+            assert_eq!(&flags.to_bytes().unwrap(), &source);
+        }
+    }
 
     #[test]
-    fn test_keyflags() {
+    fn test_keyflags_1_byte() {
         let flags: KeyFlags = Default::default();
-        assert_eq!(flags.0, 0x00);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x00]);
 
         let mut flags = KeyFlags::default();
         flags.set_certify(true);
         assert!(flags.certify());
-        assert_eq!(flags.0, 0x01);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x01]);
 
         let mut flags = KeyFlags::default();
         flags.set_sign(true);
-        assert_eq!(flags.0, 0x02);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x02]);
 
         let mut flags = KeyFlags::default();
         flags.set_encrypt_comms(true);
-        assert_eq!(flags.0, 0x04);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x04]);
 
         let mut flags = KeyFlags::default();
         flags.set_encrypt_storage(true);
-        assert_eq!(flags.0, 0x08);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x08]);
 
         let mut flags = KeyFlags::default();
         flags.set_shared(true);
-        assert_eq!(flags.0, 0x10);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x10]);
 
         let mut flags = KeyFlags::default();
         flags.set_authentication(true);
-        assert_eq!(flags.0, 0x20);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x20]);
 
         let mut flags = KeyFlags::default();
         flags.set_group(true);
-        assert_eq!(flags.0, 0x80);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x80]);
+
+        let mut flags = KeyFlags::default();
+        flags.set_certify(true);
+        flags.set_sign(true);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x03]);
+    }
+
+    #[test]
+    fn test_keyflags_2_bytes() {
+        let mut flags: KeyFlags = Default::default();
+        flags.set_adsk(true);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x00, 0x04]);
+
+        let mut flags: KeyFlags = Default::default();
+        flags.set_timestamping(true);
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x00, 0x08]);
+
+        let mut flags: KeyFlags = Default::default();
+        flags.set_timestamping(true);
+        flags.set_certify(true);
+        flags.set_sign(true);
+
+        assert_eq!(flags.to_bytes().unwrap(), vec![0x03, 0x08]);
     }
 
     #[test]
     fn test_critical() {
         use SubpacketType::*;
-
         let cases = [
             SignatureCreationTime,
             SignatureExpirationTime,
@@ -1185,6 +1246,36 @@ mod tests {
         for case in cases {
             assert_eq!(SubpacketType::from_u8(case.as_u8(false)), (case, false));
             assert_eq!(SubpacketType::from_u8(case.as_u8(true)), (case, true));
+        }
+    }
+
+    use proptest::prelude::*;
+
+    impl Arbitrary for KeyFlags {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            proptest::collection::vec(0u8..255, 1..500)
+                .prop_map(|v| KeyFlags::try_from_reader(&mut &v[..]).unwrap())
+                .boxed()
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn keyflags_write_len(flags: KeyFlags) {
+            let mut buf = Vec::new();
+            flags.to_writer(&mut buf).unwrap();
+            prop_assert_eq!(buf.len(), flags.write_len());
+        }
+
+        #[test]
+        fn keyflags_packet_roundtrip(flags: KeyFlags) {
+            let mut buf = Vec::new();
+            flags.to_writer(&mut buf).unwrap();
+            let new_flags = KeyFlags::try_from_reader(&mut &buf[..]).unwrap();
+            prop_assert_eq!(flags, new_flags);
         }
     }
 }
