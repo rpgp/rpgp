@@ -208,7 +208,7 @@ where {
         let mut bytes = Vec::new();
         dearmor.read_to_end(&mut bytes)?;
 
-        let signatures = StandaloneSignature::from_bytes_many(bytes.into())?;
+        let signatures = StandaloneSignature::from_bytes_many(&bytes[..])?;
         let signatures = signatures.collect::<Result<_>>()?;
 
         let (_, headers, _, b) = dearmor.into_parts();

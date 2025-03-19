@@ -1,12 +1,10 @@
 use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::Buf;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
 use crate::errors::Result;
-use crate::parsing::BufParsing;
 use crate::parsing_reader::BufReadParsing;
 
 /// Represents the packet length.
@@ -29,29 +27,7 @@ impl PacketLength {
         }
     }
 
-    pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
-        let olen = i.read_u8()?;
-        let len = match olen {
-            // One-Octet Lengths
-            0..=191 => PacketLength::Fixed(olen.into()),
-            // Two-Octet Lengths
-            192..=223 => {
-                let a = i.read_u8()?;
-                let l = ((olen as u32 - 192) << 8) + 192 + a as u32;
-                PacketLength::Fixed(l)
-            }
-            // Partial Body Lengths
-            224..=254 => PacketLength::Partial(1 << (olen as usize & 0x1F)),
-            // Five-Octet Lengths
-            255 => {
-                let len = i.read_be_u32()?;
-                PacketLength::Fixed(len)
-            }
-        };
-        Ok(len)
-    }
-
-    pub fn from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
+    pub fn try_from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
         let olen = r.read_u8()?;
         let len = match olen {
             // One-Octet Lengths
@@ -166,9 +142,53 @@ pub enum Tag {
 impl Tag {
     /// Packet Type ID encoded in OpenPGP format
     /// (bits 7 and 6 set, bits 5-0 carry the packet type ID)
-    pub fn encode(self) -> u8 {
-        let t: u8 = self.into();
+    pub const fn encode(self) -> u8 {
+        let t = match self {
+            Self::PublicKeyEncryptedSessionKey => 1,
+            Self::Signature => 2,
+            Self::SymKeyEncryptedSessionKey => 3,
+            Self::OnePassSignature => 4,
+            Self::SecretKey => 5,
+            Self::PublicKey => 6,
+            Self::SecretSubkey => 7,
+            Self::CompressedData => 8,
+            Self::SymEncryptedData => 9,
+            Self::Marker => 10,
+            Self::LiteralData => 11,
+            Self::Trust => 12,
+            Self::UserId => 13,
+            Self::PublicSubkey => 14,
+            Self::UserAttribute => 17,
+            Self::SymEncryptedProtectedData => 18,
+            Self::ModDetectionCode => 19,
+            Self::Padding => 21,
+            Self::Other(i) => i,
+        };
         0b1100_0000 | t
+    }
+
+    pub const fn from_bits(bits: u8) -> Self {
+        match bits {
+            1 => Self::PublicKeyEncryptedSessionKey,
+            2 => Self::Signature,
+            3 => Self::SymKeyEncryptedSessionKey,
+            4 => Self::OnePassSignature,
+            5 => Self::SecretKey,
+            6 => Self::PublicKey,
+            7 => Self::SecretSubkey,
+            8 => Self::CompressedData,
+            9 => Self::SymEncryptedData,
+            10 => Self::Marker,
+            11 => Self::LiteralData,
+            12 => Self::Trust,
+            13 => Self::UserId,
+            14 => Self::PublicSubkey,
+            17 => Self::UserAttribute,
+            18 => Self::SymEncryptedProtectedData,
+            19 => Self::ModDetectionCode,
+            21 => Self::Padding,
+            i => Self::Other(i),
+        }
     }
 }
 

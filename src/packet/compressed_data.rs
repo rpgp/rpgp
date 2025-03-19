@@ -9,7 +9,6 @@ use log::debug;
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{CompressionAlgorithm, PacketHeaderVersion, PacketLength, Tag};
@@ -35,7 +34,7 @@ pub enum Decompressor<R> {
     Zip(BufReader<DeflateDecoder<R>>),
     Zlib(BufReader<ZlibDecoder<R>>),
     #[cfg(feature = "bzip2")]
-    Bzip2(#[debug("BufReader")] BufReader<BzDecoder<R>>),
+    Bzip2(#[debug("BzDecoder")] BufReader<BzDecoder<R>>),
 }
 
 impl<R: BufRead> Decompressor<R> {
@@ -57,6 +56,26 @@ impl<R: BufRead> Decompressor<R> {
                 io::ErrorKind::InvalidInput,
                 format!("unsupported compression algorithm {:?}", alg),
             )),
+        }
+    }
+
+    pub fn get_ref(&self) -> &R {
+        match self {
+            Self::Uncompressed(r) => r,
+            Self::Zip(r) => r.get_ref().get_ref(),
+            Self::Zlib(r) => r.get_ref().get_ref(),
+            #[cfg(feature = "bzip2")]
+            Self::Bzip2(r) => r.get_ref().get_ref(),
+        }
+    }
+
+    pub fn get_mut(&mut self) -> &mut R {
+        match self {
+            Self::Uncompressed(r) => r,
+            Self::Zip(r) => r.get_mut().get_mut(),
+            Self::Zlib(r) => r.get_mut().get_mut(),
+            #[cfg(feature = "bzip2")]
+            Self::Bzip2(r) => r.get_mut().get_mut(),
         }
     }
 
@@ -107,21 +126,19 @@ impl<R: BufRead> Read for Decompressor<R> {
 
 impl CompressedData {
     /// Parses a `CompressedData` packet from the given `Buf`.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
         let alg = input.read_u8().map(CompressionAlgorithm::from)?;
 
         Ok(CompressedData {
             packet_header,
             compression_algorithm: alg,
-            compressed_data: input.copy_to_bytes(input.remaining()),
+            compressed_data: input.rest()?.freeze(),
         })
     }
 
     /// Create the structure from the raw compressed data.
-    pub(crate) fn from_compressed(
-        alg: CompressionAlgorithm,
-        data: impl Into<Bytes>,
-    ) -> Result<Self> {
+    #[cfg(test)]
+    fn from_compressed(alg: CompressionAlgorithm, data: impl Into<Bytes>) -> Result<Self> {
         let compressed_data = data.into();
         let len = 1 + compressed_data.len();
         let packet_header = PacketHeader::new_fixed(Tag::CompressedData, len.try_into()?);
@@ -514,7 +531,7 @@ mod tests {
             // roundtrip
 
             let packets: Vec<_> =
-                crate::packet::many::PacketParser::new(generator_out.clone().into()).collect();
+                crate::packet::many::PacketParser::new(&generator_out[..]).collect();
             assert_eq!(packets.len(), 1, "{:?}", packets);
             let packet_back = packets[0].as_ref().unwrap();
 
@@ -560,7 +577,7 @@ mod tests {
         fn packet_roundtrip(packet: CompressedData) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = CompressedData::from_buf(*packet.packet_header(), &mut &buf[..]).unwrap();
+            let new_packet = CompressedData::try_from_reader(*packet.packet_header(), &mut &buf[..]).unwrap();
             assert_eq!(packet, new_packet);
         }
     }

@@ -1,10 +1,8 @@
-use std::io;
-
-use bytes::Buf;
+use std::io::{self, BufRead};
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 /// PGP as UTF-8 octets.
@@ -20,7 +18,7 @@ pub struct Marker {
 
 impl Marker {
     /// Parses a `Marker` packet from the given slice.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut input: B) -> Result<Self> {
         let marker = input.read_array::<3>()?;
         ensure_eq!(marker, PGP, "invalid input");
 
@@ -64,7 +62,7 @@ mod tests {
         fn packet_roundtrip(marker: Marker) {
             let mut buf = Vec::new();
             marker.to_writer(&mut buf).unwrap();
-            let new_marker = Marker::from_buf(marker.packet_header, &mut &buf[..]).unwrap();
+            let new_marker = Marker::try_from_reader(marker.packet_header, &mut &buf[..]).unwrap();
             assert_eq!(marker, new_marker);
         }
     }

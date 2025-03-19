@@ -1,11 +1,11 @@
-use std::io;
+use std::io::{self, BufRead};
 
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::{Error, Result};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 mod dsa;
@@ -71,7 +71,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
 
 impl PublicParams {
     /// Parses the public parameters of key.
-    pub fn try_from_buf<B: Buf>(
+    pub fn try_from_reader<B: BufRead>(
         typ: PublicKeyAlgorithm,
         len: Option<usize>,
         i: B,
@@ -80,45 +80,45 @@ impl PublicParams {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSAEncrypt
             | PublicKeyAlgorithm::RSASign => {
-                let params = RsaPublicParams::try_from_buf(i)?;
+                let params = RsaPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::RSA(params))
             }
             PublicKeyAlgorithm::DSA => {
-                let params = DsaPublicParams::try_from_buf(i)?;
+                let params = DsaPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::DSA(params))
             }
             PublicKeyAlgorithm::ECDSA => {
-                let params = EcdsaPublicParams::try_from_buf(i)?;
+                let params = EcdsaPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::ECDSA(params))
             }
             PublicKeyAlgorithm::ECDH => {
-                let params = EcdhPublicParams::try_from_buf(i, len)?;
+                let params = EcdhPublicParams::try_from_reader(i, len)?;
                 Ok(PublicParams::ECDH(params))
             }
             PublicKeyAlgorithm::Elgamal => {
-                let params = ElgamalPublicParams::try_from_buf(i, false)?;
+                let params = ElgamalPublicParams::try_from_reader(i, false)?;
                 Ok(PublicParams::Elgamal(params))
             }
             PublicKeyAlgorithm::ElgamalEncrypt => {
-                let params = ElgamalPublicParams::try_from_buf(i, true)?;
+                let params = ElgamalPublicParams::try_from_reader(i, true)?;
                 Ok(PublicParams::Elgamal(params))
             }
             PublicKeyAlgorithm::EdDSALegacy => {
-                let params = EddsaLegacyPublicParams::try_from_buf(i)?;
+                let params = EddsaLegacyPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::EdDSALegacy(params))
             }
             PublicKeyAlgorithm::Ed25519 => {
-                let params = Ed25519PublicParams::try_from_buf(i)?;
+                let params = Ed25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::Ed25519(params))
             }
             PublicKeyAlgorithm::X25519 => {
-                let params = X25519PublicParams::try_from_buf(i)?;
+                let params = X25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::X25519(params))
             }
             PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
             #[cfg(feature = "unstable-curve448")]
             PublicKeyAlgorithm::X448 => {
-                let params = X448PublicParams::try_from_buf(i)?;
+                let params = X448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::X448(params))
             }
             #[cfg(not(feature = "unstable-curve448"))]
@@ -151,9 +151,9 @@ impl PublicParams {
     }
 }
 
-fn unknown<B: Buf>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
+fn unknown<B: BufRead>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
     if let Some(pub_len) = len {
-        let data = i.read_take(pub_len)?;
+        let data = i.take_bytes(pub_len)?.freeze();
         Ok(PublicParams::Unknown { data })
     } else {
         // we don't know how many bytes to consume
@@ -267,7 +267,7 @@ mod tests {
         ) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = PublicParams::try_from_buf(alg, None, &mut &buf[..])?;
+            let new_params = PublicParams::try_from_reader(alg, None, &mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

@@ -10,11 +10,14 @@ use generic_array::{
     typenum::{U15, U16},
     GenericArray,
 };
-use num_enum::{FromPrimitive, IntoPrimitive};
+use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 use ocb3::{Nonce as Ocb3Nonce, Ocb3};
+use sha2::Sha256;
+use zeroize::Zeroizing;
 
 use super::sym::SymmetricKeyAlgorithm;
 use crate::errors::{Error, Result};
+use crate::types::Tag;
 
 type Aes128Ocb3 = Ocb3<Aes128, U15, U16>;
 type Aes192Ocb3 = Ocb3<Aes192, U15, U16>;
@@ -22,6 +25,12 @@ type Aes256Ocb3 = Ocb3<Aes256, U15, U16>;
 
 /// AES-GCM with a 192-bit key and 96-bit nonce.
 pub type Aes192Gcm = AesGcm<Aes192, U12>;
+
+mod decryptor;
+mod encryptor;
+
+pub use self::decryptor::StreamDecryptor;
+pub use self::encryptor::StreamEncryptor;
 
 /// Available AEAD algorithms.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
@@ -256,4 +265,201 @@ impl AeadAlgorithm {
 
         Ok(())
     }
+}
+
+/// Get (info, message_key, nonce) for the given parameters
+#[allow(clippy::type_complexity)]
+pub(crate) fn aead_setup(
+    sym_alg: SymmetricKeyAlgorithm,
+    aead: AeadAlgorithm,
+    chunk_size: ChunkSize,
+    salt: &[u8],
+    ikm: &[u8],
+) -> Result<([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>)> {
+    let info = [
+        Tag::SymEncryptedProtectedData.encode(), // packet type
+        0x02,                                    // version
+        sym_alg.into(),
+        aead.into(),
+        chunk_size.into(),
+    ];
+
+    let hk = hkdf::Hkdf::<Sha256>::new(Some(salt), ikm);
+    let mut okm = Zeroizing::new([0u8; 42]);
+    hk.expand(&info, okm.as_mut_slice()).expect("42");
+
+    let mut message_key = Zeroizing::new(vec![0; sym_alg.key_size()]);
+    message_key.copy_from_slice(&okm.as_slice()[..sym_alg.key_size()]);
+
+    let raw_iv_len = aead.nonce_size() - 8;
+    let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
+    let mut nonce = vec![0u8; aead.nonce_size()];
+    nonce[..raw_iv_len].copy_from_slice(iv);
+
+    Ok((info, message_key, nonce))
+}
+
+/// Allowed chunk sizes.
+/// The range is from 64B to 4 MiB.
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-2-symmetrically-enc>
+#[derive(
+    Default, IntoPrimitive, Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, TryFromPrimitive,
+)]
+#[repr(u8)]
+pub enum ChunkSize {
+    C64B = 0,
+    C128B = 1,
+    C256B = 2,
+    C512B = 3,
+    C1KiB = 4,
+    C2KiB = 5,
+    #[default]
+    C4KiB = 6,
+    C8KiB = 7,
+    C16KiB = 8,
+    C32KiB = 9,
+    C64KiB = 10,
+    C128KiB = 11,
+    C256KiB = 12,
+    C512KiB = 13,
+    C1MiB = 14,
+    C2MiB = 15,
+    C4MiB = 16,
+}
+
+impl ChunkSize {
+    /// Returns the number of bytes for this chunk size.
+    pub const fn as_byte_size(self) -> u32 {
+        1u32 << ((self as u32) + 6)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::io::Read;
+
+    use log::info;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
+
+    #[test]
+    fn test_chunk_size() {
+        assert_eq!(ChunkSize::default().as_byte_size(), 4 * 1024);
+        assert_eq!(ChunkSize::C64B.as_byte_size(), 64);
+    }
+    macro_rules! roundtrip {
+        ($name:ident, $sym_alg:path, $aead:path) => {
+            #[test]
+            fn $name() {
+                pretty_env_logger::try_init().ok();
+
+                let mut data_rng = ChaCha8Rng::seed_from_u64(0);
+
+                const MAX_SIZE: usize = 2048;
+
+                // Protected
+                for i in 1..MAX_SIZE {
+                    info!("Size {}", i);
+                    let mut data = vec![0u8; i];
+                    data_rng.fill(&mut data[..]);
+
+                    let mut key = vec![0u8; $sym_alg.key_size()];
+                    data_rng.fill(&mut key[..]);
+
+                    let mut salt = [0u8; 32];
+                    data_rng.fill(&mut salt[..]);
+
+                    info!("encrypt");
+                    let mut ciphertext = Vec::new();
+
+                    {
+                        info!("encrypt streaming");
+                        let mut input = std::io::Cursor::new(&data);
+
+                        let mut encryptor = StreamEncryptor::new(
+                            $sym_alg,
+                            $aead,
+                            ChunkSize::default(),
+                            &key,
+                            &salt,
+                            &mut input,
+                        )
+                        .unwrap();
+                        encryptor.read_to_end(&mut ciphertext).unwrap();
+                    }
+
+                    {
+                        info!("decrypt streaming");
+                        let mut decryptor = StreamDecryptor::new(
+                            $sym_alg,
+                            $aead,
+                            ChunkSize::default(),
+                            &salt,
+                            &key,
+                            &ciphertext[..],
+                        )
+                        .unwrap();
+
+                        let mut plaintext = Vec::new();
+                        decryptor.read_to_end(&mut plaintext).unwrap();
+                        assert_eq!(
+                            hex::encode(&data),
+                            hex::encode(&plaintext),
+                            "stream decrypt failed"
+                        );
+                    }
+                }
+            }
+        };
+    }
+
+    roundtrip!(
+        roundtrip_aead_eax_aes128_gcm,
+        SymmetricKeyAlgorithm::AES128,
+        AeadAlgorithm::Gcm
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes192_gcm,
+        SymmetricKeyAlgorithm::AES192,
+        AeadAlgorithm::Gcm
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes256_gcm,
+        SymmetricKeyAlgorithm::AES256,
+        AeadAlgorithm::Gcm
+    );
+
+    roundtrip!(
+        roundtrip_aead_eax_aes128_eax,
+        SymmetricKeyAlgorithm::AES128,
+        AeadAlgorithm::Eax
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes192_eax,
+        SymmetricKeyAlgorithm::AES192,
+        AeadAlgorithm::Eax
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes256_eax,
+        SymmetricKeyAlgorithm::AES256,
+        AeadAlgorithm::Eax
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes128_ocb,
+        SymmetricKeyAlgorithm::AES128,
+        AeadAlgorithm::Ocb
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes192_ocb,
+        SymmetricKeyAlgorithm::AES192,
+        AeadAlgorithm::Ocb
+    );
+    roundtrip!(
+        roundtrip_aead_eax_aes256_ocb,
+        SymmetricKeyAlgorithm::AES256,
+        AeadAlgorithm::Ocb
+    );
 }

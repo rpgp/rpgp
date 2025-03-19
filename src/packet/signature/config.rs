@@ -15,6 +15,7 @@ use crate::packet::{
 };
 use crate::ser::Serialize;
 use crate::types::{Fingerprint, KeyId, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag};
+use crate::util::NormalizingHasher;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {
@@ -188,8 +189,11 @@ impl SignatureConfig {
             hasher.update(salt.as_ref())
         }
 
+        let text_mode = self.typ == SignatureType::Text;
+        let norm_hasher = NormalizingHasher::new(hasher, text_mode);
+
         Ok(SignatureHasher {
-            hasher,
+            norm_hasher,
             config: self,
         })
     }
@@ -630,7 +634,7 @@ impl SignatureConfig {
 }
 
 pub struct SignatureHasher {
-    hasher: Box<dyn DynDigest>,
+    norm_hasher: NormalizingHasher,
     config: SignatureConfig,
 }
 
@@ -640,7 +644,13 @@ impl SignatureHasher {
     where
         K: SecretKeyTrait + ?Sized,
     {
-        let Self { config, mut hasher } = self;
+        let Self {
+            config,
+            norm_hasher,
+        } = self;
+
+        let mut hasher = norm_hasher.done();
+
         ensure!(
             (config.version() == SignatureVersion::V4 && key.version() == KeyVersion::V4)
                 || (config.version() == SignatureVersion::V6 && key.version() == KeyVersion::V6),
@@ -667,14 +677,16 @@ impl SignatureHasher {
     }
 
     /// Update the internal hasher.
+    ///
+    /// Normalize line-endings on the fly for SignatureType::Text
     pub(crate) fn update(&mut self, buf: &[u8]) {
-        self.hasher.update(buf);
+        self.norm_hasher.hash_buf(buf);
     }
 }
 
 impl std::io::Write for SignatureHasher {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.hasher.update(buf);
+        self.norm_hasher.hash_buf(buf); // FIXME: when is this used?
         Ok(buf.len())
     }
 

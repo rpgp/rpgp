@@ -1,7 +1,7 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 #[cfg(test)]
 use proptest::prelude::*;
 
@@ -10,7 +10,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::signature::SignatureType;
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{KeyId, Tag};
 
@@ -102,8 +102,8 @@ impl OnePassSignature {
 }
 
 impl OnePassSignature {
-    /// Parses a `OnePassSignature` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+    /// Parses a `OnePassSignature` packet.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         let version = i.read_u8()?;
         let typ = i.read_u8().map(SignatureType::from)?;
         let hash_algorithm = i.read_u8().map(HashAlgorithm::from)?;
@@ -119,7 +119,7 @@ impl OnePassSignature {
             }
             6 => {
                 let salt_len = i.read_u8()?;
-                let salt = i.read_take(salt_len.into())?;
+                let salt = i.take_bytes(salt_len.into())?.freeze();
                 let fingerprint = i.read_array::<32>()?;
 
                 OpsVersionSpecific::V6 { salt, fingerprint }
@@ -223,6 +223,10 @@ impl OnePassSignature {
     pub fn typ(&self) -> SignatureType {
         self.typ
     }
+
+    pub fn version_specific(&self) -> &OpsVersionSpecific {
+        &self.version_specific
+    }
 }
 
 const WRITE_LEN_OVERHEAD: usize = 5;
@@ -269,7 +273,7 @@ mod tests {
         fn packet_roundtrip(packet: OnePassSignature) {
             let mut buf = Vec::new();
             packet.to_writer(&mut buf).unwrap();
-            let new_packet = OnePassSignature::from_buf(packet.packet_header, &mut &buf[..]).unwrap();
+            let new_packet = OnePassSignature::try_from_reader(packet.packet_header, &mut &buf[..]).unwrap();
             prop_assert_eq!(packet, new_packet);
         }
     }

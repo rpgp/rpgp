@@ -1,9 +1,7 @@
-use std::io;
-
-use bytes::Buf;
+use std::io::{self, BufRead};
 
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -15,7 +13,7 @@ pub struct X25519PublicParams {
 
 impl X25519PublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x>
-    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // 32 bytes of public key
         let public_raw = i.read_array::<32>()?;
         let public = x25519_dalek::PublicKey::from(public_raw);
@@ -56,7 +54,7 @@ mod tests {
         fn params_roundtrip(params: X25519PublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = X25519PublicParams::try_from_buf(&mut &buf[..])?;
+            let new_params = X25519PublicParams::try_from_reader(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }

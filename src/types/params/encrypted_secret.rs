@@ -2,12 +2,12 @@ use std::io;
 use std::io::Write;
 
 use byteorder::WriteBytesExt;
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf, Bytes, BytesMut};
 use digest::Digest;
 use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::checksum;
-use crate::errors::{Error, Result};
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -123,10 +123,15 @@ impl EncryptedSecretParams {
 
                 // Checksum
                 if plaintext.len() < 2 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
-                PlainSecretParams::try_from_buf(plaintext, pub_key.version(), alg, params)
+                PlainSecretParams::try_from_reader(
+                    plaintext.reader(),
+                    pub_key.version(),
+                    alg,
+                    params,
+                )
             }
             S2kParams::Aead {
                 sym_alg,
@@ -141,7 +146,7 @@ impl EncryptedSecretParams {
                         };
 
                         if self.data.len() < tag_size {
-                            return Err(Error::InvalidInput);
+                            return Err(InvalidInputSnafu.build());
                         }
 
                         // derive key
@@ -159,8 +164,8 @@ impl EncryptedSecretParams {
                         aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut ciphertext)?;
 
                         // "decrypt" now contains the decrypted key material
-                        PlainSecretParams::try_from_buf_no_checksum(
-                            &mut ciphertext,
+                        PlainSecretParams::try_from_reader_no_checksum(
+                            ciphertext.reader(),
                             pub_key.version(),
                             alg,
                             pub_key.public_params(),
@@ -182,17 +187,16 @@ impl EncryptedSecretParams {
                 // Check SHA-1 hash if it is present.
                 // See <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.3-3.5.1> for details.
                 if plaintext.len() < 20 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
-                let (mut plaintext, expected_sha1) =
-                    plaintext.as_ref().split_at(self.data.len() - 20);
+                let (plaintext, expected_sha1) = plaintext.as_ref().split_at(self.data.len() - 20);
                 let calculated_sha1 = checksum::calculate_sha1([plaintext])?;
                 if expected_sha1 != calculated_sha1 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
-                PlainSecretParams::try_from_buf_no_checksum(
-                    &mut plaintext,
+                PlainSecretParams::try_from_reader_no_checksum(
+                    plaintext.reader(),
                     pub_key.version(),
                     alg,
                     params,
@@ -205,10 +209,15 @@ impl EncryptedSecretParams {
                 let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
                 if plaintext.len() < 2 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
-                PlainSecretParams::try_from_buf(plaintext, pub_key.version(), alg, params)
+                PlainSecretParams::try_from_reader(
+                    plaintext.reader(),
+                    pub_key.version(),
+                    alg,
+                    params,
+                )
             }
         }
     }

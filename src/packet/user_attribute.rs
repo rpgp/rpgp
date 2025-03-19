@@ -1,7 +1,7 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 use chrono::{SubsecRound, Utc};
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
@@ -12,7 +12,7 @@ use crate::packet::{
     PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
     SubpacketLength,
 };
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{
     KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag,
@@ -87,7 +87,7 @@ pub enum ImageHeaderV1 {
 }
 
 impl ImageHeader {
-    pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // length in u16 little endian
         let length: usize = i.read_le_u16()?.into();
         ensure!(length >= 4, "invalid image header length");
@@ -98,22 +98,25 @@ impl ImageHeader {
             0x01 => {
                 // Only known version is 1
                 let format = i.read_u8()?;
-                let mut data = i.read_take(length - 4)?;
+                let mut data = i.read_take(length - 4);
                 let header = match format {
                     0x01 => {
                         // Only known format is 1 = JPEG
                         let data = data.read_array::<12>()?;
                         ImageHeaderV1::Jpeg { data }
                     }
-                    _ => ImageHeaderV1::Unknown { format, data },
+                    _ => ImageHeaderV1::Unknown {
+                        format,
+                        data: data.rest()?.freeze(),
+                    },
                 };
                 Ok(Self::V1(header))
             }
             _ => {
-                let data = i.read_take(length - 3)?;
+                let data = i.take_bytes(length - 3)?;
                 Ok(Self::Unknown {
                     version: header_version,
-                    data,
+                    data: data.freeze(),
                 })
             }
         }
@@ -162,30 +165,30 @@ impl Serialize for ImageHeader {
 
 impl UserAttribute {
     /// Parses a `UserAttribute` packet from the given buffer.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Self> {
         ensure_eq!(packet_header.tag(), Tag::UserAttribute, "invalid tag");
-        let packet_len = SubpacketLength::from_buf(&mut i)?;
-        let mut rest = i.read_take(packet_len.len())?;
+        let packet_len = SubpacketLength::try_from_reader(&mut i)?;
+        let mut rest = i.read_take(packet_len.len());
         let typ = rest.read_u8().map(UserAttributeType::from)?;
 
         match typ {
             UserAttributeType::Image => {
-                let header = ImageHeader::from_buf(&mut rest)?;
-                let data = rest.rest();
+                let header = ImageHeader::try_from_reader(&mut rest)?;
+                let data = rest.rest()?;
 
                 // the actual image is the rest
                 Ok(UserAttribute::Image {
                     packet_header,
                     subpacket_len: packet_len,
                     header,
-                    data,
+                    data: data.freeze(),
                 })
             }
             UserAttributeType::Unknown(_) => Ok(UserAttribute::Unknown {
                 packet_header,
                 subpacket_len: packet_len,
                 typ,
-                data: rest.rest(),
+                data: rest.rest()?.freeze(),
             }),
         }
     }
@@ -369,7 +372,7 @@ mod tests {
     fn test_jpeg_header() {
         let mut jpeg = [0u8; 16];
         jpeg[..4].copy_from_slice(JPEG_HEADER_PREFIX);
-        let parsed = ImageHeader::from_buf(&mut &jpeg[..]).unwrap();
+        let parsed = ImageHeader::try_from_reader(&mut &jpeg[..]).unwrap();
         assert_eq!(
             parsed,
             ImageHeader::V1(ImageHeaderV1::Jpeg { data: [0u8; 12] })
@@ -427,7 +430,7 @@ mod tests {
             prop_assert_eq!(attr.packet_header().tag(), Tag::UserAttribute);
             let mut buf = Vec::new();
             attr.to_writer(&mut buf).unwrap();
-            let new_attr = UserAttribute::from_buf(*attr.packet_header(), &mut &buf[..]).unwrap();
+            let new_attr = UserAttribute::try_from_reader(*attr.packet_header(), &mut &buf[..]).unwrap();
             prop_assert_eq!(attr, new_attr);
         }
     }

@@ -1,20 +1,16 @@
-use std::io::{self, Read};
+use std::io::{self, BufRead, Read};
 
 use byteorder::WriteBytesExt;
-use bytes::{Buf, Bytes, BytesMut};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
+use bytes::{Bytes, BytesMut};
 use rand::{CryptoRng, Rng};
-use sha2::Sha256;
-use zeroize::Zeroizing;
 
-use crate::crypto::aead::AeadAlgorithm;
+use crate::crypto::aead::{aead_setup, AeadAlgorithm, ChunkSize, StreamEncryptor};
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, Result};
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::Tag;
-use crate::util::fill_buffer;
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>
@@ -38,83 +34,51 @@ pub enum Config {
     },
 }
 
-/// Allowed chunk sizes.
-/// The range is from 64B to 4 MiB.
-///
-/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-version-2-symmetrically-enc>
-#[derive(
-    Default, IntoPrimitive, Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, TryFromPrimitive,
-)]
-#[repr(u8)]
-pub enum ChunkSize {
-    C64B = 0,
-    C128B = 1,
-    C256B = 2,
-    C512B = 3,
-    C1KiB = 4,
-    C2KiB = 5,
-    #[default]
-    C4KiB = 6,
-    C8KiB = 7,
-    C16KiB = 8,
-    C32KiB = 9,
-    C64KiB = 10,
-    C128KiB = 11,
-    C256KiB = 12,
-    C512KiB = 13,
-    C1MiB = 14,
-    C2MiB = 15,
-    C4MiB = 16,
-}
-
-impl ChunkSize {
-    /// Returns the number of bytes for this chunk size.
-    pub const fn as_byte_size(self) -> u32 {
-        1u32 << ((self as u32) + 6)
-    }
-}
-
-impl SymEncryptedProtectedData {
-    /// Parses a `SymEncryptedProtectedData` packet from the given buf.
-    pub fn from_buf<B: Buf>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
-        ensure_eq!(
-            packet_header.tag(),
-            Tag::SymEncryptedProtectedData,
-            "invalid tag"
-        );
-
+impl Config {
+    pub fn try_from_reader<R: BufRead>(mut data: R) -> Result<Self> {
         let version = data.read_u8()?;
-        let config = match version {
-            0x01 => Config::V1,
+        match version {
+            0x01 => Ok(Self::V1),
             0x02 => {
                 let sym_alg = data.read_u8().map(SymmetricKeyAlgorithm::from)?;
                 let aead = data.read_u8().map(AeadAlgorithm::from)?;
                 let chunk_size = data
                     .read_u8()?
                     .try_into()
-                    .map_err(|_| Error::InvalidInput)?;
+                    .map_err(|_| InvalidInputSnafu.build())?;
                 let salt = data.read_array::<32>()?;
 
-                Config::V2 {
+                Ok(Self::V2 {
                     sym_alg,
                     aead,
                     chunk_size,
                     salt,
-                }
+                })
             }
-            _ => {
-                return Err(format_err!(
-                    "unknown SymEncryptedProtectedData version {}",
-                    version
-                ))
-            }
-        };
-        let data = data.rest();
+            _ => Err(format_err!(
+                "unknown SymEncryptedProtectedData version {}",
+                version
+            )),
+        }
+    }
+}
+
+impl SymEncryptedProtectedData {
+    /// Parses a `SymEncryptedProtectedData` packet from the given buf.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, mut data: B) -> Result<Self> {
+        ensure_eq!(
+            packet_header.tag(),
+            Tag::SymEncryptedProtectedData,
+            "invalid tag"
+        );
+
+        let config = Config::try_from_reader(&mut data)?;
+        let data = data.rest()?;
 
         Ok(SymEncryptedProtectedData {
             packet_header,
             config,
-            data,
+            data: data.freeze(),
         })
     }
 
@@ -151,7 +115,7 @@ impl SymEncryptedProtectedData {
         let mut salt = [0u8; 32];
         rng.fill(&mut salt[..]);
 
-        let mut encryptor = StreamEncryptor::new(
+        let mut encryptor = crate::crypto::aead::StreamEncryptor::new(
             sym_alg,
             aead,
             chunk_size,
@@ -254,7 +218,7 @@ impl SymEncryptedProtectedData {
                     unsupported_err!("AEAD mode: {:?}", aead);
                 };
                 if data.len() < aead_tag_size {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
                 let offset = data.len() - aead_tag_size;
                 let mut final_auth_tag = data.split_off(offset);
@@ -364,180 +328,77 @@ impl PacketTrait for SymEncryptedProtectedData {
     }
 }
 
-/// Get (info, message_key, nonce) for the given parameters
-#[allow(clippy::type_complexity)]
-pub(crate) fn aead_setup(
-    sym_alg: SymmetricKeyAlgorithm,
-    aead: AeadAlgorithm,
-    chunk_size: ChunkSize,
-    salt: &[u8],
-    ikm: &[u8],
-) -> Result<([u8; 5], Zeroizing<Vec<u8>>, Vec<u8>)> {
-    let info = [
-        Tag::SymEncryptedProtectedData.encode(), // packet type
-        0x02,                                    // version
-        sym_alg.into(),
-        aead.into(),
-        chunk_size.into(),
-    ];
-
-    let hk = hkdf::Hkdf::<Sha256>::new(Some(salt), ikm);
-    let mut okm = Zeroizing::new([0u8; 42]);
-    hk.expand(&info, okm.as_mut_slice()).expect("42");
-
-    let mut message_key = Zeroizing::new(vec![0; sym_alg.key_size()]);
-    message_key.copy_from_slice(&okm.as_slice()[..sym_alg.key_size()]);
-
-    let raw_iv_len = aead.nonce_size() - 8;
-    let iv = &okm[sym_alg.key_size()..sym_alg.key_size() + raw_iv_len];
-    let mut nonce = vec![0u8; aead.nonce_size()];
-    nonce[..raw_iv_len].copy_from_slice(iv);
-
-    Ok((info, message_key, nonce))
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+pub enum StreamDecryptor<R: BufRead> {
+    V1(crate::crypto::sym::StreamDecryptor<R>),
+    V2(crate::crypto::aead::StreamDecryptor<R>),
 }
 
-pub struct StreamEncryptor<R> {
-    source: R,
-    /// Indicates if we are done reading from the `source`.
-    is_source_done: bool,
-    /// Total number of bytes read from the source.
-    bytes_read: u64,
-    chunk_index: u64,
-    buffer: BytesMut,
-    info: [u8; 5],
-    message_key: Zeroizing<Vec<u8>>,
-    nonce: Vec<u8>,
-    chunk_size_expanded: usize,
-    aead: AeadAlgorithm,
-    sym_alg: SymmetricKeyAlgorithm,
+impl<R: BufRead> BufRead for StreamDecryptor<R> {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match self {
+            Self::V1(r) => r.fill_buf(),
+            Self::V2(r) => r.fill_buf(),
+        }
+    }
+
+    fn consume(&mut self, amt: usize) {
+        match self {
+            Self::V1(r) => r.consume(amt),
+            Self::V2(r) => r.consume(amt),
+        }
+    }
 }
 
-impl<R: io::Read> StreamEncryptor<R> {
-    /// Encrypts the data using the given symmetric key.
-    pub(crate) fn new(
+impl<R: BufRead> Read for StreamDecryptor<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::V1(r) => r.read(buf),
+            Self::V2(r) => r.read(buf),
+        }
+    }
+}
+
+impl<R: BufRead> StreamDecryptor<R> {
+    pub fn v1(sym_alg: SymmetricKeyAlgorithm, key: &[u8], source: R) -> Result<Self> {
+        let decryptor = sym_alg.stream_decryptor_protected(key, source)?;
+        Ok(Self::V1(decryptor))
+    }
+
+    pub fn v2(
         sym_alg: SymmetricKeyAlgorithm,
         aead: AeadAlgorithm,
         chunk_size: ChunkSize,
-        session_key: &[u8],
         salt: &[u8; 32],
+        key: &[u8],
         source: R,
     ) -> Result<Self> {
-        ensure_eq!(
-            session_key.len(),
-            sym_alg.key_size(),
-            "Unexpected session key length for {:?}",
-            sym_alg
-        );
-
-        let (info, message_key, nonce) =
-            aead_setup(sym_alg, aead, chunk_size, &salt[..], session_key)?;
-        let chunk_size_expanded: usize = chunk_size.as_byte_size().try_into()?;
-
-        let buffer = BytesMut::with_capacity(chunk_size_expanded);
-
-        Ok(StreamEncryptor {
-            source,
-            is_source_done: false,
-            bytes_read: 0,
-            chunk_index: 0,
-            info,
-            message_key,
-            nonce,
-            chunk_size_expanded,
-            aead,
-            sym_alg,
-            buffer,
-        })
-    }
-
-    /// Constructs the final auth tag
-    fn create_final_auth_tag(&mut self) -> io::Result<()> {
-        // Associated data is extended with number of plaintext octets.
-        let mut final_info = self.info.to_vec();
-        // length: 8 octets as big endian
-        final_info.extend_from_slice(&self.bytes_read.to_be_bytes());
-
-        // encrypts empty string
-        self.buffer.clear();
-        self.aead
-            .encrypt_in_place(
-                &self.sym_alg,
-                &self.message_key,
-                &self.nonce,
-                &final_info,
-                &mut self.buffer,
-            )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-
-        Ok(())
-    }
-
-    fn fill_buffer(&mut self) -> io::Result<()> {
-        self.buffer.resize(self.chunk_size_expanded, 0);
-        let read = fill_buffer(
-            &mut self.source,
-            &mut self.buffer,
-            Some(self.chunk_size_expanded),
+        let decryptor = crate::crypto::aead::StreamDecryptor::new(
+            sym_alg, aead, chunk_size, salt, key, source,
         )?;
-        let read_u64 = read.try_into().map_err(|_| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "too much data read".to_string(),
-            )
-        })?;
-        self.bytes_read = match self.bytes_read.checked_add(read_u64) {
-            Some(read) => read,
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "can not read more than u64::MAX data".to_string(),
-                ));
-            }
-        };
-        if read == 0 {
-            self.is_source_done = true;
-            // time to write the final chunk
-            self.create_final_auth_tag()?;
-
-            return Ok(());
-        }
-        self.buffer.truncate(read);
-
-        self.aead
-            .encrypt_in_place(
-                &self.sym_alg,
-                &self.message_key,
-                &self.nonce,
-                &self.info,
-                &mut self.buffer,
-            )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
-
-        // Update nonce to include the next chunk index
-        self.chunk_index += 1;
-        let l = self.nonce.len() - 8;
-        self.nonce[l..].copy_from_slice(&self.chunk_index.to_be_bytes());
-
-        Ok(())
+        Ok(Self::V2(decryptor))
     }
-}
 
-impl<R: io::Read> io::Read for StreamEncryptor<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if !self.buffer.has_remaining() {
-            if !self.is_source_done {
-                // Still more to read and encrypt from the source.
-                self.fill_buffer()?;
-            } else {
-                // The final chunk was written, we have nothing left to give.
-                return Ok(0);
-            }
+    pub fn into_inner(self) -> R {
+        match self {
+            Self::V1(r) => r.into_inner(),
+            Self::V2(r) => r.into_inner(),
         }
+    }
 
-        let to_write = buf.len().min(self.buffer.remaining());
-        self.buffer.copy_to_slice(&mut buf[..to_write]);
+    pub fn get_ref(&self) -> &R {
+        match self {
+            Self::V1(r) => r.get_ref(),
+            Self::V2(r) => r.get_ref(),
+        }
+    }
 
-        Ok(to_write)
+    pub fn get_mut(&mut self) -> &mut R {
+        match self {
+            Self::V1(r) => r.get_mut(),
+            Self::V2(r) => r.get_mut(),
+        }
     }
 }
 
@@ -549,12 +410,6 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-
-    #[test]
-    fn test_chunk_size() {
-        assert_eq!(ChunkSize::default().as_byte_size(), 4 * 1024);
-        assert_eq!(ChunkSize::C64B.as_byte_size(), 64);
-    }
 
     #[test]
     fn test_aead_message_sizes() {
@@ -592,8 +447,9 @@ mod tests {
                 enc.to_writer(&mut buffer).unwrap();
                 assert_eq!(buffer.len(), enc.write_len());
 
-                let back = SymEncryptedProtectedData::from_buf(enc.packet_header, &mut &buffer[..])
-                    .unwrap();
+                let back =
+                    SymEncryptedProtectedData::try_from_reader(enc.packet_header, &mut &buffer[..])
+                        .unwrap();
                 assert_eq!(enc, back);
             }
         }

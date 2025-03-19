@@ -2,11 +2,9 @@ use std::io::BufRead;
 
 use bitfields::bitfield;
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::Buf;
 use log::debug;
 
 use crate::errors::Result;
-use crate::parsing::BufParsing;
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 use crate::types::{PacketHeaderVersion, PacketLength, Tag};
@@ -30,42 +28,8 @@ pub enum PacketHeader {
 const MAX_PARTIAL_LEN: u32 = 2u32.pow(30);
 
 impl PacketHeader {
-    /// Parse a single packet header from the given buffer.
-    pub fn from_buf<B: Buf>(mut i: B) -> Result<Self> {
-        let header = i.read_u8()?;
-
-        let first_two_bits = header & 0b1100_0000;
-        match first_two_bits {
-            0b1100_0000 => {
-                // new starts with 0b11
-                let header = NewPacketHeader::from_bits(header);
-                let length = PacketLength::from_buf(&mut i)?;
-
-                Ok(PacketHeader::New { header, length })
-            }
-            0b1000_0000 => {
-                // old starts with 0b10
-                let header = OldPacketHeader::from_bits(header);
-                let length = match header.length_type() {
-                    // One-Octet Lengths
-                    0 => PacketLength::Fixed(i.read_u8()?.into()),
-                    // Two-Octet Lengths
-                    1 => PacketLength::Fixed(i.read_be_u16()?.into()),
-                    // Four-Octet Lengths
-                    2 => PacketLength::Fixed(i.read_be_u32()?),
-                    3 => PacketLength::Indeterminate,
-                    _ => unreachable!("old packet length type is only 2 bits"),
-                };
-                Ok(PacketHeader::Old { header, length })
-            }
-            _ => {
-                bail!("unknown packet header version {:b}", header);
-            }
-        }
-    }
-
     /// Parse a single packet header from the given reader.
-    pub fn from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
+    pub fn try_from_reader<R: BufRead>(mut r: R) -> std::io::Result<Self> {
         let header = r.read_u8()?;
 
         let first_two_bits = header & 0b1100_0000;
@@ -73,7 +37,7 @@ impl PacketHeader {
             0b1100_0000 => {
                 // new starts with 0b11
                 let header = NewPacketHeader::from_bits(header);
-                let length = PacketLength::from_reader(r)?;
+                let length = PacketLength::try_from_reader(r)?;
 
                 Ok(PacketHeader::New { header, length })
             }
@@ -266,15 +230,15 @@ impl Serialize for PacketHeader {
 }
 
 /// Old format packet header ("Legacy format")
-#[bitfield(u8, order = msb)]
+#[bitfield(u8, order = msb, debug = false)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct OldPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]
-    _padding: bool,
+    padding: bool,
     /// Version: 0
     #[bits(1, default = false)]
-    _version: bool,
+    version: bool,
     /// Packet Type ID
     #[bits(4)]
     tag: u8,
@@ -283,21 +247,42 @@ pub struct OldPacketHeader {
     length_type: u8,
 }
 
+impl std::fmt::Debug for OldPacketHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OldPacketHeader")
+            .field("padding", &(self.padding() as u8))
+            .field("version", &(self.version() as u8))
+            .field("tag", &Tag::from_bits(self.tag()))
+            .field("length_type", &self.length_type())
+            .finish()
+    }
+}
+
 /// Parses a new format packet header ("OpenPGP format")
 ///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-headers>
-#[bitfield(u8, order = msb)]
+#[bitfield(u8, order = msb, debug = false)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NewPacketHeader {
     /// First bit is always 1
     #[bits(1, default = true)]
-    _padding: bool,
+    padding: bool,
     /// Version: 1
     #[bits(1, default = true)]
-    _version: bool,
+    version: bool,
     /// Packet Type ID
     #[bits(6)]
     tag: u8,
+}
+
+impl std::fmt::Debug for NewPacketHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NewPacketHeader")
+            .field("padding", &(self.padding() as u8))
+            .field("version", &(self.version() as u8))
+            .field("tag", &(Tag::from_bits(self.tag())))
+            .finish()
+    }
 }
 
 fn old_fixed_type(len: u32) -> u8 {
@@ -321,7 +306,7 @@ mod tests {
         // # off=5053201 ctb=d1 tag=17 hlen=6 plen=4973 new-ctb
         // :attribute packet: [jpeg image of size 4951]
         let packet_header_raw = hex::decode(b"d1ff0000136d").unwrap();
-        let header = PacketHeader::from_buf(&mut &packet_header_raw[..]).unwrap();
+        let header = PacketHeader::try_from_reader(&packet_header_raw[..]).unwrap();
         dbg!(&header);
 
         assert_eq!(header.version(), PacketHeaderVersion::New);
@@ -403,7 +388,7 @@ mod tests {
         fn packet_roundtrip_buf(header: PacketHeader) {
             let mut buf = Vec::new();
             header.to_writer(&mut buf).unwrap();
-            let new_header = PacketHeader::from_buf(&mut &buf[..]).unwrap();
+            let new_header = PacketHeader::try_from_reader(&mut &buf[..]).unwrap();
             prop_assert_eq!(header, new_header);
         }
 
@@ -412,7 +397,7 @@ mod tests {
         fn packet_roundtrip_reader(header: PacketHeader) {
             let mut buf = Vec::new();
             header.to_writer(&mut buf).unwrap();
-            let new_header = PacketHeader::from_reader(&mut &buf[..]).unwrap();
+            let new_header = PacketHeader::try_from_reader(&mut &buf[..]).unwrap();
             prop_assert_eq!(header, new_header);
         }
 

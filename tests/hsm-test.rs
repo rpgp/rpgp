@@ -10,7 +10,7 @@ use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
 use pgp::types::{EcdhPublicParams, Fingerprint, Password, PkeskBytes, SignatureBytes};
 use pgp::types::{KeyDetails, KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
-use pgp::{packet, Deserializable, Esk};
+use pgp::{packet, Esk};
 use pgp::{Message, SignedPublicKey, SignedSecretKey};
 
 #[derive(Debug, Clone)]
@@ -202,6 +202,11 @@ impl FakeHsm {
                     | EcdhPublicParams::P256 { hash, alg_sym, .. }
                     | EcdhPublicParams::P384 { hash, alg_sym, .. }
                     | EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Brainpool256 { .. }
+                    | EcdhPublicParams::Brainpool384 { .. }
+                    | EcdhPublicParams::Brainpool512 { .. } => {
+                        panic!("unsupported params: {:?}", params);
+                    }
                     EcdhPublicParams::Unsupported { .. } => {
                         panic!("unsupported params: {:?}", params);
                     }
@@ -349,9 +354,9 @@ fn card_decrypt() {
         let mut hsm = FakeHsm::with_public_key(as_primary).unwrap();
         hsm.set_fake_decryption_data(input, out);
 
-        let (message, _headers) = Message::from_armor_single(File::open(msgfile).unwrap()).unwrap();
+        let (message, _headers) = Message::from_armor_file(msgfile).unwrap();
 
-        let Message::Encrypted { esk, edata } = message else {
+        let Message::Encrypted { esk, mut edata, .. } = message else {
             panic!("not encrypted");
         };
 
@@ -362,19 +367,17 @@ fn card_decrypt() {
         };
 
         let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
-
-        let decrypted = edata
-            .decrypt(pgp::PlainSessionKey::V3_4 {
+        edata
+            .decrypt(&pgp::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })
             .unwrap();
 
-        if let Message::Literal(data) = decrypted {
-            assert_eq!(data.data(), b"foo bar")
-        } else {
-            panic!()
-        }
+        let mut message = Message::from_bytes(edata).unwrap();
+        let data = message.as_data_vec().unwrap();
+
+        assert_eq!(data, b"foo bar")
     }
 }
 

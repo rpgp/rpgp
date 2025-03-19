@@ -1,9 +1,7 @@
-use std::io;
-
-use bytes::Buf;
+use std::io::{self, BufRead};
 
 use crate::errors::Result;
-use crate::parsing::BufParsing;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -14,7 +12,7 @@ pub struct X448PublicParams {
 
 impl X448PublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-x4>
-    pub fn try_from_buf<B: Buf>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // 56 bytes of public key
         let key = i.read_array::<56>()?;
         let params = X448PublicParams { key };
@@ -54,7 +52,7 @@ mod tests {
         fn params_roundtrip(params: X448PublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = X448PublicParams::try_from_buf(&mut &buf[..])?;
+            let new_params = X448PublicParams::try_from_reader(&mut &buf[..])?;
             prop_assert_eq!(params, new_params);
         }
     }
