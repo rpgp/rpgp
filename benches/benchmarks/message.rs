@@ -21,7 +21,10 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| black_box(Message::from_armor(&bytes[..]).unwrap()));
+        b.iter(|| {
+            let (mut msg, _) = Message::from_armor(&bytes[..]).unwrap();
+            black_box(msg.as_data_vec().unwrap())
+        });
     });
 
     g.bench_function("parse_armored_x25519", |b| {
@@ -30,7 +33,10 @@ fn bench_message(c: &mut Criterion) {
         let mut bytes = Vec::new();
         message_file.read_to_end(&mut bytes).unwrap();
 
-        b.iter(|| black_box(Message::from_armor(&bytes[..]).unwrap()));
+        b.iter(|| {
+            let (mut msg, _) = Message::from_armor(&bytes[..]).unwrap();
+            black_box(msg.as_data_vec().unwrap())
+        });
     });
 
     g.bench_function("rsa_decrypt", |b| {
@@ -64,15 +70,13 @@ fn bench_message(c: &mut Criterion) {
                 let s2k = StringToKey::new_default(&mut rng);
 
                 b.iter(|| {
-                    let builder = MessageBuilder::from_bytes("", &bytes[..]);
+                    let builder = MessageBuilder::from_reader("", &bytes[..]);
                     let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
                     let builder = builder
                         .encrypt_with_password(s2k.clone(), &"pw".into())
                         .unwrap();
 
-                    let mut sink = vec![];
-                    builder.to_writer(&mut rng, &mut sink).unwrap();
-                    black_box(sink);
+                    black_box(builder.to_vec(&mut rng).unwrap());
                 });
             },
         );
@@ -90,7 +94,7 @@ fn bench_message(c: &mut Criterion) {
 
                 let s2k = StringToKey::new_default(&mut rng);
 
-                let builder = MessageBuilder::from_bytes("", &bytes[..]);
+                let builder = MessageBuilder::from_reader("", &bytes[..]);
                 let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
                 let builder = builder
                     .encrypt_with_password(s2k.clone(), &"pw".into())
@@ -166,7 +170,7 @@ fn bench_message(c: &mut Criterion) {
                     // let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
                     b.iter(|| {
-                        let builder = MessageBuilder::from_bytes("", &bytes[..]);
+                        let builder = MessageBuilder::from_reader("", &bytes[..]);
                         let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
                         let builder = builder
                             .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
@@ -196,7 +200,7 @@ fn bench_message(c: &mut Criterion) {
                     let key = build_key(kt1.clone(), kt2.clone());
                     let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
 
-                    let builder = MessageBuilder::from_bytes("", &bytes[..]);
+                    let builder = MessageBuilder::from_reader("", &bytes[..]);
                     let builder = builder.seipd_v1(&mut rng, sym);
                     let builder = builder
                         .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
