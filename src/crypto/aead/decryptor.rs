@@ -115,7 +115,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         // verify final auth tag
 
         // Associated data is extended with number of plaintext octets.
-        let size = self.written as u64;
+        let size = self.written;
         let mut final_info = self.info.to_vec();
         final_info.extend_from_slice(&size.to_be_bytes());
 
