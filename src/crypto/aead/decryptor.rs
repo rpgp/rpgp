@@ -16,8 +16,8 @@ pub struct StreamDecryptor<R: BufRead> {
     chunk_size_expanded: usize,
     aead_tag_size: usize,
     /// how many bytes have been written
-    written: usize,
-    chunk_index: usize,
+    written: u64,
+    chunk_index: u64,
     #[debug("{}", hex::encode(nonce))]
     nonce: Vec<u8>,
     #[debug("..")]
@@ -89,7 +89,7 @@ impl<R: BufRead> StreamDecryptor<R> {
                 &mut self.buffer,
             )
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
-        self.written += self.buffer.len();
+        self.written += self.buffer.len() as u64;
 
         // Update nonce to include the next chunk index
         self.chunk_index += 1;
