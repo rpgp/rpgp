@@ -3,11 +3,10 @@ use std::io::{self, BufRead, Read};
 use bytes::{Buf, BytesMut};
 use log::debug;
 
+use super::{fill_buffer, LimitedReader};
 use crate::packet::PacketHeader;
 use crate::parsing_reader::BufReadParsing;
 use crate::types::{PacketLength, Tag};
-
-use super::{fill_buffer, LimitedReader};
 
 #[derive(Debug)]
 pub struct PacketBodyReader<R: BufRead> {
@@ -69,7 +68,7 @@ impl<R: BufRead> PacketBodyReader<R> {
         let source = match packet_header.packet_length() {
             PacketLength::Fixed(len) => {
                 debug!("fixed packet {}", len);
-                LimitedReader::fixed(len as u64, source)
+                LimitedReader::fixed(len, source)
             }
             PacketLength::Indeterminate => {
                 debug!("indeterminate packet");
@@ -176,9 +175,19 @@ impl<R: BufRead> PacketBodyReader<R> {
                     if read == 0 {
                         debug!("body source done: {:?}", self.packet_header);
                         match source {
-                            LimitedReader::Fixed { mut reader } => {
+                            LimitedReader::Fixed {
+                                mut reader,
+                                expect_data,
+                            } => {
                                 let rest = reader.rest()?;
                                 debug_assert!(rest.is_empty(), "{}", hex::encode(&rest));
+
+                                if expect_data != 0 {
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::Other,
+                                        "Unexpectedly short final Fixed chunk",
+                                    ));
+                                }
 
                                 self.state = State::Done {
                                     source: reader.into_inner(),
@@ -196,7 +205,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                                     PacketLength::Fixed(len) => {
                                         // the last one
                                         debug!("fixed partial packet {}", len);
-                                        LimitedReader::fixed(len as u64, source)
+                                        LimitedReader::fixed(len, source)
                                     }
                                     PacketLength::Partial(len) => {
                                         // another one

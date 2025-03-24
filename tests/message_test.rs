@@ -603,7 +603,8 @@ fn test_invalid_partial_messages() {
     dbg!(&err);
 
     assert!(
-        err.to_string().contains("unexpected trailing"),
+        err.to_string()
+            .contains("Unexpectedly short final Fixed chunk"),
         "found error: {}",
         err
     );
