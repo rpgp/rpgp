@@ -419,15 +419,17 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     //     self
     // }
 
-    /// Configure the [`SignatureType`] for data signatures.
+    /// Configure the data signatures to use `SignatureType::Binary`.
     ///
-    /// Defaults to `SignatureType::Binary`
-    pub fn sign_typ(mut self, binary: bool) -> Self {
-        self.sign_typ = if binary {
-            SignatureType::Binary
-        } else {
-            SignatureType::Text
-        };
+    /// This is the default.
+    pub fn sign_binary(mut self) -> Self {
+        self.sign_typ = SignatureType::Binary;
+        self
+    }
+
+    /// Configure the data signatures to use `SignatureType::Text`.
+    pub fn sign_text(mut self) -> Self {
+        self.sign_typ = SignatureType::Text;
         self
     }
 
