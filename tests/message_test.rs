@@ -604,7 +604,7 @@ fn test_invalid_partial_messages() {
 
     assert!(
         err.to_string()
-            .contains("Unexpected trailing data in final Fixed chunk"),
+            .contains("Fixed chunk was shorter than expected"),
         "found error: {}",
         err
     );
@@ -737,7 +737,8 @@ fn test_literal_eating_mdc() {
     dbg!(&err);
 
     assert!(
-        err.to_string().contains("unexpected trailing"),
+        err.to_string()
+            .contains("Fixed chunk was shorter than expected"),
         "found error: {}",
         err
     );
