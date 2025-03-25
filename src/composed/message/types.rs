@@ -492,7 +492,7 @@ impl<'a> Edata<'a> {
 
     /// Decrypts only SEIPD (v1 or v2), errors for SED packets
     /// (this avoids decrypting malleable ciphertext)
-    pub fn decrypt_protected(&mut self, key: &PlainSessionKey) -> Result<()> {
+    pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
         debug!("decrypt_protected: protected = {:?}", protected);
 
@@ -513,7 +513,7 @@ impl<'a> Edata<'a> {
     ///
     /// Decrypting (malleable) SED packets is not necessary for most use cases, except for
     /// historical data.
-    pub fn decrypt_any(&mut self, key: &PlainSessionKey) -> Result<()> {
+    pub fn decrypt_legacy(&mut self, key: &PlainSessionKey) -> Result<()> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
         debug!("decrypt_any: protected = {:?}", protected);
 
@@ -784,7 +784,7 @@ impl<'a> Message<'a> {
                     return Err(Error::MissingKey);
                 };
 
-                edata.decrypt_protected(&session_key)?;
+                edata.decrypt(&session_key)?;
                 let source = MessageReader::Edata(Box::new(edata));
                 let message = Message::internal_from_bytes(source, is_nested)?;
                 Ok((message, result))
