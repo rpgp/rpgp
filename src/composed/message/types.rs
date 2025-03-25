@@ -1273,7 +1273,6 @@ mod tests {
     use super::*;
     use crate::crypto::aead::{AeadAlgorithm, ChunkSize};
     use crate::crypto::hash::HashAlgorithm;
-    use crate::packet::DataMode;
     use crate::types::{CompressionAlgorithm, StringToKey};
     use crate::{Deserializable, MessageBuilder};
 
@@ -1667,7 +1666,7 @@ mod tests {
         let rng = ChaCha8Rng::seed_from_u64(0);
 
         let builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes())
-            .data_mode(DataMode::Utf8)
+            .sign_text()
             .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
         let armored = builder
@@ -1758,7 +1757,7 @@ mod tests {
 
         for input in inputs {
             let builder = MessageBuilder::from_bytes("hello.txt", input)
-                .data_mode(DataMode::Utf8)
+                .sign_text()
                 .sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
             let armored = builder
