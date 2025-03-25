@@ -3,11 +3,10 @@ use std::io::{self, BufRead, Read};
 use bytes::{Buf, BytesMut};
 use log::debug;
 
+use super::{fill_buffer, LimitedReader};
 use crate::packet::PacketHeader;
 use crate::parsing_reader::BufReadParsing;
 use crate::types::{PacketLength, Tag};
-
-use super::{fill_buffer, LimitedReader};
 
 #[derive(Debug)]
 pub struct PacketBodyReader<R: BufRead> {
@@ -179,6 +178,13 @@ impl<R: BufRead> PacketBodyReader<R> {
                             LimitedReader::Fixed { mut reader } => {
                                 let rest = reader.rest()?;
                                 debug_assert!(rest.is_empty(), "{}", hex::encode(&rest));
+
+                                if reader.limit() > 0 {
+                                    return Err(io::Error::new(
+                                        io::ErrorKind::Other,
+                                        "Unexpected trailing data in final Fixed chunk",
+                                    ));
+                                }
 
                                 self.state = State::Done {
                                     source: reader.into_inner(),
