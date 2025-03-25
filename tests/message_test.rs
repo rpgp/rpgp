@@ -604,7 +604,7 @@ fn test_invalid_partial_messages() {
 
     assert!(
         err.to_string()
-            .contains("Unexpectedly short final Fixed chunk"),
+            .contains("Unexpected trailing data in final Fixed chunk"),
         "found error: {}",
         err
     );

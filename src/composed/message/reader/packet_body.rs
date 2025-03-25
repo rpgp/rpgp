@@ -68,7 +68,7 @@ impl<R: BufRead> PacketBodyReader<R> {
         let source = match packet_header.packet_length() {
             PacketLength::Fixed(len) => {
                 debug!("fixed packet {}", len);
-                LimitedReader::fixed(len, source)
+                LimitedReader::fixed(len as u64, source)
             }
             PacketLength::Indeterminate => {
                 debug!("indeterminate packet");
@@ -175,17 +175,14 @@ impl<R: BufRead> PacketBodyReader<R> {
                     if read == 0 {
                         debug!("body source done: {:?}", self.packet_header);
                         match source {
-                            LimitedReader::Fixed {
-                                mut reader,
-                                expect_data,
-                            } => {
+                            LimitedReader::Fixed { mut reader } => {
                                 let rest = reader.rest()?;
                                 debug_assert!(rest.is_empty(), "{}", hex::encode(&rest));
 
-                                if expect_data != 0 {
+                                if reader.limit() > 0 {
                                     return Err(io::Error::new(
                                         io::ErrorKind::Other,
-                                        "Unexpectedly short final Fixed chunk",
+                                        "Unexpected trailing data in final Fixed chunk",
                                     ));
                                 }
 
@@ -205,7 +202,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                                     PacketLength::Fixed(len) => {
                                         // the last one
                                         debug!("fixed partial packet {}", len);
-                                        LimitedReader::fixed(len, source)
+                                        LimitedReader::fixed(len as u64, source)
                                     }
                                     PacketLength::Partial(len) => {
                                         // another one
