@@ -1194,8 +1194,6 @@ mod tests {
 
     use super::*;
     use crate::crypto::sym::SymmetricKeyAlgorithm;
-    use crate::line_writer::LineBreak;
-    use crate::normalize_lines::normalize_lines;
     use crate::util::test::{check_strings, random_string, ChaosReader};
     use crate::{
         Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
@@ -1528,7 +1526,7 @@ mod tests {
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .data_mode(DataMode::Utf8)
+                .sign_text()
                 .partial_chunk_size(chunk_size)
                 .unwrap();
 
@@ -1543,7 +1541,7 @@ mod tests {
 
             check_strings(
                 decrypted.as_data_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
             );
         }
     }
@@ -1571,7 +1569,7 @@ mod tests {
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .data_mode(DataMode::Utf8)
+                .sign_text()
                 .partial_chunk_size(chunk_size)
                 .unwrap()
                 .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
@@ -1590,7 +1588,7 @@ mod tests {
 
             check_strings(
                 decrypted.as_data_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
             );
         }
     }
@@ -1618,7 +1616,7 @@ mod tests {
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .data_mode(DataMode::Utf8)
+                .sign_text()
                 .compression(CompressionAlgorithm::ZIP)
                 .partial_chunk_size(chunk_size)
                 .unwrap()
@@ -1644,7 +1642,7 @@ mod tests {
 
             check_strings(
                 decrypted.as_data_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
             );
         }
     }
@@ -1672,7 +1670,7 @@ mod tests {
             println!("data:\n{}", hex::encode(buf.as_bytes()));
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .data_mode(DataMode::Utf8)
+                .sign_text()
                 .partial_chunk_size(chunk_size)
                 .unwrap();
 
@@ -1684,7 +1682,7 @@ mod tests {
 
             check_strings(
                 message.as_data_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
             );
 
             // verify signature
@@ -1725,7 +1723,7 @@ mod tests {
             );
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .data_mode(DataMode::Utf8)
+                .sign_text()
                 .compression(CompressionAlgorithm::ZIP)
                 .partial_chunk_size(chunk_size)
                 .unwrap()
@@ -1749,7 +1747,7 @@ mod tests {
 
             check_strings(
                 message.as_data_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
             );
             // verify signature
             dbg!(&message);
@@ -1829,7 +1827,7 @@ mod tests {
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
             let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .data_mode(DataMode::Utf8)
+                .sign_text()
                 .compression(CompressionAlgorithm::ZIP)
                 .partial_chunk_size(chunk_size)
                 .unwrap()
@@ -1862,7 +1860,7 @@ mod tests {
 
             check_strings(
                 decompressed.as_data_string().unwrap(),
-                normalize_lines(&buf, LineBreak::Crlf),
+                buf, // normalize_lines(&buf, LineBreak::Crlf),
             );
             decompressed.verify(&*skey.public_key()).expect("signed");
 
@@ -1915,7 +1913,7 @@ mod tests {
                 let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
                 let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                    .data_mode(DataMode::Utf8)
+                    .sign_text()
                     .compression(CompressionAlgorithm::ZIP)
                     .partial_chunk_size(chunk_size)?
                     .seipd_v2(
@@ -1954,7 +1952,7 @@ mod tests {
 
                 check_strings(
                     decompressed.as_data_string().unwrap(),
-                    normalize_lines(&buf, LineBreak::Crlf),
+                    buf, // normalize_lines(&buf, LineBreak::Crlf),
                 );
 
                 let res =
@@ -2005,7 +2003,7 @@ mod tests {
                 let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
                 let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                    .data_mode(DataMode::Utf8)
+                    .sign_text()
                     .compression(CompressionAlgorithm::ZIP)
                     .partial_chunk_size(chunk_size)?
                     .sign(&*skey1, Password::empty(), HashAlgorithm::Sha256)
@@ -2034,7 +2032,7 @@ mod tests {
 
                 check_strings(
                     decompressed.as_data_string().unwrap(),
-                    normalize_lines(&buf, LineBreak::Crlf),
+                    buf, // normalize_lines(&buf, LineBreak::Crlf),
                 );
 
                 let res =
