@@ -1531,33 +1531,34 @@ mod tests {
         x25519_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES256);
     }
 
-    //     #[test]
-    //     fn test_password_encryption_seipdv1() {
-    //         let _ = pretty_env_logger::try_init();
+    #[test]
+    fn test_password_encryption_seipdv1() {
+        let _ = pretty_env_logger::try_init();
 
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-    //         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
-    //         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        let s2k = StringToKey::new_default(&mut rng);
 
-    //         let s2k = StringToKey::new_default(&mut rng);
+        let data = "hello world\n";
 
-    //         let encrypted = compressed_msg
-    //             .encrypt_with_password_seipdv1(
-    //                 &mut rng,
-    //                 s2k,
-    //                 SymmetricKeyAlgorithm::AES128,
-    //                 &"secret".into(),
-    //             )
-    //             .unwrap();
+        let armored = MessageBuilder::from_bytes("hello.txt", data)
+            .compression(CompressionAlgorithm::ZLIB)
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            .encrypt_with_password(s2k, &"secret".into())
+            .unwrap()
+            .to_armored_string(&mut rng, Default::default())
+            .unwrap();
 
-    //         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-password.asc", &armored).unwrap();
+        // fs::write("./message-password.asc", &armored).unwrap();
 
-    //         let parsed = Message::from_armor(&armored[..]).unwrap().0;
-    //         let decrypted = parsed.decrypt_with_password(&"secret".into()).unwrap();
-    //         assert_eq!(compressed_msg, decrypted);
-    //     }
+        let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            .unwrap()
+            .0;
+        let decrypted = parsed.decrypt_with_password(&"secret".into()).unwrap();
+        let mut decrypted = decrypted.decompress().unwrap();
+
+        assert_eq!(data, decrypted.as_data_string().unwrap());
+    }
 
     fn password_encryption_seipdv2(aead: AeadAlgorithm, sym: SymmetricKeyAlgorithm) {
         let _ = pretty_env_logger::try_init();
