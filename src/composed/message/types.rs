@@ -1316,118 +1316,142 @@ mod tests {
         assert_eq!(data, &uncompressed_msg);
     }
 
-    //     #[test]
-    //     fn test_rsa_encryption_seipdv1() {
-    //         let _ = pretty_env_logger::try_init();
+    #[test]
+    fn test_rsa_encryption_seipdv1() {
+        let _ = pretty_env_logger::try_init();
 
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-    //                 .unwrap(),
-    //         )
-    //         .unwrap();
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
 
-    //         // subkey[0] is the encryption key
-    //         let pkey = skey.secret_subkeys[0].public_key();
-    //         let mut rng = rand::rngs::StdRng::seed_from_u64(100);
-    //         let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(100);
+        let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
 
-    //         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
-    //         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        const DATA: &str = "hello world\n";
 
-    //         // Encrypt and test that rng is the only source of randomness.
-    //         let encrypted = compressed_msg
-    //             .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
-    //             .unwrap();
-    //         let encrypted2 = compressed_msg
-    //             .encrypt_to_keys_seipdv1(&mut rng2, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
-    //             .unwrap();
-    //         assert_eq!(encrypted, encrypted2);
+        // Encrypt and test that rng is the only source of randomness.
+        let armored = MessageBuilder::from_bytes("hello.txt", DATA)
+            .compression(CompressionAlgorithm::ZLIB)
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            .encrypt_to_key(&mut rng, &pkey)
+            .unwrap()
+            .to_armored_string(&mut rng, Default::default())
+            .unwrap();
+        let armored2 = MessageBuilder::from_bytes("hello.txt", DATA)
+            .compression(CompressionAlgorithm::ZLIB)
+            .seipd_v1(&mut rng2, SymmetricKeyAlgorithm::AES128)
+            .encrypt_to_key(&mut rng2, &pkey)
+            .unwrap()
+            .to_armored_string(&mut rng2, Default::default())
+            .unwrap();
 
-    //         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-rsa.asc", &armored).unwrap();
+        assert_eq!(armored, armored2);
 
-    //         let parsed = Message::from_armor(&armored[..]).unwrap().0;
+        // fs::write("./message-rsa.asc", &armored).unwrap();
 
-    //         let decrypted = parsed.decrypt(&["test".into()], &[&skey]).unwrap().0;
+        let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            .unwrap()
+            .0;
 
-    //         assert_eq!(compressed_msg, decrypted);
-    //     }
+        let decrypted = parsed.decrypt(&"test".into(), &skey).unwrap();
+        let mut decrypted = decrypted.decompress().unwrap();
 
-    //     #[test]
-    //     fn test_rsa_encryption_seipdv2() {
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
-    //                 .unwrap(),
-    //         )
-    //         .unwrap();
+        assert_eq!(DATA, decrypted.as_data_string().unwrap());
+    }
 
-    //         // subkey[0] is the encryption key
-    //         let pkey = skey.secret_subkeys[0].public_key();
-    //         let mut rng = rand::rngs::StdRng::seed_from_u64(100);
-    //         let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
+    #[test]
+    fn test_rsa_encryption_seipdv2() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc")
+                .unwrap(),
+        )
+        .unwrap();
 
-    //         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
-    //         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(100);
+        let mut rng2 = rand::rngs::StdRng::seed_from_u64(100);
 
-    //         // Encrypt and test that rng is the only source of randomness.
-    //         let encrypted = compressed_msg
-    //             .encrypt_to_keys_seipdv2(
-    //                 &mut rng,
-    //                 SymmetricKeyAlgorithm::AES128,
-    //                 AeadAlgorithm::Ocb,
-    //                 ChunkSize::default(),
-    //                 &[&pkey][..],
-    //             )
-    //             .unwrap();
-    //         let encrypted2 = compressed_msg
-    //             .encrypt_to_keys_seipdv2(
-    //                 &mut rng2,
-    //                 SymmetricKeyAlgorithm::AES128,
-    //                 AeadAlgorithm::Ocb,
-    //                 ChunkSize::default(),
-    //                 &[&pkey][..],
-    //             )
-    //             .unwrap();
-    //         assert_eq!(encrypted, encrypted2);
+        const DATA: &str = "hello world\n";
 
-    //         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-rsa.asc", &armored).unwrap();
+        // Encrypt and test that rng is the only source of randomness.
+        let armored = MessageBuilder::from_bytes("", DATA)
+            .compression(CompressionAlgorithm::ZLIB)
+            .seipd_v2(
+                &mut rng,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Ocb,
+                ChunkSize::default(),
+            )
+            .encrypt_to_key(&mut rng, &pkey)
+            .unwrap()
+            .to_armored_string(&mut rng, Default::default())
+            .unwrap();
+        let armored2 = MessageBuilder::from_bytes("", DATA)
+            .compression(CompressionAlgorithm::ZLIB)
+            .seipd_v2(
+                &mut rng2,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Ocb,
+                ChunkSize::default(),
+            )
+            .encrypt_to_key(&mut rng2, &pkey)
+            .unwrap()
+            .to_armored_string(&mut rng2, Default::default())
+            .unwrap();
 
-    //         let parsed = Message::from_armor(&armored[..]).unwrap().0;
+        assert_eq!(armored, armored2);
 
-    //         let decrypted = parsed.decrypt(&["test".into()], &[&skey]).unwrap().0;
+        // fs::write("./message-rsa.asc", &armored).unwrap();
 
-    //         assert_eq!(compressed_msg, decrypted);
-    //     }
+        let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            .unwrap()
+            .0;
 
-    //     #[test]
-    //     fn test_x25519_encryption_seipdv1() {
-    //         let (skey, _headers) = SignedSecretKey::from_armor_single(
-    //             fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
-    //         )
-    //         .unwrap();
+        let decrypted = parsed.decrypt(&"test".into(), &skey).unwrap();
+        let mut decrypted = decrypted.decompress().unwrap();
 
-    //         // subkey[0] is the encryption key
-    //         let pkey = skey.secret_subkeys[0].public_key();
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+        assert_eq!(DATA, decrypted.as_data_string().unwrap());
+    }
 
-    //         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
-    //         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
-    //         for _ in 0..1000 {
-    //             let encrypted = compressed_msg
-    //                 .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES128, &[&pkey][..])
-    //                 .unwrap();
+    #[test]
+    fn test_x25519_encryption_seipdv1() {
+        let (skey, _headers) = SignedSecretKey::from_armor_single(
+            fs::File::open("./tests/autocrypt/alice@autocrypt.example.sec.asc").unwrap(),
+        )
+        .unwrap();
 
-    //             let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-    //             // fs::write("./message-x25519.asc", &armored).unwrap();
+        // subkey[0] is the encryption key
+        let pkey = skey.secret_subkeys[0].public_key();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-    //             let parsed = Message::from_armor(&armored[..]).unwrap().0;
+        const DATA: &str = "hello world\n";
 
-    //             let decrypted = parsed.decrypt(&["".into()], &[&skey]).unwrap().0;
+        for _ in 0..1000 {
+            let armored = MessageBuilder::from_bytes("", DATA)
+                .compression(CompressionAlgorithm::ZLIB)
+                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+                .encrypt_to_key(&mut rng, &pkey)
+                .unwrap()
+                .to_armored_string(&mut rng, Default::default())
+                .unwrap();
 
-    //             assert_eq!(compressed_msg, decrypted);
-    //         }
-    //     }
+            // fs::write("./message-x25519.asc", &armored).unwrap();
+
+            let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+                .unwrap()
+                .0;
+
+            let decrypted = parsed.decrypt(&"".into(), &skey).unwrap();
+            let mut decrypted = decrypted.decompress().unwrap();
+
+            assert_eq!(DATA, decrypted.as_data_string().unwrap());
+        }
+    }
 
     fn x25519_encryption_seipdv2(aead: AeadAlgorithm, sym: SymmetricKeyAlgorithm) {
         let (skey, _headers) = SignedSecretKey::from_armor_single(
@@ -1507,33 +1531,34 @@ mod tests {
         x25519_encryption_seipdv2(AeadAlgorithm::Gcm, SymmetricKeyAlgorithm::AES256);
     }
 
-    //     #[test]
-    //     fn test_password_encryption_seipdv1() {
-    //         let _ = pretty_env_logger::try_init();
+    #[test]
+    fn test_password_encryption_seipdv1() {
+        let _ = pretty_env_logger::try_init();
 
-    //         let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-    //         let lit_msg = Message::new_literal("hello.txt", "hello world\n").unwrap();
-    //         let compressed_msg = lit_msg.compress(CompressionAlgorithm::ZLIB).unwrap();
+        let s2k = StringToKey::new_default(&mut rng);
 
-    //         let s2k = StringToKey::new_default(&mut rng);
+        let data = "hello world\n";
 
-    //         let encrypted = compressed_msg
-    //             .encrypt_with_password_seipdv1(
-    //                 &mut rng,
-    //                 s2k,
-    //                 SymmetricKeyAlgorithm::AES128,
-    //                 &"secret".into(),
-    //             )
-    //             .unwrap();
+        let armored = MessageBuilder::from_bytes("hello.txt", data)
+            .compression(CompressionAlgorithm::ZLIB)
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            .encrypt_with_password(s2k, &"secret".into())
+            .unwrap()
+            .to_armored_string(&mut rng, Default::default())
+            .unwrap();
 
-    //         let armored = encrypted.to_armored_bytes(None.into()).unwrap();
-    //         // fs::write("./message-password.asc", &armored).unwrap();
+        // fs::write("./message-password.asc", &armored).unwrap();
 
-    //         let parsed = Message::from_armor(&armored[..]).unwrap().0;
-    //         let decrypted = parsed.decrypt_with_password(&"secret".into()).unwrap();
-    //         assert_eq!(compressed_msg, decrypted);
-    //     }
+        let parsed = Message::from_armor(BufReader::new(armored.as_bytes()))
+            .unwrap()
+            .0;
+        let decrypted = parsed.decrypt_with_password(&"secret".into()).unwrap();
+        let mut decrypted = decrypted.decompress().unwrap();
+
+        assert_eq!(data, decrypted.as_data_string().unwrap());
+    }
 
     fn password_encryption_seipdv2(aead: AeadAlgorithm, sym: SymmetricKeyAlgorithm) {
         let _ = pretty_env_logger::try_init();
