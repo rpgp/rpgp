@@ -619,7 +619,7 @@ impl PublicKeyTrait for PubKeyInner {
                         sig_bytes[(32 - r.len())..32].copy_from_slice(r);
                         sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
 
-                        crypto::eddsa::verify(key, hash, hashed, &sig_bytes)
+                        crypto::ed25519::verify(key, hash, hashed, &sig_bytes)
                     }
                     EddsaLegacyPublicParams::Unsupported { curve, .. } => {
                         unsupported_err!("curve {:?} for EdDSA", curve.to_string());
@@ -627,7 +627,7 @@ impl PublicKeyTrait for PubKeyInner {
                 }
             }
             PublicParams::Ed25519(ref params) => {
-                crypto::eddsa::verify(&params.key, hash, hashed, sig.try_into()?)
+                crypto::ed25519::verify(&params.key, hash, hashed, sig.try_into()?)
             }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
@@ -773,12 +773,11 @@ impl PublicKeyTrait for PublicSubkey {
 
 #[cfg(test)]
 mod tests {
-    use crate::packet::PacketTrait;
-
-    use super::*;
-
     use chrono::TimeZone;
     use proptest::prelude::*;
+
+    use super::*;
+    use crate::packet::PacketTrait;
 
     fn v3_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
         prop_oneof![Just(PublicKeyAlgorithm::RSA),].boxed()

@@ -9,7 +9,7 @@ pub mod dsa;
 pub mod ecc_curve;
 pub mod ecdh;
 pub mod ecdsa;
-pub mod eddsa;
+pub mod ed25519;
 pub mod elgamal;
 pub mod hash;
 pub mod public_key;

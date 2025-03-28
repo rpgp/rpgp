@@ -13,7 +13,7 @@ use crate::crypto::aead::AeadAlgorithm;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{checksum, dsa, ecdh, ecdsa, eddsa, elgamal, rsa, x25519, Decryptor};
+use crate::crypto::{checksum, dsa, ecdh, ecdsa, ed25519, elgamal, rsa, x25519, Decryptor};
 use crate::errors::Result;
 use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
@@ -30,8 +30,8 @@ pub enum PlainSecretParams {
     DSA(dsa::SecretKey),
     ECDSA(ecdsa::SecretKey),
     ECDH(ecdh::SecretKey),
-    EdDSA(eddsa::SecretKey),
-    EdDSALegacy(eddsa::SecretKey),
+    EdDSA(ed25519::SecretKey),
+    EdDSALegacy(ed25519::SecretKey),
     X25519(x25519::SecretKey),
     Elgamal(elgamal::SecretKey),
     #[cfg(feature = "unstable-curve448")]
@@ -117,12 +117,12 @@ impl PlainSecretParams {
 
                 const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
                 let secret = pad_key::<SIZE>(secret.as_ref())?;
-                let key = crate::crypto::eddsa::SecretKey::try_from_bytes(secret)?;
+                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
                 Self::EdDSALegacy(key)
             }
             (PublicKeyAlgorithm::Ed25519, PublicParams::Ed25519(_pub_params)) => {
                 let secret = i.read_array::<32>()?;
-                let key = crate::crypto::eddsa::SecretKey::try_from_bytes(secret)?;
+                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
                 Self::EdDSA(key)
             }
             (PublicKeyAlgorithm::X25519, PublicParams::X25519(pub_params)) => {
@@ -627,10 +627,9 @@ pub(crate) fn s2k_usage_aead(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
 
+    use super::*;
     use crate::crypto::public_key::PublicKeyAlgorithm;
 
     impl Arbitrary for PlainSecretParams {
@@ -659,10 +658,10 @@ mod tests {
                 PublicKeyAlgorithm::ECDH => any::<ecdh::SecretKey>()
                     .prop_map(PlainSecretParams::ECDH)
                     .boxed(),
-                PublicKeyAlgorithm::EdDSALegacy => any::<eddsa::SecretKey>()
+                PublicKeyAlgorithm::EdDSALegacy => any::<ed25519::SecretKey>()
                     .prop_map(PlainSecretParams::EdDSALegacy)
                     .boxed(),
-                PublicKeyAlgorithm::Ed25519 => any::<eddsa::SecretKey>()
+                PublicKeyAlgorithm::Ed25519 => any::<ed25519::SecretKey>()
                     .prop_map(PlainSecretParams::EdDSA)
                     .boxed(),
                 PublicKeyAlgorithm::X25519 => any::<x25519::SecretKey>()
