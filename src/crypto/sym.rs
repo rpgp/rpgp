@@ -490,9 +490,14 @@ impl SymmetricKeyAlgorithm {
     }
 
     pub fn encrypted_protected_overhead(&self) -> usize {
-        // MDC is 1 byte packet tag, 1 byte length prefix and 20 bytes SHA1 hash.
-        let mdc_len = 22;
-        self.block_size() + 2 + mdc_len
+        // See https://www.rfc-editor.org/rfc/rfc9580.html#name-version-1-symmetrically-enc
+
+        // One "block size" of random
+        self.block_size() +
+                // 2 bytes "quick check"
+                2 +
+                // MDC (1 byte tag + 1 byte digest size + SHA1 digest)
+                22
     }
 
     pub fn stream_encryptor<R, I>(
