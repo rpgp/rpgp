@@ -17,8 +17,8 @@
       alt="docs.rs docs" />
   </a>
   <!-- msrv -->
-  <a href="https://img.shields.io/badge/rustc-1.75+-blue.svg?style=flat-square">
-    <img src="https://img.shields.io/badge/rustc-1.75+-blue.svg?style=flat-square"
+  <a href="https://img.shields.io/badge/rustc-1.83+-blue.svg?style=flat-square">
+    <img src="https://img.shields.io/badge/rustc-1.83+-blue.svg?style=flat-square"
       alt="MSRV 1.83" />
   </a>
 </div>
