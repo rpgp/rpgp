@@ -1,6 +1,7 @@
-use std::io::BufRead;
+use std::io::{BufRead, BufReader};
 
 use chrono::{DateTime, TimeZone, Utc};
+use nom::AsBytes;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
@@ -14,7 +15,23 @@ fn parse_pub_priv_fields<B: BufRead>(
     pub_len: Option<usize>,
     mut i: B,
 ) -> Result<(PublicParams, SecretParams)> {
-    let pub_params = PublicParams::try_from_reader(typ, pub_len, &mut i)?;
+    let pub_params = match pub_len {
+        Some(pub_len) => {
+            // Use the pub_len hint to make sure we consume no more or less
+            let public = i.take_bytes(pub_len)?;
+            let mut reader = BufReader::new(public.as_bytes());
+
+            let pp = PublicParams::try_from_reader(typ, Some(pub_len), &mut reader)?;
+
+            ensure!(
+                reader.into_inner().is_empty(),
+                "PublicParams::try_from_reader didn't consume all data"
+            );
+            pp
+        }
+        None => PublicParams::try_from_reader(typ, None, &mut i)?,
+    };
+
     let v = i.rest()?;
 
     let secret_params = SecretParams::from_slice(&v, key_ver, typ, &pub_params)?;
