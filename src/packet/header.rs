@@ -285,6 +285,8 @@ impl std::fmt::Debug for NewPacketHeader {
     }
 }
 
+/// The length-type bits for old style ("legacy format") packets.
+/// See https://www.rfc-editor.org/rfc/rfc9580.html#name-legacy-format-packet-length
 fn old_fixed_type(len: u32) -> u8 {
     if len < 256 {
         0
