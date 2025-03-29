@@ -25,10 +25,10 @@ mod tests {
     use testresult::TestResult;
 
     use crate::{
+        composed::{Message, MessageBuilder},
         packet::DataMode,
         types::CompressionAlgorithm,
         util::test::{check_strings, random_string, ChaosReader},
-        Message, MessageBuilder,
     };
 
     #[test]

@@ -145,9 +145,9 @@ mod tests {
 
     use super::*;
     use crate::{
+        composed::KeyType,
         packet,
         types::{KeyVersion, PacketHeaderVersion},
-        KeyType,
     };
 
     prop_compose! {

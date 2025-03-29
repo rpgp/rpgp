@@ -1,9 +1,9 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
+use pgp::composed::Deserializable;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::types::{KeyDetails, PublicKeyTrait, SignatureBytes};
-use pgp::Deserializable;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 

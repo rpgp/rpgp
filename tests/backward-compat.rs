@@ -62,12 +62,12 @@ fn decrypt_rpgp_0_10(enc_msg: &str, keyfile: &str) -> Vec<u8> {
 }
 
 fn decrypt_rpgp_cur(enc_msg: &str, keyfile: &str) -> Vec<u8> {
-    use pgp::Deserializable;
+    use pgp::composed::Deserializable;
 
-    let (enc_msg, _) = pgp::Message::from_string(enc_msg).expect("decrypt_rpgp_cur");
+    let (enc_msg, _) = pgp::composed::Message::from_string(enc_msg).expect("decrypt_rpgp_cur");
 
     let (ssk, _headers) =
-        pgp::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
+        pgp::composed::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
             .expect("failed to read key");
 
     let mut dec = enc_msg.decrypt(&"".into(), &ssk).unwrap();
@@ -97,12 +97,15 @@ fn encrypt_rpgp_0_10(msg: &[u8], keyfile: &str) -> String {
 }
 
 fn encrypt_rpgp_cur(msg: &'static [u8], keyfile: &str) -> String {
-    use pgp::{crypto::sym::SymmetricKeyAlgorithm, ArmorOptions, Deserializable, MessageBuilder};
+    use pgp::{
+        composed::{ArmorOptions, Deserializable, MessageBuilder},
+        crypto::sym::SymmetricKeyAlgorithm,
+    };
 
     let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
     let (ssk, _headers) =
-        pgp::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
+        pgp::composed::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
             .expect("failed to read key");
 
     let enc = &ssk.secret_subkeys[0];

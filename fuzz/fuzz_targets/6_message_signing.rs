@@ -3,12 +3,9 @@
 use std::io::Read;
 
 use libfuzzer_sys::fuzz_target;
+use pgp::composed::{ArmorOptions, Deserializable, Message, MessageBuilder, SignedSecretKey};
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::types::Password;
-use pgp::{
-    composed::{Deserializable, Message},
-    ArmorOptions, MessageBuilder, SignedSecretKey,
-};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 

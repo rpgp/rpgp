@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::Deserializable;
+use pgp::composed::Deserializable;
 
 // build Public Key from single armor input
 fuzz_target!(|data: &[u8]| {

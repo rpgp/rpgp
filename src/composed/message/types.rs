@@ -1330,12 +1330,12 @@ mod tests {
 
     use super::*;
     use crate::{
+        composed::{Deserializable, MessageBuilder},
         crypto::{
             aead::{AeadAlgorithm, ChunkSize},
             hash::HashAlgorithm,
         },
         types::{CompressionAlgorithm, StringToKey},
-        Deserializable, MessageBuilder,
     };
 
     #[test]

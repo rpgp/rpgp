@@ -11,11 +11,10 @@ use super::{
 };
 use crate::{
     armor::BlockType,
-    composed::{message::Message, shared::is_binary},
+    composed::{message::Message, shared::is_binary, Edata, Esk},
     errors::Result,
     parsing_reader::BufReadParsing,
     types::{PkeskVersion, SkeskVersion, Tag},
-    Edata, Esk,
 };
 
 /// Parses a single message level

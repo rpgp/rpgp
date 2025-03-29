@@ -571,7 +571,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         const DATA: &[u8] = &[0x23, 0x05];
-        let key_type = crate::KeyType::EdDSALegacy;
+        let key_type = crate::composed::KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();

@@ -11,13 +11,14 @@ use log::debug;
 
 use crate::{
     armor::{self, header_parser, read_from_buf, BlockType, Headers},
+    composed::{ArmorOptions, Deserializable, StandaloneSignature},
     crypto::hash::HashAlgorithm,
     errors::Result,
     line_writer::LineBreak,
     normalize_lines::{normalize_lines, NormalizedReader},
-    packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
-    ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE,
+    MAX_BUFFER_SIZE,
 };
 
 /// Implementation of a Cleartext Signed Message.
@@ -390,7 +391,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::{Any, SignedPublicKey, SignedSecretKey};
+    use crate::composed::{Any, SignedPublicKey, SignedSecretKey};
 
     #[test]
     fn test_cleartext_openpgp_1() {

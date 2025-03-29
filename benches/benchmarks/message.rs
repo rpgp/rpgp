@@ -5,10 +5,9 @@ use std::{
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 use pgp::{
-    composed::{Deserializable, Message, SignedSecretKey},
+    composed::{Deserializable, KeyType, Message, MessageBuilder, SignedSecretKey},
     crypto::{ecc_curve::ECCCurve, sym::SymmetricKeyAlgorithm},
     types::{Password, StringToKey},
-    KeyType, MessageBuilder,
 };
 use rand::{thread_rng, RngCore};
 

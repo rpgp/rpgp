@@ -666,7 +666,7 @@ mod tests {
             "./tests/unit-tests/argon2/aes256.msg",
         ];
 
-        use crate::Message;
+        use crate::composed::Message;
 
         for filename in MSGS {
             println!("reading {}", filename);
@@ -721,7 +721,7 @@ mod tests {
     fn aead_skesk_msg(filename: &str) {
         let _ = pretty_env_logger::try_init();
 
-        use crate::Message;
+        use crate::composed::Message;
 
         println!("reading {}", filename);
         let (msg, _header) = Message::from_armor_file(filename).expect("parse");

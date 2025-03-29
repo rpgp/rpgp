@@ -1,7 +1,10 @@
 use std::fs::File;
 
 use pgp::{
-    cleartext::CleartextSignedMessage,
+    composed::{
+        cleartext::CleartextSignedMessage, KeyType, Message, MessageBuilder,
+        SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
+    },
     crypto::{
         aead::{AeadAlgorithm, ChunkSize},
         ecc_curve::ECCCurve,
@@ -9,7 +12,6 @@ use pgp::{
         sym::SymmetricKeyAlgorithm,
     },
     types::KeyVersion,
-    KeyType, Message, MessageBuilder, SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;

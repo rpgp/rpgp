@@ -13,6 +13,7 @@ use sha2::Sha256;
 use zeroize::ZeroizeOnDrop;
 
 use crate::{
+    composed::PlainSessionKey,
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, elgamal,
         public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, Decryptor,
@@ -22,7 +23,6 @@ use crate::{
     ser::Serialize,
     types::{EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
     util::TeeWriter,
-    PlainSessionKey,
 };
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]

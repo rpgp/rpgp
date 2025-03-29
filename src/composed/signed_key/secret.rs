@@ -9,12 +9,12 @@ use crate::{
     composed::{
         key::{PublicKey, PublicSubkey},
         signed_key::{SignedKeyDetails, SignedPublicSubKey},
+        ArmorOptions, PlainSessionKey, SignedPublicKey,
     },
     errors::Result,
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag},
-    ArmorOptions, PlainSessionKey, SignedPublicKey,
 };
 
 /// Represents a secret signed PGP key.
@@ -368,10 +368,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        composed::shared::Deserializable,
+        composed::{shared::Deserializable, Message, MessageBuilder},
         crypto::hash::HashAlgorithm,
         types::{KeyVersion, Password, S2kParams},
-        Message, MessageBuilder,
     };
 
     #[test]
@@ -404,7 +403,7 @@ k0mXubZvyl4GBg==
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let pri = &ssk.primary_key;
 
-        let signed = crate::MessageBuilder::from_bytes("", &b"Hello world"[..])
+        let signed = crate::composed::MessageBuilder::from_bytes("", &b"Hello world"[..])
             .sign(pri, Password::empty(), HashAlgorithm::Sha256)
             .to_armored_string(&mut rng, ArmorOptions::default())?;
 

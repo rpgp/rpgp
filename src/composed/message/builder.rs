@@ -15,6 +15,7 @@ use zeroize::Zeroizing;
 use super::ArmorOptions;
 use crate::{
     armor,
+    composed::Esk,
     crypto::{
         aead::{AeadAlgorithm, ChunkSize},
         hash::HashAlgorithm,
@@ -36,7 +37,6 @@ use crate::{
         SecretKeyTrait, StringToKey, Tag,
     },
     util::{fill_buffer, TeeWriter},
-    Esk,
 };
 
 pub type DummyReader = std::io::Cursor<Vec<u8>>;
@@ -1199,9 +1199,11 @@ mod tests {
 
     use super::*;
     use crate::{
+        composed::{
+            Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
+        },
         crypto::sym::SymmetricKeyAlgorithm,
         util::test::{check_strings, random_string, ChaosReader},
-        Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
     };
 
     #[test]

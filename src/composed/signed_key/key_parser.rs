@@ -1,10 +1,10 @@
 use log::{debug, warn};
 
 use crate::{
+    composed::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey},
     errors::{Error, Result},
     packet::{self, Packet, PacketTrait, Signature, SignatureType, UserAttribute, UserId},
     types::{KeyDetails, KeyVersion, SignedUser, SignedUserAttribute, Tag},
-    SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey,
 };
 
 #[allow(clippy::complexity)]

@@ -2,7 +2,8 @@ use std::io::{self, BufRead, Read};
 
 use super::PacketBodyReader;
 use crate::{
-    crypto::sym::StreamDecryptor, errors::Result, packet::PacketHeader, types::Tag, PlainSessionKey,
+    composed::PlainSessionKey, crypto::sym::StreamDecryptor, errors::Result, packet::PacketHeader,
+    types::Tag,
 };
 
 #[derive(Debug)]

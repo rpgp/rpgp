@@ -9,13 +9,13 @@ use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
 use crate::{
+    composed::PlainSessionKey,
     crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{InvalidInputSnafu, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{Password, SkeskVersion, StringToKey, Tag},
-    PlainSessionKey,
 };
 
 /// Symmetric-Key Encrypted Session Key Packet

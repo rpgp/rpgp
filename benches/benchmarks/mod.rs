@@ -1,7 +1,7 @@
 use pgp::{
+    composed::{KeyType, SecretKey, SecretKeyParamsBuilder, SubkeyParamsBuilder},
     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
     types::CompressionAlgorithm,
-    KeyType, SecretKey, SecretKeyParamsBuilder, SubkeyParamsBuilder,
 };
 use rand::thread_rng;
 use smallvec::smallvec;

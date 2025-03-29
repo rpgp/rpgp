@@ -9,6 +9,7 @@ use crate::{
     composed::{
         key::{PublicKey, PublicSubkey},
         signed_key::SignedKeyDetails,
+        ArmorOptions,
     },
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -18,7 +19,6 @@ use crate::{
         EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
         PublicKeyTrait, PublicParams, SignatureBytes, Tag,
     },
-    ArmorOptions,
 };
 
 /// A Public OpenPGP key ("Transferable Public Key"), complete with self-signatures (and optionally

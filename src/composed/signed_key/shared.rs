@@ -9,13 +9,13 @@ use crate::{
     composed::{
         key::KeyDetails,
         signed_key::{SignedPublicKey, SignedSecretKey},
+        ArmorOptions,
     },
     errors::Result,
     packet,
     packet::{KeyFlags, PacketTrait},
     ser::Serialize,
     types::{PacketLength, PublicKeyTrait, SignedUser, SignedUserAttribute},
-    ArmorOptions,
 };
 
 /// Shared details between secret and public keys.

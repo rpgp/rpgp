@@ -580,7 +580,10 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::{types::Password, Deserializable, Message, SignedSecretKey};
+    use crate::{
+        composed::{Deserializable, Message, SignedSecretKey},
+        types::Password,
+    };
 
     #[test]
     #[ignore]

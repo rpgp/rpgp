@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate pretty_assertions;
 
-use pgp::{ArmorOptions, Deserializable};
+use pgp::composed::{ArmorOptions, Deserializable};
 
 /// "evn.cert" is a real world certificate with some unusual properties:
 /// For one thing, it encodes subpacket length in the 5 byte format.

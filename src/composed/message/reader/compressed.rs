@@ -4,9 +4,9 @@ use bytes::{Buf, BytesMut};
 
 use super::{fill_buffer, PacketBodyReader};
 use crate::{
+    composed::DebugBufRead,
     packet::{Decompressor, PacketHeader},
     types::Tag,
-    DebugBufRead,
 };
 
 #[derive(Debug)]

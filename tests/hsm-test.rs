@@ -2,6 +2,7 @@ use std::{fmt::Debug, fs::File};
 
 use chrono::{DateTime, Utc};
 use pgp::{
+    composed::{Esk, Message, SignedPublicKey, SignedSecretKey},
     crypto::{
         checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
@@ -12,7 +13,6 @@ use pgp::{
         EcdhPublicParams, Fingerprint, KeyDetails, KeyId, Mpi, Password, PkeskBytes,
         PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
     },
-    Esk, Message, SignedPublicKey, SignedSecretKey,
 };
 
 #[derive(Debug, Clone)]
@@ -364,7 +364,7 @@ fn card_decrypt() {
 
         let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
         edata
-            .decrypt(&pgp::PlainSessionKey::V3_4 {
+            .decrypt(&pgp::composed::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })

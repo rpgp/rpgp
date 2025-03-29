@@ -2,12 +2,11 @@ use std::iter::Peekable;
 
 use crate::{
     armor,
-    composed::Deserializable,
+    composed::{ArmorOptions, Deserializable},
     errors::Result,
     packet::{Packet, PacketTrait, Signature},
     ser::Serialize,
     types::{PublicKeyTrait, Tag},
-    ArmorOptions,
 };
 
 /// Standalone signature as defined by the cleartext framework.

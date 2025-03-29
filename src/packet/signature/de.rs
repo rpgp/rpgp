@@ -665,7 +665,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use crate::{Deserializable, StandaloneSignature};
+    use crate::composed::{Deserializable, StandaloneSignature};
 
     #[test]
     fn test_subpacket_pref_sym_alg() {

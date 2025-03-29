@@ -5,10 +5,10 @@ use log::debug;
 
 use super::PacketBodyReader;
 use crate::{
+    composed::{Message, MessageReader, RingResult, TheRing},
     errors::Result,
     packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType},
     util::{fill_buffer, NormalizingHasher},
-    Message, MessageReader, RingResult, TheRing,
 };
 
 #[derive(derive_more::Debug)]
