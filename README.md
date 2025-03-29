@@ -68,14 +68,13 @@ let key_string = fs::read_to_string(pub_key_file).unwrap();
 let (public_key, _headers_public) = SignedPublicKey::from_string(&key_string).unwrap();
 
 let msg_string = fs::read_to_string(msg_file).unwrap();
-let (msg, _headers_msg) = Message::from_string(&msg_string).unwrap();
+let (mut msg, _headers_msg) = Message::from_string(&msg_string).unwrap();
 
 // Verify this message
 // NOTE: This assumes that the primary serves as the signing key, which is not always the case!
 msg.verify(&public_key).unwrap();
 
-let msg_content = msg.get_content().unwrap(); // actual message content
-let msg_string = String::from_utf8(msg_content.unwrap()).expect("expect UTF8");
+let msg_string = msg.as_data_string().unwrap(); // actual message content
 println!("Signed message: {:?}", msg_string);
 ```
 
@@ -84,7 +83,7 @@ println!("Signed message: {:?}", msg_string);
 ```rust no_run
 use std::fs;
 use pgp::{Deserializable, SignedPublicKey, SignedSecretKey};
-use pgp::types::{PublicKeyTrait, SecretKeyTrait};
+use pgp::types::{Password, PublicKeyTrait, SecretKeyTrait};
 use pgp::crypto::hash::HashAlgorithm;
 
 let priv_key_file = "key.sec.asc";
@@ -96,7 +95,7 @@ let data = b"Hello world!";
 let secret_key_string = fs::read_to_string(priv_key_file).expect("Failed to load secret key");
 let signed_secret_key = SignedSecretKey::from_string(&secret_key_string).unwrap().0;
 
-let new_signature = signed_secret_key.create_signature(|| "".to_string(), HashAlgorithm::default(), &data[..]).unwrap();
+let new_signature = signed_secret_key.create_signature(&Password::empty(), HashAlgorithm::default(), &data[..]).unwrap();
 
 // Verify the signature using the public key
 let key_string = fs::read_to_string(pub_key_file).expect("Failed to load public key");

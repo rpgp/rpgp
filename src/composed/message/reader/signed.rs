@@ -297,7 +297,7 @@ impl BufRead for SignatureBodyReader<'_> {
 
     fn consume(&mut self, amt: usize) {
         match self {
-            Self::Init { .. } => panic!("must not be called befoer fill_buf"),
+            Self::Init { .. } => panic!("must not be called before fill_buf"),
             Self::Body { buffer, .. } => {
                 buffer.advance(amt);
             }
