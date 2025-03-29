@@ -2,8 +2,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use pgp::crypto::hash::HashAlgorithm;
-use pgp::types::PublicKeyTrait;
-use pgp::types::SignatureBytes;
+use pgp::types::{KeyDetails, PublicKeyTrait, SignatureBytes};
 use pgp::Deserializable;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -41,9 +40,9 @@ fuzz_target!(|data: &[u8]| {
             let dummy_data = b"dummy";
 
             let _ = key.verify_signature(
-                HashAlgorithm::SHA2_256,
+                HashAlgorithm::Sha256,
                 dummy_data,
-                &SignatureBytes::Native(plaintext),
+                &SignatureBytes::Native(plaintext.into()),
             );
 
             return;
