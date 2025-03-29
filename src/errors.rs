@@ -13,6 +13,7 @@ pub use crate::parsing::{Error as ParsingError, RemainingError};
 /// Error types
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
+#[non_exhaustive]
 pub enum Error {
     #[snafu(display("invalid input"))]
     InvalidInput { backtrace: Option<Backtrace> },
