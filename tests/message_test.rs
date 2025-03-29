@@ -689,6 +689,33 @@ fn test_two_literals_first_compressed_no_decompression() {
 }
 
 #[test]
+fn test_two_literals_first_compressed_two_times() {
+    // "Two literals, 1st compressed 2 times" from the OpenPGP interoperability test suite
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) =
+        Message::from_armor_file("./tests/two_literals_first_compressed_two_times.asc")
+            .expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
+
+#[test]
 fn test_two_literals_first_compressed_explicit_decompression() {
     // "Two literals, 1st compressed 1 times" from the OpenPGP interoperability test suite,
     // Explicitly decompressing the compressed packet.
@@ -707,6 +734,39 @@ fn test_two_literals_first_compressed_explicit_decompression() {
     dbg!(&message);
     let msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
 
+    let mut msg = msg.decompress().unwrap();
+
+    let err = msg.as_data_vec().unwrap_err();
+    dbg!(&err);
+
+    assert!(
+        err.to_string().contains("unexpected trailing"),
+        "found error: {}",
+        err
+    );
+}
+
+#[test]
+fn test_two_literals_first_compressed_two_times_explicit_decompression() {
+    // "Two literals, 1st compressed 2 times" from the OpenPGP interoperability test suite,
+    // Explicitly decompressing the compressed packet.
+
+    // FIXME: this test should probably error somewhere?
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (message, _) =
+        Message::from_armor_file("./tests/two_literals_first_compressed_two_times.asc")
+            .expect("ok");
+
+    dbg!(&message);
+    let msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let msg = msg.decompress().unwrap();
     let mut msg = msg.decompress().unwrap();
 
     let err = msg.as_data_vec().unwrap_err();
