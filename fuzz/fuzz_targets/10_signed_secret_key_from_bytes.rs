@@ -2,7 +2,7 @@
 
 use libfuzzer_sys::fuzz_target;
 use pgp::{
-    types::{PublicKeyTrait, SecretKeyTrait},
+    types::{KeyDetails, Password, PublicKeyTrait, SecretKeyTrait},
     Deserializable,
 };
 use rand::SeedableRng;
@@ -37,16 +37,16 @@ fuzz_target!(|data: &[u8]| {
             // FUZZER RESULT this can panic on some inputs
             // finding RPG-20 in ROS report 2024, fixed with 0.14.1
             let signature_res = key.create_signature(
-                || "pw".into(),
-                pgp::crypto::hash::HashAlgorithm::SHA2_256,
+                &Password::empty(),
+                pgp::crypto::hash::HashAlgorithm::Sha256,
                 &dummy_data,
             );
 
             match signature_res {
                 Err(_) => {}
                 Ok(signature) => {
-                    let _verify_res = key.verify_signature(
-                        pgp::crypto::hash::HashAlgorithm::SHA2_256,
+                    let _verify_res = key.public_key().verify_signature(
+                        pgp::crypto::hash::HashAlgorithm::Sha256,
                         &dummy_data,
                         &signature,
                     );
