@@ -96,6 +96,7 @@ impl PacketLength {
 #[derive(Debug, PartialEq, Eq, Clone, Copy, FromPrimitive, IntoPrimitive)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum Tag {
     /// Public-Key Encrypted Session Key Packet
     PublicKeyEncryptedSessionKey = 1,
@@ -336,9 +337,9 @@ pub enum SkeskVersion {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     #[test]
     fn test_write_header() {
