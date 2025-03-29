@@ -19,7 +19,9 @@ fuzz_target!(|data: &[u8]| {
 
             // FUZZER RESULT this can panic on some inputs
             // finding RPG-19 in ROS report 2024, fixed with 0.14.1
-            let _ = message.decrypt_with_password(&Password::from("bogus_password"));
+            if let Ok(mut dec) = message.decrypt_with_password(&Password::from("bogus_password")) {
+                let _ = dec.as_data_vec();
+            }
 
             let _ = Message::from_bytes(data).unwrap().is_one_pass_signed();
             let _ = Message::from_bytes(data).unwrap().is_literal();

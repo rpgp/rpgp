@@ -20,7 +20,7 @@ fuzz_target!(|data: &[u8]| {
             let (message, _) = message_tuple;
             // FUZZER RESULT this can panic on some inputs
             // finding RPG-19 in ROS report 2024, fixed with 0.14.1
-            if let Ok(dec) = message.decrypt_with_password(&Password::from("bogus_password")) {
+            if let Ok(mut dec) = message.decrypt_with_password(&Password::from("bogus_password")) {
                 let _ = dec.as_data_vec();
             }
 
