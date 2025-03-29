@@ -33,9 +33,8 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength, Password,
-        SecretKeyTrait, StringToKey, Tag,
-    },
+        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion, PacketLength,
+        Password, SecretKeyTrait, StringToKey, Tag,},
     util::{fill_buffer, TeeWriter},
 };
 
@@ -318,6 +317,29 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         Ok(self)
     }
 
+    /// Encrypt to a public key, but leave the recipient field unset
+    pub fn encrypt_to_key_anonymous<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    where
+        RAND: CryptoRng + Rng,
+        K: crate::types::PublicKeyTrait,
+    {
+        // Encrypt (sym) the session key using the provided password.
+        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
+            &mut rng,
+            &self.encryption.session_key,
+            self.encryption.sym_alg,
+            pkey,
+        )?;
+
+        // Blank out the recipient id
+        if let PublicKeyEncryptedSessionKey::V3 { id, .. } = &mut pkes {
+            *id = KeyId::WILDCARD;
+        }
+
+        self.encryption.pub_esks.push(pkes);
+        Ok(self)
+    }
+
     /// Encrypt to a password.
     pub fn encrypt_with_password(mut self, s2k: StringToKey, msg_pw: &Password) -> Result<Self> {
         let esk = SymKeyEncryptedSessionKey::encrypt_v4(
@@ -352,6 +374,29 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
             &self.encryption.session_key,
             pkey,
         )?;
+
+        self.encryption.pub_esks.push(pkes);
+
+        Ok(self)
+    }
+
+    /// Encrypt to a public key, but leave the recipient field unset
+    pub fn encrypt_to_key_anonymous<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    where
+        RAND: CryptoRng + Rng,
+        K: crate::types::PublicKeyTrait,
+    {
+        // Encrypt (sym) the session key using the provided password.
+        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+            &mut rng,
+            &self.encryption.session_key,
+            pkey,
+        )?;
+
+        // Blank out the recipient id
+        if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
+            *fingerprint = None;
+        }
 
         self.encryption.pub_esks.push(pkes);
 
