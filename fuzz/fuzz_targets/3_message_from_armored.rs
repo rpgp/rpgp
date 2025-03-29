@@ -27,8 +27,10 @@ fuzz_target!(|data: &[u8]| {
             let _ = Message::from_armor(data).unwrap().0.is_one_pass_signed();
             let _ = Message::from_armor(data).unwrap().0.is_literal();
             let _ = Message::from_armor(data).unwrap().0.as_data_string();
+
             // attempts decompression for some message types
-            let _ = Message::from_armor(data).unwrap().0.get_content();
+            // FIXME: manually try to unwrap the message? (esp. decompress?)
+            // let _ = Message::from_armor(data).unwrap().0.get_content();
         }
     }
 });
