@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 921c9fa26664561e2ba624937bc722a8a46db3272df173abd1779de37aaaf185 # shrinks to params = Ed25519 { key: VerifyingKey(CompressedEdwardsY: [59, 106, 39, 188, 206, 182, 164, 45, 98, 163, 168, 208, 42, 111, 13, 115, 101, 50, 21, 119, 29, 226, 67, 166, 58, 192, 72, 161, 139, 89, 218, 41]), EdwardsPoint{ 	X: FieldElement51([310059296809677, 282478782609463, 1134277466337025, 518444410351742, 252151902643196]), 	Y: FieldElement51([2242238961786615, 620980506165114, 1489546507400928, 711753760861201, 525173643617361]), 	Z: FieldElement51([1731855776171122, 121311228923670, 1422861321318776, 374124422962716, 2209285809321210]), 	T: FieldElement51([2103860483558333, 728338221394092, 2149986852255154, 599758822881070, 2065533333173962]) }) }

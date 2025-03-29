@@ -59,22 +59,22 @@ pub trait BufReadParsing: BufRead + Sized {
     }
 
     fn take_bytes(&mut self, size: usize) -> Result<BytesMut> {
-        let mut arr = BytesMut::zeroed(size);
-        let mut read = 0;
+        // Do not allocate everything upfront, only as data is actually available
+        // to avoid OOM due to buggy sizes.
+        let mut arr = BytesMut::with_capacity(size.min(1024));
 
-        while read < arr.len() {
+        while arr.len() < size {
             let buf = self.fill_buf()?;
             if buf.is_empty() {
                 break;
             }
 
-            let available = (arr.len() - read).min(buf.len());
-            arr[read..read + available].copy_from_slice(&buf[..available]);
-            read += available;
+            let available = (size - arr.len()).min(buf.len());
+            arr.extend_from_slice(&buf[..available]);
             self.consume(available);
         }
 
-        if read != arr.len() {
+        if arr.len() != size {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "no more data available",

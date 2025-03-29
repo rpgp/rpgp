@@ -339,3 +339,13 @@ fn rpg_009_message_from_bytes_subtract_with_overflow3() {
     // attempt to subtract with overflow
     let _ = Message::from_bytes(bad_input);
 }
+
+#[test]
+fn oom_signature_1() {
+    let bad_input = [
+        155, 6, 3, 72, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    ];
+
+    let res = pgp::composed::StandaloneSignature::from_bytes(&bad_input[..]);
+    assert!(res.is_err());
+}
