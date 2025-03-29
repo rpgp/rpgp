@@ -1,5 +1,7 @@
 #![no_main]
 
+use std::io::Read;
+
 use libfuzzer_sys::fuzz_target;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::types::Password;
@@ -65,14 +67,17 @@ QqrhcYJ4IBFau0avBvi7QjsSOvePvIKFO/DuDIECRpLZjRW+VKisag==
 
             // FUZZER OBSERVATION contrary to initial expectations, signing does not always succeed
             let mut builder = MessageBuilder::from_bytes("", data);
-            builder = builder.sign(&*decrypt_key, Password::empty(), HashAlgorithm::Sha256);
+            builder = builder.sign(&*decrypt_key, Password::from("test"), HashAlgorithm::Sha256);
             let armored = builder
                 .to_armored_string(rng, ArmorOptions::default())
                 .unwrap();
 
             let signed_message_res = Message::from_armor(armored.as_bytes());
             match signed_message_res {
-                Ok((signed_message, _)) => {
+                Ok((mut signed_message, _)) => {
+                    let mut sink = vec![];
+                    let _ = signed_message.read_to_end(&mut sink);
+
                     let _verify_res = signed_message
                         .verify(&*decrypt_key.public_key())
                         .expect("we just signed this and expect it to verify");
