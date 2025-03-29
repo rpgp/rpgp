@@ -25,15 +25,15 @@ fuzz_target!(|data: &[u8]| {
 
             let _ = Message::from_bytes(data).unwrap().is_one_pass_signed();
             let _ = Message::from_bytes(data).unwrap().is_literal();
-            let _ = Message::from_bytes(data).unwrap().as_data_string();
+            let _ = Message::from_bytes(data).unwrap().as_data_vec();
 
             // attempts decompression for some message types
-            // FIXME: manually try to unwrap the message? (esp. decompress?)
-            // let _ = Message::from_bytes(data).unwrap().get_content();
-
-            // FUZZER RESULT this crashes on all message types that are not Message::Signed
-            // finding RPG-18 in ROS report 2024
-            // let _ = Message::from_bytes(data).into_signature();
+            {
+                let msg = Message::from_bytes(data).unwrap();
+                if let Ok(mut msg) = msg.decompress() {
+                    let _ = msg.as_data_vec();
+                }
+            }
         }
     }
 });

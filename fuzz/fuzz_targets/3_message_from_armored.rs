@@ -16,8 +16,7 @@ fuzz_target!(|data: &[u8]| {
 
     match message_res {
         Err(_) => return,
-        Ok(message_tuple) => {
-            let (message, _) = message_tuple;
+        Ok((message, _)) => {
             // FUZZER RESULT this can panic on some inputs
             // finding RPG-19 in ROS report 2024, fixed with 0.14.1
             if let Ok(mut dec) = message.decrypt_with_password(&Password::from("bogus_password")) {
@@ -26,11 +25,16 @@ fuzz_target!(|data: &[u8]| {
 
             let _ = Message::from_armor(data).unwrap().0.is_one_pass_signed();
             let _ = Message::from_armor(data).unwrap().0.is_literal();
+            let _ = Message::from_armor(data).unwrap().0.as_data_vec();
             let _ = Message::from_armor(data).unwrap().0.as_data_string();
 
             // attempts decompression for some message types
-            // FIXME: manually try to unwrap the message? (esp. decompress?)
-            // let _ = Message::from_armor(data).unwrap().0.get_content();
+            {
+                let (msg, _) = Message::from_armor(data).unwrap();
+                if let Ok(mut msg) = msg.decompress() {
+                    let _ = msg.as_data_vec();
+                }
+            }
         }
     }
 });
