@@ -1,7 +1,7 @@
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
-    types::{Fingerprint, KeyId, KeyVersion, PublicParams, SignatureBytes},
+    types::{Fingerprint, KeyId, KeyVersion, Password, PublicParams, SignatureBytes},
 };
 
 pub trait KeyDetails {
@@ -84,4 +84,50 @@ impl<T: PublicKeyTrait> PublicKeyTrait for &T {
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         (*self).created_at()
     }
+}
+
+impl KeyDetails for Box<&dyn SecretKeyTrait> {
+    fn version(&self) -> KeyVersion {
+        (**self).version()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        (**self).fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        (**self).key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        (**self).algorithm()
+    }
+}
+
+impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
+    fn create_signature(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<crate::types::SignatureBytes> {
+        (**self).create_signature(key_pw, hash, data)
+    }
+
+    fn hash_alg(&self) -> HashAlgorithm {
+        (**self).hash_alg()
+    }
+}
+
+pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
+    fn create_signature(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<crate::types::SignatureBytes>;
+
+    /// The recommended hash algorithm to calculate the signature hash digest with,
+    /// when using this as a signer
+    fn hash_alg(&self) -> HashAlgorithm;
 }
