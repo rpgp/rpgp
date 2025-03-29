@@ -195,7 +195,26 @@ impl<'a> Message<'a> {
         Self::from_packets(parser)
     }
 
-    pub(crate) fn internal_from_bytes(source: MessageReader<'a>, is_nested: bool) -> Result<Self> {
+    /// Construct a message from the decrypted edata.
+    ///
+    /// `is_nested` must be passed through from the source `Message`.
+    pub(super) fn from_edata(edata: Edata<'a>, is_nested: bool) -> Result<Self> {
+        let source = MessageReader::Edata(Box::new(edata));
+        Message::internal_from_bytes(source, is_nested)
+    }
+
+    /// Construct a message from a compressed data reader.
+    ///
+    /// `is_nested` must be passed through from the source `Message`.
+    pub(super) fn from_compressed(
+        reader: CompressedDataReader<MessageReader<'a>>,
+        is_nested: bool,
+    ) -> Result<Self> {
+        let source = MessageReader::Compressed(Box::new(reader));
+        Message::internal_from_bytes(source, is_nested)
+    }
+
+    fn internal_from_bytes(source: MessageReader<'a>, is_nested: bool) -> Result<Self> {
         let packets = crate::packet::PacketParser::new(source);
         match next(packets, is_nested)? {
             Some(message) => Ok(message),

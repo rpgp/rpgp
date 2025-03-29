@@ -610,8 +610,8 @@ impl<'a> Message<'a> {
     pub fn decompress(self) -> Result<Self> {
         match self {
             Message::Compressed { reader, is_nested } => {
-                let source = MessageReader::Compressed(Box::new(reader.decompress()?));
-                Message::internal_from_bytes(source, is_nested)
+                let reader = reader.decompress()?;
+                Message::from_compressed(reader, is_nested)
             }
             Message::Signed { reader, is_nested } => Ok(Message::Signed {
                 reader: reader.decompress()?,
@@ -851,8 +851,7 @@ impl<'a> Message<'a> {
                 };
 
                 edata.decrypt(&session_key)?;
-                let source = MessageReader::Edata(Box::new(edata));
-                let message = Message::internal_from_bytes(source, is_nested)?;
+                let message = Message::from_edata(edata, is_nested)?;
                 Ok((message, result))
             }
         }
