@@ -10,16 +10,18 @@ use crate::util::fill_buffer;
 use super::PacketBodyReader;
 
 /// Read the underlying literal data.
-#[derive(Debug)]
+#[derive(derive_more::Debug)]
 pub enum LiteralDataReader<R: BufRead> {
     Body {
-        source: PacketBodyReader<R>,
-        buffer: BytesMut,
         header: LiteralDataHeader,
+        source: PacketBodyReader<R>,
+        #[debug("{}", hex::encode(buffer))]
+        buffer: BytesMut,
     },
     Done {
-        source: PacketBodyReader<R>,
         header: LiteralDataHeader,
+        source: PacketBodyReader<R>,
+        #[debug("{}", hex::encode(buffer))]
         buffer: BytesMut,
     },
     Error,
@@ -49,7 +51,7 @@ impl<R: BufRead> LiteralDataReader<R> {
         match self {
             Self::Done { buffer, .. } => !buffer.has_remaining(),
             Self::Body { .. } => false,
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("LiteralDataReader errored"),
         }
     }
 
@@ -57,7 +59,7 @@ impl<R: BufRead> LiteralDataReader<R> {
         match self {
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("LiteralDataReader errored"),
         }
     }
 
@@ -65,7 +67,7 @@ impl<R: BufRead> LiteralDataReader<R> {
         match self {
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("LiteralDataReader errored"),
         }
     }
 
@@ -73,7 +75,15 @@ impl<R: BufRead> LiteralDataReader<R> {
         match self {
             Self::Body { ref source, .. } => source.packet_header(),
             Self::Done { ref source, .. } => source.packet_header(),
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("LiteralDataReader errored"),
+        }
+    }
+
+    pub fn data_header(&self) -> &LiteralDataHeader {
+        match self {
+            Self::Body { ref header, .. } => header,
+            Self::Done { ref header, .. } => header,
+            Self::Error => panic!("LiteralDataReader errored"),
         }
     }
 
@@ -88,7 +98,6 @@ impl<R: BufRead> LiteralDataReader<R> {
                 mut buffer,
                 header,
             } => {
-                debug!("body");
                 if buffer.has_remaining() {
                     *self = Self::Body {
                         source,
@@ -124,7 +133,6 @@ impl<R: BufRead> LiteralDataReader<R> {
                 header,
                 buffer,
             } => {
-                debug!("literal packet: done");
                 *self = Self::Done {
                     source,
                     header,
@@ -132,9 +140,10 @@ impl<R: BufRead> LiteralDataReader<R> {
                 };
                 Ok(())
             }
-            Self::Error => {
-                panic!("LiteralReader errored");
-            }
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "LiteralDataReader errored",
+            )),
         }
     }
 }
@@ -144,7 +153,10 @@ impl<R: BufRead> BufRead for LiteralDataReader<R> {
         self.fill_inner()?;
         match self {
             Self::Body { buffer, .. } | Self::Done { buffer, .. } => Ok(&buffer[..]),
-            Self::Error => panic!("LiteralReader errored"),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "LiteralDataReader errored",
+            )),
         }
     }
 
@@ -167,17 +179,10 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
-            _ => unreachable!("invalid state"),
-        }
-    }
-}
-
-impl<R: BufRead> LiteralDataReader<R> {
-    pub fn data_header(&self) -> &LiteralDataHeader {
-        match self {
-            Self::Body { ref header, .. } => header,
-            Self::Done { ref header, .. } => header,
-            Self::Error => panic!("error state"),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "LiteralDataReader errored",
+            )),
         }
     }
 }

@@ -9,8 +9,15 @@ use crate::DebugBufRead;
 use super::{fill_buffer, PacketBodyReader};
 
 #[derive(Debug)]
-pub struct CompressedDataReader<R: DebugBufRead> {
-    state: CompressedReaderState<R>,
+pub enum CompressedDataReader<R: DebugBufRead> {
+    Body {
+        source: MaybeDecompress<PacketBodyReader<R>>,
+        buffer: BytesMut,
+    },
+    Done {
+        source: PacketBodyReader<R>,
+    },
+    Error,
 }
 
 impl<R: DebugBufRead> CompressedDataReader<R> {
@@ -24,100 +31,94 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
             MaybeDecompress::Raw(source)
         };
 
-        Ok(Self {
-            state: CompressedReaderState::Body {
-                source,
-                buffer: BytesMut::with_capacity(1024),
-            },
+        Ok(Self::Body {
+            source,
+            buffer: BytesMut::with_capacity(1024),
         })
     }
 
     pub fn new_done(source: PacketBodyReader<R>) -> Self {
-        Self {
-            state: CompressedReaderState::Done { source },
-        }
+        Self::Done { source }
     }
 
     pub fn is_done(&self) -> bool {
-        matches!(self.state, CompressedReaderState::Done { .. })
+        matches!(self, Self::Done { .. })
     }
 
     pub fn into_inner(self) -> PacketBodyReader<R> {
-        match self.state {
-            CompressedReaderState::Body { source, .. } => source.into_inner(),
-            CompressedReaderState::Done { source, .. } => source,
-            CompressedReaderState::Error => panic!("error state"),
+        match self {
+            Self::Body { source, .. } => source.into_inner(),
+            Self::Done { source, .. } => source,
+            Self::Error => {
+                panic!("CompressedDataReader errored")
+            }
         }
     }
 
     pub fn get_mut(&mut self) -> &mut PacketBodyReader<R> {
-        match &mut self.state {
-            CompressedReaderState::Body { source, .. } => source.get_mut(),
-            CompressedReaderState::Done { source, .. } => source,
-            CompressedReaderState::Error => panic!("error state"),
+        match self {
+            Self::Body { source, .. } => source.get_mut(),
+            Self::Done { source, .. } => source,
+            Self::Error => {
+                panic!("CompressedDataReader errored")
+            }
         }
     }
 
     pub fn packet_header(&self) -> PacketHeader {
-        match self.state {
-            CompressedReaderState::Body { ref source, .. } => match source {
+        match self {
+            Self::Body { ref source, .. } => match source {
                 MaybeDecompress::Raw(r) => r.packet_header(),
                 MaybeDecompress::Decompress(r) => r.get_ref().packet_header(),
             },
-            CompressedReaderState::Done { ref source, .. } => source.packet_header(),
-            CompressedReaderState::Error => panic!("error state"),
+            Self::Done { ref source, .. } => source.packet_header(),
+            Self::Error => {
+                panic!("CompressedDataReader errored")
+            }
         }
     }
 
     /// Enables decompression
     pub fn decompress(self) -> io::Result<Self> {
-        match self.state {
-            CompressedReaderState::Body { source, buffer } => Ok(Self {
-                state: CompressedReaderState::Body {
-                    source: source.decompress()?,
-                    buffer,
-                },
+        match self {
+            Self::Body { source, buffer } => Ok(Self::Body {
+                source: source.decompress()?,
+                buffer,
             }),
-            CompressedReaderState::Done { .. } => Err(io::Error::new(
+            Self::Done { .. } => Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "already finished",
             )),
-            CompressedReaderState::Error => {
-                Err(io::Error::new(io::ErrorKind::InvalidInput, "errored"))
-            }
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "CompressedDataReader errored",
+            )),
         }
     }
-}
-
-#[derive(Debug)]
-enum CompressedReaderState<R: DebugBufRead> {
-    Body {
-        source: MaybeDecompress<PacketBodyReader<R>>,
-        buffer: BytesMut,
-    },
-    Done {
-        source: PacketBodyReader<R>,
-    },
-    Error,
 }
 
 impl<R: DebugBufRead> BufRead for CompressedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
-        match self.state {
-            CompressedReaderState::Body { ref mut buffer, .. } => Ok(&buffer[..]),
-            CompressedReaderState::Done { .. } => Ok(&[][..]),
-            CompressedReaderState::Error => panic!("CompressedReader errored"),
+        match self {
+            Self::Body { ref mut buffer, .. } => Ok(&buffer[..]),
+            Self::Done { .. } => Ok(&[][..]),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "CompressedDataReader errored",
+            )),
         }
     }
 
     fn consume(&mut self, amt: usize) {
-        match self.state {
-            CompressedReaderState::Body { ref mut buffer, .. } => {
+        match self {
+            Self::Body { ref mut buffer, .. } => {
                 buffer.advance(amt);
             }
-            CompressedReaderState::Error => panic!("CompressedReader errored"),
-            CompressedReaderState::Done { .. } => {}
+            Self::Done { .. } => {}
+            Self::Error => {
+                panic!("CompressedDataReader errored");
+            }
         }
     }
 }
@@ -125,31 +126,34 @@ impl<R: DebugBufRead> BufRead for CompressedDataReader<R> {
 impl<R: DebugBufRead> Read for CompressedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
-        match self.state {
-            CompressedReaderState::Body { ref mut buffer, .. } => {
+        match self {
+            Self::Body { ref mut buffer, .. } => {
                 let to_write = buffer.remaining().min(buf.len());
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
-            CompressedReaderState::Done { .. } => Ok(0),
-            _ => unreachable!("invalid state"),
+            Self::Done { .. } => Ok(0),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "CompressedDataReader errored",
+            )),
         }
     }
 }
 
 impl<R: DebugBufRead> CompressedDataReader<R> {
     fn fill_inner(&mut self) -> io::Result<()> {
-        if matches!(self.state, CompressedReaderState::Done { .. }) {
+        if matches!(self, Self::Done { .. }) {
             return Ok(());
         }
 
-        match std::mem::replace(&mut self.state, CompressedReaderState::Error) {
-            CompressedReaderState::Body {
+        match std::mem::replace(self, Self::Error) {
+            Self::Body {
                 mut source,
                 mut buffer,
             } => {
                 if buffer.has_remaining() {
-                    self.state = CompressedReaderState::Body { source, buffer };
+                    *self = Self::Body { source, buffer };
                     return Ok(());
                 }
 
@@ -160,25 +164,26 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
                 if read == 0 {
                     let source = source.into_inner();
 
-                    self.state = CompressedReaderState::Done { source };
+                    *self = Self::Done { source };
                 } else {
-                    self.state = CompressedReaderState::Body { source, buffer };
+                    *self = Self::Body { source, buffer };
                 }
                 Ok(())
             }
-            CompressedReaderState::Done { source } => {
-                self.state = CompressedReaderState::Done { source };
+            Self::Done { source } => {
+                *self = Self::Done { source };
                 Ok(())
             }
-            CompressedReaderState::Error => {
-                panic!("CompressedReader errored");
-            }
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "CompressedDataReader errored",
+            )),
         }
     }
 }
 
 #[derive(Debug)]
-enum MaybeDecompress<R: DebugBufRead> {
+pub enum MaybeDecompress<R: DebugBufRead> {
     Raw(R),
     Decompress(Decompressor<R>),
 }

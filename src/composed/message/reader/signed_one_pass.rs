@@ -67,17 +67,19 @@ impl<'a> SignatureOnePassReader<'a> {
 
     pub fn hash(&self) -> Option<&[u8]> {
         match self {
+            Self::Init { .. } => None,
+            Self::Body { .. } => None,
             Self::Done { hash, .. } => Some(hash),
-            Self::Error => panic!("error state"),
-            _ => None,
+            Self::Error => panic!("SignatureOnePassReader errored"),
         }
     }
 
     pub fn signature(&self) -> Option<&Signature> {
         match self {
+            Self::Init { .. } => None,
+            Self::Body { .. } => None,
             Self::Done { signature, .. } => Some(signature),
-            Self::Error => panic!("error state"),
-            _ => None,
+            Self::Error => panic!("SignatureOnePassReader errored"),
         }
     }
 
@@ -86,7 +88,7 @@ impl<'a> SignatureOnePassReader<'a> {
             Self::Init { source, .. } => source,
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureOnePassReader errored"),
         }
     }
 
@@ -95,7 +97,7 @@ impl<'a> SignatureOnePassReader<'a> {
             Self::Init { source, .. } => source,
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureOnePassReader errored"),
         }
     }
 
@@ -104,7 +106,7 @@ impl<'a> SignatureOnePassReader<'a> {
             Self::Init { source, .. } => source.into_inner(),
             Self::Body { source, .. } => source.into_inner(),
             Self::Done { source, .. } => source.into_inner(),
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureOnePassReader errored"),
         }
     }
 
@@ -235,7 +237,12 @@ impl<'a> SignatureOnePassReader<'a> {
                     };
                     return Ok(());
                 }
-                Self::Error => panic!("error state"),
+                Self::Error => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SignatureOnePassReader errored",
+                    ))
+                }
             }
         }
     }
@@ -292,21 +299,24 @@ impl BufRead for SignatureOnePassReader<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { buffer, .. } => Ok(&buffer[..]),
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => panic!("error state"),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "SignatureOnePassReader errored",
+            )),
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => panic!("must not be called before fill_buf"),
             Self::Body { buffer, .. } => {
                 buffer.advance(amt);
             }
             Self::Done { .. } => {}
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureOnePassReader errored"),
         }
     }
 }
@@ -315,14 +325,17 @@ impl Read for SignatureOnePassReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { buffer, .. } => {
                 let to_write = buffer.remaining().min(buf.len());
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
             Self::Done { .. } => Ok(0),
-            Self::Error => panic!("error state"),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "SignatureOnePassReader errored",
+            )),
         }
     }
 }

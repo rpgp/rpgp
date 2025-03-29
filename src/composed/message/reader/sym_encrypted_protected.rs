@@ -154,7 +154,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                 *self = Self::Done { source, config };
                 bail!("cannot decrypt after finishing to read")
             }
-            Self::Error => panic!("error state"),
+            Self::Error => bail!("SymEncryptedProtectedDataReader errored"),
         }
     }
 
@@ -170,7 +170,9 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             Self::Init { config, .. } => config,
             Self::Body { config, .. } => config,
             Self::Done { config, .. } => config,
-            Self::Error => panic!("error state"),
+            Self::Error => {
+                panic!("SymEncryptedProtectedDataReader errored")
+            }
         }
     }
 
@@ -183,7 +185,9 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             Self::Init { source, .. } => source,
             Self::Body { decryptor, .. } => decryptor.into_inner(),
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => {
+                panic!("SymEncryptedProtectedDataReader errored")
+            }
         }
     }
 
@@ -192,7 +196,9 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             Self::Init { source, .. } => source,
             Self::Body { decryptor, .. } => decryptor.get_mut(),
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => {
+                panic!("SymEncryptedProtectedDataReader errored")
+            }
         }
     }
 
@@ -201,7 +207,9 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
             Self::Init { source, .. } => source.packet_header(),
             Self::Body { decryptor, .. } => decryptor.get_ref().packet_header(),
             Self::Done { source, .. } => source.packet_header(),
-            Self::Error => panic!("error state"),
+            Self::Error => {
+                panic!("SymEncryptedProtectedDataReader errored")
+            }
         }
     }
 
@@ -237,7 +245,10 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     return Ok(());
                 }
                 Self::Error => {
-                    panic!("CompressedReader errored");
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SymEncryptedProtectedDataReader errored",
+                    ));
                 }
             }
         }
@@ -248,20 +259,25 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { decryptor, .. } => decryptor.fill_buf(),
 
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => panic!("error state"),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "SymEncryptedProtectedDataReader errored",
+            )),
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { decryptor, .. } => decryptor.consume(amt),
             Self::Done { .. } => {}
-            Self::Error => panic!("error state"),
+            Self::Error => {
+                panic!("SymEncryptedProtectedDataReader errored")
+            }
         }
     }
 }
@@ -270,10 +286,13 @@ impl<R: DebugBufRead> Read for SymEncryptedProtectedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { decryptor, .. } => decryptor.read(buf),
             Self::Done { .. } => Ok(0),
-            Self::Error => unreachable!("error state "),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "SymEncryptedProtectedDataReader errored",
+            )),
         }
     }
 }

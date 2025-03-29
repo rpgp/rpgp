@@ -67,9 +67,12 @@ impl<'a> SignatureBodyReader<'a> {
 
     pub fn hash(&self) -> Option<&[u8]> {
         match self {
+            Self::Init { .. } => None,
+            Self::Body { .. } => None,
             Self::Done { hash, .. } => Some(hash),
-            Self::Error => panic!("error state"),
-            _ => None,
+            Self::Error => {
+                panic!("SignatureBodyReader errored");
+            }
         }
     }
 
@@ -78,7 +81,9 @@ impl<'a> SignatureBodyReader<'a> {
             Self::Init { signature, .. } => signature,
             Self::Body { signature, .. } => signature,
             Self::Done { signature, .. } => signature,
-            Self::Error => panic!("error state"),
+            Self::Error => {
+                panic!("SignatureBodyReader errored");
+            }
         }
     }
 
@@ -87,7 +92,7 @@ impl<'a> SignatureBodyReader<'a> {
             Self::Init { source, .. } => source,
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureBodyReader errored"),
         }
     }
 
@@ -96,7 +101,7 @@ impl<'a> SignatureBodyReader<'a> {
             Self::Init { source, .. } => source,
             Self::Body { source, .. } => source,
             Self::Done { source, .. } => source,
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureBodyReader errored"),
         }
     }
 
@@ -105,7 +110,7 @@ impl<'a> SignatureBodyReader<'a> {
             Self::Init { source, .. } => source.into_inner(),
             Self::Body { source, .. } => source.into_inner(),
             Self::Done { source, .. } => source.into_inner(),
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureBodyReader errored"),
         }
     }
 
@@ -214,7 +219,12 @@ impl<'a> SignatureBodyReader<'a> {
                     };
                     return Ok(());
                 }
-                Self::Error => panic!("error state"),
+                Self::Error => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "SignatureBodyReader errored",
+                    ))
+                }
             }
         }
     }
@@ -275,21 +285,24 @@ impl BufRead for SignatureBodyReader<'_> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { buffer, .. } => Ok(&buffer[..]),
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => panic!("error state"),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "SignatureBodyReader errored",
+            )),
         }
     }
 
     fn consume(&mut self, amt: usize) {
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => panic!("must not be called befoer fill_buf"),
             Self::Body { buffer, .. } => {
                 buffer.advance(amt);
             }
             Self::Done { .. } => {}
-            Self::Error => panic!("error state"),
+            Self::Error => panic!("SignatureBodyReader errored"),
         }
     }
 }
@@ -298,14 +311,17 @@ impl Read for SignatureBodyReader<'_> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {
-            Self::Init { .. } => panic!("invalid state"),
+            Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { buffer, .. } => {
                 let to_write = buffer.remaining().min(buf.len());
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
             Self::Done { .. } => Ok(0),
-            Self::Error => panic!("error state"),
+            Self::Error => Err(io::Error::new(
+                io::ErrorKind::Other,
+                "SignatureBodyReader errored",
+            )),
         }
     }
 }
