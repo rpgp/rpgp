@@ -1,7 +1,6 @@
-use std::io::{BufRead, BufReader};
+use std::io::BufRead;
 
 use chrono::{DateTime, TimeZone, Utc};
-use nom::AsBytes;
 
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
@@ -18,13 +17,11 @@ fn parse_pub_priv_fields<B: BufRead>(
     let pub_params = match pub_len {
         Some(pub_len) => {
             // Use the pub_len hint to make sure we consume no more or less
-            let public = i.take_bytes(pub_len)?;
-            let mut reader = BufReader::new(public.as_bytes());
-
-            let pp = PublicParams::try_from_reader(typ, Some(pub_len), &mut reader)?;
+            let mut public = i.read_take(pub_len);
+            let pp = PublicParams::try_from_reader(typ, Some(pub_len), &mut public)?;
 
             ensure!(
-                reader.into_inner().is_empty(),
+                !public.has_remaining()?,
                 "PublicParams::try_from_reader didn't consume all data"
             );
             pp
