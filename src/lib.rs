@@ -9,6 +9,7 @@
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
 #![allow(clippy::missing_const_for_fn, clippy::type_complexity)]
+#![deny(unsafe_code)]
 
 #[cfg(test)]
 #[macro_use]
