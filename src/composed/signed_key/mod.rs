@@ -51,7 +51,7 @@
 //!
 //! let now = chrono::Utc::now();
 //!
-//! let passwd_fn = Password::empty();
+//! let passwd = Password::empty();
 //!
 //! // simulate a digest, make sure it is a compliant produce with RFC 9580
 //! // i.e. depending on the version one needs a special suffix / prefix
@@ -66,7 +66,7 @@
 //!
 //! // creates the cryptographic core of the signature without any metadata
 //! let signature = signing_key
-//!     .create_signature(&passwd_fn, HashAlgorithm::Sha256, digest)
+//!     .create_signature(&passwd, HashAlgorithm::Sha256, digest)
 //!     .expect("Failed to crate signature");
 //!
 //! // the signature can already be verified
@@ -91,7 +91,7 @@
 //!     vec![],
 //! );
 //!
-//! // sign and and write the package (the package written here is NOT RFC 9580 compliant)
+//! // sign and write the package (the package written here is NOT RFC 9580 compliant)
 //! let mut signature_bytes = Vec::with_capacity(1024);
 //!
 //! signature.to_writer_with_header(&mut signature_bytes).expect("Write must succeed");
