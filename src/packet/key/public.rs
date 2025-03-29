@@ -6,15 +6,14 @@ use rand::{CryptoRng, Rng};
 use rsa::traits::PublicKeyParts;
 use sha1_checked::{Digest, Sha1};
 
-use crate::ser::Serialize;
-use crate::types::Password;
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    ser::Serialize,
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId,
-        KeyVersion, MpiBytes, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        KeyVersion, MpiBytes, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SignatureBytes, Tag,
     },
 };

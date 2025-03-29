@@ -2,13 +2,16 @@ use std::{io, iter};
 
 use buffer_redux::BufReader;
 
-use crate::armor::{self, BlockType};
-use crate::composed::signed_key::{
-    PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey, SignedSecretKeyParser,
+use crate::{
+    armor::{self, BlockType},
+    composed::signed_key::{
+        PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey,
+        SignedSecretKeyParser,
+    },
+    errors::Result,
+    packet::{Packet, PacketParser, PacketTrait},
+    types::Tag,
 };
-use crate::errors::Result;
-use crate::packet::{Packet, PacketParser, PacketTrait};
-use crate::types::Tag;
 
 /// Parses a list of secret and public keys, from either ASCII-armored or binary OpenPGP data.
 ///

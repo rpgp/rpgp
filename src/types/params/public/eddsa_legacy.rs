@@ -2,11 +2,13 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 
-use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{
+    crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::MpiBytes,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -107,8 +109,9 @@ impl Serialize for EddsaLegacyPublicParams {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest::prop_compose! {
         pub fn ed25519_pub_gen()(bytes: [u8; 32]) -> ed25519_dalek::VerifyingKey {

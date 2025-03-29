@@ -1,8 +1,6 @@
 use std::io::{self, BufRead};
 
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
+use crate::{errors::Result, parsing_reader::BufReadParsing, ser::Serialize};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -39,9 +37,9 @@ impl Serialize for Ed25519PublicParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

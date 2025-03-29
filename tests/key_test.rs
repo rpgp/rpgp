@@ -5,34 +5,31 @@ extern crate pretty_assertions;
 #[macro_use]
 extern crate smallvec;
 
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
+use std::{fs::File, io::Read, path::Path};
 
 use buffer_redux::BufReader;
 use chrono::{DateTime, Utc};
 use num_traits::ToPrimitive;
-use pgp::composed::signed_key::*;
-use pgp::composed::Deserializable;
-use pgp::crypto::ecdsa::SecretKey as ECDSASecretKey;
-use pgp::crypto::{
-    hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
+use pgp::{
+    armor,
+    composed::{signed_key::*, Deserializable},
+    crypto::{
+        ecdsa::SecretKey as ECDSASecretKey, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Error,
+    packet::{
+        KeyFlags, PacketHeader, Signature, SignatureType, Subpacket, SubpacketData, UserAttribute,
+        UserId,
+    },
+    ser::Serialize,
+    types::{
+        CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
+        PacketHeaderVersion, PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams,
+        S2kParams, SecretParams, SignedUser, StringToKey, Tag,
+    },
 };
-use pgp::errors::Error;
-use pgp::packet::PacketHeader;
-use pgp::packet::{
-    KeyFlags, Signature, SignatureType, Subpacket, SubpacketData, UserAttribute, UserId,
-};
-use pgp::ser::Serialize;
-use pgp::types::Fingerprint;
-use pgp::types::KeyDetails;
-use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion, PacketLength,
-    PlainSecretParams, PublicParams, S2kParams, SecretParams, SignedUser, StringToKey, Tag,
-};
-use pgp::{armor, types::PublicKeyTrait};
-use rand::thread_rng;
-use rand::SeedableRng;
+use rand::{thread_rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use rsa::{
     traits::{PrivateKeyParts, PublicKeyParts},

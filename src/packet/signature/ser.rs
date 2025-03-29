@@ -4,12 +4,14 @@ use byteorder::{BigEndian, WriteBytesExt};
 use chrono::Duration;
 use log::debug;
 
-use crate::errors::Result;
-use crate::packet::signature::types::*;
-use crate::packet::signature::SignatureConfig;
-use crate::packet::SignatureVersionSpecific;
-use crate::packet::{Subpacket, SubpacketData, SubpacketType};
-use crate::ser::Serialize;
+use crate::{
+    errors::Result,
+    packet::{
+        signature::{types::*, SignatureConfig},
+        SignatureVersionSpecific, Subpacket, SubpacketData, SubpacketType,
+    },
+    ser::Serialize,
+};
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -440,9 +442,11 @@ impl Signature {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use std::fs::File;
-    use std::io::{BufReader, Read};
-    use std::path::Path;
+    use std::{
+        fs::File,
+        io::{BufReader, Read},
+        path::Path,
+    };
 
     use super::*;
     use crate::packet::{Packet, PacketParser};

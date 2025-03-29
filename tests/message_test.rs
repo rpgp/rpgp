@@ -11,9 +11,11 @@ extern crate log;
 
 use std::fs::File;
 
-use pgp::cleartext::CleartextSignedMessage;
-use pgp::composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey};
-use pgp::types::{KeyDetails, KeyId, Password};
+use pgp::{
+    cleartext::CleartextSignedMessage,
+    composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey},
+    types::{KeyDetails, KeyId, Password},
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]

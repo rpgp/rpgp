@@ -2,8 +2,10 @@
 
 use std::io;
 
-use generic_array::typenum::{Sum, Unsigned, U2};
-use generic_array::{ArrayLength, GenericArray};
+use generic_array::{
+    typenum::{Sum, Unsigned, U2},
+    ArrayLength, GenericArray,
+};
 
 const CRLF: [u8; 2] = [b'\r', b'\n'];
 const CR: [u8; 1] = [b'\r'];
@@ -207,11 +209,12 @@ where
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
+    use std::io::Write;
 
     use base64::engine::general_purpose;
     use generic_array::typenum::{self, U10};
-    use std::io::Write;
+
+    use super::*;
 
     /// The same as the std lib, but doesn't choke on write 0. This is a hack, to be compatible with
     /// rust-base64.

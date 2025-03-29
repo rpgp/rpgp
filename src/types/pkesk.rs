@@ -2,17 +2,16 @@ use std::io::BufRead;
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{InvalidInputSnafu, Result};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-
-use super::MpiBytes;
-
 #[cfg(test)]
 use proptest::prelude::*;
+
+use super::MpiBytes;
+use crate::{
+    crypto::{public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::{InvalidInputSnafu, Result},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+};
 
 /// Values comprising a Public Key Encrypted Session Key
 #[derive(Clone, Debug, Eq, PartialEq)]

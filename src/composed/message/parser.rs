@@ -1,17 +1,22 @@
-use std::io::{BufRead, BufReader};
-use std::path::Path;
-
-use super::reader::{
-    CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
+use std::{
+    io::{BufRead, BufReader},
+    path::Path,
 };
-use super::{DebugBufRead, MessageReader};
-use crate::armor::BlockType;
-use crate::composed::message::Message;
-use crate::composed::shared::is_binary;
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::types::{PkeskVersion, SkeskVersion, Tag};
-use crate::{Edata, Esk};
+
+use super::{
+    reader::{
+        CompressedDataReader, LiteralDataReader, SignatureBodyReader, SignatureOnePassReader,
+    },
+    DebugBufRead, MessageReader,
+};
+use crate::{
+    armor::BlockType,
+    composed::{message::Message, shared::is_binary},
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    types::{PkeskVersion, SkeskVersion, Tag},
+    Edata, Esk,
+};
 
 /// Parses a single message level
 pub(super) fn next(

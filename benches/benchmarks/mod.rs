@@ -1,6 +1,8 @@
-use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
-use pgp::types::CompressionAlgorithm;
-use pgp::{KeyType, SecretKey, SecretKeyParamsBuilder, SubkeyParamsBuilder};
+use pgp::{
+    crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
+    types::CompressionAlgorithm,
+    KeyType, SecretKey, SecretKeyParamsBuilder, SubkeyParamsBuilder,
+};
 use rand::thread_rng;
 use smallvec::smallvec;
 

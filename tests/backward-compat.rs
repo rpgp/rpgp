@@ -76,8 +76,7 @@ fn decrypt_rpgp_cur(enc_msg: &str, keyfile: &str) -> Vec<u8> {
 }
 
 fn encrypt_rpgp_0_10(msg: &[u8], keyfile: &str) -> String {
-    use rpgp_0_10::crypto::sym::SymmetricKeyAlgorithm;
-    use rpgp_0_10::Deserializable;
+    use rpgp_0_10::{crypto::sym::SymmetricKeyAlgorithm, Deserializable};
 
     let mut rng = ChaChaRng::from_seed([0u8; 32]);
 
@@ -98,8 +97,7 @@ fn encrypt_rpgp_0_10(msg: &[u8], keyfile: &str) -> String {
 }
 
 fn encrypt_rpgp_cur(msg: &'static [u8], keyfile: &str) -> String {
-    use pgp::crypto::sym::SymmetricKeyAlgorithm;
-    use pgp::{ArmorOptions, Deserializable, MessageBuilder};
+    use pgp::{crypto::sym::SymmetricKeyAlgorithm, ArmorOptions, Deserializable, MessageBuilder};
 
     let mut rng = ChaChaRng::from_seed([0u8; 32]);
 

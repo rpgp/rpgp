@@ -8,23 +8,27 @@ use digest::DynDigest;
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::{HashAlgorithm, WriteHasher};
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::line_writer::LineBreak;
-use crate::normalize_lines::NormalizedReader;
-use crate::packet::signature::SignatureConfig;
-use crate::packet::{
-    PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket, SubpacketData,
-};
-use crate::parsing::BufParsing;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{
-    self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
-    SignatureBytes, Tag,
+use crate::{
+    crypto::{
+        aead::AeadAlgorithm,
+        hash::{HashAlgorithm, WriteHasher},
+        public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    line_writer::LineBreak,
+    normalize_lines::NormalizedReader,
+    packet::{
+        signature::SignatureConfig, PacketHeader, PacketTrait, SignatureVersionSpecific, Subpacket,
+        SubpacketData,
+    },
+    parsing::BufParsing,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{
+        self, CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, PublicKeyTrait,
+        SignatureBytes, Tag,
+    },
 };
 
 /// Signature Packet

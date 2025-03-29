@@ -1,5 +1,7 @@
-use generic_array::typenum::{U16, U24, U32};
-use generic_array::GenericArray;
+use generic_array::{
+    typenum::{U16, U24, U32},
+    GenericArray,
+};
 
 use crate::errors::Result;
 

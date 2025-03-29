@@ -2,11 +2,12 @@ use std::io::{self, BufRead, Read};
 
 use bytes::{Buf, BytesMut};
 
-use crate::packet::{Decompressor, PacketHeader};
-use crate::types::Tag;
-use crate::DebugBufRead;
-
 use super::{fill_buffer, PacketBodyReader};
+use crate::{
+    packet::{Decompressor, PacketHeader},
+    types::Tag,
+    DebugBufRead,
+};
 
 #[derive(Debug)]
 pub enum CompressedDataReader<R: DebugBufRead> {

@@ -4,13 +4,13 @@ use byteorder::WriteBytesExt;
 use bytes::Bytes;
 use rand::{CryptoRng, Rng};
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::KeyVersion;
+use crate::{
+    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::KeyVersion,
+};
 
 const EXPBIAS: u32 = 6;
 const DEFAULT_ITER_SALTED_COUNT: u8 = 224;
@@ -543,8 +543,10 @@ impl Serialize for StringToKey {
 #[cfg(test)]
 mod tests {
     use proptest::prelude::*;
-    use rand::distributions::{Alphanumeric, DistString};
-    use rand::SeedableRng;
+    use rand::{
+        distributions::{Alphanumeric, DistString},
+        SeedableRng,
+    };
     use rand_chacha::ChaCha8Rng;
 
     use super::*;

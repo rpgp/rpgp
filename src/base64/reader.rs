@@ -1,7 +1,6 @@
 //! # base64 reader module
 
-use std::io;
-use std::io::prelude::*;
+use std::{io, io::prelude::*};
 
 /// Reads base64 values from a given byte input, stops once it detects the first non base64 char.
 #[derive(Debug)]

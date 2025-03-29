@@ -9,14 +9,12 @@ mod signed_one_pass;
 mod sym_encrypted;
 mod sym_encrypted_protected;
 
-pub use self::compressed::CompressedDataReader;
-pub use self::limited::LimitedReader;
-pub use self::literal::LiteralDataReader;
-pub use self::packet_body::PacketBodyReader;
-pub use self::signed::SignatureBodyReader;
-pub use self::signed_one_pass::SignatureOnePassReader;
-pub use self::sym_encrypted::SymEncryptedDataReader;
-pub use self::sym_encrypted_protected::SymEncryptedProtectedDataReader;
+pub use self::{
+    compressed::CompressedDataReader, limited::LimitedReader, literal::LiteralDataReader,
+    packet_body::PacketBodyReader, signed::SignatureBodyReader,
+    signed_one_pass::SignatureOnePassReader, sym_encrypted::SymEncryptedDataReader,
+    sym_encrypted_protected::SymEncryptedProtectedDataReader,
+};
 
 #[cfg(test)]
 mod tests {
@@ -26,10 +24,12 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
     use testresult::TestResult;
 
-    use crate::packet::DataMode;
-    use crate::types::CompressionAlgorithm;
-    use crate::util::test::{check_strings, random_string, ChaosReader};
-    use crate::{Message, MessageBuilder};
+    use crate::{
+        packet::DataMode,
+        types::CompressionAlgorithm,
+        util::test::{check_strings, random_string, ChaosReader},
+        Message, MessageBuilder,
+    };
 
     #[test]
     fn test_read_literal_data_no_compression() -> TestResult {

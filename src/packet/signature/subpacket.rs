@@ -5,15 +5,17 @@ use bytes::Bytes;
 use chrono::{DateTime, Duration, Utc};
 use smallvec::SmallVec;
 
-use crate::crypto::{
-    aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
-    sym::SymmetricKeyAlgorithm,
+use crate::{
+    crypto::{
+        aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    packet::{KeyFlags, Notation, RevocationCode, Signature},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{CompressionAlgorithm, Fingerprint, KeyId, RevocationKey},
 };
-use crate::errors::Result;
-use crate::packet::{KeyFlags, Notation, RevocationCode, Signature};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{CompressionAlgorithm, Fingerprint, KeyId, RevocationKey};
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 /// Available signature subpacket types

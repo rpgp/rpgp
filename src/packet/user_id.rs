@@ -1,19 +1,21 @@
-use std::io::BufRead;
-use std::{io, str};
+use std::{io, io::BufRead, str};
 
 use bytes::Bytes;
 use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
-use crate::errors::Result;
-use crate::packet::{
-    PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
-};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{
-    KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SecretKeyTrait,
-    SignedUser, Tag,
+use crate::{
+    errors::Result,
+    packet::{
+        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
+        SubpacketData,
+    },
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{
+        KeyVersion, PacketHeaderVersion, PacketLength, Password, PublicKeyTrait, SecretKeyTrait,
+        SignedUser, Tag,
+    },
 };
 
 /// User ID Packet
@@ -142,8 +144,11 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::types::PacketHeaderVersion;
-    use crate::{packet, types::KeyVersion, KeyType};
+    use crate::{
+        packet,
+        types::{KeyVersion, PacketHeaderVersion},
+        KeyType,
+    };
 
     prop_compose! {
         pub fn id_gen()(id in "[a-zA-Z]+") -> Bytes {

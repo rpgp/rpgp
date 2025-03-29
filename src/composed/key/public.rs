@@ -3,17 +3,17 @@ use std::ops::Deref;
 use chrono::SubsecRound;
 use rand::{CryptoRng, Rng};
 
-use crate::composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey};
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::ser::Serialize;
-use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
-    SignatureBytes,
+use crate::{
+    composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey},
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::Result,
+    packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    ser::Serialize,
+    types::{
+        EskType, Fingerprint, KeyId, KeyVersion, Password, PkeskBytes, PublicKeyTrait,
+        PublicParams, SecretKeyTrait, SignatureBytes,
+    },
 };
-use crate::types::{Password, PkeskBytes};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]

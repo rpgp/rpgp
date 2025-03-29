@@ -4,9 +4,11 @@ use bytes::{Buf, BytesMut};
 use log::debug;
 
 use super::{fill_buffer, LimitedReader};
-use crate::packet::PacketHeader;
-use crate::parsing_reader::BufReadParsing;
-use crate::types::{PacketLength, Tag};
+use crate::{
+    packet::PacketHeader,
+    parsing_reader::BufReadParsing,
+    types::{PacketLength, Tag},
+};
 
 #[derive(Debug)]
 pub struct PacketBodyReader<R: BufRead> {

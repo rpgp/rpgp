@@ -1,5 +1,7 @@
-use std::cmp;
-use std::io::{BufRead, Read, Result};
+use std::{
+    cmp,
+    io::{BufRead, Read, Result},
+};
 
 use bytes::{BufMut, BytesMut};
 

@@ -1,8 +1,6 @@
 use std::io::{self, BufRead};
 
-use crate::errors::Result;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{errors::Result, ser::Serialize, types::MpiBytes};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -57,9 +55,9 @@ impl Serialize for ElgamalPublicParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

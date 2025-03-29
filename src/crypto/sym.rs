@@ -2,8 +2,10 @@ use aes::{Aes128, Aes192, Aes256};
 use blowfish::Blowfish;
 use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
-use cfb_mode::cipher::{AsyncStreamCipher, KeyIvInit};
-use cfb_mode::{BufDecryptor, BufEncryptor, Decryptor, Encryptor};
+use cfb_mode::{
+    cipher::{AsyncStreamCipher, KeyIvInit},
+    BufDecryptor, BufEncryptor, Decryptor, Encryptor,
+};
 use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut};
 use des::TdesEde3;
 use idea::Idea;
@@ -18,8 +20,7 @@ use crate::errors::{Error, Result};
 mod decryptor;
 mod encryptor;
 
-pub use self::decryptor::StreamDecryptor;
-pub use self::encryptor::StreamEncryptor;
+pub use self::{decryptor::StreamDecryptor, encryptor::StreamEncryptor};
 
 fn decrypt<MODE>(key: &[u8], iv: &[u8], prefix: &mut [u8], data: &mut [u8]) -> Result<()>
 where

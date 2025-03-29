@@ -3,12 +3,13 @@ use std::io::{self, BufRead, Read};
 use bytes::{Buf, BytesMut};
 use log::debug;
 
-use crate::errors::Result;
-use crate::packet::{Signature, SignatureType, SignatureVersionSpecific};
-use crate::util::{fill_buffer, NormalizingHasher};
-use crate::{Message, MessageReader, RingResult, TheRing};
-
 use super::PacketBodyReader;
+use crate::{
+    errors::Result,
+    packet::{Signature, SignatureType, SignatureVersionSpecific},
+    util::{fill_buffer, NormalizingHasher},
+    Message, MessageReader, RingResult, TheRing,
+};
 
 #[derive(derive_more::Debug)]
 pub enum SignatureBodyReader<'a> {

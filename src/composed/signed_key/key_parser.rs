@@ -1,9 +1,11 @@
 use log::{debug, warn};
 
-use crate::errors::{Error, Result};
-use crate::packet::{self, Packet, PacketTrait, Signature, SignatureType, UserAttribute, UserId};
-use crate::types::{KeyDetails, KeyVersion, SignedUser, SignedUserAttribute, Tag};
-use crate::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey};
+use crate::{
+    errors::{Error, Result},
+    packet::{self, Packet, PacketTrait, Signature, SignatureType, UserAttribute, UserId},
+    types::{KeyDetails, KeyVersion, SignedUser, SignedUserAttribute, Tag},
+    SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey,
+};
 
 #[allow(clippy::complexity)]
 pub fn next<I, IKT>(

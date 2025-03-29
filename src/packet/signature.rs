@@ -4,5 +4,4 @@ pub mod ser;
 pub mod subpacket;
 pub mod types;
 
-pub use self::config::*;
-pub use self::types::*;
+pub use self::{config::*, types::*};

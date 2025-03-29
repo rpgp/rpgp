@@ -14,19 +14,10 @@ mod user;
 use bytes::Bytes;
 use log::debug;
 
-pub use self::compression::*;
-pub use self::fingerprint::*;
-pub use self::key_id::*;
-pub use self::mpi::*;
-pub use self::packet::*;
-pub use self::params::*;
-pub use self::pkesk::PkeskBytes;
-pub use self::public_key::*;
-pub use self::revocation_key::*;
-pub use self::s2k::*;
-pub use self::secret_key::*;
-
-pub use self::user::*;
+pub use self::{
+    compression::*, fingerprint::*, key_id::*, mpi::*, packet::*, params::*, pkesk::PkeskBytes,
+    public_key::*, revocation_key::*, s2k::*, secret_key::*, user::*,
+};
 use crate::ser::Serialize;
 
 /// An OpenPGP cryptographic signature.

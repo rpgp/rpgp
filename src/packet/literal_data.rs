@@ -8,14 +8,16 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 #[cfg(test)]
 use proptest::prelude::*;
 
-use crate::errors::Result;
-use crate::line_writer::LineBreak;
-use crate::normalize_lines::{normalize_lines, NormalizedReader};
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{PacketHeaderVersion, PacketLength, Tag};
-use crate::util::fill_buffer;
+use crate::{
+    errors::Result,
+    line_writer::LineBreak,
+    normalize_lines::{normalize_lines, NormalizedReader},
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{PacketHeaderVersion, PacketLength, Tag},
+    util::fill_buffer,
+};
 
 /// Literal Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-literal-data-packet-type-id>
@@ -522,9 +524,11 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
 
     use super::*;
-    use crate::normalize_lines::normalize_lines;
-    use crate::packet::Packet;
-    use crate::util::test::{check_strings, random_string, ChaosReader};
+    use crate::{
+        normalize_lines::normalize_lines,
+        packet::Packet,
+        util::test::{check_strings, random_string, ChaosReader},
+    };
 
     #[test]
     fn test_utf8_literal() {

@@ -110,7 +110,4 @@ mod public;
 mod secret;
 mod shared;
 
-pub use self::parse::*;
-pub use self::public::*;
-pub use self::secret::*;
-pub use self::shared::*;
+pub use self::{parse::*, public::*, secret::*, shared::*};

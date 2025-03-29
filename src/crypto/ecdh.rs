@@ -6,12 +6,14 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use super::hash::HashAlgorithm;
-use crate::crypto::{
-    aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
-    Decryptor,
+use crate::{
+    crypto::{
+        aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
+        Decryptor,
+    },
+    errors::{Error, Result},
+    types::{pad_key, EcdhPublicParams, MpiBytes, PkeskBytes},
 };
-use crate::errors::{Error, Result};
-use crate::types::{pad_key, EcdhPublicParams, MpiBytes, PkeskBytes};
 
 /// 20 octets representing "Anonymous Sender    ".
 const ANON_SENDER: [u8; 20] = [
@@ -578,8 +580,7 @@ mod tests {
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::Password;
-    use crate::{Deserializable, Message, SignedSecretKey};
+    use crate::{types::Password, Deserializable, Message, SignedSecretKey};
 
     #[test]
     #[ignore]

@@ -7,9 +7,4 @@ mod any;
 mod shared;
 mod signature;
 
-pub use self::any::Any;
-pub use self::key::*;
-pub use self::message::*;
-pub use self::shared::Deserializable;
-pub use self::signature::*;
-pub use self::signed_key::*;
+pub use self::{any::Any, key::*, message::*, shared::Deserializable, signature::*, signed_key::*};

@@ -1,7 +1,6 @@
 use aes::{Aes128, Aes192, Aes256};
-use aes_gcm::aead::consts::U12;
 use aes_gcm::{
-    aead::{AeadInPlace, KeyInit},
+    aead::{consts::U12, AeadInPlace, KeyInit},
     Aes128Gcm, Aes256Gcm, AesGcm, Key as GcmKey, Nonce as GcmNonce,
 };
 use bytes::BytesMut;
@@ -16,8 +15,10 @@ use sha2::Sha256;
 use zeroize::Zeroizing;
 
 use super::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, Result};
-use crate::types::Tag;
+use crate::{
+    errors::{Error, Result},
+    types::Tag,
+};
 
 type Aes128Ocb3 = Ocb3<Aes128, U15, U16>;
 type Aes192Ocb3 = Ocb3<Aes192, U15, U16>;
@@ -29,8 +30,7 @@ pub type Aes192Gcm = AesGcm<Aes192, U12>;
 mod decryptor;
 mod encryptor;
 
-pub use self::decryptor::StreamDecryptor;
-pub use self::encryptor::StreamEncryptor;
+pub use self::{decryptor::StreamDecryptor, encryptor::StreamEncryptor};
 
 /// Available AEAD algorithms.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, FromPrimitive, IntoPrimitive)]
@@ -338,13 +338,13 @@ impl ChunkSize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use std::io::Read;
 
     use log::info;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
+
+    use super::*;
 
     #[test]
     fn test_chunk_size() {

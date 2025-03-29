@@ -1,9 +1,12 @@
-use log::debug;
 use std::io::BufRead;
 
-use crate::errors::{Error, Result};
-use crate::packet::{Packet, PacketHeader};
-use crate::reader::PacketBodyReader;
+use log::debug;
+
+use crate::{
+    errors::{Error, Result},
+    packet::{Packet, PacketHeader},
+    reader::PacketBodyReader,
+};
 
 pub struct PacketParser<R: BufRead> {
     /// The reader that gets advanced through the original source
@@ -107,17 +110,17 @@ impl<R: BufRead> PacketParser<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-    use std::path::Path;
+    use std::{
+        fs::File,
+        io::{BufRead, BufReader, Read, Seek, SeekFrom},
+        path::Path,
+    };
 
     use log::warn;
     use regex::Regex;
 
     use super::*;
-    use crate::packet::PacketTrait;
-    use crate::ser::Serialize;
-    use crate::types::Tag;
+    use crate::{packet::PacketTrait, ser::Serialize, types::Tag};
 
     #[test]
     #[ignore]

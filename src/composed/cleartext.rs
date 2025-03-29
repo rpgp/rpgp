@@ -1,20 +1,24 @@
 //! Implements Cleartext Signature Framework
 
-use std::collections::HashSet;
-use std::io::{BufRead, Read};
+use std::{
+    collections::HashSet,
+    io::{BufRead, Read},
+};
 
 use buffer_redux::BufReader;
 use chrono::SubsecRound;
 use log::debug;
 
-use crate::armor::{self, header_parser, read_from_buf, BlockType, Headers};
-use crate::crypto::hash::HashAlgorithm;
-use crate::errors::Result;
-use crate::line_writer::LineBreak;
-use crate::normalize_lines::{normalize_lines, NormalizedReader};
-use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait};
-use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE};
+use crate::{
+    armor::{self, header_parser, read_from_buf, BlockType, Headers},
+    crypto::hash::HashAlgorithm,
+    errors::Result,
+    line_writer::LineBreak,
+    normalize_lines::{normalize_lines, NormalizedReader},
+    packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
+    ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE,
+};
 
 /// Implementation of a Cleartext Signed Message.
 ///

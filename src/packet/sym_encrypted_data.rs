@@ -2,12 +2,8 @@ use std::io::{self, BufRead};
 
 use bytes::Bytes;
 
-use crate::errors::Result;
-use crate::packet::PacketTrait;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-
 use super::PacketHeader;
+use crate::{errors::Result, packet::PacketTrait, parsing_reader::BufReadParsing, ser::Serialize};
 
 /// Symmetrically Encrypted Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-dat>

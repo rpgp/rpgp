@@ -2,10 +2,12 @@ use std::io::BufRead;
 
 use chrono::{DateTime, TimeZone, Utc};
 
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::types::{KeyVersion, PublicParams};
+use crate::{
+    crypto::public_key::PublicKeyAlgorithm,
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    types::{KeyVersion, PublicParams},
+};
 
 fn public_key_parser_v4_v6<B: BufRead>(
     key_ver: &KeyVersion,

@@ -4,18 +4,25 @@ use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
 use rand::{CryptoRng, Rng};
 use ripemd::Ripemd160;
-use rsa::pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey};
-use rsa::{traits::PublicKeyParts, RsaPrivateKey, RsaPublicKey};
+use rsa::{
+    pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey},
+    traits::PublicKeyParts,
+    RsaPrivateKey, RsaPublicKey,
+};
 use sha1_checked::Sha1; // not used for hashing, just as a source of the OID
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};
-use signature::hazmat::{PrehashSigner, PrehashVerifier};
-use signature::SignatureEncoding;
+use signature::{
+    hazmat::{PrehashSigner, PrehashVerifier},
+    SignatureEncoding,
+};
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::{hash::HashAlgorithm, Decryptor, Signer};
-use crate::errors::Result;
-use crate::types::{MpiBytes, PkeskBytes, RsaPublicParams};
+use crate::{
+    crypto::{hash::HashAlgorithm, Decryptor, Signer},
+    errors::Result,
+    types::{MpiBytes, PkeskBytes, RsaPublicParams},
+};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
@@ -177,10 +184,10 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
     use rand::SeedableRng;
+
+    use super::*;
 
     prop_compose! {
         pub fn key_gen()(seed: u64) -> RsaPrivateKey {

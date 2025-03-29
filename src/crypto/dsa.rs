@@ -1,17 +1,17 @@
 use std::ops::Deref;
 
+pub use dsa::KeySize;
 use dsa::{Components, Signature, SigningKey};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::PrehashVerifier;
 use zeroize::Zeroize;
 
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::Signer;
-use crate::errors::Result;
-use crate::types::{DsaPublicParams, MpiBytes};
-
-pub use dsa::KeySize;
+use crate::{
+    crypto::{hash::HashAlgorithm, Signer},
+    errors::Result,
+    types::{DsaPublicParams, MpiBytes},
+};
 
 /// Secret key for DSA.
 #[derive(Clone, PartialEq, derive_more::Debug)]
@@ -109,12 +109,11 @@ pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BigUint, s: BigUint) -
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use num_traits::Num;
     use proptest::prelude::*;
     use rand::SeedableRng;
 
+    use super::*;
     use crate::types::MpiBytes;
 
     fn hex_num(s: &str) -> BigUint {

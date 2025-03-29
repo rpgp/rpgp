@@ -39,8 +39,7 @@ mod parsing_reader;
 // reexports for easier use
 #[allow(unused_imports)]
 pub use self::composed::key::*;
-pub use self::composed::*;
-pub use self::packet::Signature;
+pub use self::{composed::*, packet::Signature};
 
 /// The version of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

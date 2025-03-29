@@ -127,11 +127,10 @@ fn copy_err(err: &io::Error) -> io::Error {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use super::*;
-
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
+    use super::*;
     use crate::base64::Base64Reader;
 
     fn test_roundtrip(cap: usize, n: usize, insert_lines: bool) {

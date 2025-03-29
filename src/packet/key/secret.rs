@@ -3,6 +3,7 @@ use std::io::BufRead;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
+use super::public::{encrypt, PubKeyInner};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -17,8 +18,6 @@ use crate::{
         SecretParams, SignatureBytes, Tag,
     },
 };
-
-use super::public::{encrypt, PubKeyInner};
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretKey {
@@ -560,9 +559,11 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
-    use crate::crypto::hash::HashAlgorithm;
-    use crate::packet::{PubKeyInner, SecretKey};
-    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait};
+    use crate::{
+        crypto::hash::HashAlgorithm,
+        packet::{PubKeyInner, SecretKey},
+        types::{KeyVersion, S2kParams, SecretKeyTrait},
+    };
 
     #[test]
     #[ignore] // slow in debug mode (argon2)

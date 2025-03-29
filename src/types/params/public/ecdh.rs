@@ -3,13 +3,17 @@ use std::io::{self, BufRead};
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
 
-use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{
+    crypto::{
+        ecc_curve::{ecc_curve_from_oid, ECCCurve},
+        hash::HashAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::MpiBytes,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -284,12 +288,10 @@ impl EcdhPublicParams {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::*;
-
-    use rand::RngCore;
-    use rand::SeedableRng;
-
     use proptest::prelude::*;
+    use rand::{RngCore, SeedableRng};
+
+    use super::*;
 
     proptest::prop_compose! {
         pub fn ecdh_curve25519_gen()(seed: u64) -> x25519_dalek::PublicKey {

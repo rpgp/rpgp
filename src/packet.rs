@@ -90,24 +90,28 @@ mod user_id;
 mod public_key_parser;
 mod secret_key_parser;
 
-pub use self::compressed_data::*;
-pub use self::header::{NewPacketHeader, OldPacketHeader, PacketHeader};
-pub use self::key::*;
-pub use self::literal_data::*;
-pub use self::many::*;
-pub use self::marker::*;
-pub use self::mod_detection_code::*;
-pub use self::one_pass_signature::*;
-pub use self::packet_sum::*;
-pub use self::padding::*;
-pub use self::public_key_encrypted_session_key::*;
-pub use self::signature::subpacket::{Subpacket, SubpacketData, SubpacketLength, SubpacketType};
-pub use self::signature::*;
-pub use self::sym_encrypted_data::*;
-pub use self::sym_encrypted_protected_data::{
-    Config as SymEncryptedProtectedDataConfig, StreamDecryptor, SymEncryptedProtectedData,
+pub use self::{
+    compressed_data::*,
+    header::{NewPacketHeader, OldPacketHeader, PacketHeader},
+    key::*,
+    literal_data::*,
+    many::*,
+    marker::*,
+    mod_detection_code::*,
+    one_pass_signature::*,
+    packet_sum::*,
+    padding::*,
+    public_key_encrypted_session_key::*,
+    signature::{
+        subpacket::{Subpacket, SubpacketData, SubpacketLength, SubpacketType},
+        *,
+    },
+    sym_encrypted_data::*,
+    sym_encrypted_protected_data::{
+        Config as SymEncryptedProtectedDataConfig, StreamDecryptor, SymEncryptedProtectedData,
+    },
+    sym_key_encrypted_session_key::*,
+    trust::*,
+    user_attribute::*,
+    user_id::*,
 };
-pub use self::sym_key_encrypted_session_key::*;
-pub use self::trust::*;
-pub use self::user_attribute::*;
-pub use self::user_id::*;

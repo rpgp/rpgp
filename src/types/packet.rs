@@ -4,8 +4,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
+use crate::{errors::Result, parsing_reader::BufReadParsing};
 
 /// Represents the packet length.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

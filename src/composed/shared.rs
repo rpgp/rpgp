@@ -1,12 +1,16 @@
-use std::io::{BufRead, Read};
-use std::path::Path;
+use std::{
+    io::{BufRead, Read},
+    path::Path,
+};
 
 use buffer_redux::BufReader;
 use log::{debug, warn};
 
-use crate::armor::{self, BlockType};
-use crate::errors::{Error, Result};
-use crate::packet::{Packet, PacketParser};
+use crate::{
+    armor::{self, BlockType},
+    errors::{Error, Result},
+    packet::{Packet, PacketParser},
+};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.

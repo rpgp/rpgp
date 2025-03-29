@@ -3,14 +3,13 @@ use std::io::{self, BufRead, Read};
 use bytes::{Buf, BytesMut};
 use log::debug;
 
-use crate::errors::Result;
-use crate::packet::{
-    OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType,
-};
-use crate::util::{fill_buffer, NormalizingHasher};
-use crate::{Message, MessageReader, RingResult, TheRing};
-
 use super::PacketBodyReader;
+use crate::{
+    errors::Result,
+    packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType},
+    util::{fill_buffer, NormalizingHasher},
+    Message, MessageReader, RingResult, TheRing,
+};
 
 #[derive(derive_more::Debug)]
 pub enum SignatureOnePassReader<'a> {

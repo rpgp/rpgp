@@ -3,18 +3,18 @@ use chrono::SubsecRound;
 use rand::Rng;
 use smallvec::SmallVec;
 
-use crate::composed::SignedKeyDetails;
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::{
-    KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData, UserAttribute,
-    UserId,
-};
-use crate::ser::Serialize;
-use crate::types::{
-    CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, RevocationKey, SecretKeyTrait,
+use crate::{
+    composed::SignedKeyDetails,
+    crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::Result,
+    packet::{
+        KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+        UserAttribute, UserId,
+    },
+    ser::Serialize,
+    types::{
+        CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, RevocationKey, SecretKeyTrait,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]

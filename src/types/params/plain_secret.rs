@@ -1,5 +1,7 @@
-use std::hash::Hasher;
-use std::io::{self, BufRead};
+use std::{
+    hash::Hasher,
+    io::{self, BufRead},
+};
 
 use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
@@ -9,19 +11,18 @@ use num_bigint::ModInverse;
 use sha2::Sha256;
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::ecc_curve::ECCCurve;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{checksum, dsa, ecdh, ecdsa, ed25519, elgamal, rsa, x25519, Decryptor};
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::PkeskBytes;
-use crate::types::*;
-use crate::types::{EskType, PublicKeyTrait, PublicParams};
-use crate::util::TeeWriter;
-use crate::PlainSessionKey;
+use crate::{
+    crypto::{
+        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, elgamal,
+        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, Decryptor,
+    },
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
+    util::TeeWriter,
+    PlainSessionKey,
+};
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[allow(clippy::large_enum_variant)] // FIXME

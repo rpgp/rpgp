@@ -1,8 +1,8 @@
 use const_oid::ObjectIdentifier;
 
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
+use crate::crypto::{
+    hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]

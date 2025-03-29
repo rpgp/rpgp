@@ -1,27 +1,27 @@
-use std::io::BufRead;
-use std::str;
+use std::{io::BufRead, str};
 
 use bytes::Buf;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::{debug, warn};
 use smallvec::SmallVec;
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::{
-    Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
-    SubpacketType,
-};
-use crate::parsing_reader::BufReadParsing;
-use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion,
-    PacketLength, RevocationKey, SignatureBytes, Tag,
-};
-
 use super::{KeyFlags, Signature, SignatureType, SignatureVersion};
+use crate::{
+    crypto::{
+        aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    packet::{
+        Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
+        SubpacketType,
+    },
+    parsing_reader::BufReadParsing,
+    types::{
+        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion,
+        PacketLength, RevocationKey, SignatureBytes, Tag,
+    },
+};
 
 impl Signature {
     /// Parses a `Signature` packet from the given buffer

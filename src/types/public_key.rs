@@ -1,7 +1,8 @@
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
-use crate::types::{Fingerprint, KeyId, KeyVersion, PublicParams, SignatureBytes};
+use crate::{
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::Result,
+    types::{Fingerprint, KeyId, KeyVersion, PublicParams, SignatureBytes},
+};
 
 pub trait KeyDetails {
     fn version(&self) -> KeyVersion;

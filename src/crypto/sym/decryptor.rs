@@ -5,8 +5,7 @@ use blowfish::Blowfish;
 use bytes::{Buf, BytesMut};
 use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
-use cfb_mode::cipher::KeyIvInit;
-use cfb_mode::BufDecryptor;
+use cfb_mode::{cipher::KeyIvInit, BufDecryptor};
 use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut, BlockSizeUser};
 use des::TdesEde3;
 use idea::Idea;
@@ -15,9 +14,7 @@ use sha1::{Digest, Sha1};
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::util::fill_buffer;
+use crate::{crypto::sym::SymmetricKeyAlgorithm, errors::Result, util::fill_buffer};
 
 const MDC_LEN: usize = 22;
 const BUFFER_SIZE: usize = 512;

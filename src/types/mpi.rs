@@ -4,9 +4,11 @@ use byteorder::{BigEndian, WriteBytesExt};
 use bytes::Bytes;
 use num_bigint::BigUint;
 
-use crate::errors::{InvalidInputSnafu, Result};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
+use crate::{
+    errors::{InvalidInputSnafu, Result},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+};
 
 /// Number of bits we accept when reading or writing MPIs.
 /// The value is the same as gnupgs.

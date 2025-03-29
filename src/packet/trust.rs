@@ -2,10 +2,12 @@ use std::io::{self, BufRead};
 
 use log::warn;
 
-use crate::errors::Result;
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
+use crate::{
+    errors::Result,
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+};
 
 /// Trust Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-trust-packet-type-id-12>
@@ -47,9 +49,9 @@ impl PacketTrait for Trust {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

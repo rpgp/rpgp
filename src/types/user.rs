@@ -2,10 +2,12 @@ use std::io;
 
 use log::{debug, warn};
 
-use crate::errors::Result;
-use crate::packet::{PacketTrait, Signature, UserAttribute, UserId};
-use crate::ser::Serialize;
-use crate::types::{PublicKeyTrait, Tag};
+use crate::{
+    errors::Result,
+    packet::{PacketTrait, Signature, UserAttribute, UserId},
+    ser::Serialize,
+    types::{PublicKeyTrait, Tag},
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SignedUser {

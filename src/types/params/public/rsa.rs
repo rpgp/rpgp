@@ -2,9 +2,7 @@ use std::io::{self, BufRead};
 
 use rsa::traits::PublicKeyParts;
 
-use crate::errors::Result;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{errors::Result, ser::Serialize, types::MpiBytes};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -60,10 +58,10 @@ impl Serialize for RsaPublicParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
     use rand::SeedableRng;
+
+    use super::*;
 
     prop_compose! {
         pub fn rsa_pub_gen()(seed: u64) -> rsa::RsaPublicKey {

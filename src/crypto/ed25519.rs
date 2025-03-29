@@ -16,10 +16,11 @@ use rand::{CryptoRng, Rng};
 use signature::{Signer as _, Verifier};
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::Signer;
-use crate::errors::Result;
-use crate::types::{Ed25519PublicParams, EddsaLegacyPublicParams, MpiBytes};
+use crate::{
+    crypto::{hash::HashAlgorithm, Signer},
+    errors::Result,
+    types::{Ed25519PublicParams, EddsaLegacyPublicParams, MpiBytes},
+};
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
 /// between curve Ed25519 and Ed448 (TODO: not yet implemented)

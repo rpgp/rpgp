@@ -1,17 +1,19 @@
-use std::fmt::Debug;
-use std::fs::File;
+use std::{fmt::Debug, fs::File};
 
 use chrono::{DateTime, Utc};
-use pgp::crypto::checksum;
-use pgp::crypto::ecc_curve::ECCCurve;
-use pgp::crypto::hash::HashAlgorithm;
-use pgp::crypto::public_key::PublicKeyAlgorithm;
-use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
-use pgp::types::{EcdhPublicParams, Fingerprint, Password, PkeskBytes, SignatureBytes};
-use pgp::types::{KeyDetails, KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
-use pgp::{packet, Esk};
-use pgp::{Message, SignedPublicKey, SignedSecretKey};
+use pgp::{
+    crypto::{
+        checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    packet,
+    packet::{PubKeyInner, PublicKey, SignatureConfig},
+    types::{
+        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, MpiBytes, Password, PkeskBytes,
+        PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
+    },
+    Esk, Message, SignedPublicKey, SignedSecretKey,
+};
 
 #[derive(Debug, Clone)]
 pub struct FakeHsm {

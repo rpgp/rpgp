@@ -1,10 +1,12 @@
 use std::fs::File;
 
 use criterion::{black_box, criterion_group, Criterion};
-use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
-use pgp::crypto::ecc_curve::ECCCurve;
-use pgp::ser::Serialize;
-use pgp::types::Password;
+use pgp::{
+    composed::{Deserializable, KeyType, SignedSecretKey},
+    crypto::ecc_curve::ECCCurve,
+    ser::Serialize,
+    types::Password,
+};
 use rand::thread_rng;
 
 use super::build_key;

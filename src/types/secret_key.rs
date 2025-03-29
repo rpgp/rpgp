@@ -1,11 +1,11 @@
 use zeroize::Zeroizing;
 
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
-use crate::types::{KeyId, KeyVersion};
-
 use super::{Fingerprint, KeyDetails};
+use crate::{
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::Result,
+    types::{KeyId, KeyVersion},
+};
 
 /// Wraps around a callback to unlock keys.
 #[derive(derive_more::Debug)]
