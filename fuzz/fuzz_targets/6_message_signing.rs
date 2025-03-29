@@ -2,9 +2,10 @@
 
 use libfuzzer_sys::fuzz_target;
 use pgp::crypto::hash::HashAlgorithm;
+use pgp::types::Password;
 use pgp::{
     composed::{Deserializable, Message},
-    SignedSecretKey,
+    ArmorOptions, MessageBuilder, SignedSecretKey,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -13,11 +14,13 @@ use rand_chacha::ChaCha8Rng;
 fuzz_target!(|data: &[u8]| {
     let message_res = Message::from_bytes(data);
 
+    let data = data.to_vec();
+
     match message_res {
         // not interested further
         Err(_) => return,
         // perform checks
-        Ok(message) => {
+        Ok(_message) => {
             // file content of ./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc
             // included here to avoid I/O operations
             let key_input = "-----BEGIN PGP PRIVATE KEY BLOCK-----
@@ -58,20 +61,20 @@ QqrhcYJ4IBFau0avBvi7QjsSOvePvIKFO/DuDIECRpLZjRW+VKisag==
             let (decrypt_key, _headers) = SignedSecretKey::from_string(key_input).unwrap();
 
             // fixed seed PRNG for determinism
-            let mut rng = ChaCha8Rng::seed_from_u64(0);
+            let rng = ChaCha8Rng::seed_from_u64(0);
 
             // FUZZER OBSERVATION contrary to initial expectations, signing does not always succeed
-            let signed_message_res = Message::from_bytes(data).unwrap().sign(
-                &mut rng,
-                &decrypt_key,
-                String::default,
-                HashAlgorithm::Sha256,
-            );
+            let mut builder = MessageBuilder::from_bytes("", data);
+            builder = builder.sign(&*decrypt_key, Password::empty(), HashAlgorithm::Sha256);
+            let armored = builder
+                .to_armored_string(rng, ArmorOptions::default())
+                .unwrap();
 
+            let signed_message_res = Message::from_armor(armored.as_bytes());
             match signed_message_res {
-                Ok(signed_message) => {
+                Ok((signed_message, _)) => {
                     let _verify_res = signed_message
-                        .verify(&decrypt_key.public_key())
+                        .verify(&*decrypt_key.public_key())
                         .expect("we just signed this and expect it to verify");
                 }
                 // ignore
