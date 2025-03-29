@@ -32,7 +32,7 @@ impl Signature {
 
         let signature = match version {
             SignatureVersion::V2 | SignatureVersion::V3 => v3_parser(packet_header, version, i)?,
-            SignatureVersion::V4 | SignatureVersion::V5 => v4_parser(packet_header, version, i)?,
+            SignatureVersion::V4 => v4_parser(packet_header, version, i)?,
             SignatureVersion::V6 => v6_parser(packet_header, i)?,
             _ => unsupported_err!("signature version {:?}", version),
         };
