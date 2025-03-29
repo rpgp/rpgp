@@ -64,7 +64,8 @@ impl From<&SecretKey> for EddsaLegacyPublicParams {
 impl SecretKey {
     /// Generate an EdDSA `SecretKey`.
     ///
-    /// `mode` picks between supported EdDSA key formats and curves
+    /// This SecretKey type can be used to form either a `EddsaLegacyPublicParams` or a
+    /// `Ed25519PublicParams`.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
         let mut bytes = Zeroizing::new([0u8; ed25519_dalek::SECRET_KEY_LENGTH]);
         rng.fill_bytes(&mut *bytes);

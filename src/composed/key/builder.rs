@@ -11,7 +11,7 @@ use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{dsa, ecdh, ecdsa, eddsa, rsa, x25519};
+use crate::crypto::{dsa, ecdh, ecdsa, ed25519, rsa, x25519};
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId};
 use crate::types::{
@@ -321,7 +321,7 @@ impl KeyType {
                 (public_params, secret_params)
             }
             KeyType::EdDSALegacy => {
-                let secret = eddsa::SecretKey::generate(rng);
+                let secret = ed25519::SecretKey::generate(rng);
                 let public_params = PublicParams::EdDSALegacy((&secret).into());
                 let secret_params = PlainSecretParams::EdDSALegacy(secret);
                 (public_params, secret_params)
@@ -341,7 +341,7 @@ impl KeyType {
                 (public_params, secret_params)
             }
             KeyType::Ed25519 => {
-                let secret = eddsa::SecretKey::generate(rng);
+                let secret = ed25519::SecretKey::generate(rng);
                 let public_params = PublicParams::Ed25519((&secret).into());
                 let secret_params = PlainSecretParams::EdDSA(secret);
                 (public_params, secret_params)

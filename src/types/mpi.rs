@@ -22,8 +22,9 @@ pub struct MpiBytes(#[debug("{}", hex::encode(_0))] Bytes);
 impl MpiBytes {
     /// Wraps the given bytes as an MPI, must be normalized before
     /// Avoid if possible.
-    // TODO: remove
-    pub fn from_raw(bytes: Bytes) -> Self {
+    ///
+    /// Only used internally to handle reversed Curve 25519 "Mpis".
+    pub(crate) fn from_raw(bytes: Bytes) -> Self {
         MpiBytes(bytes)
     }
 
