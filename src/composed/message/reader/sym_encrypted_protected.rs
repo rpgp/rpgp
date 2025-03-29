@@ -2,14 +2,15 @@ use std::io::{self, BufRead, Read};
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig};
+use crate::parsing_reader::BufReadParsing;
 use crate::types::Tag;
-use crate::PlainSessionKey;
+use crate::{DebugBufRead, PlainSessionKey};
 
 use super::PacketBodyReader;
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum SymEncryptedProtectedDataReader<R: BufRead> {
+pub enum SymEncryptedProtectedDataReader<R: DebugBufRead> {
     Init {
         source: PacketBodyReader<R>,
         config: SymEncryptedProtectedDataConfig,
@@ -27,12 +28,12 @@ pub enum SymEncryptedProtectedDataReader<R: BufRead> {
 
 #[derive(derive_more::Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum MaybeDecryptor<R: BufRead> {
+pub enum MaybeDecryptor<R: DebugBufRead> {
     Raw(#[debug("R")] R),
     Decryptor(StreamDecryptor<R>),
 }
 
-impl<R: BufRead> MaybeDecryptor<R> {
+impl<R: DebugBufRead> MaybeDecryptor<R> {
     pub fn into_inner(self) -> R {
         match self {
             Self::Raw(r) => r,
@@ -55,7 +56,7 @@ impl<R: BufRead> MaybeDecryptor<R> {
     }
 }
 
-impl<R: BufRead> BufRead for MaybeDecryptor<R> {
+impl<R: DebugBufRead> BufRead for MaybeDecryptor<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::Raw(r) => r.fill_buf(),
@@ -71,7 +72,7 @@ impl<R: BufRead> BufRead for MaybeDecryptor<R> {
     }
 }
 
-impl<R: BufRead> Read for MaybeDecryptor<R> {
+impl<R: DebugBufRead> Read for MaybeDecryptor<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Raw(r) => r.read(buf),
@@ -80,7 +81,7 @@ impl<R: BufRead> Read for MaybeDecryptor<R> {
     }
 }
 
-impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
+impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
     pub fn new(mut source: PacketBodyReader<R>) -> Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::SymEncryptedProtectedData);
         let config = SymEncryptedProtectedDataConfig::try_from_reader(&mut source)?;
@@ -224,10 +225,21 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
                 } => {
                     let buf = decryptor.fill_buf()?;
                     if buf.is_empty() {
-                        *self = Self::Done {
-                            source: decryptor.into_inner(),
-                            config,
-                        };
+                        let mut source = decryptor.into_inner();
+                        if source.has_remaining()? {
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                "unexpected trailing data",
+                            ));
+                        }
+                        if source.get_mut().has_remaining()? {
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                "unexpected trailing data",
+                            ));
+                        }
+
+                        *self = Self::Done { source, config };
                     } else {
                         *self = Self::Body { config, decryptor };
                     }
@@ -245,7 +257,7 @@ impl<R: BufRead> SymEncryptedProtectedDataReader<R> {
     }
 }
 
-impl<R: BufRead> BufRead for SymEncryptedProtectedDataReader<R> {
+impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self {
@@ -267,7 +279,7 @@ impl<R: BufRead> BufRead for SymEncryptedProtectedDataReader<R> {
     }
 }
 
-impl<R: BufRead> Read for SymEncryptedProtectedDataReader<R> {
+impl<R: DebugBufRead> Read for SymEncryptedProtectedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self {

@@ -651,9 +651,10 @@ fn test_two_messages() {
     dbg!(&message);
     let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
 
-    let err = msg.as_data_vec().unwrap_err();
-    dbg!(&err);
+    let res = msg.as_data_string();
+    dbg!(&res);
 
+    let err = res.unwrap_err();
     assert!(
         err.to_string().contains("unexpected trailing"),
         "found error: {}",
