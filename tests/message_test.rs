@@ -378,7 +378,9 @@ fn pgp6_decrypt() {
     let (msg, _) = Message::from_armor_file("./tests/pgp6/hello.msg").expect("msg");
     dbg!(&msg);
 
-    let dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
+    let dec = msg
+        .decrypt_legacy(&Password::empty(), &skey)
+        .expect("decrypt");
     let mut dec = dec.decompress().expect("decompress");
 
     let decrypted = dec.as_data_string().unwrap();

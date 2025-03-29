@@ -575,10 +575,10 @@ impl<'a> Edata<'a> {
         Ok(())
     }
 
-    /// HAZMAT: Decrypts SEIPD (v1 or v2) and SED packets.
-    ///
     /// Decrypting (malleable) SED packets is not necessary for most use cases, except for
     /// historical data.
+    ///
+    /// HAZMAT: Decrypts SEIPD (v1 or v2) and SED packets.
     pub fn decrypt_legacy(&mut self, key: &PlainSessionKey) -> Result<()> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
         debug!("decrypt_any: protected = {:?}", protected);
@@ -787,6 +787,21 @@ impl<'a> Message<'a> {
 
     /// Decrypt the message using the given key.
     /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
+    ///
+    /// HAZMAT: Decrypts (malleable) SED packets.
+    pub fn decrypt_legacy(self, key_pw: &Password, key: &SignedSecretKey) -> Result<Message<'a>> {
+        let ring = TheRing {
+            allow_legacy: true,
+            secret_keys: vec![key],
+            key_passwords: vec![key_pw],
+            ..Default::default()
+        };
+        let (msg, _) = self.decrypt_the_ring(ring, true)?;
+        Ok(msg)
+    }
+
+    /// Decrypt the message using the given key.
+    /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
     pub fn decrypt_with_password(self, msg_pw: &Password) -> Result<Message<'a>> {
         let ring = TheRing {
             message_password: vec![msg_pw],
@@ -845,12 +860,17 @@ impl<'a> Message<'a> {
                 is_nested,
             } => {
                 // Lets go and find things, with which we can decrypt
+                let allow_legacy = ring.allow_legacy;
                 let (session_key, result) = ring.find_session_key(&esk, abort_early)?;
                 let Some(session_key) = session_key else {
                     return Err(Error::MissingKey);
                 };
 
-                edata.decrypt(&session_key)?;
+                if allow_legacy {
+                    edata.decrypt_legacy(&session_key)?;
+                } else {
+                    edata.decrypt(&session_key)?;
+                }
                 let message = Message::from_edata(edata, is_nested)?;
                 Ok((message, result))
             }
@@ -1027,6 +1047,10 @@ pub struct TheRing<'a> {
     pub key_passwords: Vec<&'a Password>,
     pub message_password: Vec<&'a Password>,
     pub session_keys: Vec<PlainSessionKey>,
+    /// If this is `true` (malleable) SED packets are also decrypted.
+    ///
+    /// Defaults to `false`.
+    pub allow_legacy: bool,
 }
 
 impl TheRing<'_> {
