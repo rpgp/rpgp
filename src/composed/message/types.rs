@@ -490,9 +490,32 @@ impl<'a> Edata<'a> {
         }
     }
 
+    /// Decrypts only SEIPD (v1 or v2), errors for SED packets
+    /// (this avoids decrypting malleable ciphertext)
     pub fn decrypt(&mut self, key: &PlainSessionKey) -> Result<()> {
         let protected = self.tag() == Tag::SymEncryptedProtectedData;
-        debug!("decrypting protected = {:?}", protected);
+        debug!("decrypt_protected: protected = {:?}", protected);
+
+        match self {
+            Self::SymEncryptedProtectedData { reader } => {
+                reader.decrypt(key)?;
+            }
+            Self::SymEncryptedData { .. } => {
+                // SED packets are malleable, decrypting them should only be necessary for historical data
+                bail!("Decryption of SymEncryptedData is discouraged")
+            }
+        }
+
+        Ok(())
+    }
+
+    /// HAZMAT: Decrypts SEIPD (v1 or v2) and SED packets.
+    ///
+    /// Decrypting (malleable) SED packets is not necessary for most use cases, except for
+    /// historical data.
+    pub fn decrypt_legacy(&mut self, key: &PlainSessionKey) -> Result<()> {
+        let protected = self.tag() == Tag::SymEncryptedProtectedData;
+        debug!("decrypt_any: protected = {:?}", protected);
 
         match self {
             Self::SymEncryptedProtectedData { reader } => {
