@@ -161,6 +161,7 @@ impl SymmetricKeyAlgorithm {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn cfb_prefix_size(&self) -> usize {
         self.block_size() + 2
     }

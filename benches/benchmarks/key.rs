@@ -1,5 +1,4 @@
 use std::fs::File;
-use std::io::BufReader;
 
 use criterion::{black_box, criterion_group, Criterion};
 use pgp::composed::{Deserializable, KeyType, SignedSecretKey};
@@ -29,7 +28,7 @@ fn bench_key(c: &mut Criterion) {
             .unwrap();
         let bytes = key.to_bytes().unwrap();
 
-        b.iter(|| black_box(SignedSecretKey::from_bytes(BufReader::new(&*bytes)).unwrap()))
+        b.iter(|| black_box(SignedSecretKey::from_bytes(&bytes[..]).unwrap()))
     });
 
     g.bench_function("parse_armored_rsa", |b| {

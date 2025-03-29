@@ -1,10 +1,10 @@
 use std::io::{self, BufRead, Read};
 
 use byteorder::WriteBytesExt;
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use rand::{CryptoRng, Rng};
 
-use crate::crypto::aead::{aead_setup, AeadAlgorithm, ChunkSize, StreamEncryptor};
+use crate::crypto::aead::{AeadAlgorithm, ChunkSize, StreamEncryptor};
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::{InvalidInputSnafu, Result};
 use crate::packet::{PacketHeader, PacketTrait};
@@ -185,10 +185,10 @@ impl SymEncryptedProtectedData {
         match &self.config {
             Config::V1 => {
                 let sym_alg = sym_alg.expect("v1");
-                let mut prefix = self.data[..sym_alg.cfb_prefix_size()].to_vec();
-                let mut ciphertext = self.data[sym_alg.cfb_prefix_size()..].to_vec();
-                sym_alg.decrypt_protected(session_key, &mut prefix, &mut ciphertext)?;
-                Ok(ciphertext)
+                let mut decryptor = StreamDecryptor::v1(sym_alg, session_key, &self.data[..])?;
+                let mut out = Vec::new();
+                decryptor.read_to_end(&mut out)?;
+                Ok(out)
             }
             Config::V2 {
                 sym_alg,
@@ -203,72 +203,16 @@ impl SymEncryptedProtectedData {
                     sym_alg
                 );
 
-                // Initial key material is the session key.
-                let ikm = session_key;
-
-                let chunk_size_expanded: usize = chunk_size.as_byte_size().try_into()?;
-
-                let (info, message_key, mut nonce) =
-                    aead_setup(*sym_alg, *aead, *chunk_size, &salt[..], ikm)?;
-
-                let mut data: BytesMut = self.data.clone().into();
-
-                // There are n chunks, n auth tags + 1 final auth tag
-                let Some(aead_tag_size) = aead.tag_size() else {
-                    unsupported_err!("AEAD mode: {:?}", aead);
-                };
-                if data.len() < aead_tag_size {
-                    return Err(InvalidInputSnafu.build());
-                }
-                let offset = data.len() - aead_tag_size;
-                let mut final_auth_tag = data.split_off(offset);
-
-                // Calculate output size (for more efficient vector allocation):
-                // - number of chunks: main_chunks length divided by (chunk size + tag size), rounded up to the next integer
-                let Some(aead_tag_size) = aead.tag_size() else {
-                    unsupported_err!("AEAD mode: {:?}", aead);
-                };
-                let chunk_and_tag_len = chunk_size_expanded + aead_tag_size;
-                let main_len = data.len();
-                let num_chunks = main_len.div_ceil(chunk_and_tag_len);
-                // - total output size: main_chunks length - size of one authentication tag per chunk
-                let out_len = main_len - num_chunks * aead_tag_size;
-
-                let mut out = Vec::with_capacity(out_len);
-
-                let mut chunk_index: u64 = 0;
-                let full_chunk_size = chunk_size_expanded + aead_tag_size;
-                while !data.is_empty() {
-                    let size = full_chunk_size.min(data.len());
-                    let mut chunk = data.split_to(size);
-
-                    aead.decrypt_in_place(sym_alg, &message_key, &nonce, &info, &mut chunk)?;
-                    out.extend_from_slice(&chunk);
-
-                    // Update nonce to include the next chunk index
-                    chunk_index += 1;
-                    let l = nonce.len() - 8;
-                    nonce[l..].copy_from_slice(&chunk_index.to_be_bytes());
-                }
-
-                // verify final auth tag
-
-                // Associated data is extended with number of plaintext octets.
-                let size = out.len() as u64;
-                let mut final_info = info.to_vec();
-                final_info.extend_from_slice(&size.to_be_bytes());
-
-                // Update final nonce
-                aead.decrypt_in_place(
-                    sym_alg,
-                    &message_key,
-                    &nonce,
-                    &final_info,
-                    &mut final_auth_tag,
+                let mut decryptor = StreamDecryptor::v2(
+                    *sym_alg,
+                    *aead,
+                    *chunk_size,
+                    salt,
+                    session_key,
+                    &self.data[..],
                 )?;
-
-                debug_assert_eq!(out.len(), out_len, "we pre-allocated the wrong output size");
-
+                let mut out = Vec::new();
+                decryptor.read_to_end(&mut out)?;
                 Ok(out)
             }
         }
@@ -424,11 +368,12 @@ mod tests {
 
         // Iterate over message sizes from 0 bytes through all 1-chunk and 2-chunk lengths
         // (ending with two chunks of a full 64 bytes)
-        for size in 0..=128 {
+        for size in 0..=512 {
             let mut message = vec![0; size];
             rng.fill_bytes(&mut message);
 
             for aead in [AeadAlgorithm::Ocb, AeadAlgorithm::Eax, AeadAlgorithm::Gcm] {
+                println!("{} bytes: {:?}", size, aead);
                 let enc = SymEncryptedProtectedData::encrypt_seipdv2(
                     &mut rng,
                     SYM_ALG,
