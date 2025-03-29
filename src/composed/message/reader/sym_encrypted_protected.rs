@@ -2,7 +2,6 @@ use std::io::{self, BufRead, Read};
 
 use crate::errors::Result;
 use crate::packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig};
-use crate::parsing_reader::BufReadParsing;
 use crate::types::Tag;
 use crate::{DebugBufRead, PlainSessionKey};
 
@@ -225,19 +224,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                 } => {
                     let buf = decryptor.fill_buf()?;
                     if buf.is_empty() {
-                        let mut source = decryptor.into_inner();
-                        if source.has_remaining()? {
-                            return Err(io::Error::new(
-                                io::ErrorKind::Other,
-                                "unexpected trailing data",
-                            ));
-                        }
-                        if source.get_mut().has_remaining()? {
-                            return Err(io::Error::new(
-                                io::ErrorKind::Other,
-                                "unexpected trailing data",
-                            ));
-                        }
+                        let source = decryptor.into_inner();
 
                         *self = Self::Done { source, config };
                     } else {

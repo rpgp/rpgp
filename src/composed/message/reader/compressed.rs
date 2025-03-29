@@ -4,15 +4,16 @@ use bytes::{Buf, BytesMut};
 
 use crate::packet::{Decompressor, PacketHeader};
 use crate::types::Tag;
+use crate::DebugBufRead;
 
 use super::{fill_buffer, PacketBodyReader};
 
 #[derive(Debug)]
-pub struct CompressedDataReader<R: BufRead> {
+pub struct CompressedDataReader<R: DebugBufRead> {
     state: CompressedReaderState<R>,
 }
 
-impl<R: BufRead> CompressedDataReader<R> {
+impl<R: DebugBufRead> CompressedDataReader<R> {
     pub fn new(source: PacketBodyReader<R>, decompress: bool) -> io::Result<Self> {
         debug_assert_eq!(source.packet_header().tag(), Tag::CompressedData);
 
@@ -89,7 +90,7 @@ impl<R: BufRead> CompressedDataReader<R> {
 }
 
 #[derive(Debug)]
-enum CompressedReaderState<R: BufRead> {
+enum CompressedReaderState<R: DebugBufRead> {
     Body {
         source: MaybeDecompress<PacketBodyReader<R>>,
         buffer: BytesMut,
@@ -100,7 +101,7 @@ enum CompressedReaderState<R: BufRead> {
     Error,
 }
 
-impl<R: BufRead> BufRead for CompressedDataReader<R> {
+impl<R: DebugBufRead> BufRead for CompressedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         self.fill_inner()?;
         match self.state {
@@ -121,7 +122,7 @@ impl<R: BufRead> BufRead for CompressedDataReader<R> {
     }
 }
 
-impl<R: BufRead> Read for CompressedDataReader<R> {
+impl<R: DebugBufRead> Read for CompressedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.fill_inner()?;
         match self.state {
@@ -136,7 +137,7 @@ impl<R: BufRead> Read for CompressedDataReader<R> {
     }
 }
 
-impl<R: BufRead> CompressedDataReader<R> {
+impl<R: DebugBufRead> CompressedDataReader<R> {
     fn fill_inner(&mut self) -> io::Result<()> {
         if matches!(self.state, CompressedReaderState::Done { .. }) {
             return Ok(());
@@ -158,6 +159,7 @@ impl<R: BufRead> CompressedDataReader<R> {
 
                 if read == 0 {
                     let source = source.into_inner();
+
                     self.state = CompressedReaderState::Done { source };
                 } else {
                     self.state = CompressedReaderState::Body { source, buffer };
@@ -176,12 +178,12 @@ impl<R: BufRead> CompressedDataReader<R> {
 }
 
 #[derive(Debug)]
-enum MaybeDecompress<R: BufRead> {
+enum MaybeDecompress<R: DebugBufRead> {
     Raw(R),
     Decompress(Decompressor<R>),
 }
 
-impl<R: BufRead> MaybeDecompress<R> {
+impl<R: DebugBufRead> MaybeDecompress<R> {
     fn decompress(self) -> io::Result<Self> {
         match self {
             Self::Raw(r) => Ok(Self::Decompress(Decompressor::from_reader(r)?)),
@@ -193,7 +195,7 @@ impl<R: BufRead> MaybeDecompress<R> {
     }
 }
 
-impl<R: BufRead> MaybeDecompress<R> {
+impl<R: DebugBufRead> MaybeDecompress<R> {
     fn into_inner(self) -> R {
         match self {
             Self::Raw(r) => r,
@@ -208,7 +210,7 @@ impl<R: BufRead> MaybeDecompress<R> {
     }
 }
 
-impl<R: BufRead> BufRead for MaybeDecompress<R> {
+impl<R: DebugBufRead> BufRead for MaybeDecompress<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
         match self {
             Self::Raw(ref mut r) => r.fill_buf(),
@@ -223,7 +225,7 @@ impl<R: BufRead> BufRead for MaybeDecompress<R> {
     }
 }
 
-impl<R: BufRead> Read for MaybeDecompress<R> {
+impl<R: DebugBufRead> Read for MaybeDecompress<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::Raw(ref mut r) => r.read(buf),

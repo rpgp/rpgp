@@ -736,7 +736,7 @@ fn test_two_literals_first_compressed_explicit_decompression() {
 
     let mut msg = msg.decompress().unwrap();
 
-    let err = msg.as_data_vec().unwrap_err();
+    let err = msg.as_data_string().unwrap_err();
     dbg!(&err);
 
     assert!(
@@ -767,11 +767,14 @@ fn test_two_literals_first_compressed_two_times_explicit_decompression() {
     let msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
 
     let msg = msg.decompress().unwrap();
+    dbg!(&msg);
     let mut msg = msg.decompress().unwrap();
+    dbg!(&msg);
 
-    let err = msg.as_data_vec().unwrap_err();
-    dbg!(&err);
+    let res = msg.as_data_string();
+    dbg!(&res);
 
+    let err = res.unwrap_err();
     assert!(
         err.to_string().contains("unexpected trailing"),
         "found error: {}",
@@ -794,9 +797,10 @@ fn test_literal_eating_mdc() {
     dbg!(&message);
     let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
 
-    let err = msg.as_data_vec().unwrap_err();
-    dbg!(&err);
+    let res = msg.as_data_vec();
+    dbg!(&res);
 
+    let err = res.unwrap_err();
     assert!(
         err.to_string()
             .contains("Fixed chunk was shorter than expected"),

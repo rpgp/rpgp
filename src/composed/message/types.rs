@@ -42,6 +42,72 @@ impl MessageReader<'_> {
             Self::Reader(_r) => self,
         }
     }
+
+    fn check_trailing_data(&mut self) -> io::Result<()> {
+        fn check_next_packet<R: DebugBufRead>(
+            mut parser: crate::packet::PacketParser<R>,
+        ) -> io::Result<()> {
+            match parser.next_ref() {
+                Some(Ok(packet)) => {
+                    let tag = packet.packet_header().tag();
+                    match tag {
+                        Tag::Padding | Tag::Marker => {
+                            debug!("ignoring trailing packet: {:?}", tag);
+                        }
+                        _ => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::InvalidInput,
+                                format!(
+                                    "unexpected trailing packet found: {:?}",
+                                    packet.packet_header()
+                                ),
+                            ));
+                        }
+                    }
+                }
+                Some(Err(err)) => {
+                    warn!("failed to parse trailing data: {:?}", err);
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "unexpected trailing bytes found",
+                    ));
+                }
+                None => {
+                    // all good
+                }
+            }
+            Ok(())
+        }
+
+        match self {
+            MessageReader::Compressed(r) => {
+                let compressed_body_reader = r.get_mut();
+
+                // discard excess data in the compressed packet
+                let excess = compressed_body_reader.drain()?;
+                if excess > 0 {
+                    debug!("discarded excess data in compressed packet: {excess}");
+                }
+
+                let message_reader = compressed_body_reader.get_mut();
+                message_reader.check_trailing_data()?;
+            }
+            MessageReader::Edata(e) => {
+                let mut inner_reader = e;
+                let parser = crate::packet::PacketParser::new(&mut inner_reader);
+                check_next_packet(parser)?;
+
+                let message_reader = inner_reader.get_mut().get_mut();
+                message_reader.check_trailing_data()?;
+            }
+            MessageReader::Reader(r) => {
+                let parser = crate::packet::PacketParser::new(r);
+                check_next_packet(parser)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Read for MessageReader<'_> {
@@ -901,67 +967,7 @@ impl<'a> Message<'a> {
         // drain the inner reader to ensure no trailing data is contained
         let inner = self.get_mut().get_mut();
 
-        fn check_next_packet<R: DebugBufRead>(
-            mut parser: crate::packet::PacketParser<R>,
-        ) -> io::Result<()> {
-            match parser.next_ref() {
-                Some(Ok(packet)) => {
-                    let tag = packet.packet_header().tag();
-                    match tag {
-                        Tag::Padding | Tag::Marker => {
-                            debug!("ignoring trailing packet: {:?}", tag);
-                        }
-                        _ => {
-                            return Err(io::Error::new(
-                                io::ErrorKind::InvalidInput,
-                                format!(
-                                    "unexpected trailing packet found: {:?}",
-                                    packet.packet_header()
-                                ),
-                            ));
-                        }
-                    }
-                }
-                Some(Err(err)) => {
-                    warn!("failed to parse trailing data: {:?}", err);
-                    return Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "unexpected trailing bytes found",
-                    ));
-                }
-                None => {
-                    // all good
-                }
-            }
-            Ok(())
-        }
-
-        match inner {
-            MessageReader::Compressed(r) => {
-                let compressed_body_reader = r.get_mut();
-
-                // discard excess data in the compressed packet
-                let excess = compressed_body_reader.drain()?;
-                if excess > 0 {
-                    debug!("discarded excess data in compressed packet: {excess}");
-                }
-
-                let message_reader = compressed_body_reader.get_mut();
-                let parser = crate::packet::PacketParser::new(message_reader);
-                check_next_packet(parser)?;
-            }
-            MessageReader::Edata(e) => {
-                let inner_reader = e;
-                let parser = crate::packet::PacketParser::new(inner_reader);
-                check_next_packet(parser)?;
-            }
-            MessageReader::Reader(r) => {
-                let parser = crate::packet::PacketParser::new(r);
-                check_next_packet(parser)?;
-            }
-        }
-
-        Ok(())
+        inner.check_trailing_data()
     }
 
     fn fill_inner(&mut self) -> io::Result<&[u8]> {
