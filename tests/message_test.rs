@@ -653,7 +653,7 @@ fn test_packet_excess_data() {
             .expect("ssk");
 
     // 100kbyte of excess trailing data in the compressed packet
-    let (message, _) = Message::from_armor_file("./tests/excess_100k.msg").expect("ok");
+    let (message, _) = Message::from_armor_file("./tests/tests/excess_100k.msg").expect("ok");
 
     dbg!(&message);
     let msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
