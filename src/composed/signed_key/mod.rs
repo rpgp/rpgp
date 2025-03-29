@@ -46,7 +46,7 @@
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::{Signature, packet::{PacketTrait, PacketHeader}, types::{PacketLength, Tag, KeyDetails as _}};
+//! use pgp::{Signature, packet::{PacketTrait, PacketHeader, SignatureConfig}, types::{PacketLength, Tag, KeyDetails as _}};
 //! use chrono;
 //!
 //! let now = chrono::Utc::now();
@@ -75,21 +75,21 @@
 //!     .expect("Failed to validate signature");
 //!
 //! // wraps the signature in the appropriate package fmt ready to be serialized
-//! let len = todo!();
-//! let packet_header = PacketHeader::new_fixed(Tag::Signature, len);
-//! let signature = Signature::v4(
-//!     packet_header,
-//!     packet::SignatureType::Binary,
-//!     PublicKeyAlgorithm::RSA,
-//!     HashAlgorithm::Sha256,
+//! let signature = Signature::from_config(
+//!     SignatureConfig {
+//!         typ: packet::SignatureType::Binary,
+//!         pub_alg: PublicKeyAlgorithm::RSA,
+//!         hash_alg: HashAlgorithm::Sha256,
+//!         hashed_subpackets: vec![
+//!             packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)).unwrap(),
+//!             packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())).unwrap(),
+//!         ],
+//!         unhashed_subpackets: vec![],
+//!         version_specific: SignatureVersionSpecific::V4,
+//!     },
 //!     [digest[0], digest[1]],
 //!     signature,
-//!     vec![
-//!         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)).unwrap(),
-//!         packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())).unwrap(),
-//!     ],
-//!     vec![],
-//! );
+//! ).unwrap();
 //!
 //! // sign and write the package (the package written here is NOT RFC 9580 compliant)
 //! let mut signature_bytes = Vec::with_capacity(1024);
