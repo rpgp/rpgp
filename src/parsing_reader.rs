@@ -111,7 +111,7 @@ pub trait BufReadParsing: BufRead + Sized {
                 format!(
                     "expected {}, found {}",
                     hex::encode(tag),
-                    hex::encode(&found_tag)
+                    hex::encode(found_tag)
                 ),
             ));
         }

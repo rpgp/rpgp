@@ -9,12 +9,14 @@ use crate::crypto::sym::SymmetricKeyAlgorithm;
 use crate::errors::Result;
 use crate::util::fill_buffer;
 
+/// Currently the tag size for all known aeads is 16.
+const AEAD_TAG_SIZE: usize = 16;
+
 #[derive(derive_more::Debug)]
 pub struct StreamDecryptor<R: BufRead> {
     sym_alg: SymmetricKeyAlgorithm,
     aead: AeadAlgorithm,
     chunk_size_expanded: usize,
-    aead_tag_size: usize,
     /// how many bytes have been written
     written: u64,
     chunk_index: u64,
@@ -52,6 +54,11 @@ impl<R: BufRead> StreamDecryptor<R> {
         let Some(aead_tag_size) = aead.tag_size() else {
             unsupported_err!("AEAD mode: {:?}", aead);
         };
+        ensure_eq!(
+            aead_tag_size,
+            AEAD_TAG_SIZE,
+            "unexpected AEAD configuration"
+        );
 
         Ok(Self {
             sym_alg,
@@ -61,12 +68,11 @@ impl<R: BufRead> StreamDecryptor<R> {
             chunk_index: 0,
             info,
             message_key,
-            aead_tag_size,
             chunk_size_expanded,
             source,
             is_source_done: false,
-            in_buffer: BytesMut::new(),
-            out_buffer: BytesMut::new(),
+            in_buffer: BytesMut::with_capacity(2 * (chunk_size_expanded + AEAD_TAG_SIZE)),
+            out_buffer: BytesMut::with_capacity(2 * chunk_size_expanded),
         })
     }
 
@@ -83,7 +89,7 @@ impl<R: BufRead> StreamDecryptor<R> {
     }
 
     fn decrypt(&mut self) -> io::Result<()> {
-        let enc_chunk_size = self.chunk_size_expanded + self.aead_tag_size;
+        let enc_chunk_size = self.chunk_size_expanded + AEAD_TAG_SIZE;
 
         let end = enc_chunk_size.min(self.in_buffer.len());
         let mut out = self.in_buffer.split_to(end);
@@ -112,13 +118,13 @@ impl<R: BufRead> StreamDecryptor<R> {
     /// Decrypt the final chunk of data
     pub fn decrypt_last(&mut self) -> io::Result<()> {
         debug_assert!(
-            self.in_buffer.len() >= self.aead_tag_size,
+            self.in_buffer.len() >= AEAD_TAG_SIZE,
             "last chunk size mismatch"
         );
 
         let mut final_auth_tag = self
             .in_buffer
-            .split_off(self.in_buffer.len() - self.aead_tag_size);
+            .split_off(self.in_buffer.len() - AEAD_TAG_SIZE);
 
         while !self.in_buffer.is_empty() {
             self.decrypt()?;
@@ -151,7 +157,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         }
 
         let current_len = self.in_buffer.len();
-        let buf_size = 2 * (self.chunk_size_expanded + self.aead_tag_size);
+        let buf_size = 2 * (self.chunk_size_expanded + AEAD_TAG_SIZE);
         let to_read = buf_size - current_len;
 
         self.in_buffer.resize(buf_size, 0);
@@ -165,7 +171,7 @@ impl<R: BufRead> StreamDecryptor<R> {
         if read < to_read {
             debug!("source finished reading");
             // make sure we have as much as data as we need
-            if self.in_buffer.remaining() < self.aead_tag_size {
+            if self.in_buffer.remaining() < AEAD_TAG_SIZE {
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "not enough data to finalize aead decryption",
