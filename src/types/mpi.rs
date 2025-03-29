@@ -19,15 +19,15 @@ const MAX_EXTERN_MPI_BITS: u16 = 16384;
 ///
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-multiprecision-integers>
 #[derive(Default, Clone, PartialEq, Eq, derive_more::Debug)]
-pub struct MpiBytes(#[debug("{}", hex::encode(_0))] Bytes);
+pub struct Mpi(#[debug("{}", hex::encode(_0))] Bytes);
 
-impl MpiBytes {
+impl Mpi {
     /// Wraps the given bytes as an MPI, must be normalized before
     /// Avoid if possible.
     ///
     /// Only used internally to handle reversed Curve 25519 "Mpis".
     pub(crate) fn from_raw(bytes: Bytes) -> Self {
-        MpiBytes(bytes)
+        Mpi(bytes)
     }
 
     pub fn len(&self) -> usize {
@@ -54,7 +54,7 @@ impl MpiBytes {
         let n_stripped = strip_leading_zeros(&n);
         let n_stripped = n.slice_ref(n_stripped);
 
-        Ok(MpiBytes(n_stripped))
+        Ok(Mpi(n_stripped))
     }
 
     /// Represent the data in `raw` as an Mpi.
@@ -84,13 +84,13 @@ fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
         .map_or(&[], |offset| &bytes[offset..])
 }
 
-impl AsRef<[u8]> for MpiBytes {
+impl AsRef<[u8]> for Mpi {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
 
-impl Serialize for MpiBytes {
+impl Serialize for Mpi {
     fn to_writer<W: io::Write>(&self, w: &mut W) -> Result<()> {
         let bytes = &self.0;
         let size = bit_size(bytes);
@@ -105,20 +105,20 @@ impl Serialize for MpiBytes {
     }
 }
 
-impl From<BigUint> for MpiBytes {
+impl From<BigUint> for Mpi {
     fn from(other: BigUint) -> Self {
-        MpiBytes(other.to_bytes_be().into())
+        Mpi(other.to_bytes_be().into())
     }
 }
 
-impl From<&BigUint> for MpiBytes {
+impl From<&BigUint> for Mpi {
     fn from(other: &BigUint) -> Self {
-        MpiBytes(other.to_bytes_be().into())
+        Mpi(other.to_bytes_be().into())
     }
 }
 
-impl From<MpiBytes> for BigUint {
-    fn from(other: MpiBytes) -> Self {
+impl From<Mpi> for BigUint {
+    fn from(other: Mpi) -> Self {
         BigUint::from_bytes_be(other.as_ref())
     }
 }
@@ -129,13 +129,13 @@ mod tests {
 
     use super::*;
 
-    impl Arbitrary for MpiBytes {
+    impl Arbitrary for Mpi {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
             proptest::collection::vec(0u8..255, 1..500)
-                .prop_map(|v| MpiBytes::from_slice(&v))
+                .prop_map(|v| Mpi::from_slice(&v))
                 .boxed()
         }
     }
@@ -144,20 +144,20 @@ mod tests {
     fn test_mpi() {
         // Decode the number `511` (`0x1FF` in hex).
         assert_eq!(
-            MpiBytes::try_from_reader(&mut &[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
-            MpiBytes::from_slice(&[0x01, 0xFF][..])
+            Mpi::try_from_reader(&mut &[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
+            Mpi::from_slice(&[0x01, 0xFF][..])
         );
 
         // Decode the number `2^255 + 7`.
         assert_eq!(
-            MpiBytes::try_from_reader(
+            Mpi::try_from_reader(
                 &mut &[
                     0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07
                 ][..]
             )
             .unwrap(),
-            MpiBytes::from_slice(
+            Mpi::from_slice(
                 &[
                     0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0x07
@@ -178,13 +178,13 @@ mod tests {
             let n = hex::decode(raw).unwrap();
 
             let n_big = BigUint::from_bytes_be(&n);
-            let n_mpi: MpiBytes = n_big.clone().into();
+            let n_mpi: Mpi = n_big.clone().into();
             let mut n_encoded = Vec::new();
             n_mpi.to_writer(&mut n_encoded).unwrap();
 
             assert_eq!(&n_encoded, &hex::decode(encoded).unwrap());
 
-            let n_big2 = MpiBytes::try_from_reader(&mut &n_encoded[..]).unwrap();
+            let n_big2 = Mpi::try_from_reader(&mut &n_encoded[..]).unwrap();
             assert_eq!(n_big, n_big2.into());
         }
     }
@@ -198,7 +198,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn mpi_bytes_wite_le(m: MpiBytes) {
+        fn mpi_bytes_wite_le(m: Mpi) {
             let mut buf = Vec::new();
             m.to_writer(&mut buf)?;
 
@@ -206,11 +206,11 @@ mod tests {
         }
 
         #[test]
-        fn mpi_bytes_roundtrip(m: MpiBytes) {
+        fn mpi_bytes_roundtrip(m: Mpi) {
             let mut buf = Vec::new();
             m.to_writer(&mut buf)?;
 
-            let m_back = MpiBytes::try_from_reader(&mut &buf[..])?;
+            let m_back = Mpi::try_from_reader(&mut &buf[..])?;
             prop_assert_eq!(m, m_back);
         }
     }

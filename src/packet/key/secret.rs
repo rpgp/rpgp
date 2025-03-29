@@ -13,7 +13,7 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi,
         Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SecretParams, SignatureBytes, Tag,
     },
@@ -518,7 +518,7 @@ fn create_signature(
             // strip leading zeros, to match parse results from MPIs
             let mpis = sig
                 .iter()
-                .map(|v| MpiBytes::from_slice(&v[..]))
+                .map(|v| Mpi::from_slice(&v[..]))
                 .collect::<Vec<_>>();
 
             Ok(SignatureBytes::Mpis(mpis))

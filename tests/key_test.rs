@@ -24,9 +24,9 @@ use pgp::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
-        PacketHeaderVersion, PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams,
-        S2kParams, SecretParams, SignedUser, StringToKey, Tag,
+        CompressionAlgorithm, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
+        PacketLength, PlainSecretParams, PublicKeyTrait, PublicParams, S2kParams, SecretParams,
+        SignedUser, StringToKey, Tag,
     },
 };
 use rand::{thread_rng, SeedableRng};
@@ -363,7 +363,7 @@ fn test_parse_details() {
         &hex::decode("4c073ae0c8445c0c").unwrap()[..]
     );
 
-    let primary_n = MpiBytes::from_slice(&hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap());
+    let primary_n = Mpi::from_slice(&hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap());
 
     let pk = key.primary_key;
     assert_eq!(pk.version(), KeyVersion::V4);
@@ -371,7 +371,7 @@ fn test_parse_details() {
 
     match pk.public_params() {
         PublicParams::RSA(public_params) => {
-            assert_eq!(MpiBytes::from(public_params.key.n().clone()), primary_n);
+            assert_eq!(Mpi::from(public_params.key.n().clone()), primary_n);
             assert_eq!(public_params.key.e().to_u64().unwrap(), 0x0001_0001);
         }
         _ => panic!("wrong public params: {:?}", pk.public_params()),
@@ -423,7 +423,7 @@ fn test_parse_details() {
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::Sha1,
         [0x7c, 0x63],
-        vec![MpiBytes::from_slice(&[
+        vec![Mpi::from_slice(&[
             0x15, 0xb5, 0x4f, 0xca, 0x11, 0x7f, 0x1b, 0x1d, 0xc0, 0x7a, 0x05, 0x97, 0x25, 0x10,
             0x4b, 0x6a, 0x76, 0x12, 0xf8, 0x89, 0x48, 0x76, 0x74, 0xeb, 0x8b, 0x22, 0xcf, 0xeb,
             0x95, 0x80, 0x70, 0x97, 0x1b, 0x92, 0x7e, 0x35, 0x8f, 0x5d, 0xc8, 0xae, 0x22, 0x0d,
@@ -508,7 +508,7 @@ fn test_parse_details() {
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::Sha1,
         [0xca, 0x6c],
-        vec![MpiBytes::from_slice(&[
+        vec![Mpi::from_slice(&[
             0x49, 0xa0, 0xb5, 0x41, 0xbd, 0x33, 0xa8, 0xda, 0xda, 0x6e, 0xb1, 0xe5, 0x28, 0x74,
             0x18, 0xee, 0x39, 0xc8, 0x8d, 0xfd, 0x39, 0xe8, 0x3b, 0x09, 0xdc, 0x9d, 0x04, 0x91,
             0x5d, 0x66, 0xb8, 0x1d, 0x04, 0x0a, 0x90, 0xe7, 0xa6, 0x84, 0x9b, 0xb1, 0x06, 0x4f,
@@ -605,7 +605,7 @@ fn test_parse_details() {
         PublicKeyAlgorithm::RSA,
         HashAlgorithm::Sha1,
         [0x02, 0x0c],
-        vec![MpiBytes::from_slice(&[
+        vec![Mpi::from_slice(&[
             0x5b, 0x4b, 0xeb, 0xff, 0x1a, 0x89, 0xc2, 0xe1, 0x80, 0x20, 0x26, 0x3b, 0xf4, 0x4d,
             0x2d, 0x46, 0xba, 0x96, 0x78, 0xb2, 0x88, 0xf8, 0xf9, 0xd5, 0xf1, 0x5f, 0x7d, 0x45,
             0xeb, 0xbc, 0x25, 0x2e, 0x1b, 0x2f, 0x8e, 0xd4, 0xa9, 0x6e, 0x64, 0xfa, 0x97, 0x09,

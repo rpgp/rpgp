@@ -12,7 +12,7 @@ use crate::{
         Decryptor,
     },
     errors::{Error, Result},
-    types::{pad_key, EcdhPublicParams, MpiBytes, PkeskBytes},
+    types::{pad_key, EcdhPublicParams, Mpi, PkeskBytes},
 };
 
 /// 20 octets representing "Anonymous Sender    ".
@@ -149,7 +149,7 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn try_from_mpi(pub_params: &EcdhPublicParams, d: MpiBytes) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &EcdhPublicParams, d: Mpi) -> Result<Self> {
         match pub_params {
             EcdhPublicParams::Curve25519 { .. } => {
                 const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
@@ -197,7 +197,7 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn as_mpi(&self) -> MpiBytes {
+    pub(crate) fn as_mpi(&self) -> Mpi {
         match self {
             Self::Curve25519 { secret, .. } => {
                 let bytes = secret.to_bytes();
@@ -206,11 +206,11 @@ impl SecretKey {
                 // https://www.rfc-editor.org/rfc/rfc9580.html#name-curve25519legacy-ecdh-secre
                 let reversed = bytes.iter().rev().copied().collect::<Vec<u8>>();
 
-                MpiBytes::from_raw(reversed.into())
+                Mpi::from_raw(reversed.into())
             }
-            Self::P256 { secret, .. } => MpiBytes::from_slice(&secret.to_bytes()),
-            Self::P384 { secret, .. } => MpiBytes::from_slice(&secret.to_bytes()),
-            Self::P521 { secret, .. } => MpiBytes::from_slice(&secret.to_bytes()),
+            Self::P256 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
+            Self::P384 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
+            Self::P521 { secret, .. } => Mpi::from_slice(&secret.to_bytes()),
         }
     }
 
@@ -225,7 +225,7 @@ impl SecretKey {
 }
 
 pub struct EncryptionFields<'a> {
-    pub public_point: &'a MpiBytes,
+    pub public_point: &'a Mpi,
 
     /// Encrypted and wrapped value, derived from the session key
     pub encrypted_session_key: &'a [u8],
@@ -295,7 +295,7 @@ impl Decryptor for SecretKey {
 
 /// Derive a shared secret in decryption, for a Rust Crypto curve
 fn derive_shared_secret_decryption<C>(
-    public_point: &MpiBytes,
+    public_point: &Mpi,
     our_secret: &elliptic_curve::SecretKey<C>,
     pub_bytes: usize,
 ) -> Result<Vec<u8>>
@@ -539,7 +539,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let encrypted_session_key = aes_kw::wrap(&z, &plain_padded)?;
 
     Ok(PkeskBytes::Ecdh {
-        public_point: MpiBytes::from_slice(&encoded_public),
+        public_point: Mpi::from_slice(&encoded_public),
         encrypted_session_key: encrypted_session_key.into(),
     })
 }

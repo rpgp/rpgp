@@ -17,7 +17,7 @@ pub use self::{
     fingerprint::Fingerprint,
     key_id::KeyId,
     key_traits::{KeyDetails, PublicKeyTrait, SecretKeyTrait},
-    mpi::MpiBytes,
+    mpi::Mpi,
     packet::*,
     params::*,
     password::Password,

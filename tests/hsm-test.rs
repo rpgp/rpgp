@@ -9,7 +9,7 @@ use pgp::{
     packet,
     packet::{PubKeyInner, PublicKey, SignatureConfig},
     types::{
-        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, MpiBytes, Password, PkeskBytes,
+        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, Mpi, Password, PkeskBytes,
         PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
     },
     Esk, Message, SignedPublicKey, SignedSecretKey,
@@ -108,23 +108,17 @@ impl SecretKeyTrait for FakeHsm {
         let sig = self.sign_data.unwrap().1; // fake smartcard output
 
         let mpis = match self.public_key.algorithm() {
-            PublicKeyAlgorithm::RSA => vec![MpiBytes::from_slice(sig)],
+            PublicKeyAlgorithm::RSA => vec![Mpi::from_slice(sig)],
 
             PublicKeyAlgorithm::ECDSA => {
                 let mid = sig.len() / 2;
 
-                vec![
-                    MpiBytes::from_slice(&sig[..mid]),
-                    MpiBytes::from_slice(&sig[mid..]),
-                ]
+                vec![Mpi::from_slice(&sig[..mid]), Mpi::from_slice(&sig[mid..])]
             }
             PublicKeyAlgorithm::EdDSALegacy => {
                 assert_eq!(sig.len(), 64); // FIXME: check curve; add error handling
 
-                vec![
-                    MpiBytes::from_slice(&sig[..32]),
-                    MpiBytes::from_slice(&sig[32..]),
-                ]
+                vec![Mpi::from_slice(&sig[..32]), Mpi::from_slice(&sig[32..])]
             }
 
             _ => unimplemented!(),

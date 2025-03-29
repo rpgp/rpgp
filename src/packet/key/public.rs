@@ -13,7 +13,7 @@ use crate::{
     ser::Serialize,
     types::{
         EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId,
-        KeyVersion, MpiBytes, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        KeyVersion, Mpi, Password, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SignatureBytes, Tag,
     },
 };
@@ -556,7 +556,7 @@ impl KeyDetails for PubKeyInner {
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
                 PublicParams::RSA(params) => {
-                    let n: MpiBytes = params.key.n().into();
+                    let n: Mpi = params.key.n().into();
                     let offset = n.len() - 8;
                     let raw: [u8; 8] = n.as_ref()[offset..].try_into().expect("fixed size");
                     raw.into()
@@ -595,7 +595,7 @@ impl PublicKeyTrait for PubKeyInner {
     ) -> Result<()> {
         match self.public_params {
             PublicParams::RSA(ref params) => {
-                let sig: &[MpiBytes] = sig.try_into()?;
+                let sig: &[Mpi] = sig.try_into()?;
 
                 ensure_eq!(sig.len(), 1, "invalid signature");
                 crypto::rsa::verify(&params.key, hash, hashed, sig[0].as_ref())
@@ -603,7 +603,7 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::EdDSALegacy(ref params) => {
                 match params {
                     EddsaLegacyPublicParams::Ed25519 { ref key } => {
-                        let sig: &[MpiBytes] = sig.try_into()?;
+                        let sig: &[Mpi] = sig.try_into()?;
 
                         ensure_eq!(sig.len(), 2);
 
@@ -636,7 +636,7 @@ impl PublicKeyTrait for PubKeyInner {
                 bail!("X448 can not be used for verify operations");
             }
             PublicParams::ECDSA(ref params) => {
-                let sig: &[MpiBytes] = sig.try_into()?;
+                let sig: &[Mpi] = sig.try_into()?;
 
                 crypto::ecdsa::verify(params, hash, hashed, sig)
             }
@@ -665,7 +665,7 @@ impl PublicKeyTrait for PubKeyInner {
                 unimplemented_err!("verify Elgamal");
             }
             PublicParams::DSA(ref params) => {
-                let sig: &[MpiBytes] = sig.try_into()?;
+                let sig: &[Mpi] = sig.try_into()?;
                 ensure_eq!(sig.len(), 2, "invalid signature");
 
                 crypto::dsa::verify(params, hashed, sig[0].clone().into(), sig[1].clone().into())

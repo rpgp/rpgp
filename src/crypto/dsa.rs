@@ -10,7 +10,7 @@ use zeroize::Zeroize;
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::Result,
-    types::{DsaPublicParams, MpiBytes},
+    types::{DsaPublicParams, Mpi},
 };
 
 /// Secret key for DSA.
@@ -55,7 +55,7 @@ impl Deref for SecretKey {
 impl Eq for SecretKey {}
 
 impl SecretKey {
-    pub(crate) fn try_from_mpi(pub_params: &DsaPublicParams, x: MpiBytes) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &DsaPublicParams, x: Mpi) -> Result<Self> {
         let secret = dsa::SigningKey::from_components(pub_params.key.clone(), x.into())?;
         Ok(Self { key: secret })
     }
@@ -114,7 +114,7 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
-    use crate::types::MpiBytes;
+    use crate::types::Mpi;
 
     fn hex_num(s: &str) -> BigUint {
         BigUint::from_str_radix(s, 16).expect("invalid hex")
@@ -156,13 +156,9 @@ mod tests {
              82F65CBDC4FAE93C2EA212390E54905A86E2223170B44EAA7DA5DD9FFCFB7F3B",
         );
 
-        let params = DsaPublicParams::try_from_mpi(
-            MpiBytes::from(p),
-            MpiBytes::from(q),
-            MpiBytes::from(g),
-            MpiBytes::from(y),
-        )
-        .unwrap();
+        let params =
+            DsaPublicParams::try_from_mpi(Mpi::from(p), Mpi::from(q), Mpi::from(g), Mpi::from(y))
+                .unwrap();
 
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
@@ -291,13 +287,9 @@ mod tests {
              74E04299F132026601638CB87AB79190D4A0986315DA8EEC6561C938996BEADF",
         );
 
-        let params = DsaPublicParams::try_from_mpi(
-            MpiBytes::from(p),
-            MpiBytes::from(q),
-            MpiBytes::from(g),
-            MpiBytes::from(y),
-        )
-        .unwrap();
+        let params =
+            DsaPublicParams::try_from_mpi(Mpi::from(p), Mpi::from(q), Mpi::from(g), Mpi::from(y))
+                .unwrap();
 
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {

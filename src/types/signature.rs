@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use log::debug;
 
-use super::MpiBytes;
+use super::Mpi;
 use crate::ser::Serialize;
 
 /// An OpenPGP cryptographic signature.
@@ -16,7 +16,7 @@ pub enum SignatureBytes {
     /// A cryptographic signature that is represented as a set of [Mpi]s.
     ///
     /// This format has been used for all OpenPGP cryptographic signatures in RFCs 4880 and 6637.
-    Mpis(Vec<MpiBytes>),
+    Mpis(Vec<Mpi>),
 
     /// A cryptographic signature that is represented in native format.
     ///
@@ -52,7 +52,7 @@ impl SignatureBytes {
     }
 }
 
-impl<'a> TryFrom<&'a SignatureBytes> for &'a [MpiBytes] {
+impl<'a> TryFrom<&'a SignatureBytes> for &'a [Mpi] {
     type Error = crate::errors::Error;
 
     fn try_from(value: &'a SignatureBytes) -> std::result::Result<Self, Self::Error> {
@@ -78,8 +78,8 @@ impl<'a> TryFrom<&'a SignatureBytes> for &'a [u8] {
     }
 }
 
-impl From<Vec<MpiBytes>> for SignatureBytes {
-    fn from(value: Vec<MpiBytes>) -> Self {
+impl From<Vec<Mpi>> for SignatureBytes {
+    fn from(value: Vec<Mpi>) -> Self {
         SignatureBytes::Mpis(value)
     }
 }

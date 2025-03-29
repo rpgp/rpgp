@@ -19,7 +19,7 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::Result,
-    types::{Ed25519PublicParams, EddsaLegacyPublicParams, MpiBytes},
+    types::{Ed25519PublicParams, EddsaLegacyPublicParams, Mpi},
 };
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
@@ -80,8 +80,8 @@ impl SecretKey {
         Ok(Self { secret })
     }
 
-    pub(crate) fn as_mpi(&self) -> MpiBytes {
-        MpiBytes::from_slice(&self.secret.to_bytes())
+    pub(crate) fn as_mpi(&self) -> Mpi {
+        Mpi::from_slice(&self.secret.to_bytes())
     }
 }
 

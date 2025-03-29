@@ -1,13 +1,13 @@
 use std::io::{self, BufRead};
 
-use crate::{errors::Result, ser::Serialize, types::MpiBytes};
+use crate::{errors::Result, ser::Serialize, types::Mpi};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct ElgamalPublicParams {
-    p: MpiBytes,
-    g: MpiBytes,
-    y: MpiBytes,
+    p: Mpi,
+    g: Mpi,
+    y: Mpi,
     #[cfg_attr(test, proptest(value = "false"))]
     encrypt_only: bool,
 }
@@ -19,11 +19,11 @@ impl ElgamalPublicParams {
 
     pub fn try_from_reader<B: BufRead>(mut i: B, encrypt_only: bool) -> Result<Self> {
         // MPI of Elgamal prime p
-        let p = MpiBytes::try_from_reader(&mut i)?;
+        let p = Mpi::try_from_reader(&mut i)?;
         // MPI of Elgamal group generator g
-        let g = MpiBytes::try_from_reader(&mut i)?;
+        let g = Mpi::try_from_reader(&mut i)?;
         // MPI of Elgamal public key value y (= g**x mod p where x is secret)
-        let y = MpiBytes::try_from_reader(&mut i)?;
+        let y = Mpi::try_from_reader(&mut i)?;
 
         let params = ElgamalPublicParams {
             p,

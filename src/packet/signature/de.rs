@@ -18,7 +18,7 @@ use crate::{
     },
     parsing_reader::BufReadParsing,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion,
+        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
         PacketLength, RevocationKey, SignatureBytes, Tag,
     },
 };
@@ -305,12 +305,12 @@ fn subpacket<B: BufRead>(
 fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<SignatureBytes> {
     match typ {
         PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
-            let v = MpiBytes::try_from_reader(&mut i)?;
+            let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
         }
         PublicKeyAlgorithm::DSA | PublicKeyAlgorithm::ECDSA | &PublicKeyAlgorithm::EdDSALegacy => {
-            let a = MpiBytes::try_from_reader(&mut i)?;
-            let b = MpiBytes::try_from_reader(&mut i)?;
+            let a = Mpi::try_from_reader(&mut i)?;
+            let b = Mpi::try_from_reader(&mut i)?;
 
             Ok(SignatureBytes::Mpis(vec![a, b]))
         }
@@ -321,8 +321,8 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         }
 
         &PublicKeyAlgorithm::Elgamal => {
-            let a = MpiBytes::try_from_reader(&mut i)?;
-            let b = MpiBytes::try_from_reader(&mut i)?;
+            let a = Mpi::try_from_reader(&mut i)?;
+            let b = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![a, b]))
         }
         &PublicKeyAlgorithm::Private100
@@ -336,7 +336,7 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         | &PublicKeyAlgorithm::Private108
         | &PublicKeyAlgorithm::Private109
         | &PublicKeyAlgorithm::Private110 => {
-            let v = MpiBytes::try_from_reader(&mut i)?;
+            let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
         }
         PublicKeyAlgorithm::ElgamalEncrypt => {
