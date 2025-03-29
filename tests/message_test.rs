@@ -378,8 +378,30 @@ fn pgp6_decrypt() {
     let (msg, _) = Message::from_armor_file("./tests/pgp6/hello.msg").expect("msg");
     dbg!(&msg);
 
-    let dec = msg.decrypt(&Password::empty(), &skey).expect("decrypt");
-    let mut dec = dec.decompress().expect("decompress");
+    let Message::Encrypted { esk, mut edata, .. } = msg else {
+        panic!("not encrypted");
+    };
+
+    assert_eq!(esk.len(), 1);
+
+    let esk = &esk[0];
+    let pgp::Esk::PublicKeyEncryptedSessionKey(pkesk) = esk else {
+        panic!("expected pkesk");
+    };
+
+    let sk = skey
+        .decrypt_session_key(
+            &Password::empty(),
+            pkesk.values().unwrap(),
+            pgp::types::EskType::V3_4,
+        )
+        .unwrap()
+        .unwrap();
+
+    edata.decrypt_legacy(&sk).expect("decrypt");
+
+    let dec = Message::from_bytes(edata).unwrap();
+    let mut dec = dec.decompress().unwrap();
 
     let decrypted = dec.as_data_string().unwrap();
     assert_eq!(&decrypted, "hello world\n");
