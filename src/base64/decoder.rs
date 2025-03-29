@@ -132,7 +132,7 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_xorshift::XorShiftRng;
 
-    use crate::base64_reader::Base64Reader;
+    use crate::base64::Base64Reader;
 
     fn test_roundtrip(cap: usize, n: usize, insert_lines: bool) {
         let rng = &mut XorShiftRng::from_seed([

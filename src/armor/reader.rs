@@ -15,8 +15,8 @@ use nom::multi::many0;
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::IResult;
 
-use crate::base64_decoder::Base64Decoder;
-use crate::base64_reader::Base64Reader;
+use crate::base64::Base64Decoder;
+use crate::base64::Base64Reader;
 use crate::errors::Result;
 use crate::ser::Serialize;
 
