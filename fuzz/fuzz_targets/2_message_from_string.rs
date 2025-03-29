@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::composed::{Deserializable, Message};
+use pgp::composed::Message;
 
 // build message from string
 fuzz_target!(|data: &str| {
