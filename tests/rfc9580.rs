@@ -2,8 +2,8 @@ use std::fs::File;
 
 use pgp::{
     composed::{
-        cleartext::CleartextSignedMessage, KeyType, Message, MessageBuilder,
-        SecretKeyParamsBuilder, SignedPublicKey, SignedSecretKey,
+        CleartextSignedMessage, KeyType, Message, MessageBuilder, SecretKeyParamsBuilder,
+        SignedPublicKey, SignedSecretKey,
     },
     crypto::{
         aead::{AeadAlgorithm, ChunkSize},
@@ -38,7 +38,7 @@ const CASES_PRE_9580: &[&str] = &[
 
 fn load_ssk(filename: &str) -> SignedSecretKey {
     let (mut iter, _) =
-        pgp::composed::signed_key::from_reader_many(File::open(filename).unwrap()).expect("ok");
+        pgp::composed::PublicOrSecret::from_reader_many(File::open(filename).unwrap()).expect("ok");
     let pos = iter.next().expect("some").expect("ok");
 
     pos.try_into().unwrap()
@@ -203,7 +203,7 @@ fn rfc9580_legacy_25519_illegal_in_v6() {
     // -- Try (and fail) to load a v6/legacy key --
     let key_file = File::open("tests/rfc9580/v6-legacy_illegal/tsk.asc").unwrap();
 
-    let (mut iter, _) = pgp::composed::signed_key::from_reader_many(key_file).expect("ok");
+    let (mut iter, _) = pgp::composed::PublicOrSecret::from_reader_many(key_file).expect("ok");
     let res = iter.next().expect("result");
 
     // we expect an error about the illegal legacy parameters in a v6 key

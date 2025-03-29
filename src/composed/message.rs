@@ -1,9 +1,8 @@
 mod builder;
 mod decrypt;
 mod parser;
+mod reader;
 mod types;
-
-pub mod reader;
 
 pub use self::{
     builder::{
@@ -11,5 +10,6 @@ pub use self::{
         NoEncryption, DEFAULT_PARTIAL_CHUNK_SIZE,
     },
     decrypt::*,
+    reader::*,
     types::*,
 };

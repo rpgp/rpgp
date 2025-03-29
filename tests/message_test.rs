@@ -12,10 +12,7 @@ extern crate log;
 use std::fs::File;
 
 use pgp::{
-    composed::{
-        cleartext::CleartextSignedMessage, Deserializable, Message, SignedPublicKey,
-        SignedSecretKey,
-    },
+    composed::{CleartextSignedMessage, Deserializable, Message, SignedPublicKey, SignedSecretKey},
     types::{KeyDetails, KeyId, Password},
 };
 

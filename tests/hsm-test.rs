@@ -327,7 +327,7 @@ fn card_decrypt() {
         let (keyfile, msgfile, input, out) = case;
 
         let key_file = File::open(keyfile).unwrap();
-        let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
+        let (mut x, _) = pgp::composed::PublicOrSecret::from_reader_many(key_file).unwrap();
         let key: SignedSecretKey = x.next().unwrap().unwrap().try_into().unwrap();
 
         let pubkey: SignedPublicKey = key.into();
@@ -451,7 +451,7 @@ fn card_sign() {
         let (keyfile, sig_creation, input, out) = case;
 
         let key_file = File::open(keyfile).unwrap();
-        let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
+        let (mut x, _) = pgp::composed::PublicOrSecret::from_reader_many(key_file).unwrap();
         let key: SignedSecretKey = x.next().unwrap().unwrap().try_into().unwrap();
 
         let pubkey: SignedPublicKey = key.into();

@@ -1,10 +1,12 @@
-pub mod cleartext;
-pub mod key;
-pub mod message;
-pub mod signed_key;
-
 mod any;
+mod cleartext;
+mod key;
+mod message;
 mod shared;
 mod signature;
+mod signed_key;
 
-pub use self::{any::Any, key::*, message::*, shared::Deserializable, signature::*, signed_key::*};
+pub use self::{
+    any::Any, cleartext::CleartextSignedMessage, key::*, message::*, shared::Deserializable,
+    signature::*, signed_key::*,
+};

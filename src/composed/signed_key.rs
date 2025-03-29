@@ -15,7 +15,7 @@
 //!
 //! ```rust
 //! # const DATA :&'static [u8] = b"Hello World";
-//! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, key::SecretKeyParamsBuilder};
+//! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, SecretKeyParamsBuilder};
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! # use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
@@ -104,7 +104,6 @@
 //! ```
 
 mod key_parser;
-
 mod parse;
 mod public;
 mod secret;

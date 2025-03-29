@@ -13,97 +13,99 @@ use crate::{
     types::Tag,
 };
 
-/// Parses a list of secret and public keys, from either ASCII-armored or binary OpenPGP data.
-///
-/// Returns an iterator of public or secret keys and a BTreeMap containing armor headers
-/// (None, if the data was unarmored)
-#[allow(clippy::type_complexity)]
-pub fn from_reader_many<'a, R: io::Read + 'a>(
-    input: R,
-) -> Result<(
-    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
-    Option<armor::Headers>,
-)> {
-    from_reader_many_buf(BufReader::new(input))
-}
-
-#[allow(clippy::type_complexity)]
-pub fn from_reader_many_buf<'a, R: io::BufRead + 'a>(
-    mut input: R,
-) -> Result<(
-    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
-    Option<armor::Headers>,
-)> {
-    if !crate::composed::shared::is_binary(&mut input)? {
-        let (keys, headers) = from_armor_many_buf(input)?;
-        Ok((keys, Some(headers)))
-    } else {
-        Ok((from_bytes_many(input)?, None))
+impl PublicOrSecret {
+    /// Parses a list of secret and public keys, from either ASCII-armored or binary OpenPGP data.
+    ///
+    /// Returns an iterator of public or secret keys and a BTreeMap containing armor headers
+    /// (None, if the data was unarmored)
+    #[allow(clippy::type_complexity)]
+    pub fn from_reader_many<'a, R: io::Read + 'a>(
+        input: R,
+    ) -> Result<(
+        Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+        Option<armor::Headers>,
+    )> {
+        Self::from_reader_many_buf(BufReader::new(input))
     }
-}
 
-/// Parses a list of secret and public keys from ascii armored text.
-#[allow(clippy::type_complexity)]
-pub fn from_armor_many<'a, R: io::Read + 'a>(
-    input: R,
-) -> Result<(
-    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
-    armor::Headers,
-)> {
-    from_armor_many_buf(BufReader::new(input))
-}
-
-/// Parses a list of secret and public keys from ascii armored text.
-#[allow(clippy::type_complexity)]
-pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
-    input: R,
-) -> Result<(
-    Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
-    armor::Headers,
-)> {
-    let mut dearmor = armor::Dearmor::new(input);
-    dearmor.read_header()?;
-    // Safe to unwrap, as read_header succeeded.
-    let typ = dearmor
-        .typ
-        .ok_or_else(|| format_err!("dearmor failed to retrieve armor type"))?;
-
-    // TODO: add typ information to the key possibly?
-    match typ {
-        // Standard PGP types
-        BlockType::PublicKey | BlockType::PrivateKey | BlockType::File => {
-            let headers = dearmor.headers.clone(); // FIXME: avoid clone
-                                                   // TODO: check that the result is what it actually said.
-            Ok((from_bytes_many(BufReader::new(dearmor))?, headers))
-        }
-        BlockType::Message
-        | BlockType::MultiPartMessage(_, _)
-        | BlockType::Signature
-        | BlockType::CleartextMessage => {
-            bail!("unexpected block type: {}", typ)
-        }
-        BlockType::PublicKeyPKCS1(_)
-        | BlockType::PublicKeyPKCS8
-        | BlockType::PublicKeyOpenssh
-        | BlockType::PrivateKeyPKCS1(_)
-        | BlockType::PrivateKeyPKCS8
-        | BlockType::PrivateKeyOpenssh => {
-            unimplemented_err!("key format {}", typ);
+    #[allow(clippy::type_complexity)]
+    pub fn from_reader_many_buf<'a, R: io::BufRead + 'a>(
+        mut input: R,
+    ) -> Result<(
+        Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+        Option<armor::Headers>,
+    )> {
+        if !crate::composed::shared::is_binary(&mut input)? {
+            let (keys, headers) = Self::from_armor_many_buf(input)?;
+            Ok((keys, Some(headers)))
+        } else {
+            Ok((Self::from_bytes_many(input)?, None))
         }
     }
-}
 
-/// Parses a list of secret and public keys from raw bytes.
-pub fn from_bytes_many<'a>(
-    bytes: impl io::BufRead + 'a,
-) -> Result<Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>> {
-    let packets = PacketParser::new(bytes)
-        .filter_map(crate::composed::shared::filter_parsed_packet_results)
-        .peekable();
+    /// Parses a list of secret and public keys from ascii armored text.
+    #[allow(clippy::type_complexity)]
+    pub fn from_armor_many<'a, R: io::Read + 'a>(
+        input: R,
+    ) -> Result<(
+        Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+        armor::Headers,
+    )> {
+        Self::from_armor_many_buf(BufReader::new(input))
+    }
 
-    Ok(Box::new(PubPrivIterator {
-        inner: Some(packets),
-    }))
+    /// Parses a list of secret and public keys from ascii armored text.
+    #[allow(clippy::type_complexity)]
+    pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
+        input: R,
+    ) -> Result<(
+        Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>,
+        armor::Headers,
+    )> {
+        let mut dearmor = armor::Dearmor::new(input);
+        dearmor.read_header()?;
+        // Safe to unwrap, as read_header succeeded.
+        let typ = dearmor
+            .typ
+            .ok_or_else(|| format_err!("dearmor failed to retrieve armor type"))?;
+
+        // TODO: add typ information to the key possibly?
+        match typ {
+            // Standard PGP types
+            BlockType::PublicKey | BlockType::PrivateKey | BlockType::File => {
+                let headers = dearmor.headers.clone(); // FIXME: avoid clone
+                                                       // TODO: check that the result is what it actually said.
+                Ok((Self::from_bytes_many(BufReader::new(dearmor))?, headers))
+            }
+            BlockType::Message
+            | BlockType::MultiPartMessage(_, _)
+            | BlockType::Signature
+            | BlockType::CleartextMessage => {
+                bail!("unexpected block type: {}", typ)
+            }
+            BlockType::PublicKeyPKCS1(_)
+            | BlockType::PublicKeyPKCS8
+            | BlockType::PublicKeyOpenssh
+            | BlockType::PrivateKeyPKCS1(_)
+            | BlockType::PrivateKeyPKCS8
+            | BlockType::PrivateKeyOpenssh => {
+                unimplemented_err!("key format {}", typ);
+            }
+        }
+    }
+
+    /// Parses a list of secret and public keys from raw bytes.
+    pub fn from_bytes_many<'a>(
+        bytes: impl io::BufRead + 'a,
+    ) -> Result<Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>> {
+        let packets = PacketParser::new(bytes)
+            .filter_map(crate::composed::shared::filter_parsed_packet_results)
+            .peekable();
+
+        Ok(Box::new(PubPrivIterator {
+            inner: Some(packets),
+        }))
+    }
 }
 
 pub struct PubPrivIterator<I: Sized + Iterator<Item = Result<Packet>>> {

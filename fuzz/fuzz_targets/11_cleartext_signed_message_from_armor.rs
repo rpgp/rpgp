@@ -6,7 +6,7 @@ use libfuzzer_sys::fuzz_target;
 fuzz_target!(|data: &[u8]| {
     // FUZZER RESULT this can panic on some inputs
     // finding RPG-15 in ROS report 2024, fixed with 0.14.1
-    let message_res = pgp::composed::cleartext::CleartextSignedMessage::from_armor(data);
+    let message_res = pgp::composed::CleartextSignedMessage::from_armor(data);
 
     match message_res {
         // parsing failed, we're not interested further

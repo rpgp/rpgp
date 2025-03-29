@@ -3,7 +3,7 @@ use std::io::BufRead;
 use log::debug;
 
 use crate::{
-    composed::reader::PacketBodyReader,
+    composed::PacketBodyReader,
     errors::{Error, Result},
     packet::{Packet, PacketHeader},
 };

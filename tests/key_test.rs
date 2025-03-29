@@ -12,7 +12,7 @@ use chrono::{DateTime, Utc};
 use num_traits::ToPrimitive;
 use pgp::{
     armor,
-    composed::{signed_key::*, Deserializable},
+    composed::{Deserializable, PublicOrSecret, SignedPublicKey, SignedSecretKey},
     crypto::{
         ecdsa::SecretKey as ECDSASecretKey, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
@@ -814,7 +814,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let (pk, headers) = from_armor_many(f).unwrap();
+    let (pk, headers) = PublicOrSecret::from_armor_many(f).unwrap();
     let pk: Vec<PublicOrSecret> = pk.collect::<Result<_, _>>().unwrap();
     assert!(!pk.is_empty(), "no keys found");
 
@@ -862,7 +862,8 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
         // println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
         // and parse them again
-        let (iter2, headers2) = from_armor_many(&serialized[..]).expect("failed to parse round2");
+        let (iter2, headers2) =
+            PublicOrSecret::from_armor_many(&serialized[..]).expect("failed to parse round2");
 
         assert_eq!(headers, headers2);
         assert_eq!(iter2.count(), 1);
@@ -886,7 +887,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
 fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let pk = from_bytes_many(BufReader::new(f)).unwrap();
+    let pk = PublicOrSecret::from_bytes_many(BufReader::new(f)).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         if verify {
@@ -897,7 +898,7 @@ fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
         let serialized = parsed.to_armored_bytes(None.into()).unwrap();
 
         // and parse them again
-        let parsed2 = from_armor_many(&serialized[..])
+        let parsed2 = PublicOrSecret::from_armor_many(&serialized[..])
             .expect("failed to parse round2")
             .0
             .collect::<Vec<_>>();
@@ -1233,7 +1234,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
     let _ = pretty_env_logger::try_init();
 
     let f = read_file(Path::new("./tests/autocrypt/").join(key));
-    let (pk, _headers) = from_armor_many(f).unwrap();
+    let (pk, _headers) = PublicOrSecret::from_armor_many(f).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         parsed.verify().expect("invalid key");
@@ -1254,7 +1255,7 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
         println!("{}", ::std::str::from_utf8(&serialized).unwrap());
 
         // and parse them again
-        let parsed2 = from_armor_many(&serialized[..])
+        let parsed2 = PublicOrSecret::from_armor_many(&serialized[..])
             .expect("failed to parse round2")
             .0
             .collect::<Vec<_>>();
@@ -1336,7 +1337,7 @@ fn load_adsk_pub() {
 
     let key_file = File::open("tests/adsk.pub.asc").unwrap();
 
-    let (mut iter, _) = pgp::composed::signed_key::from_reader_many(key_file).expect("ok");
+    let (mut iter, _) = pgp::composed::PublicOrSecret::from_reader_many(key_file).expect("ok");
 
     let public: SignedPublicKey = match iter.next().expect("result") {
         Ok(pos) => {
@@ -1375,7 +1376,7 @@ fn load_adsk_sec() {
 
     let key_file = File::open("tests/adsk.sec.asc").unwrap();
 
-    let (mut iter, _) = pgp::composed::signed_key::from_reader_many(key_file).expect("ok");
+    let (mut iter, _) = pgp::composed::PublicOrSecret::from_reader_many(key_file).expect("ok");
 
     let sec: SignedSecretKey = match iter.next().expect("result") {
         Ok(pos) => {
