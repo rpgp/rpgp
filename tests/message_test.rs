@@ -639,6 +639,33 @@ fn test_invalid_multi_message() {
 }
 
 #[test]
+fn test_packet_excess_data() {
+    // Message from the test "Packet excess consumption" in the interop suite.
+
+    // The message contains extra tailing data inside the compressed packet, which the decompressor
+    // ignores. The test checks that the consumer skips this data and successfully processes the
+    // message.
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    // 100kbyte of excess trailing data in the compressed packet
+    let (message, _) = Message::from_armor_file("./tests/tests/excess_100k.msg").expect("ok");
+
+    dbg!(&message);
+    let msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+    let mut msg = msg.decompress().unwrap();
+
+    dbg!(&msg);
+    let data = msg.as_data_vec().unwrap();
+
+    assert_eq!(&data, b"Hello World :)");
+}
+
+#[test]
 fn test_two_messages() {
     // "Two messages, concatenated" from the OpenPGP interoperability test suite
 
