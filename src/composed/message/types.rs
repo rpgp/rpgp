@@ -915,8 +915,16 @@ impl<'a> Message<'a> {
 
         match inner {
             MessageReader::Compressed(r) => {
-                let inner_reader = r.get_mut().get_mut();
-                let parser = crate::packet::PacketParser::new(inner_reader);
+                let compressed_body_reader = r.get_mut();
+
+                // discard excess data in the compressed packet
+                let excess = compressed_body_reader.drain()?;
+                if excess > 0 {
+                    debug!("discarded excess data in compressed packet: {excess}");
+                }
+
+                let message_reader = compressed_body_reader.get_mut();
+                let parser = crate::packet::PacketParser::new(message_reader);
                 check_next_packet(parser)?;
             }
             MessageReader::Edata(e) => {

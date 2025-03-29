@@ -182,7 +182,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                                 if reader.limit() > 0 {
                                     return Err(io::Error::new(
                                         io::ErrorKind::Other,
-                                        "Unexpected trailing data in final Fixed chunk",
+                                        "Fixed chunk was shorter than expected",
                                     ));
                                 }
 
