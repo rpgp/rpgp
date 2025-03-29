@@ -1,11 +1,11 @@
 #![no_main]
 
+use libfuzzer_sys::fuzz_target;
+use pgp::types::Password;
 use pgp::{
     composed::{Deserializable, Message},
     SignedSecretKey,
 };
-
-use libfuzzer_sys::fuzz_target;
 
 // build message and try decryption with a genuine private key
 fuzz_target!(|data: &[u8]| {
@@ -55,7 +55,7 @@ QqrhcYJ4IBFau0avBvi7QjsSOvePvIKFO/DuDIECRpLZjRW+VKisag==
 
             let (decrypt_key, _headers) = SignedSecretKey::from_string(key_input).unwrap();
             // attempt decryption
-            let decryption_res = message.decrypt(|| "".into(), &[&decrypt_key]);
+            let decryption_res = message.decrypt(&Password::empty(), &decrypt_key);
 
             match decryption_res {
                 // the fuzzer is not clever enough to encrypt anything to the public key
