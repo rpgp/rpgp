@@ -138,7 +138,7 @@ jobs:
       run: cargo install cross
 
     - name: test
-      run: cross test --all --target ${{ matrix.target }}
+      run: cross test --release --all --target ${{ matrix.target }}
 
   check_wasm:
     name: Check wasm targets
