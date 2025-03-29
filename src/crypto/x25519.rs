@@ -1,3 +1,5 @@
+use std::cmp::PartialEq;
+
 use hkdf::Hkdf;
 use log::debug;
 use rand::{CryptoRng, Rng};
@@ -5,21 +7,50 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::{aes_kw, Decryptor, KeyParams};
+use crate::crypto::{aes_kw, Decryptor};
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams};
+use crate::types::X25519PublicParams;
 
 /// Secret key for X25519
-#[derive(Clone, derive_more::Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey {
     #[debug("..")]
-    pub(crate) secret: [u8; 32],
+    pub(crate) secret: StaticSecret,
 }
 
-impl KeyParams for SecretKey {
-    type KeyParams = ();
+impl From<&SecretKey> for X25519PublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self {
+            key: PublicKey::from(&value.secret),
+        }
+    }
+}
 
-    fn key_params(&self) {}
+impl PartialEq for SecretKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.secret.as_bytes().eq(other.secret.as_bytes())
+    }
+}
+
+impl Eq for SecretKey {}
+
+impl SecretKey {
+    /// Generate an X25519 `SecretKey`.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
+        let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
+        rng.fill_bytes(&mut *secret_key_bytes);
+
+        let secret = StaticSecret::from(*secret_key_bytes);
+        SecretKey { secret }
+    }
+
+    pub(crate) fn try_from_array(
+        _pub_params: &X25519PublicParams,
+        secret: [u8; 32],
+    ) -> Result<Self> {
+        let secret = x25519_dalek::StaticSecret::from(secret);
+        Ok(Self { secret })
+    }
 }
 
 pub struct EncryptionFields<'a> {
@@ -44,7 +75,7 @@ impl Decryptor for SecretKey {
             let their_public = x25519_dalek::PublicKey::from(data.ephemeral_public_point);
 
             // private key of the recipient.
-            let our_secret = StaticSecret::from(self.secret);
+            let our_secret = &self.secret;
 
             // derive shared secret
             let shared_secret = our_secret.diffie_hellman(&their_public);
@@ -80,24 +111,6 @@ pub fn derive_session_key(
     Ok(decrypted_key)
 }
 
-/// Generate an X25519 KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(mut rng: R) -> (PublicParams, PlainSecretParams) {
-    let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
-    rng.fill_bytes(&mut *secret_key_bytes);
-
-    let secret = StaticSecret::from(*secret_key_bytes);
-    let public = PublicKey::from(&secret).to_bytes();
-
-    // secret key
-    // FIXME: is clamping needed here?
-    let q_raw = curve25519_dalek::scalar::clamp_integer(secret.to_bytes());
-
-    (
-        PublicParams::X25519 { public },
-        PlainSecretParams::X25519(q_raw),
-    )
-}
-
 /// HKDF for X25519
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for->
 pub fn hkdf(
@@ -131,7 +144,7 @@ pub fn hkdf(
 /// Returns (ephemeral, encrypted session key)
 pub fn encrypt<R: CryptoRng + Rng>(
     mut rng: R,
-    recipient_public: [u8; 32],
+    recipient_public: &x25519_dalek::PublicKey,
     plain: &[u8],
 ) -> Result<([u8; 32], Vec<u8>)> {
     debug!("X25519 encrypt");
@@ -145,15 +158,12 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     let (ephemeral_public, shared_secret) = {
-        // create montgomery point
-        let their_public = x25519_dalek::PublicKey::from(recipient_public);
-
         let mut ephemeral_secret_key_bytes = Zeroizing::new([0u8; 32]);
         rng.fill_bytes(&mut *ephemeral_secret_key_bytes);
         let our_secret = StaticSecret::from(*ephemeral_secret_key_bytes);
 
         // derive shared secret
-        let shared_secret = our_secret.diffie_hellman(&their_public);
+        let shared_secret = our_secret.diffie_hellman(recipient_public);
 
         // Encode public point
         let ephemeral_public = x25519_dalek::PublicKey::from(&our_secret);
@@ -164,7 +174,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // hkdf key derivation
     let okm = hkdf(
         ephemeral_public.as_bytes(),
-        &recipient_public,
+        recipient_public.as_bytes(),
         shared_secret.as_bytes(),
     )?;
 
@@ -180,11 +190,11 @@ mod tests {
 
     use std::ops::Deref;
 
+    use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
     use super::*;
-    use crate::types::SecretKeyRepr;
 
     #[test]
     fn x25519_hkdf() {
@@ -232,7 +242,7 @@ mod tests {
 
         // test SecretKey::decrypt
         let sk = SecretKey {
-            secret: long_lived_private,
+            secret: long_lived_private.into(),
         };
         let decrypted2 = sk
             .decrypt(EncryptionFields {
@@ -248,15 +258,8 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::from_seed([0u8; 32]);
-
-        let (pkey, skey) = generate_key(&mut rng);
-
-        let PublicParams::X25519 { public } = pkey else {
-            panic!("invalid key generated")
-        };
-        let SecretKeyRepr::X25519(ref secret) = skey.as_ref().as_repr(&pkey).unwrap() else {
-            panic!("invalid key generated")
-        };
+        let skey = SecretKey::generate(&mut rng);
+        let pub_params: X25519PublicParams = (&skey).into();
 
         for text_size in (8..=248).step_by(8) {
             for _i in 0..10 {
@@ -266,18 +269,31 @@ mod tests {
                 let mut plain = vec![0u8; text_size];
                 rng.fill_bytes(&mut plain);
 
-                let (ephemeral, enc_sk) = encrypt(&mut rng, public, &plain[..]).unwrap();
+                let (ephemeral, enc_sk) = encrypt(&mut rng, &pub_params.key, &plain[..]).unwrap();
 
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
-                    recipient_public: public,
+                    recipient_public: pub_params.key.to_bytes(),
                     encrypted_session_key: enc_sk.deref(),
                 };
 
-                let decrypted = secret.decrypt(data).unwrap();
+                let decrypted = skey.decrypt(data).unwrap();
 
                 assert_eq!(&plain[..], &decrypted[..]);
             }
+        }
+    }
+
+    impl Arbitrary for SecretKey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<[u8; 32]>()
+                .prop_map(|b| SecretKey {
+                    secret: StaticSecret::from(b),
+                })
+                .boxed()
         }
     }
 }

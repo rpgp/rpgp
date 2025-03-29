@@ -1,11 +1,13 @@
 use std::io;
 use std::io::Write;
 
-use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use byteorder::WriteBytesExt;
+use bytes::{Buf, Bytes, BytesMut};
 use digest::Digest;
+use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::checksum;
-use crate::errors::{Error, Result};
+use crate::errors::{InvalidInputSnafu, Result};
 use crate::ser::Serialize;
 use crate::types::*;
 
@@ -13,13 +15,16 @@ use crate::types::*;
 pub struct EncryptedSecretParams {
     /// The encrypted data, including the checksum.
     #[debug("{}", hex::encode(data))]
-    data: Vec<u8>,
+    data: Bytes,
     /// S2k Params
     s2k_params: S2kParams,
 }
 
+// Fake impl, we don't need to zeroize, as everything is encrypted
+impl ZeroizeOnDrop for EncryptedSecretParams {}
+
 impl EncryptedSecretParams {
-    pub fn new(data: Vec<u8>, s2k_params: S2kParams) -> Self {
+    pub fn new(data: Bytes, s2k_params: S2kParams) -> Self {
         assert_ne!(s2k_params, S2kParams::Unprotected, "invalid string to key");
         EncryptedSecretParams { data, s2k_params }
     }
@@ -52,15 +57,12 @@ impl EncryptedSecretParams {
         }
     }
 
-    pub fn unlock<F>(
+    pub fn unlock(
         &self,
-        pw: F,
+        pw: &Password,
         pub_key: &(impl PublicKeyTrait + Serialize),
         secret_tag: Option<Tag>,
-    ) -> Result<PlainSecretParams>
-    where
-        F: FnOnce() -> String,
-    {
+    ) -> Result<PlainSecretParams> {
         // Argon2 is only used with AEAD (S2K usage octet 253).
         //
         // An implementation MUST NOT create and MUST reject as malformed any secret key packet
@@ -113,24 +115,23 @@ impl EncryptedSecretParams {
         match &self.s2k_params {
             S2kParams::Unprotected => unreachable!(),
             S2kParams::LegacyCfb { sym_alg, iv } => {
-                let key = md5::Md5::digest(pw());
+                let key = md5::Md5::digest(pw.read());
 
                 // Decryption
-                let mut plaintext = self.data.clone();
+                let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
 
                 // Checksum
                 if plaintext.len() < 2 {
-                    return Err(Error::InvalidInput);
-                }
-                let (plaintext, checksum) = plaintext.split_at(self.data.len() - 2);
-
-                let calculated_checksum = checksum::calculate_simple(plaintext);
-                if calculated_checksum != BigEndian::read_u16(checksum) {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::try_from_reader(
+                    plaintext.reader(),
+                    pub_key.version(),
+                    alg,
+                    params,
+                )
             }
             S2kParams::Aead {
                 sym_alg,
@@ -145,11 +146,11 @@ impl EncryptedSecretParams {
                         };
 
                         if self.data.len() < tag_size {
-                            return Err(Error::InvalidInput);
+                            return Err(InvalidInputSnafu.build());
                         }
 
                         // derive key
-                        let derived = s2k.derive_key(&pw(), 32)?;
+                        let derived = s2k.derive_key(&pw.read(), 32)?;
 
                         let Some(secret_tag) = secret_tag else {
                             bail!("no secret_tag provided");
@@ -159,23 +160,26 @@ impl EncryptedSecretParams {
                             s2k_usage_aead(&derived, secret_tag, pub_key, *sym_alg, *aead_mode)?;
 
                         // AEAD decrypt
-                        let (ciphertext, tag) = self.data.split_at(self.data.len() - tag_size);
-
-                        let mut decrypt: Vec<_> = ciphertext.to_vec();
-                        aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, tag, &mut decrypt)?;
+                        let mut ciphertext: BytesMut = self.data.clone().into();
+                        aead_mode.decrypt_in_place(sym_alg, &okm, nonce, &ad, &mut ciphertext)?;
 
                         // "decrypt" now contains the decrypted key material
-                        PlainSecretParams::from_slice(&decrypt, alg, pub_key.public_params())
+                        PlainSecretParams::try_from_reader_no_checksum(
+                            ciphertext.reader(),
+                            pub_key.version(),
+                            alg,
+                            pub_key.public_params(),
+                        )
                     }
 
                     _ => bail!("S2K usage AEAD is not allowed with S2K type {:?}", s2k.id()),
                 }
             }
             S2kParams::Cfb { sym_alg, s2k, iv } => {
-                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+                let key = s2k.derive_key(&pw.read(), sym_alg.key_size())?;
 
                 // Decryption
-                let mut plaintext = self.data.clone();
+                let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
 
                 // Checksum
@@ -183,34 +187,37 @@ impl EncryptedSecretParams {
                 // Check SHA-1 hash if it is present.
                 // See <https://www.rfc-editor.org/rfc/rfc9580.html#section-5.5.3-3.5.1> for details.
                 if plaintext.len() < 20 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
-                let (plaintext, expected_sha1) = plaintext.split_at(self.data.len() - 20);
+                let (plaintext, expected_sha1) = plaintext.as_ref().split_at(self.data.len() - 20);
                 let calculated_sha1 = checksum::calculate_sha1([plaintext])?;
                 if expected_sha1 != calculated_sha1 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::try_from_reader_no_checksum(
+                    plaintext.reader(),
+                    pub_key.version(),
+                    alg,
+                    params,
+                )
             }
             S2kParams::MalleableCfb { sym_alg, s2k, iv } => {
-                let key = s2k.derive_key(&pw(), sym_alg.key_size())?;
+                let key = s2k.derive_key(&pw.read(), sym_alg.key_size())?;
 
                 // Decryption
-                let mut plaintext = self.data.clone();
+                let mut plaintext: BytesMut = self.data.clone().into();
                 sym_alg.decrypt_with_iv_regular(&key, iv, &mut plaintext)?;
                 if plaintext.len() < 2 {
-                    return Err(Error::InvalidInput);
+                    return Err(InvalidInputSnafu.build());
                 }
 
-                // Checksum
-                let (plaintext, checksum) = plaintext.split_at(self.data.len() - 2);
-                let calculated_checksum = checksum::calculate_simple(plaintext);
-                if calculated_checksum != BigEndian::read_u16(checksum) {
-                    return Err(Error::InvalidInput);
-                }
-
-                PlainSecretParams::from_slice(plaintext, alg, params)
+                PlainSecretParams::try_from_reader(
+                    plaintext.reader(),
+                    pub_key.version(),
+                    alg,
+                    params,
+                )
             }
         }
     }
@@ -284,5 +291,42 @@ impl EncryptedSecretParams {
         writer.write_all(&self.data)?;
 
         Ok(())
+    }
+
+    pub(crate) fn write_len(&self, version: KeyVersion) -> usize {
+        let mut sum = 1;
+        match &self.s2k_params {
+            S2kParams::Unprotected => {
+                panic!("encrypted secret params should not have an unencrypted identifier")
+            }
+            S2kParams::LegacyCfb { ref iv, .. } => {
+                sum += iv.len();
+            }
+            S2kParams::Aead { s2k, ref nonce, .. } => {
+                sum += 1 + 1;
+
+                if version == KeyVersion::V6 {
+                    sum += 1;
+                }
+                sum += s2k.write_len();
+                sum += nonce.len();
+            }
+            S2kParams::Cfb { s2k, ref iv, .. } | S2kParams::MalleableCfb { s2k, ref iv, .. } => {
+                sum += 1;
+                if version == KeyVersion::V6 && matches!(self.s2k_params, S2kParams::Cfb { .. }) {
+                    sum += 1;
+                }
+
+                sum += s2k.write_len();
+                sum += iv.len();
+            }
+        }
+
+        if self.s2k_params != S2kParams::Unprotected && version == KeyVersion::V6 {
+            sum += 1;
+        }
+
+        sum += self.data.len();
+        sum
     }
 }

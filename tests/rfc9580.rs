@@ -1,12 +1,13 @@
 use std::fs::File;
 
+use pgp::crypto::aead::ChunkSize;
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
-use pgp::packet::LiteralData;
 use pgp::types::KeyVersion;
+use pgp::MessageBuilder;
 use pgp::{
-    cleartext::CleartextSignedMessage, Deserializable, KeyType, Message, SecretKeyParamsBuilder,
-    SignedPublicKey, SignedSecretKey,
+    cleartext::CleartextSignedMessage, KeyType, Message, SecretKeyParamsBuilder, SignedPublicKey,
+    SignedSecretKey,
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -43,11 +44,10 @@ fn try_decrypt(keyfile: &str, msg_file: &str) {
     let ssk = load_ssk(keyfile);
 
     // load seipdv1 msg, decrypt
-    let (message, _) = Message::from_armor_single(File::open(msg_file).unwrap()).expect("ok");
-    let (dec, _) = message.decrypt(String::default, &[&ssk]).expect("decrypt");
+    let (message, _) = Message::from_armor_file(msg_file).expect("ok");
+    let mut dec = message.decrypt(&"".into(), &ssk).expect("decrypt");
 
-    let decrypted =
-        String::from_utf8(dec.get_literal().expect("literal").data().to_vec()).expect("utf8");
+    let decrypted = dec.as_data_string().unwrap();
 
     assert_eq!(&decrypted, MSG);
 }
@@ -100,20 +100,19 @@ fn rfc9580_seipdv1_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
-        let msg = Message::Literal(lit);
-
         // SEIPDv1 encrypt/decrypt roundtrip
-        let enc = msg
-            .encrypt_to_keys_seipdv1(&mut rng, SymmetricKeyAlgorithm::AES256, &[enc_subkey])
-            .expect("encrypt");
+        let enc = MessageBuilder::from_bytes("", MSG.as_bytes())
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256)
+            .encrypt_to_key(&mut rng, &enc_subkey)
+            .unwrap()
+            .to_vec(&mut rng)
+            .unwrap();
 
-        let (dec, _) = enc.decrypt(String::default, &[&ssk]).expect("decrypt");
-        let Message::Literal(lit) = dec else {
-            panic!("expecting literal data");
-        };
+        let msg = Message::from_bytes(&enc[..]).unwrap();
+        let mut dec = msg.decrypt(&"".into(), &ssk).expect("decrypt");
 
-        assert_eq!(String::from_utf8_lossy(lit.data()), MSG);
+        let data = dec.as_data_string().unwrap();
+        assert_eq!(data, MSG);
     }
 }
 
@@ -128,26 +127,24 @@ fn rfc9580_seipdv2_roundtrip() {
         let spk = SignedPublicKey::from(ssk.clone());
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
-        let msg = Message::Literal(lit);
-
         // SEIPDv2 encrypt/decrypt roundtrip
-        let enc = msg
-            .encrypt_to_keys_seipdv2(
+        let enc = MessageBuilder::from_bytes("", MSG.as_bytes())
+            .seipd_v2(
                 &mut rng,
                 SymmetricKeyAlgorithm::AES256,
                 AeadAlgorithm::Ocb,
-                0x06, // 2^12 bytes
-                &[enc_subkey],
+                ChunkSize::default(),
             )
-            .expect("encrypt");
+            .encrypt_to_key(&mut rng, &enc_subkey)
+            .unwrap()
+            .to_vec(&mut rng)
+            .unwrap();
 
-        let (dec, _) = enc.decrypt(String::default, &[&ssk]).expect("decrypt");
-        let Message::Literal(lit) = dec else {
-            panic!("expecting literal data");
-        };
+        let msg = Message::from_bytes(&enc[..]).unwrap();
+        let mut dec = msg.decrypt(&"".into(), &ssk).expect("decrypt");
 
-        assert_eq!(String::from_utf8_lossy(lit.data()), MSG);
+        let data = dec.as_data_string().unwrap();
+        assert_eq!(data, MSG);
     }
 }
 
@@ -162,7 +159,7 @@ fn rfc9580_roundtrip_csf() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         // roundtrip sign+verify csf
-        let csf = CleartextSignedMessage::sign(&mut rng, MSG, &ssk, String::default).expect("sign");
+        let csf = CleartextSignedMessage::sign(&mut rng, MSG, &*ssk, &"".into()).expect("sign");
         csf.verify(&spk).expect("verify");
     }
 }
@@ -177,15 +174,13 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         let spk = SignedPublicKey::from(ssk.clone());
 
-        let lit = LiteralData::from_bytes("".into(), MSG.as_bytes());
-        let msg = Message::Literal(lit);
+        let msg = MessageBuilder::from_bytes("", MSG.as_bytes())
+            .sign(&*ssk, "".into(), HashAlgorithm::default())
+            .to_vec(&mut rng)
+            .unwrap();
 
-        // roundtrip sign+verify inline msg
-        let signed = msg
-            .sign(&mut rng, &ssk, String::default, HashAlgorithm::default())
-            .expect("sign");
-
-        signed.verify(&spk).expect("verify");
+        let mut msg = Message::from_bytes(&msg[..]).unwrap();
+        msg.verify_read(&spk).expect("verify");
     }
 }
 

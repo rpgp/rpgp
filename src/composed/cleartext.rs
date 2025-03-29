@@ -11,9 +11,9 @@ use crate::armor::{self, header_parser, read_from_buf, BlockType, Headers};
 use crate::crypto::hash::HashAlgorithm;
 use crate::errors::Result;
 use crate::line_writer::LineBreak;
-use crate::normalize_lines::Normalized;
+use crate::normalize_lines::{normalize_lines, NormalizedReader};
 use crate::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::types::{KeyVersion, PublicKeyTrait, SecretKeyTrait};
+use crate::types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait};
 use crate::{ArmorOptions, Deserializable, Signature, StandaloneSignature, MAX_BUFFER_SIZE};
 
 /// Implementation of a Cleartext Signed Message.
@@ -36,18 +36,17 @@ pub struct CleartextSignedMessage {
 
 impl CleartextSignedMessage {
     /// Construct a new cleartext message and sign it using the given key.
-    pub fn new<F>(
+    pub fn new(
         text: &str,
         config: SignatureConfig,
         key: &impl SecretKeyTrait,
-        key_pw: F,
+        key_pw: &Password,
     ) -> Result<Self>
-    where
-        F: FnOnce() -> String,
-    {
-        let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
+where {
+        let mut bytes = text.as_bytes();
+        let signature_text = NormalizedReader::new(&mut bytes, LineBreak::Crlf);
         let hash = config.hash_alg;
-        let signature = config.sign(key, key_pw, &signature_text[..])?;
+        let signature = config.sign(key, key_pw, signature_text)?;
         let signature = StandaloneSignature::new(signature);
 
         Ok(Self {
@@ -58,21 +57,20 @@ impl CleartextSignedMessage {
     }
 
     /// Sign the given text.
-    pub fn sign<R, F>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: F) -> Result<Self>
+    pub fn sign<R>(rng: R, text: &str, key: &impl SecretKeyTrait, key_pw: &Password) -> Result<Self>
     where
         R: rand::Rng + rand::CryptoRng,
-        F: FnOnce() -> String,
     {
         let key_id = key.key_id();
         let algorithm = key.algorithm();
         let hash_algorithm = key.hash_alg();
         let hashed_subpackets = vec![
-            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
+            Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
-            )),
+            ))?,
         ];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))];
+        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
 
         let mut config = match key.version() {
             KeyVersion::V4 => SignatureConfig::v4(SignatureType::Text, algorithm, hash_algorithm),
@@ -93,9 +91,9 @@ impl CleartextSignedMessage {
     /// and needs to produce the individual signatures.
     pub fn new_many<F>(text: &str, signer: F) -> Result<Self>
     where
-        F: FnOnce(&[u8]) -> Result<Vec<Signature>>,
+        F: FnOnce(&str) -> Result<Vec<Signature>>,
     {
-        let signature_text: Vec<u8> = Normalized::new(text.bytes(), LineBreak::Crlf).collect();
+        let signature_text = normalize_lines(text, LineBreak::Crlf);
 
         let raw_signatures = signer(&signature_text[..])?;
         let mut hashes = HashSet::new();
@@ -150,11 +148,7 @@ impl CleartextSignedMessage {
     pub fn signed_text(&self) -> String {
         let unescaped = dash_unescape_and_trim(&self.csf_encoded_text);
 
-        let normalized: Vec<u8> = Normalized::new(unescaped.bytes(), LineBreak::Crlf).collect();
-
-        std::str::from_utf8(&normalized)
-            .map(str::to_owned)
-            .expect("csf_encoded_text is UTF8")
+        normalize_lines(&unescaped, LineBreak::Crlf).to_string()
     }
 
     /// The "cleartext framework"-encoded (i.e. dash-escaped) form of the message.
@@ -210,7 +204,11 @@ impl CleartextSignedMessage {
 
         ensure_eq!(typ, BlockType::Signature, "invalid block type");
 
-        let signatures = StandaloneSignature::from_bytes_many(&mut dearmor);
+        // TODO: limited read to 1GiB
+        let mut bytes = Vec::new();
+        dearmor.read_to_end(&mut bytes)?;
+
+        let signatures = StandaloneSignature::from_bytes_many(&bytes[..])?;
         let signatures = signatures.collect::<Result<_>>()?;
 
         let (_, headers, _, b) = dearmor.into_parts();
@@ -360,7 +358,12 @@ fn read_cleartext_body<B: BufRead>(b: &mut B) -> Result<(String, String)> {
             bail!("unexpected early end");
         }
 
-        // Look at the last line
+        // Empty CSF message body
+        if out.starts_with("-----") {
+            return Ok(("".to_string(), out));
+        }
+
+        // Look for header start in the last line
         if let Some(pos) = out.rfind("\n-----") {
             // found our end
             let rest = out.split_off(pos + 1);
@@ -476,7 +479,7 @@ mod tests {
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
 
-        msg.verify(&key.public_key()).unwrap();
+        msg.verify(&*key.public_key()).unwrap();
         assert_eq!(msg.signatures().len(), 1);
 
         roundtrip(&data, &msg, &headers);
@@ -602,11 +605,11 @@ mod tests {
         let msg = CleartextSignedMessage::sign(
             &mut rng,
             "hello\n-world-what-\nis up\n",
-            &key,
-            String::new,
+            &*key,
+            &Password::empty(),
         )
         .unwrap();
-        msg.verify(&key.public_key()).unwrap();
+        msg.verify(&*key.public_key()).unwrap();
     }
 
     #[test]
@@ -616,11 +619,11 @@ mod tests {
 
         let key_data = std::fs::read_to_string("./tests/unit-tests/cleartext-key-01.asc").unwrap();
         let (key, _) = SignedSecretKey::from_string(&key_data).unwrap();
-        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &key, String::new).unwrap();
+        let msg = CleartextSignedMessage::sign(&mut rng, MSG, &*key, &Password::empty()).unwrap();
 
         assert_eq!(msg.signed_text(), MSG);
 
-        msg.verify(&key.public_key()).unwrap();
+        msg.verify(&*key.public_key()).unwrap();
     }
 
     #[test]

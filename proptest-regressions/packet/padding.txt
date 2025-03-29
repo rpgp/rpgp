@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc cd25ea5abc03d0f86c0ad7326c2e1c2304b44e8a0eb6db578d879e13ac889bfd # shrinks to padding = Padding { packet_version: Old, data:  }

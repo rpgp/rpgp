@@ -9,11 +9,11 @@ use crate::composed::signed_key::SignedKeyDetails;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::packet::{self, write_packet, Packet, SignatureType};
+use crate::packet::{self, Packet, PacketTrait, SignatureType};
 use crate::ser::Serialize;
 use crate::types::{
-    EskType, Fingerprint, KeyId, KeyVersion, PkeskBytes, PublicKeyTrait, PublicParams,
-    SignatureBytes, Tag,
+    EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes, PublicKeyTrait,
+    PublicParams, SignatureBytes, Tag,
 };
 use crate::{armor, ArmorOptions};
 
@@ -52,7 +52,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for SignedPublicKeyPar
     type Item = Result<SignedPublicKey>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match super::key_parser::next::<I, packet::PublicKey>(
+        match super::key_parser::next::<_, packet::PublicKey>(
             &mut self.inner,
             Tag::PublicKey,
             false,
@@ -162,19 +162,8 @@ impl SignedPublicKey {
                 .collect(),
         )
     }
-}
 
-impl PublicKeyTrait for SignedPublicKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.primary_key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],
@@ -182,15 +171,9 @@ impl PublicKeyTrait for SignedPublicKey {
     ) -> Result<PkeskBytes> {
         self.primary_key.encrypt(rng, plain, typ)
     }
+}
 
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.primary_key.serialize_for_hashing(writer)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.primary_key.public_params()
-    }
-
+impl KeyDetails for SignedPublicKey {
     fn version(&self) -> KeyVersion {
         self.primary_key.version()
     }
@@ -206,6 +189,21 @@ impl PublicKeyTrait for SignedPublicKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.primary_key.algorithm()
     }
+}
+
+impl PublicKeyTrait for SignedPublicKey {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        self.primary_key.verify_signature(hash, data, sig)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.primary_key.public_params()
+    }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         self.primary_key.created_at()
@@ -218,13 +216,22 @@ impl PublicKeyTrait for SignedPublicKey {
 
 impl Serialize for SignedPublicKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.primary_key)?;
+        self.primary_key.to_writer_with_header(writer)?;
         self.details.to_writer(writer)?;
         for ps in &self.public_subkeys {
             ps.to_writer(writer)?;
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.primary_key.write_len().try_into().expect("key size");
+        let mut sum = PacketLength::fixed_encoding_len(key_len);
+        sum += key_len as usize;
+        sum += self.details.write_len();
+        sum += self.public_subkeys.write_len();
+        sum
     }
 }
 
@@ -254,7 +261,10 @@ impl SignedPublicSubKey {
         SignedPublicSubKey { key, signatures }
     }
 
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         ensure!(!self.signatures.is_empty(), "missing subkey bindings");
         for sig in &self.signatures {
             sig.verify_key_binding(key, &self.key)?;
@@ -272,19 +282,8 @@ impl SignedPublicSubKey {
 
         PublicSubkey::new(self.key.clone(), keyflags)
     }
-}
 
-impl PublicKeyTrait for SignedPublicSubKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],
@@ -292,15 +291,9 @@ impl PublicKeyTrait for SignedPublicSubKey {
     ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
     }
+}
 
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.serialize_for_hashing(writer)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        self.key.public_params()
-    }
-
+impl KeyDetails for SignedPublicSubKey {
     fn version(&self) -> KeyVersion {
         self.key.version()
     }
@@ -317,6 +310,20 @@ impl PublicKeyTrait for SignedPublicSubKey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
     }
+}
+impl PublicKeyTrait for SignedPublicSubKey {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        self.key.verify_signature(hash, data, sig)
+    }
+
+    fn public_params(&self) -> &PublicParams {
+        self.key.public_params()
+    }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
         self.key.created_at()
@@ -329,12 +336,24 @@ impl PublicKeyTrait for SignedPublicSubKey {
 
 impl Serialize for SignedPublicSubKey {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.key)?;
+        self.key.to_writer_with_header(writer)?;
         for sig in &self.signatures {
-            write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let key_len = self.key.write_len().try_into().expect("key size");
+        let mut sum = PacketLength::fixed_encoding_len(key_len);
+        sum += key_len as usize;
+        for sig in &self.signatures {
+            let sig_len = sig.write_len().try_into().expect("signature size");
+            sum += PacketLength::fixed_encoding_len(sig_len);
+            sum += sig_len as usize;
+        }
+        sum
     }
 }
 

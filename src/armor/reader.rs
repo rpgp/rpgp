@@ -76,6 +76,12 @@ impl Serialize for BlockType {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        // allocates, but this is tiny, should be fine
+        let x = self.to_string();
+        x.len()
+    }
 }
 
 /// OpenSSL PKCS#1 PEM armor types
@@ -240,7 +246,6 @@ fn armor_header(i: &[u8]) -> IResult<&[u8], (BlockType, Headers)> {
 
 fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
     let (i, headers) = many0(complete(hash_header_line))(i)?;
-    let (i, _) = pair(space0, line_ending)(i)?;
 
     let mut res = BTreeMap::new();
     let headers = headers.into_iter().flatten().collect();
@@ -281,10 +286,17 @@ fn read_checksum(input: &[u8]) -> std::io::Result<u64> {
 }
 
 pub fn header_parser(i: &[u8]) -> IResult<&[u8], (BlockType, Headers, bool)> {
+    // https://www.rfc-editor.org/rfc/rfc9580.html#name-forming-ascii-armor
+
     let (i, prefix) = take_until("-----")(i)?;
     let has_leading_data = !prefix.is_empty();
+
+    // "An Armor Header Line, appropriate for the type of data" (returned as 'typ')
+    // "Armor Headers" ('headers')
     let (i, (typ, headers)) = armor_header(i)?;
-    let (i, _) = many0(pair(space0, line_ending))(i)?;
+
+    // "A blank (zero length or containing only whitespace) line"
+    let (i, _) = pair(space0, line_ending)(i)?;
 
     Ok((i, (typ, headers, has_leading_data)))
 }
@@ -321,6 +333,7 @@ fn armor_footer_line(i: &[u8]) -> IResult<&[u8], BlockType> {
 }
 
 /// Streaming based ascii armor parsing.
+#[derive(derive_more::Debug)]
 pub struct Dearmor<R: BufRead> {
     /// The ascii armor parsed block type.
     pub typ: Option<BlockType>,
@@ -330,6 +343,7 @@ pub struct Dearmor<R: BufRead> {
     pub checksum: Option<u64>,
     /// Current state
     current_part: Part<R>,
+    #[debug("Crc24Hasher")]
     crc: crc24::Crc24Hasher,
     /// Maximum buffer limit
     max_buffer_limit: usize,
@@ -798,6 +812,7 @@ mod tests {
     #[test]
     fn test_parse_armor_full_no_header() {
         let c = "-----BEGIN RSA PRIVATE KEY-----
+
 MIIEpgIBAAKCAQEAxp4sIUtrNBl4Vbd4075CmtHmwxTc0FhQIGw36kptbrWReLb9
 Np0RQylKyc6qUruxZlCdPVFo7iX3vs272/0GEakPv0DAsKGbe1nTsMyxxz0o3dP4
 JQOlOGEnpETa0ybfPLMX1+qNiBdm7HLjqcP5+S0Exb0Z0deFNIhEP6XckUEgHmwA
@@ -999,7 +1014,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            armor_headers_hash(b"Hash: hello,world\n\n").unwrap(),
+            armor_headers_hash(b"Hash: hello,world\n").unwrap(),
             (&[][..], headers),
         );
 
@@ -1010,7 +1025,7 @@ y5Zgv9TWZlmW9FDTp4XVgn5zQTEN1LdL7vNXWV9aOvfrqPk5ClBkxhndgq7j6MFs
         );
 
         assert_eq!(
-            armor_headers_hash(b"Hash: hello,world\nHash: cool\n\n").unwrap(),
+            armor_headers_hash(b"Hash: hello,world\nHash: cool\n").unwrap(),
             (&[][..], headers,),
         );
     }

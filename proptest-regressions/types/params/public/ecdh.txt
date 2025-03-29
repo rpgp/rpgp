@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 64d1730ae77ea0c1fac25e0664a0d7590d6e3e90eec2b79400ad787f8c007ea3 # shrinks to params = Curve25519 { p: PublicKey(MontgomeryPoint([115, 212, 247, 98, 64, 108, 228, 94, 237, 15, 43, 166, 234, 81, 26, 37, 245, 78, 95, 148, 125, 80, 29, 111, 158, 32, 185, 73, 122, 121, 7, 99])), hash: Md5, alg_sym: IDEA }

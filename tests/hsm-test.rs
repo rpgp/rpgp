@@ -7,12 +7,11 @@ use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::public_key::PublicKeyAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::packet::{PacketTrait, PublicKey, SignatureConfig};
-use pgp::types::{EcdhPublicParams, EskType, Fingerprint, PkeskBytes, SignatureBytes};
-use pgp::types::{KeyId, Mpi, PublicKeyTrait, PublicParams, SecretKeyTrait};
-use pgp::{packet, Deserializable, Esk};
+use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
+use pgp::types::{EcdhPublicParams, Fingerprint, Password, PkeskBytes, SignatureBytes};
+use pgp::types::{KeyDetails, KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
+use pgp::{packet, Esk};
 use pgp::{Message, SignedPublicKey, SignedSecretKey};
-use rand::{CryptoRng, Rng};
 
 #[derive(Debug, Clone)]
 pub struct FakeHsm {
@@ -62,22 +61,20 @@ impl PublicKeyTrait for FakeHsm {
         self.public_key.verify_signature(hash, data, sig)
     }
 
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> pgp::errors::Result<PkeskBytes> {
-        self.public_key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> pgp::errors::Result<()> {
-        self.public_key.serialize_for_hashing(writer)
-    }
-
     fn public_params(&self) -> &PublicParams {
         self.public_key.public_params()
     }
+
+    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
+        self.public_key.created_at()
+    }
+
+    fn expiration(&self) -> Option<u16> {
+        self.public_key.expiration()
+    }
+}
+
+impl KeyDetails for FakeHsm {
     fn version(&self) -> pgp::types::KeyVersion {
         self.public_key.version()
     }
@@ -93,41 +90,15 @@ impl PublicKeyTrait for FakeHsm {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
     }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.public_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.public_key.expiration()
-    }
 }
 
-pub struct Unlocked;
-
 impl SecretKeyTrait for FakeHsm {
-    // XXX: This choice of the public key packet type here is a bit arbitrary.
-    type PublicKey = PublicKey;
-
-    type Unlocked = Self;
-
-    fn unlock<F, G, T>(&self, _pw: F, work: G) -> pgp::errors::Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> pgp::errors::Result<T>,
-    {
-        work(self)
-    }
-
-    fn create_signature<F>(
+    fn create_signature(
         &self,
-        _key_pw: F,
+        _key_pw: &Password,
         _hash: HashAlgorithm,
         data: &[u8],
-    ) -> pgp::errors::Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
+    ) -> pgp::errors::Result<SignatureBytes> {
         assert_eq!(data, self.sign_data.unwrap().0);
 
         // XXX: imagine a smartcard producing a signature for `data`, here
@@ -135,17 +106,23 @@ impl SecretKeyTrait for FakeHsm {
         let sig = self.sign_data.unwrap().1; // fake smartcard output
 
         let mpis = match self.public_key.algorithm() {
-            PublicKeyAlgorithm::RSA => vec![Mpi::from_slice(sig)],
+            PublicKeyAlgorithm::RSA => vec![MpiBytes::from_slice(sig)],
 
             PublicKeyAlgorithm::ECDSA => {
                 let mid = sig.len() / 2;
 
-                vec![Mpi::from_slice(&sig[..mid]), Mpi::from_slice(&sig[mid..])]
+                vec![
+                    MpiBytes::from_slice(&sig[..mid]),
+                    MpiBytes::from_slice(&sig[mid..]),
+                ]
             }
             PublicKeyAlgorithm::EdDSALegacy => {
                 assert_eq!(sig.len(), 64); // FIXME: check curve; add error handling
 
-                vec![Mpi::from_slice(&sig[..32]), Mpi::from_slice(&sig[32..])]
+                vec![
+                    MpiBytes::from_slice(&sig[..32]),
+                    MpiBytes::from_slice(&sig[32..]),
+                ]
             }
 
             _ => unimplemented!(),
@@ -154,8 +131,8 @@ impl SecretKeyTrait for FakeHsm {
         Ok(mpis.into())
     }
 
-    fn public_key(&self) -> Self::PublicKey {
-        self.public_key.clone()
+    fn hash_alg(&self) -> HashAlgorithm {
+        self.public_key.public_params().hash_alg()
     }
 }
 
@@ -169,9 +146,9 @@ impl FakeHsm {
                 // The test data in self.decrypt_data must match the parameters
                 // (this fake hsm just stores the answer for one request, and it's only legal to
                 // call it with the exact set of parameters we have stored)
-                assert_eq!(vec![mpi.as_bytes()], self.decrypt_data.unwrap().0);
+                assert_eq!(vec![mpi.as_ref()], self.decrypt_data.unwrap().0);
 
-                let _ciphertext = mpi.as_bytes();
+                let _ciphertext = mpi.as_ref();
 
                 // XXX: imagine a smartcard decrypting `_ciphertext`, here
 
@@ -181,12 +158,7 @@ impl FakeHsm {
             }
 
             (
-                PublicParams::ECDH(EcdhPublicParams::Known {
-                    curve,
-                    alg_sym,
-                    hash,
-                    ..
-                }),
+                PublicParams::ECDH(params),
                 PkeskBytes::Ecdh {
                     public_point,
                     encrypted_session_key,
@@ -197,16 +169,16 @@ impl FakeHsm {
                 // call it with the exact set of parameters we have stored)
                 assert_eq!(
                     vec![
-                        public_point.as_bytes(),
+                        public_point.as_ref(),
                         &[encrypted_session_key.len() as u8],
                         encrypted_session_key
                     ],
                     self.decrypt_data.unwrap().0
                 );
 
-                let ciphertext = public_point.as_bytes();
+                let ciphertext = public_point.as_ref();
 
-                let _ciphertext = if *curve == ECCCurve::Curve25519 {
+                let _ciphertext = if params.curve() == ECCCurve::Curve25519 {
                     assert_eq!(
                         ciphertext[0], 0x40,
                         "Unexpected shape of Cv25519 encrypted data"
@@ -225,11 +197,27 @@ impl FakeHsm {
 
                 let shared_secret: [u8; 32] = dec.try_into().expect("must be [u8; 32]");
 
+                let (hash, alg_sym) = match params {
+                    EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
+                    | EcdhPublicParams::P256 { hash, alg_sym, .. }
+                    | EcdhPublicParams::P384 { hash, alg_sym, .. }
+                    | EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Brainpool256 { .. }
+                    | EcdhPublicParams::Brainpool384 { .. }
+                    | EcdhPublicParams::Brainpool512 { .. } => {
+                        panic!("unsupported params: {:?}", params);
+                    }
+                    EcdhPublicParams::Unsupported { .. } => {
+                        panic!("unsupported params: {:?}", params);
+                    }
+                };
                 let decrypted_key: Vec<u8> = pgp::crypto::ecdh::derive_session_key(
                     &shared_secret,
                     encrypted_session_key,
                     encrypted_session_key.len(),
-                    &(curve.clone(), *alg_sym, *hash),
+                    params.curve(),
+                    *hash,
+                    *alg_sym,
                     self.public_key.fingerprint().as_bytes(),
                 )?;
 
@@ -351,22 +339,24 @@ fn card_decrypt() {
 
         // Transform subkey packet into primary key packet
         // (This is a hack: FakeHsm wants a primary key packet)
-        let as_primary = PublicKey::new(
-            enc_subkey.packet_version(),
-            enc_subkey.version(),
-            enc_subkey.algorithm(),
-            *enc_subkey.created_at(),
-            enc_subkey.expiration(),
-            enc_subkey.public_params().clone(),
+        let as_primary = PublicKey::from_inner(
+            PubKeyInner::new(
+                enc_subkey.version(),
+                enc_subkey.algorithm(),
+                *enc_subkey.created_at(),
+                enc_subkey.expiration(),
+                enc_subkey.public_params().clone(),
+            )
+            .unwrap(),
         )
         .unwrap();
 
         let mut hsm = FakeHsm::with_public_key(as_primary).unwrap();
         hsm.set_fake_decryption_data(input, out);
 
-        let (message, _headers) = Message::from_armor_single(File::open(msgfile).unwrap()).unwrap();
+        let (message, _headers) = Message::from_armor_file(msgfile).unwrap();
 
-        let Message::Encrypted { esk, edata } = message else {
+        let Message::Encrypted { esk, mut edata, .. } = message else {
             panic!("not encrypted");
         };
 
@@ -376,22 +366,18 @@ fn card_decrypt() {
             panic!("whoops")
         };
 
-        let (session_key, session_key_algorithm) = hsm
-            .unlock(String::new, |priv_key| priv_key.decrypt(values))
-            .unwrap();
-
-        let decrypted = edata
-            .decrypt(pgp::PlainSessionKey::V3_4 {
+        let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
+        edata
+            .decrypt(&pgp::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })
             .unwrap();
 
-        if let Message::Literal(data) = decrypted {
-            assert_eq!(data.data(), b"foo bar")
-        } else {
-            panic!()
-        }
+        let mut message = Message::from_bytes(edata).unwrap();
+        let data = message.as_data_vec().unwrap();
+
+        assert_eq!(data, b"foo bar")
     }
 }
 
@@ -483,17 +469,18 @@ fn card_sign() {
         let mut config = SignatureConfig::v4(
             packet::SignatureType::Binary,
             hsm.public_key().algorithm(),
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
         );
 
         config.hashed_subpackets = vec![
             packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
                 DateTime::<Utc>::from_timestamp(sig_creation, 0).unwrap(),
-            )),
-            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())),
+            ))
+            .unwrap(),
+            packet::Subpacket::regular(packet::SubpacketData::Issuer(hsm.key_id())).unwrap(),
         ];
 
-        let signature = config.sign(&hsm, String::new, DATA).unwrap();
+        let signature = config.sign(&hsm, &"".into(), DATA).unwrap();
 
         signature.verify(&pubkey, DATA).expect("ok");
     }

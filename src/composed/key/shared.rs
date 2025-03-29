@@ -12,7 +12,10 @@ use crate::packet::{
     KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData, UserAttribute,
     UserId,
 };
-use crate::types::{CompressionAlgorithm, KeyVersion, RevocationKey, SecretKeyTrait};
+use crate::ser::Serialize;
+use crate::types::{
+    CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, RevocationKey, SecretKeyTrait,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
@@ -77,17 +80,19 @@ impl KeyDetails {
         }
     }
 
-    pub fn sign<R, F>(
+    pub fn sign<R, K, P>(
         self,
         mut rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
+        key: &K,
+        pub_key: &P,
+        key_pw: &Password,
     ) -> Result<SignedKeyDetails>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        let keyflags: SmallVec<[u8; 1]> = self.keyflags.into();
+        let keyflags = self.keyflags;
         let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
         let preferred_hash_algorithms = self.preferred_hash_algorithms;
         let preferred_compression_algorithms = self.preferred_compression_algorithms;
@@ -100,27 +105,27 @@ impl KeyDetails {
         // FIXME: select primary like in signed_key/shared.rs:116? (and adjust the set of non-primaries below?)
         if let Some(id) = self.user_ids.first() {
             let mut hashed_subpackets = vec![
-                Subpacket::regular(SubpacketData::IsPrimary(true)),
+                Subpacket::regular(SubpacketData::IsPrimary(true))?,
                 Subpacket::regular(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
-                )),
-                Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone())),
+                ))?,
+                Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone()))?,
                 Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                     preferred_symmetric_algorithms.clone(),
-                )),
+                ))?,
                 Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
                     preferred_hash_algorithms.clone(),
-                )),
+                ))?,
                 Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                     preferred_compression_algorithms.clone(),
-                )),
+                ))?,
                 Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
                     preferred_aead_algorithms.clone(),
-                )),
-                Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
+                ))?,
+                Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
             ];
             if let Some(rkey) = revocation_key {
-                hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey)));
+                hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey))?);
             }
 
             let mut config = match key.version() {
@@ -138,9 +143,9 @@ impl KeyDetails {
 
             config.hashed_subpackets = hashed_subpackets;
             config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))];
+                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
-            let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
+            let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
 
             users.push(id.clone().into_signed(sig));
         }
@@ -155,24 +160,24 @@ impl KeyDetails {
                     let hashed_subpackets = vec![
                         Subpacket::regular(SubpacketData::SignatureCreationTime(
                             chrono::Utc::now().trunc_subsecs(0),
-                        )),
-                        Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone())),
+                        ))?,
+                        Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone()))?,
                         Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                             preferred_symmetric_algorithms.clone(),
-                        )),
+                        ))?,
                         Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
                             preferred_hash_algorithms.clone(),
-                        )),
+                        ))?,
                         Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                             preferred_compression_algorithms.clone(),
-                        )),
+                        ))?,
                         Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
                             preferred_aead_algorithms.clone(),
-                        )),
-                        Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint())),
+                        ))?,
+                        Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
                     ];
                     let unhashed_subpackets =
-                        vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))];
+                        vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
                     let mut config = match key.version() {
                         KeyVersion::V4 => SignatureConfig::v4(
@@ -192,7 +197,7 @@ impl KeyDetails {
                     config.hashed_subpackets = hashed_subpackets;
                     config.unhashed_subpackets = unhashed_subpackets;
 
-                    let sig = config.sign_certification(key, key_pw.clone(), id.tag(), &id)?;
+                    let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
 
                     Ok(id.into_signed(sig))
                 })
@@ -202,7 +207,7 @@ impl KeyDetails {
         let user_attributes = self
             .user_attributes
             .into_iter()
-            .map(|u| u.sign(&mut rng, key, key_pw.clone()))
+            .map(|u| u.sign(&mut rng, key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedKeyDetails {

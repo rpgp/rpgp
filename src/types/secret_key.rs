@@ -1,66 +1,106 @@
+use zeroize::Zeroizing;
+
 use crate::crypto::hash::HashAlgorithm;
+use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
-use crate::types::{EcdsaPublicParams, PublicKeyTrait, PublicParams, SignatureBytes};
+use crate::types::{KeyId, KeyVersion};
 
-pub trait SecretKeyTrait: PublicKeyTrait {
-    type PublicKey;
+use super::{Fingerprint, KeyDetails};
 
-    /// The type representing the unlocked version of this.
-    type Unlocked;
+/// Wraps around a callback to unlock keys.
+#[derive(derive_more::Debug)]
+pub enum Password {
+    Dynamic(#[debug("Box<Fn>")] Box<dyn Fn() -> Zeroizing<Vec<u8>>>),
+    Static(#[debug("***")] Zeroizing<Vec<u8>>),
+}
 
-    /// Unlock the raw data in the secret parameters.
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>;
+impl From<String> for Password {
+    fn from(value: String) -> Self {
+        Self::Static(value.as_bytes().to_vec().into())
+    }
+}
 
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<crate::types::SignatureBytes>
-    where
-        F: FnOnce() -> String;
+impl From<&str> for Password {
+    fn from(value: &str) -> Self {
+        Self::Static(value.as_bytes().to_vec().into())
+    }
+}
 
-    fn public_key(&self) -> Self::PublicKey;
+impl From<&[u8]> for Password {
+    fn from(value: &[u8]) -> Self {
+        Self::Static(value.to_vec().into())
+    }
+}
 
-    /// The suggested hash algorithm to calculate the signature hash digest with, when using this
-    /// key as a signer
-    fn hash_alg(&self) -> HashAlgorithm {
-        match self.public_params() {
-            PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::SHA2_384,
-            PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::SHA2_512,
-            _ => HashAlgorithm::default(),
+impl Default for Password {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
+impl Password {
+    /// Creates an empty password unlocker.
+    pub fn empty() -> Self {
+        Self::Static(Vec::new().into())
+    }
+
+    /// Executes the callback and returns the result.
+    pub fn read(&self) -> Zeroizing<Vec<u8>> {
+        match self {
+            Self::Dynamic(ref f) => f(),
+            Self::Static(ref s) => s.clone(),
         }
     }
 }
 
-impl<T: SecretKeyTrait> SecretKeyTrait for &T {
-    type PublicKey = T::PublicKey;
-    type Unlocked = T::Unlocked;
+impl<F: Fn() -> Zeroizing<Vec<u8>> + 'static> From<F> for Password {
+    fn from(value: F) -> Self {
+        Self::Dynamic(Box::new(value))
+    }
+}
 
-    fn unlock<F, G, S>(&self, pw: F, work: G) -> Result<S>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<S>,
-    {
-        (*self).unlock(pw, work)
+impl KeyDetails for Box<&dyn SecretKeyTrait> {
+    fn version(&self) -> KeyVersion {
+        (**self).version()
     }
 
-    fn create_signature<F>(
+    fn fingerprint(&self) -> Fingerprint {
+        (**self).fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        (**self).key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        (**self).algorithm()
+    }
+}
+
+impl SecretKeyTrait for Box<&dyn SecretKeyTrait> {
+    fn create_signature(
         &self,
-        key_pw: F,
+        key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
-        (*self).create_signature(key_pw, hash, data)
+    ) -> Result<crate::types::SignatureBytes> {
+        (**self).create_signature(key_pw, hash, data)
     }
 
-    fn public_key(&self) -> Self::PublicKey {
-        (*self).public_key()
+    fn hash_alg(&self) -> HashAlgorithm {
+        (**self).hash_alg()
     }
+}
+
+pub trait SecretKeyTrait: KeyDetails + std::fmt::Debug {
+    fn create_signature(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<crate::types::SignatureBytes>;
+
+    /// The recommended hash algorithm to calculate the signature hash digest with,
+    /// when using this as a signer
+    fn hash_alg(&self) -> HashAlgorithm;
 }

@@ -1,4 +1,5 @@
 use std::io::{BufRead, Read};
+use std::path::Path;
 
 use buffer_redux::BufReader;
 use log::{debug, warn};
@@ -9,15 +10,20 @@ use crate::packet::{Packet, PacketParser};
 
 pub trait Deserializable: Sized {
     /// Parse a single byte encoded composition.
-    fn from_bytes(bytes: impl Read) -> Result<Self> {
-        let mut el = Self::from_bytes_many(bytes);
-        el.next().ok_or(Error::NoMatchingPacket)?
+    fn from_bytes<R: BufRead>(bytes: R) -> Result<Self> {
+        let mut el = Self::from_bytes_many(bytes)?;
+        el.next()
+            .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
     }
 
     /// Parse a single armor encoded composition.
     fn from_string(input: &str) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_string_many(input)?;
-        Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
+        Ok((
+            el.next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??,
+            headers,
+        ))
     }
 
     /// Parse an armor encoded list of compositions.
@@ -31,13 +37,21 @@ pub trait Deserializable: Sized {
     /// Armored ascii data.
     fn from_armor_single<R: Read>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many(input)?;
-        Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
+        Ok((
+            el.next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??,
+            headers,
+        ))
     }
 
     /// Armored ascii data.
     fn from_armor_single_buf<R: BufRead>(input: R) -> Result<(Self, armor::Headers)> {
         let (mut el, headers) = Self::from_armor_many_buf(input)?;
-        Ok((el.next().ok_or(Error::NoMatchingPacket)??, headers))
+        Ok((
+            el.next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??,
+            headers,
+        ))
     }
 
     /// Armored ascii data.
@@ -74,7 +88,8 @@ pub trait Deserializable: Sized {
                 if !Self::matches_block_type(typ) {
                     bail!("unexpected block type: {}", typ);
                 }
-                Ok((Self::from_bytes_many(dearmor), headers))
+
+                Ok((Self::from_bytes_many(BufReader::new(dearmor))?, headers))
             }
             BlockType::PublicKeyPKCS1(_)
             | BlockType::PublicKeyPKCS8
@@ -88,10 +103,44 @@ pub trait Deserializable: Sized {
     }
 
     /// Parse a list of compositions in raw byte format.
-    fn from_bytes_many<'a>(bytes: impl Read + 'a) -> Box<dyn Iterator<Item = Result<Self>> + 'a> {
-        let packets = PacketParser::new(bytes).filter_map(filter_parsed_packet_results);
+    fn from_bytes_many<'a, R: BufRead + 'a>(
+        bytes: R,
+    ) -> Result<Box<dyn Iterator<Item = Result<Self>> + 'a>> {
+        let packets = PacketParser::new(bytes)
+            .filter_map(crate::composed::shared::filter_parsed_packet_results)
+            .peekable();
 
-        Self::from_packets(packets.peekable())
+        Ok(Self::from_packets(packets))
+    }
+
+    /// Parse a single binary encoded composition.
+    fn from_file<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let mut el = Self::from_file_many(path)?;
+        el.next()
+            .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())?
+    }
+
+    /// Parse a single armor encoded composition.
+    fn from_armor_file<P: AsRef<Path>>(path: P) -> Result<(Self, armor::Headers)> {
+        let (mut el, headers) = Self::from_armor_file_many(path)?;
+        let el = el
+            .next()
+            .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??;
+        Ok((el, headers))
+    }
+
+    /// Parse a single armor encoded composition.
+    fn from_armor_file_many<P: AsRef<Path>>(
+        path: P,
+    ) -> Result<(Box<dyn Iterator<Item = Result<Self>>>, armor::Headers)> {
+        let file = std::fs::File::open(path)?;
+        Self::from_armor_many_buf(BufReader::new(file))
+    }
+
+    /// Ready binary packets from the given file.
+    fn from_file_many<P: AsRef<Path>>(path: P) -> Result<Box<dyn Iterator<Item = Result<Self>>>> {
+        let file = std::fs::File::open(path)?;
+        Self::from_bytes_many(BufReader::new(file))
     }
 
     /// Turn a list of packets into a usable representation.
@@ -119,7 +168,11 @@ pub trait Deserializable: Sized {
             let (keys, headers) = Self::from_armor_single(input)?;
             Ok((keys, Some(headers)))
         } else {
-            Ok((Self::from_bytes(input)?, None))
+            let (mut el, headers) = Self::from_reader_many_buf(input)?;
+            let packet = el
+                .next()
+                .ok_or_else(|| crate::errors::NoMatchingPacketSnafu.build())??;
+            Ok((packet, headers))
         }
     }
 
@@ -152,7 +205,7 @@ pub trait Deserializable: Sized {
             let (keys, headers) = Self::from_armor_many_buf(input)?;
             Ok((keys, Some(headers)))
         } else {
-            Ok((Self::from_bytes_many(input), None))
+            Ok((Self::from_bytes_many(input)?, None))
         }
     }
 }
@@ -169,47 +222,48 @@ pub(crate) fn filter_parsed_packet_results(p: Result<Packet>) -> Option<Result<P
     // FIXME: handle padding packets (skip)
     // FIXME: handle criticality of packets from 9580 (error, if unsupported)
 
-    match &p {
-        Ok(Packet::Marker(_m)) => {
-            debug!("skipping marker packet");
-            None
-        }
-        Ok(_) => Some(p),
-        Err(e) => {
-            if let Error::Unsupported(e) = e {
-                // "Error::Unsupported" signals parser errors that we can safely ignore
-                // (e.g. packets with unsupported versions)
-                warn!("skipping unsupported packet: {p:?}");
-                debug!("error: {e:?}");
+    match p {
+        Ok(ref packet) => {
+            if let Packet::Marker(_) = packet {
+                debug!("skipping marker packet");
                 return None;
             }
-            if let Error::InvalidPacketContent(b) = &e {
-                let err: &Error = b; // unbox
-                if let Error::Unsupported(e) = err {
+            Some(p)
+        }
+        Err(e) => {
+            if let Error::Unsupported { ref message, .. } = e {
+                // "Error::Unsupported" signals parser errors that we can safely ignore
+                // (e.g. packets with unsupported versions)
+                warn!("skipping unsupported packet: {e:?}");
+                debug!("error: {message}");
+                return None;
+            }
+            if let Error::InvalidPacketContent { ref source } = &e {
+                let err: &Error = source; // unbox
+                if let Error::Unsupported { message, .. } = err {
                     // "Error::Unsupported" signals parser errors that we can safely ignore
                     // (e.g. packets with unsupported versions)
-                    warn!("skipping unsupported packet: {p:?}");
-                    debug!("error: {e:?}");
+                    warn!("skipping unsupported packet: {e:?}");
+                    debug!("error: {message}");
                     return None;
                 }
-                if let Error::EllipticCurve(e) = err {
+                if let Error::EllipticCurve { source, .. } = err {
                     // this error happens in one SKS test key, presumably bad public key material.
                     // ignoring the packet seems safe.
-                    warn!("skipping bad elliptic curve data: {p:?}");
-                    debug!("error: {e:?}");
+                    warn!("skipping bad elliptic curve data: {e:?}");
+                    debug!("error: {source:?}");
                     return None;
                 }
             }
-            if let Error::PacketIncomplete = e {
+            if let Error::PacketIncomplete { ref source, .. } = e {
                 // We ignore incomplete packets for now (some of these occur in the SKS dumps under `tests`)
-                warn!("skipping incomplete packet: {p:?}");
+                warn!("skipping incomplete packet: {e:?}");
+                debug!("error: {source:?}");
                 return None;
             }
 
             // Pass through all other errors from the low level parser, they should be surfaced
-            Some(Err(Error::Message(format!(
-                "unexpected packet data: {e:?}"
-            ))))
+            Some(Err(e))
         }
     }
 }

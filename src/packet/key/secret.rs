@@ -1,558 +1,212 @@
-use aes_gcm::aead::rand_core::CryptoRng;
+use std::io::BufRead;
+
 use log::debug;
-use rand::Rng;
-use zeroize::Zeroize;
+use rand::{CryptoRng, Rng};
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::{
-        PacketTrait, PublicKey, PublicSubkey, Signature, SignatureConfig, SignatureType, Subpacket,
+        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
     },
+    ser::Serialize,
     types::{
-        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
-        SecretKeyRepr, SecretKeyTrait, SecretParams, SignatureBytes, Tag, Version,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
+        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        SecretParams, SignatureBytes, Tag,
     },
 };
 
-#[derive(Debug, PartialEq, Eq, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
-pub struct SecretKey(SecretKeyInner<PublicKey>);
+use super::public::{encrypt, PubKeyInner};
 
-#[derive(Debug, PartialEq, Eq, Clone, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
-pub struct SecretSubkey(SecretKeyInner<PublicSubkey>);
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-struct SecretKeyInner<D> {
-    details: D,
+#[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
+pub struct SecretKey {
+    #[zeroize(skip)]
+    packet_header: PacketHeader,
+    #[zeroize(skip)]
+    details: super::PublicKey,
     secret_params: SecretParams,
-    tag: Tag,
 }
 
-impl<D> zeroize::Zeroize for SecretKeyInner<D> {
-    fn zeroize(&mut self) {
-        // details are not zeroed as they are public knowledge.
-        self.secret_params.zeroize();
-    }
-}
-
-impl<D> Drop for SecretKeyInner<D> {
-    fn drop(&mut self) {
-        self.zeroize()
-    }
-}
-
-impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
-    fn remove_password<P>(&mut self, password: P) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
-        if let SecretParams::Encrypted(enc) = &self.secret_params {
-            let unlocked = enc.unlock(password, &self.details, Some(self.tag))?;
-            self.secret_params = SecretParams::Plain(unlocked);
-        }
-
-        Ok(())
-    }
-
-    fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
-    where
-        R: rand::Rng + rand::CryptoRng,
-        P: FnOnce() -> String,
-    {
-        let s2k = crate::types::S2kParams::new_default(rng, self.version());
-        Self::set_password_with_s2k(self, password, s2k)
-    }
-
-    fn set_password_with_s2k<P>(
-        &mut self,
-        password: P,
-        s2k_params: crate::types::S2kParams,
-    ) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
-        let plain = match &self.secret_params {
-            SecretParams::Plain(plain) => plain,
-            SecretParams::Encrypted(_) => {
-                bail!("Secret Key packet must be unlocked")
-            }
-        };
-
-        self.secret_params = SecretParams::Encrypted(plain.clone().encrypt(
-            &password(),
-            s2k_params,
-            &self.details,
-            Some(self.tag),
-        )?);
-
-        Ok(())
-    }
+#[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
+pub struct SecretSubkey {
+    #[zeroize(skip)]
+    packet_header: PacketHeader,
+    #[zeroize(skip)]
+    details: super::PublicSubkey,
+    secret_params: SecretParams,
 }
 
 impl SecretKey {
-    pub fn new(details: PublicKey, secret_params: SecretParams) -> Self {
-        Self(SecretKeyInner {
+    pub fn new(details: super::PublicKey, secret_params: SecretParams) -> Result<Self> {
+        let len =
+            crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
+        let packet_header = PacketHeader::new_fixed(Tag::SecretKey, len.try_into()?);
+
+        Ok(Self {
+            packet_header,
             details,
             secret_params,
-            tag: Tag::SecretKey,
         })
     }
 
-    /// Parses a `SecretKey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, details) = crate::packet::secret_key_parser::parse(input)?;
+    /// Parses a `SecretKey` packet from the given buffer.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
+        ensure_eq!(Tag::SecretKey, packet_header.tag(), "invalid tag");
+
+        let details = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
-        Ok(Self(SecretKeyInner {
-            details: PublicKey::new(
-                packet_version,
-                version,
-                algorithm,
-                created_at,
-                expiration,
-                public_params,
-            )?,
+
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+        let details = super::PublicKey::from_inner(inner)?;
+
+        Ok(Self {
+            packet_header,
+            details,
             secret_params,
-            tag: Tag::SecretKey,
-        }))
+        })
     }
 
     pub fn secret_params(&self) -> &SecretParams {
-        self.0.secret_params()
+        &self.secret_params
     }
 
     /// Checks if we should expect a SHA1 checksum in the encrypted part.
     pub fn has_sha1_checksum(&self) -> bool {
-        self.0.has_sha1_checksum()
+        self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn sign<R: CryptoRng + Rng, K, P>(
         &self,
-        mut rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
+        rng: R,
+        key: &K,
+        pub_key: &P,
+        key_pw: Password,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        self.0
-            .sign(&mut rng, key, key_pw, SignatureType::KeyBinding)
+        sign(rng, key, key_pw, SignatureType::KeyBinding, pub_key)
+    }
+
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
+    where
+        G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
+    {
+        let pub_params = self.details.public_params();
+        match self.secret_params {
+            SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
+            SecretParams::Encrypted(ref k) => {
+                let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
+                Ok(work(pub_params, &plain))
+            }
+        }
+    }
+
+    pub fn public_key(&self) -> &super::PublicKey {
+        &self.details
     }
 }
 
 impl SecretSubkey {
-    pub fn new(details: PublicSubkey, secret_params: SecretParams) -> Self {
-        Self(SecretKeyInner {
+    pub fn new(details: super::PublicSubkey, secret_params: SecretParams) -> Result<Self> {
+        let len =
+            crate::ser::Serialize::write_len(&details) + secret_params.write_len(details.version());
+        let packet_header = PacketHeader::new_fixed(Tag::SecretSubkey, len.try_into()?);
+
+        Ok(Self {
+            packet_header,
             details,
             secret_params,
-            tag: Tag::SecretSubkey,
         })
     }
 
     /// Parses a `SecretSubkey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, details) = crate::packet::secret_key_parser::parse(input)?;
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
+        ensure_eq!(Tag::SecretSubkey, packet_header.tag(), "invalid tag");
+
+        let details = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
-        Ok(Self(SecretKeyInner {
-            details: PublicSubkey::new(
-                packet_version,
-                version,
-                algorithm,
-                created_at,
-                expiration,
-                public_params,
-            )?,
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+        let details = super::PublicSubkey::from_inner(inner)?;
+
+        Ok(Self {
+            packet_header,
+            details,
             secret_params,
-            tag: Tag::SecretSubkey,
-        }))
+        })
     }
 
     pub fn secret_params(&self) -> &SecretParams {
-        self.0.secret_params()
+        &self.secret_params
     }
 
     /// Checks if we should expect a SHA1 checksum in the encrypted part.
     pub fn has_sha1_checksum(&self) -> bool {
-        self.0.has_sha1_checksum()
+        self.secret_params.has_sha1_checksum()
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn sign<R: CryptoRng + Rng, K, P>(
         &self,
-        mut rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
+        rng: R,
+        key: &K,
+        pub_key: &P,
+        key_pw: Password,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
-        self.0
-            .sign(&mut rng, key, key_pw, SignatureType::SubkeyBinding)
-    }
-}
-
-impl<D: PublicKeyTrait + crate::ser::Serialize> SecretKeyInner<D> {
-    fn secret_params(&self) -> &SecretParams {
-        &self.secret_params
+        sign(rng, key, key_pw, SignatureType::SubkeyBinding, pub_key)
     }
 
-    fn has_sha1_checksum(&self) -> bool {
-        self.secret_params.string_to_key_id() == 254
-    }
-
-    fn sign<R: CryptoRng + Rng, F>(
-        &self,
-        mut rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
-        sig_typ: SignatureType,
-    ) -> Result<Signature>
+    pub fn unlock<G, T>(&self, pw: &Password, work: G) -> Result<Result<T>>
     where
-        F: FnOnce() -> String,
+        G: FnOnce(&PublicParams, &PlainSecretParams) -> Result<T>,
     {
-        use chrono::SubsecRound;
-
-        let mut config = match key.version() {
-            KeyVersion::V4 => SignatureConfig::v4(sig_typ, key.algorithm(), key.hash_alg()),
-            KeyVersion::V6 => {
-                SignatureConfig::v6(&mut rng, sig_typ, key.algorithm(), key.hash_alg())?
-            }
-            v => unsupported_err!("unsupported key version: {:?}", v),
-        };
-
-        config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
-            chrono::Utc::now().trunc_subsecs(0),
-        ))];
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))];
-
-        config.sign_key(key, key_pw, &self)
-    }
-}
-
-impl<D: PublicKeyTrait + PacketTrait + Clone + crate::ser::Serialize> SecretKeyTrait
-    for SecretKeyInner<D>
-{
-    type PublicKey = D;
-    type Unlocked = SecretKeyRepr;
-
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
-    {
-        let decrypted = match self.secret_params {
-            SecretParams::Plain(ref k) => k.as_ref().as_repr(self.public_params()),
+        let pub_params = self.details.public_params();
+        match self.secret_params {
+            SecretParams::Plain(ref k) => Ok(work(pub_params, k)),
             SecretParams::Encrypted(ref k) => {
-                let plain = k.unlock(pw, &self.details, Some(self.tag))?;
-                plain.as_ref().as_repr(self.public_params())
+                let plain = k.unlock(pw, &self.details, Some(self.packet_header.tag()))?;
+                Ok(work(pub_params, &plain))
             }
-        }?;
-
-        work(&decrypted)
+        }
     }
 
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
-        use crate::crypto::Signer;
-
-        let mut signature: Option<SignatureBytes> = None;
-        self.unlock(key_pw, |priv_key| {
-            debug!("unlocked key");
-            let sig = match *priv_key {
-                SecretKeyRepr::RSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
-                SecretKeyRepr::ECDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.public_params())
-                }
-                SecretKeyRepr::DSA(ref priv_key) => priv_key.sign(hash, data, self.public_params()),
-                SecretKeyRepr::ECDH(_) => {
-                    bail!("ECDH can not be used for signing operations")
-                }
-                SecretKeyRepr::X25519(_) => {
-                    bail!("X25519 can not be used for signing operations")
-                }
-                #[cfg(feature = "unstable-curve448")]
-                SecretKeyRepr::X448(_) => {
-                    bail!("X448 can not be used for signing operations")
-                }
-                SecretKeyRepr::EdDSA(ref priv_key) => {
-                    priv_key.sign(hash, data, self.public_params())
-                }
-            }?;
-
-            match self.public_params() {
-                PublicParams::Ed25519 { .. } => {
-                    // native format
-
-                    ensure_eq!(sig.len(), 2, "expect two signature parts");
-
-                    let mut native = sig[0].clone();
-                    native.extend_from_slice(&sig[1]);
-
-                    ensure_eq!(native.len(), 64, "expect 64 byte signature");
-
-                    signature = Some(SignatureBytes::Native(native));
-                }
-                _ => {
-                    // MPI format:
-                    // strip leading zeros, to match parse results from MPIs
-                    let mpis = sig
-                        .iter()
-                        .map(|v| Mpi::from_slice(&v[..]))
-                        .collect::<Vec<_>>();
-
-                    signature = Some(SignatureBytes::Mpis(mpis));
-                }
-            }
-            Ok(())
-        })?;
-
-        signature.ok_or_else(|| unreachable!())
-    }
-
-    fn public_key(&self) -> D {
-        self.details.clone()
+    pub fn public_key(&self) -> &super::PublicSubkey {
+        &self.details
     }
 }
 
 impl SecretKeyTrait for SecretKey {
-    type PublicKey = PublicKey;
-    type Unlocked = SecretKeyRepr;
-
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
-    {
-        SecretKeyTrait::unlock(&self.0, pw, work)
-    }
-
-    fn create_signature<F>(
+    fn create_signature(
         &self,
-        key_pw: F,
+        key_pw: &Password,
         hash: HashAlgorithm,
         data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
-        SecretKeyTrait::create_signature(&self.0, key_pw, hash, data)
+    ) -> Result<SignatureBytes> {
+        let mut signature: Option<SignatureBytes> = None;
+        self.unlock(key_pw, |pub_params, priv_key| {
+            let sig = create_signature(pub_params, priv_key, hash, data)?;
+            signature.replace(sig);
+            Ok(())
+        })??;
+
+        signature.ok_or_else(|| unreachable!())
     }
 
-    fn public_key(&self) -> PublicKey {
-        SecretKeyTrait::public_key(&self.0)
-    }
-}
-
-impl SecretKeyTrait for SecretSubkey {
-    type PublicKey = PublicSubkey;
-    type Unlocked = SecretKeyRepr;
-
-    fn unlock<F, G, T>(&self, pw: F, work: G) -> Result<T>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<T>,
-    {
-        SecretKeyTrait::unlock(&self.0, pw, work)
-    }
-
-    fn create_signature<F>(
-        &self,
-        key_pw: F,
-        hash: HashAlgorithm,
-        data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
-        SecretKeyTrait::create_signature(&self.0, key_pw, hash, data)
-    }
-
-    fn public_key(&self) -> PublicSubkey {
-        SecretKeyTrait::public_key(&self.0)
+    fn hash_alg(&self) -> HashAlgorithm {
+        self.details.public_params().hash_alg()
     }
 }
 
-impl<D: PublicKeyTrait + crate::ser::Serialize> crate::ser::Serialize for SecretKeyInner<D> {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        // writes version and public part
-        crate::ser::Serialize::to_writer(&self.details, writer)?;
-        self.secret_params.to_writer(writer, self.version())?;
-        Ok(())
-    }
-}
-
-impl crate::ser::Serialize for SecretKey {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        crate::ser::Serialize::to_writer(&self.0, writer)
-    }
-}
-
-impl crate::ser::Serialize for SecretSubkey {
-    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        crate::ser::Serialize::to_writer(&self.0, writer)
-    }
-}
-
-impl PacketTrait for SecretKey {
-    fn packet_version(&self) -> Version {
-        self.0.details.packet_version()
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::SecretKey
-    }
-}
-
-impl PacketTrait for SecretSubkey {
-    fn packet_version(&self) -> Version {
-        self.0.details.packet_version()
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::SecretSubkey
-    }
-}
-
-impl PublicKeyTrait for SecretKey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
-    }
-
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
-    }
-}
-
-impl PublicKeyTrait for SecretSubkey {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
-    }
-
-    fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
-    }
-
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
-    }
-}
-
-impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInner<D> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        hashed: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.details.verify_signature(hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::Rng + rand::CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.details.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        self.details.serialize_for_hashing(writer)
-    }
-    fn public_params(&self) -> &PublicParams {
-        self.details.public_params()
-    }
-
+impl KeyDetails for SecretKey {
     fn version(&self) -> KeyVersion {
         self.details.version()
     }
-
     fn fingerprint(&self) -> Fingerprint {
         self.details.fingerprint()
     }
@@ -560,17 +214,89 @@ impl<D: PublicKeyTrait + crate::ser::Serialize> PublicKeyTrait for SecretKeyInne
     fn key_id(&self) -> KeyId {
         self.details.key_id()
     }
-
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.details.algorithm()
     }
+}
 
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.details.created_at()
+impl KeyDetails for SecretSubkey {
+    fn version(&self) -> KeyVersion {
+        self.details.version()
+    }
+    fn fingerprint(&self) -> Fingerprint {
+        self.details.fingerprint()
     }
 
-    fn expiration(&self) -> Option<u16> {
-        self.details.expiration()
+    fn key_id(&self) -> KeyId {
+        self.details.key_id()
+    }
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.details.algorithm()
+    }
+}
+
+impl SecretKeyTrait for SecretSubkey {
+    fn create_signature(
+        &self,
+        key_pw: &Password,
+        hash: HashAlgorithm,
+        data: &[u8],
+    ) -> Result<SignatureBytes> {
+        let mut signature: Option<SignatureBytes> = None;
+        self.unlock(key_pw, |pub_params, priv_key| {
+            let sig = create_signature(pub_params, priv_key, hash, data)?;
+            signature.replace(sig);
+            Ok(())
+        })??;
+
+        signature.ok_or_else(|| unreachable!())
+    }
+    fn hash_alg(&self) -> HashAlgorithm {
+        self.details.public_params().hash_alg()
+    }
+}
+
+impl crate::ser::Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        // writes version and public part
+        crate::ser::Serialize::to_writer(&self.details, writer)?;
+        self.secret_params.to_writer(writer, self.version())?;
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let details_len = crate::ser::Serialize::write_len(&self.details);
+        let secret_params_len = self.secret_params.write_len(self.version());
+
+        details_len + secret_params_len
+    }
+}
+
+impl crate::ser::Serialize for SecretSubkey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        // writes version and public part
+        crate::ser::Serialize::to_writer(&self.details, writer)?;
+        self.secret_params.to_writer(writer, self.version())?;
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let details_len = crate::ser::Serialize::write_len(&self.details);
+        let secret_params_len = self.secret_params.write_len(self.version());
+
+        details_len + secret_params_len
+    }
+}
+
+impl PacketTrait for SecretKey {
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
+    }
+}
+
+impl PacketTrait for SecretSubkey {
+    fn packet_header(&self) -> &PacketHeader {
+        &self.packet_header
     }
 }
 
@@ -581,11 +307,13 @@ impl SecretKey {
     /// If the Secret Key material in the packet is not locked, it is left unchanged.
     ///
     /// The current locking password for this key must be provided in `password`.
-    pub fn remove_password<P>(&mut self, password: P) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
-        self.0.remove_password(password)
+    pub fn remove_password(&mut self, password: &Password) -> Result<()> {
+        if let SecretParams::Encrypted(enc) = &self.secret_params {
+            let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
+            self.secret_params = SecretParams::Plain(unlocked);
+        }
+
+        Ok(())
     }
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet.
@@ -597,12 +325,12 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
-        P: FnOnce() -> String,
     {
-        self.0.set_password(rng, password)
+        let s2k = crate::types::S2kParams::new_default(rng, self.version());
+        Self::set_password_with_s2k(self, password, s2k)
     }
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet
@@ -610,15 +338,35 @@ impl SecretKey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password_with_s2k<P>(
+    pub fn set_password_with_s2k(
         &mut self,
-        password: P,
+        password: &Password,
         s2k_params: crate::types::S2kParams,
-    ) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
-        self.0.set_password_with_s2k(password, s2k_params)
+    ) -> Result<()> {
+        let plain = match &self.secret_params {
+            SecretParams::Plain(plain) => plain,
+            SecretParams::Encrypted(_) => {
+                bail!("Secret Key packet must be unlocked")
+            }
+        };
+
+        self.secret_params = SecretParams::Encrypted(plain.clone().encrypt(
+            &password.read(),
+            s2k_params,
+            &self.details,
+            Some(self.packet_header.tag()),
+        )?);
+
+        Ok(())
+    }
+
+    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.details, rng, plain, typ)
     }
 }
 
@@ -629,11 +377,13 @@ impl SecretSubkey {
     /// If the Secret Key material in the packet is not locked, it is left unchanged.
     ///
     /// The current locking password for this key must be provided in `password`.
-    pub fn remove_password<P>(&mut self, password: P) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
-        self.0.remove_password(password)
+    pub fn remove_password(&mut self, password: &Password) -> Result<()> {
+        if let SecretParams::Encrypted(enc) = &self.secret_params {
+            let unlocked = enc.unlock(password, &self.details, Some(self.packet_header.tag()))?;
+            self.secret_params = SecretParams::Plain(unlocked);
+        }
+
+        Ok(())
     }
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet.
@@ -643,12 +393,12 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password<R, P>(&mut self, rng: R, password: P) -> Result<()>
+    pub fn set_password<R>(&mut self, rng: R, password: &Password) -> Result<()>
     where
         R: rand::Rng + rand::CryptoRng,
-        P: FnOnce() -> String,
     {
-        self.0.set_password(rng, password)
+        let s2k = crate::types::S2kParams::new_default(rng, self.version());
+        Self::set_password_with_s2k(self, password, s2k)
     }
 
     /// Set a `password` that "locks" the private key material in this Secret Key packet
@@ -656,18 +406,153 @@ impl SecretSubkey {
     ///
     /// To change the password on a locked Secret Key packet, it needs to be unlocked
     /// using [Self::remove_password] before calling this function.
-    pub fn set_password_with_s2k<P>(
+    pub fn set_password_with_s2k(
         &mut self,
-        password: P,
+        password: &Password,
         s2k_params: crate::types::S2kParams,
-    ) -> Result<()>
-    where
-        P: FnOnce() -> String,
-    {
-        self.0.set_password_with_s2k(password, s2k_params)
+    ) -> Result<()> {
+        let plain = match &self.secret_params {
+            SecretParams::Plain(plain) => plain,
+            SecretParams::Encrypted(_) => {
+                bail!("Secret Key packet must be unlocked")
+            }
+        };
+
+        self.secret_params = SecretParams::Encrypted(plain.clone().encrypt(
+            &password.read(),
+            s2k_params,
+            &self.details,
+            Some(self.packet_header.tag()),
+        )?);
+
+        Ok(())
+    }
+
+    pub fn encrypt<R: rand::Rng + rand::CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.details, rng, plain, typ)
     }
 }
 
+fn create_signature(
+    pub_params: &PublicParams,
+    priv_key: &PlainSecretParams,
+    hash: HashAlgorithm,
+    data: &[u8],
+) -> Result<SignatureBytes> {
+    use crate::crypto::Signer;
+
+    debug!("unlocked key");
+    let sig = match *priv_key {
+        PlainSecretParams::RSA(ref priv_key) => {
+            let PublicParams::RSA(_) = pub_params else {
+                bail!("inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::ECDSA(ref priv_key) => {
+            let PublicParams::ECDSA(_) = pub_params else {
+                bail!("inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::DSA(ref priv_key) => {
+            let PublicParams::DSA(_) = pub_params else {
+                bail!("inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::ECDH(_) => {
+            bail!("ECDH can not be used for signing operations")
+        }
+        PlainSecretParams::X25519(_) => {
+            bail!("X25519 can not be used for signing operations")
+        }
+        #[cfg(feature = "unstable-curve448")]
+        PlainSecretParams::X448(_) => {
+            bail!("X448 can not be used for signing operations")
+        }
+        PlainSecretParams::EdDSA(ref priv_key) => {
+            let PublicParams::Ed25519(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::EdDSALegacy(ref priv_key) => {
+            match pub_params {
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }) => {}
+                PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
+                    curve, ..
+                }) => {
+                    unsupported_err!("curve {} for EdDSA", curve);
+                }
+                _ => {
+                    bail!("invalid inconsistent key");
+                }
+            }
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::Elgamal(_) => {
+            unsupported_err!("Elgamal signing");
+        }
+    }?;
+
+    match pub_params {
+        PublicParams::Ed25519 { .. } => {
+            // native format
+
+            ensure_eq!(sig.len(), 2, "expect two signature parts");
+
+            let mut native = sig[0].clone();
+            native.extend_from_slice(&sig[1]);
+
+            ensure_eq!(native.len(), 64, "expect 64 byte signature");
+
+            Ok(SignatureBytes::Native(native.into()))
+        }
+        _ => {
+            // MPI format:
+            // strip leading zeros, to match parse results from MPIs
+            let mpis = sig
+                .iter()
+                .map(|v| MpiBytes::from_slice(&v[..]))
+                .collect::<Vec<_>>();
+
+            Ok(SignatureBytes::Mpis(mpis))
+        }
+    }
+}
+
+fn sign<R: CryptoRng + Rng, K, P>(
+    mut rng: R,
+    key: &K,
+    key_pw: Password,
+    sig_typ: SignatureType,
+    pub_key: &P,
+) -> Result<Signature>
+where
+    K: SecretKeyTrait,
+    P: PublicKeyTrait + Serialize,
+{
+    use chrono::SubsecRound;
+
+    let mut config = match key.version() {
+        KeyVersion::V4 => SignatureConfig::v4(sig_typ, key.algorithm(), key.hash_alg()),
+        KeyVersion::V6 => SignatureConfig::v6(&mut rng, sig_typ, key.algorithm(), key.hash_alg())?,
+        v => unsupported_err!("unsupported key version: {:?}", v),
+    };
+
+    config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
+        chrono::Utc::now().trunc_subsecs(0),
+    ))?];
+    config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+
+    config.sign_key(key, key_pw, pub_key)
+}
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -676,87 +561,83 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use crate::crypto::hash::HashAlgorithm;
-    use crate::packet::{PublicKey, SecretKey};
-    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait, Version};
+    use crate::packet::{PubKeyInner, SecretKey};
+    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait};
 
     #[test]
     #[ignore] // slow in debug mode (argon2)
     fn secret_key_protection_v4() {
+        let _ = pretty_env_logger::try_init();
+
         const DATA: &[u8] = &[0x23, 0x05];
         let key_type = crate::KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
 
-        let mut alice_sec = SecretKey::new(
-            PublicKey::new(
-                Version::New,
-                KeyVersion::V4,
-                key_type.to_alg(),
-                Utc::now().trunc_subsecs(0),
-                None,
-                public_params,
-            )
-            .unwrap(),
-            secret_params,
-        );
+        let pub_key = PubKeyInner::new(
+            KeyVersion::V4,
+            key_type.to_alg(),
+            Utc::now().trunc_subsecs(0),
+            None,
+            public_params,
+        )
+        .unwrap();
+        let pub_key = crate::packet::PublicKey::from_inner(pub_key).unwrap();
+        let mut alice_sec = SecretKey::new(pub_key, secret_params).unwrap();
 
         alice_sec
             .set_password_with_s2k(
-                || "password".to_string(),
+                &"password".into(),
                 crate::types::S2kParams::new_default(&mut rng, KeyVersion::V4),
             )
             .unwrap();
 
         // signing with a wrong password should fail
         assert!(alice_sec
-            .create_signature(|| "wrong".to_string(), HashAlgorithm::default(), DATA)
+            .create_signature(&"wrong".into(), HashAlgorithm::default(), DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(|| "password".to_string(), HashAlgorithm::default(), DATA)
+            .create_signature(&"password".into(), HashAlgorithm::default(), DATA)
             .is_ok());
 
         // remove the password protection
-        alice_sec
-            .remove_password(|| "password".to_string())
-            .unwrap();
+        alice_sec.remove_password(&"password".into()).unwrap();
 
         // signing without a password should succeed now
         assert!(alice_sec
-            .create_signature(String::default, HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
             .is_ok());
 
         // set different password protection
-        alice_sec
-            .set_password(&mut rng, || "foo".to_string())
-            .unwrap();
+        alice_sec.set_password(&mut rng, &"foo".into()).unwrap();
 
         // signing without a password should fail now
         assert!(alice_sec
-            .create_signature(String::default, HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(|| "foo".to_string(), HashAlgorithm::default(), DATA)
+            .create_signature(&"foo".into(), HashAlgorithm::default(), DATA)
             .is_ok());
 
         // remove the password protection again
-        alice_sec.remove_password(|| "foo".to_string()).unwrap();
+        alice_sec.remove_password(&"foo".into()).unwrap();
 
         // set password protection with v6 s2k defaults (AEAD+Argon2)
         alice_sec
             .set_password_with_s2k(
-                || "bar".to_string(),
+                &"bar".into(),
                 S2kParams::new_default(&mut rng, KeyVersion::V6),
             )
             .unwrap();
 
         // signing with the right password should succeed
-        assert!(alice_sec
-            .create_signature(|| "bar".to_string(), HashAlgorithm::default(), DATA)
-            .is_ok());
+        alice_sec
+            .create_signature(&"bar".into(), HashAlgorithm::default(), DATA)
+            .expect("failed to sign");
     }
 }

@@ -6,8 +6,8 @@ use crate::armor::{self, BlockType};
 use crate::composed::signed_key::{
     PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey, SignedSecretKeyParser,
 };
-use crate::errors::{Error, Result};
-use crate::packet::{Packet, PacketParser};
+use crate::errors::Result;
+use crate::packet::{Packet, PacketParser, PacketTrait};
 use crate::types::Tag;
 
 /// Parses a list of secret and public keys, from either ASCII-armored or binary OpenPGP data.
@@ -35,7 +35,7 @@ pub fn from_reader_many_buf<'a, R: io::BufRead + 'a>(
         let (keys, headers) = from_armor_many_buf(input)?;
         Ok((keys, Some(headers)))
     } else {
-        Ok((from_bytes_many(input), None))
+        Ok((from_bytes_many(input)?, None))
     }
 }
 
@@ -71,7 +71,7 @@ pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
         BlockType::PublicKey | BlockType::PrivateKey | BlockType::File => {
             let headers = dearmor.headers.clone(); // FIXME: avoid clone
                                                    // TODO: check that the result is what it actually said.
-            Ok((from_bytes_many(dearmor), headers))
+            Ok((from_bytes_many(BufReader::new(dearmor))?, headers))
         }
         BlockType::Message
         | BlockType::MultiPartMessage(_, _)
@@ -92,15 +92,15 @@ pub fn from_armor_many_buf<'a, R: io::BufRead + 'a>(
 
 /// Parses a list of secret and public keys from raw bytes.
 pub fn from_bytes_many<'a>(
-    bytes: impl io::Read + 'a,
-) -> Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a> {
+    bytes: impl io::BufRead + 'a,
+) -> Result<Box<dyn Iterator<Item = Result<PublicOrSecret>> + 'a>> {
     let packets = PacketParser::new(bytes)
         .filter_map(crate::composed::shared::filter_parsed_packet_results)
         .peekable();
 
-    Box::new(PubPrivIterator {
+    Ok(Box::new(PubPrivIterator {
         inner: Some(packets),
-    })
+    }))
 }
 
 pub struct PubPrivIterator<I: Sized + Iterator<Item = Result<Packet>>> {
@@ -139,7 +139,7 @@ impl<I: Sized + Iterator<Item = Result<Packet>>> Iterator for PubPrivIterator<I>
 
                     res
                 }
-                Some(Err(e)) => Some(Err(Error::Message(e.to_string()))),
+                Some(Err(_)) => Some(Err(packets.next().expect("checked").expect_err("checked"))),
                 None => None,
             },
         }

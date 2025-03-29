@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 3bd7ad1d52c73843534945fec668c479022feca564ffc40e6f3fda5f863c4950 # shrinks to params = RsaPublicParams { key: RsaPublicKey { n: BigUint { data: [13393658060932285809, 5043542623631884568, 1330226033883030252, 4401070760368894482, 2797227479331540707, 8309479174907614029, 2828656735100989842, 12178228556582579187] }, e: BigUint { data: [65537] } } }

@@ -1,4 +1,4 @@
-use std::io;
+use std::ops::Deref;
 
 use chrono::SubsecRound;
 use rand::{CryptoRng, Rng};
@@ -8,11 +8,12 @@ use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::errors::Result;
 use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::types::PkeskBytes;
+use crate::ser::Serialize;
 use crate::types::{
     EskType, Fingerprint, KeyId, KeyVersion, PublicKeyTrait, PublicParams, SecretKeyTrait,
     SignatureBytes,
 };
+use crate::types::{Password, PkeskBytes};
 
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -41,22 +42,24 @@ impl PublicKey {
         }
     }
 
-    pub fn sign<R, F>(
+    pub fn sign<R, K, P>(
         self,
         mut rng: R,
-        sec_key: &impl SecretKeyTrait,
-        key_pw: F,
+        sec_key: &K,
+        pub_key: &P,
+        key_pw: &Password,
     ) -> Result<SignedPublicKey>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
         let primary_key = self.primary_key;
-        let details = self.details.sign(&mut rng, sec_key, key_pw.clone())?;
+        let details = self.details.sign(&mut rng, sec_key, pub_key, key_pw)?;
         let public_subkeys = self
             .public_subkeys
             .into_iter()
-            .map(|k| k.sign(&mut rng, sec_key, key_pw.clone()))
+            .map(|k| k.sign(&mut rng, sec_key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedPublicKey {
@@ -65,34 +68,8 @@ impl PublicKey {
             public_subkeys,
         })
     }
-}
 
-impl PublicKeyTrait for PublicKey {
-    fn version(&self) -> crate::types::KeyVersion {
-        self.primary_key.version()
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        self.primary_key.fingerprint()
-    }
-
-    fn key_id(&self) -> KeyId {
-        self.primary_key.key_id()
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        self.primary_key.algorithm()
-    }
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.primary_key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
+    pub fn encrypt<R: Rng + CryptoRng>(
         &self,
         rng: R,
         plain: &[u8],
@@ -100,21 +77,13 @@ impl PublicKeyTrait for PublicKey {
     ) -> Result<PkeskBytes> {
         self.primary_key.encrypt(rng, plain, typ)
     }
+}
 
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.primary_key.serialize_for_hashing(writer)
-    }
+impl Deref for PublicKey {
+    type Target = packet::PublicKey;
 
-    fn public_params(&self) -> &PublicParams {
-        self.primary_key.public_params()
-    }
-
-    fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        self.primary_key.created_at()
-    }
-
-    fn expiration(&self) -> Option<u16> {
-        self.primary_key.expiration()
+    fn deref(&self) -> &Self::Target {
+        &self.primary_key
     }
 }
 
@@ -123,25 +92,28 @@ impl PublicSubkey {
         PublicSubkey { key, keyflags }
     }
 
-    pub fn sign<R, F>(
+    pub fn sign<R, K, P>(
         self,
         mut rng: R,
-        sec_key: &impl SecretKeyTrait,
-        key_pw: F,
+        sec_key: &K,
+        pub_key: &P,
+        key_pw: &Password,
     ) -> Result<SignedPublicSubKey>
     where
         R: CryptoRng + Rng,
-        F: (FnOnce() -> String) + Clone,
+        K: SecretKeyTrait,
+        P: PublicKeyTrait + Serialize,
     {
         let key = self.key;
         let hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(
                 chrono::Utc::now().trunc_subsecs(0),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.into())),
-            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint())),
+            ))?,
+            Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
+            Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))];
+        let unhashed_subpackets =
+            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
 
         let mut config = match sec_key.version() {
             KeyVersion::V4 => SignatureConfig::v4(
@@ -161,13 +133,22 @@ impl PublicSubkey {
         config.hashed_subpackets = hashed_subpackets;
         config.unhashed_subpackets = unhashed_subpackets;
 
-        let signatures = vec![config.sign_key_binding(sec_key, key_pw, &key)?];
+        let signatures = vec![config.sign_key_binding(sec_key, pub_key, key_pw, &key)?];
 
         Ok(SignedPublicSubKey { key, signatures })
     }
+
+    pub fn encrypt<R: Rng + CryptoRng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        self.key.encrypt(rng, plain, typ)
+    }
 }
 
-impl PublicKeyTrait for PublicSubkey {
+impl crate::types::KeyDetails for PublicSubkey {
     fn version(&self) -> crate::types::KeyVersion {
         self.key.version()
     }
@@ -183,7 +164,9 @@ impl PublicKeyTrait for PublicSubkey {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.key.algorithm()
     }
+}
 
+impl PublicKeyTrait for PublicSubkey {
     fn verify_signature(
         &self,
         hash: HashAlgorithm,
@@ -191,19 +174,6 @@ impl PublicKeyTrait for PublicSubkey {
         sig: &SignatureBytes,
     ) -> Result<()> {
         self.key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: Rng + CryptoRng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        self.key.encrypt(rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl io::Write) -> Result<()> {
-        self.key.serialize_for_hashing(writer)
     }
 
     fn public_params(&self) -> &PublicParams {

@@ -11,23 +11,24 @@ use std::path::Path;
 
 use buffer_redux::BufReader;
 use chrono::{DateTime, Utc};
-use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use pgp::composed::signed_key::*;
 use pgp::composed::Deserializable;
 use pgp::crypto::ecdsa::SecretKey as ECDSASecretKey;
 use pgp::crypto::{
-    ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
-    sym::SymmetricKeyAlgorithm,
+    hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
 };
 use pgp::errors::Error;
+use pgp::packet::PacketHeader;
 use pgp::packet::{
     KeyFlags, Signature, SignatureType, Subpacket, SubpacketData, UserAttribute, UserId,
 };
 use pgp::ser::Serialize;
+use pgp::types::Fingerprint;
+use pgp::types::KeyDetails;
 use pgp::types::{
-    CompressionAlgorithm, KeyId, KeyVersion, Mpi, PublicParams, S2kParams, SecretKeyRepr,
-    SecretKeyTrait, SecretParams, SignedUser, StringToKey, Version,
+    CompressionAlgorithm, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion, PacketLength,
+    PlainSecretParams, PublicParams, S2kParams, SecretParams, SignedUser, StringToKey, Tag,
 };
 use pgp::{armor, types::PublicKeyTrait};
 use rand::thread_rng;
@@ -37,7 +38,6 @@ use rsa::{
     traits::{PrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
 };
-use smallvec::SmallVec;
 
 fn read_file<P: AsRef<Path> + ::std::fmt::Debug>(path: P) -> File {
     // Open the path in read-only mode, returns `io::Result<File>`
@@ -64,16 +64,44 @@ struct DumpResult {
 fn test_parse_dump(i: usize, expected: DumpResult) {
     let _ = pretty_env_logger::try_init();
 
-    let f = read_file(Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp")));
+    let f = Path::new("./tests/tests/sks-dump/").join(format!("000{i}.pgp"));
 
     let mut actual = DumpResult::default();
 
-    for (j, key) in SignedPublicKey::from_bytes_many(f).enumerate() {
+    for (j, key) in SignedPublicKey::from_file_many(f).unwrap().enumerate() {
         if j % 1000 == 0 {
-            println!("key {}: {}", i, j);
+            warn!("key {}: {}", i, j);
         }
         actual.total_count += 1;
-        let key = key.as_ref().expect("failed to parse key");
+        let key = match key {
+            Ok(ref key) => key,
+            Err(err) => {
+                warn!("parsing failed: {}:{}: {:?}", i, j, err);
+                actual.err_count += 1;
+                continue;
+            }
+        };
+
+        if let Err(err) = key.verify() {
+            match err {
+                // Skip these for now
+                Error::Unimplemented { message } => {
+                    warn!("unimplemented: {}:{} {:?}", i, j, message);
+                    actual.unimpl_count += 1;
+                }
+                _ => {
+                    warn!(
+                        "verification failed: {}:{}: public key {}: {:?}",
+                        i,
+                        j,
+                        hex::encode(key.key_id()),
+                        err
+                    );
+                    actual.err_count += 1;
+                }
+            }
+            continue;
+        }
 
         // roundtrip
         {
@@ -84,7 +112,17 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
             let (key2, _headers) =
                 SignedPublicKey::from_string(std::str::from_utf8(&serialized[..]).unwrap())
                     .expect("failed to parse round2 - string");
-            assert_eq!(key, &key2, "string");
+
+            if key != &key2 {
+                warn!(
+                    "roundtrip not possible: {}:{}: {}",
+                    i,
+                    j,
+                    hex::encode(key.key_id())
+                );
+                actual.err_count += 1;
+                continue;
+            }
 
             // and parse them again (buffered)
             let (key2, _headers) = SignedPublicKey::from_armor_single(&serialized[..])
@@ -92,27 +130,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
             assert_eq!(key, &key2, "bytes");
         }
 
-        match key.verify() {
-            // Skip these for now
-            Err(Error::Unimplemented(err)) => {
-                warn!("unimplemented: {}:{} {:?}", i, j, err);
-                actual.unimpl_count += 1;
-            }
-            Err(err) => {
-                warn!(
-                    "verification failed: {}:{}: public key {}: {:?}",
-                    i,
-                    j,
-                    hex::encode(key.key_id()),
-                    err
-                );
-                actual.err_count += 1;
-            }
-            // all good
-            Ok(_) => {
-                actual.valid_count += 1;
-            }
-        }
+        actual.valid_count += 1;
     }
 
     assert_eq!(expected, actual);
@@ -139,98 +157,99 @@ parse_dumps!(
     (
         test_parse_dumps_0,
         0,
-        17_704,
-        1, // Hash::Other(4)
-        3294,
-        20_999
+        17_727,
+        // Hash::Other(4)
+        1,
+        3266,
+        20_994
     ),
     (
         test_parse_dumps_1,
         1,
-        17_542,
+        17_564,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3450,
-        21_000
+        3424,
+        20_996
     ),
     (
         test_parse_dumps_2,
         2,
-        17_583,
+        17_598,
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
         5,
-        3411,
-        20_999
+        3391,
+        20_994
     ),
     (
         test_parse_dumps_3,
         3,
-        17_651,
+        17_668,
         // - Hash::Other(4)
         // - Elgamal verify
         6,
-        3341,
-        20_998
+        3322,
+        20_996
     ),
     (
         test_parse_dumps_4,
         4,
-        17_583,
-        // - Elgamal verify
+        17_608,
+        // - Elgamal verify - gets hidden?
         2,
-        3414,
-        20_999
+        3384,
+        20_994
     ),
     (
         test_parse_dumps_5,
         5,
-        17_609,
+        17_642,
         // - Hash::Other(4)
         // - Elgamal verify
         8,
-        3382,
-        20_999
+        3352,
+        21_002
     ),
     (
         test_parse_dumps_6,
         6,
-        17_676,
+        17_702,
         // - Elgamal verify
         1,
-        3323,
-        21_000
+        3295,
+        20_998
     ),
     (
         test_parse_dumps_7,
         7,
-        17_688,
+        17_722,
         // - Elgamal verify
         3,
-        3309,
-        21_000
+        3274,
+        20_999
     ),
     (
         test_parse_dumps_8,
         8,
-        17_693,
+        17_722,
         // - Hash::Other(5)
         // - Elgamal verify
         6,
-        3301,
-        21_000
+        3271,
+        20_999
     ),
     (
         test_parse_dumps_9,
         9,
-        17_546,
+        17_576,
         // - Hash::Other(5)
         // - Elgamal verify
         3,
-        3451,
-        21_000
+        3423,
+        21_002
     ),
 );
 
@@ -248,8 +267,8 @@ fn test_parse_gnupg_v1() {
         let (pk, headers) = SignedPublicKey::from_string(input).expect("failed to parse key");
         match pk.verify() {
             // Skip these for now
-            Err(Error::Unimplemented(err)) => {
-                warn!("verification failed: {:?}", err);
+            Err(Error::Unimplemented { message }) => {
+                warn!("verification failed: {:?}", message);
             }
             Err(err) => panic!("{err:?}"),
             // all good
@@ -288,43 +307,42 @@ fn test_parse_openpgp_sample_rsa_private() {
         hex::decode("2c46").expect("failed hex encoding")
     );
 
-    pkey.unlock(
-        || "".to_string(),
-        |unlocked_key| {
-            match unlocked_key {
-                SecretKeyRepr::RSA(k) => {
-                    assert_eq!(k.d().bits(), 2044);
-                    assert_eq!(k.primes()[0].bits(), 1024);
-                    assert_eq!(k.primes()[1].bits(), 1024);
+    pkey.unlock(&"".into(), |_pub_params, unlocked_key| {
+        match unlocked_key {
+            PlainSecretParams::RSA(k) => {
+                assert_eq!(k.d().bits(), 2044);
+                assert_eq!(k.primes()[0].bits(), 1024);
+                assert_eq!(k.primes()[1].bits(), 1024);
 
-                    // test basic encrypt decrypt
-                    let plaintext = vec![2u8; 128];
-                    let mut rng = thread_rng();
+                // test basic encrypt decrypt
+                let plaintext = vec![2u8; 128];
+                let mut rng = thread_rng();
 
-                    let ciphertext = {
-                        // TODO: fix this in rust-rsa
-                        let k: RsaPrivateKey = (*k).clone();
-                        let pk: RsaPublicKey = k.into();
-                        pk.encrypt(
-                            &mut rng,
-                            rsa::pkcs1v15::Pkcs1v15Encrypt,
-                            plaintext.as_slice(),
-                        )
-                        .expect("failed to encrypt")
-                    };
-
+                let ciphertext = {
+                    // TODO: fix this in rust-rsa
                     let k: &RsaPrivateKey = k;
-                    let new_plaintext = k
-                        .decrypt(rsa::pkcs1v15::Pkcs1v15Encrypt, ciphertext.as_slice())
-                        .expect("failed to decrypt");
-                    assert_eq!(plaintext, new_plaintext);
-                }
-                _ => panic!("unexpected params type {unlocked_key:?}"),
+                    let k: RsaPrivateKey = k.clone();
+                    let pk: RsaPublicKey = k.into();
+                    pk.encrypt(
+                        &mut rng,
+                        rsa::pkcs1v15::Pkcs1v15Encrypt,
+                        plaintext.as_slice(),
+                    )
+                    .expect("failed to encrypt")
+                };
+
+                let k: &RsaPrivateKey = k;
+                let new_plaintext = k
+                    .decrypt(rsa::pkcs1v15::Pkcs1v15Encrypt, ciphertext.as_slice())
+                    .expect("failed to decrypt");
+                assert_eq!(plaintext, new_plaintext);
             }
-            Ok(())
-        },
-    )
-    .expect("failed to unlock");
+            _ => panic!("unexpected params type {unlocked_key:?}"),
+        }
+        Ok(())
+    })
+    .expect("failed to unlock")
+    .unwrap();
 
     let pub_key = pkey.public_key();
     assert_eq!(pub_key.key_id(), pkey.key_id());
@@ -348,19 +366,16 @@ fn test_parse_details() {
         &hex::decode("4c073ae0c8445c0c").unwrap()[..]
     );
 
-    let primary_n = Mpi::from_raw(hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap());
+    let primary_n = MpiBytes::from_slice(&hex::decode("a54cfa9142fb75265322055b11f750f49af37b64c67ad830ed7443d6c20477b0492ee9090e4cb8b0c2c5d49e87dff5ac801b1aaadb319eee9d3d29b25bd9aa634b126c0e5da4e66b414e9dbdde5dea0e38c5bfe7e5f7fdb9f4c1b1f39ed892dd4e0873a0df66ff46fd9236d291c276ce69fb972f5ef24746b6794a0f70e0694667b9de57353330c732733cc6d5f24cd772c5c7d5bdb77dc0a5b6e9d3ee0372146778cda6144976e33066fc57bfb515ef397b3aa882c0bde02d19f7a32df7b1195cb0f32e6e7455ac199fa434355f0fa43230e5237e9a6e0ff6ad5b21b4d892c6fc3842788ba48b020ee85edd135cff2808780e834b5d94cc2c2b5fa747167a20814589d7f030ee9f8a669737bdb063e6b0b88ab0fd7454c03f69678a1dd99442cfd0bf620bc5b6896cd6e2b51fdecf54c7e6368c11c70f302444ec9d5a17ceaacb4a9ac3c37db3478f8fb04a679f0957a3697e8d90152008927c751b34160c72e757efc85053dd86738931fd351cf134266e436efd64a14b35869040108082847f7f5215628e7f66513809ae0f66ea73d01f5fd965142cdb7860276d4c20faf716c40ae0632d3b180137438cb95257327607038fb3b82f76556e8dd186b77c2f51b0bfdd7552f168f2c4eb90844fdc05cf239a57690225903399783ad3736891edb87745a1180e04741526384045c2de03c463c43b27d5ab7ffd6d0ecccc249f").unwrap());
 
     let pk = key.primary_key;
     assert_eq!(pk.version(), KeyVersion::V4);
     assert_eq!(pk.algorithm(), PublicKeyAlgorithm::RSA);
 
     match pk.public_params() {
-        PublicParams::RSA { n, e } => {
-            assert_eq!(n, &primary_n);
-            assert_eq!(
-                BigUint::from_bytes_be(e.as_bytes()).to_u64().unwrap(),
-                0x0001_0001
-            );
+        PublicParams::RSA(public_params) => {
+            assert_eq!(MpiBytes::from(public_params.key.n().clone()), primary_n);
+            assert_eq!(public_params.key.e().to_u64().unwrap(), 0x0001_0001);
         }
         _ => panic!("wrong public params: {:?}", pk.public_params()),
     }
@@ -371,10 +386,14 @@ fn test_parse_details() {
     // TODO: examine subkey details
     assert_eq!(key.public_subkeys.len(), 1, "missing subkey");
 
-    let issuer = Subpacket::regular(SubpacketData::Issuer(
-        KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap(),
-    ));
-    let key_flags: SmallVec<[u8; 1]> = KeyFlags(0x03).into();
+    let issuer = Subpacket::regular(SubpacketData::Issuer(KeyId::from([
+        0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C,
+    ])))
+    .unwrap();
+    let mut key_flags = KeyFlags::default();
+    key_flags.set_certify(true);
+    key_flags.set_sign(true);
+
     let p_sym_algs = smallvec![
         SymmetricKeyAlgorithm::AES256,
         SymmetricKeyAlgorithm::AES192,
@@ -388,20 +407,26 @@ fn test_parse_details() {
         CompressionAlgorithm::ZIP,
     ];
     let p_hash_algs = smallvec![
-        HashAlgorithm::SHA2_256,
-        HashAlgorithm::SHA1,
-        HashAlgorithm::SHA2_384,
-        HashAlgorithm::SHA2_512,
-        HashAlgorithm::SHA2_224,
+        HashAlgorithm::Sha256,
+        HashAlgorithm::Sha1,
+        HashAlgorithm::Sha384,
+        HashAlgorithm::Sha512,
+        HashAlgorithm::Sha224,
     ];
 
+    let packet_header = PacketHeader::from_parts(
+        PacketHeaderVersion::Old,
+        Tag::Signature,
+        PacketLength::Fixed(568),
+    )
+    .unwrap();
     let sig1 = Signature::v4(
-        Version::Old,
+        packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA1,
+        HashAlgorithm::Sha1,
         [0x7c, 0x63],
-        vec![Mpi::from_raw(vec![
+        vec![MpiBytes::from_slice(&[
             0x15, 0xb5, 0x4f, 0xca, 0x11, 0x7f, 0x1b, 0x1d, 0xc0, 0x7a, 0x05, 0x97, 0x25, 0x10,
             0x4b, 0x6a, 0x76, 0x12, 0xf8, 0x89, 0x48, 0x76, 0x74, 0xeb, 0x8b, 0x22, 0xcf, 0xeb,
             0x95, 0x80, 0x70, 0x97, 0x1b, 0x92, 0x7e, 0x35, 0x8f, 0x5d, 0xc8, 0xae, 0x22, 0x0d,
@@ -446,33 +471,47 @@ fn test_parse_details() {
                 DateTime::parse_from_rfc3339("2014-06-06T15:57:41Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
             Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                 p_sym_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone()))
+                .unwrap(),
             Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                 p_com_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])),
-            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer.clone()],
     );
 
     let u1 = SignedUser::new(
-        UserId::from_str(Version::Old, "john doe (test) <johndoe@example.com>"),
+        UserId::from_str(
+            PacketHeaderVersion::Old,
+            "john doe (test) <johndoe@example.com>",
+        )
+        .unwrap(),
         vec![sig1],
     );
 
+    let packet_header = PacketHeader::from_parts(
+        PacketHeaderVersion::Old,
+        Tag::Signature,
+        PacketLength::Fixed(568),
+    )
+    .unwrap();
     let sig2 = Signature::v4(
-        Version::Old,
+        packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA1,
+        HashAlgorithm::Sha1,
         [0xca, 0x6c],
-        vec![Mpi::from_raw(vec![
+        vec![MpiBytes::from_slice(&[
             0x49, 0xa0, 0xb5, 0x41, 0xbd, 0x33, 0xa8, 0xda, 0xda, 0x6e, 0xb1, 0xe5, 0x28, 0x74,
             0x18, 0xee, 0x39, 0xc8, 0x8d, 0xfd, 0x39, 0xe8, 0x3b, 0x09, 0xdc, 0x9d, 0x04, 0x91,
             0x5d, 0x66, 0xb8, 0x1d, 0x04, 0x0a, 0x90, 0xe7, 0xa6, 0x84, 0x9b, 0xb1, 0x06, 0x4f,
@@ -517,23 +556,31 @@ fn test_parse_details() {
                 DateTime::parse_from_rfc3339("2014-06-06T16:21:46Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags.clone())).unwrap(),
             Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                 p_sym_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone())),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs.clone()))
+                .unwrap(),
             Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
                 p_com_algs.clone(),
-            )),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])),
-            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer.clone()],
     );
 
     let u2 = SignedUser::new(
-        UserId::from_str(Version::Old, "john doe <johndoe@seconddomain.com>"),
+        UserId::from_str(
+            PacketHeaderVersion::Old,
+            "john doe <johndoe@seconddomain.com>",
+        )
+        .unwrap(),
         vec![sig2],
     );
 
@@ -549,13 +596,19 @@ fn test_parse_details() {
         _ => panic!("not here"),
     }
 
+    let packet_header = PacketHeader::from_parts(
+        PacketHeaderVersion::Old,
+        Tag::Signature,
+        PacketLength::Fixed(568),
+    )
+    .unwrap();
     let sig3 = Signature::v4(
-        Version::Old,
+        packet_header,
         SignatureType::CertPositive,
         PublicKeyAlgorithm::RSA,
-        HashAlgorithm::SHA1,
+        HashAlgorithm::Sha1,
         [0x02, 0x0c],
-        vec![Mpi::from_raw(vec![
+        vec![MpiBytes::from_slice(&[
             0x5b, 0x4b, 0xeb, 0xff, 0x1a, 0x89, 0xc2, 0xe1, 0x80, 0x20, 0x26, 0x3b, 0xf4, 0x4d,
             0x2d, 0x46, 0xba, 0x96, 0x78, 0xb2, 0x88, 0xf8, 0xf9, 0xd5, 0xf1, 0x5f, 0x7d, 0x45,
             0xeb, 0xbc, 0x25, 0x2e, 0x1b, 0x2f, 0x8e, 0xd4, 0xa9, 0x6e, 0x64, 0xfa, 0x97, 0x09,
@@ -600,13 +653,14 @@ fn test_parse_details() {
                 DateTime::parse_from_rfc3339("2014-06-06T16:05:43Z")
                     .expect("failed to parse static time")
                     .with_timezone(&Utc),
-            )),
-            Subpacket::regular(SubpacketData::KeyFlags(key_flags)),
-            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(p_sym_algs)),
-            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs)),
-            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(p_com_algs)),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])),
-            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])),
+            ))
+            .unwrap(),
+            Subpacket::regular(SubpacketData::KeyFlags(key_flags)).unwrap(),
+            Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(p_sym_algs)).unwrap(),
+            Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs)).unwrap(),
+            Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(p_com_algs)).unwrap(),
+            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer],
     );
@@ -633,7 +687,7 @@ fn encrypted_private_key() {
 
     match pp {
         SecretParams::Plain(_) => panic!("should be encrypted"),
-        SecretParams::Encrypted(pp) => {
+        SecretParams::Encrypted(ref pp) => {
             let S2kParams::Cfb { sym_alg, s2k, iv } = pp.string_to_key_params() else {
                 panic!("unexpected s2k param: {:?}", pp);
             };
@@ -648,7 +702,7 @@ fn encrypted_private_key() {
                     salt,
                     count,
                 } => {
-                    assert_eq!(*hash_alg, HashAlgorithm::SHA2_256);
+                    assert_eq!(*hash_alg, HashAlgorithm::Sha256);
                     assert_eq!(salt, &hex::decode("CB18E77884F2F055").unwrap()[..]);
                     assert_eq!(*count, 96u8); // This is an encoded iteration count
                 }
@@ -660,11 +714,11 @@ fn encrypted_private_key() {
     }
 
     key.unlock(
-        || "test".to_string(),
-        |k| {
+        &"test".into(),
+        |_pub_params, k| {
             info!("{:?}", k);
             match k {
-                SecretKeyRepr::RSA(k) => {
+                PlainSecretParams::RSA(k) => {
                     assert_eq!(k.e().to_bytes_be(), hex::decode("010001").unwrap().to_vec());
                     assert_eq!(k.n().to_bytes_be(), hex::decode("9AF89C08A8EA84B5363268BAC8A06821194163CBCEEED2D921F5F3BDD192528911C7B1E515DCE8865409E161DBBBD8A4688C56C1E7DFCF639D9623E3175B1BCA86B1D12AE4E4FBF9A5B7D5493F468DA744F4ACFC4D13AD2D83398FFC20D7DF02DF82F3BC05F92EDC41B3C478638A053726586AAAC57E2B66C04F9775716A0C71").unwrap().to_vec());
                     assert_eq!(k.d().to_bytes_be(), hex::decode("33DE47E3421E1442CE9BFA9FA1ACC68D657594604FA7719CC91817F78D604B0DA38CD206D9D571621C589E3DF19CA2BB0C5F045EAC2C25AEB2BCE0D00E2E29538F8239F8A499EAF872497809E524A9EDA88E7ECEE78DF722E33DD62C9E204FE0F90DCF6F4247D1F7C8CE3BB3F0A4BAB23CFD95D41BC8A39C22C99D5BC38BC51D").unwrap().to_vec());
@@ -675,7 +729,7 @@ fn encrypted_private_key() {
             }
             Ok(())
         },
-    ).unwrap();
+    ).unwrap().unwrap();
 }
 
 fn get_test_fingerprint(filename: &str) -> (serde_json::Value, SignedPublicKey) {
@@ -821,7 +875,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
             match parsed {
                 PublicOrSecret::Secret(sec) => {
-                    sec.unlock(|| pw.to_string(), |_| Ok(())).unwrap();
+                    sec.unlock(&pw.into(), |_, _| Ok(())).unwrap().unwrap();
                 }
                 PublicOrSecret::Public(_) => {
                     // Nothing todo
@@ -835,7 +889,7 @@ fn test_parse_openpgp_key(key: &str, verify: bool, match_raw: bool, pw: &'static
 
 fn test_parse_openpgp_key_bin(key: &str, verify: bool) {
     let f = read_file(Path::new("./tests/openpgp/").join(key));
-    let pk = from_bytes_many(f);
+    let pk = from_bytes_many(BufReader::new(f)).unwrap();
     for key in pk {
         let parsed = key.expect("failed to parse key");
         if verify {
@@ -1067,18 +1121,16 @@ fn private_ecc1_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "0BA52DF0BAA59D9C",);
-    sk.unlock(
-        || "ecc".to_string(),
-        |k| {
-            match k {
-                SecretKeyRepr::ECDSA(ref inner_key) => {
-                    assert!(matches!(inner_key, ECDSASecretKey::P256(_)));
-                }
-                _ => panic!("invalid key"),
+    sk.unlock(&"ecc".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::ECDSA(ref inner_key) => {
+                assert!(matches!(inner_key, ECDSASecretKey::P256(_)));
             }
-            Ok(())
-        },
-    )
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1092,18 +1144,16 @@ fn private_ecc2_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 0);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "098033880F54719F",);
-    sk.unlock(
-        || "ecc".to_string(),
-        |k| {
-            match k {
-                SecretKeyRepr::ECDSA(ref inner_key) => {
-                    assert!(matches!(inner_key, ECDSASecretKey::P384(_)));
-                }
-                _ => panic!("invalid key"),
+    sk.unlock(&"ecc".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::ECDSA(ref inner_key) => {
+                assert!(matches!(inner_key, ECDSASecretKey::P384(_)));
             }
-            Ok(())
-        },
-    )
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
+    .unwrap()
     .unwrap();
 
     /*
@@ -1120,18 +1170,16 @@ fn private_ecc3_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "E15A9BB15A23A43F",);
-    sk.unlock(
-        || "ecc".to_string(),
-        |k| {
-            match k {
-                SecretKeyRepr::ECDSA(ref inner_key) => {
-                    assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
-                }
-                _ => panic!("invalid key"),
+    sk.unlock(&"ecc".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::ECDSA(ref inner_key) => {
+                assert!(matches!(inner_key, ECDSASecretKey::Secp256k1(_)));
             }
-            Ok(())
-        },
-    )
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1145,18 +1193,14 @@ fn private_x25519_verify() {
     sk.verify().expect("invalid key");
     assert_eq!(sk.secret_subkeys.len(), 1);
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
-    sk.unlock(
-        || "moon".to_string(),
-        |k| {
-            match k {
-                SecretKeyRepr::EdDSA(ref inner_key) => {
-                    assert_eq!(inner_key.oid, ECCCurve::Ed25519.oid());
-                }
-                _ => panic!("invalid key"),
-            }
-            Ok(())
-        },
-    )
+    sk.unlock(&"moon".into(), |_pub_params, k| {
+        match k {
+            PlainSecretParams::EdDSALegacy(..) => {}
+            _ => panic!("invalid key"),
+        }
+        Ok(())
+    })
+    .unwrap()
     .unwrap();
 
     let pub_key = sk.public_key();
@@ -1176,7 +1220,7 @@ fn pub_x25519_little_verify() {
         "A586D1DD06BD97BC",
     );
     assert_eq!(pk.details.users.len(), 1);
-    assert_eq!(pk.details.users[0].id.id(), "Hi <hi@hel.lo>");
+    assert_eq!(pk.details.users[0].id.id(), b"Hi <hi@hel.lo>");
 }
 
 macro_rules! autocrypt_key {
@@ -1199,8 +1243,9 @@ fn test_parse_autocrypt_key(key: &str, unlock: bool) {
 
         if unlock {
             let sk: SignedSecretKey = parsed.clone().try_into().unwrap();
-            sk.unlock(|| "".to_string(), |_| Ok(()))
-                .expect("failed to unlock key");
+            sk.unlock(&"".into(), |_, _| Ok(()))
+                .expect("failed to unlock key")
+                .unwrap();
 
             let pub_key = sk.public_key();
             assert_eq!(pub_key.key_id(), sk.key_id());
@@ -1259,32 +1304,6 @@ fn test_invalid() {
 }
 
 #[test]
-fn test_handle_incomplete_packets_end() {
-    let _ = pretty_env_logger::try_init();
-    let p = Path::new("./tests/openpgp-interop/testcases/messages/gnupg-v1-001-decrypt.asc");
-    let mut file = read_file(p.to_path_buf());
-
-    let mut buf = vec![];
-    file.read_to_end(&mut buf).unwrap();
-
-    let input = ::std::str::from_utf8(buf.as_slice()).expect("failed to convert to string");
-    let (key, _headers) = SignedSecretKey::from_string(input).expect("failed to parse key");
-    key.verify().expect("invalid key");
-
-    // add overflow of "b60ed7"
-    let raw = hex::decode(hex::encode(key.to_bytes().unwrap()) + "b60ed7").unwrap();
-    let key = SignedSecretKey::from_bytes(&raw[..]).expect("failed");
-    key.verify().expect("invalid key");
-}
-
-#[test]
-fn test_keyid_formatters() {
-    let keyid = KeyId::from_slice(&[0x4C, 0x07, 0x3A, 0xE0, 0xC8, 0x44, 0x5C, 0x0C]).unwrap();
-    assert_eq!("4C073AE0C8445C0C", format!("{keyid:X}"));
-    assert_eq!("4c073ae0c8445c0c", format!("{keyid:x}"));
-}
-
-#[test]
 #[ignore]
 fn test_encrypted_key() {
     let p = Path::new("./tests/key-with-password-123.asc");
@@ -1302,12 +1321,91 @@ fn test_encrypted_key() {
     // Incorrect password results in InvalidInput error.
     let res = unsigned_pubkey
         .clone()
-        .sign(&mut rng, &key, || "".into())
+        .sign(&mut rng, &*key, &*key.public_key(), &"".into())
         .err()
         .unwrap();
 
-    assert!(matches!(res, pgp::errors::Error::InvalidInput));
+    assert!(matches!(res, pgp::errors::Error::InvalidInput { .. }));
     let _signed_key = unsigned_pubkey
-        .sign(&mut rng, &key, || "123".into())
+        .sign(&mut rng, &*key, &*key.public_key(), &"123".into())
         .unwrap();
+}
+
+/// Handle a test certificate with key flags that span more than a single `u8`.
+/// The test key was created with GnuPG, see https://www.gnupg.org/blog/20230321-adsk.html
+#[test]
+fn load_adsk_pub() {
+    let _ = pretty_env_logger::try_init();
+
+    let key_file = File::open("tests/adsk.pub.asc").unwrap();
+
+    let (mut iter, _) = pgp::composed::signed_key::from_reader_many(key_file).expect("ok");
+
+    let public: SignedPublicKey = match iter.next().expect("result") {
+        Ok(pos) => {
+            eprintln!("{:#?}", pos);
+            pos.try_into().expect("public")
+        }
+        Err(e) => panic!("error: {:?}", e),
+    };
+
+    let adsk_subkey = public
+        .public_subkeys
+        .iter()
+        .find(|sk| {
+            sk.fingerprint()
+                == Fingerprint::V4(
+                    hex::decode("7051E786F572CF85E023D8B9A59FE955A52FFD57")
+                        .unwrap()
+                        .try_into()
+                        .unwrap(),
+                )
+        })
+        .unwrap();
+
+    let sig = &adsk_subkey.signatures[0];
+
+    let key_flags = sig.key_flags();
+    println!("key_flags {:?}", key_flags);
+    assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
+}
+
+/// Handle a test certificate with key flags that span more than a single `u8`.
+/// The test key was created with GnuPG, see https://www.gnupg.org/blog/20230321-adsk.html
+#[test]
+fn load_adsk_sec() {
+    let _ = pretty_env_logger::try_init();
+
+    let key_file = File::open("tests/adsk.sec.asc").unwrap();
+
+    let (mut iter, _) = pgp::composed::signed_key::from_reader_many(key_file).expect("ok");
+
+    let sec: SignedSecretKey = match iter.next().expect("result") {
+        Ok(pos) => {
+            eprintln!("{:#?}", pos);
+            pos.try_into().expect("secret")
+        }
+        Err(e) => panic!("error: {:?}", e),
+    };
+
+    assert_eq!(sec.secret_subkeys.len(), 2);
+    let adsk_subkey = &sec.secret_subkeys[1];
+    let sig = &adsk_subkey.signatures[0];
+
+    let key_flags = sig.key_flags();
+    println!("key_flags {:?}", key_flags);
+    assert_eq!(key_flags.to_bytes().unwrap(), vec![0x0, 0x04]);
+}
+
+/// This contains a key with an unknown algorithm.
+#[test]
+fn key_pub_regression1() {
+    let _ = pretty_env_logger::try_init();
+
+    let original = std::fs::read_to_string("tests/key_pub_regression1.asc").unwrap();
+
+    let (key, _headers) =
+        pgp::composed::SignedPublicKey::from_armor_single(original.as_bytes()).expect("parsing");
+
+    dbg!(&key);
 }

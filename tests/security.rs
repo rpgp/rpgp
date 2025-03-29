@@ -1,7 +1,4 @@
-use pgp::{
-    types::{PublicKeyTrait, SecretKeyTrait},
-    Deserializable, Message,
-};
+use pgp::{types::SecretKeyTrait, Deserializable, Message};
 
 /// RPG-022
 #[test]
@@ -10,7 +7,7 @@ fn rpg_022_message_from_armor_single_panic2() {
     // thread '[..]' panicked at [..]/src/armor/reader.rs:489:13:
     // invalid state
     let bad_input: &[u8] = b"-----BEGIN PGP SIGNATURE-----\n00LL";
-    let _ = Message::from_armor_single(std::io::Cursor::new(bad_input));
+    let _ = Message::from_armor(bad_input);
 }
 
 /// RPG-019
@@ -32,7 +29,7 @@ fn rpg_019_message_decrypt_with_password_panic1() {
     // expected bug behavior
     // thread '<unnamed>' panicked at library/alloc/src/raw_vec.rs:545:5:
     // capacity overflow
-    let _ = message.decrypt_with_password(|| "password does not matter".into());
+    let _ = message.decrypt_with_password(&"password does not matter".into());
 }
 
 /// RPG-019
@@ -50,7 +47,7 @@ fn rpg_019_message_decrypt_with_password_panic2() {
     // expected bug behavior
     // thread '[..]' panicked at [..]/src/crypto/sym.rs:265:52:
     // not implemented: CFB resync is not here
-    let _ = message.decrypt_with_password(|| "bogus_password".into());
+    let _ = message.decrypt_with_password(&"bogus_password".into());
 }
 
 /// RPG-016
@@ -147,7 +144,7 @@ fn rpg_007_message_from_armor_single_panic1() {
     // expected bug behavior
     // thread '<unnamed>' panicked at [..]/src/packet/many.rs:126:70:
     // range end index 62 out of range for slice of length 1
-    let _ = Message::from_armor_single(bad_input);
+    let _ = Message::from_armor(bad_input);
 }
 
 /// RPG-017
@@ -239,18 +236,19 @@ fn rpg_020_signed_secret_key_create_signature_panic1() {
         151, 3, 255, 251, 255, 63, 39, 254, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4,
     ];
 
-    let dummy_data: &[u8] = &[0];
+    // let dummy_data: &[u8] = &[0];
 
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
+    let res = pgp::composed::SignedSecretKey::from_bytes(bad_input);
+    assert!(res.is_err()); // validation now happens earlier
 
-    // expected bug behavior:
-    // thread '<unnamed>' panicked at [..]/num-bigint-dig-0.8.4/src/algorithms/sub.rs:75:5:
-    // Cannot subtract b from a because b is larger than a.
-    let _ = key.create_signature(
-        || "pw".into(),
-        pgp::crypto::hash::HashAlgorithm::SHA2_256,
-        dummy_data,
-    );
+    // // expected bug behavior:
+    // // thread '<unnamed>' panicked at [..]/num-bigint-dig-0.8.4/src/algorithms/sub.rs:75:5:
+    // // Cannot subtract b from a because b is larger than a.
+    // let _ = key.create_signature(
+    //     || "pw".into(),
+    //     pgp::crypto::hash::HashAlgorithm::SHA2_256,
+    //     dummy_data,
+    // );
 }
 
 /// RPG-020
@@ -271,8 +269,8 @@ fn rpg_020_signed_secret_key_create_signature_panic2() {
     // thread '[..]' panicked at [..]/src/types/params/encrypted_secret.rs:155:39:
     // assertion failed: mid <= self.len()
     let _ = key.create_signature(
-        || "pw".into(),
-        pgp::crypto::hash::HashAlgorithm::SHA2_256,
+        &"pw".into(),
+        pgp::crypto::hash::HashAlgorithm::Sha256,
         dummy_data,
     );
 }
@@ -289,8 +287,8 @@ fn rpg_020_signed_secret_key_create_signature_oom_crash1() {
     // expected bug behavior:
     // memory allocation of 137438871552 bytes failed
     let _ = key.create_signature(
-        || "pw".into(),
-        pgp::crypto::hash::HashAlgorithm::SHA2_256,
+        &"pw".into(),
+        pgp::crypto::hash::HashAlgorithm::Sha256,
         dummy_data,
     );
 }
@@ -340,4 +338,14 @@ fn rpg_009_message_from_bytes_subtract_with_overflow3() {
     // thread '<unnamed>' panicked at src/types/params/secret.rs:106:47:
     // attempt to subtract with overflow
     let _ = Message::from_bytes(bad_input);
+}
+
+#[test]
+fn oom_signature_1() {
+    let bad_input = [
+        155, 6, 3, 72, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    ];
+
+    let res = pgp::composed::StandaloneSignature::from_bytes(&bad_input[..]);
+    assert!(res.is_err());
 }

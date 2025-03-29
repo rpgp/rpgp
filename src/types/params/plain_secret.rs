@@ -1,146 +1,170 @@
 use std::hash::Hasher;
-use std::io;
+use std::io::{self, BufRead};
 
+use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
+use bytes::{BufMut, BytesMut};
 use hkdf::Hkdf;
-use nom::combinator::map;
-use nom::sequence::tuple;
-use rsa::RsaPrivateKey;
+use num_bigint::ModInverse;
 use sha2::Sha256;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::ZeroizeOnDrop;
 
 use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::checksum;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{IResult, Result};
+use crate::crypto::{checksum, dsa, ecdh, ecdsa, ed25519, elgamal, rsa, x25519, Decryptor};
+use crate::errors::Result;
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
+use crate::types::PkeskBytes;
 use crate::types::*;
+use crate::types::{EskType, PublicKeyTrait, PublicParams};
 use crate::util::TeeWriter;
+use crate::PlainSessionKey;
 
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[allow(clippy::large_enum_variant)] // FIXME
 pub enum PlainSecretParams {
-    RSA {
-        #[debug("..")]
-        d: Mpi,
-        #[debug("..")]
-        p: Mpi,
-        #[debug("..")]
-        q: Mpi,
-        #[debug("..")]
-        u: Mpi,
-    },
-    DSA(#[debug("..")] Mpi),
-    ECDSA(#[debug("..")] Mpi),
-    ECDH(#[debug("..")] Mpi),
-    Elgamal(#[debug("..")] Mpi),
-    EdDSALegacy(#[debug("..")] Mpi),
-    Ed25519(#[debug("..")] [u8; 32]),
-    X25519(#[debug("..")] [u8; 32]),
+    RSA(rsa::SecretKey),
+    DSA(dsa::SecretKey),
+    ECDSA(ecdsa::SecretKey),
+    ECDH(ecdh::SecretKey),
+    EdDSA(ed25519::SecretKey),
+    EdDSALegacy(ed25519::SecretKey),
+    X25519(x25519::SecretKey),
+    Elgamal(elgamal::SecretKey),
     #[cfg(feature = "unstable-curve448")]
-    X448(#[debug("..")] [u8; 56]),
+    X448(crate::crypto::x448::SecretKey),
 }
 
-#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
-pub enum PlainSecretParamsRef<'a> {
-    RSA {
-        #[debug("..")]
-        d: MpiRef<'a>,
-        #[debug("..")]
-        p: MpiRef<'a>,
-        #[debug("..")]
-        q: MpiRef<'a>,
-        #[debug("..")]
-        u: MpiRef<'a>,
-    },
-    DSA(#[debug("..")] MpiRef<'a>),
-    ECDSA(#[debug("..")] MpiRef<'a>),
-    ECDH(#[debug("..")] MpiRef<'a>),
-    Elgamal(#[debug("..")] MpiRef<'a>),
-    EdDSALegacy(#[debug("..")] MpiRef<'a>),
-    Ed25519(#[debug("..")] &'a [u8; 32]),
-    X25519(#[debug("..")] &'a [u8; 32]),
-    #[cfg(feature = "unstable-curve448")]
-    X448(#[debug("..")] &'a [u8; 56]),
+pub(crate) fn pad_key<const SIZE: usize>(val: &[u8]) -> Result<[u8; SIZE]> {
+    ensure!(val.len() <= SIZE, "invalid secret key size");
+
+    let mut key = [0u8; SIZE];
+    key[SIZE - val.len()..].copy_from_slice(val);
+    Ok(key)
 }
 
-impl PlainSecretParamsRef<'_> {
-    pub fn to_owned(&self) -> PlainSecretParams {
-        match self {
-            PlainSecretParamsRef::RSA { d, p, q, u } => PlainSecretParams::RSA {
-                d: (*d).to_owned(),
-                p: (*p).to_owned(),
-                q: (*q).to_owned(),
-                u: (*u).to_owned(),
-            },
-            PlainSecretParamsRef::DSA(v) => PlainSecretParams::DSA((*v).to_owned()),
-            PlainSecretParamsRef::ECDSA(v) => PlainSecretParams::ECDSA((*v).to_owned()),
-            PlainSecretParamsRef::ECDH(v) => PlainSecretParams::ECDH((*v).to_owned()),
-            PlainSecretParamsRef::Elgamal(v) => PlainSecretParams::Elgamal((*v).to_owned()),
-            PlainSecretParamsRef::EdDSALegacy(v) => PlainSecretParams::EdDSALegacy((*v).to_owned()),
-            PlainSecretParamsRef::Ed25519(s) => PlainSecretParams::Ed25519((*s).to_owned()),
-            PlainSecretParamsRef::X25519(s) => PlainSecretParams::X25519((*s).to_owned()),
+impl PlainSecretParams {
+    /// Skips the checksum, because it already has been checked.
+    pub fn try_from_reader_no_checksum<B: BufRead>(
+        mut i: B,
+        _version: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        public_params: &PublicParams,
+    ) -> Result<Self> {
+        let params = Self::try_from_reader_inner(&mut i, alg, public_params)?;
+        ensure!(
+            !i.has_remaining()?,
+            "failed to process full secret key material"
+        );
+        Ok(params)
+    }
+
+    fn try_from_reader_inner<B: BufRead>(
+        mut i: B,
+        alg: PublicKeyAlgorithm,
+        public_params: &PublicParams,
+    ) -> Result<Self> {
+        let params = match (alg, public_params) {
+            (
+                PublicKeyAlgorithm::RSA
+                | PublicKeyAlgorithm::RSAEncrypt
+                | PublicKeyAlgorithm::RSASign,
+                PublicParams::RSA(pub_params),
+            ) => {
+                let d = MpiBytes::try_from_reader(&mut i)?;
+                let p = MpiBytes::try_from_reader(&mut i)?;
+                let q = MpiBytes::try_from_reader(&mut i)?;
+                let u = MpiBytes::try_from_reader(&mut i)?;
+
+                let key = crate::crypto::rsa::SecretKey::try_from_mpi(pub_params, d, p, q, u)?;
+                Self::RSA(key)
+            }
+            (PublicKeyAlgorithm::DSA, PublicParams::DSA(pub_params)) => {
+                let secret = MpiBytes::try_from_reader(i)?;
+
+                let key = crate::crypto::dsa::SecretKey::try_from_mpi(pub_params, secret)?;
+                Self::DSA(key)
+            }
+            (PublicKeyAlgorithm::Elgamal, PublicParams::Elgamal(pub_params)) => {
+                let x = MpiBytes::try_from_reader(i)?;
+                ensure!(!pub_params.is_encrypt_only(), "inconsistent key state");
+                let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
+                Self::Elgamal(key)
+            }
+            (PublicKeyAlgorithm::ElgamalEncrypt, PublicParams::Elgamal(pub_params)) => {
+                let x = MpiBytes::try_from_reader(i)?;
+                ensure!(pub_params.is_encrypt_only(), "inconsistent key state");
+                let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
+                Self::Elgamal(key)
+            }
+            (PublicKeyAlgorithm::ECDH, PublicParams::ECDH(pub_params)) => {
+                let secret = MpiBytes::try_from_reader(i)?;
+
+                let key = crate::crypto::ecdh::SecretKey::try_from_mpi(pub_params, secret)?;
+                Self::ECDH(key)
+            }
+            (PublicKeyAlgorithm::ECDSA, PublicParams::ECDSA(pub_params)) => {
+                let secret = MpiBytes::try_from_reader(i)?;
+
+                let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(pub_params, secret)?;
+                Self::ECDSA(key)
+            }
+            (PublicKeyAlgorithm::EdDSALegacy, PublicParams::EdDSALegacy(_pub_params)) => {
+                let secret = MpiBytes::try_from_reader(i)?;
+
+                const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
+                let secret = pad_key::<SIZE>(secret.as_ref())?;
+                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
+                Self::EdDSALegacy(key)
+            }
+            (PublicKeyAlgorithm::Ed25519, PublicParams::Ed25519(_pub_params)) => {
+                let secret = i.read_array::<32>()?;
+                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
+                Self::EdDSA(key)
+            }
+            (PublicKeyAlgorithm::X25519, PublicParams::X25519(pub_params)) => {
+                let secret = i.read_array::<32>()?;
+                let key = crate::crypto::x25519::SecretKey::try_from_array(pub_params, secret)?;
+                Self::X25519(key)
+            }
             #[cfg(feature = "unstable-curve448")]
-            PlainSecretParamsRef::X448(s) => PlainSecretParams::X448((*s).to_owned()),
+            (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
+                let s = i.read_array::<56>()?;
+                let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
+                Self::X448(key)
+            }
+            _ => {
+                bail!("inconsistent key state");
+            }
+        };
+
+        Ok(params)
+    }
+
+    pub fn try_from_reader<B: BufRead>(
+        mut i: B,
+        version: KeyVersion,
+        alg: PublicKeyAlgorithm,
+        public_params: &PublicParams,
+    ) -> Result<Self> {
+        let params = Self::try_from_reader_inner(&mut i, alg, public_params)?;
+        if version == KeyVersion::V3 || version == KeyVersion::V4 {
+            let checksum = i.read_array::<2>()?;
+            params.compare_checksum_simple(&checksum)?;
+            ensure!(
+                !i.has_remaining()?,
+                "failed to process full secret key material"
+            );
         }
+
+        Ok(params)
     }
 
     pub fn string_to_key_id(&self) -> u8 {
         0
-    }
-
-    fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        match self {
-            PlainSecretParamsRef::RSA { d, p, q, u } => {
-                (*d).to_writer(writer)?;
-                (*p).to_writer(writer)?;
-                (*q).to_writer(writer)?;
-                (*u).to_writer(writer)?;
-            }
-            PlainSecretParamsRef::DSA(x) => {
-                (*x).to_writer(writer)?;
-            }
-            PlainSecretParamsRef::ECDSA(x) => {
-                (*x).to_writer(writer)?;
-            }
-            PlainSecretParamsRef::ECDH(x) => {
-                (*x).to_writer(writer)?;
-            }
-            PlainSecretParamsRef::Elgamal(d) => {
-                (*d).to_writer(writer)?;
-            }
-            PlainSecretParamsRef::EdDSALegacy(x) => {
-                (*x).to_writer(writer)?;
-            }
-            PlainSecretParamsRef::Ed25519(s) => {
-                writer.write_all(&s[..])?;
-            }
-            PlainSecretParamsRef::X25519(s) => {
-                writer.write_all(&s[..])?;
-            }
-            #[cfg(feature = "unstable-curve448")]
-            PlainSecretParamsRef::X448(s) => {
-                writer.write_all(&s[..])?;
-            }
-        }
-
-        Ok(())
-    }
-
-    pub fn compare_checksum_simple(&self, other: Option<&[u8]>) -> Result<()> {
-        if let Some(other) = other {
-            let mut hasher = checksum::SimpleChecksum::default();
-            self.to_writer_raw(&mut hasher)?;
-            ensure_eq!(
-                BigEndian::read_u16(other),
-                hasher.finish() as u16,
-                "Invalid checksum"
-            );
-            Ok(())
-        } else {
-            bail!("Missing checksum");
-        }
     }
 
     pub fn checksum_simple(&self) -> Vec<u8> {
@@ -151,210 +175,14 @@ impl PlainSecretParamsRef<'_> {
 
     /// Uses sha1_checked
     pub fn checksum_sha1(&self) -> Result<[u8; 20]> {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(self.write_len_raw());
         self.to_writer_raw(&mut buf).expect("known write target");
         checksum::calculate_sha1([&buf])
     }
 
-    fn pad_key<const SIZE: usize>(val: &[u8]) -> Result<[u8; SIZE]> {
-        ensure!(val.len() <= SIZE, "invalid secret key size");
-
-        let mut key = [0u8; SIZE];
-        key[SIZE - val.len()..].copy_from_slice(val);
-        Ok(key)
-    }
-
-    pub fn as_repr(&self, public_params: &PublicParams) -> Result<SecretKeyRepr> {
-        match self {
-            PlainSecretParamsRef::RSA { d, p, q, .. } => match public_params {
-                PublicParams::RSA { ref n, ref e } => {
-                    let secret_key = RsaPrivateKey::from_components(
-                        n.into(),
-                        e.into(),
-                        d.into(),
-                        vec![p.into(), q.into()],
-                    )?;
-                    Ok(SecretKeyRepr::RSA(crate::crypto::rsa::PrivateKey::from(
-                        secret_key,
-                    )))
-                }
-                _ => unreachable!("inconsistent key state"),
-            },
-            PlainSecretParamsRef::ECDH(d) => match public_params {
-                PublicParams::ECDH(EcdhPublicParams::Known {
-                    ref curve,
-                    ref hash,
-                    ref alg_sym,
-                    ..
-                }) => match curve {
-                    ECCCurve::Curve25519 => {
-                        const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
-
-                        Ok(SecretKeyRepr::ECDH(
-                            crate::crypto::ecdh::SecretKey::Curve25519 {
-                                secret: Self::pad_key::<SIZE>(d)?,
-                                hash: *hash,
-                                alg_sym: *alg_sym,
-                            },
-                        ))
-                    }
-                    ECCCurve::P256 => {
-                        const SIZE: usize = ECCCurve::P256.secret_key_length();
-
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P256 {
-                            secret: Self::pad_key::<SIZE>(d)?,
-                            hash: *hash,
-                            alg_sym: *alg_sym,
-                        }))
-                    }
-                    ECCCurve::P384 => {
-                        const SIZE: usize = ECCCurve::P384.secret_key_length();
-
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P384 {
-                            secret: Self::pad_key::<SIZE>(d)?,
-                            hash: *hash,
-                            alg_sym: *alg_sym,
-                        }))
-                    }
-                    ECCCurve::P521 => {
-                        const SIZE: usize = ECCCurve::P521.secret_key_length();
-
-                        Ok(SecretKeyRepr::ECDH(crate::crypto::ecdh::SecretKey::P521 {
-                            secret: Self::pad_key::<SIZE>(d)?,
-                            hash: *hash,
-                            alg_sym: *alg_sym,
-                        }))
-                    }
-                    _ => unsupported_err!("curve {:?} for ECDH", curve.to_string()),
-                },
-                PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
-                    unsupported_err!("curve {:?} for ECDH", curve)
-                }
-                _ => unreachable!("inconsistent key state"),
-            },
-            PlainSecretParamsRef::EdDSALegacy(d) => match public_params {
-                PublicParams::EdDSALegacy { ref curve, .. } => match *curve {
-                    ECCCurve::Ed25519 => {
-                        const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
-
-                        Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
-                            oid: curve.oid(),
-                            secret: Self::pad_key::<SIZE>(d)?,
-                        }))
-                    }
-                    _ => unsupported_err!("curve {:?} for EdDSA", curve.to_string()),
-                },
-                _ => unreachable!("inconsistent key state"),
-            },
-            PlainSecretParamsRef::Ed25519(d) => {
-                Ok(SecretKeyRepr::EdDSA(crate::crypto::eddsa::SecretKey {
-                    oid: ECCCurve::Ed25519.oid(),
-                    secret: **d,
-                }))
-            }
-            PlainSecretParamsRef::X25519(d) => {
-                Ok(SecretKeyRepr::X25519(crate::crypto::x25519::SecretKey {
-                    secret: **d,
-                }))
-            }
-            #[cfg(feature = "unstable-curve448")]
-            PlainSecretParamsRef::X448(d) => {
-                Ok(SecretKeyRepr::X448(crate::crypto::x448::SecretKey {
-                    secret: **d,
-                }))
-            }
-            PlainSecretParamsRef::DSA(x) => Ok(SecretKeyRepr::DSA(crate::crypto::dsa::SecretKey {
-                x: x.into(),
-            })),
-            PlainSecretParamsRef::Elgamal(_) => {
-                unimplemented_err!("Elgamal");
-            }
-            PlainSecretParamsRef::ECDSA(d) => match public_params {
-                PublicParams::ECDSA(params) => match params {
-                    EcdsaPublicParams::P256 { .. } => {
-                        let secret = p256::SecretKey::from_slice(d.as_bytes())?;
-
-                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P256(
-                            secret,
-                        )))
-                    }
-                    EcdsaPublicParams::P384 { .. } => {
-                        let secret = p384::SecretKey::from_slice(d.as_bytes())?;
-
-                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P384(
-                            secret,
-                        )))
-                    }
-                    EcdsaPublicParams::P521 { .. } => {
-                        let secret = p521::SecretKey::from_slice(d.as_bytes())?;
-
-                        Ok(SecretKeyRepr::ECDSA(crate::crypto::ecdsa::SecretKey::P521(
-                            secret,
-                        )))
-                    }
-                    EcdsaPublicParams::Secp256k1 { .. } => {
-                        let secret = k256::SecretKey::from_slice(d.as_bytes())?;
-
-                        Ok(SecretKeyRepr::ECDSA(
-                            crate::crypto::ecdsa::SecretKey::Secp256k1(secret),
-                        ))
-                    }
-                    EcdsaPublicParams::Unsupported { curve, .. } => {
-                        unsupported_err!("curve {:?} for ECDSA", curve.to_string())
-                    }
-                },
-                _ => unreachable!("inconsistent key state"),
-            },
-        }
-    }
-}
-
-impl PlainSecretParams {
-    pub fn from_slice(
-        data: &[u8],
-        alg: PublicKeyAlgorithm,
-        _params: &PublicParams,
-    ) -> Result<Self> {
-        let (_, repr) = parse_secret_params(alg)(data)?;
-        Ok(repr)
-    }
-
-    pub fn string_to_key_id(&self) -> u8 {
-        self.as_ref().string_to_key_id()
-    }
-
-    pub fn checksum_simple(&self) -> Vec<u8> {
-        self.as_ref().checksum_simple()
-    }
-
-    /// Uses sha1_checked
-    pub fn checksum_sha1(&self) -> Result<[u8; 20]> {
-        self.as_ref().checksum_sha1()
-    }
-
-    pub fn as_ref(&self) -> PlainSecretParamsRef<'_> {
-        match self {
-            PlainSecretParams::RSA { d, p, q, u } => PlainSecretParamsRef::RSA {
-                d: d.as_ref(),
-                p: p.as_ref(),
-                q: q.as_ref(),
-                u: u.as_ref(),
-            },
-            PlainSecretParams::DSA(v) => PlainSecretParamsRef::DSA(v.as_ref()),
-            PlainSecretParams::ECDSA(v) => PlainSecretParamsRef::ECDSA(v.as_ref()),
-            PlainSecretParams::ECDH(v) => PlainSecretParamsRef::ECDH(v.as_ref()),
-            PlainSecretParams::Elgamal(v) => PlainSecretParamsRef::Elgamal(v.as_ref()),
-            PlainSecretParams::EdDSALegacy(v) => PlainSecretParamsRef::EdDSALegacy(v.as_ref()),
-            PlainSecretParams::Ed25519(s) => PlainSecretParamsRef::Ed25519(s),
-            PlainSecretParams::X25519(s) => PlainSecretParamsRef::X25519(s),
-            #[cfg(feature = "unstable-curve448")]
-            PlainSecretParams::X448(s) => PlainSecretParamsRef::X448(s),
-        }
-    }
-
     pub fn encrypt(
         &self,
-        passphrase: &str,
+        passphrase: &[u8],
         s2k_params: S2kParams,
         pub_key: &(impl PublicKeyTrait + Serialize),
         secret_tag: Option<Tag>,
@@ -394,10 +222,8 @@ impl PlainSecretParams {
                         unimplemented_err!("Encryption for V2/V3 keys is not available")
                     }
                     KeyVersion::V4 | KeyVersion::V6 => {
-                        let mut data = Vec::new();
-                        self.as_ref()
-                            .to_writer_raw(&mut data)
-                            .expect("preallocated vector");
+                        let mut data = Vec::with_capacity(self.write_len_raw());
+                        self.to_writer_raw(&mut data).expect("preallocated vector");
 
                         data.extend_from_slice(&self.checksum_sha1()?[..]);
                         sym_alg.encrypt_with_iv_regular(&key, iv, &mut data)?;
@@ -408,7 +234,7 @@ impl PlainSecretParams {
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
-                Ok(EncryptedSecretParams::new(enc_data, s2k_params))
+                Ok(EncryptedSecretParams::new(enc_data.into(), s2k_params))
             }
             S2kParams::Aead {
                 sym_alg,
@@ -423,10 +249,11 @@ impl PlainSecretParams {
                         unimplemented_err!("Encryption for V2/V3 keys is not available")
                     }
                     KeyVersion::V4 | KeyVersion::V6 => {
-                        let mut data = Vec::new();
-                        self.as_ref()
-                            .to_writer_raw(&mut data)
+                        let data = BytesMut::with_capacity(self.write_len_raw());
+                        let mut writer = data.writer();
+                        self.to_writer_raw(&mut writer)
                             .expect("preallocated vector");
+                        let mut data = writer.into_inner();
 
                         let Some(secret_tag) = secret_tag else {
                             bail!("no secret_tag provided");
@@ -436,11 +263,7 @@ impl PlainSecretParams {
                             s2k_usage_aead(&key, secret_tag, pub_key, *sym_alg, *aead_mode)?;
 
                         // AEAD encrypt
-                        let tag =
-                            aead_mode.encrypt_in_place(sym_alg, &okm, nonce, &ad, &mut data)?;
-
-                        // append tag to now encrypted secret params
-                        data.extend_from_slice(&tag);
+                        aead_mode.encrypt_in_place(sym_alg, &okm, nonce, &ad, &mut data)?;
 
                         data
                     }
@@ -448,19 +271,189 @@ impl PlainSecretParams {
                     KeyVersion::Other(v) => unimplemented_err!("encryption for key version {}", v),
                 };
 
-                Ok(EncryptedSecretParams::new(enc_data, s2k_params))
+                Ok(EncryptedSecretParams::new(enc_data.into(), s2k_params))
             }
             _ => unimplemented_err!("{:?} not implemented yet", s2k_params),
         }
     }
 
-    pub fn to_writer<W: io::Write>(&self, writer: &mut W, version: KeyVersion) -> Result<()> {
-        writer.write_all(&[self.string_to_key_id()])?;
+    pub fn decrypt<P>(
+        &self,
+        pub_params: &PublicParams,
+        values: &PkeskBytes,
+        typ: EskType,
+        recipient: &P,
+    ) -> Result<PlainSessionKey>
+    where
+        P: PublicKeyTrait,
+    {
+        let decrypted_key = match (self, values) {
+            (PlainSecretParams::RSA(ref priv_key), PkeskBytes::Rsa { mpi }) => {
+                priv_key.decrypt(&mpi.to_owned())?
+            }
+            (PlainSecretParams::DSA(_), _) => bail!("DSA is only used for signing"),
+            (PlainSecretParams::ECDSA(_), _) => bail!("ECDSA is only used for signing"),
+            (
+                PlainSecretParams::ECDH(ref priv_key),
+                PkeskBytes::Ecdh {
+                    public_point,
+                    encrypted_session_key,
+                },
+            ) => {
+                let PublicParams::ECDH(params) = pub_params else {
+                    bail!("inconsistent key state");
+                };
 
+                let (hash, alg_sym) = match params {
+                    EcdhPublicParams::Curve25519 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::P256 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::P384 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::P521 { hash, alg_sym, .. } => (hash, alg_sym),
+                    EcdhPublicParams::Brainpool256 { .. }
+                    | EcdhPublicParams::Brainpool384 { .. }
+                    | EcdhPublicParams::Brainpool512 { .. } => {
+                        unsupported_err!("brainpool is not supported");
+                    }
+                    EcdhPublicParams::Unsupported { curve, .. } => {
+                        unsupported_err!("curve {} is not supported", curve);
+                    }
+                };
+
+                priv_key.decrypt(ecdh::EncryptionFields {
+                    public_point: &public_point.to_owned(),
+                    encrypted_session_key,
+                    fingerprint: recipient.fingerprint().as_bytes(),
+                    curve: params.curve(),
+                    hash: *hash,
+                    alg_sym: *alg_sym,
+                })?
+            }
+
+            (
+                PlainSecretParams::X25519(ref priv_key),
+                PkeskBytes::X25519 {
+                    ephemeral,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                // Recipient public key (32 bytes)
+                let PublicParams::X25519(params) = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for X25519",
+                        recipient.public_params()
+                    );
+                };
+
+                let data = x25519::EncryptionFields {
+                    ephemeral_public_point: ephemeral.to_owned(),
+                    recipient_public: params.key.to_bytes(),
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?;
+
+                return match (&typ, *sym_alg) {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    (EskType::V3_4, Some(sym_alg)) => Ok(PlainSessionKey::V3_4 { key, sym_alg }),
+                    (EskType::V6, None) => Ok(PlainSessionKey::V6 { key }),
+                    _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
+                };
+            }
+
+            #[cfg(feature = "unstable-curve448")]
+            (
+                PlainSecretParams::X448(ref priv_key),
+                PkeskBytes::X448 {
+                    ephemeral,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                // Recipient public key (56 bytes)
+                let PublicParams::X448(ref params) = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for X448",
+                        recipient.public_params()
+                    );
+                };
+
+                let data = crate::crypto::x448::EncryptionFields {
+                    ephemeral_public_point: ephemeral.to_owned(),
+                    recipient_public: params.key,
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?;
+
+                // We expect `algo` to be set for v3 PKESK, and unset for v6 PKESK
+                return if let Some(sym_alg) = *sym_alg {
+                    Ok(PlainSessionKey::V3_4 { key, sym_alg })
+                } else {
+                    Ok(PlainSessionKey::V6 { key })
+                };
+            }
+
+            (PlainSecretParams::EdDSA(_), _) => bail!("EdDSA is only used for signing"),
+            _ => unimplemented_err!(
+                "Unsupported: PlainSecretParams {:?}, PkeskBytes {:?}",
+                self,
+                values
+            ),
+        };
+
+        match typ {
+            EskType::V3_4 => {
+                let sym_alg = SymmetricKeyAlgorithm::from(decrypted_key[0]);
+                ensure!(
+                    sym_alg != SymmetricKeyAlgorithm::Plaintext,
+                    "session key algorithm cannot be plaintext"
+                );
+
+                debug!("sym_alg: {:?}", sym_alg);
+
+                let key_size = sym_alg.key_size();
+                ensure_eq!(
+                    decrypted_key.len(),
+                    key_size + 3,
+                    "unexpected decrypted_key length ({}) for sym_alg {:?}",
+                    decrypted_key.len(),
+                    sym_alg
+                );
+
+                let key = decrypted_key[1..=key_size].to_vec();
+                let checksum = &decrypted_key[key_size + 1..key_size + 3];
+
+                checksum::simple(checksum, &key)?;
+
+                Ok(PlainSessionKey::V3_4 { key, sym_alg })
+            }
+
+            EskType::V6 => {
+                let len = decrypted_key.len();
+
+                // ensure minimal length so that we don't panic in the slice splitting, below
+                ensure!(
+                    len >= 2,
+                    "unexpected decrypted_key length ({}) for V6 ESK",
+                    len,
+                );
+
+                let key = decrypted_key[0..len - 2].to_vec();
+                let checksum = &decrypted_key[len - 2..];
+
+                checksum::simple(checksum, &key)?;
+
+                Ok(PlainSessionKey::V6 { key })
+            }
+        }
+    }
+
+    pub fn to_writer<W: io::Write>(&self, writer: &mut W, version: KeyVersion) -> Result<()> {
         let mut hasher = checksum::SimpleChecksum::default();
         {
             let mut tee = TeeWriter::new(&mut hasher, writer);
-            self.as_ref().to_writer_raw(&mut tee)?;
+            self.to_writer_raw(&mut tee)?;
         }
 
         if version == KeyVersion::V3 || version == KeyVersion::V4 {
@@ -473,53 +466,127 @@ impl PlainSecretParams {
 
         Ok(())
     }
-}
 
-fn parse_secret_params(
-    alg: PublicKeyAlgorithm,
-) -> impl Fn(&[u8]) -> IResult<&[u8], PlainSecretParams> {
-    move |i: &[u8]| match alg {
-        PublicKeyAlgorithm::RSA | PublicKeyAlgorithm::RSAEncrypt | PublicKeyAlgorithm::RSASign => {
-            rsa_secret_params(i)
+    pub fn write_len(&self, version: KeyVersion) -> usize {
+        let mut sum = self.write_len_raw();
+        if version == KeyVersion::V3 || version == KeyVersion::V4 {
+            // checksum
+            sum += 2;
         }
-        PublicKeyAlgorithm::DSA => map(mpi, |m| PlainSecretParams::DSA(m.to_owned()))(i),
-        PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
-            map(mpi, |m| PlainSecretParams::Elgamal(m.to_owned()))(i)
-        }
-        PublicKeyAlgorithm::ECDH => map(mpi, |m| PlainSecretParams::ECDH(m.to_owned()))(i),
-        PublicKeyAlgorithm::ECDSA => map(mpi, |m| PlainSecretParams::ECDSA(m.to_owned()))(i),
-        PublicKeyAlgorithm::EdDSALegacy => {
-            map(mpi, |m| PlainSecretParams::EdDSALegacy(m.to_owned()))(i)
-        }
-        PublicKeyAlgorithm::Ed25519 => {
-            let (i, s) = nom::bytes::complete::take(32u8)(i)?;
-            Ok((i, PlainSecretParams::Ed25519(s.try_into().expect("32"))))
-        }
-        PublicKeyAlgorithm::X25519 => {
-            let (i, s) = nom::bytes::complete::take(32u8)(i)?;
-            Ok((i, PlainSecretParams::X25519(s.try_into().expect("32"))))
-        }
-        #[cfg(feature = "unstable-curve448")]
-        PublicKeyAlgorithm::X448 => {
-            let (i, s) = nom::bytes::complete::take(56u8)(i)?;
-            Ok((i, PlainSecretParams::X448(s.try_into().expect("56"))))
-        }
-        _ => Err(nom::Err::Error(crate::errors::Error::ParsingError(
-            nom::error::ErrorKind::Switch,
-        ))),
+        sum
     }
-}
 
-// Parse the decrypted private params of an RSA private key.
-fn rsa_secret_params(i: &[u8]) -> IResult<&[u8], PlainSecretParams> {
-    map(tuple((mpi, mpi, mpi, mpi)), |(d, p, q, u)| {
-        PlainSecretParams::RSA {
-            d: d.to_owned(),
-            p: p.to_owned(),
-            q: q.to_owned(),
-            u: u.to_owned(),
+    fn compare_checksum_simple(&self, other: &[u8]) -> Result<()> {
+        let mut hasher = checksum::SimpleChecksum::default();
+        self.to_writer_raw(&mut hasher)?;
+        ensure_eq!(
+            BigEndian::read_u16(other),
+            hasher.finish() as u16,
+            "Invalid checksum"
+        );
+        Ok(())
+    }
+
+    fn to_writer_raw<W: io::Write>(&self, writer: &mut W) -> Result<()> {
+        match self {
+            PlainSecretParams::RSA(key) => {
+                let d = key.d();
+                let p = &key.primes()[0];
+                let q = &key.primes()[1];
+                let u = p
+                    .clone()
+                    .mod_inverse(q)
+                    .expect("invalid prime")
+                    .to_biguint()
+                    .expect("invalid prime");
+
+                MpiBytes::from(d).to_writer(writer)?;
+                MpiBytes::from(p).to_writer(writer)?;
+                MpiBytes::from(q).to_writer(writer)?;
+                MpiBytes::from(u).to_writer(writer)?;
+            }
+            PlainSecretParams::DSA(key) => {
+                let x = key.x();
+                MpiBytes::from(x).to_writer(writer)?;
+            }
+            PlainSecretParams::Elgamal(key) => {
+                let x = key.as_mpi();
+                x.to_writer(writer)?;
+            }
+            PlainSecretParams::ECDSA(key) => {
+                let x = key.as_mpi();
+                x.to_writer(writer)?;
+            }
+            PlainSecretParams::ECDH(key) => {
+                let x = key.as_mpi();
+                x.to_writer(writer)?;
+            }
+            PlainSecretParams::X25519(key) => {
+                let q = key.secret.to_bytes();
+                writer.write_all(&q)?;
+            }
+            PlainSecretParams::EdDSA(key) => {
+                writer.write_all(key.secret.as_bytes().as_ref())?;
+            }
+            PlainSecretParams::EdDSALegacy(key) => {
+                let x = key.as_mpi();
+                x.to_writer(writer)?;
+            }
+            #[cfg(feature = "unstable-curve448")]
+            PlainSecretParams::X448(key) => {
+                writer.write_all(&key.secret)?;
+            }
         }
-    })(i)
+
+        Ok(())
+    }
+
+    fn write_len_raw(&self) -> usize {
+        match self {
+            PlainSecretParams::RSA(key) => {
+                let d = key.d();
+                let p = &key.primes()[0];
+                let q = &key.primes()[1];
+                let u = p
+                    .clone()
+                    .mod_inverse(q)
+                    .expect("invalid prime")
+                    .to_biguint()
+                    .expect("invalid prime");
+
+                let mut sum = 0;
+                sum += MpiBytes::from(d).write_len();
+                sum += MpiBytes::from(p).write_len();
+                sum += MpiBytes::from(q).write_len();
+                sum += MpiBytes::from(u).write_len();
+                sum
+            }
+            PlainSecretParams::DSA(key) => {
+                let x = key.x();
+                MpiBytes::from(x).write_len()
+            }
+            PlainSecretParams::Elgamal(key) => {
+                let x = key.as_mpi();
+                x.write_len()
+            }
+            PlainSecretParams::ECDSA(key) => {
+                let x = key.as_mpi();
+                x.write_len()
+            }
+            PlainSecretParams::ECDH(key) => {
+                let x = key.as_mpi();
+                x.write_len()
+            }
+            PlainSecretParams::EdDSA(_key) => 32,
+            PlainSecretParams::EdDSALegacy(key) => {
+                let x = key.as_mpi();
+                x.write_len()
+            }
+            PlainSecretParams::X25519(_key) => 32,
+            #[cfg(feature = "unstable-curve448")]
+            PlainSecretParams::X448(_key) => 56,
+        }
+    }
 }
 
 /// Derive output keying material and associated data for the s2k usage method AEAD.
@@ -556,4 +623,119 @@ pub(crate) fn s2k_usage_aead(
     pub_key.to_writer(&mut ad)?;
 
     Ok((okm, ad))
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::crypto::public_key::PublicKeyAlgorithm;
+
+    impl Arbitrary for PlainSecretParams {
+        type Parameters = PublicKeyAlgorithm;
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary() -> Self::Strategy {
+            any::<PublicKeyAlgorithm>()
+                .prop_flat_map(Self::arbitrary_with)
+                .boxed()
+        }
+
+        fn arbitrary_with(alg: Self::Parameters) -> Self::Strategy {
+            match alg {
+                PublicKeyAlgorithm::RSA
+                | PublicKeyAlgorithm::RSAEncrypt
+                | PublicKeyAlgorithm::RSASign => any::<rsa::SecretKey>()
+                    .prop_map(PlainSecretParams::RSA)
+                    .boxed(),
+                PublicKeyAlgorithm::DSA => any::<dsa::SecretKey>()
+                    .prop_map(PlainSecretParams::DSA)
+                    .boxed(),
+                PublicKeyAlgorithm::ECDSA => any::<ecdsa::SecretKey>()
+                    .prop_map(PlainSecretParams::ECDSA)
+                    .boxed(),
+                PublicKeyAlgorithm::ECDH => any::<ecdh::SecretKey>()
+                    .prop_map(PlainSecretParams::ECDH)
+                    .boxed(),
+                PublicKeyAlgorithm::EdDSALegacy => any::<ed25519::SecretKey>()
+                    .prop_map(PlainSecretParams::EdDSALegacy)
+                    .boxed(),
+                PublicKeyAlgorithm::Ed25519 => any::<ed25519::SecretKey>()
+                    .prop_map(PlainSecretParams::EdDSA)
+                    .boxed(),
+                PublicKeyAlgorithm::X25519 => any::<x25519::SecretKey>()
+                    .prop_map(PlainSecretParams::X25519)
+                    .boxed(),
+                #[cfg(feature = "unstable-curve448")]
+                PublicKeyAlgorithm::X448 => any::<crate::crypto::x448::SecretKey>()
+                    .prop_map(PlainSecretParams::X448)
+                    .boxed(),
+                _ => {
+                    unimplemented!("{:?}", alg)
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        #[ignore]
+        fn params_write_len_v3(params: PlainSecretParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf, KeyVersion::V3)?;
+            prop_assert_eq!(buf.len(), params.write_len(KeyVersion::V3));
+        }
+
+        #[test]
+        #[ignore]
+        fn params_write_len_v4(params: PlainSecretParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf, KeyVersion::V4)?;
+            prop_assert_eq!(buf.len(), params.write_len(KeyVersion::V4));
+        }
+
+        #[test]
+        #[ignore]
+        fn params_write_len_v6(params: PlainSecretParams) {
+            let mut buf = Vec::new();
+            params.to_writer(&mut buf, KeyVersion::V6)?;
+            prop_assert_eq!(buf.len(), params.write_len(KeyVersion::V6));
+        }
+
+        #[test]
+        #[ignore]
+        fn params_roundtrip_v3(
+            (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            secret_params.to_writer(&mut buf, KeyVersion::V3)?;
+            let public_params = PublicParams::try_from(&secret_params)?;
+            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V3, alg, &public_params)?;
+            prop_assert_eq!(secret_params, new_params);
+        }
+        #[test]
+        #[ignore]
+        fn params_roundtrip_v4(
+            (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            secret_params.to_writer(&mut buf, KeyVersion::V4)?;
+            let public_params = PublicParams::try_from(&secret_params)?;
+            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V4, alg, &public_params)?;
+            prop_assert_eq!(secret_params, new_params);
+        }
+
+        #[test]
+        #[ignore]
+        fn params_roundtrip_v6(
+            (alg, secret_params) in any::<PublicKeyAlgorithm>().prop_flat_map(|alg| (Just(alg), any_with::<PlainSecretParams>(alg)))
+        ) {
+            let mut buf = Vec::new();
+            secret_params.to_writer(&mut buf, KeyVersion::V6)?;
+            let public_params = PublicParams::try_from(&secret_params)?;
+            let new_params = PlainSecretParams::try_from_reader(&mut &buf[..], KeyVersion::V6, alg, &public_params)?;
+            prop_assert_eq!(secret_params, new_params);
+        }
+    }
 }

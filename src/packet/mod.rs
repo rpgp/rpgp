@@ -15,7 +15,7 @@
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
-//! use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm};
+//! use pgp::types::{self, PublicKeyTrait, SecretKeyTrait, CompressionAlgorithm, KeyDetails as _, Password};
 //! use smallvec::*;
 //! #
 //! # let mut key_params = SecretKeyParamsBuilder::default();
@@ -28,44 +28,45 @@
 //! #          SymmetricKeyAlgorithm::AES256,
 //! #     ])
 //! #     .preferred_hash_algorithms(smallvec![
-//! #          HashAlgorithm::SHA2_256,
+//! #          HashAlgorithm::Sha256,
 //! #     ])
 //! #     .preferred_compression_algorithms(smallvec![
 //! #          CompressionAlgorithm::ZLIB,
 //! #     ]);
 //! # let secret_key_params = key_params.build().expect("Must be able to create secret key params");
 //! # let secret_key = secret_key_params.generate(thread_rng()).expect("Failed to generate a plain key.");
-//! # let passwd_fn = || String::new();
-//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), passwd_fn).expect("Must be able to sign its own metadata");
+//! # let passwd_fn = Password::empty();
+//! # let signed_secret_key = secret_key.sign(&mut thread_rng(), &passwd_fn).expect("Must be able to sign its own metadata");
 //! # let public_key = signed_secret_key.public_key();
-//! use pgp::packet::{Signature, SignatureConfig};
+//! use pgp::packet::{Signature, SignatureConfig, PacketTrait};
 //!
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
 //!
-//! let passwd_fn = || String::new();
+//! let passwd_fn = Password::empty();
 //!
 //! let now = chrono::Utc::now();
 //!
-//! let mut sig_cfg = SignatureConfig::v4(packet::SignatureType::Binary, PublicKeyAlgorithm::RSA, HashAlgorithm::SHA2_256);
+//! let mut sig_cfg = SignatureConfig::v4(packet::SignatureType::Binary, PublicKeyAlgorithm::RSA, HashAlgorithm::Sha256);
 //! sig_cfg.hashed_subpackets = vec![
-//!     packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)),
-//!     packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())),
+//!     packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(now)).unwrap(),
+//!     packet::Subpacket::regular(packet::SubpacketData::Issuer(signing_key.key_id())).unwrap(),
 //! ];
 //!
 //! let signature_packet = sig_cfg
-//!      .sign(&signing_key, passwd_fn, DATA)
+//!      .sign(&*signing_key, &passwd_fn, DATA)
 //!      .expect("Should sign");
 //!
 //! let mut signature_bytes = Vec::with_capacity(1024);
-//! packet::write_packet(&mut signature_bytes, &signature_packet).expect("Write must succeed");
+//! signature_packet.to_writer_with_header(&mut signature_bytes).expect("Write must succeed");
 //!
 //! signature_packet
-//!      .verify(&verification_key, DATA)
+//!      .verify(&*verification_key, DATA)
 //!      .expect("Failed to validate signature");
 //! ```
 
+mod header;
 mod many;
 mod packet_sum;
 mod single;
@@ -90,6 +91,7 @@ mod public_key_parser;
 mod secret_key_parser;
 
 pub use self::compressed_data::*;
+pub use self::header::{NewPacketHeader, OldPacketHeader, PacketHeader};
 pub use self::key::*;
 pub use self::literal_data::*;
 pub use self::many::*;
@@ -99,10 +101,12 @@ pub use self::one_pass_signature::*;
 pub use self::packet_sum::*;
 pub use self::padding::*;
 pub use self::public_key_encrypted_session_key::*;
+pub use self::signature::subpacket::{Subpacket, SubpacketData, SubpacketLength, SubpacketType};
 pub use self::signature::*;
 pub use self::sym_encrypted_data::*;
-pub use self::sym_encrypted_protected_data::Data;
-pub use self::sym_encrypted_protected_data::*;
+pub use self::sym_encrypted_protected_data::{
+    Config as SymEncryptedProtectedDataConfig, StreamDecryptor, SymEncryptedProtectedData,
+};
 pub use self::sym_key_encrypted_session_key::*;
 pub use self::trust::*;
 pub use self::user_attribute::*;

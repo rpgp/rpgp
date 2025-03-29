@@ -1,5 +1,4 @@
 use ecdsa::SigningKey;
-use elliptic_curve::sec1::ToEncodedPoint;
 use p521::NistP521;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
@@ -8,37 +7,122 @@ use zeroize::ZeroizeOnDrop;
 use crate::crypto::ecc_curve::ECCCurve;
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::types::EcdsaPublicParams;
-use crate::types::{Mpi, PlainSecretParams, PublicParams};
+use crate::types::MpiBytes;
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum SecretKey {
-    P256(#[debug("..")] p256::SecretKey),
-    P384(#[debug("..")] p384::SecretKey),
-    P521(#[debug("..")] p521::SecretKey),
-    Secp256k1(#[debug("..")] k256::SecretKey),
+    P256(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_p256_gen()"))]
+        p256::SecretKey,
+    ),
+    P384(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_p384_gen()"))]
+        p384::SecretKey,
+    ),
+    P521(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_p521_gen()"))]
+        p521::SecretKey,
+    ),
+    Secp256k1(
+        #[debug("..")]
+        #[cfg_attr(test, proptest(strategy = "tests::key_k256_gen()"))]
+        k256::SecretKey,
+    ),
+    #[cfg_attr(test, proptest(skip))]
     Unsupported {
         /// The secret point.
         #[debug("..")]
-        x: Mpi,
+        x: Vec<u8>,
         #[zeroize(skip)]
         curve: ECCCurve,
     },
 }
 
-impl Signer for SecretKey {
-    fn sign(
-        &self,
-        hash: HashAlgorithm,
-        digest: &[u8],
-        pub_params: &PublicParams,
-    ) -> Result<Vec<Vec<u8>>> {
-        ensure!(
-            matches!(pub_params, PublicParams::ECDSA(..)),
-            "invalid public params"
-        );
+impl TryFrom<&SecretKey> for EcdsaPublicParams {
+    type Error = Error;
 
+    fn try_from(value: &SecretKey) -> std::result::Result<Self, Self::Error> {
+        match value {
+            SecretKey::P256(ref p) => Ok(EcdsaPublicParams::P256 {
+                key: p.public_key(),
+            }),
+            SecretKey::P384(ref p) => Ok(EcdsaPublicParams::P384 {
+                key: p.public_key(),
+            }),
+            SecretKey::P521(ref p) => Ok(EcdsaPublicParams::P521 {
+                key: p.public_key(),
+            }),
+            SecretKey::Secp256k1(ref p) => Ok(EcdsaPublicParams::Secp256k1 {
+                key: p.public_key(),
+            }),
+            SecretKey::Unsupported { ref curve, .. } => {
+                bail!("unsupported curve, cannot convert: {}", curve);
+            }
+        }
+    }
+}
+
+impl SecretKey {
+    /// Generate an ECDSA `SecretKey`.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R, curve: &ECCCurve) -> Result<Self> {
+        match curve {
+            ECCCurve::P256 => {
+                let secret = p256::SecretKey::random(&mut rng);
+                Ok(SecretKey::P256(secret))
+            }
+            ECCCurve::P384 => {
+                let secret = p384::SecretKey::random(&mut rng);
+                Ok(SecretKey::P384(secret))
+            }
+            ECCCurve::P521 => {
+                let secret = p521::SecretKey::random(&mut rng);
+                Ok(SecretKey::P521(secret))
+            }
+            ECCCurve::Secp256k1 => {
+                let secret = k256::SecretKey::random(&mut rng);
+                Ok(SecretKey::Secp256k1(secret))
+            }
+            _ => unsupported_err!("curve {:?} for ECDSA", curve),
+        }
+    }
+
+    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: MpiBytes) -> Result<Self> {
+        match pub_params {
+            EcdsaPublicParams::P256 { .. } => {
+                let secret = p256::SecretKey::from_slice(d.as_ref())?;
+
+                Ok(SecretKey::P256(secret))
+            }
+            EcdsaPublicParams::P384 { .. } => {
+                let secret = p384::SecretKey::from_slice(d.as_ref())?;
+
+                Ok(SecretKey::P384(secret))
+            }
+            EcdsaPublicParams::P521 { .. } => {
+                let secret = p521::SecretKey::from_slice(d.as_ref())?;
+
+                Ok(SecretKey::P521(secret))
+            }
+            EcdsaPublicParams::Secp256k1 { .. } => {
+                let secret = k256::SecretKey::from_slice(d.as_ref())?;
+
+                Ok(SecretKey::Secp256k1(secret))
+            }
+            EcdsaPublicParams::Unsupported { curve, .. } => {
+                unsupported_err!("curve {:?} for ECDSA", curve.to_string())
+            }
+        }
+    }
+}
+
+impl Signer for SecretKey {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
         if let Some(field_size) = self.secret_key_length() {
             // We require that the signing key length is matched by the hash digest length,
             // see https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.2-5
@@ -101,70 +185,15 @@ impl SecretKey {
             Self::Unsupported { .. } => None,
         }
     }
-}
-/// Generate an ECDSA KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    curve: &ECCCurve,
-) -> Result<(PublicParams, PlainSecretParams)> {
-    match curve {
-        ECCCurve::P256 => {
-            let secret = p256::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
 
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P256 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
-                PlainSecretParams::ECDSA(secret),
-            ))
+    pub(crate) fn as_mpi(&self) -> MpiBytes {
+        match self {
+            Self::P256(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::P384(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::P521(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::Secp256k1(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
+            Self::Unsupported { x, .. } => MpiBytes::from_slice(x),
         }
-
-        ECCCurve::P384 => {
-            let secret = p384::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
-
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P384 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
-                PlainSecretParams::ECDSA(secret),
-            ))
-        }
-
-        ECCCurve::P521 => {
-            let secret = p521::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
-
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::P521 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
-                PlainSecretParams::ECDSA(secret),
-            ))
-        }
-
-        ECCCurve::Secp256k1 => {
-            let secret = k256::SecretKey::random(&mut rng);
-            let public = secret.public_key();
-            let secret = Mpi::from_slice(secret.to_bytes().as_slice());
-
-            Ok((
-                PublicParams::ECDSA(EcdsaPublicParams::Secp256k1 {
-                    key: public,
-                    p: Mpi::from_slice(public.to_encoded_point(false).as_bytes()),
-                }),
-                PlainSecretParams::ECDSA(secret),
-            ))
-        }
-
-        _ => unsupported_err!("curve {:?} for ECDSA", curve),
     }
 }
 
@@ -173,7 +202,7 @@ pub fn verify(
     p: &EcdsaPublicParams,
     hash: HashAlgorithm,
     hashed: &[u8],
-    sig: &[Mpi],
+    sig: &[MpiBytes],
 ) -> Result<()> {
     // NOTE: the `None` case will run into an `unsupported_err`, below, so it's ok not to consider it here
     if let Some(field_size) = p.secret_key_length() {
@@ -209,8 +238,8 @@ pub fn verify(
         EcdsaPublicParams::P256 { key, .. } => {
             const FLEN: usize = 32;
             ensure_eq!(sig.len(), 2);
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
             let mut sig_bytes = [0u8; 2 * FLEN];
@@ -230,8 +259,8 @@ pub fn verify(
             const FLEN: usize = 48;
             ensure_eq!(sig.len(), 2);
 
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
 
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
@@ -253,8 +282,8 @@ pub fn verify(
             const FLEN: usize = 66;
             ensure_eq!(sig.len(), 2);
 
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
 
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
@@ -275,8 +304,8 @@ pub fn verify(
         EcdsaPublicParams::Secp256k1 { key, .. } => {
             const FLEN: usize = 32;
             ensure_eq!(sig.len(), 2);
-            let r = sig[0].as_bytes();
-            let s = sig[1].as_bytes();
+            let r = sig[0].as_ref();
+            let s = sig[1].as_ref();
             ensure!(r.len() <= FLEN, "invalid R (len)");
             ensure!(s.len() <= FLEN, "invalid S (len)");
             let mut sig_bytes = [0u8; 2 * FLEN];
@@ -294,6 +323,40 @@ pub fn verify(
         }
         EcdsaPublicParams::Unsupported { curve, .. } => {
             unsupported_err!("curve {:?} for ECDSA", curve.to_string())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use proptest::prelude::*;
+    use rand::SeedableRng;
+
+    prop_compose! {
+        pub fn key_p256_gen()(seed: u64) -> p256::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+             p256::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_p384_gen()(seed: u64) -> p384::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            p384::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_p521_gen()(seed: u64) -> p521::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            p521::SecretKey::random(&mut rng)
+        }
+    }
+
+    prop_compose! {
+        pub fn key_k256_gen()(seed: u64) -> k256::SecretKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            k256::SecretKey::random(&mut rng)
         }
     }
 }

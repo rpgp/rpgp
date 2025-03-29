@@ -1,53 +1,93 @@
-use dsa::{Components, Signature, SigningKey, VerifyingKey};
+use std::ops::Deref;
+
+use dsa::{Components, Signature, SigningKey};
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
 use signature::hazmat::PrehashVerifier;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::Zeroize;
 
 use crate::crypto::hash::HashAlgorithm;
 use crate::crypto::Signer;
 use crate::errors::Result;
-use crate::types::{PlainSecretParams, PublicParams};
+use crate::types::{DsaPublicParams, MpiBytes};
 
 pub use dsa::KeySize;
 
 /// Secret key for DSA.
-#[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, derive_more::Debug)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub struct SecretKey {
     #[debug("..")]
-    pub x: BigUint,
+    #[cfg_attr(test, proptest(strategy = "tests::key_gen()"))]
+    key: dsa::SigningKey,
+}
+
+impl From<&SecretKey> for DsaPublicParams {
+    fn from(value: &SecretKey) -> Self {
+        Self {
+            key: value.key.verifying_key().clone(),
+        }
+    }
+}
+
+impl Zeroize for SecretKey {
+    fn zeroize(&mut self) {
+        // TODO!!!!
+        // self.key.zeroize();
+    }
+}
+
+impl Drop for SecretKey {
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+impl zeroize::ZeroizeOnDrop for SecretKey {}
+
+impl Deref for SecretKey {
+    type Target = dsa::SigningKey;
+    fn deref(&self) -> &Self::Target {
+        &self.key
+    }
+}
+
+impl Eq for SecretKey {}
+
+impl SecretKey {
+    pub(crate) fn try_from_mpi(pub_params: &DsaPublicParams, x: MpiBytes) -> Result<Self> {
+        let secret = dsa::SigningKey::from_components(pub_params.key.clone(), x.into())?;
+        Ok(Self { key: secret })
+    }
+
+    /// Generate a DSA `SecretKey`.
+    pub fn generate<R: Rng + CryptoRng>(mut rng: R, key_size: KeySize) -> Self {
+        let components = Components::generate(&mut rng, key_size);
+        let signing_key = SigningKey::generate(&mut rng, components);
+
+        SecretKey { key: signing_key }
+    }
 }
 
 impl Signer for SecretKey {
-    fn sign(
-        &self,
-        hash_algorithm: HashAlgorithm,
-        digest: &[u8],
-        pub_params: &PublicParams,
-    ) -> Result<Vec<Vec<u8>>> {
-        let PublicParams::DSA { p, q, g, y } = pub_params else {
-            bail!("invalid public params");
-        };
-        let components = Components::from_components(p.into(), q.into(), g.into())?;
-        let verifying_key = VerifyingKey::from_components(components, y.into())?;
-        let signing_key = SigningKey::from_components(verifying_key, self.x.clone())?;
-
+    fn sign(&self, hash_algorithm: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let signing_key = &self.key;
         let signature = match hash_algorithm {
-            HashAlgorithm::MD5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
+            HashAlgorithm::Md5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
 
             // FIXME: Use sha1_checked once it implements BlockSizeUser
             // (See https://github.com/RustCrypto/hashes/pull/582)
-            HashAlgorithm::SHA1 => signing_key.sign_prehashed_rfc6979::<sha1::Sha1>(digest),
+            HashAlgorithm::Sha1 => signing_key.sign_prehashed_rfc6979::<sha1::Sha1>(digest),
 
-            HashAlgorithm::RIPEMD160 => {
+            HashAlgorithm::Ripemd160 => {
                 signing_key.sign_prehashed_rfc6979::<ripemd::Ripemd160>(digest)
             }
-            HashAlgorithm::SHA2_256 => signing_key.sign_prehashed_rfc6979::<sha2::Sha256>(digest),
-            HashAlgorithm::SHA2_384 => signing_key.sign_prehashed_rfc6979::<sha2::Sha384>(digest),
-            HashAlgorithm::SHA2_512 => signing_key.sign_prehashed_rfc6979::<sha2::Sha512>(digest),
-            HashAlgorithm::SHA2_224 => signing_key.sign_prehashed_rfc6979::<sha2::Sha224>(digest),
-            HashAlgorithm::SHA3_256 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_256>(digest),
-            HashAlgorithm::SHA3_512 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_512>(digest),
+            HashAlgorithm::Sha256 => signing_key.sign_prehashed_rfc6979::<sha2::Sha256>(digest),
+            HashAlgorithm::Sha384 => signing_key.sign_prehashed_rfc6979::<sha2::Sha384>(digest),
+            HashAlgorithm::Sha512 => signing_key.sign_prehashed_rfc6979::<sha2::Sha512>(digest),
+            HashAlgorithm::Sha224 => signing_key.sign_prehashed_rfc6979::<sha2::Sha224>(digest),
+            HashAlgorithm::Sha3_256 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_256>(digest),
+            HashAlgorithm::Sha3_512 => signing_key.sign_prehashed_rfc6979::<sha3::Sha3_512>(digest),
             _ => unimplemented_err!("hasher {:?}", hash_algorithm),
         }?;
 
@@ -59,53 +99,23 @@ impl Signer for SecretKey {
 }
 
 /// Verify a DSA signature.
-pub fn verify(
-    p: BigUint,
-    q: BigUint,
-    g: BigUint,
-    y: BigUint,
-    hashed: &[u8],
-    r: BigUint,
-    s: BigUint,
-) -> Result<()> {
-    let components = Components::from_components(p, q, g)?;
-    let verifying_key = VerifyingKey::from_components(components, y)?;
+pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BigUint, s: BigUint) -> Result<()> {
+    let verifying_key = &params.key;
     let signature = Signature::from_components(r, s)?;
-
     verifying_key.verify_prehash(hashed, &signature)?;
 
     Ok(())
 }
 
-/// Generate a DSA KeyPair.
-pub fn generate_key<R: Rng + CryptoRng>(
-    mut rng: R,
-    key_size: KeySize,
-) -> Result<(PublicParams, PlainSecretParams)> {
-    let components = Components::generate(&mut rng, key_size);
-    let signing_key = SigningKey::generate(&mut rng, components);
-    let verifying_key = signing_key.verifying_key();
-    let p = verifying_key.components().p();
-    let q = verifying_key.components().q();
-    let g = verifying_key.components().g();
-    let y = verifying_key.y();
-
-    let x = signing_key.x();
-    let public_params = PublicParams::DSA {
-        p: p.into(),
-        q: q.into(),
-        g: g.into(),
-        y: y.into(),
-    };
-    let secret_params = PlainSecretParams::DSA(x.into());
-    Ok((public_params, secret_params))
-}
-
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     use num_traits::Num;
+    use proptest::prelude::*;
+    use rand::SeedableRng;
+
+    use crate::types::MpiBytes;
 
     fn hex_num(s: &str) -> BigUint {
         BigUint::from_str_radix(s, 16).expect("invalid hex")
@@ -147,91 +157,92 @@ mod test {
              82F65CBDC4FAE93C2EA212390E54905A86E2223170B44EAA7DA5DD9FFCFB7F3B",
         );
 
+        let params = DsaPublicParams::try_from_mpi(
+            MpiBytes::from(p),
+            MpiBytes::from(q),
+            MpiBytes::from(g),
+            MpiBytes::from(y),
+        )
+        .unwrap();
+
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
-                let key = SecretKey { x: x.clone() };
-                let params = PublicParams::DSA {
-                    p: p.clone().into(),
-                    q: q.clone().into(),
-                    g: g.clone().into(),
-                    y: y.clone().into(),
-                };
-                let res = key
-                    .sign(hash_algorithm, &hashed, &params)
-                    .expect("failed to sign");
+                let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
+                let key = SecretKey { key };
+
+                let res = key.sign(hash_algorithm, &hashed).expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
                 assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
-                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
-                    .expect("failed to verify");
+                verify(&params, &hashed, r, s).expect("failed to verify");
             };
 
         check(
-            HashAlgorithm::SHA1,
+            HashAlgorithm::Sha1,
             "sample",
             hex_num("7BDB6B0FF756E1BB5D53583EF979082F9AD5BD5B"),
             hex_num("2E1A0C2562B2912CAAF89186FB0F42001585DA55"),
             hex_num("29EFB6B0AFF2D7A68EB70CA313022253B9A88DF5"),
         );
         check(
-            HashAlgorithm::SHA2_224,
+            HashAlgorithm::Sha224,
             "sample",
             hex_num("562097C06782D60C3037BA7BE104774344687649"),
             hex_num("4BC3B686AEA70145856814A6F1BB53346F02101E"),
             hex_num("410697B92295D994D21EDD2F4ADA85566F6F94C1"),
         );
         check(
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
             "sample",
             hex_num("519BA0546D0C39202A7D34D7DFA5E760B318BCFB"),
             hex_num("81F2F5850BE5BC123C43F71A3033E9384611C545"),
             hex_num("4CDD914B65EB6C66A8AAAD27299BEE6B035F5E89"),
         );
         check(
-            HashAlgorithm::SHA2_384,
+            HashAlgorithm::Sha384,
             "sample",
             hex_num("95897CD7BBB944AA932DBC579C1C09EB6FCFC595"),
             hex_num("07F2108557EE0E3921BC1774F1CA9B410B4CE65A"),
             hex_num("54DF70456C86FAC10FAB47C1949AB83F2C6F7595"),
         );
         check(
-            HashAlgorithm::SHA2_512,
+            HashAlgorithm::Sha512,
             "sample",
             hex_num("09ECE7CA27D0F5A4DD4E556C9DF1D21D28104F8B"),
             hex_num("16C3491F9B8C3FBBDD5E7A7B667057F0D8EE8E1B"),
             hex_num("02C36A127A7B89EDBB72E4FFBC71DABC7D4FC69C"),
         );
         check(
-            HashAlgorithm::SHA1,
+            HashAlgorithm::Sha1,
             "test",
             hex_num("5C842DF4F9E344EE09F056838B42C7A17F4A6433"),
             hex_num("42AB2052FD43E123F0607F115052A67DCD9C5C77"),
             hex_num("183916B0230D45B9931491D4C6B0BD2FB4AAF088"),
         );
         check(
-            HashAlgorithm::SHA2_224,
+            HashAlgorithm::Sha224,
             "test",
             hex_num("4598B8EFC1A53BC8AECD58D1ABBB0C0C71E67297"),
             hex_num("6868E9964E36C1689F6037F91F28D5F2C30610F2"),
             hex_num("49CEC3ACDC83018C5BD2674ECAAD35B8CD22940F"),
         );
         check(
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
             "test",
             hex_num("5A67592E8128E03A417B0484410FB72C0B630E1A"),
             hex_num("22518C127299B0F6FDC9872B282B9E70D0790812"),
             hex_num("6837EC18F150D55DE95B5E29BE7AF5D01E4FE160"),
         );
         check(
-            HashAlgorithm::SHA2_384,
+            HashAlgorithm::Sha384,
             "test",
             hex_num("220156B761F6CA5E6C9F1B9CF9C24BE25F98CD89"),
             hex_num("854CF929B58D73C3CBFDC421E8D5430CD6DB5E66"),
             hex_num("91D0E0F53E22F898D158380676A871A157CDA622"),
         );
         check(
-            HashAlgorithm::SHA2_512,
+            HashAlgorithm::Sha512,
             "test",
             hex_num("65D2C2EEB175E370F28C75BFCDC028D22C7DBE9C"),
             hex_num("8EA47E475BA8AC6F2D821DA3BD212D11A3DEB9A0"),
@@ -281,95 +292,105 @@ mod test {
              74E04299F132026601638CB87AB79190D4A0986315DA8EEC6561C938996BEADF",
         );
 
+        let params = DsaPublicParams::try_from_mpi(
+            MpiBytes::from(p),
+            MpiBytes::from(q),
+            MpiBytes::from(g),
+            MpiBytes::from(y),
+        )
+        .unwrap();
+
         let check =
             |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
                 let hashed = hash(hash_algorithm, text);
-                let key = SecretKey { x: x.clone() };
-                let params = PublicParams::DSA {
-                    p: p.clone().into(),
-                    q: q.clone().into(),
-                    g: g.clone().into(),
-                    y: y.clone().into(),
-                };
-                let res = key
-                    .sign(hash_algorithm, &hashed, &params)
-                    .expect("failed to sign");
+                let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
+                let key = SecretKey { key };
+
+                let res = key.sign(hash_algorithm, &hashed).expect("failed to sign");
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
                 assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
-                verify(p.clone(), q.clone(), g.clone(), y.clone(), &hashed, r, s)
-                    .expect("failed to verify");
+                verify(&params, &hashed, r, s).expect("failed to verify");
             };
 
         check(
-            HashAlgorithm::SHA1,
+            HashAlgorithm::Sha1,
             "sample",
             hex_num("888FA6F7738A41BDC9846466ABDB8174C0338250AE50CE955CA16230F9CBD53E"),
             hex_num("3A1B2DBD7489D6ED7E608FD036C83AF396E290DBD602408E8677DAABD6E7445A"),
             hex_num("D26FCBA19FA3E3058FFC02CA1596CDBB6E0D20CB37B06054F7E36DED0CDBBCCF"),
         );
         check(
-            HashAlgorithm::SHA2_224,
+            HashAlgorithm::Sha224,
             "sample",
             hex_num("BC372967702082E1AA4FCE892209F71AE4AD25A6DFD869334E6F153BD0C4D806"),
             hex_num("DC9F4DEADA8D8FF588E98FED0AB690FFCE858DC8C79376450EB6B76C24537E2C"),
             hex_num("A65A9C3BC7BABE286B195D5DA68616DA8D47FA0097F36DD19F517327DC848CEC"),
         );
         check(
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
             "sample",
             hex_num("8926A27C40484216F052F4427CFD5647338B7B3939BC6573AF4333569D597C52"),
             hex_num("EACE8BDBBE353C432A795D9EC556C6D021F7A03F42C36E9BC87E4AC7932CC809"),
             hex_num("7081E175455F9247B812B74583E9E94F9EA79BD640DC962533B0680793A38D53"),
         );
         check(
-            HashAlgorithm::SHA2_384,
+            HashAlgorithm::Sha384,
             "sample",
             hex_num("C345D5AB3DA0A5BCB7EC8F8FB7A7E96069E03B206371EF7D83E39068EC564920"),
             hex_num("B2DA945E91858834FD9BF616EBAC151EDBC4B45D27D0DD4A7F6A22739F45C00B"),
             hex_num("19048B63D9FD6BCA1D9BAE3664E1BCB97F7276C306130969F63F38FA8319021B"),
         );
         check(
-            HashAlgorithm::SHA2_512,
+            HashAlgorithm::Sha512,
             "sample",
             hex_num("5A12994431785485B3F5F067221517791B85A597B7A9436995C89ED0374668FC"),
             hex_num("2016ED092DC5FB669B8EFB3D1F31A91EECB199879BE0CF78F02BA062CB4C942E"),
             hex_num("D0C76F84B5F091E141572A639A4FB8C230807EEA7D55C8A154A224400AFF2351"),
         );
         check(
-            HashAlgorithm::SHA1,
+            HashAlgorithm::Sha1,
             "test",
             hex_num("6EEA486F9D41A037B2C640BC5645694FF8FF4B98D066A25F76BE641CCB24BA4F"),
             hex_num("C18270A93CFC6063F57A4DFA86024F700D980E4CF4E2CB65A504397273D98EA0"),
             hex_num("414F22E5F31A8B6D33295C7539C1C1BA3A6160D7D68D50AC0D3A5BEAC2884FAA"),
         );
         check(
-            HashAlgorithm::SHA2_224,
+            HashAlgorithm::Sha224,
             "test",
             hex_num("06BD4C05ED74719106223BE33F2D95DA6B3B541DAD7BFBD7AC508213B6DA6670"),
             hex_num("272ABA31572F6CC55E30BF616B7A265312018DD325BE031BE0CC82AA17870EA3"),
             hex_num("E9CC286A52CCE201586722D36D1E917EB96A4EBDB47932F9576AC645B3A60806"),
         );
         check(
-            HashAlgorithm::SHA2_256,
+            HashAlgorithm::Sha256,
             "test",
             hex_num("1D6CE6DDA1C5D37307839CD03AB0A5CBB18E60D800937D67DFB4479AAC8DEAD7"),
             hex_num("8190012A1969F9957D56FCCAAD223186F423398D58EF5B3CEFD5A4146A4476F0"),
             hex_num("7452A53F7075D417B4B013B278D1BB8BBD21863F5E7B1CEE679CF2188E1AB19E"),
         );
         check(
-            HashAlgorithm::SHA2_384,
+            HashAlgorithm::Sha384,
             "test",
             hex_num("206E61F73DBE1B2DC8BE736B22B079E9DACD974DB00EEBBC5B64CAD39CF9F91C"),
             hex_num("239E66DDBE8F8C230A3D071D601B6FFBDFB5901F94D444C6AF56F732BEB954BE"),
             hex_num("6BD737513D5E72FE85D1C750E0F73921FE299B945AAD1C802F15C26A43D34961"),
         );
         check(
-            HashAlgorithm::SHA2_512,
+            HashAlgorithm::Sha512,
             "test",
             hex_num("AFF1651E4CD6036D57AA8B2A05CCF1A9D5A40166340ECBBDC55BE10B568AA0AA"),
             hex_num("89EC4BB1400ECCFF8E7D9AA515CD1DE7803F2DAFF09693EE7FD1353E90A68307"),
             hex_num("C9F0BDABCC0D880BB137A994CC7F3980CE91CC10FAF529FC46565B15CEA854E1"),
         );
+    }
+
+    prop_compose! {
+        pub fn key_gen()(seed: u64) -> dsa::SigningKey {
+            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            #[allow(deprecated)]
+            let components = Components::generate(&mut rng, KeySize::DSA_1024_160);
+            SigningKey::generate(&mut rng, components)
+        }
     }
 }

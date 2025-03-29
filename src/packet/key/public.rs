@@ -1,109 +1,178 @@
-use aes_gcm::aead::rand_core::CryptoRng;
+use std::io::BufRead;
+
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 use md5::Md5;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
+use rsa::traits::PublicKeyParts;
 use sha1_checked::{Digest, Sha1};
 
-use crate::types::EcdhPublicParams;
+use crate::ser::Serialize;
+use crate::types::Password;
 use crate::{
-    crypto::{self, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
-    packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     types::{
-        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
-        SecretKeyTrait, SignatureBytes, Tag, Version,
+        EcdhPublicParams, EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId,
+        KeyVersion, MpiBytes, PkeskBytes, PublicKeyTrait, PublicParams, SecretKeyTrait,
+        SignatureBytes, Tag,
     },
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicKey(PubKeyInner);
+pub struct PublicKey {
+    packet_header: PacketHeader,
+    inner: PubKeyInner,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PublicSubkey(PubKeyInner);
+pub struct PublicSubkey {
+    packet_header: PacketHeader,
+    inner: PubKeyInner,
+}
 
 impl PublicKey {
+    pub fn from_inner(inner: PubKeyInner) -> Result<Self> {
+        let len = inner.write_len();
+        let packet_header = PacketHeader::new_fixed(Tag::PublicKey, len.try_into()?);
+        Ok(Self {
+            packet_header,
+            inner,
+        })
+    }
+
     /// Create a new `PublicKey` packet from underlying parameters.
-    pub fn new(
-        packet_version: Version,
+    pub fn new_with_header(
+        packet_header: PacketHeader,
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
-        let inner = PubKeyInner::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )?;
-        Ok(Self(inner))
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+
+        if let Some(len) = packet_header.packet_length().maybe_len() {
+            ensure_eq!(
+                inner.write_len(),
+                len as usize,
+                "PublicKey: inconsisteng packet length"
+            );
+        }
+        ensure_eq!(packet_header.tag(), Tag::PublicKey, "invalid tag");
+
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
-    /// Parses a `PublicKeyKey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(packet_version, input)?;
-        Ok(Self(inner))
+    /// Parses a `PublicKeyKey` packet.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
+        ensure_eq!(packet_header.tag(), Tag::PublicKey, "invalid tag");
+
+        let inner = PubKeyInner::try_from_reader(input)?;
+
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn sign<R: CryptoRng + Rng, K>(
         &self,
         rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
+        key: &K,
+        key_pw: Password,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
-        self.0.sign(rng, key, key_pw, SignatureType::KeyBinding)
+        self.inner.sign(rng, key, key_pw, SignatureType::KeyBinding)
+    }
+
+    pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.inner, rng, plain, typ)
     }
 }
 
 impl PublicSubkey {
+    pub fn from_inner(inner: PubKeyInner) -> Result<Self> {
+        let len = inner.write_len();
+        let packet_header = PacketHeader::new_fixed(Tag::PublicSubkey, len.try_into()?);
+
+        Ok(Self {
+            packet_header,
+            inner,
+        })
+    }
     /// Create a new `PublicSubkey` packet from underlying parameters.
-    pub fn new(
-        packet_version: Version,
+    pub fn new_with_header(
+        packet_header: PacketHeader,
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
         expiration: Option<u16>,
         public_params: PublicParams,
     ) -> Result<Self> {
-        let inner = PubKeyInner::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )?;
-        Ok(Self(inner))
+        let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
+
+        if let Some(len) = packet_header.packet_length().maybe_len() {
+            ensure_eq!(
+                inner.write_len(),
+                len as usize,
+                "PublicSubkey: inconsistent packet length"
+            );
+        }
+        ensure_eq!(packet_header.tag(), Tag::PublicSubkey, "invalid tag");
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
-    /// Parses a `PublicSubkey` packet from the given slice.
-    pub fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let inner = PubKeyInner::from_slice(packet_version, input)?;
-        Ok(Self(inner))
+    /// Parses a `PublicSubkey` packet from the given buffer.
+    pub fn try_from_reader<B: BufRead>(packet_header: PacketHeader, input: B) -> Result<Self> {
+        ensure_eq!(packet_header.tag(), Tag::PublicSubkey, "invalid tag");
+        let inner = PubKeyInner::try_from_reader(input)?;
+
+        Ok(Self {
+            packet_header,
+            inner,
+        })
     }
 
-    pub fn sign<R: CryptoRng + Rng, F>(
+    pub fn sign<R: CryptoRng + Rng, K>(
         &self,
         rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
+        key: &K,
+        key_pw: Password,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
-        self.0.sign(rng, key, key_pw, SignatureType::SubkeyBinding)
+        self.inner
+            .sign(rng, key, key_pw, SignatureType::SubkeyBinding)
+    }
+
+    pub fn encrypt<R: rand::CryptoRng + rand::Rng>(
+        &self,
+        rng: R,
+        plain: &[u8],
+        typ: EskType,
+    ) -> Result<PkeskBytes> {
+        encrypt(&self.inner, rng, plain, typ)
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-struct PubKeyInner {
-    packet_version: Version,
+#[doc(hidden)] // must leak for proptest to work
+pub struct PubKeyInner {
     version: KeyVersion,
     algorithm: PublicKeyAlgorithm,
     created_at: chrono::DateTime<chrono::Utc>,
@@ -112,8 +181,14 @@ struct PubKeyInner {
 }
 
 impl PubKeyInner {
-    fn new(
-        packet_version: Version,
+    fn try_from_reader<B: BufRead>(input: B) -> Result<Self> {
+        let details = crate::packet::public_key_parser::parse(input)?;
+        let (version, algorithm, created_at, expiration, public_params) = details;
+
+        Self::new(version, algorithm, created_at, expiration, public_params)
+    }
+
+    pub fn new(
         version: KeyVersion,
         algorithm: PublicKeyAlgorithm,
         created_at: chrono::DateTime<chrono::Utc>,
@@ -142,10 +217,7 @@ impl PubKeyInner {
         if version != KeyVersion::V4 {
             if matches!(
                 public_params,
-                PublicParams::ECDH(EcdhPublicParams::Known {
-                    curve: ECCCurve::Curve25519,
-                    ..
-                })
+                PublicParams::ECDH(EcdhPublicParams::Curve25519 { .. })
             ) {
                 bail!(
                     "ECDH over Curve25519 is illegal for key version {}",
@@ -162,27 +234,12 @@ impl PubKeyInner {
         }
 
         Ok(Self {
-            packet_version,
             version,
             algorithm,
             created_at,
             expiration,
             public_params,
         })
-    }
-
-    fn from_slice(packet_version: Version, input: &[u8]) -> Result<Self> {
-        let (_, details) = crate::packet::public_key_parser::parse(input)?;
-        let (version, algorithm, created_at, expiration, public_params) = details;
-
-        Self::new(
-            packet_version,
-            version,
-            algorithm,
-            created_at,
-            expiration,
-            public_params,
-        )
     }
 
     fn to_writer_v2_v3<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
@@ -199,33 +256,47 @@ impl PubKeyInner {
         Ok(())
     }
 
+    fn writer_len_v2_v3(&self) -> usize {
+        let mut sum = 4 + 2 + 1;
+        sum += self.public_params.write_len();
+        sum
+    }
+
     fn to_writer_v4_v6<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
         use crate::ser::Serialize;
 
         writer.write_u32::<BigEndian>(self.created_at.timestamp().try_into()?)?;
         writer.write_u8(self.algorithm.into())?;
 
-        let mut public_params = vec![];
-        self.public_params.to_writer(&mut public_params)?;
-
         if self.version == KeyVersion::V6 {
-            writer.write_u32::<BigEndian>(public_params.len().try_into()?)?;
+            writer.write_u32::<BigEndian>(self.public_params.write_len().try_into()?)?;
         }
 
-        writer.write_all(&public_params)?;
+        self.public_params.to_writer(writer)?;
 
         Ok(())
     }
 
-    fn sign<R: CryptoRng + Rng, F>(
+    fn writer_len_v4_v6(&self) -> usize {
+        let mut sum = 4 + 1;
+
+        if self.version == KeyVersion::V6 {
+            sum += 4;
+        }
+        sum += self.public_params.write_len();
+
+        sum
+    }
+
+    fn sign<R: CryptoRng + Rng, K>(
         &self,
         mut rng: R,
-        key: &impl SecretKeyTrait,
-        key_pw: F,
+        key: &K,
+        key_pw: Password,
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
-        F: FnOnce() -> String,
+        K: SecretKeyTrait + Serialize,
     {
         use chrono::SubsecRound;
 
@@ -239,22 +310,117 @@ impl PubKeyInner {
 
         config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             chrono::Utc::now().trunc_subsecs(0),
-        ))];
-        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))];
+        ))?];
+        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
         config.sign_key(key, key_pw, &self)
     }
 }
 
+pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
+    key: &K,
+    mut rng: R,
+    plain: &[u8],
+    typ: EskType,
+) -> Result<PkeskBytes> {
+    match key.public_params() {
+        PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
+        PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
+        PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
+        PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
+        PublicParams::ECDH(ref params) => match params {
+            EcdhPublicParams::Unsupported { ref curve, .. } => {
+                unsupported_err!("ECDH over curve {:?} is unsupported", curve)
+            }
+            _ => {
+                if key.version() == KeyVersion::V6 {
+                    // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
+                    // listed curve that announces a different KDF or KEK parameter.
+                    //
+                    // (See https://www.rfoc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
+                    let curve = params.curve();
+                    match params {
+                        EcdhPublicParams::Curve25519 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P256 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P521 { hash, alg_sym, .. }
+                        | EcdhPublicParams::P384 { hash, alg_sym, .. } => {
+                            if curve.hash_algo()? != *hash || curve.sym_algo()? != *alg_sym {
+                                bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}", curve, hash, alg_sym);
+                            }
+                        }
+                        _ => unsupported_err!("{:?} for ECDH", params),
+                    }
+                }
+
+                crypto::ecdh::encrypt(rng, params, key.fingerprint().as_bytes(), plain)
+            }
+        },
+        PublicParams::X25519(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, &params.key, plain)?;
+
+            Ok(PkeskBytes::X25519 {
+                ephemeral,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        #[cfg(feature = "unstable-curve448")]
+        PublicParams::X448(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, params, plain)?;
+
+            Ok(PkeskBytes::X448 {
+                ephemeral,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
+        PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
+        PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
+    }
+}
+
 impl crate::ser::Serialize for PublicKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        crate::ser::Serialize::to_writer(&self.0, writer)
+        self.inner.to_writer(writer)
+    }
+
+    fn write_len(&self) -> usize {
+        self.inner.write_len()
     }
 }
 
 impl crate::ser::Serialize for PublicSubkey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        crate::ser::Serialize::to_writer(&self.0, writer)
+        self.inner.to_writer(writer)
+    }
+
+    fn write_len(&self) -> usize {
+        self.inner.write_len()
     }
 }
 
@@ -271,29 +437,34 @@ impl crate::ser::Serialize for PubKeyInner {
             }
         }
     }
+
+    fn write_len(&self) -> usize {
+        let mut sum = 1;
+        sum += match self.version {
+            KeyVersion::V2 | KeyVersion::V3 => self.writer_len_v2_v3(),
+            KeyVersion::V4 | KeyVersion::V6 => self.writer_len_v4_v6(),
+            KeyVersion::V5 => panic!("V5 keys"),
+            KeyVersion::Other(v) => {
+                panic!("Unsupported key version {}", v)
+            }
+        };
+        sum
+    }
 }
 
 impl crate::packet::PacketTrait for PublicKey {
-    fn packet_version(&self) -> Version {
-        self.0.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::PublicKey
+    fn packet_header(&self) -> &crate::packet::PacketHeader {
+        &self.packet_header
     }
 }
 
 impl crate::packet::PacketTrait for PublicSubkey {
-    fn packet_version(&self) -> Version {
-        self.0.packet_version
-    }
-
-    fn tag(&self) -> Tag {
-        Tag::PublicSubkey
+    fn packet_header(&self) -> &crate::packet::PacketHeader {
+        &self.packet_header
     }
 }
 
-impl PublicKeyTrait for PubKeyInner {
+impl KeyDetails for PubKeyInner {
     fn version(&self) -> KeyVersion {
         self.version
     }
@@ -350,7 +521,7 @@ impl PublicKeyTrait for PubKeyInner {
                 let mut h = sha2::Sha256::new();
 
                 // a.1) 0x9B (1 octet)
-                h.update(&[0x9B]);
+                h.update([0x9B]);
 
                 // a.2) four-octet scalar octet count of (b)-(f)
                 let total_len: u32 = 1 + 4 + 1 + 4 + pp.len() as u32;
@@ -358,14 +529,14 @@ impl PublicKeyTrait for PubKeyInner {
                     .expect("write to hasher");
 
                 // b) version number = 6 (1 octet);
-                h.update(&[0x06]);
+                h.update([0x06]);
 
                 // c) timestamp of key creation (4 octets);
                 h.write_u32::<BigEndian>(self.created_at.timestamp() as u32)
                     .expect("write to hasher");
 
                 // d) algorithm (1 octet);
-                h.update(&[self.algorithm.into()]);
+                h.update([self.algorithm.into()]);
 
                 // e) four-octet scalar octet count for the following key material;
                 h.write_u32::<BigEndian>(pp.len() as u32)
@@ -385,10 +556,11 @@ impl PublicKeyTrait for PubKeyInner {
     fn key_id(&self) -> KeyId {
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => match &self.public_params {
-                PublicParams::RSA { n, .. } => {
+                PublicParams::RSA(params) => {
+                    let n: MpiBytes = params.key.n().into();
                     let offset = n.len() - 8;
-
-                    KeyId::from_slice(&n.as_bytes()[offset..]).expect("fixed size slice")
+                    let raw: [u8; 8] = n.as_ref()[offset..].try_into().expect("fixed size");
+                    raw.into()
                 }
                 _ => panic!("invalid key constructed: {:?}", &self.public_params),
             },
@@ -396,15 +568,15 @@ impl PublicKeyTrait for PubKeyInner {
                 // Lower 64 bits
                 let f = self.fingerprint();
                 let offset = f.len() - 8;
-
-                KeyId::from_slice(&f.as_bytes()[offset..]).expect("fixed size slice")
+                let raw: [u8; 8] = f.as_bytes()[offset..].try_into().expect("fixed size");
+                raw.into()
             }
             KeyVersion::V5 => unimplemented!("V5 keys"),
             KeyVersion::V6 => {
                 // High 64 bits
                 let f = self.fingerprint();
-
-                KeyId::from_slice(&f.as_bytes()[0..8]).expect("fixed size slice")
+                let raw: [u8; 8] = f.as_bytes()[0..8].try_into().expect("fixed size");
+                raw.into()
             }
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
@@ -413,6 +585,9 @@ impl PublicKeyTrait for PubKeyInner {
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.algorithm
     }
+}
+
+impl PublicKeyTrait for PubKeyInner {
     fn verify_signature(
         &self,
         hash: HashAlgorithm,
@@ -420,41 +595,40 @@ impl PublicKeyTrait for PubKeyInner {
         sig: &SignatureBytes,
     ) -> Result<()> {
         match self.public_params {
-            PublicParams::RSA { ref n, ref e } => {
-                let sig: &[Mpi] = sig.try_into()?;
+            PublicParams::RSA(ref params) => {
+                let sig: &[MpiBytes] = sig.try_into()?;
 
                 ensure_eq!(sig.len(), 1, "invalid signature");
-                crypto::rsa::verify(n.as_bytes(), e.as_bytes(), hash, hashed, sig[0].as_bytes())
+                crypto::rsa::verify(&params.key, hash, hashed, sig[0].as_ref())
             }
-            PublicParams::EdDSALegacy { ref curve, ref q } => {
-                let sig: &[Mpi] = sig.try_into()?;
+            PublicParams::EdDSALegacy(ref params) => {
+                match params {
+                    EddsaLegacyPublicParams::Ed25519 { ref key } => {
+                        let sig: &[MpiBytes] = sig.try_into()?;
 
-                ensure_eq!(sig.len(), 2);
+                        ensure_eq!(sig.len(), 2);
 
-                let r = sig[0].as_bytes();
-                let s = sig[1].as_bytes();
+                        let r = sig[0].as_ref();
+                        let s = sig[1].as_ref();
 
-                ensure!(r.len() < 33, "invalid R (len)");
-                ensure!(s.len() < 33, "invalid S (len)");
-                ensure_eq!(q.len(), 33, "invalid Q (len)");
-                ensure_eq!(q[0], 0x40, "invalid Q (prefix)");
+                        ensure!(r.len() < 33, "invalid R (len)");
+                        ensure!(s.len() < 33, "invalid S (len)");
 
-                let public = &q[1..];
+                        let mut sig_bytes = vec![0u8; 64];
+                        // add padding if the values were encoded short
+                        sig_bytes[(32 - r.len())..32].copy_from_slice(r);
+                        sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
 
-                let mut sig_bytes = vec![0u8; 64];
-                // add padding if the values were encoded short
-                sig_bytes[(32 - r.len())..32].copy_from_slice(r);
-                sig_bytes[32 + (32 - s.len())..].copy_from_slice(s);
-
-                crypto::eddsa::verify(curve, public, hash, hashed, &sig_bytes)
+                        crypto::ed25519::verify(key, hash, hashed, &sig_bytes)
+                    }
+                    EddsaLegacyPublicParams::Unsupported { curve, .. } => {
+                        unsupported_err!("curve {:?} for EdDSA", curve.to_string());
+                    }
+                }
             }
-            PublicParams::Ed25519 { ref public } => crypto::eddsa::verify(
-                &crypto::ecc_curve::ECCCurve::Ed25519,
-                public,
-                hash,
-                hashed,
-                sig.try_into()?,
-            ),
+            PublicParams::Ed25519(ref params) => {
+                crypto::ed25519::verify(&params.key, hash, hashed, sig.try_into()?)
+            }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
             }
@@ -463,22 +637,24 @@ impl PublicKeyTrait for PubKeyInner {
                 bail!("X448 can not be used for verify operations");
             }
             PublicParams::ECDSA(ref params) => {
-                let sig: &[Mpi] = sig.try_into()?;
+                let sig: &[MpiBytes] = sig.try_into()?;
 
                 crypto::ecdsa::verify(params, hash, hashed, sig)
             }
-            PublicParams::ECDH(EcdhPublicParams::Known {
-                ref curve,
-                ref hash,
-                ref alg_sym,
-                ..
-            }) => {
-                bail!(
-                    "ECDH ({:?} {:?} {:?}) can not be used for verify operations",
-                    curve,
-                    hash,
-                    alg_sym
-                );
+            PublicParams::ECDH(
+                ref params @ EcdhPublicParams::Curve25519 { .. }
+                | ref params @ EcdhPublicParams::P256 { .. }
+                | ref params @ EcdhPublicParams::P384 { .. }
+                | ref params @ EcdhPublicParams::P521 { .. },
+            ) => {
+                bail!("ECDH ({:?}) can not be used for verify operations", params,);
+            }
+            PublicParams::ECDH(
+                EcdhPublicParams::Brainpool256 { .. }
+                | EcdhPublicParams::Brainpool384 { .. }
+                | EcdhPublicParams::Brainpool512 { .. },
+            ) => {
+                bail!("ECDH (unsupported: brainpool) can not be used for verify operations");
             }
             PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
                 bail!(
@@ -489,156 +665,16 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::Elgamal { .. } => {
                 unimplemented_err!("verify Elgamal");
             }
-            PublicParams::DSA {
-                ref p,
-                ref q,
-                ref g,
-                ref y,
-            } => {
-                let sig: &[Mpi] = sig.try_into()?;
-
+            PublicParams::DSA(ref params) => {
+                let sig: &[MpiBytes] = sig.try_into()?;
                 ensure_eq!(sig.len(), 2, "invalid signature");
 
-                crypto::dsa::verify(
-                    p.into(),
-                    q.into(),
-                    g.into(),
-                    y.into(),
-                    hashed,
-                    sig[0].clone().into(),
-                    sig[1].clone().into(),
-                )
+                crypto::dsa::verify(params, hashed, sig[0].clone().into(), sig[1].clone().into())
             }
             PublicParams::Unknown { .. } => {
                 unimplemented_err!("PublicParams::Unknown can not be used for verify operations");
             }
         }
-    }
-
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        mut rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        match self.public_params {
-            PublicParams::RSA { ref n, ref e } => {
-                crypto::rsa::encrypt(rng, n.as_bytes(), e.as_bytes(), plain)
-            }
-            PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
-            PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
-            PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
-            PublicParams::ECDH(EcdhPublicParams::Known {
-                ref curve,
-                hash,
-                alg_sym,
-                ref p,
-            }) => {
-                if self.version() == KeyVersion::V6 {
-                    // An implementation MUST NOT encrypt any message to a version 6 ECDH key over a
-                    // listed curve that announces a different KDF or KEK parameter.
-                    //
-                    // (See https://www.rfc-editor.org/rfc/rfc9580.html#section-11.5.1-2)
-                    if curve.hash_algo()? != hash || curve.sym_algo()? != alg_sym {
-                        bail!("Unsupported KDF/KEK parameters for {:?} and KeyVersion::V6: {:?}, {:?}",curve,
-                           hash,
-                            alg_sym);
-                    }
-                }
-
-                crypto::ecdh::encrypt(
-                    rng,
-                    curve,
-                    alg_sym,
-                    hash,
-                    self.fingerprint().as_bytes(),
-                    p.as_bytes(),
-                    plain,
-                )
-            }
-            PublicParams::ECDH(EcdhPublicParams::Unsupported { ref curve, .. }) => {
-                unsupported_err!("ECDH over curve {:?} is unsupported", curve)
-            }
-            PublicParams::X25519 { ref public } => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
-
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
-
-                let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, *public, plain)?;
-
-                Ok(PkeskBytes::X25519 {
-                    ephemeral,
-                    session_key,
-                    sym_alg,
-                })
-            }
-            #[cfg(feature = "unstable-curve448")]
-            PublicParams::X448 { ref public } => {
-                let (sym_alg, plain) = match typ {
-                    EskType::V6 => (None, plain),
-                    EskType::V3_4 => {
-                        ensure!(!plain.is_empty(), "plain may not be empty");
-
-                        (
-                            Some(plain[0].into()), // byte 0 is the symmetric algorithm
-                            &plain[1..],           // strip symmetric algorithm
-                        )
-                    }
-                };
-
-                let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, *public, plain)?;
-
-                Ok(PkeskBytes::X448 {
-                    ephemeral,
-                    session_key,
-                    sym_alg,
-                })
-            }
-            PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
-            PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
-            PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
-        }
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        use crate::ser::Serialize;
-
-        let mut key_buf = Vec::new();
-        self.to_writer(&mut key_buf)?;
-
-        // old style packet header for the key
-        match self.version() {
-            KeyVersion::V2 | KeyVersion::V3 | KeyVersion::V4 => {
-                // When a v4 signature is made over a key, the hash data starts with the octet 0x99,
-                // followed by a two-octet length of the key, and then the body of the key packet.
-                writer.write_u8(0x99)?;
-                writer.write_u16::<BigEndian>(key_buf.len().try_into()?)?;
-            }
-
-            KeyVersion::V6 => {
-                // When a v6 signature is made over a key, the hash data starts with the salt
-                // [NOTE: the salt is hashed in packet/signature/config.rs],
-
-                // then octet 0x9B, followed by a four-octet length of the key,
-                // and then the body of the key packet.
-                writer.write_u8(0x9b)?;
-                writer.write_u32::<BigEndian>(key_buf.len().try_into()?)?;
-            }
-
-            v => unimplemented_err!("key version {:?}", v),
-        }
-
-        writer.write_all(&key_buf)?;
-
-        Ok(())
     }
 
     fn public_params(&self) -> &PublicParams {
@@ -654,6 +690,23 @@ impl PublicKeyTrait for PubKeyInner {
     }
 }
 
+impl KeyDetails for PublicKey {
+    fn version(&self) -> KeyVersion {
+        self.inner.version()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.inner.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.inner.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.inner.algorithm()
+    }
+}
 impl PublicKeyTrait for PublicKey {
     fn verify_signature(
         &self,
@@ -661,48 +714,37 @@ impl PublicKeyTrait for PublicKey {
         hashed: &[u8],
         sig: &SignatureBytes,
     ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
+        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
     }
 
     fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
-    }
-
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
+        PublicKeyTrait::public_params(&self.inner)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
+        PublicKeyTrait::created_at(&self.inner)
     }
 
     fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
+        PublicKeyTrait::expiration(&self.inner)
+    }
+}
+
+impl KeyDetails for PublicSubkey {
+    fn version(&self) -> KeyVersion {
+        self.inner.version()
+    }
+
+    fn fingerprint(&self) -> Fingerprint {
+        self.inner.fingerprint()
+    }
+
+    fn key_id(&self) -> KeyId {
+        self.inner.key_id()
+    }
+
+    fn algorithm(&self) -> PublicKeyAlgorithm {
+        self.inner.algorithm()
     }
 }
 
@@ -713,47 +755,160 @@ impl PublicKeyTrait for PublicSubkey {
         hashed: &[u8],
         sig: &SignatureBytes,
     ) -> Result<()> {
-        PublicKeyTrait::verify_signature(&self.0, hash, hashed, sig)
-    }
-
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
-        &self,
-        rng: R,
-        plain: &[u8],
-        typ: EskType,
-    ) -> Result<PkeskBytes> {
-        PublicKeyTrait::encrypt(&self.0, rng, plain, typ)
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        PublicKeyTrait::serialize_for_hashing(&self.0, writer)
+        PublicKeyTrait::verify_signature(&self.inner, hash, hashed, sig)
     }
 
     fn public_params(&self) -> &PublicParams {
-        PublicKeyTrait::public_params(&self.0)
-    }
-
-    fn version(&self) -> KeyVersion {
-        PublicKeyTrait::version(&self.0)
-    }
-
-    fn fingerprint(&self) -> Fingerprint {
-        PublicKeyTrait::fingerprint(&self.0)
-    }
-
-    fn key_id(&self) -> KeyId {
-        PublicKeyTrait::key_id(&self.0)
-    }
-
-    fn algorithm(&self) -> PublicKeyAlgorithm {
-        PublicKeyTrait::algorithm(&self.0)
+        PublicKeyTrait::public_params(&self.inner)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
-        PublicKeyTrait::created_at(&self.0)
+        PublicKeyTrait::created_at(&self.inner)
     }
 
     fn expiration(&self) -> Option<u16> {
-        PublicKeyTrait::expiration(&self.0)
+        PublicKeyTrait::expiration(&self.inner)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+    use proptest::prelude::*;
+
+    use super::*;
+    use crate::packet::PacketTrait;
+
+    fn v3_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![Just(PublicKeyAlgorithm::RSA),].boxed()
+    }
+    fn v4_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![
+            Just(PublicKeyAlgorithm::RSA),
+            Just(PublicKeyAlgorithm::DSA),
+            Just(PublicKeyAlgorithm::ECDSA),
+            Just(PublicKeyAlgorithm::ECDH),
+            Just(PublicKeyAlgorithm::Elgamal),
+            Just(PublicKeyAlgorithm::EdDSALegacy),
+            Just(PublicKeyAlgorithm::Ed25519),
+            Just(PublicKeyAlgorithm::X25519),
+        ]
+        .boxed()
+    }
+    fn v6_alg() -> BoxedStrategy<PublicKeyAlgorithm> {
+        prop_oneof![
+            Just(PublicKeyAlgorithm::RSA),
+            Just(PublicKeyAlgorithm::DSA),
+            Just(PublicKeyAlgorithm::ECDSA),
+            Just(PublicKeyAlgorithm::Elgamal),
+            Just(PublicKeyAlgorithm::Ed25519),
+            Just(PublicKeyAlgorithm::X25519),
+            // cfg is not working here
+            // Just(PublicKeyAlgorithm::X448),
+        ]
+        .boxed()
+    }
+
+    impl Arbitrary for PubKeyInner {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<(KeyVersion, u32, u16)>()
+                .prop_flat_map(|(version, created_at, expiration)| {
+                    let created_at = chrono::Utc
+                        .timestamp_opt(created_at as i64, 0)
+                        .single()
+                        .expect("invalid time");
+                    match version {
+                        KeyVersion::V2 | KeyVersion::V3 => (
+                            Just(version),
+                            Just(created_at),
+                            Just(Some(expiration)),
+                            v3_alg(),
+                        ),
+                        KeyVersion::V4 => (Just(version), Just(created_at), Just(None), v4_alg()),
+                        KeyVersion::V5 | KeyVersion::V6 => {
+                            (Just(version), Just(created_at), Just(None), v6_alg())
+                        }
+                        KeyVersion::Other(_) => unimplemented!(),
+                    }
+                })
+                .prop_flat_map(|(version, created_at, expiration, algorithm)| {
+                    (
+                        Just(version),
+                        Just(algorithm),
+                        Just(created_at),
+                        Just(expiration),
+                        any_with::<PublicParams>(algorithm),
+                    )
+                })
+                .prop_map(|(version, algorithm, created_at, expiration, pub_params)| {
+                    PubKeyInner::new(version, algorithm, created_at, expiration, pub_params)
+                        .unwrap()
+                })
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for PublicKey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<PubKeyInner>()
+                .prop_map(|k| PublicKey::from_inner(k).unwrap())
+                .boxed()
+        }
+    }
+
+    impl Arbitrary for PublicSubkey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<PubKeyInner>()
+                .prop_map(|k| PublicSubkey::from_inner(k).unwrap())
+                .boxed()
+        }
+    }
+
+    proptest! {
+        #[test]
+        #[ignore]
+        fn public_key_write_len(packet: PublicKey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf)?;
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+        #[test]
+        #[ignore]
+        fn public_key_packet_roundtrip(packet: PublicKey) {
+            // dyn compat
+            let _: Box<&dyn PublicKeyTrait> = Box::new(&packet);
+
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf)?;
+            let new_packet = PublicKey::try_from_reader(*packet.packet_header(), &mut &buf[..])?;
+            prop_assert_eq!(packet, new_packet);
+        }
+
+        #[test]
+        #[ignore]
+        fn public_sub_key_write_len(packet: PublicSubkey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf)?;
+            prop_assert_eq!(buf.len(), packet.write_len());
+        }
+
+        #[test]
+        #[ignore]
+        fn public_sub_key_packet_roundtrip(packet: PublicSubkey) {
+            let mut buf = Vec::new();
+            packet.to_writer(&mut buf)?;
+            let new_packet = PublicSubkey::try_from_reader(*packet.packet_header(), &mut &buf[..])?;
+            prop_assert_eq!(packet, new_packet);
+        }
     }
 }

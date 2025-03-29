@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc dc642bca599004dac48239605f0a182e8e2fe1195d2cbcf8915090e392644383 # shrinks to attr = Image { packet_version: Old, header: , data:  }
+cc 3c3d73b8e6c9eaffb69413df5693e4cdefb4ad6005667e624731fe0c56b12e40 # shrinks to attr = Image { packet_version: Old, header: 000000000000000000000000000000, data:  }
+cc 8436a6d3f6a7e284354b040d11b2daddc8e8e7cfc29da2466968ac7a96547691 # shrinks to attr = Unknown { packet_version: Old, typ: 1, data:  }
+cc 8e3a220c91038f7da49ca75a81a511b5ae18dbc613bd0d4caa214a9d1acefa50 # shrinks to attr = Unknown { packet_version: Old, typ: Unknown(1), data: 00 }

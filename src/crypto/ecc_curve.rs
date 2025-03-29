@@ -5,6 +5,7 @@ use crate::crypto::public_key::PublicKeyAlgorithm;
 use crate::crypto::sym::SymmetricKeyAlgorithm;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum ECCCurve {
     Curve25519,
     Ed25519,
@@ -15,6 +16,7 @@ pub enum ECCCurve {
     BrainpoolP384r1,
     BrainpoolP512r1,
     Secp256k1,
+    #[cfg_attr(test, proptest(skip))]
     Unknown(ObjectIdentifier),
 }
 
@@ -122,11 +124,11 @@ impl ECCCurve {
             | ECCCurve::Ed25519
             | ECCCurve::P256
             | ECCCurve::BrainpoolP256r1
-            | ECCCurve::Secp256k1 => Ok(HashAlgorithm::SHA2_256),
+            | ECCCurve::Secp256k1 => Ok(HashAlgorithm::Sha256),
 
-            ECCCurve::P384 | ECCCurve::BrainpoolP384r1 => Ok(HashAlgorithm::SHA2_384),
+            ECCCurve::P384 | ECCCurve::BrainpoolP384r1 => Ok(HashAlgorithm::Sha384),
 
-            ECCCurve::P521 | ECCCurve::BrainpoolP512r1 => Ok(HashAlgorithm::SHA2_512),
+            ECCCurve::P521 | ECCCurve::BrainpoolP512r1 => Ok(HashAlgorithm::Sha512),
 
             ECCCurve::Unknown(_oid) => {
                 unsupported_err!("no default hash_algo for curve {:?}", self.to_string())

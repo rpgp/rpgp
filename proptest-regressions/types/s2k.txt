@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ece8400e8e7678de5fc73ca02ff4c6280bc191bbafc793a6ccd7b4add0c6be52 # shrinks to s2k = Simple { hash_alg: Other(110) }

@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 935334330f0b9c51e7a3dc3d09865ae28199ba9f29e68bae4219902d9250181e # shrinks to params = P256 { key: PublicKey { point: AffinePoint { x: FieldElement(0x713785BDDE221873195703803ACB6AC111CB926BC56BC355F66FC5DE4790FC01), y: FieldElement(0x1F6F7BA1CA8B97014DD1A2A0E6B9D45D1E8B6EC91399AC553F2E9A2E658FA7A3), infinity: 0 } } }

@@ -1,8 +1,8 @@
 use log::{debug, warn};
 
 use crate::errors::{Error, Result};
-use crate::packet::{self, Packet, Signature, SignatureType, UserAttribute, UserId};
-use crate::types::{KeyVersion, PublicKeyTrait, SignedUser, SignedUserAttribute, Tag};
+use crate::packet::{self, Packet, PacketTrait, Signature, SignatureType, UserAttribute, UserId};
+use crate::types::{KeyDetails, KeyVersion, SignedUser, SignedUserAttribute, Tag};
 use crate::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey};
 
 #[allow(clippy::complexity)]
@@ -20,7 +20,7 @@ pub fn next<I, IKT>(
 >
 where
     I: Sized + Iterator<Item = Result<Packet>>,
-    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + PublicKeyTrait,
+    IKT: TryFrom<packet::Packet, Error = crate::errors::Error> + KeyDetails,
 {
     let packets = packets.by_ref();
 
@@ -49,13 +49,13 @@ where
         Some(Err(e)) => return Some(Err(e)),
         None => return None,
     };
+
     let primary_key: IKT = match next.try_into() {
         Ok(key) => key,
         Err(err) => {
             return Some(Err(err));
         }
     };
-    debug!("primary key: {:?}", primary_key.key_id());
 
     // -- Zero or more revocation signatures
     // -- followed by zero or more direct signatures in V4 keys
@@ -177,7 +177,8 @@ where
             Err(e) => return Some(Err(e)),
         };
 
-        match packet.tag() {
+        let tag = packet.tag();
+        match tag {
             Tag::PublicSubkey => {
                 let subkey: packet::PublicSubkey = err_opt!(packet.try_into());
                 let mut sigs = Vec::new();
@@ -222,7 +223,7 @@ where
     if let Some(Err(e)) = packets.next_if(|peek| peek.is_err()) {
         match e {
             // "Unsupported" errors are by definition "soft", these packets are safe to skip silently
-            Error::Unsupported(_) => {}
+            Error::Unsupported { .. } => {}
 
             _ => {
                 return Some(Err(format_err!(
@@ -240,18 +241,18 @@ where
     if primary_key.version() == KeyVersion::V6 {
         for sub in &public_subkey_container {
             if sub.version() != KeyVersion::V6 {
-                return Some(Err(crate::errors::Error::Message(format!(
+                return Some(Err(format_err!(
                     "Illegal public subkey {:?} in v6 key",
                     sub.version()
-                ))));
+                )));
             }
         }
         for sub in &secret_subkey_container {
             if sub.version() != KeyVersion::V6 {
-                return Some(Err(crate::errors::Error::Message(format!(
+                return Some(Err(format_err!(
                     "Illegal secret subkey {:?} in v6 key",
                     sub.version()
-                ))));
+                )));
             }
         }
     }

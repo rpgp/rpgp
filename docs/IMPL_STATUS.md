@@ -1,6 +1,6 @@
 # Implementation Status
 
-For an overall comparison with other implementations 
+For an overall comparison with other implementations
 see the "rpgpie" results in the [OpenPGP interoperability test suite](https://tests.sequoia-pgp.org/)
 
 
@@ -83,10 +83,10 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] SHA2 224
   - [x] SHA3 256
   - [x] SHA3 512
-- [ ] Compression Algorithms
+- [x] Compression Algorithms
   - [x] ZIP
   - [x] ZLIB
-  - [ ] 🚫 BZip2
+  - [x] BZip2
 - [x] AEAD Algorithms
   - [x] OCB
   - [x] EAX

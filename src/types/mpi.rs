@@ -1,135 +1,95 @@
-use std::io;
+use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use nom::number::streaming::be_u16;
-use nom::{Err, InputIter, InputTake};
+use bytes::Bytes;
 use num_bigint::BigUint;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::errors::{self, Error, IResult};
+use crate::errors::{InvalidInputSnafu, Result};
+use crate::parsing_reader::BufReadParsing;
 use crate::ser::Serialize;
-use crate::util::{bit_size, strip_leading_zeros, strip_leading_zeros_vec};
 
 /// Number of bits we accept when reading or writing MPIs.
 /// The value is the same as gnupgs.
-const MAX_EXTERN_MPI_BITS: u32 = 16384;
-
-/// Parse Multi Precision Integers
-/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-multiprecision-integers>
-///
-/// # Examples
-///
-/// ```rust
-/// use pgp::types::mpi;
-/// use pgp::types::MpiRef;
-///
-/// // Decode the number `1`.
-/// assert_eq!(
-///     mpi(&[0x00, 0x01, 0x01][..]).unwrap(),
-///     (&b""[..], MpiRef::from_slice(&[1][..]))
-/// );
-/// ```
-pub fn mpi(input: &[u8]) -> IResult<&[u8], MpiRef<'_>> {
-    let (number, len) = be_u16(input)?;
-
-    let bits = u32::from(len);
-    let len_actual = (bits + 7) >> 3;
-
-    if len_actual > MAX_EXTERN_MPI_BITS {
-        Err(Err::Error(Error::InvalidInput))
-    } else {
-        // same as take!
-        let cnt = len_actual as usize;
-        match number.slice_index(cnt) {
-            Err(needed) => Err(nom::Err::Incomplete(needed)),
-            Ok(index) => {
-                let (rest, n) = number.take_split(index);
-                let n_stripped: MpiRef<'_> = MpiRef::from_slice(strip_leading_zeros(n));
-
-                Ok((rest, n_stripped))
-            }
-        }
-    }
-}
+const MAX_EXTERN_MPI_BITS: u16 = 16384;
 
 /// Represents an owned MPI value.
 /// The inner value is ready to be serialized, without the need to strip leading zeros.
-#[derive(Default, Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop, derive_more::Debug)]
-pub struct Mpi(#[debug("{}", hex::encode(_0))] Vec<u8>);
+///
+/// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-multiprecision-integers>
+#[derive(Default, Clone, PartialEq, Eq, derive_more::Debug)]
+pub struct MpiBytes(#[debug("{}", hex::encode(_0))] Bytes);
 
-/// Represents a borrowed MPI value.
-/// The inner value is ready to be serialized, without the need to strip leading zeros.
-#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
-pub struct MpiRef<'a>(#[debug("{}", hex::encode(_0))] &'a [u8]);
+impl MpiBytes {
+    /// Wraps the given bytes as an MPI, must be normalized before
+    /// Avoid if possible.
+    ///
+    /// Only used internally to handle reversed Curve 25519 "Mpis".
+    pub(crate) fn from_raw(bytes: Bytes) -> Self {
+        MpiBytes(bytes)
+    }
 
-impl AsRef<[u8]> for Mpi {
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Parses the given reader as an MPI.
+    ///
+    /// The buffer is expected to be length-prefixed.
+    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
+        let len_bits = i.read_be_u16()?;
+
+        if len_bits > MAX_EXTERN_MPI_BITS {
+            return Err(InvalidInputSnafu.build());
+        }
+
+        let len_bytes = (len_bits + 7) >> 3;
+
+        let n = i.take_bytes(usize::from(len_bytes))?.freeze();
+        let n_stripped = strip_leading_zeros(&n);
+        let n_stripped = n.slice_ref(n_stripped);
+
+        Ok(MpiBytes(n_stripped))
+    }
+
+    /// Represent the data in `raw` as an Mpi.
+    /// Note that `raw` is not expected to be length-prefixed!
+    ///
+    /// Strips leading zeros.
+    pub fn from_slice(raw: &[u8]) -> Self {
+        Self(strip_leading_zeros(raw).to_vec().into())
+    }
+}
+
+/// Returns the bit length of a given slice.
+#[inline]
+fn bit_size(val: &[u8]) -> usize {
+    if val.is_empty() {
+        0
+    } else {
+        (val.len() * 8) - val[0].leading_zeros() as usize
+    }
+}
+
+#[inline]
+fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
+    bytes
+        .iter()
+        .position(|b| b != &0)
+        .map_or(&[], |offset| &bytes[offset..])
+}
+
+impl AsRef<[u8]> for MpiBytes {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
 
-impl Mpi {
-    pub fn from_raw(mut v: Vec<u8>) -> Self {
-        strip_leading_zeros_vec(&mut v);
-        Mpi(v)
-    }
-
-    /// Strips leading zeros.
-    pub fn from_slice(raw: &[u8]) -> Self {
-        Mpi(strip_leading_zeros(raw).to_vec())
-    }
-
-    pub fn as_ref(&self) -> MpiRef<'_> {
-        MpiRef(&self.0)
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.0
-    }
-}
-
-impl std::ops::Deref for Mpi {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::Deref for MpiRef<'_> {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl<'a> MpiRef<'a> {
-    pub fn from_slice(slice: &'a [u8]) -> Self {
-        MpiRef(strip_leading_zeros(slice))
-    }
-
-    pub fn to_owned(&self) -> Mpi {
-        Mpi(self.0.to_owned())
-    }
-
-    pub fn parse(slice: &'a [u8]) -> IResult<&'a [u8], MpiRef<'a>> {
-        mpi(slice)
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0
-    }
-}
-
-impl Serialize for Mpi {
-    fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
-        MpiRef(&self.0).to_writer(w)
-    }
-}
-
-impl Serialize for MpiRef<'_> {
-    fn to_writer<W: io::Write>(&self, w: &mut W) -> errors::Result<()> {
+impl Serialize for MpiBytes {
+    fn to_writer<W: io::Write>(&self, w: &mut W) -> Result<()> {
         let bytes = &self.0;
         let size = bit_size(bytes);
         w.write_u16::<BigEndian>(size as u16)?;
@@ -137,73 +97,69 @@ impl Serialize for MpiRef<'_> {
 
         Ok(())
     }
+
+    fn write_len(&self) -> usize {
+        2 + self.0.len()
+    }
 }
 
-impl From<BigUint> for Mpi {
+impl From<BigUint> for MpiBytes {
     fn from(other: BigUint) -> Self {
-        Mpi(other.to_bytes_be())
+        MpiBytes(other.to_bytes_be().into())
     }
 }
 
-impl From<Mpi> for BigUint {
-    fn from(other: Mpi) -> Self {
-        BigUint::from_bytes_be(other.as_bytes())
+impl From<&BigUint> for MpiBytes {
+    fn from(other: &BigUint) -> Self {
+        MpiBytes(other.to_bytes_be().into())
     }
 }
 
-impl<'a> From<&'a Mpi> for BigUint {
-    fn from(other: &'a Mpi) -> Self {
-        BigUint::from_bytes_be(other.as_bytes())
-    }
-}
-
-impl<'a> From<MpiRef<'a>> for BigUint {
-    fn from(other: MpiRef<'a>) -> Self {
-        BigUint::from_bytes_be(other.as_bytes())
-    }
-}
-
-impl<'a, 'b> From<&'b MpiRef<'a>> for BigUint {
-    fn from(other: &'b MpiRef<'a>) -> Self {
-        BigUint::from_bytes_be(other.as_bytes())
-    }
-}
-
-impl<'a> From<&'a BigUint> for Mpi {
-    fn from(other: &'a BigUint) -> Self {
-        Mpi(other.to_bytes_be())
+impl From<MpiBytes> for BigUint {
+    fn from(other: MpiBytes) -> Self {
+        BigUint::from_bytes_be(other.as_ref())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
+    use proptest::prelude::*;
 
     use super::*;
+
+    impl Arbitrary for MpiBytes {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            proptest::collection::vec(0u8..255, 1..500)
+                .prop_map(|v| MpiBytes::from_slice(&v))
+                .boxed()
+        }
+    }
 
     #[test]
     fn test_mpi() {
         // Decode the number `511` (`0x1FF` in hex).
         assert_eq!(
-            mpi(&[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
-            (&b""[..], MpiRef::from_slice(&[0x01, 0xFF][..]))
+            MpiBytes::try_from_reader(&mut &[0x00, 0x09, 0x01, 0xFF][..]).unwrap(),
+            MpiBytes::from_slice(&[0x01, 0xFF][..])
         );
 
         // Decode the number `2^255 + 7`.
         assert_eq!(
-            mpi(&[
-                0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0x07
-            ][..])
+            MpiBytes::try_from_reader(
+                &mut &[
+                    0x01, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0x07
+                ][..]
+            )
             .unwrap(),
-            (
-                &b""[..],
-                MpiRef::from_slice(
-                    &[
-                        0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                        0, 0, 0, 0, 0, 0, 0, 0x07
-                    ][..]
-                )
+            MpiBytes::from_slice(
+                &[
+                    0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0x07
+                ][..]
             )
         );
     }
@@ -220,15 +176,40 @@ mod tests {
             let n = hex::decode(raw).unwrap();
 
             let n_big = BigUint::from_bytes_be(&n);
-            let n_mpi: Mpi = n_big.clone().into();
+            let n_mpi: MpiBytes = n_big.clone().into();
             let mut n_encoded = Vec::new();
             n_mpi.to_writer(&mut n_encoded).unwrap();
 
             assert_eq!(&n_encoded, &hex::decode(encoded).unwrap());
 
-            let (rest, n_big2) = mpi(&n_encoded).unwrap();
-            assert_eq!(rest.len(), 0);
+            let n_big2 = MpiBytes::try_from_reader(&mut &n_encoded[..]).unwrap();
             assert_eq!(n_big, n_big2.into());
+        }
+    }
+
+    #[test]
+    fn test_strip_leading_zeros_with_all_zeros() {
+        let buf = [0u8, 0u8, 0u8];
+        let stripped: &[u8] = strip_leading_zeros(&buf[..]);
+        assert!(stripped.is_empty());
+    }
+
+    proptest! {
+        #[test]
+        fn mpi_bytes_wite_le(m: MpiBytes) {
+            let mut buf = Vec::new();
+            m.to_writer(&mut buf)?;
+
+            prop_assert_eq!(m.write_len(), buf.len());
+        }
+
+        #[test]
+        fn mpi_bytes_roundtrip(m: MpiBytes) {
+            let mut buf = Vec::new();
+            m.to_writer(&mut buf)?;
+
+            let m_back = MpiBytes::try_from_reader(&mut &buf[..])?;
+            prop_assert_eq!(m, m_back);
         }
     }
 }

@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2fe2077e14c4a47ad618b74ef7dff527cce85e0e71818fc20806bca5857d635f # shrinks to params = ElgamalPublicParams { p: MpiBytes(), g: MpiBytes(), y: MpiBytes(01), encrypt_only: false }

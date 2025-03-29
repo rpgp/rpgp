@@ -12,10 +12,10 @@ fn bench_s2k(c: &mut Criterion) {
     let mut group = c.benchmark_group("s2k");
     {
         let algs = [
-            HashAlgorithm::SHA1,
-            HashAlgorithm::SHA2_256,
-            HashAlgorithm::SHA3_256,
-            HashAlgorithm::SHA2_512,
+            HashAlgorithm::Sha1,
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Sha3_256,
+            HashAlgorithm::Sha512,
         ];
         let counts = [
             1u8,
@@ -45,8 +45,9 @@ fn bench_s2k(c: &mut Criterion) {
                                 let passphrase = Alphanumeric.sample_string(&mut rng, size);
 
                                 b.iter(|| {
-                                    let res =
-                                        s2k.derive_key(&passphrase, sym_alg.key_size()).unwrap();
+                                    let res = s2k
+                                        .derive_key(passphrase.as_bytes(), sym_alg.key_size())
+                                        .unwrap();
                                     black_box(res);
                                 })
                             },

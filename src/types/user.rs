@@ -3,7 +3,7 @@ use std::io;
 use log::{debug, warn};
 
 use crate::errors::Result;
-use crate::packet::{write_packet, Signature, UserAttribute, UserId};
+use crate::packet::{PacketTrait, Signature, UserAttribute, UserId};
 use crate::ser::Serialize;
 use crate::types::{PublicKeyTrait, Tag};
 
@@ -34,7 +34,10 @@ impl SignedUser {
     }
 
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         debug!("verify signed user {:#?}", self);
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
@@ -46,11 +49,11 @@ impl SignedUser {
     }
 
     /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
-    pub fn verify_third_party(
-        &self,
-        signee: &impl PublicKeyTrait,
-        signer: &impl PublicKeyTrait,
-    ) -> Result<()> {
+    pub fn verify_third_party<P, K>(&self, signee: &P, signer: &K) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         debug!("verify signed user {:#?} with signer {:#?}", self, signer);
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
@@ -68,12 +71,19 @@ impl SignedUser {
 
 impl Serialize for SignedUser {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.id)?;
+        self.id.to_writer_with_header(writer)?;
         for sig in &self.signatures {
-            write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         Ok(())
+    }
+    fn write_len(&self) -> usize {
+        let mut sum = self.id.write_len_with_header();
+        for sig in &self.signatures {
+            sum += sig.write_len_with_header();
+        }
+        sum
     }
 }
 
@@ -104,7 +114,10 @@ impl SignedUserAttribute {
     }
 
     /// Verify all signatures (for self-signatures). If signatures is empty, this fails.
-    pub fn verify(&self, key: &impl PublicKeyTrait) -> Result<()> {
+    pub fn verify<P>(&self, key: &P) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+    {
         debug!("verify signed attribute {:?}", self);
         ensure!(!self.signatures.is_empty(), "no signatures found");
 
@@ -116,11 +129,11 @@ impl SignedUserAttribute {
     }
 
     /// Verify all signatures (for third-party signatures). If signatures is empty, this fails.
-    pub fn verify_third_party(
-        &self,
-        signee: &impl PublicKeyTrait,
-        signer: &impl PublicKeyTrait,
-    ) -> Result<()> {
+    pub fn verify_third_party<P, K>(&self, signee: &P, signer: &K) -> Result<()>
+    where
+        P: PublicKeyTrait + Serialize,
+        K: PublicKeyTrait + Serialize,
+    {
         debug!(
             "verify signed attribute {:#?} with signer {:#?}",
             self, signer
@@ -142,11 +155,19 @@ impl SignedUserAttribute {
 
 impl Serialize for SignedUserAttribute {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        write_packet(writer, &self.attr)?;
+        self.attr.to_writer_with_header(writer)?;
         for sig in &self.signatures {
-            write_packet(writer, sig)?;
+            sig.to_writer_with_header(writer)?;
         }
 
         Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        let mut sum = self.attr.write_len_with_header();
+        for sig in &self.signatures {
+            sum += sig.write_len_with_header();
+        }
+        sum
     }
 }

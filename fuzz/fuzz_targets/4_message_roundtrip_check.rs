@@ -1,8 +1,7 @@
 #![no_main]
 
-use pgp::composed::{Deserializable, Message};
-
 use libfuzzer_sys::fuzz_target;
+use pgp::composed::{Deserializable, Message};
 
 // test logical behavior around message handling
 fuzz_target!(|data: &[u8]| {
@@ -15,7 +14,7 @@ fuzz_target!(|data: &[u8]| {
         // inspired by test_parse_msg() in message_test.rs
         Ok(message_ok) => {
             // serialize and check we get the same thing
-            let serialized = message_ok.to_armored_bytes(None.into());
+            let serialized = message_ok.to_armored_string(None.into());
 
             match serialized {
                 Err(_) => return,
@@ -25,14 +24,13 @@ fuzz_target!(|data: &[u8]| {
                     // known anomalies
                     // nonfinding RPG-14 in ROS report 2024
                     // let (m2, _headers) =
-                    //     Message::from_armor_single(&serialized_ok[..]).expect("failed round trip");
+                    //     Message::from_armor(&serialized_ok[..]).expect("failed round trip");
 
                     // assert_eq!(message_ok, m2);
-                    // let _ = Message::from_armor_single(&serialized[..]);
+                    // let _ = Message::from_armor(&serialized[..]);
 
                     // no known issues yet
-                    let _ =
-                        Message::from_armor_many(&serialized_ok[..]).expect("failed round trip");
+                    let _ = Message::from_armor(&serialized_ok[..]).expect("failed round trip");
                 }
             }
         }
