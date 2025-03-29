@@ -2,7 +2,6 @@
 
 use libfuzzer_sys::fuzz_target;
 use pgp::crypto::hash::HashAlgorithm;
-use pgp::types::SecretKeyTrait;
 use pgp::{
     composed::{Deserializable, Message},
     SignedSecretKey,
@@ -62,11 +61,11 @@ QqrhcYJ4IBFau0avBvi7QjsSOvePvIKFO/DuDIECRpLZjRW+VKisag==
             let mut rng = ChaCha8Rng::seed_from_u64(0);
 
             // FUZZER OBSERVATION contrary to initial expectations, signing does not always succeed
-            let signed_message_res = message.clone().sign(
+            let signed_message_res = Message::from_bytes(data).unwrap().sign(
                 &mut rng,
                 &decrypt_key,
                 String::default,
-                HashAlgorithm::SHA2_256,
+                HashAlgorithm::Sha256,
             );
 
             match signed_message_res {
