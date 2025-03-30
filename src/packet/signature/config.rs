@@ -382,7 +382,7 @@ impl SignatureConfig {
     }
 
     /// Calculate the serialized version of this packet, but only the part relevant for hashing.
-    pub fn hash_signature_data(&self, hasher: &mut Box<dyn DynDigest>) -> Result<usize> {
+    pub fn hash_signature_data(&self, hasher: &mut Box<dyn DynDigest + Send>) -> Result<usize> {
         match self.version() {
             SignatureVersion::V2 | SignatureVersion::V3 => {
                 let created = {
@@ -477,7 +477,7 @@ impl SignatureConfig {
 
     pub fn hash_data_to_sign<R>(
         &self,
-        hasher: &mut Box<dyn DynDigest>,
+        hasher: &mut Box<dyn DynDigest + Send>,
         mut data: R,
     ) -> Result<usize>
     where

@@ -3,7 +3,7 @@ use zeroize::Zeroizing;
 /// Wraps around a callback to unlock keys.
 #[derive(derive_more::Debug)]
 pub enum Password {
-    Dynamic(#[debug("Box<Fn>")] Box<dyn Fn() -> Zeroizing<Vec<u8>>>),
+    Dynamic(#[debug("Box<Fn>")] Box<dyn Fn() -> Zeroizing<Vec<u8>> + 'static + Send + Sync>),
     Static(#[debug("***")] Zeroizing<Vec<u8>>),
 }
 
@@ -46,7 +46,7 @@ impl Password {
     }
 }
 
-impl<F: Fn() -> Zeroizing<Vec<u8>> + 'static> From<F> for Password {
+impl<F: Fn() -> Zeroizing<Vec<u8>> + 'static + Send + Sync> From<F> for Password {
     fn from(value: F) -> Self {
         Self::Dynamic(Box::new(value))
     }

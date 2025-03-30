@@ -93,7 +93,7 @@ impl HashAlgorithm {
 impl zeroize::DefaultIsZeroes for HashAlgorithm {}
 
 /// Temporary wrapper around `Box<dyn DynDigest>` to implement `io::Write`.
-pub(crate) struct WriteHasher<'a>(pub(crate) &'a mut Box<dyn DynDigest>);
+pub(crate) struct WriteHasher<'a>(pub(crate) &'a mut Box<dyn DynDigest + Send>);
 
 impl std::io::Write for WriteHasher<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -109,7 +109,7 @@ impl std::io::Write for WriteHasher<'_> {
 
 impl HashAlgorithm {
     /// Create a new hasher.
-    pub fn new_hasher(self) -> Result<Box<dyn DynDigest>> {
+    pub fn new_hasher(self) -> Result<Box<dyn DynDigest + Send>> {
         match self {
             HashAlgorithm::Md5 => Ok(Box::<Md5>::default()),
             HashAlgorithm::Sha1 => Ok(Box::<Sha1>::default()),

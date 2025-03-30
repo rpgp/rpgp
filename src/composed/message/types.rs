@@ -21,9 +21,9 @@ use crate::{
     types::{EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag},
 };
 
-pub trait DebugBufRead: BufRead + std::fmt::Debug {}
+pub trait DebugBufRead: BufRead + std::fmt::Debug + Send {}
 
-impl<T: BufRead + std::fmt::Debug> DebugBufRead for T {}
+impl<T: BufRead + std::fmt::Debug + Send> DebugBufRead for T {}
 
 /// The inner reader type in a nested message
 #[derive(Debug)]
@@ -1337,6 +1337,15 @@ mod tests {
         },
         types::{CompressionAlgorithm, StringToKey},
     };
+
+    fn is_send<T: Send>() {}
+
+    #[test]
+    fn test_message_send() {
+        is_send::<&[u8]>();
+        is_send::<MessageReader<'_>>();
+        is_send::<Message<'_>>();
+    }
 
     #[test]
     fn test_compression_zlib() {

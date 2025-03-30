@@ -24,7 +24,9 @@ pub enum Any<'a> {
 
 impl<'a> Any<'a> {
     /// Parse armored ascii data.
-    pub fn from_armor<R: std::fmt::Debug + Read + 'a>(bytes: R) -> Result<(Self, armor::Headers)> {
+    pub fn from_armor<R: std::fmt::Debug + Read + 'a + Send>(
+        bytes: R,
+    ) -> Result<(Self, armor::Headers)> {
         Self::from_armor_buf(BufReader::new(bytes))
     }
 
@@ -34,7 +36,7 @@ impl<'a> Any<'a> {
     }
 
     /// Parse armored ascii data.
-    pub fn from_armor_buf<R: BufRead + std::fmt::Debug + 'a>(
+    pub fn from_armor_buf<R: BufRead + std::fmt::Debug + 'a + Send>(
         input: R,
     ) -> Result<(Self, armor::Headers)> {
         let dearmor = armor::Dearmor::new(input);

@@ -193,7 +193,7 @@ impl<'a> Message<'a> {
     }
 
     /// Parses a message from the given bytes.
-    pub fn from_bytes<R: BufRead + std::fmt::Debug + 'a>(source: R) -> Result<Self> {
+    pub fn from_bytes<R: BufRead + std::fmt::Debug + 'a + Send>(source: R) -> Result<Self> {
         let source = MessageReader::Reader(Box::new(source) as Box<dyn DebugBufRead>);
         let parser = crate::packet::PacketParser::new(source);
         Self::from_packets(parser)
@@ -246,7 +246,7 @@ impl<'a> Message<'a> {
     }
 
     /// Armored ascii data.
-    pub fn from_armor<R: BufRead + std::fmt::Debug + 'a>(
+    pub fn from_armor<R: BufRead + std::fmt::Debug + 'a + Send>(
         input: R,
     ) -> Result<(Self, crate::armor::Headers)> {
         let mut dearmor = crate::armor::Dearmor::new(input);
@@ -283,7 +283,7 @@ impl<'a> Message<'a> {
     }
 
     /// Parse from a reader which might contain ASCII armored data or binary data.
-    pub fn from_reader<R: BufRead + std::fmt::Debug + 'a>(
+    pub fn from_reader<R: BufRead + std::fmt::Debug + 'a + Send>(
         mut source: R,
     ) -> Result<(Self, Option<crate::armor::Headers>)> {
         if is_binary(&mut source)? {
