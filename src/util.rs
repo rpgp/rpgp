@@ -144,13 +144,13 @@ pub(crate) mod test {
 #[derive(derive_more::Debug)]
 pub struct NormalizingHasher {
     #[debug("hasher")]
-    hasher: Box<dyn DynDigest>,
+    hasher: Box<dyn DynDigest + Send>,
     text_mode: bool,
     last_was_cr: bool,
 }
 
 impl NormalizingHasher {
-    pub(crate) fn new(hasher: Box<dyn DynDigest>, text_mode: bool) -> Self {
+    pub(crate) fn new(hasher: Box<dyn DynDigest + Send>, text_mode: bool) -> Self {
         Self {
             hasher,
             text_mode,
@@ -158,7 +158,7 @@ impl NormalizingHasher {
         }
     }
 
-    pub(crate) fn done(mut self) -> Box<dyn DynDigest> {
+    pub(crate) fn done(mut self) -> Box<dyn DynDigest + Send> {
         if self.text_mode && self.last_was_cr {
             self.hasher.update(b"\n")
         }

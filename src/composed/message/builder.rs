@@ -258,7 +258,7 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
                 sym_esks: Vec::new(),
                 pub_esks: Vec::new(),
             },
-            signing: Vec::new(),
+            signing: self.signing,
         }
     }
 }
@@ -295,7 +295,7 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
                 sym_esks: Vec::new(),
                 pub_esks: Vec::new(),
             },
-            signing: Vec::new(),
+            signing: self.signing,
         }
     }
 }

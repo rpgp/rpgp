@@ -1105,7 +1105,7 @@ impl PacketTrait for Signature {
 
 pub(super) fn serialize_for_hashing<K: KeyDetails + Serialize>(
     key: &K,
-    hasher: &mut Box<dyn DynDigest>,
+    hasher: &mut Box<dyn DynDigest + Send>,
 ) -> Result<()> {
     let key_len = key.write_len();
 
