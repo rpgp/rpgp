@@ -4,13 +4,17 @@ use byteorder::WriteBytesExt;
 use bytes::Bytes;
 use rand::{CryptoRng, Rng};
 
-use crate::crypto::aead::{AeadAlgorithm, ChunkSize, StreamEncryptor};
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{InvalidInputSnafu, Result};
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::Tag;
+use crate::{
+    crypto::{
+        aead::{AeadAlgorithm, ChunkSize, StreamEncryptor},
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::{InvalidInputSnafu, Result},
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::Tag,
+};
 
 /// Symmetrically Encrypted Integrity Protected Data Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetrically-encrypted-and>

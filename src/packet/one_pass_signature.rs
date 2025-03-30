@@ -5,14 +5,14 @@ use bytes::Bytes;
 #[cfg(test)]
 use proptest::prelude::*;
 
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::signature::SignatureType;
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{KeyId, Tag};
+use crate::{
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::Result,
+    packet::{signature::SignatureType, PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{KeyId, Tag},
+};
 
 /// One-Pass Signature Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-one-pass-signature-packet-t>

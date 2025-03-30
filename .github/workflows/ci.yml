@@ -171,8 +171,23 @@ jobs:
         command: check
         args: --target wasm32-unknown-unknown --no-default-features --features wasm
 
-  check_fmt_and_docs:
-    name: Checking fmt and docs
+  check_fmt:
+    name: Checking fmt
+    runs-on: ubuntu-latest
+    env:
+      RUSTC_WRAPPER: "sccache"
+      SCCACHE_GHA_ENABLED: "on"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: mozilla-actions/sccache-action@v0.0.7
+      - uses: taiki-e/install-action@cargo-make
+      - run: cargo make format-check
+
+  check_docs:
+    name: Checking docs
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@master
@@ -183,14 +198,6 @@ jobs:
           toolchain: ${{ env.RUST_NIGHTLY }}
           override: true
           components: rustfmt
-
-    - name: setup
-      run: |
-        rustup component add rustfmt
-        rustc --version
-
-    - name: fmt
-      run: cargo fmt --all -- --check
 
     - name: Docs
       run: cargo doc

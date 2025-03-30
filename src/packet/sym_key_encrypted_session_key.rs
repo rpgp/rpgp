@@ -8,14 +8,15 @@ use proptest::prelude::*;
 use rand::{CryptoRng, Rng};
 use sha2::Sha256;
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{InvalidInputSnafu, Result};
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{Password, SkeskVersion, StringToKey, Tag};
-use crate::PlainSessionKey;
+use crate::{
+    composed::PlainSessionKey,
+    crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::{InvalidInputSnafu, Result},
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{Password, SkeskVersion, StringToKey, Tag},
+};
 
 /// Symmetric-Key Encrypted Session Key Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-symmetric-key-encrypted-ses>

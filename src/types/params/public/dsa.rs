@@ -1,8 +1,6 @@
 use std::io::{self, BufRead};
 
-use crate::errors::Result;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{errors::Result, ser::Serialize, types::Mpi};
 
 #[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -16,16 +14,16 @@ impl Eq for DsaPublicParams {}
 
 impl DsaPublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
-        let p = MpiBytes::try_from_reader(&mut i)?;
-        let q = MpiBytes::try_from_reader(&mut i)?;
-        let g = MpiBytes::try_from_reader(&mut i)?;
-        let y = MpiBytes::try_from_reader(&mut i)?;
+        let p = Mpi::try_from_reader(&mut i)?;
+        let q = Mpi::try_from_reader(&mut i)?;
+        let g = Mpi::try_from_reader(&mut i)?;
+        let y = Mpi::try_from_reader(&mut i)?;
 
         let params = DsaPublicParams::try_from_mpi(p, q, g, y)?;
         Ok(params)
     }
 
-    pub(crate) fn try_from_mpi(p: MpiBytes, q: MpiBytes, g: MpiBytes, y: MpiBytes) -> Result<Self> {
+    pub(crate) fn try_from_mpi(p: Mpi, q: Mpi, g: Mpi, y: Mpi) -> Result<Self> {
         let components = dsa::Components::from_components(p.into(), q.into(), g.into())?;
         let key = dsa::VerifyingKey::from_components(components, y.into())?;
 
@@ -36,13 +34,13 @@ impl DsaPublicParams {
 impl Serialize for DsaPublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
         let c = self.key.components();
-        let p: MpiBytes = c.p().into();
+        let p: Mpi = c.p().into();
         p.to_writer(writer)?;
-        let q: MpiBytes = c.q().into();
+        let q: Mpi = c.q().into();
         q.to_writer(writer)?;
-        let g: MpiBytes = c.g().into();
+        let g: Mpi = c.g().into();
         g.to_writer(writer)?;
-        let y: MpiBytes = self.key.y().into();
+        let y: Mpi = self.key.y().into();
         y.to_writer(writer)?;
 
         Ok(())
@@ -52,13 +50,13 @@ impl Serialize for DsaPublicParams {
         let mut sum = 0;
 
         let c = self.key.components();
-        let p: MpiBytes = c.p().into();
+        let p: Mpi = c.p().into();
         sum += p.write_len();
-        let q: MpiBytes = c.q().into();
+        let q: Mpi = c.q().into();
         sum += q.write_len();
-        let g: MpiBytes = c.g().into();
+        let g: Mpi = c.g().into();
         sum += g.write_len();
-        let y: MpiBytes = self.key.y().into();
+        let y: Mpi = self.key.y().into();
         sum += y.write_len();
         sum
     }
@@ -66,11 +64,10 @@ impl Serialize for DsaPublicParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
+    use proptest::prelude::*;
     use rand::SeedableRng;
 
-    use proptest::prelude::*;
+    use super::*;
 
     prop_compose! {
         pub fn dsa_pub_gen()(seed: u64) -> dsa::VerifyingKey {

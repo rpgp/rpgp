@@ -1,10 +1,12 @@
 use log::debug;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::SymKeyEncryptedSessionKey;
-use crate::types::{Password, SkeskVersion};
+use crate::{
+    crypto::sym::SymmetricKeyAlgorithm,
+    errors::Result,
+    packet::SymKeyEncryptedSessionKey,
+    types::{Password, SkeskVersion},
+};
 
 /// Decrypted session key.
 ///

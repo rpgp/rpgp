@@ -2,30 +2,29 @@ use std::io::BufRead;
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{InvalidInputSnafu, Result};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-
-use super::MpiBytes;
-
 #[cfg(test)]
 use proptest::prelude::*;
+
+use super::Mpi;
+use crate::{
+    crypto::{public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::{InvalidInputSnafu, Result},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+};
 
 /// Values comprising a Public Key Encrypted Session Key
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PkeskBytes {
     Rsa {
-        mpi: MpiBytes,
+        mpi: Mpi,
     },
     Elgamal {
-        first: MpiBytes,
-        second: MpiBytes,
+        first: Mpi,
+        second: Mpi,
     },
     Ecdh {
-        public_point: MpiBytes,
+        public_point: Mpi,
         encrypted_session_key: Bytes,
     },
     X25519 {
@@ -57,19 +56,19 @@ impl PkeskBytes {
             PublicKeyAlgorithm::RSA
             | PublicKeyAlgorithm::RSASign
             | PublicKeyAlgorithm::RSAEncrypt => {
-                let mpi = MpiBytes::try_from_reader(&mut i)?;
+                let mpi = Mpi::try_from_reader(&mut i)?;
                 Ok(PkeskBytes::Rsa { mpi })
             }
             PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
-                let first = MpiBytes::try_from_reader(&mut i)?;
-                let second = MpiBytes::try_from_reader(&mut i)?;
+                let first = Mpi::try_from_reader(&mut i)?;
+                let second = Mpi::try_from_reader(&mut i)?;
                 Ok(PkeskBytes::Elgamal { first, second })
             }
             PublicKeyAlgorithm::ECDSA
             | PublicKeyAlgorithm::DSA
             | PublicKeyAlgorithm::DiffieHellman => Ok(PkeskBytes::Other),
             PublicKeyAlgorithm::ECDH => {
-                let public_point = MpiBytes::try_from_reader(&mut i)?;
+                let public_point = Mpi::try_from_reader(&mut i)?;
                 let session_key_len = i.read_u8()?;
                 let session_key = i.take_bytes(session_key_len.into())?.freeze();
 
@@ -317,14 +316,14 @@ mod tests {
                 PublicKeyAlgorithm::RSA
                 | PublicKeyAlgorithm::RSAEncrypt
                 | PublicKeyAlgorithm::RSASign => {
-                    any::<MpiBytes>().prop_map(|mpi| Self::Rsa { mpi }).boxed()
+                    any::<Mpi>().prop_map(|mpi| Self::Rsa { mpi }).boxed()
                 }
                 PublicKeyAlgorithm::Elgamal | PublicKeyAlgorithm::ElgamalEncrypt => {
-                    any::<(MpiBytes, MpiBytes)>()
+                    any::<(Mpi, Mpi)>()
                         .prop_map(|(first, second)| Self::Elgamal { first, second })
                         .boxed()
                 }
-                PublicKeyAlgorithm::ECDH => any::<MpiBytes>()
+                PublicKeyAlgorithm::ECDH => any::<Mpi>()
                     .prop_flat_map(|a| (Just(a), collection::vec(0u8..255u8, 1..100)))
                     .prop_map(|(a, b)| Self::Ecdh {
                         public_point: a,

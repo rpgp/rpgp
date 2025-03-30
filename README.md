@@ -59,7 +59,7 @@ Additionally, it fully supports all functionality required by the [Autocrypt 1.1
 
 ```rust no_run
 use std::fs;
-use pgp::{SignedPublicKey, Message, Deserializable};
+use pgp::composed::{SignedPublicKey, Message, Deserializable};
 
 let pub_key_file = "key.asc";
 let msg_file = "msg.asc";
@@ -82,7 +82,7 @@ println!("Signed message: {:?}", msg_string);
 
 ```rust no_run
 use std::fs;
-use pgp::{Deserializable, SignedPublicKey, SignedSecretKey};
+use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
 use pgp::types::{Password, PublicKeyTrait, SecretKeyTrait};
 use pgp::crypto::hash::HashAlgorithm;
 

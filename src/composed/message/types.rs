@@ -6,20 +6,19 @@ use super::reader::{
     CompressedDataReader, LiteralDataReader, PacketBodyReader, SignatureBodyReader,
     SignatureOnePassReader, SymEncryptedDataReader, SymEncryptedProtectedDataReader,
 };
-use crate::armor;
-use crate::composed::message::decrypt::*;
-use crate::composed::signed_key::SignedSecretKey;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{Error, Result};
-use crate::packet::{
-    LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
-    PublicKeyEncryptedSessionKey, Signature, SymEncryptedProtectedDataConfig,
-    SymKeyEncryptedSessionKey,
-};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{
-    EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag,
+use crate::{
+    armor,
+    composed::{message::decrypt::*, signed_key::SignedSecretKey},
+    crypto::sym::SymmetricKeyAlgorithm,
+    errors::{Error, Result},
+    packet::{
+        LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
+        PublicKeyEncryptedSessionKey, Signature, SymEncryptedProtectedDataConfig,
+        SymKeyEncryptedSessionKey,
+    },
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag},
 };
 
 pub trait DebugBufRead: BufRead + std::fmt::Debug {}
@@ -1324,17 +1323,20 @@ impl<'a> From<Option<&'a armor::Headers>> for ArmorOptions<'a> {
 #[cfg(test)]
 mod tests {
 
-    use std::fs;
-    use std::io::BufReader;
+    use std::{fs, io::BufReader};
 
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::crypto::aead::{AeadAlgorithm, ChunkSize};
-    use crate::crypto::hash::HashAlgorithm;
-    use crate::types::{CompressionAlgorithm, StringToKey};
-    use crate::{Deserializable, MessageBuilder};
+    use crate::{
+        composed::{Deserializable, MessageBuilder},
+        crypto::{
+            aead::{AeadAlgorithm, ChunkSize},
+            hash::HashAlgorithm,
+        },
+        types::{CompressionAlgorithm, StringToKey},
+    };
 
     #[test]
     fn test_compression_zlib() {

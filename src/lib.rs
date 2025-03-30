@@ -9,6 +9,7 @@
 
 #![cfg_attr(not(test), deny(clippy::unwrap_used))]
 #![allow(clippy::missing_const_for_fn, clippy::type_complexity)]
+#![deny(unsafe_code)]
 
 #[cfg(test)]
 #[macro_use]
@@ -23,8 +24,7 @@ pub(crate) mod util;
 #[macro_use]
 pub mod errors;
 pub mod armor;
-pub mod base64_decoder;
-pub mod base64_reader;
+pub mod base64;
 pub mod composed;
 pub mod crypto;
 pub mod line_writer;
@@ -35,12 +35,6 @@ pub mod types;
 
 mod parsing;
 mod parsing_reader;
-
-// reexports for easier use
-#[allow(unused_imports)]
-pub use self::composed::key::*;
-pub use self::composed::*;
-pub use self::packet::Signature;
 
 /// The version of this crate.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

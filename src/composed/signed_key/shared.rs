@@ -5,15 +5,18 @@ use log::warn;
 use smallvec::SmallVec;
 use snafu::Snafu;
 
-use crate::composed::key::KeyDetails;
-use crate::composed::signed_key::{SignedPublicKey, SignedSecretKey};
-use crate::errors::Result;
-use crate::packet::KeyFlags;
-use crate::packet::PacketTrait;
-use crate::ser::Serialize;
-use crate::types::PacketLength;
-use crate::types::{PublicKeyTrait, SignedUser, SignedUserAttribute};
-use crate::{packet, ArmorOptions};
+use crate::{
+    composed::{
+        key::KeyDetails,
+        signed_key::{SignedPublicKey, SignedSecretKey},
+        ArmorOptions,
+    },
+    errors::Result,
+    packet,
+    packet::{KeyFlags, PacketTrait},
+    ser::Serialize,
+    types::{PacketLength, PublicKeyTrait, SignedUser, SignedUserAttribute},
+};
 
 /// Shared details between secret and public keys.
 #[derive(Debug, PartialEq, Eq, Clone)]

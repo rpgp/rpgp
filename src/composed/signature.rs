@@ -1,11 +1,13 @@
 use std::iter::Peekable;
 
-use crate::composed::Deserializable;
-use crate::errors::Result;
-use crate::packet::{Packet, PacketTrait, Signature};
-use crate::ser::Serialize;
-use crate::types::{PublicKeyTrait, Tag};
-use crate::{armor, ArmorOptions};
+use crate::{
+    armor,
+    composed::{ArmorOptions, Deserializable},
+    errors::Result,
+    packet::{Packet, PacketTrait, Signature},
+    ser::Serialize,
+    types::{PublicKeyTrait, Tag},
+};
 
 /// Standalone signature as defined by the cleartext framework.
 #[derive(Debug, Clone, PartialEq, Eq)]

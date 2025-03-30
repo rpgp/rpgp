@@ -2,15 +2,17 @@ use std::io;
 
 use log::warn;
 
-use crate::errors::Result;
-use crate::packet::{
-    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PacketHeader, Padding,
-    PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey, Signature,
-    SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust, UserAttribute,
-    UserId,
+use crate::{
+    errors::Result,
+    packet::{
+        CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, PacketHeader,
+        Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey,
+        Signature, SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust,
+        UserAttribute, UserId,
+    },
+    ser::Serialize,
+    types::{PacketHeaderVersion, PacketLength, Tag},
 };
-use crate::ser::Serialize;
-use crate::types::{PacketHeaderVersion, PacketLength, Tag};
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-packet-syntax>

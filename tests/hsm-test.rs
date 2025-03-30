@@ -1,17 +1,19 @@
-use std::fmt::Debug;
-use std::fs::File;
+use std::{fmt::Debug, fs::File};
 
 use chrono::{DateTime, Utc};
-use pgp::crypto::checksum;
-use pgp::crypto::ecc_curve::ECCCurve;
-use pgp::crypto::hash::HashAlgorithm;
-use pgp::crypto::public_key::PublicKeyAlgorithm;
-use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::packet::{PubKeyInner, PublicKey, SignatureConfig};
-use pgp::types::{EcdhPublicParams, Fingerprint, Password, PkeskBytes, SignatureBytes};
-use pgp::types::{KeyDetails, KeyId, MpiBytes, PublicKeyTrait, PublicParams, SecretKeyTrait};
-use pgp::{packet, Esk};
-use pgp::{Message, SignedPublicKey, SignedSecretKey};
+use pgp::{
+    composed::{Esk, Message, SignedPublicKey, SignedSecretKey},
+    crypto::{
+        checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    packet,
+    packet::{PubKeyInner, PublicKey, SignatureConfig},
+    types::{
+        EcdhPublicParams, Fingerprint, KeyDetails, KeyId, Mpi, Password, PkeskBytes,
+        PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes,
+    },
+};
 
 #[derive(Debug, Clone)]
 pub struct FakeHsm {
@@ -106,23 +108,17 @@ impl SecretKeyTrait for FakeHsm {
         let sig = self.sign_data.unwrap().1; // fake smartcard output
 
         let mpis = match self.public_key.algorithm() {
-            PublicKeyAlgorithm::RSA => vec![MpiBytes::from_slice(sig)],
+            PublicKeyAlgorithm::RSA => vec![Mpi::from_slice(sig)],
 
             PublicKeyAlgorithm::ECDSA => {
                 let mid = sig.len() / 2;
 
-                vec![
-                    MpiBytes::from_slice(&sig[..mid]),
-                    MpiBytes::from_slice(&sig[mid..]),
-                ]
+                vec![Mpi::from_slice(&sig[..mid]), Mpi::from_slice(&sig[mid..])]
             }
             PublicKeyAlgorithm::EdDSALegacy => {
                 assert_eq!(sig.len(), 64); // FIXME: check curve; add error handling
 
-                vec![
-                    MpiBytes::from_slice(&sig[..32]),
-                    MpiBytes::from_slice(&sig[32..]),
-                ]
+                vec![Mpi::from_slice(&sig[..32]), Mpi::from_slice(&sig[32..])]
             }
 
             _ => unimplemented!(),
@@ -331,7 +327,7 @@ fn card_decrypt() {
         let (keyfile, msgfile, input, out) = case;
 
         let key_file = File::open(keyfile).unwrap();
-        let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
+        let (mut x, _) = pgp::composed::PublicOrSecret::from_reader_many(key_file).unwrap();
         let key: SignedSecretKey = x.next().unwrap().unwrap().try_into().unwrap();
 
         let pubkey: SignedPublicKey = key.into();
@@ -368,7 +364,7 @@ fn card_decrypt() {
 
         let (session_key, session_key_algorithm) = hsm.decrypt(values).unwrap();
         edata
-            .decrypt(&pgp::PlainSessionKey::V3_4 {
+            .decrypt(&pgp::composed::PlainSessionKey::V3_4 {
                 key: session_key,
                 sym_alg: session_key_algorithm,
             })
@@ -455,7 +451,7 @@ fn card_sign() {
         let (keyfile, sig_creation, input, out) = case;
 
         let key_file = File::open(keyfile).unwrap();
-        let (mut x, _) = pgp::composed::signed_key::from_reader_many(key_file).unwrap();
+        let (mut x, _) = pgp::composed::PublicOrSecret::from_reader_many(key_file).unwrap();
         let key: SignedSecretKey = x.next().unwrap().unwrap().try_into().unwrap();
 
         let pubkey: SignedPublicKey = key.into();

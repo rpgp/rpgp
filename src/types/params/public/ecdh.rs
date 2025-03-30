@@ -3,13 +3,17 @@ use std::io::{self, BufRead};
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
 
-use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{
+    crypto::{
+        ecc_curve::{ecc_curve_from_oid, ECCCurve},
+        hash::HashAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::Mpi,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -41,19 +45,19 @@ pub enum EcdhPublicParams {
     },
     #[cfg_attr(test, proptest(skip))]
     Brainpool256 {
-        p: MpiBytes,
+        p: Mpi,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
     },
     #[cfg_attr(test, proptest(skip))]
     Brainpool384 {
-        p: MpiBytes,
+        p: Mpi,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
     },
     #[cfg_attr(test, proptest(skip))]
     Brainpool512 {
-        p: MpiBytes,
+        p: Mpi,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
     },
@@ -74,22 +78,22 @@ impl Serialize for EcdhPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
-                let mpi = MpiBytes::from_slice(&mpi);
+                let mpi = Mpi::from_slice(&mpi);
                 mpi.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
             Self::P256 { p, hash, alg_sym } => {
-                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
+                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
             Self::P384 { p, hash, alg_sym } => {
-                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
+                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
             Self::P521 { p, hash, alg_sym } => {
-                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
+                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 p.to_writer(writer)?;
                 Some((hash, alg_sym))
             }
@@ -131,21 +135,21 @@ impl Serialize for EcdhPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(p.as_bytes());
-                let mpi = MpiBytes::from_slice(&mpi);
+                let mpi = Mpi::from_slice(&mpi);
                 sum += mpi.write_len();
             }
             Self::P256 { p, .. } => {
-                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
+                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 sum += self.curve().oid().len();
                 sum += p.write_len();
             }
             Self::P384 { p, .. } => {
-                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
+                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 sum += self.curve().oid().len();
                 sum += p.write_len();
             }
             Self::P521 { p, .. } => {
-                let p = MpiBytes::from_slice(p.to_sec1_bytes().as_ref());
+                let p = Mpi::from_slice(p.to_sec1_bytes().as_ref());
                 sum += self.curve().oid().len();
                 sum += p.write_len();
             }
@@ -211,7 +215,7 @@ impl EcdhPublicParams {
             | ECCCurve::BrainpoolP384r1
             | ECCCurve::BrainpoolP512r1 => {
                 // MPI of an EC point representing a public key
-                let p = MpiBytes::try_from_reader(&mut i)?;
+                let p = Mpi::try_from_reader(&mut i)?;
 
                 // a one-octet size of the following fields
                 let _len2 = i.read_u8()?;
@@ -244,7 +248,7 @@ impl EcdhPublicParams {
     }
 
     fn try_from_mpi(
-        p: MpiBytes,
+        p: Mpi,
         curve: ECCCurve,
         hash: HashAlgorithm,
         alg_sym: SymmetricKeyAlgorithm,
@@ -284,12 +288,10 @@ impl EcdhPublicParams {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::*;
-
-    use rand::RngCore;
-    use rand::SeedableRng;
-
     use proptest::prelude::*;
+    use rand::{RngCore, SeedableRng};
+
+    use super::*;
 
     proptest::prop_compose! {
         pub fn ecdh_curve25519_gen()(seed: u64) -> x25519_dalek::PublicKey {

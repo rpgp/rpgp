@@ -2,11 +2,13 @@ use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
 
-use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{
+    crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::Mpi,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -16,7 +18,7 @@ pub enum EddsaLegacyPublicParams {
         key: ed25519_dalek::VerifyingKey,
     },
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, mpi: MpiBytes },
+    Unsupported { curve: ECCCurve, mpi: Mpi },
 }
 
 impl EddsaLegacyPublicParams {
@@ -29,13 +31,13 @@ impl EddsaLegacyPublicParams {
         let curve = ecc_curve_from_oid(&curve_raw).ok_or_else(|| format_err!("invalid curve"))?;
 
         // MPI of an EC point representing a public key
-        let q = MpiBytes::try_from_reader(&mut i)?;
+        let q = Mpi::try_from_reader(&mut i)?;
         let res = Self::try_from_mpi(curve, q)?;
 
         Ok(res)
     }
 
-    fn try_from_mpi(curve: ECCCurve, mpi: MpiBytes) -> Result<Self> {
+    fn try_from_mpi(curve: ECCCurve, mpi: Mpi) -> Result<Self> {
         match curve {
             ECCCurve::Ed25519 => {
                 ensure_eq!(mpi.len(), 33, "invalid Q (len)");
@@ -67,7 +69,7 @@ impl Serialize for EddsaLegacyPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(key.as_bytes());
-                let mpi = MpiBytes::from_slice(&mpi);
+                let mpi = Mpi::from_slice(&mpi);
                 mpi.to_writer(writer)?;
             }
             Self::Unsupported { curve, mpi } => {
@@ -91,7 +93,7 @@ impl Serialize for EddsaLegacyPublicParams {
                 let mut mpi = Vec::with_capacity(33);
                 mpi.push(0x40);
                 mpi.extend_from_slice(key.as_bytes());
-                let mpi = MpiBytes::from_slice(&mpi);
+                let mpi = Mpi::from_slice(&mpi);
                 sum += mpi.write_len();
             }
             Self::Unsupported { curve, mpi } => {
@@ -107,8 +109,9 @@ impl Serialize for EddsaLegacyPublicParams {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest::prop_compose! {
         pub fn ed25519_pub_gen()(bytes: [u8; 32]) -> ed25519_dalek::VerifyingKey {

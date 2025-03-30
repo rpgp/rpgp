@@ -1,12 +1,10 @@
 use std::io::{self, BufRead, Read};
 
-use crate::crypto::sym::StreamDecryptor;
-use crate::errors::Result;
-use crate::packet::PacketHeader;
-use crate::types::Tag;
-use crate::PlainSessionKey;
-
 use super::PacketBodyReader;
+use crate::{
+    composed::PlainSessionKey, crypto::sym::StreamDecryptor, errors::Result, packet::PacketHeader,
+    types::Tag,
+};
 
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]

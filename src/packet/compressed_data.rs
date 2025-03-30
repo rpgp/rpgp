@@ -7,12 +7,14 @@ use bzip2::bufread::BzDecoder;
 use flate2::bufread::{DeflateDecoder, ZlibDecoder};
 use log::debug;
 
-use crate::errors::Result;
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{CompressionAlgorithm, PacketHeaderVersion, PacketLength, Tag};
-use crate::util::fill_buffer;
+use crate::{
+    errors::Result,
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{CompressionAlgorithm, PacketHeaderVersion, PacketLength, Tag},
+    util::fill_buffer,
+};
 
 /// Packet for compressed data.
 ///
@@ -443,13 +445,12 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::packet::Packet;
-
-    use super::*;
-
     use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
+
+    use super::*;
+    use crate::packet::Packet;
 
     proptest::prop_compose! {
         pub fn compressed_data_gen()(source: Vec<u8>) -> Bytes {

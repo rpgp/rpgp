@@ -1,5 +1,4 @@
-use std::hash::Hasher;
-use std::io;
+use std::{hash::Hasher, io};
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 

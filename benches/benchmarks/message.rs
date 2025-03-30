@@ -1,12 +1,14 @@
-use std::fs::{self, File};
-use std::io::Read;
+use std::{
+    fs::{self, File},
+    io::Read,
+};
 
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
-use pgp::composed::{Deserializable, Message, SignedSecretKey};
-use pgp::crypto::ecc_curve::ECCCurve;
-use pgp::crypto::sym::SymmetricKeyAlgorithm;
-use pgp::types::{Password, StringToKey};
-use pgp::{KeyType, MessageBuilder};
+use pgp::{
+    composed::{Deserializable, KeyType, Message, MessageBuilder, SignedSecretKey},
+    crypto::{ecc_curve::ECCCurve, sym::SymmetricKeyAlgorithm},
+    types::{Password, StringToKey},
+};
 use rand::{thread_rng, RngCore};
 
 use super::build_key;

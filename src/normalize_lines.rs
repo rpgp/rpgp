@@ -4,8 +4,7 @@ use std::sync::LazyLock;
 
 use bytes::{Buf, BytesMut};
 
-use crate::line_writer::LineBreak;
-use crate::util::fill_buffer;
+use crate::{line_writer::LineBreak, util::fill_buffer};
 
 static RE: LazyLock<regex::bytes::Regex> =
     LazyLock::new(|| regex::bytes::Regex::new(r"(\r\n?|\n)").expect("valid regex"));
@@ -104,9 +103,8 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
-    use crate::util::test::{check_strings, random_string, ChaosReader};
-
     use super::*;
+    use crate::util::test::{check_strings, random_string, ChaosReader};
 
     #[test]
     fn reader_normalized_lf() {

@@ -1,15 +1,16 @@
-use std::io;
-use std::io::Write;
+use std::{io, io::Write};
 
 use byteorder::WriteBytesExt;
 use bytes::{Buf, Bytes, BytesMut};
 use digest::Digest;
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::checksum;
-use crate::errors::{InvalidInputSnafu, Result};
-use crate::ser::Serialize;
-use crate::types::*;
+use crate::{
+    crypto::checksum,
+    errors::{InvalidInputSnafu, Result},
+    ser::Serialize,
+    types::*,
+};
 
 #[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub struct EncryptedSecretParams {

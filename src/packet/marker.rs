@@ -1,9 +1,11 @@
 use std::io::{self, BufRead};
 
-use crate::errors::Result;
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
+use crate::{
+    errors::Result,
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+};
 
 /// PGP as UTF-8 octets.
 const PGP: [u8; 3] = [0x50, 0x47, 0x50];
@@ -45,9 +47,9 @@ impl PacketTrait for Marker {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

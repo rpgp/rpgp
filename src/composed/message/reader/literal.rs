@@ -3,11 +3,12 @@ use std::io::{self, BufRead, Read};
 use bytes::{Buf, BytesMut};
 use log::debug;
 
-use crate::packet::{LiteralDataHeader, PacketHeader};
-use crate::types::Tag;
-use crate::util::fill_buffer;
-
 use super::PacketBodyReader;
+use crate::{
+    packet::{LiteralDataHeader, PacketHeader},
+    types::Tag,
+    util::fill_buffer,
+};
 
 /// Read the underlying literal data.
 #[derive(derive_more::Debug)]

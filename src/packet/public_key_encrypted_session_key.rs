@@ -5,16 +5,16 @@ use bytes::Bytes;
 use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
-use crate::crypto::checksum;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{
-    EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes, PkeskVersion, PublicKeyTrait,
-    PublicParams, Tag,
+use crate::{
+    crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::Result,
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{
+        EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PkeskBytes, PkeskVersion,
+        PublicKeyTrait, PublicParams, Tag,
+    },
 };
 
 /// Public Key Encrypted Session Key Packet (PKESK)
@@ -410,11 +410,10 @@ fn write_len_v6(values: &PkeskBytes, fingerprint: &Option<Fingerprint>) -> usize
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{PacketHeaderVersion, PacketLength};
+    use proptest::prelude::*;
 
     use super::*;
-
-    use proptest::prelude::*;
+    use crate::types::{PacketHeaderVersion, PacketLength};
 
     impl Arbitrary for PublicKeyEncryptedSessionKey {
         type Parameters = PublicKeyAlgorithm;

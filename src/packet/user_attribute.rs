@@ -7,15 +7,15 @@ use log::debug;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 
-use crate::errors::Result;
-use crate::packet::{
-    PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData,
-    SubpacketLength,
-};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{
-    KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag,
+use crate::{
+    errors::Result,
+    packet::{
+        PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
+        SubpacketData, SubpacketLength,
+    },
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, SignedUserAttribute, Tag},
 };
 
 /// The type of a user attribute. Only `Image` is a known type currently
@@ -363,10 +363,10 @@ impl PacketTrait for UserAttribute {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use prop::collection::vec;
     use proptest::prelude::*;
+
+    use super::*;
 
     #[test]
     fn test_jpeg_header() {

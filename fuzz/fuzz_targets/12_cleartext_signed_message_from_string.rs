@@ -9,5 +9,5 @@ fuzz_target!(|data: &str| {
 
     // FUZZER RESULT this can panic on some inputs
     // finding RPG-15 in ROS report 2024, fixed with 0.14.1
-    let _ = pgp::composed::cleartext::CleartextSignedMessage::from_string(data);
+    let _ = pgp::composed::CleartextSignedMessage::from_string(data);
 });

@@ -3,12 +3,15 @@ use std::io;
 use bytes::{Buf, BytesMut};
 use zeroize::Zeroizing;
 
-use crate::crypto::aead::{aead_setup, AeadAlgorithm};
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::util::fill_buffer;
-
 use super::ChunkSize;
+use crate::{
+    crypto::{
+        aead::{aead_setup, AeadAlgorithm},
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    util::fill_buffer,
+};
 
 pub struct StreamEncryptor<R> {
     source: R,

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate pretty_assertions;
 
-use pgp::{ArmorOptions, Deserializable};
+use pgp::composed::{ArmorOptions, Deserializable};
 
 #[test]
 fn load_carol_sec() {

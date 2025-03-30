@@ -1,9 +1,12 @@
-use log::debug;
 use std::io::BufRead;
 
-use crate::errors::{Error, Result};
-use crate::packet::{Packet, PacketHeader};
-use crate::reader::PacketBodyReader;
+use log::debug;
+
+use crate::{
+    composed::PacketBodyReader,
+    errors::{Error, Result},
+    packet::{Packet, PacketHeader},
+};
 
 pub struct PacketParser<R: BufRead> {
     /// The reader that gets advanced through the original source
@@ -107,17 +110,17 @@ impl<R: BufRead> PacketParser<R> {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::File;
-    use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
-    use std::path::Path;
+    use std::{
+        fs::File,
+        io::{BufRead, BufReader, Read, Seek, SeekFrom},
+        path::Path,
+    };
 
     use log::warn;
     use regex::Regex;
 
     use super::*;
-    use crate::packet::PacketTrait;
-    use crate::ser::Serialize;
-    use crate::types::Tag;
+    use crate::{packet::PacketTrait, ser::Serialize, types::Tag};
 
     #[test]
     #[ignore]
@@ -293,7 +296,7 @@ mod tests {
     fn test_partial_length_encoding() {
         let _ = pretty_env_logger::try_init();
 
-        use crate::Message;
+        use crate::composed::Message;
 
         const TEXT: &str = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.\n";
 

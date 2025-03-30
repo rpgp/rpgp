@@ -1,16 +1,17 @@
 use std::io::{self, BufRead};
 
 use bytes::Bytes;
-use rand::{CryptoRng, RngCore};
-
-use crate::errors::Result;
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{PacketHeaderVersion, PacketLength, Tag};
-
 #[cfg(test)]
 use proptest::prelude::*;
+use rand::{CryptoRng, RngCore};
+
+use crate::{
+    errors::Result,
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{PacketHeaderVersion, PacketLength, Tag},
+};
 
 /// Padding Packet
 ///
@@ -80,9 +81,10 @@ mod tests {
     use rand_chacha::ChaCha20Rng;
 
     use super::*;
-
-    use crate::packet::{Packet, PacketHeader};
-    use crate::types::PacketLength;
+    use crate::{
+        packet::{Packet, PacketHeader},
+        types::PacketLength,
+    };
 
     #[test]
     fn test_padding_roundtrip() {

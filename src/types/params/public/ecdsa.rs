@@ -3,11 +3,13 @@ use std::io::{self, BufRead};
 use byteorder::WriteBytesExt;
 use elliptic_curve::sec1::ToEncodedPoint;
 
-use crate::crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve};
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{
+    crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::Mpi,
+};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -29,7 +31,7 @@ pub enum EcdsaPublicParams {
         key: k256::PublicKey,
     },
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, p: MpiBytes },
+    Unsupported { curve: ECCCurve, p: Mpi },
 }
 
 impl EcdsaPublicParams {
@@ -42,12 +44,12 @@ impl EcdsaPublicParams {
             .ok_or_else(|| format_err!("invalid curve"))?;
 
         // MPI of an EC point representing a public key
-        let p = MpiBytes::try_from_reader(&mut i)?;
+        let p = Mpi::try_from_reader(&mut i)?;
         let params = EcdsaPublicParams::try_from_mpi(p, curve)?;
         Ok(params)
     }
 
-    fn try_from_mpi(p: MpiBytes, curve: ECCCurve) -> Result<Self> {
+    fn try_from_mpi(p: Mpi, curve: ECCCurve) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
                 ensure!(p.len() <= 65, "invalid public key length");
@@ -114,19 +116,19 @@ impl Serialize for EcdsaPublicParams {
 
         match self {
             EcdsaPublicParams::P256 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::P384 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::P521 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::Secp256k1 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
             EcdsaPublicParams::Unsupported { p, .. } => {
@@ -151,19 +153,19 @@ impl Serialize for EcdsaPublicParams {
 
         match self {
             EcdsaPublicParams::P256 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::P384 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::P521 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::Secp256k1 { key, .. } => {
-                let p = MpiBytes::from_slice(key.to_encoded_point(false).as_bytes());
+                let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 sum += p.write_len();
             }
             EcdsaPublicParams::Unsupported { p, .. } => {
@@ -176,10 +178,10 @@ impl Serialize for EcdsaPublicParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
     use rand::SeedableRng;
+
+    use super::*;
 
     proptest::prop_compose! {
         pub fn p256_pub_gen()(seed: u64) -> p256::PublicKey {

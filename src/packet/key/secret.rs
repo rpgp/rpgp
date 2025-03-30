@@ -3,6 +3,7 @@ use std::io::BufRead;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
+use super::public::{encrypt, PubKeyInner};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
@@ -12,13 +13,11 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, MpiBytes,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi,
         Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
         SecretParams, SignatureBytes, Tag,
     },
 };
-
-use super::public::{encrypt, PubKeyInner};
 
 #[derive(Debug, PartialEq, Eq, Clone, zeroize::ZeroizeOnDrop)]
 pub struct SecretKey {
@@ -519,7 +518,7 @@ fn create_signature(
             // strip leading zeros, to match parse results from MPIs
             let mpis = sig
                 .iter()
-                .map(|v| MpiBytes::from_slice(&v[..]))
+                .map(|v| Mpi::from_slice(&v[..]))
                 .collect::<Vec<_>>();
 
             Ok(SignatureBytes::Mpis(mpis))
@@ -560,9 +559,11 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
-    use crate::crypto::hash::HashAlgorithm;
-    use crate::packet::{PubKeyInner, SecretKey};
-    use crate::types::{KeyVersion, S2kParams, SecretKeyTrait};
+    use crate::{
+        crypto::hash::HashAlgorithm,
+        packet::{PubKeyInner, SecretKey},
+        types::{KeyVersion, S2kParams, SecretKeyTrait},
+    };
 
     #[test]
     #[ignore] // slow in debug mode (argon2)
@@ -570,7 +571,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         const DATA: &[u8] = &[0x23, 0x05];
-        let key_type = crate::KeyType::EdDSALegacy;
+        let key_type = crate::composed::KeyType::EdDSALegacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();

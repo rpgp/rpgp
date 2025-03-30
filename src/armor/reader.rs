@@ -1,24 +1,23 @@
-use std::collections::BTreeMap;
-use std::hash::Hasher;
-use std::io::prelude::*;
-use std::{fmt, io, str};
+use std::{collections::BTreeMap, fmt, hash::Hasher, io, io::prelude::*, str};
 
 use base64::engine::{general_purpose::STANDARD, Engine as _};
 use buffer_redux::BufReader;
 use byteorder::{BigEndian, ByteOrder};
-use nom::branch::alt;
-use nom::bytes::streaming::{tag, take_until1};
-use nom::bytes::streaming::{take, take_until};
-use nom::character::streaming::{alphanumeric1, digit1, line_ending, not_line_ending, space0};
-use nom::combinator::{complete, map, map_res, opt, success, value};
-use nom::multi::many0;
-use nom::sequence::{delimited, pair, preceded, terminated};
-use nom::IResult;
+use nom::{
+    branch::alt,
+    bytes::streaming::{tag, take, take_until, take_until1},
+    character::streaming::{alphanumeric1, digit1, line_ending, not_line_ending, space0},
+    combinator::{complete, map, map_res, opt, success, value},
+    multi::many0,
+    sequence::{delimited, pair, preceded, terminated},
+    IResult,
+};
 
-use crate::base64_decoder::Base64Decoder;
-use crate::base64_reader::Base64Reader;
-use crate::errors::Result;
-use crate::ser::Serialize;
+use crate::{
+    base64::{Base64Decoder, Base64Reader},
+    errors::Result,
+    ser::Serialize,
+};
 
 /// Armor block types.
 ///

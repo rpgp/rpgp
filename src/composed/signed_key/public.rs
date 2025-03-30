@@ -4,18 +4,22 @@ use chrono::{DateTime, Utc};
 use log::warn;
 use rand::{CryptoRng, Rng};
 
-use crate::composed::key::{PublicKey, PublicSubkey};
-use crate::composed::signed_key::SignedKeyDetails;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::{self, Packet, PacketTrait, SignatureType};
-use crate::ser::Serialize;
-use crate::types::{
-    EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes, PublicKeyTrait,
-    PublicParams, SignatureBytes, Tag,
+use crate::{
+    armor,
+    composed::{
+        key::{PublicKey, PublicSubkey},
+        signed_key::SignedKeyDetails,
+        ArmorOptions,
+    },
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::Result,
+    packet::{self, Packet, PacketTrait, SignatureType},
+    ser::Serialize,
+    types::{
+        EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, PacketLength, PkeskBytes,
+        PublicKeyTrait, PublicParams, SignatureBytes, Tag,
+    },
 };
-use crate::{armor, ArmorOptions};
 
 /// A Public OpenPGP key ("Transferable Public Key"), complete with self-signatures (and optionally
 /// third party signatures). This format can be used to transfer a public key to other OpenPGP users.

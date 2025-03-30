@@ -2,11 +2,12 @@ use std::io::{self, BufRead};
 
 use bytes::Bytes;
 
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::{Error, Result};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
+use crate::{
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    errors::{Error, Result},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+};
 
 mod dsa;
 mod ecdh;
@@ -19,17 +20,13 @@ mod x25519;
 #[cfg(feature = "unstable-curve448")]
 mod x448;
 
-pub use self::dsa::DsaPublicParams;
-pub use self::ecdh::EcdhPublicParams;
-pub use self::ecdsa::EcdsaPublicParams;
-pub use self::ed25519::Ed25519PublicParams;
-pub use self::eddsa_legacy::EddsaLegacyPublicParams;
-pub use self::elgamal::ElgamalPublicParams;
-pub use self::rsa::RsaPublicParams;
-pub use self::x25519::X25519PublicParams;
 #[cfg(feature = "unstable-curve448")]
 pub use self::x448::X448PublicParams;
-
+pub use self::{
+    dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
+    ed25519::Ed25519PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
+    elgamal::ElgamalPublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
+};
 use super::PlainSecretParams;
 
 /// Represent the public parameters for the different algorithms.
@@ -243,10 +240,9 @@ impl Serialize for PublicParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
 
+    use super::*;
     use crate::crypto::public_key::PublicKeyAlgorithm;
 
     proptest! {

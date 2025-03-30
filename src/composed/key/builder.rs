@@ -5,17 +5,17 @@ use derive_builder::Builder;
 use rand::{CryptoRng, Rng};
 use smallvec::SmallVec;
 
-use crate::composed::{KeyDetails, SecretKey, SecretSubkey};
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::ecc_curve::ECCCurve;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{dsa, ecdh, ecdsa, ed25519, rsa, x25519};
-use crate::errors::Result;
-use crate::packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId};
-use crate::types::{
-    self, CompressionAlgorithm, PlainSecretParams, PublicParams, RevocationKey, S2kParams,
+use crate::{
+    composed::{KeyDetails, SecretKey, SecretSubkey},
+    crypto::{
+        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, hash::HashAlgorithm,
+        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519,
+    },
+    errors::Result,
+    packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
+    types::{
+        self, CompressionAlgorithm, PlainSecretParams, PublicParams, RevocationKey, S2kParams,
+    },
 };
 
 #[derive(Debug, PartialEq, Eq, Builder)]
@@ -374,8 +374,10 @@ mod tests {
     use smallvec::smallvec;
 
     use super::*;
-    use crate::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-    use crate::types::KeyVersion;
+    use crate::{
+        composed::{Deserializable, SignedPublicKey, SignedSecretKey},
+        types::KeyVersion,
+    };
 
     #[test]
     #[ignore] // slow in debug mode

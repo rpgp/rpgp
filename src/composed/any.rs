@@ -4,9 +4,11 @@ use buffer_redux::BufReader;
 
 use crate::{
     armor::{self, BlockType, Dearmor},
-    cleartext::CleartextSignedMessage,
+    composed::{
+        cleartext::CleartextSignedMessage, Deserializable, Message, SignedPublicKey,
+        SignedSecretKey, StandaloneSignature,
+    },
     errors::Result,
-    Deserializable, Message, SignedPublicKey, SignedSecretKey, StandaloneSignature,
 };
 
 /// A flexible representation of what can be represented in an armor file.

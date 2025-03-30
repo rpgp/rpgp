@@ -4,10 +4,12 @@ use bitfields::bitfield;
 use byteorder::{BigEndian, WriteBytesExt};
 use log::debug;
 
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::{PacketHeaderVersion, PacketLength, Tag};
+use crate::{
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{PacketHeaderVersion, PacketLength, Tag},
+};
 
 /// Represents a packet header.
 ///
@@ -299,9 +301,9 @@ fn old_fixed_type(len: u32) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     #[test]
     fn test_packet_length() {

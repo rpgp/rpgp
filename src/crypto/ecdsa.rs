@@ -4,12 +4,11 @@ use rand::{CryptoRng, Rng};
 use signature::hazmat::{PrehashSigner, PrehashVerifier};
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::ecc_curve::ECCCurve;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::Signer;
-use crate::errors::{Error, Result};
-use crate::types::EcdsaPublicParams;
-use crate::types::MpiBytes;
+use crate::{
+    crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, Signer},
+    errors::{Error, Result},
+    types::{EcdsaPublicParams, Mpi},
+};
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -92,7 +91,7 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: MpiBytes) -> Result<Self> {
+    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: Mpi) -> Result<Self> {
         match pub_params {
             EcdsaPublicParams::P256 { .. } => {
                 let secret = p256::SecretKey::from_slice(d.as_ref())?;
@@ -186,13 +185,13 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn as_mpi(&self) -> MpiBytes {
+    pub(crate) fn as_mpi(&self) -> Mpi {
         match self {
-            Self::P256(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
-            Self::P384(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
-            Self::P521(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
-            Self::Secp256k1(k) => MpiBytes::from_slice(k.to_bytes().as_ref()),
-            Self::Unsupported { x, .. } => MpiBytes::from_slice(x),
+            Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Unsupported { x, .. } => Mpi::from_slice(x),
         }
     }
 }
@@ -202,7 +201,7 @@ pub fn verify(
     p: &EcdsaPublicParams,
     hash: HashAlgorithm,
     hashed: &[u8],
-    sig: &[MpiBytes],
+    sig: &[Mpi],
 ) -> Result<()> {
     // NOTE: the `None` case will run into an `unsupported_err`, below, so it's ok not to consider it here
     if let Some(field_size) = p.secret_key_length() {

@@ -1,4 +1,7 @@
-use pgp::{types::SecretKeyTrait, Deserializable, Message};
+use pgp::{
+    composed::{Deserializable, Message},
+    types::SecretKeyTrait,
+};
 
 /// RPG-022
 #[test]
@@ -69,7 +72,7 @@ fn rpg_015_cleartext_signed_message_from_armor_panic1() {
         69, 83, 83, 65, 71, 69, 45, 45, 45, 45, 45, 10, 10, 22, 10, 45, 45, 45, 45, 45, 66, 69, 71,
         73, 78, 32, 80, 71, 80, 32, 83, 73, 71, 78, 65, 84, 85, 82, 69, 45, 45, 45, 45, 45, 10, 72,
     ];
-    let _ = pgp::composed::cleartext::CleartextSignedMessage::from_armor(bad_input);
+    let _ = pgp::composed::CleartextSignedMessage::from_armor(bad_input);
 }
 
 /// RPG-015
@@ -78,7 +81,7 @@ fn rgp_015_cleartext_signed_message_from_string_panic1() {
     // this triggers the same bug as the from_armor() case, but is more human readable
 
     let bad_input = "-----BEGIN PGP SIGNED MESSAGE-----\n\n-\n-----BEGIN PGP SIGNATURE-----\n-";
-    let _ = pgp::composed::cleartext::CleartextSignedMessage::from_string(bad_input);
+    let _ = pgp::composed::CleartextSignedMessage::from_string(bad_input);
 }
 
 /// RPG-015
@@ -92,7 +95,7 @@ qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq-qqqqqqqqqqqqqqqq\0----BE\u{7}IN-D*'S-- \u{1}
 >>>>>>>>>>>>>>>>>>>>>#>>>>>>>>>>>>>>>>>>>>>>>>>>>>qq>>>>>>>>>>>>>>>>>>>\t>>>>>>>PGP M[ESSAGE\t---\0\0>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 >>>>>>>>>[ESSAGE\tw:::::::";
 
-    let _ = pgp::composed::cleartext::CleartextSignedMessage::from_string(data);
+    let _ = pgp::composed::CleartextSignedMessage::from_string(data);
 }
 
 /// RPG-015
@@ -118,7 +121,7 @@ fn rpg_015_cleartext_signed_message_from_armor_panic2() {
         10, 133, 133, 133, 64, 10, 86, 10, 10, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 7, 121, 0, 0, 0,
         0, 0, 45, 0, 0, 0, 45, 45, 0, 13, 10, 45, 45, 45, 45, 10, 13, 10, 10, 45, 45, 45, 10, 166,
     ];
-    let _ = pgp::composed::cleartext::CleartextSignedMessage::from_armor(&data[..]);
+    let _ = pgp::composed::CleartextSignedMessage::from_armor(&data[..]);
 }
 
 /// RPG-007

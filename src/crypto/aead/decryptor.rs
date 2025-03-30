@@ -4,10 +4,14 @@ use bytes::{Buf, BytesMut};
 use log::debug;
 use zeroize::Zeroizing;
 
-use crate::crypto::aead::{aead_setup, AeadAlgorithm, ChunkSize};
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::util::fill_buffer;
+use crate::{
+    crypto::{
+        aead::{aead_setup, AeadAlgorithm, ChunkSize},
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    util::fill_buffer,
+};
 
 /// Currently the tag size for all known aeads is 16.
 const AEAD_TAG_SIZE: usize = 16;

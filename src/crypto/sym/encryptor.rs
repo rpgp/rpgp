@@ -3,8 +3,7 @@ use blowfish::Blowfish;
 use bytes::{Buf, Bytes, BytesMut};
 use camellia::{Camellia128, Camellia192, Camellia256};
 use cast5::Cast5;
-use cfb_mode::cipher::KeyIvInit;
-use cfb_mode::BufEncryptor;
+use cfb_mode::{cipher::KeyIvInit, BufEncryptor};
 use cipher::{BlockCipher, BlockDecrypt, BlockEncryptMut, BlockSizeUser};
 use des::TdesEde3;
 use idea::Idea;
@@ -13,9 +12,7 @@ use rand::{CryptoRng, Rng};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::util::fill_buffer;
+use crate::{crypto::sym::SymmetricKeyAlgorithm, errors::Result, util::fill_buffer};
 
 #[derive(Debug)]
 pub enum StreamEncryptor<R>

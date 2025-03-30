@@ -2,9 +2,7 @@ use std::io::{self, BufRead};
 
 use rsa::traits::PublicKeyParts;
 
-use crate::errors::Result;
-use crate::ser::Serialize;
-use crate::types::MpiBytes;
+use crate::{errors::Result, ser::Serialize, types::Mpi};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
@@ -15,14 +13,14 @@ pub struct RsaPublicParams {
 
 impl RsaPublicParams {
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
-        let n = MpiBytes::try_from_reader(&mut i)?;
-        let e = MpiBytes::try_from_reader(&mut i)?;
+        let n = Mpi::try_from_reader(&mut i)?;
+        let e = Mpi::try_from_reader(&mut i)?;
 
         let params = RsaPublicParams::try_from_mpi(n, e)?;
         Ok(params)
     }
 
-    fn try_from_mpi(n: MpiBytes, e: MpiBytes) -> Result<Self> {
+    fn try_from_mpi(n: Mpi, e: Mpi) -> Result<Self> {
         let key = rsa::RsaPublicKey::new_with_max_size(
             n.into(),
             e.into(),
@@ -40,8 +38,8 @@ impl From<rsa::RsaPublicKey> for RsaPublicParams {
 }
 impl Serialize for RsaPublicParams {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        let n: MpiBytes = self.key.n().into();
-        let e: MpiBytes = self.key.e().into();
+        let n: Mpi = self.key.n().into();
+        let e: Mpi = self.key.e().into();
 
         n.to_writer(writer)?;
         e.to_writer(writer)?;
@@ -49,8 +47,8 @@ impl Serialize for RsaPublicParams {
     }
 
     fn write_len(&self) -> usize {
-        let n: MpiBytes = self.key.n().into();
-        let e: MpiBytes = self.key.e().into();
+        let n: Mpi = self.key.n().into();
+        let e: Mpi = self.key.e().into();
 
         let mut sum = n.write_len();
         sum += e.write_len();
@@ -60,10 +58,10 @@ impl Serialize for RsaPublicParams {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
     use rand::SeedableRng;
+
+    use super::*;
 
     prop_compose! {
         pub fn rsa_pub_gen()(seed: u64) -> rsa::RsaPublicKey {

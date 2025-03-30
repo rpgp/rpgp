@@ -2,12 +2,12 @@ use std::io::{self, BufRead};
 
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::{InvalidInputSnafu, Result};
-use crate::parsing_reader::BufReadParsing;
-use crate::types::*;
+use crate::{
+    crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::{InvalidInputSnafu, Result},
+    parsing_reader::BufReadParsing,
+    types::*,
+};
 
 /// A list of params that are used to represent the values of possibly encrypted key,
 /// from imports and exports.

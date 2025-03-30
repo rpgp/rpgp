@@ -15,7 +15,7 @@
 //!
 //! ```rust
 //! # const DATA :&'static [u8] = b"Hello World";
-//! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, key::SecretKeyParamsBuilder};
+//! # use pgp::composed::{self, KeyType, KeyDetails, SecretKey, SecretSubkey, SecretKeyParamsBuilder};
 //! # use pgp::errors::Result;
 //! # use pgp::packet::{self, KeyFlags, UserAttribute, SignatureVersionSpecific, UserId};
 //! # use pgp::crypto::{self, sym::SymmetricKeyAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm};
@@ -46,7 +46,7 @@
 //! let signing_key = signed_secret_key;
 //! let verification_key = public_key;
 //!
-//! use pgp::{Signature, packet::{PacketTrait, PacketHeader, SignatureConfig}, types::{PacketLength, Tag, KeyDetails as _}};
+//! use pgp::{packet::{PacketTrait, PacketHeader, Signature, SignatureConfig}, types::{PacketLength, Tag, KeyDetails as _}};
 //! use chrono;
 //!
 //! let now = chrono::Utc::now();
@@ -104,13 +104,9 @@
 //! ```
 
 mod key_parser;
-
 mod parse;
 mod public;
 mod secret;
 mod shared;
 
-pub use self::parse::*;
-pub use self::public::*;
-pub use self::secret::*;
-pub use self::shared::*;
+pub use self::{parse::*, public::*, secret::*, shared::*};

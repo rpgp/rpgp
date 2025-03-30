@@ -6,16 +6,20 @@ use digest::DynDigest;
 use log::debug;
 use rand::{CryptoRng, Rng};
 
-use crate::crypto::hash::{HashAlgorithm, WriteHasher};
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::types::serialize_for_hashing;
-use crate::packet::{
-    Signature, SignatureType, SignatureVersion, Subpacket, SubpacketData, SubpacketType,
+use crate::{
+    crypto::{
+        hash::{HashAlgorithm, WriteHasher},
+        public_key::PublicKeyAlgorithm,
+    },
+    errors::Result,
+    packet::{
+        types::serialize_for_hashing, Signature, SignatureType, SignatureVersion, Subpacket,
+        SubpacketData, SubpacketType,
+    },
+    ser::Serialize,
+    types::{Fingerprint, KeyId, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag},
+    util::NormalizingHasher,
 };
-use crate::ser::Serialize;
-use crate::types::{Fingerprint, KeyId, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait, Tag};
-use crate::util::NormalizingHasher;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SignatureConfig {

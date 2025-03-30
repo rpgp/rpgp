@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate pretty_assertions;
 
-use pgp::Deserializable;
+use pgp::composed::Deserializable;
 
 #[test]
 fn sig_odd() {

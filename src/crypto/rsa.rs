@@ -4,18 +4,25 @@ use digest::{const_oid::AssociatedOid, Digest};
 use md5::Md5;
 use rand::{CryptoRng, Rng};
 use ripemd::Ripemd160;
-use rsa::pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey};
-use rsa::{traits::PublicKeyParts, RsaPrivateKey, RsaPublicKey};
+use rsa::{
+    pkcs1v15::{Pkcs1v15Encrypt, Signature as RsaSignature, SigningKey, VerifyingKey},
+    traits::PublicKeyParts,
+    RsaPrivateKey, RsaPublicKey,
+};
 use sha1_checked::Sha1; // not used for hashing, just as a source of the OID
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_256, Sha3_512};
-use signature::hazmat::{PrehashSigner, PrehashVerifier};
-use signature::SignatureEncoding;
+use signature::{
+    hazmat::{PrehashSigner, PrehashVerifier},
+    SignatureEncoding,
+};
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::{hash::HashAlgorithm, Decryptor, Signer};
-use crate::errors::Result;
-use crate::types::{MpiBytes, PkeskBytes, RsaPublicParams};
+use crate::{
+    crypto::{hash::HashAlgorithm, Decryptor, Signer},
+    errors::Result,
+    types::{Mpi, PkeskBytes, RsaPublicParams},
+};
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
 
@@ -40,10 +47,10 @@ impl SecretKey {
 
     pub(crate) fn try_from_mpi(
         pub_params: &RsaPublicParams,
-        d: MpiBytes,
-        p: MpiBytes,
-        q: MpiBytes,
-        _u: MpiBytes,
+        d: Mpi,
+        p: Mpi,
+        q: Mpi,
+        _u: Mpi,
     ) -> Result<Self> {
         let secret_key = RsaPrivateKey::from_components(
             pub_params.key.n().clone(),
@@ -72,7 +79,7 @@ impl Deref for SecretKey {
 }
 
 impl Decryptor for SecretKey {
-    type EncryptionFields<'a> = &'a MpiBytes;
+    type EncryptionFields<'a> = &'a Mpi;
 
     /// RSA decryption using PKCS1v15 padding.
     fn decrypt(&self, mpi: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
@@ -119,7 +126,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     let data = key.encrypt(&mut rng, Pkcs1v15Encrypt, plaintext)?;
 
     Ok(PkeskBytes::Rsa {
-        mpi: MpiBytes::from_slice(&data[..]),
+        mpi: Mpi::from_slice(&data[..]),
     })
 }
 
@@ -177,10 +184,10 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
     use rand::SeedableRng;
+
+    use super::*;
 
     prop_compose! {
         pub fn key_gen()(seed: u64) -> RsaPrivateKey {

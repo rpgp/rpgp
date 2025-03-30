@@ -2,15 +2,17 @@ use std::io::BufRead;
 
 use log::warn;
 
-use crate::errors::{Error, Result};
-use crate::packet::{
-    CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Packet, PacketHeader,
-    Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey, SecretSubkey,
-    Signature, SymEncryptedData, SymEncryptedProtectedData, SymKeyEncryptedSessionKey, Trust,
-    UserAttribute, UserId,
+use crate::{
+    errors::{Error, Result},
+    packet::{
+        CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Packet,
+        PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey,
+        SecretSubkey, Signature, SymEncryptedData, SymEncryptedProtectedData,
+        SymKeyEncryptedSessionKey, Trust, UserAttribute, UserId,
+    },
+    parsing_reader::BufReadParsing,
+    types::Tag,
 };
-use crate::parsing_reader::BufReadParsing;
-use crate::types::Tag;
 
 impl Packet {
     pub fn from_reader<R: BufRead>(packet_header: PacketHeader, mut body: R) -> Result<Self> {

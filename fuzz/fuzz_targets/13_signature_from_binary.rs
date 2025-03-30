@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use pgp::Deserializable;
+use pgp::composed::Deserializable;
 
 // build Signature from binary
 fuzz_target!(|data: &[u8]| {

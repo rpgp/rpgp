@@ -1,27 +1,27 @@
-use std::io::BufRead;
-use std::str;
+use std::{io::BufRead, str};
 
 use bytes::Buf;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use log::{debug, warn};
 use smallvec::SmallVec;
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::packet::{
-    Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
-    SubpacketType,
-};
-use crate::parsing_reader::BufReadParsing;
-use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, MpiBytes, PacketHeaderVersion,
-    PacketLength, RevocationKey, SignatureBytes, Tag,
-};
-
 use super::{KeyFlags, Signature, SignatureType, SignatureVersion};
+use crate::{
+    crypto::{
+        aead::AeadAlgorithm, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    packet::{
+        Notation, PacketHeader, RevocationCode, Subpacket, SubpacketData, SubpacketLength,
+        SubpacketType,
+    },
+    parsing_reader::BufReadParsing,
+    types::{
+        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, Mpi, PacketHeaderVersion,
+        PacketLength, RevocationKey, SignatureBytes, Tag,
+    },
+};
 
 impl Signature {
     /// Parses a `Signature` packet from the given buffer
@@ -305,12 +305,12 @@ fn subpacket<B: BufRead>(
 fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<SignatureBytes> {
     match typ {
         PublicKeyAlgorithm::RSA | &PublicKeyAlgorithm::RSASign => {
-            let v = MpiBytes::try_from_reader(&mut i)?;
+            let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
         }
         PublicKeyAlgorithm::DSA | PublicKeyAlgorithm::ECDSA | &PublicKeyAlgorithm::EdDSALegacy => {
-            let a = MpiBytes::try_from_reader(&mut i)?;
-            let b = MpiBytes::try_from_reader(&mut i)?;
+            let a = Mpi::try_from_reader(&mut i)?;
+            let b = Mpi::try_from_reader(&mut i)?;
 
             Ok(SignatureBytes::Mpis(vec![a, b]))
         }
@@ -321,8 +321,8 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         }
 
         &PublicKeyAlgorithm::Elgamal => {
-            let a = MpiBytes::try_from_reader(&mut i)?;
-            let b = MpiBytes::try_from_reader(&mut i)?;
+            let a = Mpi::try_from_reader(&mut i)?;
+            let b = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![a, b]))
         }
         &PublicKeyAlgorithm::Private100
@@ -336,7 +336,7 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         | &PublicKeyAlgorithm::Private108
         | &PublicKeyAlgorithm::Private109
         | &PublicKeyAlgorithm::Private110 => {
-            let v = MpiBytes::try_from_reader(&mut i)?;
+            let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
         }
         PublicKeyAlgorithm::ElgamalEncrypt => {
@@ -665,7 +665,7 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::*;
-    use crate::{Deserializable, StandaloneSignature};
+    use crate::composed::{Deserializable, StandaloneSignature};
 
     #[test]
     fn test_subpacket_pref_sym_alg() {

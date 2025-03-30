@@ -2,11 +2,13 @@ use aes_gcm::aead::rand_core::CryptoRng;
 use chrono::SubsecRound;
 use rand::Rng;
 
-use crate::composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey};
-use crate::errors::Result;
-use crate::packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData};
-use crate::ser::Serialize;
-use crate::types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait};
+use crate::{
+    composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
+    errors::Result,
+    packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
+    ser::Serialize,
+    types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
+};
 
 /// User facing interface to work with a secret key.
 #[derive(Debug, PartialEq, Eq, Clone)]

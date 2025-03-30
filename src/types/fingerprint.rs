@@ -1,5 +1,4 @@
-use crate::errors::Result;
-use crate::types::KeyVersion;
+use crate::{errors::Result, types::KeyVersion};
 
 /// Represents a Fingerprint.
 ///

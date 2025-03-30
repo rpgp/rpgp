@@ -1,6 +1,8 @@
-use std::collections::VecDeque;
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::VecDeque,
+    io::{BufReader, BufWriter, Read, Write},
+    path::{Path, PathBuf},
+};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use chrono::SubsecRound;
@@ -11,28 +13,31 @@ use rand::{CryptoRng, Rng};
 use zeroize::Zeroizing;
 
 use super::ArmorOptions;
-use crate::armor;
-use crate::crypto::aead::{AeadAlgorithm, ChunkSize};
-use crate::crypto::hash::HashAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::errors::Result;
-use crate::line_writer::{LineBreak, LineWriter};
-use crate::normalize_lines::NormalizedReader;
-use crate::packet::{
-    CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
-    MaybeNormalizedReader, OnePassSignature, PacketHeader, PacketTrait,
-    PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType, SignatureVersionSpecific,
-    Subpacket, SubpacketData, SymEncryptedProtectedData, SymEncryptedProtectedDataConfig,
-    SymKeyEncryptedSessionKey,
+use crate::{
+    armor,
+    composed::Esk,
+    crypto::{
+        aead::{AeadAlgorithm, ChunkSize},
+        hash::HashAlgorithm,
+        sym::SymmetricKeyAlgorithm,
+    },
+    errors::Result,
+    line_writer::{LineBreak, LineWriter},
+    normalize_lines::NormalizedReader,
+    packet::{
+        CompressedDataGenerator, DataMode, LiteralDataGenerator, LiteralDataHeader,
+        MaybeNormalizedReader, OnePassSignature, PacketHeader, PacketTrait,
+        PublicKeyEncryptedSessionKey, SignatureHasher, SignatureType, SignatureVersionSpecific,
+        Subpacket, SubpacketData, SymEncryptedProtectedData, SymEncryptedProtectedDataConfig,
+        SymKeyEncryptedSessionKey,
+    },
+    ser::Serialize,
+    types::{
+        CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength, Password,
+        SecretKeyTrait, StringToKey, Tag,
+    },
+    util::{fill_buffer, TeeWriter},
 };
-use crate::ser::Serialize;
-use crate::types::{
-    CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength, Password,
-    SecretKeyTrait, StringToKey, Tag,
-};
-use crate::util::fill_buffer;
-use crate::util::TeeWriter;
-use crate::Esk;
 
 pub type DummyReader = std::io::Cursor<Vec<u8>>;
 
@@ -1193,10 +1198,12 @@ mod tests {
     use testresult::TestResult;
 
     use super::*;
-    use crate::crypto::sym::SymmetricKeyAlgorithm;
-    use crate::util::test::{check_strings, random_string, ChaosReader};
     use crate::{
-        Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
+        composed::{
+            Deserializable, InnerRingResult, Message, SignedSecretKey, TheRing, VerificationResult,
+        },
+        crypto::sym::SymmetricKeyAlgorithm,
+        util::test::{check_strings, random_string, ChaosReader},
     };
 
     #[test]

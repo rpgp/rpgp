@@ -1,17 +1,21 @@
-use std::io;
-use std::ops::Deref;
+use std::{io, ops::Deref};
 
 use chrono::{DateTime, Utc};
 use log::{debug, warn};
 use rand::{CryptoRng, Rng};
 
-use crate::composed::key::{PublicKey, PublicSubkey};
-use crate::composed::signed_key::{SignedKeyDetails, SignedPublicSubKey};
-use crate::errors::Result;
-use crate::packet::{self, Packet, PacketTrait, SignatureType};
-use crate::ser::Serialize;
-use crate::types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag};
-use crate::{armor, ArmorOptions, PlainSessionKey, SignedPublicKey};
+use crate::{
+    armor,
+    composed::{
+        key::{PublicKey, PublicSubkey},
+        signed_key::{SignedKeyDetails, SignedPublicSubKey},
+        ArmorOptions, PlainSessionKey, SignedPublicKey,
+    },
+    errors::Result,
+    packet::{self, Packet, PacketTrait, SignatureType},
+    ser::Serialize,
+    types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag},
+};
 
 /// Represents a secret signed PGP key.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -363,10 +367,11 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::crypto::hash::HashAlgorithm;
-    use crate::types::{KeyVersion, Password, S2kParams};
-
-    use crate::{composed::shared::Deserializable, Message, MessageBuilder};
+    use crate::{
+        composed::{shared::Deserializable, Message, MessageBuilder},
+        crypto::hash::HashAlgorithm,
+        types::{KeyVersion, Password, S2kParams},
+    };
 
     #[test]
     fn test_v6_annex_a_4() -> Result<()> {
@@ -398,7 +403,7 @@ k0mXubZvyl4GBg==
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let pri = &ssk.primary_key;
 
-        let signed = crate::MessageBuilder::from_bytes("", &b"Hello world"[..])
+        let signed = crate::composed::MessageBuilder::from_bytes("", &b"Hello world"[..])
             .sign(pri, Password::empty(), HashAlgorithm::Sha256)
             .to_armored_string(&mut rng, ArmorOptions::default())?;
 

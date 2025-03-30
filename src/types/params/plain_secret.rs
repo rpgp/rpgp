@@ -1,27 +1,29 @@
-use std::hash::Hasher;
-use std::io::{self, BufRead};
+use std::{
+    hash::Hasher,
+    io::{self, BufRead},
+};
 
 use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, BytesMut};
 use hkdf::Hkdf;
+use log::debug;
 use num_bigint::ModInverse;
 use sha2::Sha256;
 use zeroize::ZeroizeOnDrop;
 
-use crate::crypto::aead::AeadAlgorithm;
-use crate::crypto::ecc_curve::ECCCurve;
-use crate::crypto::public_key::PublicKeyAlgorithm;
-use crate::crypto::sym::SymmetricKeyAlgorithm;
-use crate::crypto::{checksum, dsa, ecdh, ecdsa, ed25519, elgamal, rsa, x25519, Decryptor};
-use crate::errors::Result;
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
-use crate::types::PkeskBytes;
-use crate::types::*;
-use crate::types::{EskType, PublicKeyTrait, PublicParams};
-use crate::util::TeeWriter;
-use crate::PlainSessionKey;
+use crate::{
+    composed::PlainSessionKey,
+    crypto::{
+        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, elgamal,
+        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, Decryptor,
+    },
+    errors::Result,
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+    types::{EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
+    util::TeeWriter,
+};
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
 #[allow(clippy::large_enum_variant)] // FIXME
@@ -74,46 +76,46 @@ impl PlainSecretParams {
                 | PublicKeyAlgorithm::RSASign,
                 PublicParams::RSA(pub_params),
             ) => {
-                let d = MpiBytes::try_from_reader(&mut i)?;
-                let p = MpiBytes::try_from_reader(&mut i)?;
-                let q = MpiBytes::try_from_reader(&mut i)?;
-                let u = MpiBytes::try_from_reader(&mut i)?;
+                let d = Mpi::try_from_reader(&mut i)?;
+                let p = Mpi::try_from_reader(&mut i)?;
+                let q = Mpi::try_from_reader(&mut i)?;
+                let u = Mpi::try_from_reader(&mut i)?;
 
                 let key = crate::crypto::rsa::SecretKey::try_from_mpi(pub_params, d, p, q, u)?;
                 Self::RSA(key)
             }
             (PublicKeyAlgorithm::DSA, PublicParams::DSA(pub_params)) => {
-                let secret = MpiBytes::try_from_reader(i)?;
+                let secret = Mpi::try_from_reader(i)?;
 
                 let key = crate::crypto::dsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::DSA(key)
             }
             (PublicKeyAlgorithm::Elgamal, PublicParams::Elgamal(pub_params)) => {
-                let x = MpiBytes::try_from_reader(i)?;
+                let x = Mpi::try_from_reader(i)?;
                 ensure!(!pub_params.is_encrypt_only(), "inconsistent key state");
                 let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
                 Self::Elgamal(key)
             }
             (PublicKeyAlgorithm::ElgamalEncrypt, PublicParams::Elgamal(pub_params)) => {
-                let x = MpiBytes::try_from_reader(i)?;
+                let x = Mpi::try_from_reader(i)?;
                 ensure!(pub_params.is_encrypt_only(), "inconsistent key state");
                 let key = crate::crypto::elgamal::SecretKey::try_from_mpi(pub_params.clone(), x);
                 Self::Elgamal(key)
             }
             (PublicKeyAlgorithm::ECDH, PublicParams::ECDH(pub_params)) => {
-                let secret = MpiBytes::try_from_reader(i)?;
+                let secret = Mpi::try_from_reader(i)?;
 
                 let key = crate::crypto::ecdh::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::ECDH(key)
             }
             (PublicKeyAlgorithm::ECDSA, PublicParams::ECDSA(pub_params)) => {
-                let secret = MpiBytes::try_from_reader(i)?;
+                let secret = Mpi::try_from_reader(i)?;
 
                 let key = crate::crypto::ecdsa::SecretKey::try_from_mpi(pub_params, secret)?;
                 Self::ECDSA(key)
             }
             (PublicKeyAlgorithm::EdDSALegacy, PublicParams::EdDSALegacy(_pub_params)) => {
-                let secret = MpiBytes::try_from_reader(i)?;
+                let secret = Mpi::try_from_reader(i)?;
 
                 const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
                 let secret = pad_key::<SIZE>(secret.as_ref())?;
@@ -500,14 +502,14 @@ impl PlainSecretParams {
                     .to_biguint()
                     .expect("invalid prime");
 
-                MpiBytes::from(d).to_writer(writer)?;
-                MpiBytes::from(p).to_writer(writer)?;
-                MpiBytes::from(q).to_writer(writer)?;
-                MpiBytes::from(u).to_writer(writer)?;
+                Mpi::from(d).to_writer(writer)?;
+                Mpi::from(p).to_writer(writer)?;
+                Mpi::from(q).to_writer(writer)?;
+                Mpi::from(u).to_writer(writer)?;
             }
             PlainSecretParams::DSA(key) => {
                 let x = key.x();
-                MpiBytes::from(x).to_writer(writer)?;
+                Mpi::from(x).to_writer(writer)?;
             }
             PlainSecretParams::Elgamal(key) => {
                 let x = key.as_mpi();
@@ -555,15 +557,15 @@ impl PlainSecretParams {
                     .expect("invalid prime");
 
                 let mut sum = 0;
-                sum += MpiBytes::from(d).write_len();
-                sum += MpiBytes::from(p).write_len();
-                sum += MpiBytes::from(q).write_len();
-                sum += MpiBytes::from(u).write_len();
+                sum += Mpi::from(d).write_len();
+                sum += Mpi::from(p).write_len();
+                sum += Mpi::from(q).write_len();
+                sum += Mpi::from(u).write_len();
                 sum
             }
             PlainSecretParams::DSA(key) => {
                 let x = key.x();
-                MpiBytes::from(x).write_len()
+                Mpi::from(x).write_len()
             }
             PlainSecretParams::Elgamal(key) => {
                 let x = key.as_mpi();

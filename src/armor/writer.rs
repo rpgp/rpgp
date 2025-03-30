@@ -1,17 +1,17 @@
-use std::hash::Hasher;
-use std::io::Write;
+use std::{hash::Hasher, io::Write};
 
 use base64::engine::{general_purpose, Engine as _};
 use crc24::Crc24Hasher;
 use generic_array::typenum::U64;
 
-use crate::armor::BlockType;
-use crate::errors::Result;
-use crate::line_writer::{LineBreak, LineWriter};
-use crate::ser::Serialize;
-use crate::util::TeeWriter;
-
 use super::Headers;
+use crate::{
+    armor::BlockType,
+    errors::Result,
+    line_writer::{LineBreak, LineWriter},
+    ser::Serialize,
+    util::TeeWriter,
+};
 
 pub fn write(
     source: &impl Serialize,
@@ -151,13 +151,14 @@ impl<W: std::io::Write> std::io::Write for Base64Encoder<W> {
 mod tests {
     #![allow(clippy::unwrap_used)]
 
-    use crate::util::test::ChaosReader;
+    use std::io;
 
-    use super::*;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
     use rand_xorshift::XorShiftRng;
-    use std::io;
+
+    use super::*;
+    use crate::util::test::ChaosReader;
 
     struct TestSource {
         content: Vec<u8>,

@@ -1,9 +1,11 @@
 use std::io::{self, BufRead};
 
-use crate::errors::Result;
-use crate::packet::{PacketHeader, PacketTrait};
-use crate::parsing_reader::BufReadParsing;
-use crate::ser::Serialize;
+use crate::{
+    errors::Result,
+    packet::{PacketHeader, PacketTrait},
+    parsing_reader::BufReadParsing,
+    ser::Serialize,
+};
 
 /// Modification Detection Code Packet
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#version-one-seipd>
@@ -56,9 +58,9 @@ impl PacketTrait for ModDetectionCode {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

@@ -7,13 +7,13 @@
 //! # Generating a signed secret key and deriving a public key
 //!
 //! ```rust
-//! use pgp::composed::{
-//!     key::SecretKeyParamsBuilder, KeyDetails, KeyType, SecretKey, SecretSubkey,
+//! use pgp::{
+//!     composed::{KeyDetails, KeyType, SecretKey, SecretKeyParamsBuilder, SecretSubkey},
+//!     crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
+//!     errors::Result,
+//!     packet::{KeyFlags, UserAttribute, UserId},
+//!     types::{CompressionAlgorithm, Password, PublicKeyTrait, SecretKeyTrait},
 //! };
-//! use pgp::crypto::{hash::HashAlgorithm, sym::SymmetricKeyAlgorithm};
-//! use pgp::errors::Result;
-//! use pgp::packet::{KeyFlags, UserAttribute, UserId};
-//! use pgp::types::{CompressionAlgorithm, PublicKeyTrait, SecretKeyTrait, Password};
 //! use rand::thread_rng;
 //! use smallvec::*;
 //!
@@ -50,7 +50,4 @@ mod public;
 mod secret;
 mod shared;
 
-pub use self::builder::*;
-pub use self::public::*;
-pub use self::secret::*;
-pub use self::shared::*;
+pub use self::{builder::*, public::*, secret::*, shared::*};

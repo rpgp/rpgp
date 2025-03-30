@@ -7,9 +7,11 @@ use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-use crate::crypto::{aes_kw, Decryptor};
-use crate::errors::Result;
-use crate::types::X25519PublicParams;
+use crate::{
+    crypto::{aes_kw, Decryptor},
+    errors::Result,
+    types::X25519PublicParams,
+};
 
 /// Secret key for X25519
 #[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
