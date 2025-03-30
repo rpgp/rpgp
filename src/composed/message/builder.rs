@@ -1239,7 +1239,6 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
 
 #[cfg(test)]
 mod tests {
-    use nom::AsBytes;
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha20Rng;
     use testresult::TestResult;
@@ -2117,7 +2116,7 @@ mod tests {
             "./tests/autocrypt/alice@autocrypt.example.sec.asc",
         )?)?;
 
-        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_bytes())
+        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
             .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
             .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
@@ -2155,7 +2154,7 @@ mod tests {
             "./tests/autocrypt/alice@autocrypt.example.sec.asc",
         )?)?;
 
-        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_bytes())
+        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
             .seipd_v2(
                 &mut rng,
                 SymmetricKeyAlgorithm::AES128,
