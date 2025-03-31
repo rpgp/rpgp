@@ -40,6 +40,13 @@ impl PublicKey {
         })
     }
 
+    pub(super) fn from_inner_with_header(packet_header: PacketHeader, inner: PubKeyInner) -> Self {
+        Self {
+            packet_header,
+            inner,
+        }
+    }
+
     /// Create a new `PublicKey` packet from underlying parameters.
     pub fn new_with_header(
         packet_header: PacketHeader,

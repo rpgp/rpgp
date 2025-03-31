@@ -118,3 +118,42 @@ impl SecretSubkey {
         Ok(SignedSecretSubKey { key, signatures })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use packet::PacketTrait;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+
+    use crate::composed::{Deserializable, SignedPublicKey};
+
+    use super::*;
+
+    /// Based on the operations "split_public_key" in Deltachat
+    #[test]
+    fn test_split_key() {
+        let (public, _) =
+            SignedPublicKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.pub.asc")
+                .unwrap();
+        let (secret, _) =
+            SignedSecretKey::from_armor_file("./tests/autocrypt/alice@autocrypt.example.sec.asc")
+                .unwrap();
+
+        secret.verify().unwrap();
+        public.verify().unwrap();
+
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let unsigned_pubkey = secret.public_key();
+
+        let signed_pubkey = unsigned_pubkey
+            .sign(
+                &mut rng,
+                &secret.primary_key,
+                secret.primary_key.public_key(),
+                &Password::empty(),
+            )
+            .unwrap();
+
+        assert_eq!(signed_pubkey.primary_key, public.primary_key);
+    }
+}
