@@ -33,8 +33,8 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        CompressionAlgorithm, Fingerprint, KeyVersion, PacketHeaderVersion, PacketLength, Password,
-        SecretKeyTrait, StringToKey, Tag,
+        CompressionAlgorithm, Fingerprint, KeyId, KeyVersion, PacketHeaderVersion, PacketLength,
+        Password, SecretKeyTrait, StringToKey, Tag,
     },
     util::{fill_buffer, TeeWriter},
 };
@@ -318,6 +318,29 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         Ok(self)
     }
 
+    /// Encrypt to a public key, but leave the recipient field unset
+    pub fn encrypt_to_key_anonymous<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    where
+        RAND: CryptoRng + Rng,
+        K: crate::types::PublicKeyTrait,
+    {
+        // Encrypt (sym) the session key using the provided password.
+        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
+            &mut rng,
+            &self.encryption.session_key,
+            self.encryption.sym_alg,
+            pkey,
+        )?;
+
+        // Blank out the recipient id
+        if let PublicKeyEncryptedSessionKey::V3 { id, .. } = &mut pkes {
+            *id = KeyId::WILDCARD;
+        }
+
+        self.encryption.pub_esks.push(pkes);
+        Ok(self)
+    }
+
     /// Encrypt to a password.
     pub fn encrypt_with_password(mut self, s2k: StringToKey, msg_pw: &Password) -> Result<Self> {
         let esk = SymKeyEncryptedSessionKey::encrypt_v4(
@@ -352,6 +375,29 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
             &self.encryption.session_key,
             pkey,
         )?;
+
+        self.encryption.pub_esks.push(pkes);
+
+        Ok(self)
+    }
+
+    /// Encrypt to a public key, but leave the recipient field unset
+    pub fn encrypt_to_key_anonymous<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    where
+        RAND: CryptoRng + Rng,
+        K: crate::types::PublicKeyTrait,
+    {
+        // Encrypt (sym) the session key using the provided password.
+        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+            &mut rng,
+            &self.encryption.session_key,
+            pkey,
+        )?;
+
+        // Blank out the recipient id
+        if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
+            *fingerprint = None;
+        }
 
         self.encryption.pub_esks.push(pkes);
 
@@ -2058,6 +2104,87 @@ mod tests {
                 assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn send_anonymous_recipient_seipdv1() -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
+            .unwrap();
+
+        let encrypted = builder.to_vec(&mut rng).unwrap();
+
+        // re-parse and check the PKESK
+        let message = Message::from_bytes(&encrypted[..]).unwrap();
+
+        let Message::Encrypted { esk, .. } = message else {
+            panic!("should be an encrypted message")
+        };
+
+        assert_eq!(esk.len(), 1);
+        let esk = &esk[0];
+        let Esk::PublicKeyEncryptedSessionKey(pkesk) = esk else {
+            panic!("should be pkesk")
+        };
+
+        let PublicKeyEncryptedSessionKey::V3 { id, .. } = pkesk else {
+            panic!("should be v3 pkesk")
+        };
+
+        assert_eq!(*id, KeyId::WILDCARD);
+
+        Ok(())
+    }
+
+    #[test]
+    fn send_anonymous_recipient_seipdv2() -> TestResult {
+        let _ = pretty_env_logger::try_init();
+        let mut rng = ChaCha20Rng::seed_from_u64(1);
+
+        let (skey, _headers) = SignedSecretKey::from_armor_single(std::fs::File::open(
+            "./tests/autocrypt/alice@autocrypt.example.sec.asc",
+        )?)?;
+
+        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
+            .seipd_v2(
+                &mut rng,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Ocb,
+                ChunkSize::default(),
+            )
+            .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
+            .unwrap();
+
+        let encrypted = builder.to_vec(&mut rng).unwrap();
+
+        // re-parse and check the PKESK
+        let message = Message::from_bytes(&encrypted[..]).unwrap();
+
+        let Message::Encrypted { esk, .. } = message else {
+            panic!("should be an encrypted message")
+        };
+
+        assert_eq!(esk.len(), 1);
+        let esk = &esk[0];
+        let Esk::PublicKeyEncryptedSessionKey(pkesk) = esk else {
+            panic!("should be pkesk")
+        };
+
+        let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = pkesk else {
+            panic!("should be v6 pkesk")
+        };
+
+        assert_eq!(*fingerprint, None);
+
         Ok(())
     }
 }
