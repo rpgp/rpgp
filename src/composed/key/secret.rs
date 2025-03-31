@@ -121,7 +121,6 @@ impl SecretSubkey {
 
 #[cfg(test)]
 mod tests {
-    use packet::PacketTrait;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
