@@ -137,7 +137,15 @@ impl SecretSubkey {
         let details = crate::packet::secret_key_parser::parse(input)?;
         let (version, algorithm, created_at, expiration, public_params, secret_params) = details;
         let inner = PubKeyInner::new(version, algorithm, created_at, expiration, public_params)?;
-        let details = super::PublicSubkey::from_inner(inner)?;
+        let len = inner.write_len();
+
+        let pub_packet_header = PacketHeader::from_parts(
+            packet_header.version(),
+            Tag::PublicSubkey,
+            crate::types::PacketLength::Fixed(len.try_into()?),
+        )?;
+
+        let details = super::PublicSubkey::from_inner_with_header(pub_packet_header, inner)?;
 
         Ok(Self {
             packet_header,
