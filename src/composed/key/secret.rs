@@ -124,9 +124,8 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
-    use crate::composed::{Deserializable, SignedPublicKey};
-
     use super::*;
+    use crate::composed::{Deserializable, SignedPublicKey};
 
     /// Based on the operations "split_public_key" in Deltachat
     #[test]
