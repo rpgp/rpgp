@@ -491,7 +491,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// - must be larger than `512`,
     /// - must be a power of 2.
     ///
-    /// Defaults to [`DEFAULT_CHUNK_SIZE`].
+    /// Defaults to [`DEFAULT_PARTIAL_CHUNK_SIZE`].
     pub fn partial_chunk_size(mut self, size: u32) -> Result<Self> {
         ensure!(size >= 512, "partial chunk size must be at least 512");
         ensure!(

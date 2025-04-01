@@ -773,7 +773,7 @@ impl<'a> Message<'a> {
     }
 
     /// Decrypt the message using the given key.
-    /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
+    /// Returns a message decryptor.
     pub fn decrypt(self, key_pw: &Password, key: &SignedSecretKey) -> Result<Message<'a>> {
         let ring = TheRing {
             secret_keys: vec![key],
@@ -785,7 +785,7 @@ impl<'a> Message<'a> {
     }
 
     /// Decrypt the message using the given key.
-    /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
+    /// Returns a message decryptor.
     ///
     /// HAZMAT: Decrypts (malleable) SED packets.
     pub fn decrypt_legacy(self, key_pw: &Password, key: &SignedSecretKey) -> Result<Message<'a>> {
@@ -800,7 +800,7 @@ impl<'a> Message<'a> {
     }
 
     /// Decrypt the message using the given key.
-    /// Returns a message decrypter, and a list of [KeyId]s that are valid recipients of this message.
+    /// Returns a message decryptor.
     pub fn decrypt_with_password(self, msg_pw: &Password) -> Result<Message<'a>> {
         let ring = TheRing {
             message_password: vec![msg_pw],
