@@ -2,6 +2,139 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.16.0-alpha.0](https://github.com/rpgp/rpgp/compare/v0.15.0..0.16.0-alpha.0) - 2025-04-02
+
+### ⛰️  Features
+
+- *(message builder)* Allow password and public key encryption to be mixed - ([01b5c3e](https://github.com/rpgp/rpgp/commit/01b5c3e2a8150da579faf36618d6375687592d43))
+- Introduce mmap based file parsing - ([a893ee2](https://github.com/rpgp/rpgp/commit/a893ee2dbd9cbd5868d734b1e7b2b2d6bd4e1c77))
+- Start setting up a message builder - ([98a9350](https://github.com/rpgp/rpgp/commit/98a93508e80f3187841da6c5e9e3b1cb509881c1))
+- Avoid allocations in signature calculations - ([f3303a1](https://github.com/rpgp/rpgp/commit/f3303a17437b9f9f1cfae642a73adf64610e4b57))
+- Roundtrip elgamal secret keys properly - ([28012d8](https://github.com/rpgp/rpgp/commit/28012d8a5af23e836c10f30db8ae017603767b64))
+- Implement new type `SubpacketLength` - ([3ffc914](https://github.com/rpgp/rpgp/commit/3ffc914d43c1b343a608b7433e5c63b393d25c62))
+- Introduce dyn compatible SigningKey trait - ([8b2e1ce](https://github.com/rpgp/rpgp/commit/8b2e1ce0a040cc4df5cc62520284bb5459c819c1))
+- Implement seipdv2 support for the message builder - ([21f259c](https://github.com/rpgp/rpgp/commit/21f259cacb746c15849913f82521dab8d5330360))
+- Type safe chunk sizes for seipdv2 - ([58d3534](https://github.com/rpgp/rpgp/commit/58d35343a3372c261534da376c95b41c7a55f8ae))
+- Implement ascii armor writing - ([003f1ee](https://github.com/rpgp/rpgp/commit/003f1ee01deccb900a44e5968c31f4e2737a3ae9))
+- Start work on streaming based message reader - ([cc17c24](https://github.com/rpgp/rpgp/commit/cc17c246121caa774fdf4208ea06f03766996ec5))
+- Handle invalid trailing data - ([934920d](https://github.com/rpgp/rpgp/commit/934920d0f2cd580eda79b663246d91e2805e64ee))
+- Allow for legacy decryption - ([7f8bada](https://github.com/rpgp/rpgp/commit/7f8badaa77da3b6d1a43a12471ffc70aeaac0b34))
+- Add encrypt_to_key_anonymous functions - ([0e3ff66](https://github.com/rpgp/rpgp/commit/0e3ff663f8d66599274ac2ad010ad21d2829af06))
+
+### 🐛 Bug Fixes
+
+- PublicKeyAlgorithm 16 is ElGamal encrypt only - ([5538d80](https://github.com/rpgp/rpgp/commit/5538d80c96055c48672a1baf836b62ce3418d7a7))
+- Handle ElgamalEncrypt secret key material - ([f4c1297](https://github.com/rpgp/rpgp/commit/f4c12970ae4ba1590dde6d7b4d89350785bbef22))
+- Handle invalid subpackets properly - ([a32a6af](https://github.com/rpgp/rpgp/commit/a32a6afbd0d7fa57890247768874af9b83bb7ece))
+- Remove plural - ([164c970](https://github.com/rpgp/rpgp/commit/164c97077bb154d53346443c102d1008c9416495))
+- Correctly handle multiple nested signed messages - ([e9674ce](https://github.com/rpgp/rpgp/commit/e9674ce3a039d65855d805ea34638061efb878be))
+- Implement full handling of known keyflags - ([a988e23](https://github.com/rpgp/rpgp/commit/a988e23d08f20cca6e6da02ce84d3480070dbbd4))
+- Handle nested marker for OPS - ([907c337](https://github.com/rpgp/rpgp/commit/907c3373409232b9cee0c94b7788fa52893dc776))
+- Handle empty CSF message body - ([03439a0](https://github.com/rpgp/rpgp/commit/03439a001b2486edcbdd56d15ebbc590385464b3))
+- Check that fixed part is as long as it claims to be ([#497](https://github.com/rpgp/rpgp/issues/497)) - ([86cc9fa](https://github.com/rpgp/rpgp/commit/86cc9fa51dc73cffc6369b81366c211e7d7c104a))
+- Handle trailing data in symencryptedprotected reader - ([26e2521](https://github.com/rpgp/rpgp/commit/26e25216af60d4610442cc58d93410f6a9d3295b))
+- Do not try to parse v5 signatures as v4 - ([2154f0d](https://github.com/rpgp/rpgp/commit/2154f0d1271b1f10cd644eb950ce29e8c4604239))
+- Do not attempt to allocate overy large buffers when parsing - ([1370a3f](https://github.com/rpgp/rpgp/commit/1370a3f9224ee8d1ecd23a5d4a39c8d5c2abaf5f))
+- Enforce Send for Message - ([b0f7b83](https://github.com/rpgp/rpgp/commit/b0f7b83c144b9104c12ed08e807baaad2ce44533))
+- Do not loose signing information on the message builder - ([4837145](https://github.com/rpgp/rpgp/commit/48371456c251ac30324e7dd90db97ee0bf51fce9))
+- Correctly propagate packetheader version - ([cbb44a1](https://github.com/rpgp/rpgp/commit/cbb44a1d1efe670435c735fb7b600f10073b5c86))
+
+### 🚜 Refactor
+
+- Use bytes internally - ([b0026ba](https://github.com/rpgp/rpgp/commit/b0026ba6c61546974b2e28ae3d1a37297cee468c))
+- Pass bytes through - ([dbc4cb2](https://github.com/rpgp/rpgp/commit/dbc4cb2602b7637325a3dd3aa2e8205d49e1ec83))
+- Remove macro usage in sym crypto - ([202c584](https://github.com/rpgp/rpgp/commit/202c584bde9e922a1b9b3d4b652cb46a693d1801))
+- Avoid intermediary allocations in packet writing - ([556a7c1](https://github.com/rpgp/rpgp/commit/556a7c161f3e23693242c68070231972b9f904ce))
+- Store public keys better - ([a00f3ad](https://github.com/rpgp/rpgp/commit/a00f3ade543acb79744c2d4b2bea3257bbb15027))
+- Store dsa public params as key - ([c25f0dd](https://github.com/rpgp/rpgp/commit/c25f0dd1b6f13083fa959f5f00aa51ebb1dcfcef))
+- Store ed25519 public params as keys - ([61e4998](https://github.com/rpgp/rpgp/commit/61e4998db98c25fc74c9174ea999fba5b28082d0))
+- Store x25519 public params as key - ([e164d94](https://github.com/rpgp/rpgp/commit/e164d943772507d57863f30d69373d1644d71e3a))
+- Split up public params into mods - ([cbef72b](https://github.com/rpgp/rpgp/commit/cbef72bd2dd8e9f8c63ed2acb5a7c629f75ba97a))
+- Make signer trait more type safe - ([5111dad](https://github.com/rpgp/rpgp/commit/5111dad514829c0199c1e9b32a3532674f3a13a0))
+- Merge secretkeyrepr and plainsecretparams - ([2e802fe](https://github.com/rpgp/rpgp/commit/2e802fe59396153d3476db814d7529c598cc157a))
+- Cleanup keyid - ([dffc8f0](https://github.com/rpgp/rpgp/commit/dffc8f0ace9ac106ff78771a17fd02caa369405c))
+- Remove unused PublicParams from Signer trait - ([e97fd46](https://github.com/rpgp/rpgp/commit/e97fd46af4a6d55d6f2e88959aa0650b56e572ff))
+- Normalize secret key generation - ([ad5f029](https://github.com/rpgp/rpgp/commit/ad5f0297032519ad34de0ca5daa3f100c9c4cd90))
+- Replace bstr with bytes - ([03c405c](https://github.com/rpgp/rpgp/commit/03c405c6b92d7fb1da771e93c0a988930c0a4aa6))
+- Start replacing nom with custom bytes parsing - ([ab4f266](https://github.com/rpgp/rpgp/commit/ab4f2662e9696519372c1d08a1f0c1c6a8ec6150))
+- Switch to extension methods - ([73fbd4a](https://github.com/rpgp/rpgp/commit/73fbd4a085439daddb66a55743f5f32e79ddb6ab))
+- Extract pkeskbytes - ([6f0d2b0](https://github.com/rpgp/rpgp/commit/6f0d2b0216f75b749eb00efc888e7a88298bf703))
+- Cleanup user attribute packet - ([ac64021](https://github.com/rpgp/rpgp/commit/ac6402199f83dd5f759ba20c03eaa4de455bc669))
+- Sym_key_encrypted_session_key - ([ee869e3](https://github.com/rpgp/rpgp/commit/ee869e39f28cd8fbcb8ec753e3596f0388ce3fbf))
+- One_pass_signature - ([09ad24e](https://github.com/rpgp/rpgp/commit/09ad24e994657fefac4d405360c4a1edd9e2a5fd))
+- Update signature parsing - ([5355d27](https://github.com/rpgp/rpgp/commit/5355d273df317100fa3b43cb23b74511316f629c))
+- Packet header parsing - ([9d3115c](https://github.com/rpgp/rpgp/commit/9d3115c2acc754908d7880cbfb17ae409d60e2b9))
+- Introduce packetbody - ([8b0ec45](https://github.com/rpgp/rpgp/commit/8b0ec45579a205858789fa62e1422476b54eb4e8))
+- Fully extract packetheaders and their versions - ([17c38b9](https://github.com/rpgp/rpgp/commit/17c38b953fca5862d77ceb35fb6016ced57ab67a))
+- Convert public and secret key parsing - ([99f9634](https://github.com/rpgp/rpgp/commit/99f9634f3079de8d30ac9616ebe9d23296449f00))
+- Back to a single mpi type - ([c384f36](https://github.com/rpgp/rpgp/commit/c384f361d3e950b6d960fecada1c225ba0473a77))
+- Remove dead code from utils - ([25e9ee3](https://github.com/rpgp/rpgp/commit/25e9ee3fe8ae77408b166309cd06260f5dab9469))
+- Remove bitfield dep - ([97c5d35](https://github.com/rpgp/rpgp/commit/97c5d35d25be39019f18a35afa60e2cd6aec78b2))
+- Make passwords bytes based - ([d61f733](https://github.com/rpgp/rpgp/commit/d61f733ad1515337318a58fc1d32dec3422d1c4e))
+- Cleanup hash implementation - ([e96fa25](https://github.com/rpgp/rpgp/commit/e96fa25842f9a7f772d96bf848926359ef23dfd3))
+- Apply rust naming convention to hashalgorithm - ([9dd2e74](https://github.com/rpgp/rpgp/commit/9dd2e74941aaf1d93ef306d1e6f022510e4d0579))
+- Builder encryption is now based on type states - ([a3c96e5](https://github.com/rpgp/rpgp/commit/a3c96e5760cd38ea9dacd6dcfc9eaa1c5f989958))
+- Move decrypt_session_key - ([10182d0](https://github.com/rpgp/rpgp/commit/10182d0176d1ed7dd583384eca2941134fb8a05c))
+- Split readers into their own files - ([85b14b9](https://github.com/rpgp/rpgp/commit/85b14b901f8b2f46594c961afe8a9e571c9e3799))
+- Normalize mod.rs -> <name>.rs convention - ([65f884c](https://github.com/rpgp/rpgp/commit/65f884c4b430e41887810c35b394140ca3b1ae81))
+- Move base64 related code into its own module - ([085c9ca](https://github.com/rpgp/rpgp/commit/085c9cabc200cb533a4298dce79a0840be56beec))
+- Cleanup imports using cargo-make - ([fe8c5d0](https://github.com/rpgp/rpgp/commit/fe8c5d0f2d2b980bd8c0401d81c17064469d382f))
+- Cleanup types module - ([dc96aeb](https://github.com/rpgp/rpgp/commit/dc96aeb03221db3ca6ee32bd13397953b291c491))
+- MpiBytes -> Mpi - ([6b75d02](https://github.com/rpgp/rpgp/commit/6b75d023004052154a16e5e26355b8f8a914e4bb))
+- Remove toplevel reexports - ([15c4ab1](https://github.com/rpgp/rpgp/commit/15c4ab1b628683d9f9d883610fb19902aba544c7))
+- Deduplicate exports in composed - ([af09ae4](https://github.com/rpgp/rpgp/commit/af09ae4a9733f0cc757eff24f5a632932abba015))
+
+### 📚 Documentation
+
+- Add note on compatibility reasons to use seipdv1  - ([24cd29c](https://github.com/rpgp/rpgp/commit/24cd29cd1b3429812125477496a1cc0ab69ad0bc))
+- Include crate README in docs for automatic example validation ([#468](https://github.com/rpgp/rpgp/issues/468)) - ([8dd2efc](https://github.com/rpgp/rpgp/commit/8dd2efc9d4e9989568024f98dac1cd85b6481a67))
+
+### ⚡ Performance
+
+- Reduce allocations - ([c620822](https://github.com/rpgp/rpgp/commit/c620822f05981f01ad0fbd6dd639d25bc5449566))
+- Avoid allocations when reading fixed tags - ([32c418a](https://github.com/rpgp/rpgp/commit/32c418a00de8fac8f495f563668032b3842f34c3))
+
+### 🧪 Testing
+
+- Update dump tests for dsa - ([f2c9655](https://github.com/rpgp/rpgp/commit/f2c96557bf827dfb124eedf30d19f741a4f951c8))
+- Load Carol test key from openpgp-samples - ([ee0cb7a](https://github.com/rpgp/rpgp/commit/ee0cb7a82e44e4299287889257fb1999b2f86b27))
+- Add failing test for subpacket key length - ([2b08dce](https://github.com/rpgp/rpgp/commit/2b08dceb8dd833c592c28c65585ec0a05fb9446d))
+- Parse CSF messages with pgp::Any::from_armor - ([31a384f](https://github.com/rpgp/rpgp/commit/31a384f4de944a180029a82b021c3af98d367b43))
+- Drop leniency tests for now ([#498](https://github.com/rpgp/rpgp/issues/498)) - ([f4fea91](https://github.com/rpgp/rpgp/commit/f4fea91b6a817d8cafaef8b00335772cd5da79e4))
+- Packet excess consumption ([#508](https://github.com/rpgp/rpgp/issues/508)) - ([ffcb250](https://github.com/rpgp/rpgp/commit/ffcb250d0cfc466c5e2c263a087e239b4459475c))
+- Port fuzz tests - ([ce0e221](https://github.com/rpgp/rpgp/commit/ce0e221f22d94e1508d84117fcbddc3c9b7d0be2))
+
+### ⚙️ Miscellaneous Tasks
+
+- Fixup versions - ([dcf7ad2](https://github.com/rpgp/rpgp/commit/dcf7ad2c50b694e273055d0538926563c4ae215d))
+- Fixup - ([20b38c2](https://github.com/rpgp/rpgp/commit/20b38c237e6bdd49210e9be03d34ccbee1e79599))
+- Make `cargo` not pull the tests submodule when referencing rpgp via git - ([4f9ffd0](https://github.com/rpgp/rpgp/commit/4f9ffd03b5a641b42a55539b9b5934b168af2342))
+- Don't handle text-mode literals; but allow explictly setting signature type ([#496](https://github.com/rpgp/rpgp/issues/496)) - ([dda1ed4](https://github.com/rpgp/rpgp/commit/dda1ed47fec99e3bb2c9e9af869cd6fd68170647))
+- Run doctests ([#487](https://github.com/rpgp/rpgp/issues/487)) - ([be19029](https://github.com/rpgp/rpgp/commit/be1902930d08b1cd63d5e154844f6468c69b7aa6))
+- Run cross tests in release mode - ([191c463](https://github.com/rpgp/rpgp/commit/191c4636e09e53b13e90d2f8771a06100cb81804))
+- Bring back deny unsafe - ([0322ad1](https://github.com/rpgp/rpgp/commit/0322ad1abb9b06a7ad0f2741c3fb45962cd0a99c))
+- Ignore Cargo.lock for fuzz - ([3cab978](https://github.com/rpgp/rpgp/commit/3cab97826c632be7b06894af8eaf60f2852d45b7))
+
+### Builder
+
+- Handle unencrypted - ([2d3513b](https://github.com/rpgp/rpgp/commit/2d3513b06008030302287a3923fc0a0aa385b805))
+- Implement handling of different data modes - ([5641fc6](https://github.com/rpgp/rpgp/commit/5641fc610a9f6da91b3f47bd967005c3391dbed8))
+- Cleanup seipd configuration - ([544cd96](https://github.com/rpgp/rpgp/commit/544cd962008922165a46c9c9423b4a12ffda8134))
+- Fix first partial chunk size being sized wrong - ([89c0b40](https://github.com/rpgp/rpgp/commit/89c0b40265820d978528df99d6fb0c554014d238))
+
+### Errors
+
+- Capture optional backtraces - ([216200f](https://github.com/rpgp/rpgp/commit/216200f9294d8e42e4069b5b30936a32b5bab90e))
+
+### Reader
+
+- Support for partial packets - ([c691625](https://github.com/rpgp/rpgp/commit/c6916250880e2242aa86e33e90e432cc14ce77ea))
+
+### Wip
+
+- Start implementing proptest for individual packet types - ([eb87c2e](https://github.com/rpgp/rpgp/commit/eb87c2e96394ba1eba245c2c4ac3cf277f80a825))
+- Error handling with snafu - ([2df12f5](https://github.com/rpgp/rpgp/commit/2df12f544c36615a866c500c635c13f3651e34fa))
+
 ## [0.15.0](https://github.com/rpgp/rpgp/compare/v0.14.2..0.15.0) - 2025-01-29
 
 ### ⛰️  Features
