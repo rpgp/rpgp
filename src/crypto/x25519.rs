@@ -46,10 +46,7 @@ impl SecretKey {
         SecretKey { secret }
     }
 
-    pub(crate) fn try_from_array(
-        _pub_params: &X25519PublicParams,
-        secret: [u8; 32],
-    ) -> Result<Self> {
+    pub(crate) fn try_from_array(secret: [u8; 32]) -> Result<Self> {
         let secret = x25519_dalek::StaticSecret::from(secret);
         Ok(Self { secret })
     }

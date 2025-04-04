@@ -8,6 +8,7 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, Bytes, BytesMut};
 use hkdf::Hkdf;
 use log::debug;
+use ml_kem::EncodedSizeUser;
 use num_bigint::ModInverse;
 use sha2::Sha256;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
@@ -16,8 +17,8 @@ use crate::{
     composed::PlainSessionKey,
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
-        Decryptor,
+        elgamal, ml_kem768_x25519, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
+        x25519, x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
@@ -36,6 +37,7 @@ pub enum PlainSecretParams {
     Ed25519(ed25519::SecretKey),
     Ed25519Legacy(ed25519::SecretKey),
     X25519(x25519::SecretKey),
+    MlKem768X25519(ml_kem768_x25519::SecretKey),
     Elgamal(elgamal::SecretKey),
     X448(x448::SecretKey),
     Ed448(ed448::SecretKey),
@@ -142,15 +144,26 @@ impl PlainSecretParams {
                 let key = crate::crypto::ed448::SecretKey::try_from_bytes(secret)?;
                 Self::Ed448(key)
             }
-            (PublicKeyAlgorithm::X25519, PublicParams::X25519(pub_params)) => {
+            (PublicKeyAlgorithm::X25519, PublicParams::X25519(_)) => {
                 let secret = i.read_array::<32>()?;
-                let key = crate::crypto::x25519::SecretKey::try_from_array(pub_params, secret)?;
+                let key = crate::crypto::x25519::SecretKey::try_from_array(secret)?;
                 Self::X25519(key)
             }
             (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
                 let s = i.read_array::<56>()?;
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
                 Self::X448(key)
+            }
+            (PublicKeyAlgorithm::MlKem768X25519Draft, PublicParams::MlKem768X25519(_)) => {
+                // X25519
+                let x = i.read_array::<32>()?;
+                let x = crate::crypto::x25519::SecretKey::try_from_array(x)?;
+
+                // ML KEM
+                let ml_kem = i.read_array::<64>()?;
+
+                let key = crate::crypto::ml_kem768_x25519::SecretKey::try_from_parts(x, ml_kem)?;
+                Self::MlKem768X25519(key)
             }
             (
                 alg,
@@ -557,7 +570,13 @@ impl PlainSecretParams {
                 writer.write_all(&q)?;
             }
             PlainSecretParams::Ed25519(key) => {
-                writer.write_all(key.secret.as_bytes().as_ref())?;
+                let q = key.secret.to_bytes();
+                writer.write_all(&q)?;
+            }
+            PlainSecretParams::MlKem768X25519(key) => {
+                let q = key.x25519.secret.to_bytes();
+                writer.write_all(&q)?;
+                writer.write_all(&key.ml_kem.as_bytes())?;
             }
             PlainSecretParams::Ed448(key) => {
                 writer.write_all(key.secret.as_bytes().as_ref())?;
@@ -620,6 +639,7 @@ impl PlainSecretParams {
             }
             PlainSecretParams::X25519(_key) => 32,
             PlainSecretParams::Ed448(_key) => 57,
+            PlainSecretParams::MlKem768X25519 { .. } => 32 + 64,
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }

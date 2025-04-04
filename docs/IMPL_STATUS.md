@@ -94,6 +94,17 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] Iterated and Salted
   - [x] Argon2
 
+- PQC
+ - Encryption & Decryption
+   - [ ] ML-KEM-768 x25519
+   - [ ] ML-KEM-1024 ed448
+ - Signing
+   - [ ] ML-DSA-65+Ed25519
+   - [ ] ML-DSA-87+Ed448
+   - [ ] SLH-DSA-SHAKE-128s
+   - [ ] SLH-DSA-SHAKE-128f
+   - [ ] SLH-DSA-SHAKE-256s
+
 ## High Level API
 
 Not yet started

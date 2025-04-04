@@ -414,6 +414,9 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
         }
         PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
         PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
+        PublicParams::MlKem768X25519(ref params) => {
+            todo!()
+        }
         PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }
 }
@@ -656,6 +659,9 @@ impl PublicKeyTrait for PubKeyInner {
                 let sig: &[Mpi] = sig.try_into()?;
 
                 crypto::ecdsa::verify(params, hash, hashed, sig)
+            }
+            PublicParams::MlKem768X25519(_) => {
+                bail!("ML KEM X25519 can not be used for verify operations");
             }
             PublicParams::ECDH(
                 ref params @ EcdhPublicParams::Curve25519 { .. }

@@ -7,21 +7,27 @@ use crate::{
 ///
 /// OpenPGP fingerprints consist of two pieces of information:
 /// The key version, and binary data that represents the fingerprint itself.
-#[derive(Clone, Eq, Hash, PartialEq, derive_more::Debug)]
+#[derive(Clone, Eq, Hash, PartialEq, derive_more::Debug, derive_more::Display)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum Fingerprint {
     #[debug("{}", hex::encode(_0))]
+    #[display("{}", hex::encode(_0))]
     V2([u8; 16]),
     #[debug("{}", hex::encode(_0))]
+    #[display("{}", hex::encode(_0))]
     V3([u8; 16]),
     #[debug("{}", hex::encode(_0))]
+    #[display("{}", hex::encode(_0))]
     V4([u8; 20]),
     #[debug("{}", hex::encode(_0))]
+    #[display("{}", hex::encode(_0))]
     V5([u8; 32]),
     #[debug("{}", hex::encode(_0))]
+    #[display("{}", hex::encode(_0))]
     V6([u8; 32]),
 
     #[debug("{}", hex::encode(_0))]
+    #[display("{}", hex::encode(_0))]
     #[cfg_attr(test, proptest(skip))]
     /// Fingerprint with unknown key version
     Unknown(Box<[u8]>),

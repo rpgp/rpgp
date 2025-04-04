@@ -85,7 +85,7 @@ pub struct EncryptionSeipdV1 {
     sym_alg: SymmetricKeyAlgorithm,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Clone)]
 pub struct EncryptionSeipdV2 {
     session_key: Zeroizing<Vec<u8>>,
     sym_esks: Vec<SymKeyEncryptedSessionKey>,
@@ -93,6 +93,7 @@ pub struct EncryptionSeipdV2 {
     sym_alg: SymmetricKeyAlgorithm,
     aead: AeadAlgorithm,
     chunk_size: ChunkSize,
+    #[debug("{}", hex::encode(salt))]
     salt: [u8; 32],
 }
 

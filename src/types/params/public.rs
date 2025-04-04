@@ -16,6 +16,7 @@ mod ed25519;
 mod ed448;
 mod eddsa_legacy;
 mod elgamal;
+mod ml_kem768_x25519;
 mod rsa;
 mod x25519;
 mod x448;
@@ -23,8 +24,8 @@ mod x448;
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
-    elgamal::ElgamalPublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
-    x448::X448PublicParams,
+    elgamal::ElgamalPublicParams, ml_kem768_x25519::MlKem768X25519PublicParams,
+    rsa::RsaPublicParams, x25519::X25519PublicParams, x448::X448PublicParams,
 };
 use super::PlainSecretParams;
 
@@ -41,6 +42,7 @@ pub enum PublicParams {
     X25519(X25519PublicParams),
     X448(X448PublicParams),
     Ed448(Ed448PublicParams),
+    MlKem768X25519(MlKem768X25519PublicParams),
     Unknown {
         #[debug("{}", hex::encode(data))]
         data: Bytes,
@@ -60,6 +62,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::Ed25519(ref p) => Ok(Self::Ed25519(p.into())),
             PlainSecretParams::Ed25519Legacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
+            PlainSecretParams::MlKem768X25519(ref p) => Ok(Self::MlKem768X25519(p.into())),
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
             PlainSecretParams::Ed448(ref p) => Ok(Self::Ed448(p.into())),
             PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {
@@ -123,14 +126,18 @@ impl PublicParams {
                 let params = X448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::X448(params))
             }
+            PublicKeyAlgorithm::X448 => unknown(i, len),
+            PublicKeyAlgorithm::MlKem768X25519Draft => {
+                let params = MlKem768X25519PublicParams::try_from_reader(i)?;
+                Ok(PublicParams::MlKem768X25519(params))
+            }
+            PublicKeyAlgorithm::MlKem1024X448Draft => unknown(i, len),
             PublicKeyAlgorithm::DiffieHellman
             | PublicKeyAlgorithm::Private100
             | PublicKeyAlgorithm::Private101
             | PublicKeyAlgorithm::Private102
             | PublicKeyAlgorithm::Private103
             | PublicKeyAlgorithm::Private104
-            | PublicKeyAlgorithm::Private105
-            | PublicKeyAlgorithm::Private106
             | PublicKeyAlgorithm::Private107
             | PublicKeyAlgorithm::Private108
             | PublicKeyAlgorithm::Private109
@@ -192,6 +199,9 @@ impl Serialize for PublicParams {
             PublicParams::X25519(params) => {
                 params.to_writer(writer)?;
             }
+            PublicParams::MlKem768X25519(params) => {
+                params.to_writer(writer)?;
+            }
             PublicParams::X448(params) => {
                 params.to_writer(writer)?;
             }
@@ -231,6 +241,9 @@ impl Serialize for PublicParams {
                 sum += params.write_len();
             }
             PublicParams::X25519(params) => {
+                sum += params.write_len();
+            }
+            PublicParams::MlKem768X25519(params) => {
                 sum += params.write_len();
             }
             PublicParams::X448(params) => {

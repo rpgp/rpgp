@@ -114,6 +114,8 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = [
     "static_secrets",
 ] }
 
+ml-kem = { git = "https://github.com/supinie/KEMs", branch = "master", features = ["zeroize"] }
+
 
 [dev-dependencies]
 glob = "0.3"
