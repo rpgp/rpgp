@@ -15,6 +15,7 @@ mod ecdsa;
 mod ed25519;
 mod eddsa_legacy;
 mod elgamal;
+mod ml_kem768_x25519;
 mod rsa;
 mod x25519;
 #[cfg(feature = "unstable-curve448")]
@@ -25,7 +26,8 @@ pub use self::x448::X448PublicParams;
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
-    elgamal::ElgamalPublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
+    elgamal::ElgamalPublicParams, ml_kem768_x25519::MlKem768X25519PublicParams,
+    rsa::RsaPublicParams, x25519::X25519PublicParams,
 };
 use super::PlainSecretParams;
 
@@ -42,6 +44,7 @@ pub enum PublicParams {
     X25519(X25519PublicParams),
     #[cfg(feature = "unstable-curve448")]
     X448(X448PublicParams),
+    MlKem768X25519(MlKem768X25519PublicParams),
     Unknown {
         data: Bytes,
     },
@@ -60,6 +63,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::EdDSA(ref p) => Ok(Self::Ed25519(p.into())),
             PlainSecretParams::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
+            PlainSecretParams::MlKem768X25519(ref p) => Ok(Self::MlKem768X25519(p.into())),
             #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
         }
@@ -121,14 +125,17 @@ impl PublicParams {
             #[cfg(not(feature = "unstable-curve448"))]
             PublicKeyAlgorithm::X448 => unknown(i, len),
 
+            PublicKeyAlgorithm::MlKem768X25519Draft => {
+                let params = MlKem768X25519PublicParams::try_from_reader(i)?;
+                Ok(PublicParams::MlKem768X25519(params))
+            }
+            PublicKeyAlgorithm::MlKem1024X448Draft => unknown(i, len),
             PublicKeyAlgorithm::DiffieHellman
             | PublicKeyAlgorithm::Private100
             | PublicKeyAlgorithm::Private101
             | PublicKeyAlgorithm::Private102
             | PublicKeyAlgorithm::Private103
             | PublicKeyAlgorithm::Private104
-            | PublicKeyAlgorithm::Private105
-            | PublicKeyAlgorithm::Private106
             | PublicKeyAlgorithm::Private107
             | PublicKeyAlgorithm::Private108
             | PublicKeyAlgorithm::Private109
@@ -187,6 +194,9 @@ impl Serialize for PublicParams {
             PublicParams::X25519(params) => {
                 params.to_writer(writer)?;
             }
+            PublicParams::MlKem768X25519(params) => {
+                params.to_writer(writer)?;
+            }
             #[cfg(feature = "unstable-curve448")]
             PublicParams::X448(params) => {
                 params.to_writer(writer)?;
@@ -224,6 +234,9 @@ impl Serialize for PublicParams {
                 sum += params.write_len();
             }
             PublicParams::X25519(params) => {
+                sum += params.write_len();
+            }
+            PublicParams::MlKem768X25519(params) => {
                 sum += params.write_len();
             }
             #[cfg(feature = "unstable-curve448")]
