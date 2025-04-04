@@ -1,6 +1,8 @@
-use pgp::composed::{Deserializable, SignedPublicKey, SignedSecretKey};
-use pgp::crypto::public_key::PublicKeyAlgorithm;
-use pgp::types::KeyDetails;
+use pgp::{
+    composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey},
+    crypto::public_key::PublicKeyAlgorithm,
+    types::{KeyDetails, Password},
+};
 use testresult::TestResult;
 
 #[test]
@@ -56,6 +58,27 @@ fn test_a_1_2_transferrable_public_key() -> TestResult {
     );
 
     key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_1_3_signed_encrpyted() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_1_1_key.sec.asc")?;
+    sec_key.verify()?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_1_2_key.pub.asc")?;
+    pub_key.verify()?;
+
+    let (msg, _) = Message::from_armor_file("./tests/pqc/a_1_3_msg.asc")?;
+
+    dbg!(&msg);
+    let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+    let data = msg.as_data_string()?;
+    assert_eq!(data, "Testing\n");
+    msg.verify(&pub_key)?;
 
     Ok(())
 }

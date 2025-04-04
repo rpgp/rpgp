@@ -1,7 +1,6 @@
 use std::io::{self, BufRead};
 
-use ml_kem::kem::EncapsulationKey;
-use ml_kem::{EncodedSizeUser, MlKem768Params};
+use ml_kem::{kem::EncapsulationKey, EncodedSizeUser, MlKem768Params};
 
 use crate::{errors::Result, parsing_reader::BufReadParsing, ser::Serialize};
 
@@ -46,13 +45,12 @@ impl Serialize for MlKem768X25519PublicParams {
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::ecc_curve::ECCCurve;
-    use ml_kem::kem::DecapsulationKey;
     use ml_kem::{KemCore, MlKem768};
     use proptest::prelude::*;
     use rand::SeedableRng;
 
     use super::*;
+    use crate::crypto::ecc_curve::ECCCurve;
 
     impl Arbitrary for MlKem768X25519PublicParams {
         type Parameters = ();
