@@ -185,10 +185,6 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used)]
-
-    use std::ops::Deref;
-
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
@@ -262,9 +258,6 @@ mod tests {
 
         for text_size in (8..=248).step_by(8) {
             for _i in 0..10 {
-                let mut fingerprint = vec![0u8; 20];
-                rng.fill_bytes(&mut fingerprint);
-
                 let mut plain = vec![0u8; text_size];
                 rng.fill_bytes(&mut plain);
 
@@ -273,7 +266,7 @@ mod tests {
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
                     recipient_public: pub_params.key.to_bytes(),
-                    encrypted_session_key: enc_sk.deref(),
+                    encrypted_session_key: &*enc_sk,
                 };
 
                 let decrypted = skey.decrypt(data).unwrap();

@@ -421,9 +421,9 @@ impl PlainSecretParams {
 
                 let data = ml_kem768_x25519::EncryptionFields {
                     ecdh_ciphertext: ephemeral.to_owned(),
-                    ml_kem_ciphertext: ml_kem_ciphertext.clone(),
-                    ecdh_pub_key: params.x25519_key.clone(),
-                    ml_kem_pub_key: params.ml_kem_key.clone(),
+                    ml_kem_ciphertext: ml_kem_ciphertext,
+                    ecdh_pub_key: &params.x25519_key,
+                    ml_kem_pub_key: &params.ml_kem_key,
                     encrypted_session_key: session_key,
                 };
 

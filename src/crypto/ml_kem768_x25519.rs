@@ -2,7 +2,7 @@ use std::cmp::PartialEq;
 
 use log::debug;
 use ml_kem::{
-    kem::{Decapsulate, DecapsulationKey, EncapsulationKey},
+    kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
     EncodedSizeUser, KemCore, MlKem768, MlKem768Params,
 };
 use rand::{CryptoRng, Rng};
@@ -65,11 +65,11 @@ pub struct EncryptionFields<'a> {
     /// Ephemeral X25519 public key (32 bytes)
     pub ecdh_ciphertext: [u8; 32],
 
-    pub ml_kem_ciphertext: [u8; 1088],
+    pub ml_kem_ciphertext: &'a [u8; 1088],
 
     /// Recipient public key (32 bytes)
-    pub ecdh_pub_key: x25519_dalek::PublicKey,
-    pub ml_kem_pub_key: EncapsulationKey<MlKem768Params>,
+    pub ecdh_pub_key: &'a x25519_dalek::PublicKey,
+    pub ml_kem_pub_key: &'a EncapsulationKey<MlKem768Params>,
 
     /// Encrypted and wrapped session key
     pub encrypted_session_key: &'a [u8],
@@ -160,4 +160,113 @@ fn multi_key_combine(
     hasher.update(DOM_SEP);
 
     hasher.finalize().into()
+}
+
+/// ML KEM 768 - X25519 Encryption
+///
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-encryption-procedure>
+///
+/// Returns
+/// - ecdh_ciphertext
+/// - ml_kem_ciphertext
+/// - encrpyted data
+pub fn encrypt<R: CryptoRng + Rng>(
+    mut rng: R,
+    ecdh_public_key: &x25519_dalek::PublicKey,
+    ml_kem_public_key: &EncapsulationKey<MlKem768Params>,
+    plain: &[u8],
+) -> Result<([u8; 32], [u8; 1088], Vec<u8>)> {
+    // Maximum length for `plain` - FIXME: what should the maximum be, here?
+    const MAX_SIZE: usize = 255;
+    ensure!(
+        plain.len() <= MAX_SIZE,
+        "unable to encrypt larger than {} bytes",
+        MAX_SIZE
+    );
+
+    // Compute (ecdhCipherText, ecdhKeyShare) := ECDH-KEM.Encaps(ecdhPublicKey)
+    let (ecdh_ciphertext, ecdh_key_share) = x25519_kem_encaps(&mut rng, ecdh_public_key);
+    // Compute (mlkemCipherText, mlkemKeyShare) := ML-KEM.Encaps(mlkemPublicKey)
+    let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(&mut rng, ml_kem_public_key);
+    // Compute KEK := multiKeyCombine(mlkemKeyShare, mlkemCipherText, mlkemPublicKey, ecdhKeyShare,
+    //                        ecdhCipherText, ecdhPublicKey, algId, 256)
+
+    let kek = multi_key_combine(
+        &ml_kem_key_share,
+        &ml_kem_ciphertext,
+        ml_kem_public_key,
+        &ecdh_key_share,
+        &ecdh_ciphertext,
+        ecdh_public_key,
+        PublicKeyAlgorithm::MlKem768X25519Draft,
+    );
+    // Compute C := AESKeyWrap(KEK, sessionKey) with AES-256 as per [RFC3394] that includes a 64 bit integrity check
+    let c = aes_kw::wrap(&kek, plain)?;
+
+    Ok((ecdh_ciphertext, ml_kem_ciphertext, c))
+}
+
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x25519-kem>
+fn x25519_kem_encaps<R: CryptoRng + Rng>(
+    mut rng: R,
+    public_key: &x25519_dalek::PublicKey,
+) -> ([u8; 32], [u8; 32]) {
+    // Generate an ephemeral key pair {v, V} via V = X25519(v,U(P)) where v is a randomly generated octet string with a length of 32 octets
+    let mut ephemeral_secret_key_bytes = Zeroizing::new([0u8; 32]);
+    rng.fill_bytes(&mut *ephemeral_secret_key_bytes);
+    let our_secret = StaticSecret::from(*ephemeral_secret_key_bytes);
+
+    // Compute the shared coordinate X = X25519(v, R) where R is the recipient's public key ecdhPublicKey
+    let shared_secret = our_secret.diffie_hellman(public_key);
+
+    let ephemeral_public = x25519_dalek::PublicKey::from(&our_secret);
+    (ephemeral_public.to_bytes(), shared_secret.to_bytes())
+}
+
+fn ml_kem_encaps<R: CryptoRng + Rng>(
+    mut rng: R,
+    public_key: &EncapsulationKey<MlKem768Params>,
+) -> ([u8; 1088], [u8; 32]) {
+    let (ciphertext, share) = public_key.encapsulate(&mut rng).expect("infallible");
+    (ciphertext.into(), share.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::{RngCore, SeedableRng};
+    use rand_chacha::ChaChaRng;
+
+    use super::*;
+
+    #[test]
+    fn test_encrypt_decrypt() {
+        let mut rng = ChaChaRng::seed_from_u64(0);
+        let skey = SecretKey::generate(&mut rng);
+        let pub_params: MlKem768X25519PublicParams = (&skey).into();
+
+        for text_size in (8..=248).step_by(8) {
+            let mut plain = vec![0u8; text_size];
+            rng.fill_bytes(&mut plain);
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, encrypted_session_key) = encrypt(
+                &mut rng,
+                &pub_params.x25519_key,
+                &pub_params.ml_kem_key,
+                &plain[..],
+            )
+            .unwrap();
+
+            let data = EncryptionFields {
+                ecdh_ciphertext,
+                ml_kem_ciphertext: &ml_kem_ciphertext,
+                ecdh_pub_key: &pub_params.x25519_key,
+                ml_kem_pub_key: &pub_params.ml_kem_key,
+                encrypted_session_key: &encrypted_session_key,
+            };
+
+            let decrypted = skey.decrypt(data).unwrap();
+
+            assert_eq!(&plain[..], &decrypted[..]);
+        }
+    }
 }
