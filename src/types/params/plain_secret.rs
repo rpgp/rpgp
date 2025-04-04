@@ -157,11 +157,10 @@ impl PlainSecretParams {
             (PublicKeyAlgorithm::MlKem768X25519Draft, PublicParams::MlKem768X25519(_)) => {
                 // X25519
                 let x = i.read_array::<32>()?;
-                let x = crate::crypto::x25519::SecretKey::try_from_array(x)?;
+                let x = x25519_dalek::StaticSecret::from(x);
 
                 // ML KEM
                 let ml_kem = i.read_array::<64>()?;
-
                 let key = crate::crypto::ml_kem768_x25519::SecretKey::try_from_parts(x, ml_kem)?;
                 Self::MlKem768X25519(key)
             }
@@ -403,7 +402,40 @@ impl PlainSecretParams {
                     _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
                 };
             }
+            (
+                PlainSecretParams::MlKem768X25519(ref priv_key),
+                PkeskBytes::MlKem768X25519 {
+                    ephemeral,
+                    ml_kem_ciphertext,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                // Recipient public key (32 bytes)
+                let PublicParams::MlKem768X25519(params) = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for ML KEM 768 X25519",
+                        recipient.public_params()
+                    );
+                };
 
+                let data = ml_kem768_x25519::EncryptionFields {
+                    ecdh_ciphertext: ephemeral.to_owned(),
+                    ml_kem_ciphertext: ml_kem_ciphertext.clone(),
+                    ecdh_pub_key: params.x25519_key.clone(),
+                    ml_kem_pub_key: params.ml_kem_key.clone(),
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?;
+
+                return match (&typ, *sym_alg) {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    (EskType::V3_4, Some(sym_alg)) => Ok(PlainSessionKey::V3_4 { key, sym_alg }),
+                    (EskType::V6, None) => Ok(PlainSessionKey::V6 { key }),
+                    _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
+                };
+            }
             (
                 PlainSecretParams::X448(ref priv_key),
                 PkeskBytes::X448 {
@@ -574,7 +606,7 @@ impl PlainSecretParams {
                 writer.write_all(&q)?;
             }
             PlainSecretParams::MlKem768X25519(key) => {
-                let q = key.x25519.secret.to_bytes();
+                let q = key.x25519.to_bytes();
                 writer.write_all(&q)?;
                 writer.write_all(&key.ml_kem.as_bytes())?;
             }
