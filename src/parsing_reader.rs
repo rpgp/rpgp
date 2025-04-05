@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, Read, Result},
 };
 
-use bytes::{BufMut, BytesMut};
+use bytes::{Bytes, BytesMut};
 
 pub trait BufReadParsing: BufRead + Sized {
     fn read_u8(&mut self) -> Result<u8> {
@@ -91,17 +91,23 @@ pub trait BufReadParsing: BufRead + Sized {
     }
 
     fn rest(&mut self) -> Result<BytesMut> {
-        let out = BytesMut::new();
-        let mut writer = out.writer();
-        std::io::copy(self, &mut writer)?;
-        Ok(writer.into_inner())
+        let mut buffer = Vec::new();
+        self.read_to_end(&mut buffer)?;
+        Ok(Bytes::from(buffer).into())
     }
 
     /// Drain the data in this reader, to make sure all is consumed.
     /// Returns how many bytes have been drained
     fn drain(&mut self) -> Result<u64> {
-        let mut out = std::io::sink();
-        let copied = std::io::copy(self, &mut out)?;
+        let mut buffer = [0u8; 256];
+        let mut copied = 0;
+        loop {
+            let read = self.read(&mut buffer)? as u64;
+            copied += read;
+            if read == 0 {
+                break;
+            }
+        }
         Ok(copied)
     }
 
