@@ -115,7 +115,7 @@ fn v4_parser<B: BufRead>(
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u16()?.into();
     let hsub_raw = i.read_take(hsub_len);
-    let hsub = subpackets(packet_header.version(), hsub_raw)?;
+    let hsub = subpackets(packet_header.version(), hsub_len, hsub_raw)?;
     debug!(
         "found {} hashed subpackets in {} bytes",
         hsub.len(),
@@ -126,7 +126,7 @@ fn v4_parser<B: BufRead>(
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u16()?.into();
     let usub_raw = i.read_take(usub_len);
-    let usub = subpackets(packet_header.version(), usub_raw)?;
+    let usub = subpackets(packet_header.version(), usub_len, usub_raw)?;
     debug!(
         "found {} unhashed subpackets in {} bytes",
         usub.len(),
@@ -165,7 +165,7 @@ fn v6_parser<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Signat
     // Hashed subpacket data set (zero or more subpackets).
     let hsub_len: usize = i.read_be_u32()?.try_into()?;
     let hsub_raw = i.read_take(hsub_len);
-    let hsub = subpackets(packet_header.version(), hsub_raw)?;
+    let hsub = subpackets(packet_header.version(), hsub_len, hsub_raw)?;
     debug!(
         "found {} hashed subpackets in {} bytes",
         hsub.len(),
@@ -176,7 +176,7 @@ fn v6_parser<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Signat
     // Unhashed subpacket data set (zero or more subpackets).
     let usub_len: usize = i.read_be_u32()?.try_into()?;
     let usub_raw = i.read_take(usub_len);
-    let usub = subpackets(packet_header.version(), usub_raw)?;
+    let usub = subpackets(packet_header.version(), usub_len, usub_raw)?;
     debug!(
         "found {} unhashed subpackets in {} bytes",
         usub.len(),
@@ -216,8 +216,12 @@ fn v6_parser<B: BufRead>(packet_header: PacketHeader, mut i: B) -> Result<Signat
     ))
 }
 
-fn subpackets<B: BufRead>(packet_version: PacketHeaderVersion, mut i: B) -> Result<Vec<Subpacket>> {
-    let mut packets = Vec::new();
+fn subpackets<B: BufRead>(
+    packet_version: PacketHeaderVersion,
+    len: usize,
+    mut i: B,
+) -> Result<Vec<Subpacket>> {
+    let mut packets = Vec::with_capacity(len.min(32));
 
     while i.has_remaining()? {
         // the subpacket length (1, 2, or 5 octets)

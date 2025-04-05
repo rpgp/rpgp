@@ -1,9 +1,8 @@
 use std::{
-    io::{BufRead, Read},
+    io::{BufRead, BufReader, Read},
     path::Path,
 };
 
-use buffer_redux::BufReader;
 use log::{debug, warn};
 
 use crate::{

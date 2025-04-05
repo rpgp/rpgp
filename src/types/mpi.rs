@@ -1,7 +1,7 @@
 use std::io::{self, BufRead};
 
 use byteorder::{BigEndian, WriteBytesExt};
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 use num_bigint::BigUint;
 
 use crate::{
@@ -50,9 +50,14 @@ impl Mpi {
 
         let len_bytes = (len_bits + 7) >> 3;
 
-        let n = i.take_bytes(usize::from(len_bytes))?.freeze();
-        let n_stripped = strip_leading_zeros(&n);
-        let n_stripped = n.slice_ref(n_stripped);
+        let mut n = i.take_bytes(usize::from(len_bytes))?.freeze();
+        let n_stripped = match leading_zeros_offset(&n) {
+            Some(offset) => {
+                n.advance(offset);
+                n
+            }
+            None => Bytes::new(),
+        };
 
         Ok(Mpi(n_stripped))
     }
@@ -78,10 +83,15 @@ fn bit_size(val: &[u8]) -> usize {
 
 #[inline]
 fn strip_leading_zeros(bytes: &[u8]) -> &[u8] {
-    bytes
-        .iter()
-        .position(|b| b != &0)
-        .map_or(&[], |offset| &bytes[offset..])
+    match leading_zeros_offset(bytes) {
+        Some(offset) => &bytes[offset..],
+        None => &[],
+    }
+}
+
+#[inline]
+fn leading_zeros_offset(bytes: &[u8]) -> Option<usize> {
+    bytes.iter().position(|b| b != &0)
 }
 
 impl AsRef<[u8]> for Mpi {
