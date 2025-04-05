@@ -1,6 +1,4 @@
-use std::io::{BufRead, Read};
-
-use buffer_redux::BufReader;
+use std::io::{BufRead, BufReader, Read};
 
 use crate::{
     armor::{self, BlockType, Dearmor},

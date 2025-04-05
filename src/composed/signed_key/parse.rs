@@ -1,6 +1,5 @@
+use std::io::BufReader;
 use std::{io, iter};
-
-use buffer_redux::BufReader;
 
 use crate::{
     armor::{self, BlockType},
