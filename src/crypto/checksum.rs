@@ -5,7 +5,7 @@ use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
 #[snafu(display(
-    "checkum missmatch 0x{} != 0x{}",
+    "checksum mismatch 0x{} != 0x{}",
     hex::encode(expected),
     hex::encode(actual)
 ))]
@@ -86,7 +86,7 @@ impl Hasher for SimpleChecksum {
 }
 
 #[derive(Debug, Snafu)]
-#[snafu(display("SHA1 hash collision occured"), visibility(pub(super)))]
+#[snafu(display("SHA1 hash collision occurred"), visibility(pub(super)))]
 pub struct Sha1HashCollision;
 
 /// SHA1 checksum, using sha1_checked, first 20 octets.

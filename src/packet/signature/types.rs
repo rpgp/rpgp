@@ -180,7 +180,7 @@ impl Signature {
         }
     }
 
-    /// Create a signature of unkown version
+    /// Create a signature of unknown version
     pub fn unknown(packet_header: PacketHeader, version: SignatureVersion, data: Bytes) -> Self {
         Self {
             packet_header,
