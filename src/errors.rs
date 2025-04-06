@@ -58,7 +58,10 @@ pub enum Error {
     #[snafu(display("cfb: invalid key iv length"))]
     CfbInvalidKeyIvLength,
     #[snafu(display("Not yet implemented: {message}"))]
-    Unimplemented { message: String },
+    Unimplemented {
+        message: String,
+        backtrace: Option<Backtrace>,
+    },
     /// Signals packet versions and parameters we don't support, but can safely ignore
     #[snafu(display("Unsupported: {message}"))]
     Unsupported {
@@ -169,26 +172,24 @@ impl From<derive_builder::UninitializedFieldError> for Error {
 #[macro_export]
 macro_rules! unimplemented_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unimplemented { message: $e.to_string() })
+        return Err($crate::errors::UnimplementedSnafu { message: $e.to_string() }.build())
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unimplemented { message: format!($fmt, $($arg)+)})
+        return Err($crate::errors::UnimplementedSnafu { message: format!($fmt, $($arg)+)}.build())
     };
 }
 
 #[macro_export]
 macro_rules! unsupported_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unsupported {
+        return Err($crate::errors::UnsupportedSnafu {
             message: $e.to_string(),
-            backtrace: ::snafu::GenerateImplicitData::generate(),
-        })
+        }.build())
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unsupported {
+        return Err($crate::errors::UnsupportedSnafu {
             message: format!($fmt, $($arg)+),
-            backtrace: ::snafu::GenerateImplicitData::generate(),
-        })
+        }.build())
     };
 }
 

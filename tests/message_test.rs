@@ -12,7 +12,11 @@ extern crate log;
 use std::fs::File;
 
 use pgp::{
-    composed::{CleartextSignedMessage, Deserializable, Message, SignedPublicKey, SignedSecretKey},
+    composed::{
+        CleartextSignedMessage, Deserializable, Message, PlainSessionKey, SignedPublicKey,
+        SignedSecretKey,
+    },
+    crypto::sym::SymmetricKeyAlgorithm,
     types::{KeyDetails, KeyId, Password},
 };
 
@@ -837,4 +841,42 @@ fn test_literal_eating_mdc() {
         "found error: {}",
         err
     );
+}
+
+#[test]
+fn test_unknown_hash() {
+    pretty_env_logger::try_init().ok();
+    let (msg, _) = Message::from_armor_file("tests/sigs/unknown_hash.sig.asc").unwrap();
+    dbg!(&msg);
+
+    let mut msg = msg
+        .decrypt_with_session_key(PlainSessionKey::V3_4 {
+            sym_alg: SymmetricKeyAlgorithm::AES256,
+            key: hex::decode("0A62FC3D10FA134E8C3C915C68AA4B6C6E081D68A9ED1578735AC4743D0381F8")
+                .unwrap(),
+        })
+        .expect("failed to decrypt");
+
+    dbg!(&msg);
+    let content = msg.as_data_string().expect("failed to read");
+    assert_eq!(content, "Encrypted, signed message.");
+}
+
+#[test]
+fn test_unknown_one_pass() {
+    pretty_env_logger::try_init().ok();
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (msg, _) = Message::from_armor_file("tests/sigs/unknown_one_pass.sig.asc").unwrap();
+    dbg!(&msg);
+
+    let mut msg = msg
+        .decrypt(&Password::empty(), &ssk)
+        .expect("failed to decrypt");
+
+    dbg!(&msg);
+    let content = msg.as_data_string().expect("failed to read");
+    assert_eq!(content, "Encrypted, signed message.");
 }
