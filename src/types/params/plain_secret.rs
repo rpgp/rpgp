@@ -5,12 +5,12 @@ use std::{
 
 use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use hkdf::Hkdf;
 use log::debug;
 use num_bigint::ModInverse;
 use sha2::Sha256;
-use zeroize::ZeroizeOnDrop;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     composed::PlainSessionKey,
@@ -25,7 +25,7 @@ use crate::{
     util::TeeWriter,
 };
 
-#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
 #[allow(clippy::large_enum_variant)] // FIXME
 pub enum PlainSecretParams {
     RSA(rsa::SecretKey),
@@ -38,6 +38,15 @@ pub enum PlainSecretParams {
     Elgamal(elgamal::SecretKey),
     #[cfg(feature = "unstable-curve448")]
     X448(crate::crypto::x448::SecretKey),
+    Unknown {
+        #[zeroize(skip)]
+        alg: PublicKeyAlgorithm,
+        #[debug("{}", hex::encode(data))]
+        data: Zeroizing<Vec<u8>>,
+        #[zeroize(skip)]
+        #[debug("{}", hex::encode(pub_params))]
+        pub_params: Bytes,
+    },
 }
 
 pub(crate) fn pad_key<const SIZE: usize>(val: &[u8]) -> Result<[u8; SIZE]> {
@@ -138,8 +147,21 @@ impl PlainSecretParams {
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
                 Self::X448(key)
             }
-            _ => {
-                bail!("inconsistent key state");
+            (
+                alg,
+                PublicParams::Unknown {
+                    data: pub_params, ..
+                },
+            ) => {
+                let data = Zeroizing::new(i.rest()?.to_vec());
+                Self::Unknown {
+                    alg,
+                    data,
+                    pub_params: pub_params.clone(),
+                }
+            }
+            (_, _) => {
+                bail!("invalid combination {:?} - {:?}", alg, public_params);
             }
         };
 
@@ -541,6 +563,9 @@ impl PlainSecretParams {
             PlainSecretParams::X448(key) => {
                 writer.write_all(&key.secret)?;
             }
+            PlainSecretParams::Unknown { data, .. } => {
+                writer.write_all(data)?;
+            }
         }
 
         Ok(())
@@ -590,6 +615,7 @@ impl PlainSecretParams {
             PlainSecretParams::X25519(_key) => 32,
             #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(_key) => 56,
+            PlainSecretParams::Unknown { data, .. } => data.len(),
         }
     }
 }
