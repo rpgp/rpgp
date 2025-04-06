@@ -196,7 +196,7 @@ pub(crate) enum MessageParts {
     },
     SignedOnePass {
         one_pass_signature: OnePassSignature,
-        hash: Box<[u8]>,
+        hash: Option<Box<[u8]>>,
         signature: Signature,
         parts: Box<MessageParts>,
         is_nested: bool,
