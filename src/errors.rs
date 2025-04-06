@@ -98,7 +98,11 @@ pub enum Error {
         backtrace: Option<Backtrace>,
     },
     #[snafu(display("AEAD {:?}", source), context(false))]
-    Aeade { source: crate::crypto::aead::Error },
+    Aead { source: crate::crypto::aead::Error },
+    #[snafu(display("AES key wrap {:?}", source), context(false))]
+    AesKw {
+        source: crate::crypto::aes_kw::Error,
+    },
     #[snafu(display("SHA1 hash collision detected"))]
     Sha1HashCollision,
     #[snafu(transparent)]
