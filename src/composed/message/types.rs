@@ -12,7 +12,7 @@ use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
     errors::{Error, Result},
     packet::{
-        LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
+        InnerSignature, LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
         PublicKeyEncryptedSessionKey, Signature, SymEncryptedProtectedDataConfig,
         SymKeyEncryptedSessionKey,
     },
@@ -190,7 +190,7 @@ pub(crate) enum MessageParts {
     },
     Signed {
         signature: Signature,
-        hash: Box<[u8]>,
+        hash: Option<Box<[u8]>>,
         parts: Box<MessageParts>,
         is_nested: bool,
     },
@@ -709,32 +709,13 @@ impl<'a> Message<'a> {
                 let Some(signature) = reader.signature() else {
                     bail!("cannot verify message before reading the final signature packet");
                 };
-
-                // Check that the high 16 bits of the hash from the signature packet match with the hash we
-                // just calculated.
-                //
-                // "When verifying a version 6 signature, an implementation MUST reject the signature if
-                // these octets do not match the first two octets of the computed hash."
-                //
-                // (See https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures)
-                //
-                // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
-                // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
-                ensure_eq!(
-                    &signature.signed_hash_value,
-                    &calculated_hash[0..2],
-                    "signature: invalid signed hash value"
-                );
-                key.verify_signature(
-                    signature.config.hash_alg,
-                    calculated_hash,
-                    &signature.signature,
-                )?;
-                Ok(signature)
-            }
-            Message::Signed { reader, .. } => {
-                let Some(calculated_hash) = reader.hash() else {
-                    bail!("cannot verify message before reading it to the end");
+                let InnerSignature::Known {
+                    ref config,
+                    ref signed_hash_value,
+                    signature: ref signature_bytes,
+                } = signature.inner
+                else {
+                    bail!("cannot verify unkown hash");
                 };
 
                 // Check that the high 16 bits of the hash from the signature packet match with the hash we
@@ -748,15 +729,43 @@ impl<'a> Message<'a> {
                 // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
                 // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
                 ensure_eq!(
-                    &reader.signature().signed_hash_value,
+                    signed_hash_value,
                     &calculated_hash[0..2],
                     "signature: invalid signed hash value"
                 );
-                key.verify_signature(
-                    reader.signature().config.hash_alg,
-                    calculated_hash,
-                    &reader.signature().signature,
-                )?;
+                key.verify_signature(config.hash_alg, calculated_hash, signature_bytes)?;
+                Ok(signature)
+            }
+            Message::Signed { reader, .. } => {
+                let Some(calculated_hash) = reader.hash() else {
+                    bail!("cannot verify message before reading it to the end");
+                };
+
+                let InnerSignature::Known {
+                    ref config,
+                    ref signed_hash_value,
+                    signature: ref signature_bytes,
+                } = reader.signature().inner
+                else {
+                    bail!("cannot verify unkown hash");
+                };
+
+                // Check that the high 16 bits of the hash from the signature packet match with the hash we
+                // just calculated.
+                //
+                // "When verifying a version 6 signature, an implementation MUST reject the signature if
+                // these octets do not match the first two octets of the computed hash."
+                //
+                // (See https://www.rfc-editor.org/rfc/rfc9580.html#name-notes-on-signatures)
+                //
+                // (Note: we currently also reject v4 signatures if the calculated hash doesn't match the
+                // high 16 bits in the signature packet, even though RFC 9580 doesn't strictly require this)
+                ensure_eq!(
+                    signed_hash_value,
+                    &calculated_hash[0..2],
+                    "signature: invalid signed hash value"
+                );
+                key.verify_signature(config.hash_alg, calculated_hash, signature_bytes)?;
 
                 Ok(reader.signature())
             }

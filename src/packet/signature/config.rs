@@ -1,7 +1,6 @@
 use std::io::Read;
 
 use byteorder::{BigEndian, ByteOrder};
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use digest::DynDigest;
 use log::debug;
@@ -49,12 +48,6 @@ pub enum SignatureVersionSpecific {
         #[debug("{}", hex::encode(salt))]
         salt: Vec<u8>,
     },
-    Unknown {
-        #[debug("{:X}", version)]
-        version: u8,
-        #[debug("{}", hex::encode(data))]
-        data: Bytes,
-    },
 }
 
 impl From<&SignatureVersionSpecific> for SignatureVersion {
@@ -64,7 +57,6 @@ impl From<&SignatureVersionSpecific> for SignatureVersion {
             SignatureVersionSpecific::V3 { .. } => SignatureVersion::V3,
             SignatureVersionSpecific::V4 => SignatureVersion::V4,
             SignatureVersionSpecific::V6 { .. } => SignatureVersion::V6,
-            SignatureVersionSpecific::Unknown { version, .. } => SignatureVersion::Other(*version),
         }
     }
 }

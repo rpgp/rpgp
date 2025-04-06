@@ -74,7 +74,7 @@ where
                 let sig: Signature = err_opt!(packet.try_into());
                 let typ = sig.typ();
 
-                if typ == SignatureType::KeyRevocation {
+                if typ == Some(SignatureType::KeyRevocation) {
                     revocation_signatures.push(sig);
                 } else {
                     if primary_key.version() != KeyVersion::V4 {

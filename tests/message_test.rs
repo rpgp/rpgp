@@ -879,4 +879,5 @@ fn test_unknown_one_pass() {
     dbg!(&msg);
     let content = msg.as_data_string().expect("failed to read");
     assert_eq!(content, "Encrypted, signed message.");
+    dbg!(&msg);
 }
