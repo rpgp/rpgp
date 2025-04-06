@@ -30,7 +30,7 @@ pub use self::{
 use super::PlainSecretParams;
 
 /// Represent the public parameters for the different algorithms.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, derive_more::Debug)]
 pub enum PublicParams {
     RSA(RsaPublicParams),
     DSA(DsaPublicParams),
@@ -43,6 +43,7 @@ pub enum PublicParams {
     #[cfg(feature = "unstable-curve448")]
     X448(X448PublicParams),
     Unknown {
+        #[debug("{}", hex::encode(data))]
         data: Bytes,
     },
 }
@@ -62,6 +63,9 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
             #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
+            PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {
+                data: pub_params.clone(),
+            }),
         }
     }
 }

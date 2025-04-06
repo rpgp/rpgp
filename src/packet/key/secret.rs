@@ -514,6 +514,9 @@ fn create_signature(
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
         }
+        PlainSecretParams::Unknown { alg, .. } => {
+            unsupported_err!("{:?} signing", alg);
+        }
     }?;
 
     match pub_params {
