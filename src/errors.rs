@@ -103,8 +103,14 @@ pub enum Error {
     AesKw {
         source: crate::crypto::aes_kw::Error,
     },
-    #[snafu(display("SHA1 hash collision detected"))]
-    Sha1HashCollision,
+    #[snafu(transparent)]
+    ChecksumMissmatch {
+        source: crate::crypto::checksum::ChecksumMissmatch,
+    },
+    #[snafu(transparent)]
+    Sha1HashCollision {
+        source: crate::crypto::checksum::Sha1HashCollision,
+    },
     #[snafu(transparent)]
     AesKek { source: aes_kw::Error },
     #[snafu(transparent)]
