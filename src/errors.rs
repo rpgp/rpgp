@@ -97,12 +97,8 @@ pub enum Error {
         source: TryFromIntError,
         backtrace: Option<Backtrace>,
     },
-    #[snafu(display("GCM"))]
-    Gcm,
-    #[snafu(display("EAX"))]
-    Eax,
-    #[snafu(display("OCB"))]
-    Ocb,
+    #[snafu(display("AEAD {:?}", source), context(false))]
+    Aeade { source: crate::crypto::aead::Error },
     #[snafu(display("SHA1 hash collision detected"))]
     Sha1HashCollision,
     #[snafu(transparent)]
