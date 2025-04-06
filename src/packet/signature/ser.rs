@@ -15,28 +15,81 @@ use crate::{
 
 impl Serialize for Signature {
     fn to_writer<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_u8(self.config.version().into())?;
+        writer.write_u8(self.version().into())?;
 
-        match self.config.version() {
-            SignatureVersion::V2 | SignatureVersion::V3 => self.to_writer_v3(writer),
-            SignatureVersion::V4 | SignatureVersion::V6 => self.to_writer_v4_v6(writer),
-            SignatureVersion::V5 => {
-                unsupported_err!("crate V5 signature")
+        match &self.inner {
+            InnerSignature::Known {
+                config,
+                signed_hash_value,
+                signature,
+                ..
+            } => match config.version() {
+                SignatureVersion::V2 | SignatureVersion::V3 => {
+                    config.to_writer_v3(writer)?;
+                    // signed hash value
+                    writer.write_all(signed_hash_value)?;
+                    // the actual cryptographic signature
+                    signature.to_writer(writer)?;
+                }
+                SignatureVersion::V4 | SignatureVersion::V6 => {
+                    config.to_writer_v4_v6(writer)?;
+
+                    // signed hash value
+                    writer.write_all(signed_hash_value)?;
+
+                    // salt, if v6
+                    if let SignatureVersionSpecific::V6 { salt } = &config.version_specific {
+                        debug!("writing salt {} bytes", salt.len());
+                        writer.write_u8(salt.len().try_into()?)?;
+                        writer.write_all(salt)?;
+                    }
+
+                    // the actual cryptographic signature
+                    signature.to_writer(writer)?;
+                }
+                SignatureVersion::V5 => {
+                    unsupported_err!("crate V5 signature")
+                }
+                _ => unreachable!(),
+            },
+            InnerSignature::Unknown { data, .. } => {
+                writer.write_all(data)?;
             }
-            SignatureVersion::Other(version) => unsupported_err!("signature version {}", version),
         }
+        Ok(())
     }
 
     fn write_len(&self) -> usize {
         let mut sum = 1;
-        sum += match self.config.version() {
-            SignatureVersion::V2 | SignatureVersion::V3 => self.write_len_v3(),
-            SignatureVersion::V4 | SignatureVersion::V6 => self.write_len_v4_v6(),
-            SignatureVersion::V5 => {
-                panic!("v5 signature unsupported writer")
+        match &self.inner {
+            InnerSignature::Known {
+                config,
+                signed_hash_value,
+                signature,
+            } => match config.version() {
+                SignatureVersion::V2 | SignatureVersion::V3 => {
+                    sum += config.write_len_v3();
+                    sum += signed_hash_value.len();
+                    sum += signature.write_len();
+                }
+                SignatureVersion::V4 | SignatureVersion::V6 => {
+                    sum += config.write_len_v4_v6();
+                    sum += signed_hash_value.len();
+
+                    if let SignatureVersionSpecific::V6 { salt } = &config.version_specific {
+                        sum += 1;
+                        sum += salt.len();
+                    }
+
+                    sum += signature.write_len();
+                }
+                SignatureVersion::V5 => panic!("v5 signature unsupported writer"),
+                _ => unreachable!(),
+            },
+            InnerSignature::Unknown { data, .. } => {
+                sum += data.len();
             }
-            SignatureVersion::Other(version) => panic!("Unsupported signature version {}", version),
-        };
+        }
         sum
     }
 }
@@ -377,62 +430,6 @@ impl SignatureConfig {
             }
             v => panic!("signature version {:?}", v),
         }
-
-        sum
-    }
-}
-
-impl Signature {
-    /// Serializes a v2 or v3 signature.
-    fn to_writer_v3<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.config.to_writer_v3(writer)?;
-
-        // signed hash value
-        writer.write_all(&self.signed_hash_value)?;
-
-        // the actual cryptographic signature
-        self.signature.to_writer(writer)?;
-
-        Ok(())
-    }
-
-    fn write_len_v3(&self) -> usize {
-        let mut sum = self.config.write_len_v3();
-        sum += self.signed_hash_value.len();
-        sum += self.signature.write_len();
-        sum
-    }
-
-    /// Serializes a v4 or v6 signature.
-    fn to_writer_v4_v6<W: io::Write>(&self, writer: &mut W) -> Result<()> {
-        self.config.to_writer_v4_v6(writer)?;
-
-        // signed hash value
-        writer.write_all(&self.signed_hash_value)?;
-
-        // salt, if v6
-        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
-            debug!("writing salt {} bytes", salt.len());
-            writer.write_u8(salt.len().try_into()?)?;
-            writer.write_all(salt)?;
-        }
-
-        // the actual cryptographic signature
-        self.signature.to_writer(writer)?;
-
-        Ok(())
-    }
-
-    fn write_len_v4_v6(&self) -> usize {
-        let mut sum = self.config.write_len_v4_v6();
-        sum += self.signed_hash_value.len();
-
-        if let SignatureVersionSpecific::V6 { salt } = &self.config.version_specific {
-            sum += 1;
-            sum += salt.len();
-        }
-
-        sum += self.signature.write_len();
 
         sum
     }

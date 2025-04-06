@@ -13,6 +13,6 @@ fn sig_odd() {
     let (sig, _headers) =
         StandaloneSignature::from_armor_single(original_sig.as_bytes()).expect("parsing");
 
-    assert_eq!(sig.signature.config.hashed_subpackets.len(), 2);
-    assert_eq!(sig.signature.config.unhashed_subpackets.len(), 3);
+    assert_eq!(sig.signature.config().unwrap().hashed_subpackets.len(), 2);
+    assert_eq!(sig.signature.config().unwrap().unhashed_subpackets.len(), 3);
 }

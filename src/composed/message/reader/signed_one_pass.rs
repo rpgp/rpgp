@@ -24,10 +24,12 @@ pub enum SignatureOnePassReader<'a> {
         norm_hasher: Option<NormalizingHasher>,
         /// Data source
         source: Box<Message<'a>>,
+        #[debug("{}", hex::encode(buffer))]
         buffer: BytesMut,
     },
     Done {
         /// Finalized hash
+        #[debug("{:?}", hash.as_ref().map(hex::encode))]
         hash: Option<Box<[u8]>>,
         /// Data source
         source: Box<Message<'a>>,
@@ -199,17 +201,17 @@ impl<'a> SignatureOnePassReader<'a> {
                         // calculate final hash
                         let hash = if let Some(mut hasher) = hasher {
                             debug!("calculating final hash");
-                            let len =
-                                signature
-                                    .config
-                                    .hash_signature_data(&mut hasher)
-                                    .map_err(|e| {
-                                        io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                                    })?;
-                            hasher.update(&signature.config.trailer(len).map_err(|e| {
-                                io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                            })?);
-                            Some(hasher.finalize())
+                            if let Some(config) = signature.config() {
+                                let len = config.hash_signature_data(&mut hasher).map_err(|e| {
+                                    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+                                })?;
+                                hasher.update(&config.trailer(len).map_err(|e| {
+                                    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+                                })?);
+                                Some(hasher.finalize())
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         };

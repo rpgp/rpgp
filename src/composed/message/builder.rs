@@ -2094,12 +2094,12 @@ mod tests {
                 let VerificationResult::Valid(ref sig1) = res[0] else {
                     panic!("invalid sig1");
                 };
-                assert_eq!(sig1.hash_alg(), HashAlgorithm::Sha256);
+                assert_eq!(sig1.hash_alg().unwrap(), HashAlgorithm::Sha256);
 
                 let VerificationResult::Valid(ref sig2) = res[1] else {
                     panic!("invalid sig2");
                 };
-                assert_eq!(sig2.hash_alg(), HashAlgorithm::Sha512);
+                assert_eq!(sig2.hash_alg().unwrap(), HashAlgorithm::Sha512);
 
                 assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
             }
