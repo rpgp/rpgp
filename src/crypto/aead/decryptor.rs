@@ -6,10 +6,9 @@ use zeroize::Zeroizing;
 
 use crate::{
     crypto::{
-        aead::{aead_setup, AeadAlgorithm, ChunkSize},
+        aead::{aead_setup, AeadAlgorithm, ChunkSize, Error, UnsupporedAlgorithmSnafu},
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
     util::fill_buffer,
 };
 
@@ -47,20 +46,23 @@ impl<R: BufRead> StreamDecryptor<R> {
         salt: &[u8; 32],
         key: &[u8],
         source: R,
-    ) -> Result<Self> {
+    ) -> Result<Self, Error> {
         // Initial key material is the session key.
         let ikm = key;
-        let chunk_size_expanded: usize = chunk_size.as_byte_size().try_into()?;
+        let chunk_size_expanded: usize = chunk_size
+            .as_byte_size()
+            .try_into()
+            .expect("chunk size is smaller");
 
-        let (info, message_key, nonce) = aead_setup(sym_alg, aead, chunk_size, &salt[..], ikm)?;
+        let (info, message_key, nonce) = aead_setup(sym_alg, aead, chunk_size, &salt[..], ikm);
 
         // There are n chunks, n auth tags + 1 final auth tag
         let Some(aead_tag_size) = aead.tag_size() else {
-            unsupported_err!("AEAD mode: {:?}", aead);
+            return Err(UnsupporedAlgorithmSnafu { alg: aead }.build());
         };
-        ensure_eq!(
-            aead_tag_size,
-            AEAD_TAG_SIZE,
+
+        debug_assert_eq!(
+            aead_tag_size, AEAD_TAG_SIZE,
             "unexpected AEAD configuration"
         );
 
