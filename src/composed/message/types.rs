@@ -715,7 +715,7 @@ impl<'a> Message<'a> {
                     signature: ref signature_bytes,
                 } = signature.inner
                 else {
-                    bail!("cannot verify unkown hash");
+                    bail!("cannot verify unknown hash");
                 };
 
                 // Check that the high 16 bits of the hash from the signature packet match with the hash we
@@ -747,7 +747,7 @@ impl<'a> Message<'a> {
                     signature: ref signature_bytes,
                 } = reader.signature().inner
                 else {
-                    bail!("cannot verify unkown hash");
+                    bail!("cannot verify unknown hash");
                 };
 
                 // Check that the high 16 bits of the hash from the signature packet match with the hash we
