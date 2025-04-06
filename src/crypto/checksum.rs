@@ -1,34 +1,41 @@
 use std::{hash::Hasher, io};
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use snafu::Snafu;
 
-use crate::errors::Result;
+#[derive(Debug, Snafu)]
+#[snafu(display(
+    "checkum missmatch 0x{} != 0x{}",
+    hex::encode(expected),
+    hex::encode(actual)
+))]
+pub struct ChecksumMissmatch {
+    expected: [u8; 2],
+    actual: [u8; 2],
+}
 
 /// Two octet checksum: sum of all octets mod 65535.
 #[inline]
-pub fn simple(actual: &[u8], data: &[u8]) -> Result<()> {
+pub fn simple(actual: [u8; 2], data: &[u8]) -> Result<(), ChecksumMissmatch> {
     // Then a two-octet checksum is appended, which is equal to the
     // sum of the preceding session key octets, not including the algorithm
     // identifier, modulo 65536.
     let expected_checksum = calculate_simple(data);
+    let expected = expected_checksum.to_be_bytes();
 
-    ensure_eq!(
-        &actual[..2],
-        &expected_checksum.to_be_bytes()[..],
-        "invalid simple checksum"
-    );
+    if actual != expected {
+        return Err(ChecksumMissmatchSnafu { actual, expected }.build());
+    }
 
     Ok(())
 }
 
-#[inline]
 pub fn simple_to_writer<W: io::Write>(data: &[u8], writer: &mut W) -> io::Result<()> {
     let mut hasher = SimpleChecksum::default();
     hasher.write(data);
     hasher.to_writer(writer)
 }
 
-#[inline]
 pub fn calculate_simple(data: &[u8]) -> u16 {
     let mut hasher = SimpleChecksum::default();
     hasher.write(data);
@@ -78,11 +85,14 @@ impl Hasher for SimpleChecksum {
     }
 }
 
+#[derive(Debug, Snafu)]
+#[snafu(display("SHA1 hash collision occured"), visibility(pub(super)))]
+pub struct Sha1HashCollision;
+
 /// SHA1 checksum, using sha1_checked, first 20 octets.
 ///
 /// Fails with `Error::HashCollision` if a SHA1 collision was detected.
-#[inline]
-pub fn calculate_sha1<I, T>(data: I) -> Result<[u8; 20]>
+pub fn calculate_sha1<I, T>(data: I) -> Result<[u8; 20], Sha1HashCollision>
 where
     T: AsRef<[u8]>,
     I: IntoIterator<Item = T>,
@@ -97,7 +107,7 @@ where
     match digest.try_finalize() {
         CollisionResult::Ok(sha1) => Ok(sha1.into()),
         CollisionResult::Collision(_) | CollisionResult::Mitigated(_) => {
-            Err(crate::errors::Error::Sha1HashCollision)
+            Err(Sha1HashCollisionSnafu {}.build())
         }
     }
 }

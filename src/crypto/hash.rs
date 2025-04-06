@@ -6,7 +6,10 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use ripemd::Ripemd160;
 use sha1_checked::{CollisionResult, Sha1};
 
-use crate::errors::{Error, Result};
+use crate::{
+    crypto::checksum::Sha1HashCollisionSnafu,
+    errors::{Error, Result},
+};
 
 /// Available hash algorithms.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-hash-algorithms>
@@ -133,7 +136,7 @@ impl HashAlgorithm {
             HashAlgorithm::Sha1 => match Sha1::try_digest(data) {
                 CollisionResult::Ok(output) => output.to_vec(),
                 CollisionResult::Collision(_) | CollisionResult::Mitigated(_) => {
-                    return Err(Error::Sha1HashCollision)
+                    return Err(Sha1HashCollisionSnafu {}.build().into())
                 }
             },
             HashAlgorithm::Ripemd160 => Ripemd160::digest(data).to_vec(),

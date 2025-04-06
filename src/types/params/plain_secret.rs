@@ -179,7 +179,8 @@ impl PlainSecretParams {
     pub fn checksum_sha1(&self) -> Result<[u8; 20]> {
         let mut buf = Vec::with_capacity(self.write_len_raw());
         self.to_writer_raw(&mut buf).expect("known write target");
-        checksum::calculate_sha1([&buf])
+        let checksum = checksum::calculate_sha1([&buf])?;
+        Ok(checksum)
     }
 
     pub fn encrypt(
@@ -424,7 +425,9 @@ impl PlainSecretParams {
                 );
 
                 let key = decrypted_key[1..=key_size].to_vec();
-                let checksum = &decrypted_key[key_size + 1..key_size + 3];
+                let checksum = decrypted_key[key_size + 1..key_size + 3]
+                    .try_into()
+                    .expect("fixed size");
 
                 checksum::simple(checksum, &key)?;
 
@@ -442,7 +445,7 @@ impl PlainSecretParams {
                 );
 
                 let key = decrypted_key[0..len - 2].to_vec();
-                let checksum = &decrypted_key[len - 2..];
+                let checksum = decrypted_key[len - 2..].try_into().expect("fixed size");
 
                 checksum::simple(checksum, &key)?;
 

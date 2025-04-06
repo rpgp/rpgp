@@ -231,7 +231,7 @@ impl FakeHsm {
         );
 
         // ... check the checksum, while we have it at hand
-        checksum::simple(checksum, sessionkey)?;
+        checksum::simple(checksum.try_into().unwrap(), sessionkey)?;
 
         let session_key_algorithm = decrypted_key[0].into();
         Ok((sessionkey.to_vec(), session_key_algorithm))
