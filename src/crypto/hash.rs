@@ -7,9 +7,8 @@ use ripemd::Ripemd160;
 use sha1_checked::{CollisionResult, Sha1};
 use snafu::Snafu;
 
-use crate::crypto::checksum::Sha1HashCollisionSnafu;
-
 use super::checksum::Sha1HashCollision;
+use crate::crypto::checksum::Sha1HashCollisionSnafu;
 
 /// Available hash algorithms.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-hash-algorithms>
