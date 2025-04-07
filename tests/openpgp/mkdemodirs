@@ -18,24 +18,24 @@ if [ "$1" = "--clean" ]; then
     exit 0
 fi
 
-$GPG --dearmor -o secdemo.gpg --yes ../checks/secdemo.asc
-$GPG --dearmor -o pubdemo.gpg --yes ../checks/pubdemo.asc
+$GPG --dearmor -o secdemo.pgp --yes ../checks/secdemo.asc
+$GPG --dearmor -o pubdemo.pgp --yes ../checks/pubdemo.asc
 [ -f ./tdb.tmp ] && rm ./tdb.tmp
 GPGDEMO="$GPG --homedir . --trustdb-name ./tdb.tmp --no-default-keyring
-	 --keyring pubdemo.gpg --secret-keyring secdemo.gpg"
+	 --keyring pubdemo.pgp --secret-keyring secdemo.pgp"
 echo -n "Creating:"
 for name in $NAMES; do
     echo -n " $name"
     [ -d $name ] && rm -r $name
     mkdir $name
-    $GPGDEMO --export-secret-key -o - $name > $name/Secret.gpg
-    $GPG --homedir $name --import $name/Secret.gpg
-    $GPGDEMO --export -o - $name > $name/Public.gpg
-    $GPG --homedir $name --import $name/Public.gpg
+    $GPGDEMO --export-secret-key -o - $name > $name/Secret.pgp
+    $GPG --homedir $name --import $name/Secret.pgp
+    $GPGDEMO --export -o - $name > $name/Public.pgp
+    $GPG --homedir $name --import $name/Public.pgp
     [ -f $name/pubring.gpg~ ] && rm $name/pubring.gpg~
 done
 echo "."
 [ -f ./tdb.tmp ] && rm ./tdb.tmp
-rm pubdemo.gpg secdemo.gpg
+rm pubdemo.pgp secdemo.pgp
 
 
