@@ -133,6 +133,18 @@ pub enum Error {
     },
 }
 
+impl From<crate::crypto::hash::Error> for Error {
+    fn from(err: crate::crypto::hash::Error) -> Self {
+        match err {
+            crate::crypto::hash::Error::Unsupported { alg } => UnsupportedSnafu {
+                message: format!("hash algorithm: {:?}", alg),
+            }
+            .build(),
+            crate::crypto::hash::Error::Sha1HashCollision { source } => source.into(),
+        }
+    }
+}
+
 impl<T> From<nom::error::Error<T>> for Error {
     fn from(err: nom::error::Error<T>) -> Self {
         Self::PacketError { kind: err.code }
