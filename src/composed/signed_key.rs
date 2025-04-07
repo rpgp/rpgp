@@ -97,7 +97,7 @@
 //! signature.to_writer_with_header(&mut signature_bytes).expect("Write must succeed");
 //!
 //!
-//! let raw_signature = signature.signature;
+//! let raw_signature = signature.signature().unwrap();
 //! verification_key
 //!     .verify_signature(HashAlgorithm::Sha256, digest, &raw_signature)
 //!     .expect("Verify must succeed");

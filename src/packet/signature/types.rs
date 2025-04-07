@@ -253,6 +253,22 @@ impl Signature {
         self.config().map(|c| c.hash_alg)
     }
 
+    pub fn signature(&self) -> Option<&SignatureBytes> {
+        match self.inner {
+            InnerSignature::Known { ref signature, .. } => Some(signature),
+            InnerSignature::Unknown { .. } => None,
+        }
+    }
+
+    pub fn signed_hash_value(&self) -> Option<[u8; 2]> {
+        match self.inner {
+            InnerSignature::Known {
+                signed_hash_value, ..
+            } => Some(signed_hash_value),
+            InnerSignature::Unknown { .. } => None,
+        }
+    }
+
     /// Does `key` match any issuer or issuer_fingerprint subpacket in `sig`?
     /// If yes, we consider `key` a candidate to verify `sig` against.
     ///
