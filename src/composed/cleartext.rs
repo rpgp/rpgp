@@ -284,7 +284,9 @@ fn validate_headers(headers: Headers) -> Result<Vec<HashAlgorithm>> {
     for (name, values) in headers {
         ensure_eq!(name, "Hash", "unexpected header");
         for value in values {
-            let h: HashAlgorithm = value.parse()?;
+            let h: HashAlgorithm = value
+                .parse()
+                .map_err(|_| format_err!("unknown hash algorithm {}", value))?;
             hashes.push(h);
         }
     }
