@@ -53,7 +53,7 @@ pub enum OpsVersionSpecific {
         fingerprint: [u8; 32],
     },
     #[cfg_attr(test, proptest(skip))]
-    Unkown {
+    Unknown {
         #[debug("{:X}", version)]
         version: u8,
         #[debug("{}", hex::encode(data))]
@@ -76,7 +76,7 @@ impl Serialize for OpsVersionSpecific {
             OpsVersionSpecific::V6 { fingerprint, .. } => {
                 writer.write_all(fingerprint.as_ref())?;
             }
-            OpsVersionSpecific::Unkown { data, .. } => {
+            OpsVersionSpecific::Unknown { data, .. } => {
                 writer.write_all(data)?;
             }
         }
@@ -97,7 +97,7 @@ impl Serialize for OpsVersionSpecific {
             OpsVersionSpecific::V6 { fingerprint, .. } => {
                 sum += fingerprint.len();
             }
-            OpsVersionSpecific::Unkown { data, .. } => {
+            OpsVersionSpecific::Unknown { data, .. } => {
                 sum += data.len();
             }
         }
@@ -110,7 +110,7 @@ impl OnePassSignature {
         match self.version_specific {
             OpsVersionSpecific::V3 { .. } => 3,
             OpsVersionSpecific::V6 { .. } => 6,
-            OpsVersionSpecific::Unkown { version, .. } => version,
+            OpsVersionSpecific::Unknown { version, .. } => version,
         }
     }
 }
@@ -151,7 +151,7 @@ impl OnePassSignature {
                 } else {
                     bail!("missing last field");
                 };
-                (OpsVersionSpecific::Unkown { version, data }, last)
+                (OpsVersionSpecific::Unknown { version, data }, last)
             }
         };
 
