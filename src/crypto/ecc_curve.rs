@@ -1,7 +1,8 @@
 use const_oid::ObjectIdentifier;
 
-use crate::crypto::{
-    hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
+use crate::{
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
+    errors::unsupported_err,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]

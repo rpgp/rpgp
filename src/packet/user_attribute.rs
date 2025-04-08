@@ -8,7 +8,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::Result,
+    errors::{ensure, ensure_eq, unsupported_err, Result},
     packet::{
         PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData, SubpacketLength,

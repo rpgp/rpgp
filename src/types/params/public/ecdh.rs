@@ -9,7 +9,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, ensure_eq, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,

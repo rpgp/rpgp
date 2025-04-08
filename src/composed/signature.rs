@@ -3,7 +3,7 @@ use std::iter::Peekable;
 use crate::{
     armor,
     composed::{ArmorOptions, Deserializable},
-    errors::Result,
+    errors::{format_err, Result},
     packet::{Packet, PacketTrait, Signature},
     ser::Serialize,
     types::{PublicKeyTrait, Tag},

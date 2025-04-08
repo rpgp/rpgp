@@ -4,7 +4,7 @@ use rand::Rng;
 
 use crate::{
     composed::{KeyDetails, PublicSubkey, SignedSecretKey, SignedSecretSubKey},
-    errors::Result,
+    errors::{unsupported_err, Result},
     packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},

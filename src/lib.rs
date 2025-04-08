@@ -18,15 +18,13 @@ extern crate pretty_assertions;
 // Reexport as used in the public api
 pub use bytes;
 
-#[macro_use]
 pub(crate) mod util;
 
-#[macro_use]
-pub mod errors;
 pub mod armor;
 pub mod base64;
 pub mod composed;
 pub mod crypto;
+pub mod errors;
 pub mod line_writer;
 pub mod normalize_lines;
 pub mod packet;

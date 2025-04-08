@@ -9,7 +9,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use proptest::prelude::*;
 
 use crate::{
-    errors::Result,
+    errors::{ensure, Result},
     line_writer::LineBreak,
     normalize_lines::{normalize_lines, NormalizedReader},
     packet::{PacketHeader, PacketTrait},

@@ -8,7 +8,7 @@ use flate2::bufread::{DeflateDecoder, ZlibDecoder};
 use log::debug;
 
 use crate::{
-    errors::Result,
+    errors::{ensure, unsupported_err, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,

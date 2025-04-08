@@ -7,7 +7,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::checksum,
-    errors::{InvalidInputSnafu, Result},
+    errors::{bail, ensure, unsupported_err, InvalidInputSnafu, Result},
     ser::Serialize,
     types::*,
 };

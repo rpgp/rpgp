@@ -14,7 +14,11 @@ use sha1::{Digest, Sha1};
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
-use crate::{crypto::sym::SymmetricKeyAlgorithm, errors::Result, util::fill_buffer};
+use crate::{
+    crypto::sym::SymmetricKeyAlgorithm,
+    errors::{bail, Result},
+    util::fill_buffer,
+};
 
 const MDC_LEN: usize = 22;
 const BUFFER_SIZE: usize = 512;

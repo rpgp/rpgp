@@ -6,7 +6,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, Signer},
-    errors::{Error, Result},
+    errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
     types::{EcdsaPublicParams, Mpi},
 };
 

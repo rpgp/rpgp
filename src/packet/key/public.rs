@@ -8,7 +8,7 @@ use sha1_checked::{Digest, Sha1};
 
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
+    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{

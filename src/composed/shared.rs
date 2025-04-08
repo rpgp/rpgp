@@ -7,7 +7,7 @@ use log::{debug, warn};
 
 use crate::{
     armor::{self, BlockType},
-    errors::{Error, Result},
+    errors::{bail, format_err, unimplemented_err, Error, Result},
     packet::{Packet, PacketParser},
 };
 

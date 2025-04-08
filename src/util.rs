@@ -23,7 +23,6 @@ pub(crate) fn fill_buffer<R: std::io::Read>(
     Ok(offset)
 }
 
-#[macro_export]
 macro_rules! impl_try_from_into {
     ($enum_name:ident, $( $name:ident => $variant_type:ty ),*) => {
        $(
@@ -35,7 +34,7 @@ macro_rules! impl_try_from_into {
                    if let $enum_name::$name(value) = other {
                        Ok(value)
                    } else {
-                      Err(format_err!("invalid packet type: {:?}", other))
+                       Err($crate::errors::format_err!("invalid packet type: {:?}", other))
                    }
                }
            }
@@ -48,6 +47,8 @@ macro_rules! impl_try_from_into {
        )*
     }
 }
+
+pub(crate) use impl_try_from_into;
 
 pub struct TeeWriter<'a, A, B> {
     a: &'a mut A,

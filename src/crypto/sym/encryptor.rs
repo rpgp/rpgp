@@ -12,7 +12,11 @@ use rand::{CryptoRng, Rng};
 use sha1::{Digest, Sha1};
 use twofish::Twofish;
 
-use crate::{crypto::sym::SymmetricKeyAlgorithm, errors::Result, util::fill_buffer};
+use crate::{
+    crypto::sym::SymmetricKeyAlgorithm,
+    errors::{bail, unsupported_err, Result},
+    util::fill_buffer,
+};
 
 #[derive(Debug)]
 pub enum StreamEncryptor<R>

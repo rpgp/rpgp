@@ -6,7 +6,7 @@ use crate::{
         cleartext::CleartextSignedMessage, Deserializable, Message, SignedPublicKey,
         SignedSecretKey, StandaloneSignature,
     },
-    errors::Result,
+    errors::{ensure, unimplemented_err, Result},
 };
 
 /// A flexible representation of what can be represented in an armor file.

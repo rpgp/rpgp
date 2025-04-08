@@ -3,7 +3,7 @@ use std::io::{self, BufRead, Read};
 use super::PacketBodyReader;
 use crate::{
     composed::{DebugBufRead, PlainSessionKey},
-    errors::Result,
+    errors::{bail, ensure_eq, unsupported_err, Result},
     packet::{PacketHeader, StreamDecryptor, SymEncryptedProtectedDataConfig},
     types::Tag,
 };

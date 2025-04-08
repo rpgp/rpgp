@@ -15,7 +15,7 @@ use nom::{
 
 use crate::{
     base64::{Base64Decoder, Base64Reader},
-    errors::Result,
+    errors::{bail, Result},
     ser::Serialize,
 };
 

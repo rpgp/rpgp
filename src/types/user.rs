@@ -3,7 +3,7 @@ use std::io;
 use log::{debug, warn};
 
 use crate::{
-    errors::Result,
+    errors::{ensure, Result},
     packet::{PacketTrait, Signature, UserAttribute, UserId},
     ser::Serialize,
     types::{PublicKeyTrait, Tag},

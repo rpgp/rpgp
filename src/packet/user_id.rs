@@ -5,7 +5,7 @@ use chrono::{SubsecRound, Utc};
 use rand::{CryptoRng, Rng};
 
 use crate::{
-    errors::Result,
+    errors::{unsupported_err, Result},
     packet::{
         PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,

@@ -3,7 +3,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{
     crypto::sym::SymmetricKeyAlgorithm,
-    errors::Result,
+    errors::{ensure, unsupported_err, Result},
     packet::SymKeyEncryptedSessionKey,
     types::{Password, SkeskVersion},
 };

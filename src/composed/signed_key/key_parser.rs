@@ -2,7 +2,7 @@ use log::{debug, warn};
 
 use crate::{
     composed::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey},
-    errors::{Error, Result},
+    errors::{err_opt, format_err, Error, Result},
     packet::{self, Packet, PacketTrait, Signature, SignatureType, UserAttribute, UserId},
     types::{KeyDetails, KeyVersion, SignedUser, SignedUserAttribute, Tag},
 };

@@ -12,7 +12,7 @@ use crate::{
         ArmorOptions,
     },
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
+    errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{

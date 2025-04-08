@@ -3,7 +3,7 @@ use std::io::BufRead;
 use log::warn;
 
 use crate::{
-    errors::{Error, Result},
+    errors::{format_err, unimplemented_err, unsupported_err, Error, Result},
     packet::{
         CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Packet,
         PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey,
