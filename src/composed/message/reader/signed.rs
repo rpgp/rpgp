@@ -192,12 +192,14 @@ impl<'a> SignatureBodyReader<'a> {
                                 )
                             })?;
                             // calculate final hash
-                            let len = config.hash_signature_data(&mut hasher).map_err(|e| {
-                                io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                            })?;
-                            hasher.update(&config.trailer(len).map_err(|e| {
-                                io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                            })?);
+                            let len = config
+                                .hash_signature_data(&mut hasher)
+                                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                            hasher.update(
+                                &config
+                                    .trailer(len)
+                                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+                            );
 
                             Some(hasher.finalize())
                         } else {

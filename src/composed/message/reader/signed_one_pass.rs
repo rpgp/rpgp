@@ -184,9 +184,8 @@ impl<'a> SignatureOnePassReader<'a> {
                                 "missing signature packet",
                             ));
                         };
-                        let packet = packet.map_err(|e| {
-                            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                        })?;
+                        let packet =
+                            packet.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
                         let Packet::Signature(signature) = packet else {
                             return Err(io::Error::new(
@@ -202,12 +201,14 @@ impl<'a> SignatureOnePassReader<'a> {
                         let hash = if let Some(mut hasher) = hasher {
                             debug!("calculating final hash");
                             if let Some(config) = signature.config() {
-                                let len = config.hash_signature_data(&mut hasher).map_err(|e| {
-                                    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                                })?;
-                                hasher.update(&config.trailer(len).map_err(|e| {
-                                    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                                })?);
+                                let len = config
+                                    .hash_signature_data(&mut hasher)
+                                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                                hasher.update(
+                                    &config.trailer(len).map_err(|e| {
+                                        io::Error::new(io::ErrorKind::InvalidData, e)
+                                    })?,
+                                );
                                 Some(hasher.finalize())
                             } else {
                                 None

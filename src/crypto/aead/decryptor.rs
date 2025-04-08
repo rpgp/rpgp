@@ -108,7 +108,7 @@ impl<R: BufRead> StreamDecryptor<R> {
                 &self.info,
                 &mut out,
             )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
         self.written += out.len() as u64;
 
         self.out_buffer.extend(out);
@@ -152,7 +152,7 @@ impl<R: BufRead> StreamDecryptor<R> {
                 &final_info,
                 &mut final_auth_tag,
             )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
 
         Ok(())
     }

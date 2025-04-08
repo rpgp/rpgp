@@ -87,7 +87,7 @@ impl<R: io::Read> StreamEncryptor<R> {
                 &final_info,
                 &mut self.buffer,
             )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         Ok(())
     }
@@ -131,7 +131,7 @@ impl<R: io::Read> StreamEncryptor<R> {
                 &self.info,
                 &mut self.buffer,
             )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         // Update nonce to include the next chunk index
         self.chunk_index += 1;
