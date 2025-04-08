@@ -76,6 +76,9 @@ impl Packet {
             }
             Tag::Other(40..=59) => {
                 // a "soft" error that will usually get ignored while processing packet streams
+
+                body.drain()?; // skip packet content
+
                 unsupported_err!(
                     "Unsupported but non-critical packet type: {:?}",
                     packet_header.tag()
