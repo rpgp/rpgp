@@ -1145,7 +1145,7 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
                         if let Some(op) = ops.pop_front() {
                             let mut writer = buffer.writer();
                             op.to_writer_with_header(&mut writer).map_err(|e| {
-                                std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, e)
                             })?;
                             buffer = writer.into_inner();
                         } else {

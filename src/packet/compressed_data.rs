@@ -418,7 +418,7 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
                 .expect("known construction");
                 packet_header
                     .to_writer(&mut writer)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(io::Error::other)?;
 
                 writer.write_u8(self.source.algorithm().into())?;
 
@@ -428,7 +428,7 @@ impl<R: io::Read> io::Read for CompressedDataPartialGenerator<R> {
                 // only length
                 packet_length
                     .to_writer_new(&mut writer)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(io::Error::other)?;
                 debug!("partial packet {:?}", packet_length);
             };
 
