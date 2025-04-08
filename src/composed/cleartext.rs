@@ -13,7 +13,7 @@ use crate::{
     armor::{self, header_parser, read_from_buf, BlockType, Headers},
     composed::{ArmorOptions, Deserializable, StandaloneSignature},
     crypto::hash::HashAlgorithm,
-    errors::{InvalidInputSnafu, Result},
+    errors::{bail, ensure, ensure_eq, format_err, InvalidInputSnafu, Result},
     line_writer::LineBreak,
     normalize_lines::{normalize_lines, NormalizedReader},
     packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},

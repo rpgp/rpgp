@@ -21,7 +21,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, ensure, ensure_eq, Result},
     line_writer::{LineBreak, LineWriter},
     normalize_lines::NormalizedReader,
     packet::{

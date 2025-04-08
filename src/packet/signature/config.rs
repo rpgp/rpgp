@@ -11,7 +11,7 @@ use crate::{
         hash::{HashAlgorithm, WriteHasher},
         public_key::PublicKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, ensure, unimplemented_err, Result},
     packet::{
         types::serialize_for_hashing, Signature, SignatureType, SignatureVersion, Subpacket,
         SubpacketData, SubpacketType,

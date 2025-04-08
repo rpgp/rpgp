@@ -7,7 +7,7 @@ use proptest::prelude::*;
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
+    errors::{bail, Result},
     packet::{signature::SignatureType, PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,

@@ -18,7 +18,7 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
-    errors::Result,
+    errors::{bail, ensure, Result},
     types::{Ed25519PublicParams, EddsaLegacyPublicParams, Mpi},
 };
 

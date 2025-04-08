@@ -4,7 +4,7 @@ use byteorder::WriteBytesExt;
 
 use crate::{
     crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
-    errors::Result,
+    errors::{ensure_eq, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,

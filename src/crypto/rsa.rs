@@ -20,7 +20,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{hash::HashAlgorithm, Decryptor, Signer},
-    errors::Result,
+    errors::{format_err, unsupported_err, Result},
     types::{Mpi, PkeskBytes, RsaPublicParams},
 };
 

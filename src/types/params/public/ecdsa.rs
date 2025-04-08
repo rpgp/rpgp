@@ -5,7 +5,7 @@ use elliptic_curve::sec1::ToEncodedPoint;
 
 use crate::{
     crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
-    errors::Result,
+    errors::{ensure, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,

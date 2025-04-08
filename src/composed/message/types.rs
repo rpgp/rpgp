@@ -10,7 +10,7 @@ use crate::{
     armor,
     composed::{message::decrypt::*, signed_key::SignedSecretKey},
     crypto::sym::SymmetricKeyAlgorithm,
-    errors::{Error, Result},
+    errors::{bail, ensure, ensure_eq, format_err, Error, Result},
     packet::{
         InnerSignature, LiteralDataHeader, OnePassSignature, Packet, PacketHeader, PacketTrait,
         PublicKeyEncryptedSessionKey, Signature, SymEncryptedProtectedDataConfig,
@@ -19,6 +19,7 @@ use crate::{
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{EskType, KeyDetails, Password, PkeskVersion, PublicKeyTrait, SecretParams, Tag},
+    util::impl_try_from_into,
 };
 
 pub trait DebugBufRead: BufRead + std::fmt::Debug + Send {}

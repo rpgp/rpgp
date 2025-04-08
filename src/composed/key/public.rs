@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use crate::{
     composed::{KeyDetails, SignedPublicKey, SignedPublicSubKey},
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
+    errors::{unsupported_err, Result},
     packet::{self, KeyFlags, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{

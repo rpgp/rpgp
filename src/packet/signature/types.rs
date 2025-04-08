@@ -15,7 +15,7 @@ use crate::{
         public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     line_writer::LineBreak,
     normalize_lines::NormalizedReader,
     packet::{

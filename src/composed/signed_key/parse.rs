@@ -6,7 +6,7 @@ use crate::{
         PublicOrSecret, SignedPublicKey, SignedPublicKeyParser, SignedSecretKey,
         SignedSecretKeyParser,
     },
-    errors::Result,
+    errors::{bail, format_err, unimplemented_err, Result},
     packet::{Packet, PacketParser, PacketTrait},
     types::Tag,
 };

@@ -4,7 +4,7 @@ use chrono::{DateTime, TimeZone, Utc};
 
 use crate::{
     crypto::public_key::PublicKeyAlgorithm,
-    errors::Result,
+    errors::{ensure, format_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     types::{KeyVersion, PublicParams},
 };

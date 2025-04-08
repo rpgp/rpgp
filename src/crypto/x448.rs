@@ -6,7 +6,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{aes_kw, Decryptor},
-    errors::Result,
+    errors::{bail, ensure, Result},
     types::X448PublicParams,
 };
 

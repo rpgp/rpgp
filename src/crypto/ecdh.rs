@@ -11,7 +11,7 @@ use crate::{
         aes_kw, ecc_curve::ECCCurve, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm,
         Decryptor,
     },
-    errors::{Error, Result},
+    errors::{ensure, ensure_eq, unsupported_err, Error, Result},
     types::{pad_key, EcdhPublicParams, Mpi, PkeskBytes},
 };
 

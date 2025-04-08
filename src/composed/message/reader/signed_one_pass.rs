@@ -6,7 +6,7 @@ use log::debug;
 use super::PacketBodyReader;
 use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
-    errors::Result,
+    errors::{bail, ensure_eq, Result},
     packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType},
     util::{fill_buffer, NormalizingHasher},
 };

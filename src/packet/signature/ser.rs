@@ -5,7 +5,7 @@ use chrono::Duration;
 use log::debug;
 
 use crate::{
-    errors::Result,
+    errors::{bail, unimplemented_err, unsupported_err, Result},
     packet::{
         signature::{types::*, SignatureConfig},
         SignatureVersionSpecific, Subpacket, SubpacketData, SubpacketType,

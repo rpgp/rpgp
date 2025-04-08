@@ -181,7 +181,6 @@ impl From<derive_builder::UninitializedFieldError> for Error {
     }
 }
 
-#[macro_export]
 macro_rules! unimplemented_err {
     ($e:expr) => {
         return Err($crate::errors::UnimplementedSnafu { message: $e.to_string() }.build())
@@ -191,7 +190,6 @@ macro_rules! unimplemented_err {
     };
 }
 
-#[macro_export]
 macro_rules! unsupported_err {
     ($e:expr) => {
         return Err($crate::errors::UnsupportedSnafu {
@@ -205,7 +203,6 @@ macro_rules! unsupported_err {
     };
 }
 
-#[macro_export]
 macro_rules! bail {
     ($e:expr) => {
         return Err($crate::errors::Error::Message {
@@ -221,7 +218,6 @@ macro_rules! bail {
     };
 }
 
-#[macro_export]
 macro_rules! format_err {
     ($e:expr) => {
         $crate::errors::Error::Message {
@@ -237,27 +233,25 @@ macro_rules! format_err {
     };
 }
 
-#[macro_export(local_inner_macros)]
 macro_rules! ensure {
     ($cond:expr, $e:expr) => {
         if !($cond) {
-            bail!($e);
+            $crate::errors::bail!($e);
         }
     };
     ($cond:expr, $fmt:expr, $($arg:tt)+) => {
         if !($cond) {
-            bail!($fmt, $($arg)+);
+            $crate::errors::bail!($fmt, $($arg)+);
         }
     };
 }
 
-#[macro_export]
 macro_rules! ensure_eq {
     ($left:expr, $right:expr) => ({
         match (&$left, &$right) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    bail!(r#"assertion failed: `(left == right)`
+                    $crate::errors::bail!(r#"assertion failed: `(left == right)`
   left: `{:?}`,
  right: `{:?}`"#, left_val, right_val)
                 }
@@ -265,13 +259,13 @@ macro_rules! ensure_eq {
         }
     });
     ($left:expr, $right:expr,) => ({
-        ensure_eq!($left, $right)
+        $crate::errors::ensure_eq!($left, $right)
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
         match (&($left), &($right)) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    bail!(r#"assertion failed: `(left == right)`
+                    $crate::errors::bail!(r#"assertion failed: `(left == right)`
   left: `{:?}`,
  right: `{:?}`: {}"#, left_val, right_val,
                            format_args!($($arg)+))
@@ -281,7 +275,6 @@ macro_rules! ensure_eq {
     });
 }
 
-#[macro_export]
 macro_rules! err_opt {
     ($e:expr) => {
         match $e {
@@ -290,3 +283,11 @@ macro_rules! err_opt {
         }
     };
 }
+
+pub(crate) use bail;
+pub(crate) use ensure;
+pub(crate) use ensure_eq;
+pub(crate) use err_opt;
+pub(crate) use format_err;
+pub(crate) use unimplemented_err;
+pub(crate) use unsupported_err;

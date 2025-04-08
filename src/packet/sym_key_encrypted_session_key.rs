@@ -11,7 +11,10 @@ use sha2::Sha256;
 use crate::{
     composed::PlainSessionKey,
     crypto::{aead::AeadAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{InvalidInputSnafu, Result},
+    errors::{
+        ensure, ensure_eq, format_err, unimplemented_err, unsupported_err, InvalidInputSnafu,
+        Result,
+    },
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,

@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 
 use crate::{
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::Result,
+    errors::{bail, ensure, unimplemented_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::KeyVersion,

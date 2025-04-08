@@ -11,7 +11,7 @@ use crate::{
         signed_key::{SignedKeyDetails, SignedPublicSubKey},
         ArmorOptions, PlainSessionKey, SignedPublicKey,
     },
-    errors::Result,
+    errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag},

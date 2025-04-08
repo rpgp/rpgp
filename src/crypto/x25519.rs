@@ -9,7 +9,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{aes_kw, Decryptor},
-    errors::Result,
+    errors::{ensure, Result},
     types::X25519PublicParams,
 };
 
