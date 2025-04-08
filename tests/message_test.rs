@@ -935,30 +935,39 @@ fn test_packet_leniency() {
 
     pretty_env_logger::try_init().ok();
 
-    let res = SignedPublicKey::from_armor_file("./tests/perturbed.pub.asc");
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/perturbed.pub.asc").unwrap();
+    dbg!(&key);
+}
 
-    assert!(res.is_ok());
+// Tests graceful handling of a certificates with a subkey that has unknown features.
+// Test vectors from "Mock PQ subkey" in OpenPGP interoperability test suite.
 
-    let (spk, _) = res.unwrap();
-    eprintln!("spk {:#?}", spk);
+#[test]
+fn test_mock_pq_cert_leniency_unkown_algo_mpi() {
+    pretty_env_logger::try_init().ok();
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/unknown_algo_mpi.pub.asc").unwrap();
+    dbg!(&key);
 }
 
 #[test]
-fn test_mock_pq_cert_leniency() {
-    // Tests graceful handling of a certificates with a subkey that has unknown features.
-    // Test vectors from "Mock PQ subkey" in OpenPGP interoperability test suite.
-
+fn test_mock_pq_cert_leniency_ecdsa_opaque() {
     pretty_env_logger::try_init().ok();
-
-    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/unknown_algo_mpi.pub.asc");
-    assert!(res.is_ok());
-
-    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/ecdsa_opaque_small.pub.asc");
-    assert!(res.is_ok());
-
-    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/eddsa_opaque_small.pub.asc");
-    assert!(res.is_ok());
-
-    let res = SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc");
-    assert!(res.is_ok());
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/ecdsa_opaque_small.pub.asc").unwrap();
+    dbg!(&key);
+}
+#[test]
+fn test_mock_pq_cert_leniency_eddsa_opaque() {
+    pretty_env_logger::try_init().ok();
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/eddsa_opaque_small.pub.asc").unwrap();
+    dbg!(&key);
+}
+#[test]
+fn test_mock_pq_cert_leniency_ecdh_opaque() {
+    pretty_env_logger::try_init().ok();
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc").unwrap();
+    dbg!(key);
 }

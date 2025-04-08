@@ -157,8 +157,8 @@ parse_dumps!(
         17_727,
         // Hash::Other(4)
         0,
-        3267,
-        20_994
+        3268,
+        20_995
     ),
     (
         test_parse_dumps_1,

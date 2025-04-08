@@ -234,7 +234,6 @@ mod tests {
                 let list = [
                     "1193538",  // invalid mpi
                     "9218758",  // invalid packet length
-                    "8240010",  // invalid packet length
                     "6844449",  // RSA public exponent too large
                     "24798372", // TODO: unclear why this public sub key fails to parse
                     "38521947", // RSA public exponent too large

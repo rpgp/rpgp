@@ -1,6 +1,7 @@
 use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
+use bytes::Bytes;
 
 use crate::{
     crypto::ecc_curve::{ecc_curve_from_oid, ECCCurve},
@@ -10,7 +11,7 @@ use crate::{
     types::Mpi,
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EddsaLegacyPublicParams {
     Ed25519 {
@@ -18,12 +19,16 @@ pub enum EddsaLegacyPublicParams {
         key: ed25519_dalek::VerifyingKey,
     },
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, mpi: Mpi },
+    Unsupported {
+        curve: ECCCurve,
+        #[debug("{}", hex::encode(opaque))]
+        opaque: Bytes,
+    },
 }
 
 impl EddsaLegacyPublicParams {
     /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed>
-    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B, len: Option<usize>) -> Result<Self> {
         // a one-octet size of the following field
         let curve_len = i.read_u8()?;
         // octets representing a curve OID
@@ -31,23 +36,25 @@ impl EddsaLegacyPublicParams {
         let curve = ecc_curve_from_oid(&curve_raw).ok_or_else(|| format_err!("invalid curve"))?;
 
         // MPI of an EC point representing a public key
-        let q = Mpi::try_from_reader(&mut i)?;
-        let res = Self::try_from_mpi(curve, q)?;
-
-        Ok(res)
-    }
-
-    fn try_from_mpi(curve: ECCCurve, mpi: Mpi) -> Result<Self> {
         match curve {
             ECCCurve::Ed25519 => {
-                ensure_eq!(mpi.len(), 33, "invalid Q (len)");
-                ensure_eq!(mpi.as_ref()[0], 0x40, "invalid Q (prefix)");
-                let public = &mpi.as_ref()[1..];
+                let q = Mpi::try_from_reader(&mut i)?;
+                ensure_eq!(q.len(), 33, "invalid Q (len)");
+                ensure_eq!(q.as_ref()[0], 0x40, "invalid Q (prefix)");
+                let public = &q.as_ref()[1..];
 
                 let key: ed25519_dalek::VerifyingKey = public.try_into()?;
                 Ok(Self::Ed25519 { key })
             }
-            _ => Ok(Self::Unsupported { curve, mpi }),
+            _ => {
+                let opaque = if let Some(pub_len) = len {
+                    i.take_bytes(pub_len)?.freeze()
+                } else {
+                    i.rest()?.freeze()
+                };
+
+                Ok(Self::Unsupported { curve, opaque })
+            }
         }
     }
 
@@ -72,12 +79,12 @@ impl Serialize for EddsaLegacyPublicParams {
                 let mpi = Mpi::from_slice(&mpi);
                 mpi.to_writer(writer)?;
             }
-            Self::Unsupported { curve, mpi } => {
+            Self::Unsupported { curve, opaque } => {
                 let oid = curve.oid();
                 writer.write_u8(oid.len().try_into()?)?;
                 writer.write_all(&oid)?;
 
-                mpi.to_writer(writer)?;
+                writer.write_all(opaque)?;
             }
         }
         Ok(())
@@ -96,11 +103,11 @@ impl Serialize for EddsaLegacyPublicParams {
                 let mpi = Mpi::from_slice(&mpi);
                 sum += mpi.write_len();
             }
-            Self::Unsupported { curve, mpi } => {
+            Self::Unsupported { curve, opaque } => {
                 let oid = curve.oid();
                 sum += 1;
                 sum += oid.len();
-                sum += mpi.write_len();
+                sum += opaque.len();
             }
         }
         sum
@@ -132,7 +139,7 @@ pub(super) mod tests {
         fn params_roundtrip(params: EddsaLegacyPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = EddsaLegacyPublicParams::try_from_reader(&mut &buf[..])?;
+            let new_params = EddsaLegacyPublicParams::try_from_reader(&mut &buf[..], None)?;
             prop_assert_eq!(params, new_params);
         }
     }

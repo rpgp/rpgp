@@ -89,7 +89,7 @@ impl PublicParams {
                 Ok(PublicParams::DSA(params))
             }
             PublicKeyAlgorithm::ECDSA => {
-                let params = EcdsaPublicParams::try_from_reader(i)?;
+                let params = EcdsaPublicParams::try_from_reader(i, len)?;
                 Ok(PublicParams::ECDSA(params))
             }
             PublicKeyAlgorithm::ECDH => {
@@ -105,7 +105,7 @@ impl PublicParams {
                 Ok(PublicParams::Elgamal(params))
             }
             PublicKeyAlgorithm::EdDSALegacy => {
-                let params = EddsaLegacyPublicParams::try_from_reader(i)?;
+                let params = EddsaLegacyPublicParams::try_from_reader(i, len)?;
                 Ok(PublicParams::EdDSALegacy(params))
             }
             PublicKeyAlgorithm::Ed25519 => {
@@ -157,10 +157,9 @@ fn unknown<B: BufRead>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
         let data = i.take_bytes(pub_len)?.freeze();
         Ok(PublicParams::Unknown { data })
     } else {
-        // we don't know how many bytes to consume
-        Ok(PublicParams::Unknown {
-            data: Bytes::default(),
-        })
+        // consume the reset
+        let data = i.rest()?.freeze();
+        Ok(PublicParams::Unknown { data })
     }
 }
 

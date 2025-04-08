@@ -1,6 +1,7 @@
 use std::io::{self, BufRead};
 
 use byteorder::WriteBytesExt;
+use bytes::Bytes;
 use elliptic_curve::sec1::ToEncodedPoint;
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
     types::Mpi,
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdsaPublicParams {
     P256 {
@@ -31,27 +32,25 @@ pub enum EcdsaPublicParams {
         key: k256::PublicKey,
     },
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, p: Mpi },
+    Unsupported {
+        curve: ECCCurve,
+        #[debug("{}", hex::encode(opaque))]
+        opaque: Bytes,
+    },
 }
 
 impl EcdsaPublicParams {
     /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ec>
-    pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
+    pub fn try_from_reader<B: BufRead>(mut i: B, len: Option<usize>) -> Result<Self> {
         // a one-octet size of the following field
         let curve_len = i.read_u8()?;
         // octets representing a curve OID
         let curve = ecc_curve_from_oid(&i.take_bytes(curve_len.into())?)
             .ok_or_else(|| format_err!("invalid curve"))?;
 
-        // MPI of an EC point representing a public key
-        let p = Mpi::try_from_reader(&mut i)?;
-        let params = EcdsaPublicParams::try_from_mpi(p, curve)?;
-        Ok(params)
-    }
-
-    fn try_from_mpi(p: Mpi, curve: ECCCurve) -> Result<Self> {
         match curve {
             ECCCurve::P256 => {
+                let p = Mpi::try_from_reader(&mut i)?;
                 ensure!(p.len() <= 65, "invalid public key length");
                 let mut key = [0u8; 65];
                 key[..p.len()].copy_from_slice(p.as_ref());
@@ -60,6 +59,7 @@ impl EcdsaPublicParams {
                 Ok(EcdsaPublicParams::P256 { key: public })
             }
             ECCCurve::P384 => {
+                let p = Mpi::try_from_reader(&mut i)?;
                 ensure!(p.len() <= 97, "invalid public key length");
                 let mut key = [0u8; 97];
                 key[..p.len()].copy_from_slice(p.as_ref());
@@ -68,6 +68,7 @@ impl EcdsaPublicParams {
                 Ok(EcdsaPublicParams::P384 { key: public })
             }
             ECCCurve::P521 => {
+                let p = Mpi::try_from_reader(&mut i)?;
                 ensure!(p.len() <= 133, "invalid public key length");
                 let mut key = [0u8; 133];
                 key[..p.len()].copy_from_slice(p.as_ref());
@@ -76,6 +77,7 @@ impl EcdsaPublicParams {
                 Ok(EcdsaPublicParams::P521 { key: public })
             }
             ECCCurve::Secp256k1 => {
+                let p = Mpi::try_from_reader(&mut i)?;
                 ensure!(p.len() <= 65, "invalid public key length");
                 let mut key = [0u8; 65];
                 key[..p.len()].copy_from_slice(p.as_ref());
@@ -83,10 +85,14 @@ impl EcdsaPublicParams {
                 let public = k256::PublicKey::from_sec1_bytes(&key)?;
                 Ok(EcdsaPublicParams::Secp256k1 { key: public })
             }
-            _ => Ok(EcdsaPublicParams::Unsupported {
-                curve,
-                p: p.to_owned(),
-            }),
+            _ => {
+                let opaque = if let Some(pub_len) = len {
+                    i.take_bytes(pub_len)?.freeze()
+                } else {
+                    i.rest()?.freeze()
+                };
+                Ok(EcdsaPublicParams::Unsupported { curve, opaque })
+            }
         }
     }
 
@@ -131,8 +137,8 @@ impl Serialize for EcdsaPublicParams {
                 let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 p.to_writer(writer)?;
             }
-            EcdsaPublicParams::Unsupported { p, .. } => {
-                p.to_writer(writer)?;
+            EcdsaPublicParams::Unsupported { opaque, .. } => {
+                writer.write_all(opaque)?;
             }
         }
 
@@ -168,8 +174,8 @@ impl Serialize for EcdsaPublicParams {
                 let p = Mpi::from_slice(key.to_encoded_point(false).as_bytes());
                 sum += p.write_len();
             }
-            EcdsaPublicParams::Unsupported { p, .. } => {
-                sum += p.write_len();
+            EcdsaPublicParams::Unsupported { opaque, .. } => {
+                sum += opaque.len();
             }
         }
         sum
@@ -223,7 +229,7 @@ mod tests {
         fn params_roundtrip(params: EcdsaPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
-            let new_params = EcdsaPublicParams::try_from_reader(&mut &buf[..])?;
+            let new_params = EcdsaPublicParams::try_from_reader(&mut &buf[..], None)?;
             prop_assert_eq!(params, new_params);
         }
     }
