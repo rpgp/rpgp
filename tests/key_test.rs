@@ -1048,13 +1048,13 @@ openpgp_key!(
 );
 openpgp_key!(
     key_openpgp_samplekeys_issue2346,
-    "samplekeys/issue2346.gpg",
+    "samplekeys/issue2346.pgp",
     true,
     true
 );
 openpgp_key_bin!(
     key_openpgp_samplekeys_no_creation_time,
-    "samplekeys/no-creation-time.gpg",
+    "samplekeys/no-creation-time.pgp",
     false
 );
 openpgp_key!(

@@ -325,7 +325,7 @@ fn msg_literal_signature() {
 #[test]
 fn binary_msg_password() {
     // encrypted README.md using gpg
-    let message = Message::from_file("./tests/binary_password.gpg").unwrap();
+    let message = Message::from_file("./tests/binary_password.pgp").unwrap();
     let decrypted = message.decrypt_with_password(&"1234".into()).unwrap();
     let decompressed = decrypted.decompress().unwrap();
 
