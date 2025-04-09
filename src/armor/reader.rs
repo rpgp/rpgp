@@ -518,8 +518,7 @@ impl<R: BufRead> Read for Dearmor<R> {
                         }
                     }
 
-                    self.read_footer(b)
-                        .map_err(io::Error::other)?;
+                    self.read_footer(b).map_err(io::Error::other)?;
                 }
                 Part::Done(b) => {
                     self.current_part = Part::Done(b);

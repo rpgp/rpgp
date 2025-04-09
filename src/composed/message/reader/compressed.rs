@@ -90,9 +90,7 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
                 io::ErrorKind::InvalidInput,
                 "already finished",
             )),
-            Self::Error => Err(io::Error::other(
-                "CompressedDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }
     }
 }
@@ -103,9 +101,7 @@ impl<R: DebugBufRead> BufRead for CompressedDataReader<R> {
         match self {
             Self::Body { ref mut buffer, .. } => Ok(&buffer[..]),
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::other(
-                "CompressedDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }
     }
 
@@ -132,9 +128,7 @@ impl<R: DebugBufRead> Read for CompressedDataReader<R> {
                 Ok(to_write)
             }
             Self::Done { .. } => Ok(0),
-            Self::Error => Err(io::Error::other(
-                "CompressedDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }
     }
 }
@@ -172,9 +166,7 @@ impl<R: DebugBufRead> CompressedDataReader<R> {
                 *self = Self::Done { source };
                 Ok(())
             }
-            Self::Error => Err(io::Error::other(
-                "CompressedDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("CompressedDataReader errored")),
         }
     }
 }

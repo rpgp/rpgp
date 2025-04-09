@@ -35,9 +35,7 @@ impl<R: BufRead> BufRead for PacketBodyReader<R> {
         match self.state {
             State::Body { ref mut buffer, .. } => Ok(&buffer[..]),
             State::Done { .. } => Ok(&[][..]),
-            State::Error => Err(io::Error::other(
-                "PacketBodyReader errored",
-            )),
+            State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }
     }
 
@@ -62,9 +60,7 @@ impl<R: BufRead> Read for PacketBodyReader<R> {
                 Ok(to_write)
             }
             State::Done { .. } => Ok(0),
-            State::Error => Err(io::Error::other(
-                "PacketBodyReader errored",
-            )),
+            State::Error => Err(io::Error::other("PacketBodyReader errored")),
         }
     }
 }
@@ -236,9 +232,7 @@ impl<R: BufRead> PacketBodyReader<R> {
                     return Ok(());
                 }
                 State::Error => {
-                    return Err(io::Error::other(
-                        "PacketBodyReader errored",
-                    ));
+                    return Err(io::Error::other("PacketBodyReader errored"));
                 }
             }
         }
