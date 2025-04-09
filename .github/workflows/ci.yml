@@ -91,12 +91,6 @@ jobs:
         target: ${{ matrix.target }}
         override: true
 
-    - name: check curve448
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --features unstable-curve448 --all --target ${{ matrix.target }}
-
     - name: Install cargo-nextest
       uses: taiki-e/install-action@v2
       with:
@@ -107,6 +101,12 @@ jobs:
 
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
+
+    - name: check curve448
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --features unstable-curve448 --all --target ${{ matrix.target }}
 
   cross:
     name: Cross compile
