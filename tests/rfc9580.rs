@@ -105,12 +105,10 @@ fn rfc9580_seipdv1_roundtrip() {
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
         // SEIPDv1 encrypt/decrypt roundtrip
-        let enc = MessageBuilder::from_bytes("", MSG.as_bytes())
-            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256)
-            .encrypt_to_key(&mut rng, &enc_subkey)
-            .unwrap()
-            .to_vec(&mut rng)
-            .unwrap();
+        let mut builder = MessageBuilder::from_bytes("", MSG.as_bytes())
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+        builder.encrypt_to_key(&mut rng, &enc_subkey).unwrap();
+        let enc = builder.to_vec(&mut rng).unwrap();
 
         let msg = Message::from_bytes(&enc[..]).unwrap();
         let mut dec = msg.decrypt(&"".into(), &ssk).expect("decrypt");
@@ -132,17 +130,14 @@ fn rfc9580_seipdv2_roundtrip() {
         let enc_subkey = &spk.public_subkeys.first().unwrap().key;
 
         // SEIPDv2 encrypt/decrypt roundtrip
-        let enc = MessageBuilder::from_bytes("", MSG.as_bytes())
-            .seipd_v2(
-                &mut rng,
-                SymmetricKeyAlgorithm::AES256,
-                AeadAlgorithm::Ocb,
-                ChunkSize::default(),
-            )
-            .encrypt_to_key(&mut rng, &enc_subkey)
-            .unwrap()
-            .to_vec(&mut rng)
-            .unwrap();
+        let mut builder = MessageBuilder::from_bytes("", MSG.as_bytes()).seipd_v2(
+            &mut rng,
+            SymmetricKeyAlgorithm::AES256,
+            AeadAlgorithm::Ocb,
+            ChunkSize::default(),
+        );
+        builder.encrypt_to_key(&mut rng, &enc_subkey).unwrap();
+        let enc = builder.to_vec(&mut rng).unwrap();
 
         let msg = Message::from_bytes(&enc[..]).unwrap();
         let mut dec = msg.decrypt(&"".into(), &ssk).expect("decrypt");
@@ -178,10 +173,9 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
 
         let spk = SignedPublicKey::from(ssk.clone());
 
-        let msg = MessageBuilder::from_bytes("", MSG.as_bytes())
-            .sign(&*ssk, "".into(), HashAlgorithm::default())
-            .to_vec(&mut rng)
-            .unwrap();
+        let mut builder = MessageBuilder::from_bytes("", MSG.as_bytes());
+        builder.sign(&*ssk, "".into(), HashAlgorithm::default());
+        let msg = builder.to_vec(&mut rng).unwrap();
 
         let mut msg = Message::from_bytes(&msg[..]).unwrap();
         msg.verify_read(&spk).expect("verify");

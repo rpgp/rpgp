@@ -403,9 +403,9 @@ k0mXubZvyl4GBg==
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let pri = &ssk.primary_key;
 
-        let signed = crate::composed::MessageBuilder::from_bytes("", &b"Hello world"[..])
-            .sign(pri, Password::empty(), HashAlgorithm::Sha256)
-            .to_armored_string(&mut rng, ArmorOptions::default())?;
+        let mut builder = crate::composed::MessageBuilder::from_bytes("", &b"Hello world"[..]);
+        builder.sign(pri, Password::empty(), HashAlgorithm::Sha256);
+        let signed = builder.to_armored_string(&mut rng, ArmorOptions::default())?;
 
         eprintln!("{}", signed);
 
@@ -444,13 +444,13 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         ssk.verify()?;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
-        let msg = MessageBuilder::from_bytes("", &b"Hello world"[..])
-            .sign(
-                &ssk.primary_key,
-                ANNEX_A_5_PASSPHRASE.into(),
-                HashAlgorithm::Sha256,
-            )
-            .to_vec(&mut rng)?;
+        let mut builder = MessageBuilder::from_bytes("", &b"Hello world"[..]);
+        builder.sign(
+            &ssk.primary_key,
+            ANNEX_A_5_PASSPHRASE.into(),
+            HashAlgorithm::Sha256,
+        );
+        let msg = builder.to_vec(&mut rng)?;
         let mut msg = Message::from_bytes(&msg[..])?;
         msg.verify_read(&ssk.primary_key.public_key())?;
         Ok(())
@@ -475,9 +475,9 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         pri.remove_password(&ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing without pw
-        let msg = MessageBuilder::from_bytes(file_name, &text[..])
-            .sign(&pri, Password::empty(), HashAlgorithm::Sha256)
-            .to_vec(&mut rng)?;
+        let mut builder = MessageBuilder::from_bytes(file_name, &text[..]);
+        builder.sign(&pri, Password::empty(), HashAlgorithm::Sha256);
+        let msg = builder.to_vec(&mut rng)?;
 
         let mut msg = Message::from_bytes(&msg[..])?;
         msg.verify_read(pri.public_key())?;
@@ -486,9 +486,9 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         pri.set_password(&mut rng, &ANNEX_A_5_PASSPHRASE.into())?;
 
         // try signing with pw
-        let msg = MessageBuilder::from_bytes(file_name, &text[..])
-            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
-            .to_vec(&mut rng)?;
+        let mut builder = MessageBuilder::from_bytes(file_name, &text[..]);
+        builder.sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256);
+        let msg = builder.to_vec(&mut rng)?;
 
         let mut msg = Message::from_bytes(&msg[..])?;
         msg.verify_read(pri.public_key())?;
@@ -503,9 +503,9 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         )?;
 
         // try signing with pw
-        let msg = MessageBuilder::from_bytes(file_name, &text[..])
-            .sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256)
-            .to_vec(&mut rng)?;
+        let mut builder = MessageBuilder::from_bytes(file_name, &text[..]);
+        builder.sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256);
+        let msg = builder.to_vec(&mut rng)?;
 
         let mut msg = Message::from_bytes(&msg[..])?;
         msg.verify_read(pri.public_key())?;
