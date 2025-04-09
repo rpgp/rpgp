@@ -55,6 +55,9 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
 
+    - name: curve448
+      run: cargo nextest run --lib --bins --tests --all --features unstable-curve448
+
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
