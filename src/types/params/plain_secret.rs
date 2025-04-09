@@ -5,12 +5,12 @@ use std::{
 
 use ::rsa::traits::PrivateKeyParts;
 use byteorder::{BigEndian, ByteOrder};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use hkdf::Hkdf;
 use log::debug;
 use num_bigint::ModInverse;
 use sha2::Sha256;
-use zeroize::ZeroizeOnDrop;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     composed::PlainSessionKey,
@@ -18,14 +18,14 @@ use crate::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, elgamal,
         public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, Decryptor,
     },
-    errors::Result,
+    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{EskType, PkeskBytes, PublicKeyTrait, PublicParams, *},
     util::TeeWriter,
 };
 
-#[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug, ZeroizeOnDrop)]
 #[allow(clippy::large_enum_variant)] // FIXME
 pub enum PlainSecretParams {
     RSA(rsa::SecretKey),
@@ -38,6 +38,15 @@ pub enum PlainSecretParams {
     Elgamal(elgamal::SecretKey),
     #[cfg(feature = "unstable-curve448")]
     X448(crate::crypto::x448::SecretKey),
+    Unknown {
+        #[zeroize(skip)]
+        alg: PublicKeyAlgorithm,
+        #[debug("{}", hex::encode(data))]
+        data: Zeroizing<Vec<u8>>,
+        #[zeroize(skip)]
+        #[debug("{}", hex::encode(pub_params))]
+        pub_params: Bytes,
+    },
 }
 
 pub(crate) fn pad_key<const SIZE: usize>(val: &[u8]) -> Result<[u8; SIZE]> {
@@ -138,8 +147,21 @@ impl PlainSecretParams {
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
                 Self::X448(key)
             }
-            _ => {
-                bail!("inconsistent key state");
+            (
+                alg,
+                PublicParams::Unknown {
+                    data: pub_params, ..
+                },
+            ) => {
+                let data = Zeroizing::new(i.rest()?.to_vec());
+                Self::Unknown {
+                    alg,
+                    data,
+                    pub_params: pub_params.clone(),
+                }
+            }
+            (_, _) => {
+                bail!("invalid combination {:?} - {:?}", alg, public_params);
             }
         };
 
@@ -179,7 +201,8 @@ impl PlainSecretParams {
     pub fn checksum_sha1(&self) -> Result<[u8; 20]> {
         let mut buf = Vec::with_capacity(self.write_len_raw());
         self.to_writer_raw(&mut buf).expect("known write target");
-        checksum::calculate_sha1([&buf])
+        let checksum = checksum::calculate_sha1([&buf])?;
+        Ok(checksum)
     }
 
     pub fn encrypt(
@@ -424,7 +447,9 @@ impl PlainSecretParams {
                 );
 
                 let key = decrypted_key[1..=key_size].to_vec();
-                let checksum = &decrypted_key[key_size + 1..key_size + 3];
+                let checksum = decrypted_key[key_size + 1..key_size + 3]
+                    .try_into()
+                    .expect("fixed size");
 
                 checksum::simple(checksum, &key)?;
 
@@ -442,7 +467,7 @@ impl PlainSecretParams {
                 );
 
                 let key = decrypted_key[0..len - 2].to_vec();
-                let checksum = &decrypted_key[len - 2..];
+                let checksum = decrypted_key[len - 2..].try_into().expect("fixed size");
 
                 checksum::simple(checksum, &key)?;
 
@@ -538,6 +563,9 @@ impl PlainSecretParams {
             PlainSecretParams::X448(key) => {
                 writer.write_all(&key.secret)?;
             }
+            PlainSecretParams::Unknown { data, .. } => {
+                writer.write_all(data)?;
+            }
         }
 
         Ok(())
@@ -587,6 +615,7 @@ impl PlainSecretParams {
             PlainSecretParams::X25519(_key) => 32,
             #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(_key) => 56,
+            PlainSecretParams::Unknown { data, .. } => data.len(),
         }
     }
 }

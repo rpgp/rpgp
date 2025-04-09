@@ -5,8 +5,10 @@ use md5::Md5;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use ripemd::Ripemd160;
 use sha1_checked::{CollisionResult, Sha1};
+use snafu::Snafu;
 
-use crate::errors::{Error, Result};
+use super::checksum::Sha1HashCollision;
+use crate::crypto::checksum::Sha1HashCollisionSnafu;
 
 /// Available hash algorithms.
 /// Ref: <https://www.rfc-editor.org/rfc/rfc9580.html#name-hash-algorithms>
@@ -47,14 +49,8 @@ pub enum HashAlgorithm {
     Other(#[cfg_attr(test, proptest(strategy = "111u8.."))] u8),
 }
 
-impl Default for HashAlgorithm {
-    fn default() -> Self {
-        Self::Sha256
-    }
-}
-
 impl FromStr for HashAlgorithm {
-    type Err = Error;
+    type Err = ();
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
@@ -69,8 +65,14 @@ impl FromStr for HashAlgorithm {
             "sha3-256" => Ok(Self::Sha3_256),
             "sha3-512" => Ok(Self::Sha3_512),
             "private10" => Ok(Self::Private10),
-            _ => bail!("unknown hash"),
+            _ => Err(()),
         }
+    }
+}
+
+impl Default for HashAlgorithm {
+    fn default() -> Self {
+        Self::Sha256
     }
 }
 
@@ -90,8 +92,6 @@ impl HashAlgorithm {
     }
 }
 
-impl zeroize::DefaultIsZeroes for HashAlgorithm {}
-
 /// Temporary wrapper around `Box<dyn DynDigest>` to implement `io::Write`.
 pub(crate) struct WriteHasher<'a>(pub(crate) &'a mut Box<dyn DynDigest + Send>);
 
@@ -107,9 +107,17 @@ impl std::io::Write for WriteHasher<'_> {
     }
 }
 
+#[derive(Debug, Snafu)]
+pub enum Error {
+    #[snafu(display("unsupported {:?}", alg))]
+    Unsupported { alg: HashAlgorithm },
+    #[snafu(transparent)]
+    Sha1HashCollision { source: Sha1HashCollision },
+}
+
 impl HashAlgorithm {
     /// Create a new hasher.
-    pub fn new_hasher(self) -> Result<Box<dyn DynDigest + Send>> {
+    pub fn new_hasher(self) -> Result<Box<dyn DynDigest + Send>, Error> {
         match self {
             HashAlgorithm::Md5 => Ok(Box::<Md5>::default()),
             HashAlgorithm::Sha1 => Ok(Box::<Sha1>::default()),
@@ -120,20 +128,20 @@ impl HashAlgorithm {
             HashAlgorithm::Sha224 => Ok(Box::<sha2::Sha224>::default()),
             HashAlgorithm::Sha3_256 => Ok(Box::<sha3::Sha3_256>::default()),
             HashAlgorithm::Sha3_512 => Ok(Box::<sha3::Sha3_512>::default()),
-            _ => unimplemented_err!("hasher {:?}", self),
+            _ => Err(UnsupportedSnafu { alg: self }.build()),
         }
     }
 
     /// Calculate the digest of the given input data.
-    pub fn digest(self, data: &[u8]) -> Result<Vec<u8>> {
+    pub fn digest(self, data: &[u8]) -> Result<Vec<u8>, Error> {
         use digest::Digest;
 
-        Ok(match self {
+        let res = match self {
             HashAlgorithm::Md5 => Md5::digest(data).to_vec(),
             HashAlgorithm::Sha1 => match Sha1::try_digest(data) {
                 CollisionResult::Ok(output) => output.to_vec(),
                 CollisionResult::Collision(_) | CollisionResult::Mitigated(_) => {
-                    return Err(Error::Sha1HashCollision)
+                    return Err(Sha1HashCollisionSnafu {}.build().into())
                 }
             },
             HashAlgorithm::Ripemd160 => Ripemd160::digest(data).to_vec(),
@@ -143,10 +151,9 @@ impl HashAlgorithm {
             HashAlgorithm::Sha224 => sha2::Sha224::digest(data).to_vec(),
             HashAlgorithm::Sha3_256 => sha3::Sha3_256::digest(data).to_vec(),
             HashAlgorithm::Sha3_512 => sha3::Sha3_512::digest(data).to_vec(),
-
-            HashAlgorithm::Private10 => unsupported_err!("Private10 should not be used"),
-            _ => unimplemented_err!("hasher: {:?}", self),
-        })
+            _ => return Err(UnsupportedSnafu { alg: self }.build()),
+        };
+        Ok(res)
     }
 
     /// Returns the expected digest size for the given algorithm.

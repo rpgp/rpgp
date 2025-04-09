@@ -7,7 +7,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     crypto::{checksum, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::Result,
+    errors::{bail, ensure_eq, Result},
     packet::{PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,

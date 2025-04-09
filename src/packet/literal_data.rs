@@ -9,7 +9,7 @@ use num_enum::{FromPrimitive, IntoPrimitive};
 use proptest::prelude::*;
 
 use crate::{
-    errors::Result,
+    errors::{ensure, Result},
     line_writer::LineBreak,
     normalize_lines::{normalize_lines, NormalizedReader},
     packet::{PacketHeader, PacketTrait},
@@ -491,11 +491,11 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 .expect("known construction");
                 packet_header
                     .to_writer(&mut writer)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(io::Error::other)?;
 
                 self.header
                     .to_writer(&mut writer)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(io::Error::other)?;
 
                 debug!("first partial packet {:?}", packet_header);
                 self.is_first = false;
@@ -503,7 +503,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 // only length
                 packet_length
                     .to_writer_new(&mut writer)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                    .map_err(io::Error::other)?;
                 debug!("partial packet {:?}", packet_length);
             };
 

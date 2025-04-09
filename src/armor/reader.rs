@@ -15,7 +15,7 @@ use nom::{
 
 use crate::{
     base64::{Base64Decoder, Base64Reader},
-    errors::Result,
+    errors::{bail, Result},
     ser::Serialize,
 };
 
@@ -489,7 +489,7 @@ impl<R: BufRead> Read for Dearmor<R> {
                 Part::Header(mut b) => {
                     let (typ, headers, _leading) =
                         Self::read_header_internal(&mut b, self.max_buffer_limit)
-                            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                            .map_err(io::Error::other)?;
                     self.typ = Some(typ);
                     self.headers = headers;
                     self.current_part = Part::Body(Base64Decoder::new(Base64Reader::new(b)));
@@ -519,7 +519,7 @@ impl<R: BufRead> Read for Dearmor<R> {
                     }
 
                     self.read_footer(b)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
                 }
                 Part::Done(b) => {
                     self.current_part = Part::Done(b);

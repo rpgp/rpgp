@@ -3,7 +3,7 @@ use std::io::BufRead;
 use log::warn;
 
 use crate::{
-    errors::{Error, Result},
+    errors::{format_err, Error, Result, UnsupportedSnafu},
     packet::{
         CompressedData, LiteralData, Marker, ModDetectionCode, OnePassSignature, Packet,
         PacketHeader, Padding, PublicKey, PublicKeyEncryptedSessionKey, PublicSubkey, SecretKey,
@@ -62,26 +62,30 @@ impl Packet {
                 ModDetectionCode::try_from_reader(packet_header, &mut body).map(Into::into)
             }
             Tag::Padding => Padding::try_from_reader(packet_header, &mut body).map(Into::into),
-            Tag::Other(20) => {
-                unimplemented_err!("GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported")
+            Tag::Other(20) => Err(UnsupportedSnafu {
+                message: "GnuPG-proprietary 'OCB Encrypted Data Packet' is unsupported".to_string(),
             }
+            .build()),
             Tag::Other(22..=39) => {
                 // a "hard" error that will bubble up and interrupt processing of compositions
-                return Err(Error::InvalidPacketContent {
+                Err(Error::InvalidPacketContent {
                     source: Box::new(format_err!(
                         "Unassigned Critical Packet type {:?}",
                         packet_header.tag()
                     )),
-                });
+                })
             }
             Tag::Other(40..=59) => {
                 // a "soft" error that will usually get ignored while processing packet streams
-                unsupported_err!(
-                    "Unsupported but non-critical packet type: {:?}",
-                    packet_header.tag()
-                )
+                Err(UnsupportedSnafu {
+                    message: format!("Unassigned Critical Packet type {:?}", packet_header.tag()),
+                }
+                .build())
             }
-            Tag::Other(other) => unimplemented_err!("Unknown packet type: {}", other),
+            Tag::Other(other) => Err(UnsupportedSnafu {
+                message: format!("Unknown packet type: {}", other),
+            }
+            .build()),
         };
 
         if let Err(ref err) = res {

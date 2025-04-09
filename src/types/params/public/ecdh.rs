@@ -9,13 +9,13 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, ensure_eq, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::Mpi,
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(test, derive(proptest_derive::Arbitrary))]
 pub enum EcdhPublicParams {
     /// ECDH public parameters for a curve that we know uses Mpi representation
@@ -64,7 +64,11 @@ pub enum EcdhPublicParams {
 
     /// Public parameters for a curve that we don't know about (which might not use Mpi representation).
     #[cfg_attr(test, proptest(skip))]
-    Unsupported { curve: ECCCurve, opaque: Bytes },
+    Unsupported {
+        curve: ECCCurve,
+        #[debug("{}", hex::encode(opaque))]
+        opaque: Bytes,
+    },
 }
 
 impl Serialize for EcdhPublicParams {
@@ -237,7 +241,7 @@ impl EcdhPublicParams {
                 let data = if let Some(pub_len) = len {
                     i.take_bytes(pub_len)?.freeze()
                 } else {
-                    Bytes::default()
+                    i.rest()?.freeze()
                 };
                 Ok(EcdhPublicParams::Unsupported {
                     curve,

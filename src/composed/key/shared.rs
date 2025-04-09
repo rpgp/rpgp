@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 use crate::{
     composed::SignedKeyDetails,
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::Result,
+    errors::{unsupported_err, Result},
     packet::{
         KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData,
         UserAttribute, UserId,

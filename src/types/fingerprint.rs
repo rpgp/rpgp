@@ -1,4 +1,7 @@
-use crate::{errors::Result, types::KeyVersion};
+use crate::{
+    errors::{bail, format_err, Result},
+    types::KeyVersion,
+};
 
 /// Represents a Fingerprint.
 ///

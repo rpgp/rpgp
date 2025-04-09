@@ -3,13 +3,12 @@ use std::io;
 use bytes::{Buf, BytesMut};
 use zeroize::Zeroizing;
 
-use super::ChunkSize;
+use super::{ChunkSize, InvalidSessionKeySnafu};
 use crate::{
     crypto::{
-        aead::{aead_setup, AeadAlgorithm},
+        aead::{aead_setup, AeadAlgorithm, Error},
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
     util::fill_buffer,
 };
 
@@ -38,17 +37,21 @@ impl<R: io::Read> StreamEncryptor<R> {
         session_key: &[u8],
         salt: &[u8; 32],
         source: R,
-    ) -> Result<Self> {
-        ensure_eq!(
-            session_key.len(),
-            sym_alg.key_size(),
-            "Unexpected session key length for {:?}",
-            sym_alg
-        );
+    ) -> Result<Self, Error> {
+        if session_key.len() != sym_alg.key_size() {
+            return Err(InvalidSessionKeySnafu {
+                alg: sym_alg,
+                session_key_size: session_key.len(),
+            }
+            .build());
+        }
 
         let (info, message_key, nonce) =
-            aead_setup(sym_alg, aead, chunk_size, &salt[..], session_key)?;
-        let chunk_size_expanded: usize = chunk_size.as_byte_size().try_into()?;
+            aead_setup(sym_alg, aead, chunk_size, &salt[..], session_key);
+        let chunk_size_expanded: usize = chunk_size
+            .as_byte_size()
+            .try_into()
+            .expect("invalid chunk size");
 
         let buffer = BytesMut::with_capacity(chunk_size_expanded);
 
@@ -84,7 +87,7 @@ impl<R: io::Read> StreamEncryptor<R> {
                 &final_info,
                 &mut self.buffer,
             )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         Ok(())
     }
@@ -128,7 +131,7 @@ impl<R: io::Read> StreamEncryptor<R> {
                 &self.info,
                 &mut self.buffer,
             )
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
         // Update nonce to include the next chunk index
         self.chunk_index += 1;

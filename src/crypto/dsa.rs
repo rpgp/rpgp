@@ -9,7 +9,7 @@ use zeroize::Zeroize;
 
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
-    errors::Result,
+    errors::{unimplemented_err, Result},
     types::{DsaPublicParams, Mpi},
 };
 

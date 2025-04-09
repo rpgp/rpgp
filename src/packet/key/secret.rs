@@ -6,7 +6,7 @@ use rand::{CryptoRng, Rng};
 use super::public::{encrypt, PubKeyInner};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
+    errors::{bail, ensure_eq, unsupported_err, Result},
     packet::{
         PacketHeader, PacketTrait, Signature, SignatureConfig, SignatureType, Subpacket,
         SubpacketData,
@@ -513,6 +513,9 @@ fn create_signature(
         }
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
+        }
+        PlainSecretParams::Unknown { alg, .. } => {
+            unsupported_err!("{:?} signing", alg);
         }
     }?;
 

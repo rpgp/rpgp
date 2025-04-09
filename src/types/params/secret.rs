@@ -4,7 +4,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{aead::AeadAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{InvalidInputSnafu, Result},
+    errors::{bail, InvalidInputSnafu, Result},
     parsing_reader::BufReadParsing,
     types::*,
 };

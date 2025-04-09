@@ -30,7 +30,7 @@ pub use self::{
 use super::PlainSecretParams;
 
 /// Represent the public parameters for the different algorithms.
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, derive_more::Debug)]
 pub enum PublicParams {
     RSA(RsaPublicParams),
     DSA(DsaPublicParams),
@@ -43,6 +43,7 @@ pub enum PublicParams {
     #[cfg(feature = "unstable-curve448")]
     X448(X448PublicParams),
     Unknown {
+        #[debug("{}", hex::encode(data))]
         data: Bytes,
     },
 }
@@ -62,6 +63,9 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
             #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
+            PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {
+                data: pub_params.clone(),
+            }),
         }
     }
 }
@@ -85,7 +89,7 @@ impl PublicParams {
                 Ok(PublicParams::DSA(params))
             }
             PublicKeyAlgorithm::ECDSA => {
-                let params = EcdsaPublicParams::try_from_reader(i)?;
+                let params = EcdsaPublicParams::try_from_reader(i, len)?;
                 Ok(PublicParams::ECDSA(params))
             }
             PublicKeyAlgorithm::ECDH => {
@@ -101,7 +105,7 @@ impl PublicParams {
                 Ok(PublicParams::Elgamal(params))
             }
             PublicKeyAlgorithm::EdDSALegacy => {
-                let params = EddsaLegacyPublicParams::try_from_reader(i)?;
+                let params = EddsaLegacyPublicParams::try_from_reader(i, len)?;
                 Ok(PublicParams::EdDSALegacy(params))
             }
             PublicKeyAlgorithm::Ed25519 => {
@@ -153,10 +157,9 @@ fn unknown<B: BufRead>(mut i: B, len: Option<usize>) -> Result<PublicParams> {
         let data = i.take_bytes(pub_len)?.freeze();
         Ok(PublicParams::Unknown { data })
     } else {
-        // we don't know how many bytes to consume
-        Ok(PublicParams::Unknown {
-            data: Bytes::default(),
-        })
+        // consume the reset
+        let data = i.rest()?.freeze();
+        Ok(PublicParams::Unknown { data })
     }
 }
 

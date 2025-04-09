@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate pretty_assertions;
 
-use pgp::composed::Deserializable;
+use pgp::composed::{Deserializable, StandaloneSignature};
 
 #[test]
 fn sig_odd() {
@@ -11,9 +11,8 @@ fn sig_odd() {
     let original_sig = std::fs::read_to_string("tests/sig_odd.asc").unwrap();
 
     let (sig, _headers) =
-        pgp::composed::StandaloneSignature::from_armor_single(original_sig.as_bytes())
-            .expect("parsing");
+        StandaloneSignature::from_armor_single(original_sig.as_bytes()).expect("parsing");
 
-    assert_eq!(sig.signature.config.hashed_subpackets.len(), 2);
-    assert_eq!(sig.signature.config.unhashed_subpackets.len(), 3);
+    assert_eq!(sig.signature.config().unwrap().hashed_subpackets.len(), 2);
+    assert_eq!(sig.signature.config().unwrap().unhashed_subpackets.len(), 3);
 }

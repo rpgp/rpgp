@@ -5,7 +5,7 @@ use byteorder::{BigEndian, WriteBytesExt};
 use log::debug;
 
 use crate::{
-    errors::Result,
+    errors::{bail, ensure, format_err, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
     types::{PacketHeaderVersion, PacketLength, Tag},

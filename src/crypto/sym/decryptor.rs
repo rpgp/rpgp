@@ -14,7 +14,11 @@ use sha1::{Digest, Sha1};
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
-use crate::{crypto::sym::SymmetricKeyAlgorithm, errors::Result, util::fill_buffer};
+use crate::{
+    crypto::sym::SymmetricKeyAlgorithm,
+    errors::{bail, Result},
+    util::fill_buffer,
+};
 
 const MDC_LEN: usize = 22;
 const BUFFER_SIZE: usize = 512;
@@ -334,9 +338,7 @@ where
                             let encrypted_prefix = prefix[2..].to_vec();
                             encryptor.decrypt(&mut prefix);
                             encryptor = BufDecryptor::<M>::new_from_slices(key, &encrypted_prefix)
-                                .map_err(|e| {
-                                    io::Error::new(io::ErrorKind::InvalidInput, e.to_string())
-                                })?;
+                                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
                         }
                         MaybeProtected::Protected { ref mut hasher } => {
                             encryptor.decrypt(&mut prefix);

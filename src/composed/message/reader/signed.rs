@@ -6,7 +6,7 @@ use log::debug;
 use super::PacketBodyReader;
 use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
-    errors::Result,
+    errors::{bail, ensure_eq, Result},
     packet::{Signature, SignatureType, SignatureVersionSpecific},
     util::{fill_buffer, NormalizingHasher},
 };
@@ -15,14 +15,14 @@ use crate::{
 pub enum SignatureBodyReader<'a> {
     Init {
         /// Running hasher
-        norm_hasher: NormalizingHasher,
+        norm_hasher: Option<NormalizingHasher>,
         /// Data source
         source: Box<Message<'a>>,
         signature: Signature,
     },
     Body {
         /// Running hasher
-        norm_hasher: NormalizingHasher,
+        norm_hasher: Option<NormalizingHasher>,
         /// Data source
         source: Box<Message<'a>>,
         buffer: BytesMut,
@@ -30,7 +30,7 @@ pub enum SignatureBodyReader<'a> {
     },
     Done {
         /// Finalized hash
-        hash: Box<[u8]>,
+        hash: Option<Box<[u8]>>,
         /// Data source
         source: Box<Message<'a>>,
         signature: Signature,
@@ -40,24 +40,28 @@ pub enum SignatureBodyReader<'a> {
 
 impl<'a> SignatureBodyReader<'a> {
     pub(crate) fn new(sig: Signature, source: Box<Message<'a>>) -> Result<Self> {
-        let mut hasher = sig.config.hash_alg.new_hasher()?;
-        if let SignatureVersionSpecific::V6 { ref salt, .. } = sig.config.version_specific {
-            // Salt size must match the expected length for the hash algorithm that is used
-            //
-            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
-            ensure_eq!(
-                sig.config.hash_alg.salt_len(),
-                Some(salt.len()),
-                "Illegal salt length {} for a V6 Signature using {:?}",
-                salt.len(),
-                sig.config.hash_alg,
-            );
+        let hasher = if let Some(config) = sig.config() {
+            let mut hasher = config.hash_alg.new_hasher()?;
+            if let SignatureVersionSpecific::V6 { ref salt, .. } = config.version_specific {
+                // Salt size must match the expected length for the hash algorithm that is used
+                //
+                // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+                ensure_eq!(
+                    config.hash_alg.salt_len(),
+                    Some(salt.len()),
+                    "Illegal salt length {} for a V6 Signature using {:?}",
+                    salt.len(),
+                    config.hash_alg,
+                );
 
-            hasher.update(salt.as_ref());
-        }
-
-        let text_mode = sig.typ() == SignatureType::Text;
-        let norm_hasher = NormalizingHasher::new(hasher, text_mode);
+                hasher.update(salt.as_ref());
+            }
+            Some(hasher)
+        } else {
+            None
+        };
+        let text_mode = sig.typ() == Some(SignatureType::Text);
+        let norm_hasher = hasher.map(|h| NormalizingHasher::new(h, text_mode));
 
         Ok(Self::Init {
             norm_hasher,
@@ -70,7 +74,7 @@ impl<'a> SignatureBodyReader<'a> {
         match self {
             Self::Init { .. } => None,
             Self::Body { .. } => None,
-            Self::Done { hash, .. } => Some(hash),
+            Self::Done { hash, .. } => hash.as_deref(),
             Self::Error => {
                 panic!("SignatureBodyReader errored");
             }
@@ -139,8 +143,9 @@ impl<'a> SignatureBodyReader<'a> {
                         ));
                     }
 
-                    // TODO: normalize line endings..
-                    norm_hasher.hash_buf(&buffer);
+                    if let Some(ref mut hasher) = norm_hasher {
+                        hasher.hash_buf(&buffer);
+                    }
 
                     *self = Self::Body {
                         source,
@@ -171,26 +176,35 @@ impl<'a> SignatureBodyReader<'a> {
                     let read = fill_buffer(&mut source, &mut buffer, None)?;
                     buffer.truncate(read);
 
-                    // TODO: normalize line endings
-                    norm_hasher.hash_buf(&buffer);
+                    if let Some(ref mut hasher) = norm_hasher {
+                        hasher.hash_buf(&buffer);
+                    }
 
                     if read == 0 {
                         debug!("SignatureReader finish");
 
-                        let mut hasher = norm_hasher.done();
-
-                        // calculate final hash
-                        let len =
-                            signature
-                                .config
+                        let hash = if let Some(norm_hasher) = norm_hasher {
+                            let mut hasher = norm_hasher.done();
+                            let config = signature.config().ok_or_else(|| {
+                                io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "inconsistent signature state",
+                                )
+                            })?;
+                            // calculate final hash
+                            let len = config
                                 .hash_signature_data(&mut hasher)
-                                .map_err(|e| {
-                                    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                                })?;
-                        hasher.update(&signature.config.trailer(len).map_err(|e| {
-                            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                        })?);
-                        let hash = hasher.finalize();
+                                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                            hasher.update(
+                                &config
+                                    .trailer(len)
+                                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?,
+                            );
+
+                            Some(hasher.finalize())
+                        } else {
+                            None
+                        };
 
                         *self = Self::Done {
                             signature,
@@ -204,7 +218,7 @@ impl<'a> SignatureBodyReader<'a> {
                             buffer,
                             signature,
                         }
-                    }
+                    };
 
                     return Ok(());
                 }

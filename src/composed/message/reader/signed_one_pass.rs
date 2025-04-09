@@ -6,7 +6,7 @@ use log::debug;
 use super::PacketBodyReader;
 use crate::{
     composed::{Message, MessageReader, RingResult, TheRing},
-    errors::Result,
+    errors::{bail, ensure_eq, Result},
     packet::{OnePassSignature, OpsVersionSpecific, Packet, PacketTrait, Signature, SignatureType},
     util::{fill_buffer, NormalizingHasher},
 };
@@ -15,20 +15,22 @@ use crate::{
 pub enum SignatureOnePassReader<'a> {
     Init {
         /// Running hasher
-        norm_hasher: NormalizingHasher,
+        norm_hasher: Option<NormalizingHasher>,
         /// Data source
         source: Box<Message<'a>>,
     },
     Body {
         /// Running hasher
-        norm_hasher: NormalizingHasher,
+        norm_hasher: Option<NormalizingHasher>,
         /// Data source
         source: Box<Message<'a>>,
+        #[debug("{}", hex::encode(buffer))]
         buffer: BytesMut,
     },
     Done {
         /// Finalized hash
-        hash: Box<[u8]>,
+        #[debug("{:?}", hash.as_ref().map(hex::encode))]
+        hash: Option<Box<[u8]>>,
         /// Data source
         source: Box<Message<'a>>,
         /// Final signature,
@@ -39,24 +41,25 @@ pub enum SignatureOnePassReader<'a> {
 
 impl<'a> SignatureOnePassReader<'a> {
     pub(crate) fn new(ops: &OnePassSignature, source: Box<Message<'a>>) -> Result<Self> {
-        let mut hasher = ops.hash_algorithm().new_hasher()?;
-        if let OpsVersionSpecific::V6 { salt, .. } = ops.version_specific() {
-            // Salt size must match the expected length for the hash algorithm that is used
-            //
-            // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
-            ensure_eq!(
-                ops.hash_algorithm().salt_len(),
-                Some(salt.len()),
-                "Illegal salt length {} for a V6 Signature using {:?}",
-                salt.len(),
-                ops.hash_algorithm(),
-            );
+        let mut hasher = ops.hash_algorithm().new_hasher().ok();
+        if let Some(ref mut hasher) = hasher {
+            if let OpsVersionSpecific::V6 { salt, .. } = ops.version_specific() {
+                // Salt size must match the expected length for the hash algorithm that is used
+                //
+                // See: https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3-2.10.2.1.1
+                ensure_eq!(
+                    ops.hash_algorithm().salt_len(),
+                    Some(salt.len()),
+                    "Illegal salt length {} for a V6 Signature using {:?}",
+                    salt.len(),
+                    ops.hash_algorithm(),
+                );
 
-            hasher.update(salt.as_ref());
+                hasher.update(salt.as_ref());
+            }
         }
-
         let text_mode = ops.typ() == SignatureType::Text;
-        let norm_hasher = NormalizingHasher::new(hasher, text_mode);
+        let norm_hasher = hasher.map(|hasher| NormalizingHasher::new(hasher, text_mode));
 
         Ok(Self::Init {
             norm_hasher,
@@ -68,7 +71,7 @@ impl<'a> SignatureOnePassReader<'a> {
         match self {
             Self::Init { .. } => None,
             Self::Body { .. } => None,
-            Self::Done { hash, .. } => Some(hash),
+            Self::Done { hash, .. } => hash.as_deref(),
             Self::Error => panic!("SignatureOnePassReader errored"),
         }
     }
@@ -132,7 +135,9 @@ impl<'a> SignatureOnePassReader<'a> {
                         ));
                     }
 
-                    norm_hasher.hash_buf(&buffer[..read]);
+                    if let Some(ref mut hasher) = norm_hasher {
+                        hasher.hash_buf(&buffer[..read]);
+                    }
 
                     *self = Self::Body {
                         norm_hasher,
@@ -160,12 +165,14 @@ impl<'a> SignatureOnePassReader<'a> {
                     let read = fill_buffer(&mut source, &mut buffer, None)?;
                     buffer.truncate(read);
 
-                    norm_hasher.hash_buf(&buffer[..read]);
+                    if let Some(ref mut hasher) = norm_hasher {
+                        hasher.hash_buf(&buffer[..read]);
+                    }
 
                     if read == 0 {
                         debug!("SignatureOnePassReader finish");
 
-                        let mut hasher = norm_hasher.done();
+                        let hasher = norm_hasher.map(|h| h.done());
 
                         let (reader, parts) = source.into_parts();
 
@@ -177,9 +184,8 @@ impl<'a> SignatureOnePassReader<'a> {
                                 "missing signature packet",
                             ));
                         };
-                        let packet = packet.map_err(|e| {
-                            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                        })?;
+                        let packet =
+                            packet.map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
 
                         let Packet::Signature(signature) = packet else {
                             return Err(io::Error::new(
@@ -192,18 +198,24 @@ impl<'a> SignatureOnePassReader<'a> {
                         };
 
                         // calculate final hash
-                        debug!("calculating final hash");
-                        let len =
-                            signature
-                                .config
-                                .hash_signature_data(&mut hasher)
-                                .map_err(|e| {
-                                    io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                                })?;
-                        hasher.update(&signature.config.trailer(len).map_err(|e| {
-                            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
-                        })?);
-                        let hash = hasher.finalize();
+                        let hash = if let Some(mut hasher) = hasher {
+                            debug!("calculating final hash");
+                            if let Some(config) = signature.config() {
+                                let len = config
+                                    .hash_signature_data(&mut hasher)
+                                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                                hasher.update(
+                                    &config.trailer(len).map_err(|e| {
+                                        io::Error::new(io::ErrorKind::InvalidData, e)
+                                    })?,
+                                );
+                                Some(hasher.finalize())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
 
                         // reconstruct message source
                         let reader = packets.into_inner();

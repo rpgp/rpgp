@@ -21,7 +21,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, ensure, ensure_eq, Result},
     line_writer::{LineBreak, LineWriter},
     normalize_lines::NormalizedReader,
     packet::{
@@ -1145,7 +1145,7 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
                         if let Some(op) = ops.pop_front() {
                             let mut writer = buffer.writer();
                             op.to_writer_with_header(&mut writer).map_err(|e| {
-                                std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string())
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, e)
                             })?;
                             buffer = writer.into_inner();
                         } else {
@@ -2094,12 +2094,12 @@ mod tests {
                 let VerificationResult::Valid(ref sig1) = res[0] else {
                     panic!("invalid sig1");
                 };
-                assert_eq!(sig1.hash_alg(), HashAlgorithm::Sha256);
+                assert_eq!(sig1.hash_alg().unwrap(), HashAlgorithm::Sha256);
 
                 let VerificationResult::Valid(ref sig2) = res[1] else {
                     panic!("invalid sig2");
                 };
-                assert_eq!(sig2.hash_alg(), HashAlgorithm::Sha512);
+                assert_eq!(sig2.hash_alg().unwrap(), HashAlgorithm::Sha512);
 
                 assert_eq!(decompressed.literal_data_header().unwrap().file_name(), "");
             }

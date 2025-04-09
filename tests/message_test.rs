@@ -12,7 +12,11 @@ extern crate log;
 use std::fs::File;
 
 use pgp::{
-    composed::{CleartextSignedMessage, Deserializable, Message, SignedPublicKey, SignedSecretKey},
+    composed::{
+        CleartextSignedMessage, Deserializable, Message, PlainSessionKey, SignedPublicKey,
+        SignedSecretKey,
+    },
+    crypto::sym::SymmetricKeyAlgorithm,
     types::{KeyDetails, KeyId, Password},
 };
 
@@ -837,4 +841,133 @@ fn test_literal_eating_mdc() {
         "found error: {}",
         err
     );
+}
+
+#[test]
+fn test_unknown_hash() {
+    pretty_env_logger::try_init().ok();
+    let (msg, _) = Message::from_armor_file("tests/sigs/unknown_hash.sig.asc").unwrap();
+    dbg!(&msg);
+
+    let mut msg = msg
+        .decrypt_with_session_key(PlainSessionKey::V3_4 {
+            sym_alg: SymmetricKeyAlgorithm::AES256,
+            key: hex::decode("0A62FC3D10FA134E8C3C915C68AA4B6C6E081D68A9ED1578735AC4743D0381F8")
+                .unwrap(),
+        })
+        .expect("failed to decrypt");
+
+    dbg!(&msg);
+    let content = msg.as_data_string().expect("failed to read");
+    assert_eq!(content, "Encrypted, signed message.");
+}
+
+#[test]
+fn test_unknown_one_pass() {
+    pretty_env_logger::try_init().ok();
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    let (msg, _) = Message::from_armor_file("tests/sigs/unknown_one_pass.sig.asc").unwrap();
+    dbg!(&msg);
+
+    let mut msg = msg
+        .decrypt(&Password::empty(), &ssk)
+        .expect("failed to decrypt");
+
+    dbg!(&msg);
+    let content = msg.as_data_string().expect("failed to read");
+    assert_eq!(content, "Encrypted, signed message.");
+    dbg!(&msg);
+}
+
+#[test]
+fn test_signature_leniency() {
+    // Test graceful handling of signatures with unknown elements.
+    // Test vectors from "Messages with unknown packets" in OpenPGP interoperability test suite.
+
+    pretty_env_logger::try_init().ok();
+
+    let (ssk, _headers) =
+        SignedSecretKey::from_armor_file("./tests/draft-bre-openpgp-samples-00/bob.sec.asc")
+            .expect("ssk");
+
+    // "PKESK3 SEIPDv1 [OPS3[H99] Literal Sig4[H99]]" from the OpenPGP interoperability test suite
+    let (message, _) = Message::from_armor_file("./tests/message_other_hash.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+
+    // "PKESK3 SEIPDv1 [OPS3[P99] Literal Sig4[P99]]" from the OpenPGP interoperability test suite
+    let (message, _) = Message::from_armor_file("./tests/message_other_pub_algo.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+
+    // "PKESK3 SEIP [OPS23 OPS3 Literal Sig4 Sig23]" from the OpenPGP interoperability test suite
+    let (message, _) =
+        Message::from_armor_file("./tests/message_future_signature.asc").expect("ok");
+
+    dbg!(&message);
+    let mut msg = message.decrypt(&Password::empty(), &ssk).expect("decrypt");
+
+    let res = msg.as_data_vec();
+    dbg!(&res);
+
+    assert!(res.is_ok());
+}
+
+#[test]
+fn test_packet_leniency() {
+    // Tests graceful handling of a certificate with an unknown packet.
+    // Test vector "P U UB S SB X B" from "Perturbed certificates" in OpenPGP interoperability test suite.
+
+    pretty_env_logger::try_init().ok();
+
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/perturbed.pub.asc").unwrap();
+    dbg!(&key);
+}
+
+// Tests graceful handling of a certificates with a subkey that has unknown features.
+// Test vectors from "Mock PQ subkey" in OpenPGP interoperability test suite.
+
+#[test]
+fn test_mock_pq_cert_leniency_unkown_algo_mpi() {
+    pretty_env_logger::try_init().ok();
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/unknown_algo_mpi.pub.asc").unwrap();
+    dbg!(&key);
+}
+
+#[test]
+fn test_mock_pq_cert_leniency_ecdsa_opaque() {
+    pretty_env_logger::try_init().ok();
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/ecdsa_opaque_small.pub.asc").unwrap();
+    dbg!(&key);
+}
+#[test]
+fn test_mock_pq_cert_leniency_eddsa_opaque() {
+    pretty_env_logger::try_init().ok();
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/eddsa_opaque_small.pub.asc").unwrap();
+    dbg!(&key);
+}
+#[test]
+fn test_mock_pq_cert_leniency_ecdh_opaque() {
+    pretty_env_logger::try_init().ok();
+    let (key, _) =
+        SignedPublicKey::from_armor_file("./tests/mock_pq/ecdh_opaque_small.pub.asc").unwrap();
+    dbg!(key);
 }

@@ -12,6 +12,7 @@ use crate::{
     },
     ser::Serialize,
     types::{PacketHeaderVersion, PacketLength, Tag},
+    util::impl_try_from_into,
 };
 
 /// Represents a Packet. A packet is the record structure used to encode a chunk of data in OpenPGP.

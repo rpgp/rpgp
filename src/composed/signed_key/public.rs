@@ -12,7 +12,7 @@ use crate::{
         ArmorOptions,
     },
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
+    errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{
@@ -249,8 +249,8 @@ pub struct SignedPublicSubKey {
 impl SignedPublicSubKey {
     pub fn new(key: packet::PublicSubkey, mut signatures: Vec<packet::Signature>) -> Self {
         signatures.retain(|sig| {
-            if sig.typ() != SignatureType::SubkeyBinding
-                && sig.typ() != SignatureType::SubkeyRevocation
+            if sig.typ() != Some(SignatureType::SubkeyBinding)
+                && sig.typ() != Some(SignatureType::SubkeyRevocation)
             {
                 warn!(
                     "ignoring unexpected signature {:?} after Subkey packet",

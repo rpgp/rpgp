@@ -11,7 +11,7 @@ use crate::{
         hash::{HashAlgorithm, WriteHasher},
         public_key::PublicKeyAlgorithm,
     },
-    errors::Result,
+    errors::{bail, ensure, unimplemented_err, Result},
     packet::{
         types::serialize_for_hashing, Signature, SignatureType, SignatureVersion, Subpacket,
         SubpacketData, SubpacketType,
@@ -33,7 +33,7 @@ pub struct SignatureConfig {
     pub version_specific: SignatureVersionSpecific,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, derive_more::Debug)]
 pub enum SignatureVersionSpecific {
     V2 {
         created: DateTime<Utc>,
@@ -45,6 +45,7 @@ pub enum SignatureVersionSpecific {
     },
     V4,
     V6 {
+        #[debug("{}", hex::encode(salt))]
         salt: Vec<u8>,
     },
 }

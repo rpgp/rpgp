@@ -15,7 +15,7 @@ use rand::{CryptoRng, Rng};
 use twofish::Twofish;
 use zeroize::Zeroizing;
 
-use crate::errors::{Error, Result};
+use crate::errors::{bail, ensure, unimplemented_err, Error, Result};
 
 mod decryptor;
 mod encryptor;

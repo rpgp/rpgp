@@ -1,10 +1,11 @@
 use std::io::BufRead;
 
 use chrono::{DateTime, TimeZone, Utc};
+use log::debug;
 
 use crate::{
     crypto::public_key::PublicKeyAlgorithm,
-    errors::Result,
+    errors::{ensure, format_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
     types::{KeyVersion, PublicParams},
 };
@@ -77,6 +78,8 @@ pub(crate) fn parse<B: BufRead>(
     PublicParams,
 )> {
     let key_ver = i.read_u8().map(KeyVersion::from)?;
+    debug!("public params for key version {:?}", key_ver);
+
     let key = match key_ver {
         KeyVersion::V2 | KeyVersion::V3 => public_key_parser_v2_v3(&key_ver, i)?,
         KeyVersion::V4 | KeyVersion::V6 => public_key_parser_v4_v6(&key_ver, i)?,

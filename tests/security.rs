@@ -1,7 +1,4 @@
-use pgp::{
-    composed::{Deserializable, Message},
-    types::SecretKeyTrait,
-};
+use pgp::composed::{Deserializable, Message};
 
 /// RPG-022
 #[test]
@@ -242,14 +239,14 @@ fn rpg_020_signed_secret_key_create_signature_panic1() {
     // let dummy_data: &[u8] = &[0];
 
     let res = pgp::composed::SignedSecretKey::from_bytes(bad_input);
-    assert!(res.is_err()); // validation now happens earlier
+    assert!(res.is_err());
 
     // // expected bug behavior:
     // // thread '<unnamed>' panicked at [..]/num-bigint-dig-0.8.4/src/algorithms/sub.rs:75:5:
     // // Cannot subtract b from a because b is larger than a.
     // let _ = key.create_signature(
-    //     || "pw".into(),
-    //     pgp::crypto::hash::HashAlgorithm::SHA2_256,
+    //     &Password::empty(),
+    //     pgp::crypto::hash::HashAlgorithm::Sha256,
     //     dummy_data,
     // );
 }
@@ -262,20 +259,21 @@ fn rpg_020_signed_secret_key_create_signature_panic2() {
         0xff, 0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0xf8, 0xf8, 0xff, 0x00, 0xff,
         0x00, 0xff, 0x00,
     ];
-    let dummy_data: &[u8] = &[0];
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
-    // expected bug behavior for --debug:
-    // thread [..] panicked at [..]/src/types/params/encrypted_secret.rs:155:48:
-    // attempt to subtract with overflow
-    //
-    // expected bug behavior for --release:
-    // thread '[..]' panicked at [..]/src/types/params/encrypted_secret.rs:155:39:
-    // assertion failed: mid <= self.len()
-    let _ = key.create_signature(
-        &"pw".into(),
-        pgp::crypto::hash::HashAlgorithm::Sha256,
-        dummy_data,
-    );
+    // let dummy_data: &[u8] = &[0];
+    let res = pgp::composed::SignedSecretKey::from_bytes(bad_input);
+    assert!(res.is_err());
+    // // expected bug behavior for --debug:
+    // // thread [..] panicked at [..]/src/types/params/encrypted_secret.rs:155:48:
+    // // attempt to subtract with overflow
+    // //
+    // // expected bug behavior for --release:
+    // // thread '[..]' panicked at [..]/src/types/params/encrypted_secret.rs:155:39:
+    // // assertion failed: mid <= self.len()
+    // let _ = key.create_signature(
+    //     &"pw".into(),
+    //     pgp::crypto::hash::HashAlgorithm::Sha256,
+    //     dummy_data,
+    // );
 }
 
 /// RPG-020
@@ -285,15 +283,17 @@ fn rpg_020_signed_secret_key_create_signature_oom_crash1() {
         0x97, 0x04, 0x00, 0x00, 0x08, 0x29, 0xc1, 0xfd, 0xff, 0x9f, 0x04, 0x8f, 0xe4, 0xff, 0xff,
         0xff, 0xff, 0x80, 0x8f, 0x8f, 0x8f, 0x00, 0x01, 0x00, 0x00, 0x00, 0xaf, 0xf8, 0x1b, 0x1b,
     ];
-    let dummy_data: &[u8] = &[0];
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
-    // expected bug behavior:
-    // memory allocation of 137438871552 bytes failed
-    let _ = key.create_signature(
-        &"pw".into(),
-        pgp::crypto::hash::HashAlgorithm::Sha256,
-        dummy_data,
-    );
+    // let dummy_data: &[u8] = &[0];
+    let res = pgp::composed::SignedSecretKey::from_bytes(bad_input);
+
+    assert!(res.is_err());
+    // // expected bug behavior:
+    // // memory allocation of 137438871552 bytes failed
+    // let _ = key.create_signature(
+    //     &"pw".into(),
+    //     pgp::crypto::hash::HashAlgorithm::Sha256,
+    //     dummy_data,
+    // );
 }
 
 /// RPG-010

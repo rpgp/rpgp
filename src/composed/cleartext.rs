@@ -13,7 +13,7 @@ use crate::{
     armor::{self, header_parser, read_from_buf, BlockType, Headers},
     composed::{ArmorOptions, Deserializable, StandaloneSignature},
     crypto::hash::HashAlgorithm,
-    errors::Result,
+    errors::{bail, ensure, ensure_eq, format_err, InvalidInputSnafu, Result},
     line_writer::LineBreak,
     normalize_lines::{normalize_lines, NormalizedReader},
     packet::{Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
@@ -105,7 +105,10 @@ where {
         let mut signatures = Vec::new();
 
         for signature in raw_signatures {
-            hashes.insert(signature.hash_alg());
+            let hash_alg = signature
+                .hash_alg()
+                .ok_or_else(|| InvalidInputSnafu {}.build())?;
+            hashes.insert(hash_alg);
             let signature = StandaloneSignature::new(signature);
             signatures.push(signature);
         }
@@ -281,7 +284,9 @@ fn validate_headers(headers: Headers) -> Result<Vec<HashAlgorithm>> {
     for (name, values) in headers {
         ensure_eq!(name, "Hash", "unexpected header");
         for value in values {
-            let h: HashAlgorithm = value.parse()?;
+            let h: HashAlgorithm = value
+                .parse()
+                .map_err(|_| format_err!("unknown hash algorithm {}", value))?;
             hashes.push(h);
         }
     }

@@ -185,7 +185,7 @@ impl SubpacketLength {
         }
     }
 
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         match self {
             Self::One(l) => *l as _,
             Self::Two(l) => *l as _,
@@ -193,7 +193,7 @@ impl SubpacketLength {
         }
     }
 
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }

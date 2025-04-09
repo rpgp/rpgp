@@ -7,7 +7,7 @@ use num_enum::{FromPrimitive, IntoPrimitive, TryFromPrimitive};
 use crate::{errors::Result, parsing_reader::BufReadParsing};
 
 /// Represents the packet length.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(derive_more::Debug, PartialEq, Eq, Clone, Copy)]
 pub enum PacketLength {
     Fixed(u32),
     Indeterminate,

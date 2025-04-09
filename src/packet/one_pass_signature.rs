@@ -7,7 +7,7 @@ use proptest::prelude::*;
 
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
+    errors::{bail, Result},
     packet::{signature::SignatureType, PacketHeader, PacketTrait},
     parsing_reader::BufReadParsing,
     ser::Serialize,
@@ -52,6 +52,13 @@ pub enum OpsVersionSpecific {
         salt: Bytes,
         fingerprint: [u8; 32],
     },
+    #[cfg_attr(test, proptest(skip))]
+    Unknown {
+        #[debug("{:X}", version)]
+        version: u8,
+        #[debug("{}", hex::encode(data))]
+        data: Bytes,
+    },
 }
 
 impl Serialize for OpsVersionSpecific {
@@ -68,6 +75,9 @@ impl Serialize for OpsVersionSpecific {
             }
             OpsVersionSpecific::V6 { fingerprint, .. } => {
                 writer.write_all(fingerprint.as_ref())?;
+            }
+            OpsVersionSpecific::Unknown { data, .. } => {
+                writer.write_all(data)?;
             }
         }
         Ok(())
@@ -87,6 +97,9 @@ impl Serialize for OpsVersionSpecific {
             OpsVersionSpecific::V6 { fingerprint, .. } => {
                 sum += fingerprint.len();
             }
+            OpsVersionSpecific::Unknown { data, .. } => {
+                sum += data.len();
+            }
         }
         sum
     }
@@ -97,6 +110,7 @@ impl OnePassSignature {
         match self.version_specific {
             OpsVersionSpecific::V3 { .. } => 3,
             OpsVersionSpecific::V6 { .. } => 6,
+            OpsVersionSpecific::Unknown { version, .. } => version,
         }
     }
 }
@@ -109,25 +123,37 @@ impl OnePassSignature {
         let hash_algorithm = i.read_u8().map(HashAlgorithm::from)?;
         let pub_algorithm = i.read_u8().map(PublicKeyAlgorithm::from)?;
 
-        let version_specific = match version {
+        let (version_specific, last) = match version {
             3 => {
                 let key_id_raw: [u8; 8] = i.read_array::<8>()?;
 
-                OpsVersionSpecific::V3 {
-                    key_id: key_id_raw.into(),
-                }
+                let last = i.read_u8()?;
+                (
+                    OpsVersionSpecific::V3 {
+                        key_id: key_id_raw.into(),
+                    },
+                    last,
+                )
             }
             6 => {
                 let salt_len = i.read_u8()?;
                 let salt = i.take_bytes(salt_len.into())?.freeze();
                 let fingerprint = i.read_array::<32>()?;
+                let last = i.read_u8()?;
 
-                OpsVersionSpecific::V6 { salt, fingerprint }
+                (OpsVersionSpecific::V6 { salt, fingerprint }, last)
             }
-            _ => unsupported_err!("Unsupported one pass signature packet version {version}"),
+            _ => {
+                let mut data = i.rest()?.freeze();
+                let last = if !data.is_empty() {
+                    let last = data.split_off(data.len() - 1);
+                    last[0]
+                } else {
+                    bail!("missing last field");
+                };
+                (OpsVersionSpecific::Unknown { version, data }, last)
+            }
         };
-
-        let last = i.read_u8()?;
 
         Ok(OnePassSignature {
             packet_header,

@@ -2,7 +2,7 @@ use bytes::Bytes;
 use log::debug;
 
 use super::Mpi;
-use crate::ser::Serialize;
+use crate::{errors::bail, ser::Serialize};
 
 /// An OpenPGP cryptographic signature.
 ///

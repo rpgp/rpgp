@@ -11,7 +11,7 @@ use crate::{
         signed_key::{SignedKeyDetails, SignedPublicSubKey},
         ArmorOptions, PlainSessionKey, SignedPublicKey,
     },
-    errors::Result,
+    errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
     types::{EskType, Password, PkeskBytes, PublicKeyTrait, Tag},
@@ -247,8 +247,8 @@ pub struct SignedSecretSubKey {
 impl SignedSecretSubKey {
     pub fn new(key: packet::SecretSubkey, mut signatures: Vec<packet::Signature>) -> Self {
         signatures.retain(|sig| {
-            if sig.typ() != SignatureType::SubkeyBinding
-                && sig.typ() != SignatureType::SubkeyRevocation
+            if sig.typ() != Some(SignatureType::SubkeyBinding)
+                && sig.typ() != Some(SignatureType::SubkeyRevocation)
             {
                 warn!(
                     "ignoring unexpected signature {:?} after Subkey packet",

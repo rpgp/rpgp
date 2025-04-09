@@ -82,7 +82,7 @@ fn test_parse_dump(i: usize, expected: DumpResult) {
         if let Err(err) = key.verify() {
             match err {
                 // Skip these for now
-                Error::Unimplemented { message } => {
+                Error::Unimplemented { message, .. } => {
                     warn!("unimplemented: {}:{} {:?}", i, j, message);
                     actual.unimpl_count += 1;
                 }
@@ -156,9 +156,9 @@ parse_dumps!(
         0,
         17_727,
         // Hash::Other(4)
-        1,
-        3266,
-        20_994
+        0,
+        3268,
+        20_995
     ),
     (
         test_parse_dumps_1,
@@ -166,8 +166,8 @@ parse_dumps!(
         17_564,
         // - Hash::Other(4)
         // - Elgamal verify
-        8,
-        3424,
+        6,
+        3426,
         20_996
     ),
     (
@@ -177,8 +177,8 @@ parse_dumps!(
         // - Hash::Other(4)
         // - Hash::Other(5)
         // - Elgamal verify
-        5,
-        3391,
+        3,
+        3393,
         20_994
     ),
     (
@@ -187,8 +187,8 @@ parse_dumps!(
         17_668,
         // - Hash::Other(4)
         // - Elgamal verify
-        6,
-        3322,
+        5,
+        3323,
         20_996
     ),
     (
@@ -206,8 +206,8 @@ parse_dumps!(
         17_642,
         // - Hash::Other(4)
         // - Elgamal verify
-        8,
-        3352,
+        7,
+        3353,
         21_002
     ),
     (
@@ -234,8 +234,8 @@ parse_dumps!(
         17_722,
         // - Hash::Other(5)
         // - Elgamal verify
-        6,
-        3271,
+        5,
+        3272,
         20_999
     ),
     (
@@ -244,8 +244,8 @@ parse_dumps!(
         17_576,
         // - Hash::Other(5)
         // - Elgamal verify
-        3,
-        3423,
+        2,
+        3424,
         21_002
     ),
 );
@@ -264,7 +264,7 @@ fn test_parse_gnupg_v1() {
         let (pk, headers) = SignedPublicKey::from_string(input).expect("failed to parse key");
         match pk.verify() {
             // Skip these for now
-            Err(Error::Unimplemented { message }) => {
+            Err(Error::Unimplemented { message, .. }) => {
                 warn!("verification failed: {:?}", message);
             }
             Err(err) => panic!("{err:?}"),

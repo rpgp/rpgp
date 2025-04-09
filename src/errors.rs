@@ -58,7 +58,10 @@ pub enum Error {
     #[snafu(display("cfb: invalid key iv length"))]
     CfbInvalidKeyIvLength,
     #[snafu(display("Not yet implemented: {message}"))]
-    Unimplemented { message: String },
+    Unimplemented {
+        message: String,
+        backtrace: Option<Backtrace>,
+    },
     /// Signals packet versions and parameters we don't support, but can safely ignore
     #[snafu(display("Unsupported: {message}"))]
     Unsupported {
@@ -97,14 +100,20 @@ pub enum Error {
         source: TryFromIntError,
         backtrace: Option<Backtrace>,
     },
-    #[snafu(display("GCM"))]
-    Gcm,
-    #[snafu(display("EAX"))]
-    Eax,
-    #[snafu(display("OCB"))]
-    Ocb,
-    #[snafu(display("SHA1 hash collision detected"))]
-    Sha1HashCollision,
+    #[snafu(display("AEAD {:?}", source), context(false))]
+    Aead { source: crate::crypto::aead::Error },
+    #[snafu(display("AES key wrap {:?}", source), context(false))]
+    AesKw {
+        source: crate::crypto::aes_kw::Error,
+    },
+    #[snafu(transparent)]
+    ChecksumMissmatch {
+        source: crate::crypto::checksum::ChecksumMismatch,
+    },
+    #[snafu(transparent)]
+    Sha1HashCollision {
+        source: crate::crypto::checksum::Sha1HashCollision,
+    },
     #[snafu(transparent)]
     AesKek { source: aes_kw::Error },
     #[snafu(transparent)]
@@ -122,6 +131,18 @@ pub enum Error {
         source: argon2::Error,
         backtrace: Option<Backtrace>,
     },
+}
+
+impl From<crate::crypto::hash::Error> for Error {
+    fn from(err: crate::crypto::hash::Error) -> Self {
+        match err {
+            crate::crypto::hash::Error::Unsupported { alg } => UnsupportedSnafu {
+                message: format!("hash algorithm: {:?}", alg),
+            }
+            .build(),
+            crate::crypto::hash::Error::Sha1HashCollision { source } => source.into(),
+        }
+    }
 }
 
 impl<T> From<nom::error::Error<T>> for Error {
@@ -160,33 +181,28 @@ impl From<derive_builder::UninitializedFieldError> for Error {
     }
 }
 
-#[macro_export]
 macro_rules! unimplemented_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unimplemented { message: $e.to_string() })
+        return Err($crate::errors::UnimplementedSnafu { message: $e.to_string() }.build())
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unimplemented { message: format!($fmt, $($arg)+)})
+        return Err($crate::errors::UnimplementedSnafu { message: format!($fmt, $($arg)+)}.build())
     };
 }
 
-#[macro_export]
 macro_rules! unsupported_err {
     ($e:expr) => {
-        return Err($crate::errors::Error::Unsupported {
+        return Err($crate::errors::UnsupportedSnafu {
             message: $e.to_string(),
-            backtrace: ::snafu::GenerateImplicitData::generate(),
-        })
+        }.build())
     };
     ($fmt:expr, $($arg:tt)+) => {
-        return Err($crate::errors::Error::Unsupported {
+        return Err($crate::errors::UnsupportedSnafu {
             message: format!($fmt, $($arg)+),
-            backtrace: ::snafu::GenerateImplicitData::generate(),
-        })
+        }.build())
     };
 }
 
-#[macro_export]
 macro_rules! bail {
     ($e:expr) => {
         return Err($crate::errors::Error::Message {
@@ -202,7 +218,6 @@ macro_rules! bail {
     };
 }
 
-#[macro_export]
 macro_rules! format_err {
     ($e:expr) => {
         $crate::errors::Error::Message {
@@ -218,27 +233,25 @@ macro_rules! format_err {
     };
 }
 
-#[macro_export(local_inner_macros)]
 macro_rules! ensure {
     ($cond:expr, $e:expr) => {
         if !($cond) {
-            bail!($e);
+            $crate::errors::bail!($e);
         }
     };
     ($cond:expr, $fmt:expr, $($arg:tt)+) => {
         if !($cond) {
-            bail!($fmt, $($arg)+);
+            $crate::errors::bail!($fmt, $($arg)+);
         }
     };
 }
 
-#[macro_export]
 macro_rules! ensure_eq {
     ($left:expr, $right:expr) => ({
         match (&$left, &$right) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    bail!(r#"assertion failed: `(left == right)`
+                    $crate::errors::bail!(r#"assertion failed: `(left == right)`
   left: `{:?}`,
  right: `{:?}`"#, left_val, right_val)
                 }
@@ -246,13 +259,13 @@ macro_rules! ensure_eq {
         }
     });
     ($left:expr, $right:expr,) => ({
-        ensure_eq!($left, $right)
+        $crate::errors::ensure_eq!($left, $right)
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
         match (&($left), &($right)) {
             (left_val, right_val) => {
                 if !(*left_val == *right_val) {
-                    bail!(r#"assertion failed: `(left == right)`
+                    $crate::errors::bail!(r#"assertion failed: `(left == right)`
   left: `{:?}`,
  right: `{:?}`: {}"#, left_val, right_val,
                            format_args!($($arg)+))
@@ -262,7 +275,6 @@ macro_rules! ensure_eq {
     });
 }
 
-#[macro_export]
 macro_rules! err_opt {
     ($e:expr) => {
         match $e {
@@ -271,3 +283,11 @@ macro_rules! err_opt {
         }
     };
 }
+
+pub(crate) use bail;
+pub(crate) use ensure;
+pub(crate) use ensure_eq;
+pub(crate) use err_opt;
+pub(crate) use format_err;
+pub(crate) use unimplemented_err;
+pub(crate) use unsupported_err;

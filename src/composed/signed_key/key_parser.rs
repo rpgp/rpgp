@@ -2,7 +2,7 @@ use log::{debug, warn};
 
 use crate::{
     composed::{SignedKeyDetails, SignedPublicSubKey, SignedSecretSubKey},
-    errors::{Error, Result},
+    errors::{err_opt, format_err, Error, Result},
     packet::{self, Packet, PacketTrait, Signature, SignatureType, UserAttribute, UserId},
     types::{KeyDetails, KeyVersion, SignedUser, SignedUserAttribute, Tag},
 };
@@ -74,7 +74,7 @@ where
                 let sig: Signature = err_opt!(packet.try_into());
                 let typ = sig.typ();
 
-                if typ == SignatureType::KeyRevocation {
+                if typ == Some(SignatureType::KeyRevocation) {
                     revocation_signatures.push(sig);
                 } else {
                     if primary_key.version() != KeyVersion::V4 {
