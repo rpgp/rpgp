@@ -12,7 +12,7 @@ concurrency:
 env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: -Dwarnings
-  RUST_NIGHTLY: nightly-2025-02-02
+  RUST_NIGHTLY: nightly-2025-04-02
 
 jobs:
   build_and_test_nix:
@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - nightly-2025-02-02
+          - nightly-2025-04-02
           - stable
 
     steps:
@@ -68,7 +68,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2025-02-02
+          - nightly-2025-04-02
           - stable
         target:
           - x86_64-pc-windows-gnu
@@ -146,7 +146,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2025-02-02
+          - nightly-2025-04-02
           - stable
 
     steps:
