@@ -19,6 +19,7 @@ use crate::{
 };
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum StreamEncryptor<R>
 where
     R: std::io::Read,

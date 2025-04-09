@@ -235,8 +235,7 @@ impl<'a> SignatureBodyReader<'a> {
                     return Ok(());
                 }
                 Self::Error => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Err(io::Error::other(
                         "SignatureBodyReader errored",
                     ))
                 }
@@ -303,8 +302,7 @@ impl BufRead for SignatureBodyReader<'_> {
             Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { buffer, .. } => Ok(&buffer[..]),
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
+            Self::Error => Err(io::Error::other(
                 "SignatureBodyReader errored",
             )),
         }
@@ -333,8 +331,7 @@ impl Read for SignatureBodyReader<'_> {
                 Ok(to_write)
             }
             Self::Done { .. } => Ok(0),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
+            Self::Error => Err(io::Error::other(
                 "SignatureBodyReader errored",
             )),
         }

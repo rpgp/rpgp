@@ -100,8 +100,7 @@ impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
         match self {
             Self::Body { decryptor } => decryptor.fill_buf(),
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
+            Self::Error => Err(io::Error::other(
                 "SymEncryptedDataReader errored",
             )),
         }
@@ -121,8 +120,7 @@ impl<R: BufRead> Read for SymEncryptedDataReader<R> {
         match self {
             Self::Body { decryptor } => decryptor.read(buf),
             Self::Done { .. } => Ok(0),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
+            Self::Error => Err(io::Error::other(
                 "SymEncryptedDataReader errored",
             )),
         }
