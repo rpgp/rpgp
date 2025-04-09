@@ -308,18 +308,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        match PublicKeyEncryptedSessionKey::from_session_key_v3(
+        let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             pkey,
-        ) {
-            Ok(pkes) => {
-                self.encryption.pub_esks.push(pkes);
-                Ok(self)
-            }
-            Err(err) => Err(err),
-        }
+        )?;
+        self.encryption.pub_esks.push(pkes);
+        Ok(self)
     }
 
     /// Encrypt to a public key, but leave the recipient field unset
@@ -333,23 +329,19 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        match PublicKeyEncryptedSessionKey::from_session_key_v3(
+        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             pkey,
-        ) {
-            Ok(mut pkes) => {
-                // Blank out the recipient id
-                if let PublicKeyEncryptedSessionKey::V3 { id, .. } = &mut pkes {
-                    *id = KeyId::WILDCARD;
-                }
-
-                self.encryption.pub_esks.push(pkes);
-                Ok(self)
-            }
-            Err(err) => Err(err),
+        )?;
+        // Blank out the recipient id
+        if let PublicKeyEncryptedSessionKey::V3 { id, .. } = &mut pkes {
+            *id = KeyId::WILDCARD;
         }
+
+        self.encryption.pub_esks.push(pkes);
+        Ok(self)
     }
 
     /// Encrypt to a password.
@@ -358,18 +350,14 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         s2k: StringToKey,
         msg_pw: &Password,
     ) -> Result<&mut Self> {
-        match SymKeyEncryptedSessionKey::encrypt_v4(
+        let esk = SymKeyEncryptedSessionKey::encrypt_v4(
             msg_pw,
             &self.encryption.session_key,
             s2k,
             self.encryption.sym_alg,
-        ) {
-            Ok(esk) => {
-                self.encryption.sym_esks.push(esk);
-                Ok(self)
-            }
-            Err(err) => Err(err),
-        }
+        )?;
+        self.encryption.sym_esks.push(esk);
+        Ok(self)
     }
 
     /// Returns the currently used session key.
@@ -389,17 +377,13 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        match PublicKeyEncryptedSessionKey::from_session_key_v6(
+        let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
             pkey,
-        ) {
-            Ok(pkes) => {
-                self.encryption.pub_esks.push(pkes);
-                Ok(self)
-            }
-            Err(err) => Err(err),
-        }
+        )?;
+        self.encryption.pub_esks.push(pkes);
+        Ok(self)
     }
 
     /// Encrypt to a public key, but leave the recipient field unset
@@ -413,23 +397,18 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        match PublicKeyEncryptedSessionKey::from_session_key_v6(
+        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
             pkey,
-        ) {
-            Ok(mut pkes) => {
-                // Blank out the recipient id
-                if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
-                    *fingerprint = None;
-                }
-
-                self.encryption.pub_esks.push(pkes);
-
-                Ok(self)
-            }
-            Err(err) => Err(err),
+        )?;
+        // Blank out the recipient id
+        if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
+            *fingerprint = None;
         }
+
+        self.encryption.pub_esks.push(pkes);
+        Ok(self)
     }
 
     /// Encrypt to a password.
@@ -443,20 +422,16 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         RAND: Rng + CryptoRng,
     {
         // Encrypt (sym) the session key using the provided password.
-        match SymKeyEncryptedSessionKey::encrypt_v6(
+        let esk = SymKeyEncryptedSessionKey::encrypt_v6(
             &mut rng,
             msg_pw,
             &self.encryption.session_key,
             s2k,
             self.encryption.sym_alg,
             self.encryption.aead,
-        ) {
-            Ok(esk) => {
-                self.encryption.sym_esks.push(esk);
-                Ok(self)
-            }
-            Err(err) => Err(err),
-        }
+        )?;
+        self.encryption.sym_esks.push(esk);
+        Ok(self)
     }
 
     /// Returns the currently used session key.
