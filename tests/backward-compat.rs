@@ -35,7 +35,7 @@ fn ecdh_roundtrip_with_rpgp_0_10() {
     // let dec = decrypt_rpgp_0_10(&enc, KEYFILE);
     let enc_expected =
         std::fs::read_to_string("./tests/unit-tests/padding/rpgp-current.enc.asc").unwrap();
-    assert_eq!(enc, enc_expected, "cur -> 0.10");
+    assert_eq!(enc, enc_expected.replace("\r\n", "\n"), "cur -> 0.10");
     // assert_eq!(dec, MSG, "cur -> 0.10");
 
     // cur -> cur
