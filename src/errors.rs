@@ -108,7 +108,7 @@ pub enum Error {
     },
     #[snafu(transparent)]
     ChecksumMissmatch {
-        source: crate::crypto::checksum::ChecksumMissmatch,
+        source: crate::crypto::checksum::ChecksumMismatch,
     },
     #[snafu(transparent)]
     Sha1HashCollision {

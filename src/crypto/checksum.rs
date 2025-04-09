@@ -9,14 +9,14 @@ use snafu::Snafu;
     hex::encode(expected),
     hex::encode(actual)
 ))]
-pub struct ChecksumMissmatch {
+pub struct ChecksumMismatch {
     expected: [u8; 2],
     actual: [u8; 2],
 }
 
 /// Two octet checksum: sum of all octets mod 65535.
 #[inline]
-pub fn simple(actual: [u8; 2], data: &[u8]) -> Result<(), ChecksumMissmatch> {
+pub fn simple(actual: [u8; 2], data: &[u8]) -> Result<(), ChecksumMismatch> {
     // Then a two-octet checksum is appended, which is equal to the
     // sum of the preceding session key octets, not including the algorithm
     // identifier, modulo 65536.
@@ -24,7 +24,7 @@ pub fn simple(actual: [u8; 2], data: &[u8]) -> Result<(), ChecksumMissmatch> {
     let expected = expected_checksum.to_be_bytes();
 
     if actual != expected {
-        return Err(ChecksumMissmatchSnafu { actual, expected }.build());
+        return Err(ChecksumMismatchSnafu { actual, expected }.build());
     }
 
     Ok(())
