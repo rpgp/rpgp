@@ -72,9 +72,9 @@ fn bench_message(c: &mut Criterion) {
                 let s2k = StringToKey::new_default(&mut rng);
 
                 b.iter(|| {
-                    let builder = MessageBuilder::from_reader("", &bytes[..]);
-                    let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
-                    let builder = builder
+                    let mut builder = MessageBuilder::from_reader("", &bytes[..])
+                        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
+                    builder
                         .encrypt_with_password(s2k.clone(), &"pw".into())
                         .unwrap();
 
@@ -96,9 +96,9 @@ fn bench_message(c: &mut Criterion) {
 
                 let s2k = StringToKey::new_default(&mut rng);
 
-                let builder = MessageBuilder::from_reader("", &bytes[..]);
-                let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
-                let builder = builder
+                let mut builder = MessageBuilder::from_reader("", &bytes[..])
+                    .seipd_v1(&mut rng, SymmetricKeyAlgorithm::default());
+                builder
                     .encrypt_with_password(s2k.clone(), &"pw".into())
                     .unwrap();
 
@@ -172,9 +172,9 @@ fn bench_message(c: &mut Criterion) {
                     // let message = Message::new_literal_bytes("test", &bytes).unwrap();
 
                     b.iter(|| {
-                        let builder = MessageBuilder::from_reader("", &bytes[..]);
-                        let builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
-                        let builder = builder
+                        let mut builder = MessageBuilder::from_reader("", &bytes[..])
+                            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+                        builder
                             .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
                             .unwrap();
 
@@ -202,9 +202,9 @@ fn bench_message(c: &mut Criterion) {
                     let key = build_key(kt1.clone(), kt2.clone());
                     let signed_key = key.sign(&mut rng, &Password::empty()).unwrap();
 
-                    let builder = MessageBuilder::from_reader("", &bytes[..]);
-                    let builder = builder.seipd_v1(&mut rng, sym);
-                    let builder = builder
+                    let mut builder =
+                        MessageBuilder::from_reader("", &bytes[..]).seipd_v1(&mut rng, sym);
+                    builder
                         .encrypt_to_key(&mut rng, &signed_key.secret_subkeys[0].public_key())
                         .unwrap();
 

@@ -110,10 +110,10 @@ fn encrypt_rpgp_cur(msg: &'static [u8], keyfile: &str) -> String {
 
     let enc = &ssk.secret_subkeys[0];
 
-    MessageBuilder::from_bytes("", msg)
-        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-        .encrypt_to_key(&mut rng, &enc.public_key())
-        .unwrap()
+    let mut builder =
+        MessageBuilder::from_bytes("", msg).seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+    builder.encrypt_to_key(&mut rng, &enc.public_key()).unwrap();
+    builder
         .to_armored_string(&mut rng, ArmorOptions::default())
         .unwrap()
 }

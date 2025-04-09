@@ -1382,10 +1382,9 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let data = "hello world";
-        let compressed_msg = MessageBuilder::from_bytes("hello-zlib.txt", data)
-            .compression(alg)
-            .to_vec(&mut rng)
-            .unwrap();
+        let mut builder = MessageBuilder::from_bytes("hello-zlib.txt", data);
+        builder.compression(alg);
+        let compressed_msg = builder.to_vec(&mut rng).unwrap();
 
         let uncompressed_msg = Message::from_bytes(&compressed_msg[..])
             .unwrap()
@@ -1415,20 +1414,25 @@ mod tests {
         const DATA: &str = "hello world\n";
 
         // Encrypt and test that rng is the only source of randomness.
-        let armored = MessageBuilder::from_bytes("hello.txt", DATA)
-            .compression(CompressionAlgorithm::ZLIB)
-            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-            .encrypt_to_key(&mut rng, &pkey)
-            .unwrap()
-            .to_armored_string(&mut rng, Default::default())
-            .unwrap();
-        let armored2 = MessageBuilder::from_bytes("hello.txt", DATA)
-            .compression(CompressionAlgorithm::ZLIB)
-            .seipd_v1(&mut rng2, SymmetricKeyAlgorithm::AES128)
-            .encrypt_to_key(&mut rng2, &pkey)
-            .unwrap()
-            .to_armored_string(&mut rng2, Default::default())
-            .unwrap();
+        let armored = {
+            let mut builder = MessageBuilder::from_bytes("hello.txt", DATA);
+            builder.compression(CompressionAlgorithm::ZLIB);
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder.encrypt_to_key(&mut rng, &pkey).unwrap();
+
+            builder
+                .to_armored_string(&mut rng, Default::default())
+                .unwrap()
+        };
+        let armored2 = {
+            let mut builder = MessageBuilder::from_bytes("hello.txt", DATA);
+            builder.compression(CompressionAlgorithm::ZLIB);
+            let mut builder = builder.seipd_v1(&mut rng2, SymmetricKeyAlgorithm::AES128);
+            builder.encrypt_to_key(&mut rng2, &pkey).unwrap();
+            builder
+                .to_armored_string(&mut rng2, Default::default())
+                .unwrap()
+        };
 
         assert_eq!(armored, armored2);
 
@@ -1460,30 +1464,35 @@ mod tests {
         const DATA: &str = "hello world\n";
 
         // Encrypt and test that rng is the only source of randomness.
-        let armored = MessageBuilder::from_bytes("", DATA)
-            .compression(CompressionAlgorithm::ZLIB)
-            .seipd_v2(
+        let armored = {
+            let mut builder = MessageBuilder::from_bytes("", DATA);
+            builder.compression(CompressionAlgorithm::ZLIB);
+            let mut builder = builder.seipd_v2(
                 &mut rng,
                 SymmetricKeyAlgorithm::AES128,
                 AeadAlgorithm::Ocb,
                 ChunkSize::default(),
-            )
-            .encrypt_to_key(&mut rng, &pkey)
-            .unwrap()
-            .to_armored_string(&mut rng, Default::default())
-            .unwrap();
-        let armored2 = MessageBuilder::from_bytes("", DATA)
-            .compression(CompressionAlgorithm::ZLIB)
-            .seipd_v2(
+            );
+            builder.encrypt_to_key(&mut rng, &pkey).unwrap();
+            builder
+                .to_armored_string(&mut rng, Default::default())
+                .unwrap()
+        };
+        let armored2 = {
+            let mut builder = MessageBuilder::from_bytes("", DATA).seipd_v2(
                 &mut rng2,
                 SymmetricKeyAlgorithm::AES128,
                 AeadAlgorithm::Ocb,
                 ChunkSize::default(),
-            )
-            .encrypt_to_key(&mut rng2, &pkey)
-            .unwrap()
-            .to_armored_string(&mut rng2, Default::default())
-            .unwrap();
+            );
+            builder
+                .compression(CompressionAlgorithm::ZLIB)
+                .encrypt_to_key(&mut rng2, &pkey)
+                .unwrap();
+            builder
+                .to_armored_string(&mut rng2, Default::default())
+                .unwrap()
+        };
 
         assert_eq!(armored, armored2);
 
@@ -1513,11 +1522,13 @@ mod tests {
         const DATA: &str = "hello world\n";
 
         for _ in 0..1000 {
-            let armored = MessageBuilder::from_bytes("", DATA)
+            let mut builder = MessageBuilder::from_bytes("", DATA)
+                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder
                 .compression(CompressionAlgorithm::ZLIB)
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
                 .encrypt_to_key(&mut rng, &pkey)
-                .unwrap()
+                .unwrap();
+            let armored = builder
                 .to_armored_string(&mut rng, Default::default())
                 .unwrap();
 
@@ -1547,11 +1558,17 @@ mod tests {
         let data = "hello world\n";
 
         for _ in 0..512 {
-            let armored = MessageBuilder::from_bytes("hello.txt", data)
+            let mut builder = MessageBuilder::from_bytes("hello.txt", data).seipd_v2(
+                &mut rng,
+                sym,
+                aead,
+                ChunkSize::default(),
+            );
+            builder
                 .compression(CompressionAlgorithm::ZLIB)
-                .seipd_v2(&mut rng, sym, aead, ChunkSize::default())
                 .encrypt_to_key(&mut rng, &pkey)
-                .unwrap()
+                .unwrap();
+            let armored = builder
                 .to_armored_string(&mut rng, Default::default())
                 .unwrap();
 
@@ -1622,11 +1639,14 @@ mod tests {
 
         let data = "hello world\n";
 
-        let armored = MessageBuilder::from_bytes("hello.txt", data)
+        let mut builder = MessageBuilder::from_bytes("hello.txt", data)
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+
+        builder
             .compression(CompressionAlgorithm::ZLIB)
-            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
             .encrypt_with_password(s2k, &"secret".into())
-            .unwrap()
+            .unwrap();
+        let armored = builder
             .to_armored_string(&mut rng, Default::default())
             .unwrap();
 
@@ -1648,10 +1668,16 @@ mod tests {
 
         let data = "hello world\n";
         let s2k = StringToKey::new_default(&mut rng);
-        let armored = MessageBuilder::from_bytes("hello.txt", data)
-            .seipd_v2(&mut rng, sym, aead, ChunkSize::default())
+        let mut builder = MessageBuilder::from_bytes("hello.txt", data).seipd_v2(
+            &mut rng,
+            sym,
+            aead,
+            ChunkSize::default(),
+        );
+        builder
             .encrypt_with_password(&mut rng, s2k, &"secret".into())
-            .unwrap()
+            .unwrap();
+        let armored = builder
             .to_armored_string(&mut rng, Default::default())
             .unwrap();
 
@@ -1771,7 +1797,8 @@ mod tests {
         let pkey = skey.public_key();
         let rng = ChaCha8Rng::seed_from_u64(0);
 
-        let builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes())
+        let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+        builder
             .sign_text()
             .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
@@ -1798,7 +1825,7 @@ mod tests {
         let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-        builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+        builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
         let armored = builder
             .to_armored_string(rng, ArmorOptions::default())
@@ -1824,8 +1851,8 @@ mod tests {
         let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-        builder = builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
-        builder = builder.compression(CompressionAlgorithm::ZLIB);
+        builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+        builder.compression(CompressionAlgorithm::ZLIB);
 
         let armored = builder
             .to_armored_string(rng, ArmorOptions::default())
@@ -1862,7 +1889,8 @@ mod tests {
         ];
 
         for input in inputs {
-            let builder = MessageBuilder::from_bytes("hello.txt", input)
+            let mut builder = MessageBuilder::from_bytes("hello.txt", input);
+            builder
                 .sign_text()
                 .sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
@@ -1895,11 +1923,8 @@ mod tests {
 
         let rng = ChaCha8Rng::seed_from_u64(0);
 
-        let builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes()).sign(
-            &*skey,
-            Password::from("test"),
-            HashAlgorithm::Sha256,
-        );
+        let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
+        builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
         let armored = builder
             .to_armored_string(rng, ArmorOptions::default())
@@ -1928,9 +1953,9 @@ mod tests {
             let rng = ChaCha8Rng::seed_from_u64(0);
 
             let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-            builder = builder.compression(CompressionAlgorithm::ZLIB);
+            builder.compression(CompressionAlgorithm::ZLIB);
 
-            builder = builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
+            builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
 
             let armored = builder
                 .to_armored_string(rng, ArmorOptions::default())

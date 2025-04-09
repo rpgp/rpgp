@@ -42,9 +42,9 @@ mod tests {
 
                 let buf = random_string(&mut rng, file_size);
                 let message = if is_partial {
-                    MessageBuilder::from_reader("test.txt", buf.as_bytes())
-                        .partial_chunk_size(512)?
-                        .to_vec(&mut rng)?
+                    let mut builder = MessageBuilder::from_reader("test.txt", buf.as_bytes());
+                    builder.partial_chunk_size(512)?;
+                    builder.to_vec(&mut rng)?
                 } else {
                     MessageBuilder::from_bytes("test.txt", buf.clone()).to_vec(&mut rng)?
                 };
@@ -80,14 +80,16 @@ mod tests {
 
                     if is_armor {
                         let message = if is_partial {
-                            MessageBuilder::from_reader("test.txt", buf.as_bytes())
+                            let mut builder =
+                                MessageBuilder::from_reader("test.txt", buf.as_bytes());
+                            builder
                                 .compression(CompressionAlgorithm::ZIP)
-                                .partial_chunk_size(512)?
-                                .to_armored_string(&mut rng, Default::default())?
+                                .partial_chunk_size(512)?;
+                            builder.to_armored_string(&mut rng, Default::default())?
                         } else {
-                            MessageBuilder::from_bytes("test.txt", buf.clone())
-                                .compression(CompressionAlgorithm::ZIP)
-                                .to_armored_string(&mut rng, Default::default())?
+                            let mut builder = MessageBuilder::from_bytes("test.txt", buf.clone());
+                            builder.compression(CompressionAlgorithm::ZIP);
+                            builder.to_armored_string(&mut rng, Default::default())?
                         };
                         let reader = ChaosReader::new(rng.clone(), message.clone());
                         let mut reader = BufReader::new(reader);
@@ -103,16 +105,13 @@ mod tests {
                         assert_eq!(header.file_name(), &b""[..]);
                         assert_eq!(header.mode(), DataMode::Binary);
                     } else {
-                        let message = if is_partial {
-                            MessageBuilder::from_reader("test.txt", buf.as_bytes())
-                                .compression(CompressionAlgorithm::ZIP)
-                                .partial_chunk_size(512)?
-                                .to_vec(&mut rng)?
-                        } else {
-                            MessageBuilder::from_bytes("test.txt", buf.clone())
-                                .compression(CompressionAlgorithm::ZIP)
-                                .to_vec(&mut rng)?
-                        };
+                        let mut builder = MessageBuilder::from_bytes("test.txt", buf.clone());
+                        builder.compression(CompressionAlgorithm::ZIP);
+                        if is_partial {
+                            builder.partial_chunk_size(512)?;
+                        }
+                        let message = builder.to_vec(&mut rng)?;
+
                         let reader = ChaosReader::new(rng.clone(), message.clone());
                         let mut reader = BufReader::new(reader);
                         let message = Message::from_bytes(&mut reader)?;

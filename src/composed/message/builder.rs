@@ -21,7 +21,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure, ensure_eq, Result},
+    errors::{bail, ensure_eq, format_err, Error},
     line_writer::{LineBreak, LineWriter},
     normalize_lines::NormalizedReader,
     packet::{
@@ -104,7 +104,7 @@ pub trait Encryption: PartialEq {
         partial_chunk_size: u32,
         len: Option<u32>,
         out: W,
-    ) -> Result<()>
+    ) -> Result<(), Error>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -173,7 +173,7 @@ fn prepare<R>(
     mut rng: R,
     typ: SignatureType,
     keys: &[SigningConfig<'_>],
-) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
+) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>, Error>
 where
     R: Rng + CryptoRng,
 {
@@ -302,55 +302,74 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
 
 impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// Encrypt to a public key
-    pub fn encrypt_to_key<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self, Error>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        let pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
+        match PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             pkey,
-        )?;
-        self.encryption.pub_esks.push(pkes);
-        Ok(self)
+        ) {
+            Ok(pkes) => {
+                self.encryption.pub_esks.push(pkes);
+                Ok(self)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Encrypt to a public key, but leave the recipient field unset
-    pub fn encrypt_to_key_anonymous<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    pub fn encrypt_to_key_anonymous<RAND, K>(
+        &mut self,
+        mut rng: RAND,
+        pkey: &K,
+    ) -> Result<&mut Self, Error>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v3(
+        match PublicKeyEncryptedSessionKey::from_session_key_v3(
             &mut rng,
             &self.encryption.session_key,
             self.encryption.sym_alg,
             pkey,
-        )?;
+        ) {
+            Ok(mut pkes) => {
+                // Blank out the recipient id
+                if let PublicKeyEncryptedSessionKey::V3 { id, .. } = &mut pkes {
+                    *id = KeyId::WILDCARD;
+                }
 
-        // Blank out the recipient id
-        if let PublicKeyEncryptedSessionKey::V3 { id, .. } = &mut pkes {
-            *id = KeyId::WILDCARD;
+                self.encryption.pub_esks.push(pkes);
+                Ok(self)
+            }
+            Err(err) => Err(err),
         }
-
-        self.encryption.pub_esks.push(pkes);
-        Ok(self)
     }
 
     /// Encrypt to a password.
-    pub fn encrypt_with_password(mut self, s2k: StringToKey, msg_pw: &Password) -> Result<Self> {
-        let esk = SymKeyEncryptedSessionKey::encrypt_v4(
+    pub fn encrypt_with_password(
+        &mut self,
+        s2k: StringToKey,
+        msg_pw: &Password,
+    ) -> Result<&mut Self, Error> {
+        match SymKeyEncryptedSessionKey::encrypt_v4(
             msg_pw,
             &self.encryption.session_key,
             s2k,
             self.encryption.sym_alg,
-        )?;
-        self.encryption.sym_esks.push(esk);
-        Ok(self)
+        ) {
+            Ok(esk) => {
+                self.encryption.sym_esks.push(esk);
+                Ok(self)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Returns the currently used session key.
@@ -364,68 +383,80 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
 
 impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// Encrypt to a public key
-    pub fn encrypt_to_key<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self, Error>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        let pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+        match PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
             pkey,
-        )?;
-
-        self.encryption.pub_esks.push(pkes);
-
-        Ok(self)
+        ) {
+            Ok(pkes) => {
+                self.encryption.pub_esks.push(pkes);
+                Ok(self)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Encrypt to a public key, but leave the recipient field unset
-    pub fn encrypt_to_key_anonymous<RAND, K>(mut self, mut rng: RAND, pkey: &K) -> Result<Self>
+    pub fn encrypt_to_key_anonymous<RAND, K>(
+        &mut self,
+        mut rng: RAND,
+        pkey: &K,
+    ) -> Result<&mut Self, Error>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
     {
         // Encrypt (sym) the session key using the provided password.
-        let mut pkes = PublicKeyEncryptedSessionKey::from_session_key_v6(
+        match PublicKeyEncryptedSessionKey::from_session_key_v6(
             &mut rng,
             &self.encryption.session_key,
             pkey,
-        )?;
+        ) {
+            Ok(mut pkes) => {
+                // Blank out the recipient id
+                if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
+                    *fingerprint = None;
+                }
 
-        // Blank out the recipient id
-        if let PublicKeyEncryptedSessionKey::V6 { fingerprint, .. } = &mut pkes {
-            *fingerprint = None;
+                self.encryption.pub_esks.push(pkes);
+
+                Ok(self)
+            }
+            Err(err) => Err(err),
         }
-
-        self.encryption.pub_esks.push(pkes);
-
-        Ok(self)
     }
 
     /// Encrypt to a password.
     pub fn encrypt_with_password<RAND>(
-        mut self,
+        &mut self,
         mut rng: RAND,
         s2k: StringToKey,
         msg_pw: &Password,
-    ) -> Result<Self>
+    ) -> Result<&mut Self, Error>
     where
         RAND: Rng + CryptoRng,
     {
         // Encrypt (sym) the session key using the provided password.
-        let esk = SymKeyEncryptedSessionKey::encrypt_v6(
+        match SymKeyEncryptedSessionKey::encrypt_v6(
             &mut rng,
             msg_pw,
             &self.encryption.session_key,
             s2k,
             self.encryption.sym_alg,
             self.encryption.aead,
-        )?;
-        self.encryption.sym_esks.push(esk);
-
-        Ok(self)
+        ) {
+            Ok(esk) => {
+                self.encryption.sym_esks.push(esk);
+                Ok(self)
+            }
+            Err(err) => Err(err),
+        }
     }
 
     /// Returns the currently used session key.
@@ -473,13 +504,13 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// Configure the data signatures to use `SignatureType::Binary`.
     ///
     /// This is the default.
-    pub fn sign_binary(mut self) -> Self {
+    pub fn sign_binary(&mut self) -> &mut Self {
         self.sign_typ = SignatureType::Binary;
         self
     }
 
     /// Configure the data signatures to use `SignatureType::Text`.
-    pub fn sign_text(mut self) -> Self {
+    pub fn sign_text(&mut self) -> &mut Self {
         self.sign_typ = SignatureType::Text;
         self
     }
@@ -492,12 +523,13 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// - must be a power of 2.
     ///
     /// Defaults to [`DEFAULT_PARTIAL_CHUNK_SIZE`].
-    pub fn partial_chunk_size(mut self, size: u32) -> Result<Self> {
-        ensure!(size >= 512, "partial chunk size must be at least 512");
-        ensure!(
-            size.is_power_of_two(),
-            "partial chunk size must be a power of two"
-        );
+    pub fn partial_chunk_size(&mut self, size: u32) -> Result<&mut Self, Error> {
+        if size < 512 {
+            return Err(format_err!("partial chunk size must be at least 512"));
+        }
+        if !size.is_power_of_two() {
+            return Err(format_err!("partial chunk size must be a power of two"));
+        }
         self.partial_chunk_size = size;
         Ok(self)
     }
@@ -505,24 +537,24 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// Configure compression.
     ///
     /// Defaults to no compression.
-    pub fn compression(mut self, compression: CompressionAlgorithm) -> Self {
+    pub fn compression(&mut self, compression: CompressionAlgorithm) -> &mut Self {
         self.compression.replace(compression);
         self
     }
 
     pub fn sign(
-        mut self,
+        &mut self,
         key: &'a dyn SecretKeyTrait,
         key_pw: Password,
         hash_algorithm: HashAlgorithm,
-    ) -> Self {
+    ) -> &mut Self {
         self.signing
             .push(SigningConfig::new(key, key_pw, hash_algorithm));
         self
     }
 
     /// Write the data out to a writer.
-    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<()>
+    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<(), Error>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
@@ -605,7 +637,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         rng: RAND,
         opts: ArmorOptions<'_>,
         mut out: W,
-    ) -> Result<()>
+    ) -> Result<(), Error>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
@@ -638,7 +670,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
+    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<(), Error>
     where
         RAND: Rng + CryptoRng,
         P: AsRef<Path>,
@@ -668,7 +700,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         rng: RAND,
         out_path: P,
         opts: ArmorOptions<'_>,
-    ) -> Result<()>
+    ) -> Result<(), Error>
     where
         RAND: Rng + CryptoRng,
         P: AsRef<Path>,
@@ -693,7 +725,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a `Vec<u8>`.
-    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
+    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>, Error>
     where
         RAND: Rng + CryptoRng,
     {
@@ -703,7 +735,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data as ascii armored data, directly to a `String`.
-    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
+    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String, Error>
     where
         RAND: Rng + CryptoRng,
     {
@@ -727,7 +759,7 @@ fn to_writer_inner<RAND, R, W, E>(
     compression: Option<CompressionAlgorithm>,
     encryption: E,
     out: W,
-) -> Result<()>
+) -> Result<(), Error>
 where
     RAND: Rng + CryptoRng,
     R: std::io::Read,
@@ -771,7 +803,7 @@ impl Encryption for NoEncryption {
         _partial_chunk_size: u32,
         _len: Option<u32>,
         mut out: W,
-    ) -> Result<()>
+    ) -> Result<(), Error>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -794,7 +826,7 @@ impl Encryption for EncryptionSeipdV1 {
         partial_chunk_size: u32,
         len: Option<u32>,
         mut out: W,
-    ) -> Result<()>
+    ) -> Result<(), Error>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -844,7 +876,7 @@ impl Encryption for EncryptionSeipdV2 {
         partial_chunk_size: u32,
         len: Option<u32>,
         mut out: W,
-    ) -> Result<()>
+    ) -> Result<(), Error>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -916,7 +948,7 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
     len: Option<u32>,
     mut encrypted: R,
     mut out: W,
-) -> Result<()> {
+) -> Result<(), Error> {
     debug!(
         "encrypt {:?}: at {} chunks, total len: {:?}",
         tag, partial_chunk_size, len
@@ -1063,7 +1095,7 @@ impl<'a, R: std::io::Read> SignGenerator<'a, R> {
         source: R,
         signers: Vec<SigningConfig<'a>>,
         source_len: Option<u32>,
-    ) -> Result<Self>
+    ) -> Result<Self, Error>
     where
         RAND: CryptoRng + Rng,
     {
@@ -1277,10 +1309,10 @@ mod tests {
             // encrypt it
             let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
-            let builder = Builder::from_file(&plaintext_file)
-                .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            let mut builder = Builder::from_file(&plaintext_file);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder
                 .encrypt_with_password(s2k, &"hello world".into())
                 .unwrap();
 
@@ -1320,10 +1352,10 @@ mod tests {
             // encrypt it
             let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder
                 .encrypt_with_password(s2k, &"hello world".into())
                 .unwrap();
 
@@ -1360,10 +1392,10 @@ mod tests {
 
                 let mut builder = Builder::from_bytes("plaintext.txt", buf.clone());
                 if let Some(chunk_size) = chunk_size {
-                    builder = builder.partial_chunk_size(chunk_size).unwrap();
+                    builder.partial_chunk_size(chunk_size).unwrap();
                 }
-                let builder = builder
-                    .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+                let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+                builder
                     .encrypt_with_password(s2k, &"hello world".into())
                     .unwrap();
 
@@ -1403,10 +1435,10 @@ mod tests {
             // encrypt it
             let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
-            let builder = Builder::from_reader("plaintext.txt", &buf[..])
-                .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            let mut builder = Builder::from_reader("plaintext.txt", &buf[..]);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder
                 .encrypt_with_password(s2k, &"hello world".into())
                 .expect("encryption");
 
@@ -1440,9 +1472,8 @@ mod tests {
             let mut buf = vec![0u8; file_size];
             rng.fill(&mut buf[..]);
 
-            let builder = Builder::from_reader("plaintext.txt", &buf[..])
-                .partial_chunk_size(chunk_size)
-                .unwrap();
+            let mut builder = Builder::from_reader("plaintext.txt", &buf[..]);
+            builder.partial_chunk_size(chunk_size).unwrap();
 
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
@@ -1478,12 +1509,10 @@ mod tests {
             let mut buf = vec![0u8; file_size];
             rng.fill(&mut buf[..]);
 
-            let builder = Builder::from_reader("plaintext.txt", &buf[..])
-                .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
-                .expect("encryption");
+            let mut builder = Builder::from_reader("plaintext.txt", &buf[..]);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
@@ -1525,10 +1554,10 @@ mod tests {
 
             let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
-            let builder = Builder::from_reader("plaintext.txt", &buf[..])
-                .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+            let mut builder = Builder::from_reader("plaintext.txt", &buf[..]);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder
                 .encrypt_to_key(&mut rng, &pkey)
                 .expect("encryption")
                 .encrypt_with_password(s2k, &"hello world".into())
@@ -1578,10 +1607,8 @@ mod tests {
             let buf = random_string(&mut rng, file_size);
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .sign_text()
-                .partial_chunk_size(chunk_size)
-                .unwrap();
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder.sign_text().partial_chunk_size(chunk_size).unwrap();
 
             let encoded = builder.to_vec(&mut rng).expect("writing");
 
@@ -1621,13 +1648,10 @@ mod tests {
             let buf = random_string(&mut rng, file_size);
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
-                .sign_text()
-                .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
-                .expect("encryption");
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder.sign_text().partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
@@ -1668,14 +1692,14 @@ mod tests {
             let buf = random_string(&mut rng, file_size);
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder
                 .sign_text()
                 .compression(CompressionAlgorithm::ZIP)
                 .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
-                .expect("encryption");
+                .unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
 
             let encrypted = builder.to_vec(&mut rng).expect("writing");
 
@@ -1722,15 +1746,14 @@ mod tests {
 
             println!("data:\n{}", hex::encode(buf.as_bytes()));
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder
                 .sign_text()
                 .partial_chunk_size(chunk_size)
-                .unwrap();
+                .unwrap()
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
 
-            let signed = builder
-                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
-                .to_vec(&mut rng)
-                .expect("writing");
+            let signed = builder.to_vec(&mut rng).expect("writing");
             let mut message = Message::from_bytes(&signed[..]).expect("reading");
 
             check_strings(
@@ -1775,19 +1798,17 @@ mod tests {
                 buf.len()
             );
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder
                 .sign_text()
                 .compression(CompressionAlgorithm::ZIP)
                 .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
-                .encrypt_to_key(&mut rng, &pkey)
-                .expect("encryption");
+                .unwrap();
+            let mut builder = builder.seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+            builder.encrypt_to_key(&mut rng, &pkey).expect("encryption");
 
-            let encrypted = builder
-                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
-                .to_vec(&mut rng)
-                .expect("writing");
+            builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+            let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
@@ -1829,15 +1850,15 @@ mod tests {
             // encrypt it
             let s2k = crate::types::StringToKey::new_iterated(&mut rng, Default::default(), 2);
 
-            let builder = Builder::from_reader("plaintext.txt", &buf[..])
-                .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v2(
-                    &mut rng,
-                    SymmetricKeyAlgorithm::AES128,
-                    AeadAlgorithm::Gcm,
-                    ChunkSize::default(),
-                )
+            let mut builder = Builder::from_reader("plaintext.txt", &buf[..]);
+            builder.partial_chunk_size(chunk_size).unwrap();
+            let mut builder = builder.seipd_v2(
+                &mut rng,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Gcm,
+                ChunkSize::default(),
+            );
+            builder
                 .encrypt_with_password(&mut rng, s2k, &"hello world".into())
                 .expect("encryption");
 
@@ -1879,24 +1900,23 @@ mod tests {
             let buf = random_string(&mut rng, file_size);
             let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
-            let builder = Builder::from_reader("plaintext.txt", &mut reader)
+            let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+            builder
                 .sign_text()
                 .compression(CompressionAlgorithm::ZIP)
                 .partial_chunk_size(chunk_size)
-                .unwrap()
-                .seipd_v2(
-                    &mut rng,
-                    SymmetricKeyAlgorithm::AES128,
-                    AeadAlgorithm::Gcm,
-                    ChunkSize::default(),
-                )
+                .unwrap();
+            let mut builder = builder.seipd_v2(
+                &mut rng,
+                SymmetricKeyAlgorithm::AES128,
+                AeadAlgorithm::Gcm,
+                ChunkSize::default(),
+            );
+            builder
                 .encrypt_to_key(&mut rng, &pkey)
-                .expect("encryption");
-
-            let encrypted = builder
-                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256)
-                .to_vec(&mut rng)
-                .expect("writing");
+                .expect("encryption")
+                .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+            let encrypted = builder.to_vec(&mut rng).expect("writing");
 
             let message = Message::from_bytes(&encrypted[..]).expect("reading");
 
@@ -1965,16 +1985,18 @@ mod tests {
                 let buf = random_string(&mut rng, file_size);
                 let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
-                let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+                builder
                     .sign_text()
                     .compression(CompressionAlgorithm::ZIP)
-                    .partial_chunk_size(chunk_size)?
-                    .seipd_v2(
-                        &mut rng,
-                        SymmetricKeyAlgorithm::AES128,
-                        AeadAlgorithm::Gcm,
-                        ChunkSize::default(),
-                    )
+                    .partial_chunk_size(chunk_size)?;
+                let mut builder = builder.seipd_v2(
+                    &mut rng,
+                    SymmetricKeyAlgorithm::AES128,
+                    AeadAlgorithm::Gcm,
+                    ChunkSize::default(),
+                );
+                builder
                     .encrypt_to_key(&mut rng, &pkey1)?
                     .sign(&*skey1, Password::empty(), HashAlgorithm::Sha256)
                     .sign(&*skey2, Password::empty(), HashAlgorithm::Sha512);
@@ -2055,7 +2077,8 @@ mod tests {
                 let buf = random_string(&mut rng, file_size);
                 let mut reader = ChaosReader::new(rng.clone(), buf.clone());
 
-                let builder = Builder::from_reader("plaintext.txt", &mut reader)
+                let mut builder = Builder::from_reader("plaintext.txt", &mut reader);
+                builder
                     .sign_text()
                     .compression(CompressionAlgorithm::ZIP)
                     .partial_chunk_size(chunk_size)?
@@ -2116,8 +2139,9 @@ mod tests {
             "./tests/autocrypt/alice@autocrypt.example.sec.asc",
         )?)?;
 
-        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
-            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128)
+        let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
+            .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES128);
+        builder
             .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
 
@@ -2154,13 +2178,13 @@ mod tests {
             "./tests/autocrypt/alice@autocrypt.example.sec.asc",
         )?)?;
 
-        let builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice())
-            .seipd_v2(
-                &mut rng,
-                SymmetricKeyAlgorithm::AES128,
-                AeadAlgorithm::Ocb,
-                ChunkSize::default(),
-            )
+        let mut builder = Builder::from_bytes("plaintext.txt", b"hello world".as_slice()).seipd_v2(
+            &mut rng,
+            SymmetricKeyAlgorithm::AES128,
+            AeadAlgorithm::Ocb,
+            ChunkSize::default(),
+        );
+        builder
             .encrypt_to_key_anonymous(&mut rng, &skey.secret_subkeys[0].public_key())
             .unwrap();
 
