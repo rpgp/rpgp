@@ -322,17 +322,16 @@ fn dash_unescape_and_trim(text: &str) -> String {
         };
         let (content, end) = line.split_at(line.len() - line_end_len);
 
-        // trim spaces/tabs from the end of line content
-        let trimmed = content.trim_end_matches([' ', '\t']);
-
         // strip dash escapes if they exist
-        if let Some(stripped) = trimmed.strip_prefix("- ") {
-            out += stripped;
-        } else {
-            out += trimmed;
-        }
+        let undashed = content.strip_prefix("- ").unwrap_or(content);
 
-        // output line ending
+        // trim spaces/tabs from the end of line content
+        let trimmed = undashed.trim_end_matches([' ', '\t']);
+
+        // append normalized line content
+        out += trimmed;
+
+        // append line ending
         out += end;
     }
 
@@ -590,6 +589,26 @@ mod tests {
 - - noodles
 
 ";
+        let expected = "From the grocery store we need:
+
+- tofu
+- vegetables
+- noodles
+
+";
+
+        assert_eq!(dash_unescape_and_trim(input), expected);
+    }
+
+    #[test]
+    fn test_dash_unescape_and_trim2() {
+        let input = "From the grocery store we need:
+
+- - tofu\u{20}\u{20}
+- - vegetables\t
+- - noodles
+-\u{20}
+- ";
         let expected = "From the grocery store we need:
 
 - tofu
