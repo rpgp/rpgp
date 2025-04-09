@@ -21,7 +21,7 @@ use crate::{
         hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    errors::{bail, ensure_eq, format_err, Error},
+    errors::{bail, ensure, ensure_eq, Result},
     line_writer::{LineBreak, LineWriter},
     normalize_lines::NormalizedReader,
     packet::{
@@ -104,7 +104,7 @@ pub trait Encryption: PartialEq {
         partial_chunk_size: u32,
         len: Option<u32>,
         out: W,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -173,7 +173,7 @@ fn prepare<R>(
     mut rng: R,
     typ: SignatureType,
     keys: &[SigningConfig<'_>],
-) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>, Error>
+) -> Result<Vec<(crate::packet::SignatureConfig, OnePassSignature)>>
 where
     R: Rng + CryptoRng,
 {
@@ -302,7 +302,7 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
 
 impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
     /// Encrypt to a public key
-    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self, Error>
+    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
@@ -327,7 +327,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         &mut self,
         mut rng: RAND,
         pkey: &K,
-    ) -> Result<&mut Self, Error>
+    ) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
@@ -357,7 +357,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
         &mut self,
         s2k: StringToKey,
         msg_pw: &Password,
-    ) -> Result<&mut Self, Error> {
+    ) -> Result<&mut Self> {
         match SymKeyEncryptedSessionKey::encrypt_v4(
             msg_pw,
             &self.encryption.session_key,
@@ -383,7 +383,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV1> {
 
 impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
     /// Encrypt to a public key
-    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self, Error>
+    pub fn encrypt_to_key<RAND, K>(&mut self, mut rng: RAND, pkey: &K) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
@@ -407,7 +407,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         &mut self,
         mut rng: RAND,
         pkey: &K,
-    ) -> Result<&mut Self, Error>
+    ) -> Result<&mut Self>
     where
         RAND: CryptoRng + Rng,
         K: crate::types::PublicKeyTrait,
@@ -438,7 +438,7 @@ impl<R: Read> Builder<'_, R, EncryptionSeipdV2> {
         mut rng: RAND,
         s2k: StringToKey,
         msg_pw: &Password,
-    ) -> Result<&mut Self, Error>
+    ) -> Result<&mut Self>
     where
         RAND: Rng + CryptoRng,
     {
@@ -523,13 +523,12 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     /// - must be a power of 2.
     ///
     /// Defaults to [`DEFAULT_PARTIAL_CHUNK_SIZE`].
-    pub fn partial_chunk_size(&mut self, size: u32) -> Result<&mut Self, Error> {
-        if size < 512 {
-            return Err(format_err!("partial chunk size must be at least 512"));
-        }
-        if !size.is_power_of_two() {
-            return Err(format_err!("partial chunk size must be a power of two"));
-        }
+    pub fn partial_chunk_size(&mut self, size: u32) -> Result<&mut Self> {
+        ensure!(size >= 512, "partial chunk size must be at least 512");
+        ensure!(
+            size.is_power_of_two(),
+            "partial chunk size must be a power of two"
+        );
         self.partial_chunk_size = size;
         Ok(self)
     }
@@ -554,7 +553,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out to a writer.
-    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<(), Error>
+    pub fn to_writer<RAND, W>(self, rng: RAND, out: W) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
@@ -637,7 +636,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         rng: RAND,
         opts: ArmorOptions<'_>,
         mut out: W,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         W: std::io::Write,
@@ -670,7 +669,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a file.
-    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<(), Error>
+    pub fn to_file<RAND, P>(self, rng: RAND, out_path: P) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         P: AsRef<Path>,
@@ -700,7 +699,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
         rng: RAND,
         out_path: P,
         opts: ArmorOptions<'_>,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         RAND: Rng + CryptoRng,
         P: AsRef<Path>,
@@ -725,7 +724,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data out directly to a `Vec<u8>`.
-    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>, Error>
+    pub fn to_vec<RAND>(self, rng: RAND) -> Result<Vec<u8>>
     where
         RAND: Rng + CryptoRng,
     {
@@ -735,7 +734,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     }
 
     /// Write the data as ascii armored data, directly to a `String`.
-    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String, Error>
+    pub fn to_armored_string<RAND>(self, rng: RAND, opts: ArmorOptions<'_>) -> Result<String>
     where
         RAND: Rng + CryptoRng,
     {
@@ -759,7 +758,7 @@ fn to_writer_inner<RAND, R, W, E>(
     compression: Option<CompressionAlgorithm>,
     encryption: E,
     out: W,
-) -> Result<(), Error>
+) -> Result<()>
 where
     RAND: Rng + CryptoRng,
     R: std::io::Read,
@@ -803,7 +802,7 @@ impl Encryption for NoEncryption {
         _partial_chunk_size: u32,
         _len: Option<u32>,
         mut out: W,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -826,7 +825,7 @@ impl Encryption for EncryptionSeipdV1 {
         partial_chunk_size: u32,
         len: Option<u32>,
         mut out: W,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -876,7 +875,7 @@ impl Encryption for EncryptionSeipdV2 {
         partial_chunk_size: u32,
         len: Option<u32>,
         mut out: W,
-    ) -> Result<(), Error>
+    ) -> Result<()>
     where
         R: Rng + CryptoRng,
         READ: std::io::Read,
@@ -948,7 +947,7 @@ fn encrypt_write<R: std::io::Read, W: std::io::Write>(
     len: Option<u32>,
     mut encrypted: R,
     mut out: W,
-) -> Result<(), Error> {
+) -> Result<()> {
     debug!(
         "encrypt {:?}: at {} chunks, total len: {:?}",
         tag, partial_chunk_size, len
@@ -1095,7 +1094,7 @@ impl<'a, R: std::io::Read> SignGenerator<'a, R> {
         source: R,
         signers: Vec<SigningConfig<'a>>,
         source_len: Option<u32>,
-    ) -> Result<Self, Error>
+    ) -> Result<Self>
     where
         RAND: CryptoRng + Rng,
     {
