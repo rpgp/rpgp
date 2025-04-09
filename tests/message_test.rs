@@ -405,8 +405,9 @@ fn test_compression_quine() {
     let pkey = skey.public_key();
 
     let msg = Message::from_file("./tests/quine.out").unwrap();
-    let res = msg.decompress();
-    assert!(res.is_err());
+    let mut msg = msg.decompress().unwrap();
+    let res = msg.as_data_vec().unwrap();
+    assert_eq!(res.len(), 176);
 
     let msg = Message::from_file("./tests/quine.out").unwrap();
     assert!(msg.verify(&*pkey).is_err());
