@@ -568,7 +568,6 @@ mod tests {
                 HashAlgorithm::Sha384,
                 HashAlgorithm::Sha512,
                 HashAlgorithm::Sha224,
-                HashAlgorithm::Sha1,
             ])
             .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
@@ -677,7 +676,6 @@ mod tests {
                 HashAlgorithm::Sha384,
                 HashAlgorithm::Sha512,
                 HashAlgorithm::Sha224,
-                HashAlgorithm::Sha1,
             ])
             .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
@@ -762,7 +760,6 @@ mod tests {
                 HashAlgorithm::Sha384,
                 HashAlgorithm::Sha512,
                 HashAlgorithm::Sha224,
-                HashAlgorithm::Sha1,
             ])
             .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
@@ -917,7 +914,6 @@ mod tests {
                 HashAlgorithm::Sha384,
                 HashAlgorithm::Sha512,
                 HashAlgorithm::Sha224,
-                HashAlgorithm::Sha1,
             ])
             .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
@@ -1051,13 +1047,7 @@ mod tests {
                 SymmetricKeyAlgorithm::AES192,
                 SymmetricKeyAlgorithm::AES128,
             ])
-            .preferred_hash_algorithms(smallvec![
-                HashAlgorithm::Sha256,
-                HashAlgorithm::Sha384,
-                HashAlgorithm::Sha512,
-                HashAlgorithm::Sha224,
-                HashAlgorithm::Sha1,
-            ])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha3_512, HashAlgorithm::Sha512,])
             .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
                 CompressionAlgorithm::ZIP,
