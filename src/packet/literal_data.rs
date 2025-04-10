@@ -464,7 +464,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 self.is_fixed_emitted = true;
                 let len = (buf_size + self.header.write_len())
                     .try_into()
-                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "too large"))?;
+                    .map_err(|_| io::Error::other("too large"))?;
                 PacketLength::Fixed(len)
             } else if buf_size == chunk_size {
                 // partial
@@ -476,7 +476,7 @@ impl<R: io::Read> io::Read for LiteralDataPartialGenerator<R> {
                 let len = data
                     .len()
                     .try_into()
-                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "too large"))?;
+                    .map_err(|_| io::Error::other("too large"))?;
                 PacketLength::Fixed(len)
             };
 

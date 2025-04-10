@@ -246,10 +246,7 @@ impl<R: DebugBufRead> SymEncryptedProtectedDataReader<R> {
                     return Ok(());
                 }
                 Self::Error => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "SymEncryptedProtectedDataReader errored",
-                    ));
+                    return Err(io::Error::other("SymEncryptedProtectedDataReader errored"));
                 }
             }
         }
@@ -264,10 +261,7 @@ impl<R: DebugBufRead> BufRead for SymEncryptedProtectedDataReader<R> {
             Self::Body { decryptor, .. } => decryptor.fill_buf(),
 
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "SymEncryptedProtectedDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("SymEncryptedProtectedDataReader errored")),
         }
     }
 
@@ -290,10 +284,7 @@ impl<R: DebugBufRead> Read for SymEncryptedProtectedDataReader<R> {
             Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { decryptor, .. } => decryptor.read(buf),
             Self::Done { .. } => Ok(0),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "SymEncryptedProtectedDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("SymEncryptedProtectedDataReader errored")),
         }
     }
 }

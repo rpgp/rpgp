@@ -141,10 +141,7 @@ impl<R: BufRead> LiteralDataReader<R> {
                 };
                 Ok(())
             }
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "LiteralDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 }
@@ -154,10 +151,7 @@ impl<R: BufRead> BufRead for LiteralDataReader<R> {
         self.fill_inner()?;
         match self {
             Self::Body { buffer, .. } | Self::Done { buffer, .. } => Ok(&buffer[..]),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "LiteralDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 
@@ -180,10 +174,7 @@ impl<R: BufRead> Read for LiteralDataReader<R> {
                 buffer.copy_to_slice(&mut buf[..to_write]);
                 Ok(to_write)
             }
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "LiteralDataReader errored",
-            )),
+            Self::Error => Err(io::Error::other("LiteralDataReader errored")),
         }
     }
 }

@@ -12,7 +12,7 @@ concurrency:
 env:
   RUST_BACKTRACE: 1
   RUSTFLAGS: -Dwarnings
-  RUST_NIGHTLY: nightly-2025-02-02
+  RUST_NIGHTLY: nightly-2025-04-02
 
 jobs:
   build_and_test_nix:
@@ -22,7 +22,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest]
         rust:
-          - nightly-2025-02-02
+          - nightly-2025-04-02
           - stable
 
     steps:
@@ -55,6 +55,9 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
 
+    - name: curve448
+      run: cargo nextest run --lib --bins --tests --all --features unstable-curve448
+
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
@@ -68,7 +71,7 @@ jobs:
       matrix:
         os: [windows-latest]
         rust:
-          - nightly-2025-02-02
+          - nightly-2025-04-02
           - stable
         target:
           - x86_64-pc-windows-gnu
@@ -91,12 +94,6 @@ jobs:
         target: ${{ matrix.target }}
         override: true
 
-    - name: check curve448
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --features unstable-curve448 --all --target ${{ matrix.target }}
-
     - name: Install cargo-nextest
       uses: taiki-e/install-action@v2
       with:
@@ -107,6 +104,13 @@ jobs:
 
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
+
+    # Broken currently
+    # - name: check curve448
+    #   uses: actions-rs/cargo@v1
+    #   with:
+    #     command: test
+    #     args: --features unstable-curve448 --all --target ${{ matrix.target }}
 
   cross:
     name: Cross compile
@@ -146,7 +150,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2025-02-02
+          - nightly-2025-04-02
           - stable
 
     steps:

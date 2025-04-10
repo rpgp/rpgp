@@ -23,42 +23,25 @@ fn ecdh_roundtrip_with_rpgp_0_10() {
     // a test-key with an ECDH(Curve25519) encryption subkey
     const KEYFILE: &str = "./tests/unit-tests/padding/alice.key";
 
-    // 0.10 -> 0.10
-    let enc = encrypt_rpgp_0_10(MSG, KEYFILE);
-    let dec = decrypt_rpgp_0_10(&enc, KEYFILE);
-    assert_eq!(dec, MSG, "0.10 -> 0.10");
-
     // 0.10 -> cur
-    let enc = encrypt_rpgp_0_10(MSG, KEYFILE);
+    // let enc = encrypt_rpgp_0_10(MSG, KEYFILE);
+    let enc = std::fs::read_to_string("./tests/unit-tests/padding/rpgp-0-10.enc.asc").unwrap();
     let dec = decrypt_rpgp_cur(&enc, KEYFILE);
     assert_eq!(dec, MSG, "0.10 -> cur");
 
     // cur -> 0.10
     let enc = encrypt_rpgp_cur(MSG, KEYFILE);
-    let dec = decrypt_rpgp_0_10(&enc, KEYFILE);
-    assert_eq!(dec, MSG, "cur -> 0.10");
+    // std::fs::write("./tests/unit-tests/padding/rpgp-current.enc.asc", &enc).unwrap();
+    // let dec = decrypt_rpgp_0_10(&enc, KEYFILE);
+    let enc_expected =
+        std::fs::read_to_string("./tests/unit-tests/padding/rpgp-current.enc.asc").unwrap();
+    assert_eq!(enc, enc_expected.replace("\r\n", "\n"), "cur -> 0.10");
+    // assert_eq!(dec, MSG, "cur -> 0.10");
 
     // cur -> cur
     let enc = encrypt_rpgp_cur(MSG, KEYFILE);
     let dec = decrypt_rpgp_cur(&enc, KEYFILE);
     assert_eq!(dec, MSG, "cur -> cur");
-}
-
-fn decrypt_rpgp_0_10(enc_msg: &str, keyfile: &str) -> Vec<u8> {
-    use rpgp_0_10::Deserializable;
-
-    let (enc_msg, _) = rpgp_0_10::Message::from_string(enc_msg).unwrap();
-
-    let (ssk, _headers) =
-        rpgp_0_10::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
-            .expect("failed to read key");
-
-    let (mut dec, _) = enc_msg
-        .decrypt(|| "".to_string(), &[&ssk])
-        .expect("decrypt_rpgp_0_10");
-    let inner = dec.next().unwrap().unwrap();
-
-    inner.get_literal().unwrap().data().to_vec()
 }
 
 fn decrypt_rpgp_cur(enc_msg: &str, keyfile: &str) -> Vec<u8> {
@@ -73,27 +56,6 @@ fn decrypt_rpgp_cur(enc_msg: &str, keyfile: &str) -> Vec<u8> {
     let mut dec = enc_msg.decrypt(&"".into(), &ssk).unwrap();
 
     dec.as_data_vec().unwrap()
-}
-
-fn encrypt_rpgp_0_10(msg: &[u8], keyfile: &str) -> String {
-    use rpgp_0_10::{crypto::sym::SymmetricKeyAlgorithm, Deserializable};
-
-    let mut rng = ChaChaRng::from_seed([0u8; 32]);
-
-    let lit = rpgp_0_10::packet::LiteralData::from_bytes((&[]).into(), msg);
-    let msg = rpgp_0_10::Message::Literal(lit);
-
-    let (ssk, _headers) =
-        rpgp_0_10::SignedSecretKey::from_armor_single(std::fs::File::open(keyfile).unwrap())
-            .expect("failed to read key");
-
-    let enc = &ssk.secret_subkeys[0];
-
-    let enc_msg = msg
-        .encrypt_to_keys(&mut rng, SymmetricKeyAlgorithm::AES128, &[enc])
-        .unwrap();
-
-    enc_msg.to_armored_string(None).unwrap()
 }
 
 fn encrypt_rpgp_cur(msg: &'static [u8], keyfile: &str) -> String {

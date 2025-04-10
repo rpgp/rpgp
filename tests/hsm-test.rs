@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 use std::{fmt::Debug, fs::File};
 
 use chrono::{DateTime, Utc};

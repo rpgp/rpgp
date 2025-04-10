@@ -248,12 +248,7 @@ impl<'a> SignatureOnePassReader<'a> {
                     };
                     return Ok(());
                 }
-                Self::Error => {
-                    return Err(io::Error::new(
-                        io::ErrorKind::Other,
-                        "SignatureOnePassReader errored",
-                    ))
-                }
+                Self::Error => return Err(io::Error::other("SignatureOnePassReader errored")),
             }
         }
     }
@@ -313,10 +308,7 @@ impl BufRead for SignatureOnePassReader<'_> {
             Self::Init { .. } => unreachable!("invalid state"),
             Self::Body { buffer, .. } => Ok(&buffer[..]),
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "SignatureOnePassReader errored",
-            )),
+            Self::Error => Err(io::Error::other("SignatureOnePassReader errored")),
         }
     }
 
@@ -343,10 +335,7 @@ impl Read for SignatureOnePassReader<'_> {
                 Ok(to_write)
             }
             Self::Done { .. } => Ok(0),
-            Self::Error => Err(io::Error::new(
-                io::ErrorKind::Other,
-                "SignatureOnePassReader errored",
-            )),
+            Self::Error => Err(io::Error::other("SignatureOnePassReader errored")),
         }
     }
 }
