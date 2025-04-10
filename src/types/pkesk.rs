@@ -106,7 +106,6 @@ impl PkeskBytes {
                     session_key: esk,
                 })
             }
-            #[cfg(feature = "unstable-curve448")]
             PublicKeyAlgorithm::X448 => {
                 // 56 octets representing an ephemeral X448 public key.
                 let ephemeral_public = i.read_array::<56>()?;
@@ -136,8 +135,6 @@ impl PkeskBytes {
                     session_key,
                 })
             }
-            #[cfg(not(feature = "unstable-curve448"))]
-            PublicKeyAlgorithm::X448 => Ok(PkeskBytes::Other),
             PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
             _ => unsupported_err!("unsupported algorithm for ESK"),
         }
@@ -190,7 +187,6 @@ impl Serialize for PkeskBytes {
 
                 writer.write_all(session_key)?; // encrypted session key
             }
-            #[cfg(feature = "unstable-curve448")]
             PkeskBytes::X448 {
                 ephemeral,
                 sym_alg,
@@ -216,8 +212,6 @@ impl Serialize for PkeskBytes {
 
                 writer.write_all(session_key)?; // encrypted session key
             }
-            #[cfg(not(feature = "unstable-curve448"))]
-            PkeskBytes::X448 { .. } => {}
             PkeskBytes::Other => {
                 // Nothing to do
             }
@@ -265,7 +259,6 @@ impl Serialize for PkeskBytes {
                 }
                 sum += session_key.len(); // encrypted session key
             }
-            #[cfg(feature = "unstable-curve448")]
             PkeskBytes::X448 {
                 ephemeral,
                 sym_alg,
@@ -287,8 +280,6 @@ impl Serialize for PkeskBytes {
                 }
                 sum += session_key.len(); // encrypted session key
             }
-            #[cfg(not(feature = "unstable-curve448"))]
-            PkeskBytes::X448 { .. } => {}
             PkeskBytes::Other => {}
         }
         sum
@@ -338,7 +329,6 @@ mod tests {
                         sym_alg: (!is_v6).then_some(b),
                     })
                     .boxed(),
-                #[cfg(feature = "unstable-curve448")]
                 PublicKeyAlgorithm::X448 => any::<([u8; 56], SymmetricKeyAlgorithm)>()
                     .prop_flat_map(|(a, b)| (Just(a), Just(b), collection::vec(0u8..255u8, 1..100)))
                     .prop_map(move |(a, b, c)| Self::X448 {

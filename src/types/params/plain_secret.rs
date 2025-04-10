@@ -36,7 +36,6 @@ pub enum PlainSecretParams {
     EdDSALegacy(ed25519::SecretKey),
     X25519(x25519::SecretKey),
     Elgamal(elgamal::SecretKey),
-    #[cfg(feature = "unstable-curve448")]
     X448(crate::crypto::x448::SecretKey),
     Unknown {
         #[zeroize(skip)]
@@ -141,7 +140,6 @@ impl PlainSecretParams {
                 let key = crate::crypto::x25519::SecretKey::try_from_array(pub_params, secret)?;
                 Self::X25519(key)
             }
-            #[cfg(feature = "unstable-curve448")]
             (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
                 let s = i.read_array::<56>()?;
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
@@ -386,7 +384,6 @@ impl PlainSecretParams {
                 };
             }
 
-            #[cfg(feature = "unstable-curve448")]
             (
                 PlainSecretParams::X448(ref priv_key),
                 PkeskBytes::X448 {
@@ -559,7 +556,6 @@ impl PlainSecretParams {
                 let x = key.as_mpi();
                 x.to_writer(writer)?;
             }
-            #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(key) => {
                 writer.write_all(&key.secret)?;
             }
@@ -613,7 +609,6 @@ impl PlainSecretParams {
                 x.write_len()
             }
             PlainSecretParams::X25519(_key) => 32,
-            #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }
@@ -698,7 +693,6 @@ mod tests {
                 PublicKeyAlgorithm::X25519 => any::<x25519::SecretKey>()
                     .prop_map(PlainSecretParams::X25519)
                     .boxed(),
-                #[cfg(feature = "unstable-curve448")]
                 PublicKeyAlgorithm::X448 => any::<crate::crypto::x448::SecretKey>()
                     .prop_map(PlainSecretParams::X448)
                     .boxed(),

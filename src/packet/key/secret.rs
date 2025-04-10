@@ -487,7 +487,6 @@ fn create_signature(
         PlainSecretParams::X25519(_) => {
             bail!("X25519 can not be used for signing operations")
         }
-        #[cfg(feature = "unstable-curve448")]
         PlainSecretParams::X448(_) => {
             bail!("X448 can not be used for signing operations")
         }

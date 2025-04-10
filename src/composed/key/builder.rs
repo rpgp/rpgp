@@ -262,7 +262,6 @@ pub enum KeyType {
     /// Encrypting with X25519
     X25519,
     /// Encrypting with X448
-    #[cfg(feature = "unstable-curve448")]
     X448,
 }
 
@@ -298,7 +297,6 @@ impl KeyType {
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
             KeyType::Ed25519 => PublicKeyAlgorithm::Ed25519,
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
-            #[cfg(feature = "unstable-curve448")]
             KeyType::X448 => PublicKeyAlgorithm::X448,
         }
     }
@@ -352,7 +350,6 @@ impl KeyType {
                 let secret_params = PlainSecretParams::X25519(secret);
                 (public_params, secret_params)
             }
-            #[cfg(feature = "unstable-curve448")]
             KeyType::X448 => {
                 let secret = crate::crypto::x448::SecretKey::generate(rng);
                 let public_params = PublicParams::X448((&secret).into());

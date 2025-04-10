@@ -1,3 +1,4 @@
+use cx448::x448;
 use hkdf::Hkdf;
 use log::debug;
 use rand::{CryptoRng, Rng};
