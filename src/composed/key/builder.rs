@@ -9,8 +9,8 @@ use crate::{
     composed::{KeyDetails, SecretKey, SecretSubkey},
     crypto::{
         aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        hash::HashAlgorithm, ml_kem768_x25519, public_key::PublicKeyAlgorithm, rsa,
-        sym::SymmetricKeyAlgorithm, x25519, x448,
+        hash::HashAlgorithm, ml_kem1024_x448, ml_kem768_x25519, public_key::PublicKeyAlgorithm,
+        rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
@@ -266,8 +266,10 @@ pub enum KeyType {
     X25519,
     /// Encrypting with X448
     X448,
-    /// Encrypting using MlKem-X25519
-    MlKemX25519,
+    /// Encrypting using MlKem768-X25519
+    MlKem768X25519,
+    /// Encrypting using MlKem1024-X25519
+    MlKem1024X448,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -304,7 +306,8 @@ impl KeyType {
             KeyType::Ed448 => PublicKeyAlgorithm::Ed448,
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
             KeyType::X448 => PublicKeyAlgorithm::X448,
-            KeyType::MlKemX25519 => PublicKeyAlgorithm::MlKem768X25519Draft,
+            KeyType::MlKem768X25519 => PublicKeyAlgorithm::MlKem768X25519Draft,
+            KeyType::MlKem1024X448 => PublicKeyAlgorithm::MlKem1024X448Draft,
         }
     }
 
@@ -369,10 +372,16 @@ impl KeyType {
                 let secret_params = PlainSecretParams::X448(secret);
                 (public_params, secret_params)
             }
-            KeyType::MlKemX25519 => {
+            KeyType::MlKem768X25519 => {
                 let secret = ml_kem768_x25519::SecretKey::generate(rng);
                 let public_params = PublicParams::MlKem768X25519((&secret).into());
                 let secret_params = PlainSecretParams::MlKem768X25519(secret);
+                (public_params, secret_params)
+            }
+            KeyType::MlKem1024X448 => {
+                let secret = ml_kem1024_x448::SecretKey::generate(rng);
+                let public_params = PublicParams::MlKem1024X448((&secret).into());
+                let secret_params = PlainSecretParams::MlKem1024X448(secret);
                 (public_params, secret_params)
             }
         };
@@ -1136,7 +1145,7 @@ mod tests {
             .key_type(KeyType::Ed25519)
             .can_certify(true)
             .can_sign(true)
-            .primary_user_id("Me-X <me-ml-kem-x5519-rfc9580@mail.com>".into())
+            .primary_user_id("Me-X <me-ml-kem-x25519-rfc9580@mail.com>".into())
             .passphrase(None)
             .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256,])
             .preferred_hash_algorithms(smallvec![
@@ -1151,7 +1160,94 @@ mod tests {
             .subkey(
                 SubkeyParamsBuilder::default()
                     .version(version)
-                    .key_type(KeyType::MlKemX25519)
+                    .key_type(KeyType::MlKem768X25519)
+                    .can_encrypt(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        let armor = signed_key
+            .to_armored_string(None.into())
+            .expect("failed to serialize key");
+
+        // std::fs::write("sample-448-rfc9580.sec.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        signed_key2.verify().expect("invalid key");
+
+        assert_eq!(signed_key, signed_key2);
+
+        let public_key = signed_key.public_key();
+
+        let public_signed_key = public_key
+            .sign(
+                &mut rng,
+                &*signed_key,
+                &*signed_key.public_key(),
+                &"".into(),
+            )
+            .expect("failed to sign public key");
+
+        public_signed_key.verify().expect("invalid public key");
+
+        let armor = public_signed_key
+            .to_armored_string(None.into())
+            .expect("failed to serialize public key");
+
+        // std::fs::write("sample-448-rfc9580.pub.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
+        signed_key2.verify().expect("invalid public key");
+    }
+
+    #[test]
+    fn key_gen_ed448_ml_kem_x448() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for _ in 0..10 {
+                gen_ed448_ml_kem_x448(&mut rng, key_version);
+            }
+        }
+    }
+
+    fn gen_ed448_ml_kem_x448<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+        let _ = pretty_env_logger::try_init();
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(version)
+            .key_type(KeyType::Ed448)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("Me-X <me-ml-kem-x448-rfc9580@mail.com>".into())
+            .passphrase(None)
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256,])
+            .preferred_hash_algorithms(smallvec![
+                HashAlgorithm::Sha256,
+                HashAlgorithm::Sha3_512,
+                HashAlgorithm::Sha512,
+            ])
+            .preferred_compression_algorithms(smallvec![
+                CompressionAlgorithm::ZLIB,
+                CompressionAlgorithm::ZIP,
+            ])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(version)
+                    .key_type(KeyType::MlKem1024X448)
                     .can_encrypt(true)
                     .passphrase(None)
                     .build()

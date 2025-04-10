@@ -488,7 +488,10 @@ fn create_signature(
             bail!("X25519 can not be used for signing operations")
         }
         PlainSecretParams::MlKem768X25519 { .. } => {
-            bail!("ML KEM X25519 can not be used for signing operations")
+            bail!("ML KEM 768 X25519 can not be used for signing operations")
+        }
+        PlainSecretParams::MlKem1024X448 { .. } => {
+            bail!("ML KEM 1024 X448 can not be used for signing operations")
         }
         PlainSecretParams::X448(_) => {
             bail!("X448 can not be used for signing operations")

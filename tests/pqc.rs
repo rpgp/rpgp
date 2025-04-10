@@ -1,10 +1,14 @@
 use pgp::{
-    composed::{Deserializable, Message, MessageBuilder, SignedPublicKey, SignedSecretKey},
+    composed::{
+        Deserializable, KeyType, Message, MessageBuilder, SecretKeyParamsBuilder, SignedPublicKey,
+        SignedSecretKey, SubkeyParamsBuilder,
+    },
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    types::{KeyDetails, Password},
+    types::{KeyDetails, KeyVersion, Password},
 };
-use rand::SeedableRng;
+use rand::{CryptoRng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use smallvec::smallvec;
 use testresult::TestResult;
 
 #[test]
@@ -108,5 +112,75 @@ fn test_a_1_3_signed_encrypted() -> TestResult {
         msg.verify(&pub_key)?;
         dbg!(&msg);
     }
+    Ok(())
+}
+
+fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
+    let key_params = SecretKeyParamsBuilder::default()
+        .version(KeyVersion::V6)
+        .key_type(KeyType::Ed448)
+        .can_sign(true)
+        .primary_user_id("Me-X <me-ml-kem-x448-rfc9580@mail.com>".into())
+        .passphrase(None)
+        .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256,])
+        .preferred_hash_algorithms(smallvec![
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Sha3_512,
+            HashAlgorithm::Sha512,
+        ])
+        .subkey(
+            SubkeyParamsBuilder::default()
+                .version(KeyVersion::V6)
+                .key_type(KeyType::MlKem1024X448)
+                .can_encrypt(true)
+                .passphrase(None)
+                .build()
+                .unwrap(),
+        )
+        .build()
+        .unwrap();
+
+    let key = key_params
+        .generate(&mut rng)
+        .expect("failed to generate secret key");
+
+    let signed_key = key.sign(&mut rng, &"".into())?;
+    signed_key.verify()?;
+
+    Ok(signed_key)
+}
+
+#[test]
+fn test_ml_kem_1024_x448() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let key_a = gen_key(&mut rng)?;
+    let key_b = gen_key(&mut rng)?;
+
+    // encrypt & sign
+    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    builder
+        .sign(&*key_a, Password::empty(), HashAlgorithm::Sha3_512)
+        // encrypting to the PQ subkey
+        .encrypt_to_key(&mut rng, &key_b.public_key().public_subkeys[0])?;
+
+    let out = builder.to_armored_string(&mut rng, Default::default())?;
+
+    // decrypt and verify sig
+    {
+        let (msg, _) = Message::from_armor(out.as_bytes())?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &key_b)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&*key_a.public_key())?;
+        dbg!(&msg);
+    }
+
     Ok(())
 }

@@ -18,15 +18,15 @@ use crate::{
 /// User facing interface to work with a public key.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PublicKey {
-    primary_key: packet::PublicKey,
-    details: KeyDetails,
-    public_subkeys: Vec<PublicSubkey>,
+    pub primary_key: packet::PublicKey,
+    pub details: KeyDetails,
+    pub public_subkeys: Vec<PublicSubkey>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PublicSubkey {
-    key: packet::PublicSubkey,
-    keyflags: KeyFlags,
+    pub key: packet::PublicSubkey,
+    pub keyflags: KeyFlags,
 }
 
 impl PublicKey {

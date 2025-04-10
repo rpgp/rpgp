@@ -40,7 +40,6 @@ pub enum PublicKeyAlgorithm {
     /// ML-KEM-768+X25519
     MlKem768X25519Draft = 105,
     /// ML-KEM-1024+X448
-    #[cfg_attr(test, proptest(skip))]
     MlKem1024X448Draft = 106,
 
     /// Private experimental range (from OpenPGP)

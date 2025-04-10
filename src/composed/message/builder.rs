@@ -246,7 +246,6 @@ impl<'a, R: Read> Builder<'a, R, NoEncryption> {
         RAND: CryptoRng + Rng,
     {
         let session_key = sym_alg.new_session_key(&mut rng);
-        dbg!(hex::encode(&*session_key));
         Builder {
             source: self.source,
             compression: self.compression,

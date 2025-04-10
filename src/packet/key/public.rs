@@ -442,6 +442,34 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
                 sym_alg,
             })
         }
+        PublicParams::MlKem1024X448(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem1024_x448::encrypt(
+                    &mut rng,
+                    &params.x448_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem1024X448 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
         PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }
 }
@@ -686,7 +714,10 @@ impl PublicKeyTrait for PubKeyInner {
                 crypto::ecdsa::verify(params, hash, hashed, sig)
             }
             PublicParams::MlKem768X25519(_) => {
-                bail!("ML KEM X25519 can not be used for verify operations");
+                bail!("ML KEM 768 X25519 can not be used for verify operations");
+            }
+            PublicParams::MlKem1024X448(_) => {
+                bail!("ML KEM 1024 X448 can not be used for verify operations");
             }
             PublicParams::ECDH(
                 ref params @ EcdhPublicParams::Curve25519 { .. }

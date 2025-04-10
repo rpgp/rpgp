@@ -145,3 +145,6 @@ debug = 2
 [[bench]]
 name = "benches_main"
 harness = false
+
+[patch.crates-io]
+cx448 = { path = "../../cx448" }

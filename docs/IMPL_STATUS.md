@@ -94,10 +94,10 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] Iterated and Salted
   - [x] Argon2
 
-- PQC
+- PQC - Draf 07
  - Encryption & Decryption
-   - [ ] ML-KEM-768 x25519
-   - [ ] ML-KEM-1024 ed448
+   - [x] ML-KEM-768 x25519
+   - [x] ML-KEM-1024 ed448
  - Signing
    - [ ] ML-DSA-65+Ed25519
    - [ ] ML-DSA-87+Ed448

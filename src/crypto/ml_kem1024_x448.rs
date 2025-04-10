@@ -1,34 +1,34 @@
 use std::cmp::PartialEq;
 
+use cx448::x448::{PublicKey, Secret};
 use log::debug;
 use ml_kem::{
     kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
-    EncodedSizeUser, KemCore, MlKem768, MlKem768Params,
+    EncodedSizeUser, KemCore, MlKem1024, MlKem1024Params,
 };
 use rand::{CryptoRng, Rng};
 use sha3::{Digest, Sha3_256};
-use x25519_dalek::{PublicKey, StaticSecret};
-use zeroize::{ZeroizeOnDrop, Zeroizing};
+use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{aes_kw, public_key::PublicKeyAlgorithm, Decryptor},
     errors::{ensure, Result},
-    types::MlKem768X25519PublicParams,
+    types::MlKem1024X448PublicParams,
 };
 
-/// Secret key for ML KEM 768 X25519
+/// Secret key for ML KEM 1024 X448
 #[derive(Clone, derive_more::Debug, ZeroizeOnDrop)]
 pub struct SecretKey {
     #[debug("..")]
-    pub(crate) x25519: StaticSecret,
+    pub(crate) x448: Secret,
     #[debug("..")]
-    pub(crate) ml_kem: DecapsulationKey<MlKem768Params>,
+    pub(crate) ml_kem: DecapsulationKey<MlKem1024Params>,
 }
 
-impl From<&SecretKey> for MlKem768X25519PublicParams {
+impl From<&SecretKey> for MlKem1024X448PublicParams {
     fn from(value: &SecretKey) -> Self {
         Self {
-            x25519_key: PublicKey::from(&value.x25519),
+            x448_key: PublicKey::from(&value.x448),
             ml_kem_key: Box::new(value.ml_kem.encapsulation_key()),
         }
     }
@@ -36,7 +36,7 @@ impl From<&SecretKey> for MlKem768X25519PublicParams {
 
 impl PartialEq for SecretKey {
     fn eq(&self, other: &Self) -> bool {
-        self.x25519.as_bytes().eq(other.x25519.as_bytes()) && self.ml_kem.eq(&other.ml_kem)
+        self.x448.as_bytes().eq(other.x448.as_bytes()) && self.ml_kem.eq(&other.ml_kem)
     }
 }
 
@@ -45,31 +45,28 @@ impl Eq for SecretKey {}
 impl SecretKey {
     /// Generate a `SecretKey`.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
-        rng.fill_bytes(&mut *secret_key_bytes);
+        let x448 = Secret::new(&mut rng);
 
-        let x25519 = StaticSecret::from(*secret_key_bytes);
-
-        let (de, _) = MlKem768::generate(&mut rng);
-        Self { x25519, ml_kem: de }
+        let (de, _) = MlKem1024::generate(&mut rng);
+        Self { x448, ml_kem: de }
     }
 
-    pub(crate) fn try_from_parts(x: StaticSecret, ml_kem: [u8; 64]) -> Result<Self> {
+    pub(crate) fn try_from_parts(x: Secret, ml_kem: [u8; 64]) -> Result<Self> {
         let ml_kem = DecapsulationKey::from_bytes(&(ml_kem.into()));
 
-        Ok(Self { x25519: x, ml_kem })
+        Ok(Self { x448: x, ml_kem })
     }
 }
 
 pub struct EncryptionFields<'a> {
-    /// Ephemeral X25519 public key (32 bytes)
-    pub ecdh_ciphertext: [u8; 32],
+    /// Ephemeral X448 public key
+    pub ecdh_ciphertext: &'a PublicKey,
 
-    pub ml_kem_ciphertext: &'a [u8; 1088],
+    pub ml_kem_ciphertext: &'a [u8; 1568],
 
-    /// Recipient public key (32 bytes)
-    pub ecdh_pub_key: &'a x25519_dalek::PublicKey,
-    pub ml_kem_pub_key: &'a EncapsulationKey<MlKem768Params>,
+    /// Recipient public key
+    pub ecdh_pub_key: &'a PublicKey,
+    pub ml_kem_pub_key: &'a EncapsulationKey<MlKem1024Params>,
 
     /// Encrypted and wrapped session key
     pub encrypted_session_key: &'a [u8],
@@ -79,14 +76,13 @@ impl Decryptor for SecretKey {
     type EncryptionFields<'a> = EncryptionFields<'a>;
 
     fn decrypt(&self, data: Self::EncryptionFields<'_>) -> Result<Vec<u8>> {
-        debug!("ML KEM 768 X25519 decrypt");
+        debug!("ML KEM 1024 X448 decrypt");
 
         // Compute (ecdhKeyShare) := ECDH-KEM.Decaps(ecdhCipherText, ecdhSecretKey, ecdhPublicKey)
-        let ecdh_key_share =
-            x25519_kem_decaps(&data.ecdh_ciphertext, &self.x25519, data.ecdh_pub_key);
+        let ecdh_key_share = x448_kem_decaps(data.ecdh_ciphertext, &self.x448, data.ecdh_pub_key);
 
         // Compute (mlkemKeyShare) := ML-KEM.Decaps(mlkemCipherText, mlkemSecretKey)
-        let ml_kem_key_share = ml_kem_768_decaps(data.ml_kem_ciphertext, &self.ml_kem);
+        let ml_kem_key_share = ml_kem_1024_decaps(data.ml_kem_ciphertext, &self.ml_kem);
         // Compute KEK := multiKeyCombine(
         //                  mlkemKeyShare, mlkemCipherText, mlkemPublicKey, ecdhKeyShare,
         //                  ecdhCipherText, ecdhPublicKey, algId
@@ -96,9 +92,9 @@ impl Decryptor for SecretKey {
             data.ml_kem_ciphertext,
             data.ml_kem_pub_key,
             &ecdh_key_share,
-            &data.ecdh_ciphertext,
+            data.ecdh_ciphertext,
             data.ecdh_pub_key,
-            PublicKeyAlgorithm::MlKem768X25519Draft,
+            PublicKeyAlgorithm::MlKem1024X448Draft,
         );
         // Compute sessionKey := AESKeyUnwrap(KEK, C) with AES-256 as per [RFC3394], aborting if the 64 bit integrity check fails
         // Output sessionKey
@@ -109,24 +105,23 @@ impl Decryptor for SecretKey {
     }
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x25519-kem>
-fn x25519_kem_decaps(
-    ecdh_ciphertext: &[u8; 32],
-    ecdh_secret_key: &x25519_dalek::StaticSecret,
-    _ecdh_public_key: &x25519_dalek::PublicKey,
-) -> [u8; 32] {
-    // create montgomery point
-    let their_public = x25519_dalek::PublicKey::from(*ecdh_ciphertext);
-
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x448-kem>
+fn x448_kem_decaps(
+    their_public: &PublicKey,
+    ecdh_secret_key: &Secret,
+    _ecdh_public_key: &PublicKey,
+) -> [u8; 56] {
     // derive shared secret
-    let shared_secret = ecdh_secret_key.diffie_hellman(&their_public);
+    let shared_secret = ecdh_secret_key
+        .as_diffie_hellman(their_public)
+        .expect("point checked before");
 
-    shared_secret.to_bytes()
+    *shared_secret.as_bytes()
 }
 
-fn ml_kem_768_decaps(
-    ml_kem_ciphertext: &[u8; 1088],
-    ml_kem_secret_key: &DecapsulationKey<MlKem768Params>,
+fn ml_kem_1024_decaps(
+    ml_kem_ciphertext: &[u8; 1568],
+    ml_kem_secret_key: &DecapsulationKey<MlKem1024Params>,
 ) -> [u8; 32] {
     let shared = ml_kem_secret_key
         .decapsulate(ml_kem_ciphertext.into())
@@ -139,11 +134,11 @@ const DOM_SEP: &[u8] = b"OpenPGPCompositeKDFv1";
 /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-key-combiner>
 fn multi_key_combine(
     ml_kem_key_share: &[u8; 32],
-    ml_kem_cipher_text: &[u8; 1088],
-    ml_kem_public_key: &EncapsulationKey<MlKem768Params>,
-    ecdh_key_share: &[u8; 32],
-    ecdh_cipher_text: &[u8; 32],
-    ecdh_public_key: &x25519_dalek::PublicKey,
+    ml_kem_cipher_text: &[u8; 1568],
+    ml_kem_public_key: &EncapsulationKey<MlKem1024Params>,
+    ecdh_key_share: &[u8; 56],
+    ecdh_cipher_text: &PublicKey,
+    ecdh_public_key: &PublicKey,
     alg: PublicKeyAlgorithm,
 ) -> [u8; 32] {
     let mut hasher = Sha3_256::new();
@@ -152,8 +147,8 @@ fn multi_key_combine(
     //             || mlkemCipherText || mlkemPublicKey || algId || domSep )
     hasher.update(ml_kem_key_share);
     hasher.update(ecdh_key_share);
-    hasher.update(ecdh_cipher_text);
-    hasher.update(ecdh_public_key);
+    hasher.update(ecdh_cipher_text.as_bytes());
+    hasher.update(ecdh_public_key.as_bytes());
     hasher.update(ml_kem_cipher_text);
     hasher.update(ml_kem_public_key.as_bytes());
     hasher.update(&[u8::from(alg)][..]);
@@ -162,7 +157,7 @@ fn multi_key_combine(
     hasher.finalize().into()
 }
 
-/// ML KEM 768 - X25519 Encryption
+/// ML KEM 1024 - X448 Encryption
 ///
 /// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-encryption-procedure>
 ///
@@ -172,10 +167,10 @@ fn multi_key_combine(
 /// - encrpyted data
 pub fn encrypt<R: CryptoRng + Rng>(
     mut rng: R,
-    ecdh_public_key: &x25519_dalek::PublicKey,
-    ml_kem_public_key: &EncapsulationKey<MlKem768Params>,
+    ecdh_public_key: &PublicKey,
+    ml_kem_public_key: &EncapsulationKey<MlKem1024Params>,
     plain: &[u8],
-) -> Result<([u8; 32], Box<[u8; 1088]>, Vec<u8>)> {
+) -> Result<(PublicKey, Box<[u8; 1568]>, Vec<u8>)> {
     // Maximum length for `plain` - FIXME: what should the maximum be, here?
     const MAX_SIZE: usize = 255;
     ensure!(
@@ -185,7 +180,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     );
 
     // Compute (ecdhCipherText, ecdhKeyShare) := ECDH-KEM.Encaps(ecdhPublicKey)
-    let (ecdh_ciphertext, ecdh_key_share) = x25519_kem_encaps(&mut rng, ecdh_public_key);
+    let (ecdh_ciphertext, ecdh_key_share) = x448_kem_encaps(&mut rng, ecdh_public_key);
     // Compute (mlkemCipherText, mlkemKeyShare) := ML-KEM.Encaps(mlkemPublicKey)
     let (ml_kem_ciphertext, ml_kem_key_share) = ml_kem_encaps(&mut rng, ml_kem_public_key);
     // Compute KEK := multiKeyCombine(mlkemKeyShare, mlkemCipherText, mlkemPublicKey, ecdhKeyShare,
@@ -198,7 +193,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
         &ecdh_key_share,
         &ecdh_ciphertext,
         ecdh_public_key,
-        PublicKeyAlgorithm::MlKem768X25519Draft,
+        PublicKeyAlgorithm::MlKem1024X448Draft,
     );
 
     // Compute C := AESKeyWrap(KEK, sessionKey) with AES-256 as per [RFC3394] that includes a 64 bit integrity check
@@ -207,27 +202,25 @@ pub fn encrypt<R: CryptoRng + Rng>(
     Ok((ecdh_ciphertext, ml_kem_ciphertext, c))
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x25519-kem>
-fn x25519_kem_encaps<R: CryptoRng + Rng>(
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x448-kem>
+fn x448_kem_encaps<R: CryptoRng + Rng>(
     mut rng: R,
-    public_key: &x25519_dalek::PublicKey,
-) -> ([u8; 32], [u8; 32]) {
-    // Generate an ephemeral key pair {v, V} via V = X25519(v,U(P)) where v is a randomly generated octet string with a length of 32 octets
-    let mut ephemeral_secret_key_bytes = Zeroizing::new([0u8; 32]);
-    rng.fill_bytes(&mut *ephemeral_secret_key_bytes);
-    let our_secret = StaticSecret::from(*ephemeral_secret_key_bytes);
+    public_key: &PublicKey,
+) -> (PublicKey, [u8; 56]) {
+    // Generate an ephemeral key pair {v, V} via V = X448(v,U(P)) where v is a randomly generated octet string with a length of 56 octets
+    let our_secret = Secret::new(&mut rng);
 
-    // Compute the shared coordinate X = X25519(v, R) where R is the recipient's public key ecdhPublicKey
-    let shared_secret = our_secret.diffie_hellman(public_key);
+    // Compute the shared coordinate X = X448(v, R) where R is the recipient's public key ecdhPublicKey
+    let shared_secret = our_secret.as_diffie_hellman(public_key).expect("checked");
 
-    let ephemeral_public = x25519_dalek::PublicKey::from(&our_secret);
-    (ephemeral_public.to_bytes(), shared_secret.to_bytes())
+    let ephemeral_public = PublicKey::from(&our_secret);
+    (ephemeral_public, *shared_secret.as_bytes())
 }
 
 fn ml_kem_encaps<R: CryptoRng + Rng>(
     mut rng: R,
-    public_key: &EncapsulationKey<MlKem768Params>,
-) -> (Box<[u8; 1088]>, [u8; 32]) {
+    public_key: &EncapsulationKey<MlKem1024Params>,
+) -> (Box<[u8; 1568]>, [u8; 32]) {
     let (ciphertext, share) = public_key.encapsulate(&mut rng).expect("infallible");
     (Box::new(ciphertext.into()), share.into())
 }
@@ -244,7 +237,7 @@ mod tests {
     fn test_encrypt_decrypt() {
         let mut rng = ChaChaRng::seed_from_u64(0);
         let skey = SecretKey::generate(&mut rng);
-        let pub_params: MlKem768X25519PublicParams = (&skey).into();
+        let pub_params: MlKem1024X448PublicParams = (&skey).into();
 
         for text_size in (8..=248).step_by(8) {
             let mut plain = vec![0u8; text_size];
@@ -252,16 +245,16 @@ mod tests {
 
             let (ecdh_ciphertext, ml_kem_ciphertext, encrypted_session_key) = encrypt(
                 &mut rng,
-                &pub_params.x25519_key,
+                &pub_params.x448_key,
                 &pub_params.ml_kem_key,
                 &plain[..],
             )
             .unwrap();
 
             let data = EncryptionFields {
-                ecdh_ciphertext,
+                ecdh_ciphertext: &ecdh_ciphertext,
                 ml_kem_ciphertext: &ml_kem_ciphertext,
-                ecdh_pub_key: &pub_params.x25519_key,
+                ecdh_pub_key: &pub_params.x448_key,
                 ml_kem_pub_key: &pub_params.ml_kem_key,
                 encrypted_session_key: &encrypted_session_key,
             };
@@ -277,9 +270,9 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            any::<([u8; 32], [u8; 64])>()
+            any::<([u8; 56], [u8; 64])>()
                 .prop_map(|(a, b)| SecretKey {
-                    x25519: StaticSecret::from(a),
+                    x448: Secret::from(a),
                     ml_kem: DecapsulationKey::from_bytes(&b.into()),
                 })
                 .boxed()
