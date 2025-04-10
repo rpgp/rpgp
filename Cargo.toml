@@ -99,7 +99,7 @@ aes-gcm = "0.10.3"
 eax = "0.5.0"
 ocb3 = "0.1"
 aes-kw = { version = "0.2.1", features = ["std"] }
-cx448 = { version = "0.1", features = ["zeroize"] }
+cx448 = { version = "0.1.1", features = ["zeroize"] }
 num-bigint = { version = "0.8.4", features = [
     "rand",
     "i128",
@@ -145,6 +145,3 @@ debug = 2
 [[bench]]
 name = "benches_main"
 harness = false
-
-[patch.crates-io]
-cx448 = { path = "../../cx448" }
