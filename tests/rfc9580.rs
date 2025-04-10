@@ -22,7 +22,7 @@ const MSG: &str = "hello world\n";
 const CASES_9580: &[&str] = &[
     ("tests/rfc9580/v6-25519-annex-a-4"), // TSK from RFC 9580 Annex A.4 (Ed25519/X25519)
     ("tests/rfc9580/v6-ed448-x448"),      // TSK using Ed448/X448
-    ("tests/rfc9580/v6-ed25519-x448"), // TSK using Ed25519/X448 (TODO: replace with Ed448/X448 once rPGP supports it)
+    ("tests/rfc9580/v6-ed25519-x448"), // TSK using Ed25519/X448 (mixed 25519 and 448 component keys)
     ("tests/rfc9580/v6-rsa"),          // TSK using RSA
     ("tests/rfc9580/v6-nistp"),        // TSK using NIST P-256
     ("tests/rfc9580/v4-ed25519-x25519"), // Version 4 TSK using the RFC 9580 Ed25519/X25519 formats
