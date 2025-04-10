@@ -50,3 +50,8 @@ Here are some key differences, without claiming to exhaust the question:
 - All cryptographic primitives used in rPGP are implemented in Rust,
   whereas Sequoia by default uses Nettle, which is implemented in C, 
   but also offers optional Rust backends. 
+
+### Community standards
+
+The rPGP project is affiliated with the [Delta Chat](https://delta.chat/) project.
+The [Delta Chat Community Standards](https://delta.chat/en/community-standards) also apply for the rPGP project.
