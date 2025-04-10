@@ -3,9 +3,11 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
-    errors::{bail, ensure, format_err, Result},
+    errors::{bail, ensure, ensure_eq, format_err, Result},
     types::Ed448PublicParams,
 };
+
+const MIN_HASH_LEN_BITS: usize = 512;
 
 /// Secret key for EdDSA with Curve448.
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
@@ -44,8 +46,15 @@ impl Signer for SecretKey {
         let Some(digest_size) = hash.digest_size() else {
             bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
         };
+        ensure_eq!(
+            digest.len(),
+            digest_size,
+            "Unexpected digest length {} for hash algorithm {:?}",
+            digest.len(),
+            hash,
+        );
         ensure!(
-            digest_size * 8 >= 512,
+            digest_size * 8 >= MIN_HASH_LEN_BITS,
             "EdDSA signature: hash algorithm {:?} is too weak for Ed448",
             hash,
         );
@@ -70,7 +79,7 @@ pub fn verify(
         bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
     };
     ensure!(
-        digest_size * 8 >= 512,
+        digest_size * 8 >= MIN_HASH_LEN_BITS,
         "EdDSA signature: hash algorithm {:?} is too weak for Ed448",
         hash,
     );
