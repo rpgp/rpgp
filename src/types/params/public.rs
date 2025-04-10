@@ -144,7 +144,9 @@ impl PublicParams {
     pub fn hash_alg(&self) -> HashAlgorithm {
         match self {
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
-            PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
+            PublicParams::Ed448(_) | PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => {
+                HashAlgorithm::Sha512
+            }
             _ => HashAlgorithm::default(),
         }
     }
