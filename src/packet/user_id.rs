@@ -158,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_user_id_certification() {
-        let key_type = KeyType::EdDSALegacy;
+        let key_type = KeyType::Ed25519Legacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();

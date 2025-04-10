@@ -15,8 +15,9 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 use crate::{
     composed::PlainSessionKey,
     crypto::{
-        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, elgamal,
-        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, Decryptor,
+        aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
+        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
+        Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
@@ -32,12 +33,12 @@ pub enum PlainSecretParams {
     DSA(dsa::SecretKey),
     ECDSA(ecdsa::SecretKey),
     ECDH(ecdh::SecretKey),
-    EdDSA(ed25519::SecretKey),
-    EdDSALegacy(ed25519::SecretKey),
+    Ed25519(ed25519::SecretKey),
+    Ed25519Legacy(ed25519::SecretKey),
     X25519(x25519::SecretKey),
     Elgamal(elgamal::SecretKey),
-    #[cfg(feature = "unstable-curve448")]
-    X448(crate::crypto::x448::SecretKey),
+    X448(x448::SecretKey),
+    Ed448(ed448::SecretKey),
     Unknown {
         #[zeroize(skip)]
         alg: PublicKeyAlgorithm,
@@ -129,19 +130,23 @@ impl PlainSecretParams {
                 const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
                 let secret = pad_key::<SIZE>(secret.as_ref())?;
                 let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
-                Self::EdDSALegacy(key)
+                Self::Ed25519Legacy(key)
             }
             (PublicKeyAlgorithm::Ed25519, PublicParams::Ed25519(_pub_params)) => {
                 let secret = i.read_array::<32>()?;
                 let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
-                Self::EdDSA(key)
+                Self::Ed25519(key)
+            }
+            (PublicKeyAlgorithm::Ed448, PublicParams::Ed448(_pub_params)) => {
+                let secret = i.read_array::<57>()?;
+                let key = crate::crypto::ed448::SecretKey::try_from_bytes(secret)?;
+                Self::Ed448(key)
             }
             (PublicKeyAlgorithm::X25519, PublicParams::X25519(pub_params)) => {
                 let secret = i.read_array::<32>()?;
                 let key = crate::crypto::x25519::SecretKey::try_from_array(pub_params, secret)?;
                 Self::X25519(key)
             }
-            #[cfg(feature = "unstable-curve448")]
             (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
                 let s = i.read_array::<56>()?;
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
@@ -386,7 +391,6 @@ impl PlainSecretParams {
                 };
             }
 
-            #[cfg(feature = "unstable-curve448")]
             (
                 PlainSecretParams::X448(ref priv_key),
                 PkeskBytes::X448 {
@@ -419,7 +423,7 @@ impl PlainSecretParams {
                 };
             }
 
-            (PlainSecretParams::EdDSA(_), _) => bail!("EdDSA is only used for signing"),
+            (PlainSecretParams::Ed25519(_), _) => bail!("EdDSA is only used for signing"),
             _ => unimplemented_err!(
                 "Unsupported: PlainSecretParams {:?}, PkeskBytes {:?}",
                 self,
@@ -552,14 +556,16 @@ impl PlainSecretParams {
                 let q = key.secret.to_bytes();
                 writer.write_all(&q)?;
             }
-            PlainSecretParams::EdDSA(key) => {
+            PlainSecretParams::Ed25519(key) => {
                 writer.write_all(key.secret.as_bytes().as_ref())?;
             }
-            PlainSecretParams::EdDSALegacy(key) => {
+            PlainSecretParams::Ed448(key) => {
+                writer.write_all(key.secret.as_bytes().as_ref())?;
+            }
+            PlainSecretParams::Ed25519Legacy(key) => {
                 let x = key.as_mpi();
                 x.to_writer(writer)?;
             }
-            #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(key) => {
                 writer.write_all(&key.secret)?;
             }
@@ -607,13 +613,13 @@ impl PlainSecretParams {
                 let x = key.as_mpi();
                 x.write_len()
             }
-            PlainSecretParams::EdDSA(_key) => 32,
-            PlainSecretParams::EdDSALegacy(key) => {
+            PlainSecretParams::Ed25519(_key) => 32,
+            PlainSecretParams::Ed25519Legacy(key) => {
                 let x = key.as_mpi();
                 x.write_len()
             }
             PlainSecretParams::X25519(_key) => 32,
-            #[cfg(feature = "unstable-curve448")]
+            PlainSecretParams::Ed448(_key) => 57,
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }
@@ -690,17 +696,19 @@ mod tests {
                     .prop_map(PlainSecretParams::ECDH)
                     .boxed(),
                 PublicKeyAlgorithm::EdDSALegacy => any::<ed25519::SecretKey>()
-                    .prop_map(PlainSecretParams::EdDSALegacy)
+                    .prop_map(PlainSecretParams::Ed25519Legacy)
                     .boxed(),
                 PublicKeyAlgorithm::Ed25519 => any::<ed25519::SecretKey>()
-                    .prop_map(PlainSecretParams::EdDSA)
+                    .prop_map(PlainSecretParams::Ed25519)
                     .boxed(),
                 PublicKeyAlgorithm::X25519 => any::<x25519::SecretKey>()
                     .prop_map(PlainSecretParams::X25519)
                     .boxed(),
-                #[cfg(feature = "unstable-curve448")]
                 PublicKeyAlgorithm::X448 => any::<crate::crypto::x448::SecretKey>()
                     .prop_map(PlainSecretParams::X448)
+                    .boxed(),
+                PublicKeyAlgorithm::Ed448 => any::<crate::crypto::ed448::SecretKey>()
+                    .prop_map(PlainSecretParams::Ed448)
                     .boxed(),
                 _ => {
                     unimplemented!("{:?}", alg)

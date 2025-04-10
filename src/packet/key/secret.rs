@@ -487,17 +487,22 @@ fn create_signature(
         PlainSecretParams::X25519(_) => {
             bail!("X25519 can not be used for signing operations")
         }
-        #[cfg(feature = "unstable-curve448")]
         PlainSecretParams::X448(_) => {
             bail!("X448 can not be used for signing operations")
         }
-        PlainSecretParams::EdDSA(ref priv_key) => {
+        PlainSecretParams::Ed25519(ref priv_key) => {
             let PublicParams::Ed25519(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
             priv_key.sign(hash, data)
         }
-        PlainSecretParams::EdDSALegacy(ref priv_key) => {
+        PlainSecretParams::Ed448(ref priv_key) => {
+            let PublicParams::Ed448(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::Ed25519Legacy(ref priv_key) => {
             match pub_params {
                 PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }) => {}
                 PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
@@ -522,13 +527,23 @@ fn create_signature(
     match pub_params {
         PublicParams::Ed25519 { .. } => {
             // native format
-
             ensure_eq!(sig.len(), 2, "expect two signature parts");
 
             let mut native = sig[0].clone();
             native.extend_from_slice(&sig[1]);
 
             ensure_eq!(native.len(), 64, "expect 64 byte signature");
+
+            Ok(SignatureBytes::Native(native.into()))
+        }
+        PublicParams::Ed448 { .. } => {
+            // native format
+            ensure_eq!(sig.len(), 2, "expect two signature parts");
+
+            let mut native = sig[0].clone();
+            native.extend_from_slice(&sig[1]);
+
+            ensure_eq!(native.len(), 114, "expect 114 byte signature");
 
             Ok(SignatureBytes::Native(native.into()))
         }
@@ -589,8 +604,10 @@ mod tests {
     fn secret_key_protection_v4() {
         let _ = pretty_env_logger::try_init();
 
-        const DATA: &[u8] = &[0x23, 0x05];
-        let key_type = crate::composed::KeyType::EdDSALegacy;
+        let hash_algo = HashAlgorithm::Sha256;
+        const DATA: &[u8] = &[0x23; 32];
+
+        let key_type = crate::composed::KeyType::Ed25519Legacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         let (public_params, secret_params) = key_type.generate(&mut rng).unwrap();
@@ -615,12 +632,12 @@ mod tests {
 
         // signing with a wrong password should fail
         assert!(alice_sec
-            .create_signature(&"wrong".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"wrong".into(), hash_algo, DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(&"password".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"password".into(), hash_algo, DATA)
             .is_ok());
 
         // remove the password protection
@@ -628,7 +645,7 @@ mod tests {
 
         // signing without a password should succeed now
         assert!(alice_sec
-            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), hash_algo, DATA)
             .is_ok());
 
         // set different password protection
@@ -636,12 +653,12 @@ mod tests {
 
         // signing without a password should fail now
         assert!(alice_sec
-            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), hash_algo, DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(&"foo".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"foo".into(), hash_algo, DATA)
             .is_ok());
 
         // remove the password protection again
@@ -657,7 +674,7 @@ mod tests {
 
         // signing with the right password should succeed
         alice_sec
-            .create_signature(&"bar".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"bar".into(), hash_algo, DATA)
             .expect("failed to sign");
     }
 }

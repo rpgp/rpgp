@@ -10,13 +10,13 @@ pub mod ecc_curve;
 pub mod ecdh;
 pub mod ecdsa;
 pub mod ed25519;
+pub mod ed448;
 pub mod elgamal;
 pub mod hash;
 pub mod public_key;
 pub mod rsa;
 pub mod sym;
 pub mod x25519;
-#[cfg(feature = "unstable-curve448")]
 pub mod x448;
 
 pub trait Decryptor {

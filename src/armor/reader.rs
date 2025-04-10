@@ -6,11 +6,11 @@ use byteorder::{BigEndian, ByteOrder};
 use nom::{
     branch::alt,
     bytes::streaming::{tag, take, take_until, take_until1},
-    character::streaming::{alphanumeric1, digit1, line_ending, not_line_ending, space0},
+    character::streaming::{digit1, line_ending, not_line_ending, space0},
     combinator::{complete, map, map_res, opt, success, value},
     multi::many0,
     sequence::{delimited, pair, preceded, terminated},
-    IResult,
+    AsChar, IResult, InputTakeAtPosition,
 };
 
 use crate::{
@@ -253,14 +253,31 @@ fn armor_headers_hash(i: &[u8]) -> IResult<&[u8], Headers> {
     Ok((i, res))
 }
 
+pub fn alphanumeric1_or_dash<T, E: nom::error::ParseError<T>>(input: T) -> IResult<T, T, E>
+where
+    T: InputTakeAtPosition,
+    <T as InputTakeAtPosition>::Item: AsChar,
+{
+    input.split_at_position1(
+        |item| {
+            let i = item.as_char();
+
+            !(i.is_alphanum() || i == '-')
+        },
+        nom::error::ErrorKind::AlphaNumeric,
+    )
+}
+
 fn hash_header_line(i: &[u8]) -> IResult<&[u8], Vec<String>> {
     let (i, _) = tag("Hash: ")(i)?;
-    let (i, mut values) = many0(map_res(terminated(alphanumeric1, tag(",")), |s| {
+    let (i, mut values) = many0(map_res(terminated(alphanumeric1_or_dash, tag(",")), |s| {
         str::from_utf8(s).map(|s| s.to_string())
     }))(i)?;
 
     let (i, last_value) = terminated(
-        map_res(alphanumeric1, |s| str::from_utf8(s).map(|s| s.to_string())),
+        map_res(alphanumeric1_or_dash, |s| {
+            str::from_utf8(s).map(|s| s.to_string())
+        }),
         line_ending,
     )(i)?;
     values.push(last_value);

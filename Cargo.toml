@@ -90,16 +90,16 @@ sha1-asm = { version = "0.5.3", optional = true }
 sha1-checked = { version = "0.10", features = ["zeroize"] }
 sha2 = { version = "0.10.6", features = ["oid"] }
 sha3 = { version = "0.10.5", features = ["oid"] }
-signature = "2.1"
+signature = "2.2"
 twofish = "0.7"
-zeroize = { version = "1.7", features = ["zeroize_derive"] }
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
 getrandom = { version = "0.2", optional = true }
 hkdf = "0.12.4"
 aes-gcm = "0.10.3"
 eax = "0.5.0"
 ocb3 = "0.1"
 aes-kw = { version = "0.2.1", features = ["std"] }
-x448 = { version = "0.6", optional = true }
+cx448 = { version = "0.1", features = ["zeroize"] }
 num-bigint = { version = "0.8.4", features = [
     "rand",
     "i128",
@@ -123,7 +123,7 @@ pretty_env_logger = "0.5"
 rand_chacha = "0.3"
 rand_xorshift = "0.3"
 serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0"
+serde_json = "1.0.47"
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3.14.0"
 proptest = { version = "1.6.0", features = ["proptest-macro"] }
@@ -136,7 +136,6 @@ default = ["bzip2"]
 bzip2 = ["dep:bzip2"]
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
-unstable-curve448 = ["dep:x448"]
 
 [profile.bench]
 debug = 2

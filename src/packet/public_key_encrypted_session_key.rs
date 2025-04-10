@@ -149,7 +149,6 @@ impl PublicKeyEncryptedSessionKey {
         // Appended a checksum of the session key (except for X25519 and X448)
         match pp {
             PublicParams::X25519 { .. } => {}
-            #[cfg(feature = "unstable-curve448")]
             PublicParams::X448 { .. } => {}
             _ => data.extend_from_slice(&checksum::calculate_simple(sk).to_be_bytes()),
         }

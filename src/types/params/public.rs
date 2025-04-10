@@ -13,19 +13,18 @@ mod dsa;
 mod ecdh;
 mod ecdsa;
 mod ed25519;
+mod ed448;
 mod eddsa_legacy;
 mod elgamal;
 mod rsa;
 mod x25519;
-#[cfg(feature = "unstable-curve448")]
 mod x448;
 
-#[cfg(feature = "unstable-curve448")]
-pub use self::x448::X448PublicParams;
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
-    ed25519::Ed25519PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
+    ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
     elgamal::ElgamalPublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
+    x448::X448PublicParams,
 };
 use super::PlainSecretParams;
 
@@ -40,8 +39,8 @@ pub enum PublicParams {
     EdDSALegacy(EddsaLegacyPublicParams),
     Ed25519(Ed25519PublicParams),
     X25519(X25519PublicParams),
-    #[cfg(feature = "unstable-curve448")]
     X448(X448PublicParams),
+    Ed448(Ed448PublicParams),
     Unknown {
         #[debug("{}", hex::encode(data))]
         data: Bytes,
@@ -58,11 +57,11 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::ECDSA(ref p) => p.try_into().map(Self::ECDSA),
             PlainSecretParams::ECDH(ref p) => Ok(Self::ECDH(p.into())),
             PlainSecretParams::Elgamal(ref p) => Ok(Self::Elgamal(p.into())),
-            PlainSecretParams::EdDSA(ref p) => Ok(Self::Ed25519(p.into())),
-            PlainSecretParams::EdDSALegacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
+            PlainSecretParams::Ed25519(ref p) => Ok(Self::Ed25519(p.into())),
+            PlainSecretParams::Ed25519Legacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
-            #[cfg(feature = "unstable-curve448")]
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
+            PlainSecretParams::Ed448(ref p) => Ok(Self::Ed448(p.into())),
             PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {
                 data: pub_params.clone(),
             }),
@@ -116,15 +115,14 @@ impl PublicParams {
                 let params = X25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::X25519(params))
             }
-            PublicKeyAlgorithm::Ed448 => unknown(i, len), // FIXME: implement later
-            #[cfg(feature = "unstable-curve448")]
+            PublicKeyAlgorithm::Ed448 => {
+                let params = Ed448PublicParams::try_from_reader(i)?;
+                Ok(PublicParams::Ed448(params))
+            }
             PublicKeyAlgorithm::X448 => {
                 let params = X448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::X448(params))
             }
-            #[cfg(not(feature = "unstable-curve448"))]
-            PublicKeyAlgorithm::X448 => unknown(i, len),
-
             PublicKeyAlgorithm::DiffieHellman
             | PublicKeyAlgorithm::Private100
             | PublicKeyAlgorithm::Private101
@@ -147,6 +145,7 @@ impl PublicParams {
         match self {
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
             PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
+            PublicParams::Ed448(_) => HashAlgorithm::Sha3_512,
             _ => HashAlgorithm::default(),
         }
     }
@@ -187,10 +186,12 @@ impl Serialize for PublicParams {
             PublicParams::Ed25519(params) => {
                 params.to_writer(writer)?;
             }
+            PublicParams::Ed448(params) => {
+                params.to_writer(writer)?;
+            }
             PublicParams::X25519(params) => {
                 params.to_writer(writer)?;
             }
-            #[cfg(feature = "unstable-curve448")]
             PublicParams::X448(params) => {
                 params.to_writer(writer)?;
             }
@@ -226,10 +227,12 @@ impl Serialize for PublicParams {
             PublicParams::Ed25519(params) => {
                 sum += params.write_len();
             }
+            PublicParams::Ed448(params) => {
+                sum += params.write_len();
+            }
             PublicParams::X25519(params) => {
                 sum += params.write_len();
             }
-            #[cfg(feature = "unstable-curve448")]
             PublicParams::X448(params) => {
                 sum += params.write_len();
             }
@@ -316,9 +319,11 @@ mod tests {
                 PublicKeyAlgorithm::X25519 => any::<X25519PublicParams>()
                     .prop_map(PublicParams::X25519)
                     .boxed(),
-                #[cfg(feature = "unstable-curve448")]
                 PublicKeyAlgorithm::X448 => any::<X448PublicParams>()
                     .prop_map(PublicParams::X448)
+                    .boxed(),
+                PublicKeyAlgorithm::Ed448 => any::<Ed448PublicParams>()
+                    .prop_map(PublicParams::Ed448)
                     .boxed(),
                 _ => {
                     unimplemented!("{:?}", args)

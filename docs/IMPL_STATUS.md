@@ -57,7 +57,7 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [ ] brainpoolP384r1
   - [ ] brainpoolP512r1
   - [x] Curve 25519
-  - [ ] Ed448
+  - [x] Ed448
   - [x] X448
   - [x] Secp256k1
 - [x] Symmetric Algorithms

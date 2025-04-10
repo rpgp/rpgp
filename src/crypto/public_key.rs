@@ -36,7 +36,6 @@ pub enum PublicKeyAlgorithm {
     /// Ed25519 [RFC 9580]
     Ed25519 = 27,
     /// Ed448 [RFC 9580]
-    #[cfg_attr(test, proptest(skip))]
     Ed448 = 28,
 
     /// Private experimental range (from OpenPGP)

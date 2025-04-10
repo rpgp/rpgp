@@ -341,6 +341,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
         PublicParams::RSA(ref params) => crypto::rsa::encrypt(rng, &params.key, plain),
         PublicParams::EdDSALegacy { .. } => bail!("EdDSALegacy is only used for signing"),
         PublicParams::Ed25519 { .. } => bail!("Ed25519 is only used for signing"),
+        PublicParams::Ed448 { .. } => bail!("Ed448 is only used for signing"),
         PublicParams::ECDSA { .. } => bail!("ECDSA is only used for signing"),
         PublicParams::ECDH(ref params) => match params {
             EcdhPublicParams::Unsupported { ref curve, .. } => {
@@ -390,7 +391,6 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
                 sym_alg,
             })
         }
-        #[cfg(feature = "unstable-curve448")]
         PublicParams::X448(ref params) => {
             let (sym_alg, plain) = match typ {
                 EskType::V6 => (None, plain),
@@ -643,10 +643,12 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::Ed25519(ref params) => {
                 crypto::ed25519::verify(&params.key, hash, hashed, sig.try_into()?)
             }
+            PublicParams::Ed448(ref params) => {
+                crypto::ed448::verify(&params.key, hash, hashed, sig.try_into()?)
+            }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
             }
-            #[cfg(feature = "unstable-curve448")]
             PublicParams::X448 { .. } => {
                 bail!("X448 can not be used for verify operations");
             }

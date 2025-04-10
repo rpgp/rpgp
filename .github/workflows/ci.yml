@@ -55,9 +55,6 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
 
-    - name: curve448
-      run: cargo nextest run --lib --bins --tests --all --features unstable-curve448
-
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
@@ -104,13 +101,6 @@ jobs:
 
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
-
-    # Broken currently
-    # - name: check curve448
-    #   uses: actions-rs/cargo@v1
-    #   with:
-    #     command: test
-    #     args: --features unstable-curve448 --all --target ${{ matrix.target }}
 
   cross:
     name: Cross compile

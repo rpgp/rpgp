@@ -131,6 +131,8 @@ pub enum Error {
         source: argon2::Error,
         backtrace: Option<Backtrace>,
     },
+    #[snafu(transparent)]
+    SigningError { source: cx448::SigningError },
 }
 
 impl From<crate::crypto::hash::Error> for Error {

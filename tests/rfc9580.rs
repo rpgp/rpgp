@@ -8,10 +8,9 @@ use pgp::{
     crypto::{
         aead::{AeadAlgorithm, ChunkSize},
         ecc_curve::ECCCurve,
-        hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    types::KeyVersion,
+    types::{KeyVersion, PublicKeyTrait},
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -21,10 +20,10 @@ const MSG: &str = "hello world\n";
 // Test cases based on keys with new formats from RFC9580
 const CASES_9580: &[&str] = &[
     ("tests/rfc9580/v6-25519-annex-a-4"), // TSK from RFC 9580 Annex A.4 (Ed25519/X25519)
-    #[cfg(feature = "unstable-curve448")]
-    ("tests/rfc9580/v6-ed25519-x448"), // TSK using Ed25519/X448 (TODO: replace with Ed448/X448 once rPGP supports it)
-    ("tests/rfc9580/v6-rsa"),            // TSK using RSA
-    ("tests/rfc9580/v6-nistp"),          // TSK using NIST P-256
+    ("tests/rfc9580/v6-ed448-x448"),      // TSK using Ed448/X448
+    ("tests/rfc9580/v6-ed25519-x448"), // TSK using Ed25519/X448 (mixed 25519 and 448 component keys)
+    ("tests/rfc9580/v6-rsa"),          // TSK using RSA
+    ("tests/rfc9580/v6-nistp"),        // TSK using NIST P-256
     ("tests/rfc9580/v4-ed25519-x25519"), // Version 4 TSK using the RFC 9580 Ed25519/X25519 formats
 ];
 
@@ -84,6 +83,8 @@ fn rfc9580_verify_csf() {
 
         let ssk = load_ssk(&keyfile);
         let spk = SignedPublicKey::from(ssk.clone());
+
+        spk.verify().expect("SignedPublicKey::verify");
 
         // load+verify csf msg
         let (csf, _) =
@@ -174,7 +175,11 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         let mut builder = MessageBuilder::from_bytes("", MSG.as_bytes());
-        builder.sign(&*ssk, "".into(), HashAlgorithm::default());
+        builder.sign(
+            &*ssk,
+            "".into(),
+            ssk.public_key().public_params().hash_alg(),
+        );
         let msg = builder.to_vec(&mut rng).unwrap();
 
         let mut msg = Message::from_bytes(&msg[..]).unwrap();
@@ -206,7 +211,7 @@ fn rfc9580_legacy_25519_illegal_in_v6() {
     // -- Create a v6 ed25519 legacy signing key, expect failure --
     let mut key_params = SecretKeyParamsBuilder::default();
     key_params
-        .key_type(KeyType::EdDSALegacy)
+        .key_type(KeyType::Ed25519Legacy)
         .version(KeyVersion::V6)
         .can_sign(true)
         .primary_user_id("Me <me@example.com>".into());
