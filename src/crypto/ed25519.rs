@@ -18,9 +18,11 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
-    errors::{bail, ensure, Result},
+    errors::{bail, ensure, ensure_eq, Result},
     types::{Ed25519PublicParams, EddsaLegacyPublicParams, Mpi},
 };
+
+const MIN_HASH_LEN_BITS: usize = 256;
 
 /// Specifies which OpenPGP framing (e.g. `Ed25519` vs. `EdDSALegacy`) is used, and also chooses
 /// between curve Ed25519 and Ed448 (TODO: not yet implemented)
@@ -86,7 +88,23 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, _hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+        let Some(digest_size) = hash.digest_size() else {
+            bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
+        };
+        ensure_eq!(
+            digest.len(),
+            digest_size,
+            "Unexpected digest length {} for hash algorithm {:?}",
+            digest.len(),
+            hash,
+        );
+        ensure!(
+            digest_size * 8 >= MIN_HASH_LEN_BITS,
+            "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
+            hash,
+        );
+
         let signature = self.secret.sign(digest);
         let bytes = signature.to_bytes();
 
@@ -108,7 +126,7 @@ pub fn verify(
         bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
     };
     ensure!(
-        digest_size * 8 >= 256,
+        digest_size * 8 >= MIN_HASH_LEN_BITS,
         "EdDSA signature: hash algorithm {:?} is too weak for Ed25519",
         hash,
     );

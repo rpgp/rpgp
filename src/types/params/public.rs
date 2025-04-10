@@ -145,6 +145,7 @@ impl PublicParams {
         match self {
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
             PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
+            PublicParams::Ed448(_) => HashAlgorithm::Sha3_512,
             _ => HashAlgorithm::default(),
         }
     }

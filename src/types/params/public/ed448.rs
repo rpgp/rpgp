@@ -10,7 +10,7 @@ pub struct Ed448PublicParams {
 }
 
 impl Ed448PublicParams {
-    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed2>
+    /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-part-for-ed4>
     pub fn try_from_reader<B: BufRead>(mut i: B) -> Result<Self> {
         // 57 bytes of public key
         let p = i.read_array::<57>()?;

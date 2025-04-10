@@ -8,10 +8,9 @@ use pgp::{
     crypto::{
         aead::{AeadAlgorithm, ChunkSize},
         ecc_curve::ECCCurve,
-        hash::HashAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
-    types::KeyVersion,
+    types::{KeyVersion, PublicKeyTrait},
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -176,7 +175,11 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         let mut builder = MessageBuilder::from_bytes("", MSG.as_bytes());
-        builder.sign(&*ssk, "".into(), HashAlgorithm::default());
+        builder.sign(
+            &*ssk,
+            "".into(),
+            ssk.public_key().public_params().hash_alg(),
+        );
         let msg = builder.to_vec(&mut rng).unwrap();
 
         let mut msg = Message::from_bytes(&msg[..]).unwrap();

@@ -604,7 +604,9 @@ mod tests {
     fn secret_key_protection_v4() {
         let _ = pretty_env_logger::try_init();
 
-        const DATA: &[u8] = &[0x23, 0x05];
+        let hash_algo = HashAlgorithm::Sha256;
+        const DATA: &[u8] = &[0x23; 32];
+
         let key_type = crate::composed::KeyType::Ed25519Legacy;
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
@@ -630,12 +632,12 @@ mod tests {
 
         // signing with a wrong password should fail
         assert!(alice_sec
-            .create_signature(&"wrong".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"wrong".into(), hash_algo, DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(&"password".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"password".into(), hash_algo, DATA)
             .is_ok());
 
         // remove the password protection
@@ -643,7 +645,7 @@ mod tests {
 
         // signing without a password should succeed now
         assert!(alice_sec
-            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), hash_algo, DATA)
             .is_ok());
 
         // set different password protection
@@ -651,12 +653,12 @@ mod tests {
 
         // signing without a password should fail now
         assert!(alice_sec
-            .create_signature(&"".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"".into(), hash_algo, DATA)
             .is_err());
 
         // signing with the right password should succeed
         assert!(alice_sec
-            .create_signature(&"foo".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"foo".into(), hash_algo, DATA)
             .is_ok());
 
         // remove the password protection again
@@ -672,7 +674,7 @@ mod tests {
 
         // signing with the right password should succeed
         alice_sec
-            .create_signature(&"bar".into(), HashAlgorithm::default(), DATA)
+            .create_signature(&"bar".into(), hash_algo, DATA)
             .expect("failed to sign");
     }
 }
