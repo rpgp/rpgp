@@ -10,8 +10,7 @@ use pgp::{
         ecc_curve::ECCCurve,
         sym::SymmetricKeyAlgorithm,
     },
-    types::KeyVersion,
-    types::PublicKeyTrait,
+    types::{KeyVersion, PublicKeyTrait},
 };
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
