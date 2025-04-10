@@ -1193,7 +1193,7 @@ fn private_x25519_verify() {
     assert_eq!(hex::encode(sk.key_id()).to_uppercase(), "F25E5F24BB372CFA",);
     sk.unlock(&"moon".into(), |_pub_params, k| {
         match k {
-            PlainSecretParams::EdDSALegacy(..) => {}
+            PlainSecretParams::Ed25519Legacy(..) => {}
             _ => panic!("invalid key"),
         }
         Ok(())

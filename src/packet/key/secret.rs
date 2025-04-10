@@ -490,13 +490,19 @@ fn create_signature(
         PlainSecretParams::X448(_) => {
             bail!("X448 can not be used for signing operations")
         }
-        PlainSecretParams::EdDSA(ref priv_key) => {
+        PlainSecretParams::Ed25519(ref priv_key) => {
             let PublicParams::Ed25519(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
             priv_key.sign(hash, data)
         }
-        PlainSecretParams::EdDSALegacy(ref priv_key) => {
+        PlainSecretParams::Ed448(ref priv_key) => {
+            let PublicParams::Ed448(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::Ed25519Legacy(ref priv_key) => {
             match pub_params {
                 PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Ed25519 { .. }) => {}
                 PublicParams::EdDSALegacy(EddsaLegacyPublicParams::Unsupported {
@@ -521,13 +527,23 @@ fn create_signature(
     match pub_params {
         PublicParams::Ed25519 { .. } => {
             // native format
-
             ensure_eq!(sig.len(), 2, "expect two signature parts");
 
             let mut native = sig[0].clone();
             native.extend_from_slice(&sig[1]);
 
             ensure_eq!(native.len(), 64, "expect 64 byte signature");
+
+            Ok(SignatureBytes::Native(native.into()))
+        }
+        PublicParams::Ed448 { .. } => {
+            // native format
+            ensure_eq!(sig.len(), 2, "expect two signature parts");
+
+            let mut native = sig[0].clone();
+            native.extend_from_slice(&sig[1]);
+
+            ensure_eq!(native.len(), 114, "expect 114 byte signature");
 
             Ok(SignatureBytes::Native(native.into()))
         }
