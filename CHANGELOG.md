@@ -2,6 +2,62 @@
 
 All notable changes to rpgp will be documented in this file.
 
+## [0.16.0-alpha.1](https://github.com/rpgp/rpgp/compare/v0.16.0-alpha.0..0.16.0-alpha.1) - 2025-04-10
+
+### ⛰️  Features
+
+- Stable implementation for x448 and ed448 ([#527](https://github.com/rpgp/rpgp/issues/527)) - ([0824c3b](https://github.com/rpgp/rpgp/commit/0824c3bd6ed11ed4145a2e5e11eadbc6fb5fb046))
+
+### 🐛 Bug Fixes
+
+- Handle empty dash-escaped lines in CSF - ([29ee830](https://github.com/rpgp/rpgp/commit/29ee8306bd8f1e6fde3e94fb39d1c71e647bca3e))
+- Handle unknown key material - ([ed5805b](https://github.com/rpgp/rpgp/commit/ed5805b541dad4b49c6fa69b0bc19b5c50657f8e))
+- Fmt - ([d86fb72](https://github.com/rpgp/rpgp/commit/d86fb72a5b023b1db63deff87a5f328642bd3f60))
+- Do not stringify errors wrapped in io::error - ([f54c52b](https://github.com/rpgp/rpgp/commit/f54c52b0091558c31f1e061728ba4ae8fec64768))
+- Correctly handle more unknown data - ([d226255](https://github.com/rpgp/rpgp/commit/d226255c480d6129858008a1f67bcbd3da4e7639))
+- Typo - ([e148e03](https://github.com/rpgp/rpgp/commit/e148e03e4aa4ed5352e3b6d5984d9731807e0c1a))
+- Undo not needed changes - ([f5857da](https://github.com/rpgp/rpgp/commit/f5857daaf7b8ea0c60d63862c39901510f7a1fd6))
+- Undo match statements - ([a34bf93](https://github.com/rpgp/rpgp/commit/a34bf939b85ae5879a6b7c03e30f4f3125011766))
+
+### 🚜 Refactor
+
+- Extract aead error types - ([94b5480](https://github.com/rpgp/rpgp/commit/94b54802bb9e9ec2d5c568af75ceee58d6cfe2de))
+- Extract aes_kw error - ([68cbfbb](https://github.com/rpgp/rpgp/commit/68cbfbb4b119ae1abc8985f0a4d893d879a852de))
+- Extract checksum errors - ([406b062](https://github.com/rpgp/rpgp/commit/406b062919e7a3bd5650b81400368e652232cc05))
+- Handle unknown signature versions - ([f06b6d6](https://github.com/rpgp/rpgp/commit/f06b6d69440515c61f8fb34a34c500c0dc291d26))
+- Hash specfic error - ([c3193f3](https://github.com/rpgp/rpgp/commit/c3193f3b8a4b8e60785f9c46bec94adea0595ccb))
+- Explicit imports of macros - ([1be4727](https://github.com/rpgp/rpgp/commit/1be47278587280ee38a1ecfa841c24f6a987fe45))
+- Allow better error handling on the MessageBuilder - ([63d4fd4](https://github.com/rpgp/rpgp/commit/63d4fd4c8682c475764ac31ab7d31ae551964002))
+- Cleanup deps in Cargo.toml - ([300ac60](https://github.com/rpgp/rpgp/commit/300ac6097db7256db4b13ec06e02a7b58865a232))
+
+### ⚡ Performance
+
+- Small refactors to optimize parsing - ([c9f1fbb](https://github.com/rpgp/rpgp/commit/c9f1fbbe76c8e57bde756781f304b245f0baeead))
+
+### 🧪 Testing
+
+- Rename OpenPGP files from .gpg to .pgp  - ([ddbd52c](https://github.com/rpgp/rpgp/commit/ddbd52cf373469c0074a5bae11a58e2099cae161))
+- Update error counts - ([e6e9b09](https://github.com/rpgp/rpgp/commit/e6e9b09272d1858cac262ceae27d5d50197bcafa))
+- Single decompression of quine is ok - ([58998d1](https://github.com/rpgp/rpgp/commit/58998d1eae4b5e5f4faf47c06d3c87f125a31370))
+- Avoid pulling in rpgp@0.10 - ([d3058d0](https://github.com/rpgp/rpgp/commit/d3058d00120528b7de16921fd7a552b8ad18f786))
+- Normalize line endings for windows - ([49dd58d](https://github.com/rpgp/rpgp/commit/49dd58dab6dfeb225d3f1283aae21868ea41e433))
+
+### ⚙️ Miscellaneous Tasks
+
+- Fix typos - ([7fcc23d](https://github.com/rpgp/rpgp/commit/7fcc23daa8a9b23f0c7f03faa85d5b6aa7cd9884))
+- Remove empty file - ([d2a92c4](https://github.com/rpgp/rpgp/commit/d2a92c40986ce0157c73f448431f71ffe70ae65e))
+- Reorder - ([4b7955b](https://github.com/rpgp/rpgp/commit/4b7955b51962faade548a76b05a90f341bb328d1))
+- Check curve on other OSes as well - ([96afabc](https://github.com/rpgp/rpgp/commit/96afabc6941d70fd16b2ae506c17074acd369b78))
+- Disable x448 on windows - ([397d6e3](https://github.com/rpgp/rpgp/commit/397d6e39f3cc75a5257bc68f77a79d3a77748c3d))
+
+### Deps
+
+- Stop using derive-more beta - ([e333bdb](https://github.com/rpgp/rpgp/commit/e333bdb203a848ec4b33db6aa9fc24aa03a7a06e))
+
+### Wip
+
+- Unkown algorithme ops - ([6a399b3](https://github.com/rpgp/rpgp/commit/6a399b318385d950a7c9b0a017afa4a15e9b57e5))
+
 ## [0.16.0-alpha.0](https://github.com/rpgp/rpgp/compare/v0.15.0..0.16.0-alpha.0) - 2025-04-02
 
 ### ⛰️  Features
