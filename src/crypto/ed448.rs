@@ -45,7 +45,7 @@ impl Signer for SecretKey {
             bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
         };
         ensure!(
-            digest_size * 8 >= 256,
+            digest_size * 8 >= 512,
             "EdDSA signature: hash algorithm {:?} is too weak for Ed448",
             hash,
         );
@@ -70,7 +70,7 @@ pub fn verify(
         bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
     };
     ensure!(
-        digest_size * 8 >= 256,
+        digest_size * 8 >= 512,
         "EdDSA signature: hash algorithm {:?} is too weak for Ed448",
         hash,
     );
