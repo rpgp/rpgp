@@ -61,7 +61,6 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] X448
   - [x] Secp256k1
 - [x] Symmetric Algorithms
-  - [x] Plaintext
   - [x] IDEA
   - [x] DES
   - [x] CAST5
