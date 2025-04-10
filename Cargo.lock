@@ -574,7 +574,8 @@ dependencies = [
 [[package]]
 name = "cx448"
 version = "0.1.0"
-source = "git+https://github.com/dignifiedquire/cx448?branch=main#febc8858c7b62fb3449f2aeb8015d18c6f5d58d2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab88916976789e4e5c2187fecf5ecf0b4fb3495e0010dbd0bfed261063a71c65"
 dependencies = [
  "crypto-bigint",
  "elliptic-curve",
