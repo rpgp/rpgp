@@ -11,7 +11,7 @@ pub struct MlKem768X25519PublicParams {
     #[debug("{}", hex::encode(x25519_key.as_bytes()))]
     pub x25519_key: x25519_dalek::PublicKey,
     #[debug("{}", hex::encode(ml_kem_key.as_bytes()))]
-    pub ml_kem_key: EncapsulationKey<MlKem768Params>,
+    pub ml_kem_key: Box<EncapsulationKey<MlKem768Params>>,
 }
 
 impl Eq for MlKem768X25519PublicParams {}
@@ -26,7 +26,7 @@ impl MlKem768X25519PublicParams {
 
         Ok(Self {
             x25519_key: x25519_dalek::PublicKey::from(x25519_public_raw),
-            ml_kem_key,
+            ml_kem_key: Box::new(ml_kem_key),
         })
     }
 }
@@ -68,11 +68,11 @@ mod tests {
 
                 MlKem768X25519PublicParams {
                     x25519_key: x,
-                    ml_kem_key: ml,
+                    ml_kem_key: Box::new(ml),
                 }
             }
 
-            (1..=u64::MAX).prop_map(|s| from_seed(s)).boxed()
+            (1..=u64::MAX).prop_map(from_seed).boxed()
         }
     }
 

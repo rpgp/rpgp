@@ -405,7 +405,7 @@ impl PlainSecretParams {
             (
                 PlainSecretParams::MlKem768X25519(ref priv_key),
                 PkeskBytes::MlKem768X25519 {
-                    ephemeral,
+                    ecdh_ciphertext: ephemeral,
                     ml_kem_ciphertext,
                     session_key,
                     sym_alg,
@@ -421,7 +421,7 @@ impl PlainSecretParams {
 
                 let data = ml_kem768_x25519::EncryptionFields {
                     ecdh_ciphertext: ephemeral.to_owned(),
-                    ml_kem_ciphertext: ml_kem_ciphertext,
+                    ml_kem_ciphertext,
                     ecdh_pub_key: &params.x25519_key,
                     ml_kem_pub_key: &params.ml_kem_key,
                     encrypted_session_key: session_key,
@@ -467,8 +467,7 @@ impl PlainSecretParams {
                     Ok(PlainSessionKey::V6 { key })
                 };
             }
-
-            (PlainSecretParams::Ed25519(_), _) => bail!("EdDSA is only used for signing"),
+            (PlainSecretParams::Ed25519(_), _) => bail!("Ed25519 is only used for signing"),
             _ => unimplemented_err!(
                 "Unsupported: PlainSecretParams {:?}, PkeskBytes {:?}",
                 self,
@@ -762,6 +761,11 @@ mod tests {
                 PublicKeyAlgorithm::Ed448 => any::<crate::crypto::ed448::SecretKey>()
                     .prop_map(PlainSecretParams::Ed448)
                     .boxed(),
+                PublicKeyAlgorithm::MlKem768X25519Draft => {
+                    any::<crate::crypto::ml_kem768_x25519::SecretKey>()
+                        .prop_map(PlainSecretParams::MlKem768X25519)
+                        .boxed()
+                }
                 _ => {
                     unimplemented!("{:?}", alg)
                 }

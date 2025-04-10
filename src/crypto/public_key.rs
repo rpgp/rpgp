@@ -31,7 +31,6 @@ pub enum PublicKeyAlgorithm {
     /// X25519 [RFC 9580]
     X25519 = 25,
     /// X448 [RFC 9580]
-    #[cfg_attr(test, proptest(skip))]
     X448 = 26,
     /// Ed25519 [RFC 9580]
     Ed25519 = 27,
@@ -41,6 +40,7 @@ pub enum PublicKeyAlgorithm {
     /// ML-KEM-768+X25519
     MlKem768X25519Draft = 105,
     /// ML-KEM-1024+X448
+    #[cfg_attr(test, proptest(skip))]
     MlKem1024X448Draft = 106,
 
     /// Private experimental range (from OpenPGP)

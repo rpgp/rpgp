@@ -146,10 +146,9 @@ impl PublicKeyEncryptedSessionKey {
         // Add the raw session key data
         data.extend_from_slice(sk);
 
-        // Appended a checksum of the session key (except for X25519 and X448)
+        // If needed, appended a checksum of the session key
         match pp {
-            PublicParams::X25519 { .. } => {}
-            PublicParams::X448 { .. } => {}
+            PublicParams::X25519(_) | PublicParams::X448(_) | PublicParams::MlKem768X25519(_) => {}
             _ => data.extend_from_slice(&checksum::calculate_simple(sk).to_be_bytes()),
         }
 

@@ -49,10 +49,10 @@ pub enum PkeskBytes {
     },
     MlKem768X25519 {
         /// Ephemeral X25519 public key (32 bytes).
-        #[debug("{}", hex::encode(ephemeral))]
-        ephemeral: [u8; 32],
-        #[debug("{}", hex::encode(ml_kem_ciphertext))]
-        ml_kem_ciphertext: [u8; 1088],
+        #[debug("{}", hex::encode(ecdh_ciphertext))]
+        ecdh_ciphertext: [u8; 32],
+        #[debug("{}", hex::encode(&ml_kem_ciphertext[..]))]
+        ml_kem_ciphertext: Box<[u8; 1088]>,
         /// Encrypted and wrapped session key.
         #[debug("{}", hex::encode(session_key))]
         session_key: Bytes,
@@ -160,7 +160,7 @@ impl PkeskBytes {
                 let ephemeral_public = i.read_array::<32>()?;
 
                 // A fixed-length octet string of the ML-KEM ciphertext, whose length depends on the algorithm ID as specified in Table 4.
-                let ml_kem_ciphertext = i.read_array::<1088>()?;
+                let ml_kem_ciphertext = Box::new(i.read_array::<1088>()?);
 
                 // A one-octet size of the following fields.
                 let len = i.read_u8()?;
@@ -182,7 +182,7 @@ impl PkeskBytes {
                 let esk = i.take_bytes(skey_len.into())?.freeze();
 
                 Ok(PkeskBytes::MlKem768X25519 {
-                    ephemeral: ephemeral_public,
+                    ecdh_ciphertext: ephemeral_public,
                     sym_alg,
                     session_key: esk,
                     ml_kem_ciphertext,
@@ -243,13 +243,13 @@ impl Serialize for PkeskBytes {
                 writer.write_all(session_key)?; // encrypted session key
             }
             PkeskBytes::MlKem768X25519 {
-                ephemeral,
+                ecdh_ciphertext: ephemeral,
                 sym_alg,
                 session_key,
                 ml_kem_ciphertext,
             } => {
                 writer.write_all(ephemeral)?;
-                writer.write_all(ml_kem_ciphertext)?;
+                writer.write_all(&ml_kem_ciphertext[..])?;
 
                 // Unlike the other public-key algorithms, in the case of a v3 PKESK packet,
                 // the symmetric algorithm ID is not encrypted [for X25519].
@@ -342,7 +342,7 @@ impl Serialize for PkeskBytes {
                 sum += session_key.len(); // encrypted session key
             }
             PkeskBytes::MlKem768X25519 {
-                ephemeral,
+                ecdh_ciphertext: ephemeral,
                 sym_alg,
                 session_key,
                 ml_kem_ciphertext,

@@ -415,7 +415,32 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
         PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
         PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
         PublicParams::MlKem768X25519(ref params) => {
-            todo!()
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem768_x25519::encrypt(
+                    &mut rng,
+                    &params.x25519_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem768X25519 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
         }
         PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }

@@ -1,8 +1,10 @@
 use pgp::{
-    composed::{Deserializable, Message, SignedPublicKey, SignedSecretKey},
-    crypto::public_key::PublicKeyAlgorithm,
+    composed::{Deserializable, Message, MessageBuilder, SignedPublicKey, SignedSecretKey},
+    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     types::{KeyDetails, Password},
 };
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 use testresult::TestResult;
 
 #[test]
@@ -63,7 +65,7 @@ fn test_a_1_2_transferrable_public_key() -> TestResult {
 }
 
 #[test]
-fn test_a_1_3_signed_encrpyted() -> TestResult {
+fn test_a_1_3_signed_encrypted() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_1_1_key.sec.asc")?;
@@ -71,14 +73,40 @@ fn test_a_1_3_signed_encrpyted() -> TestResult {
     let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_1_2_key.pub.asc")?;
     pub_key.verify()?;
 
-    let (msg, _) = Message::from_armor_file("./tests/pqc/a_1_3_msg.asc")?;
+    {
+        let (msg, _) = Message::from_armor_file("./tests/pqc/a_1_3_msg.asc")?;
 
-    dbg!(&msg);
-    let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
 
-    let data = msg.as_data_string()?;
-    assert_eq!(data, "Testing\n");
-    msg.verify(&pub_key)?;
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
+    // encrypt again
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
 
+    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    builder
+        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha256)
+        // encrypting to the PQ subkey
+        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[1])?;
+
+    let out = builder.to_armored_string(&mut rng, Default::default())?;
+
+    // decrypt and verify sig again
+    {
+        let (msg, _) = Message::from_armor(out.as_bytes())?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
     Ok(())
 }

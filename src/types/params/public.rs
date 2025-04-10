@@ -126,7 +126,6 @@ impl PublicParams {
                 let params = X448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::X448(params))
             }
-            PublicKeyAlgorithm::X448 => unknown(i, len),
             PublicKeyAlgorithm::MlKem768X25519Draft => {
                 let params = MlKem768X25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlKem768X25519(params))
@@ -337,6 +336,9 @@ mod tests {
                     .boxed(),
                 PublicKeyAlgorithm::Ed448 => any::<Ed448PublicParams>()
                     .prop_map(PublicParams::Ed448)
+                    .boxed(),
+                PublicKeyAlgorithm::MlKem768X25519Draft => any::<MlKem768X25519PublicParams>()
+                    .prop_map(PublicParams::MlKem768X25519)
                     .boxed(),
                 _ => {
                     unimplemented!("{:?}", args)

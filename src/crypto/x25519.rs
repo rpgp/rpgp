@@ -266,7 +266,7 @@ mod tests {
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
                     recipient_public: pub_params.key.to_bytes(),
-                    encrypted_session_key: &*enc_sk,
+                    encrypted_session_key: &enc_sk,
                 };
 
                 let decrypted = skey.decrypt(data).unwrap();

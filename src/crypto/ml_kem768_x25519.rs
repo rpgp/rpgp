@@ -29,7 +29,7 @@ impl From<&SecretKey> for MlKem768X25519PublicParams {
     fn from(value: &SecretKey) -> Self {
         Self {
             x25519_key: PublicKey::from(&value.x25519),
-            ml_kem_key: value.ml_kem.encapsulation_key(),
+            ml_kem_key: Box::new(value.ml_kem.encapsulation_key()),
         }
     }
 }
@@ -83,21 +83,21 @@ impl Decryptor for SecretKey {
 
         // Compute (ecdhKeyShare) := ECDH-KEM.Decaps(ecdhCipherText, ecdhSecretKey, ecdhPublicKey)
         let ecdh_key_share =
-            x25519_kem_decaps(&data.ecdh_ciphertext, &self.x25519, &data.ecdh_pub_key);
+            x25519_kem_decaps(&data.ecdh_ciphertext, &self.x25519, data.ecdh_pub_key);
 
         // Compute (mlkemKeyShare) := ML-KEM.Decaps(mlkemCipherText, mlkemSecretKey)
-        let ml_kem_key_share = ml_kem_768_decaps(&data.ml_kem_ciphertext, &self.ml_kem);
+        let ml_kem_key_share = ml_kem_768_decaps(data.ml_kem_ciphertext, &self.ml_kem);
         // Compute KEK := multiKeyCombine(
         //                  mlkemKeyShare, mlkemCipherText, mlkemPublicKey, ecdhKeyShare,
         //                  ecdhCipherText, ecdhPublicKey, algId
         //                )
         let kek = multi_key_combine(
             &ml_kem_key_share,
-            &data.ml_kem_ciphertext,
-            &data.ml_kem_pub_key,
+            data.ml_kem_ciphertext,
+            data.ml_kem_pub_key,
             &ecdh_key_share,
             &data.ecdh_ciphertext,
-            &data.ecdh_pub_key,
+            data.ecdh_pub_key,
             PublicKeyAlgorithm::MlKem768X25519Draft,
         );
         // Compute sessionKey := AESKeyUnwrap(KEK, C) with AES-256 as per [RFC3394], aborting if the 64 bit integrity check fails
@@ -175,7 +175,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     ecdh_public_key: &x25519_dalek::PublicKey,
     ml_kem_public_key: &EncapsulationKey<MlKem768Params>,
     plain: &[u8],
-) -> Result<([u8; 32], [u8; 1088], Vec<u8>)> {
+) -> Result<([u8; 32], Box<[u8; 1088]>, Vec<u8>)> {
     // Maximum length for `plain` - FIXME: what should the maximum be, here?
     const MAX_SIZE: usize = 255;
     ensure!(
@@ -200,7 +200,9 @@ pub fn encrypt<R: CryptoRng + Rng>(
         ecdh_public_key,
         PublicKeyAlgorithm::MlKem768X25519Draft,
     );
+
     // Compute C := AESKeyWrap(KEK, sessionKey) with AES-256 as per [RFC3394] that includes a 64 bit integrity check
+    dbg!(hex::encode(kek), hex::encode(plain));
     let c = aes_kw::wrap(&kek, plain)?;
 
     Ok((ecdh_ciphertext, ml_kem_ciphertext, c))
@@ -226,13 +228,14 @@ fn x25519_kem_encaps<R: CryptoRng + Rng>(
 fn ml_kem_encaps<R: CryptoRng + Rng>(
     mut rng: R,
     public_key: &EncapsulationKey<MlKem768Params>,
-) -> ([u8; 1088], [u8; 32]) {
+) -> (Box<[u8; 1088]>, [u8; 32]) {
     let (ciphertext, share) = public_key.encapsulate(&mut rng).expect("infallible");
-    (ciphertext.into(), share.into())
+    (Box::new(ciphertext.into()), share.into())
 }
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaChaRng;
 
@@ -267,6 +270,20 @@ mod tests {
             let decrypted = skey.decrypt(data).unwrap();
 
             assert_eq!(&plain[..], &decrypted[..]);
+        }
+    }
+
+    impl Arbitrary for SecretKey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<([u8; 32], [u8; 64])>()
+                .prop_map(|(a, b)| SecretKey {
+                    x25519: StaticSecret::from(a),
+                    ml_kem: DecapsulationKey::from_bytes(&b.into()),
+                })
+                .boxed()
         }
     }
 }
