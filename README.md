@@ -104,8 +104,6 @@ let public_key = SignedPublicKey::from_string(&key_string).unwrap().0;
 public_key.verify_signature(HashAlgorithm::default(), &data[..], &new_signature).unwrap();
 ```
 
-## Features
-
 ## Current Status
 
 > Last updated *September 2024*
@@ -114,6 +112,15 @@ public_key.verify_signature(HashAlgorithm::default(), &data[..], &new_signature)
 - Security Status: [STATUS_SECURITY.md](docs/SECURITY_STATUS.md)
 - Supported Platforms: [PLATFORMS.md](docs/PLATFORMS.md)
 
+## rPGP for application developers
+
+rPGP aims to make it easy for application developers to incorporate OpenPGP functionality into their projects.
+
+However, the OpenPGP format and its semantics are relatively complex, and there has historically not been a reader-friendly introduction to the domain.
+
+The text ["OpenPGP for application developers"](https://openpgp.dev/) offers an introduction to OpenPGP, aimed mainly at application developers. We recommend it for initial orientation.
+
+Independently, we welcome questions in the rPGP issue tracker.
 
 ## Users & Libraries built using rPGP
 
