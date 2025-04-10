@@ -8,8 +8,9 @@ use smallvec::SmallVec;
 use crate::{
     composed::{KeyDetails, SecretKey, SecretSubkey},
     crypto::{
-        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, hash::HashAlgorithm,
-        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519,
+        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
+        hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
+        x25519, x448,
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
@@ -109,7 +110,7 @@ impl SecretKeyParamsBuilder {
                     return Err("Keys with less than 2048bits are considered insecure".into());
                 }
             }
-            Some(KeyType::EdDSALegacy) => {
+            Some(KeyType::Ed25519Legacy) => {
                 if let Some(can_encrypt) = self.can_encrypt {
                     if can_encrypt {
                         return Err("EdDSA can only be used for signing keys".into());
@@ -252,13 +253,15 @@ pub enum KeyType {
     /// Encrypting with ECDH
     ECDH(ECCCurve),
     /// Signing with Curve25519, legacy format (deprecated in RFC 9580)
-    EdDSALegacy,
+    Ed25519Legacy,
     /// Signing with ECDSA
     ECDSA(ECCCurve),
     /// Signing with DSA for the given bitsize.
     Dsa(DsaKeySize),
     /// Signing with Ed25519
     Ed25519,
+    /// Signing with Ed448
+    Ed448,
     /// Encrypting with X25519
     X25519,
     /// Encrypting with X448
@@ -292,10 +295,11 @@ impl KeyType {
         match self {
             KeyType::Rsa(_) => PublicKeyAlgorithm::RSA,
             KeyType::ECDH(_) => PublicKeyAlgorithm::ECDH,
-            KeyType::EdDSALegacy => PublicKeyAlgorithm::EdDSALegacy,
+            KeyType::Ed25519Legacy => PublicKeyAlgorithm::EdDSALegacy,
             KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
             KeyType::Ed25519 => PublicKeyAlgorithm::Ed25519,
+            KeyType::Ed448 => PublicKeyAlgorithm::Ed448,
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
             KeyType::X448 => PublicKeyAlgorithm::X448,
         }
@@ -318,7 +322,7 @@ impl KeyType {
                 let secret_params = PlainSecretParams::ECDH(secret);
                 (public_params, secret_params)
             }
-            KeyType::EdDSALegacy => {
+            KeyType::Ed25519Legacy => {
                 let secret = ed25519::SecretKey::generate(rng);
                 let public_params = PublicParams::EdDSALegacy((&secret).into());
                 let secret_params = PlainSecretParams::Ed25519Legacy(secret);
@@ -344,6 +348,12 @@ impl KeyType {
                 let secret_params = PlainSecretParams::Ed25519(secret);
                 (public_params, secret_params)
             }
+            KeyType::Ed448 => {
+                let secret = ed448::SecretKey::generate(rng);
+                let public_params = PublicParams::Ed448((&secret).into());
+                let secret_params = PlainSecretParams::Ed448(secret);
+                (public_params, secret_params)
+            }
             KeyType::X25519 => {
                 let secret = x25519::SecretKey::generate(rng);
                 let public_params = PublicParams::X25519((&secret).into());
@@ -351,7 +361,7 @@ impl KeyType {
                 (public_params, secret_params)
             }
             KeyType::X448 => {
-                let secret = crate::crypto::x448::SecretKey::generate(rng);
+                let secret = x448::SecretKey::generate(rng);
                 let public_params = PublicParams::X448((&secret).into());
                 let secret_params = PlainSecretParams::X448(secret);
                 (public_params, secret_params)
@@ -543,7 +553,7 @@ mod tests {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
-            .key_type(KeyType::EdDSALegacy)
+            .key_type(KeyType::Ed25519Legacy)
             .can_certify(true)
             .can_sign(true)
             .primary_user_id("Me-X <me-25519-legacy@mail.com>".into())
@@ -994,5 +1004,115 @@ mod tests {
         let mut rng = &mut ChaCha8Rng::seed_from_u64(0);
 
         gen_dsa(&mut rng, DsaKeySize::B3072);
+    }
+
+    #[ignore]
+    #[test]
+    fn key_gen_448_rfc9580_long() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for i in 0..100 {
+                println!("round {i}");
+                gen_448_rfc9580(&mut rng, key_version);
+            }
+        }
+    }
+
+    #[test]
+    fn key_gen_448_rfc9580_short() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            for _ in 0..10 {
+                gen_448_rfc9580(&mut rng, key_version);
+            }
+        }
+    }
+
+    fn gen_448_rfc9580<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+        // The RFC 9580 key format variants based on Curve 448 (X448/Ed448)
+
+        let _ = pretty_env_logger::try_init();
+
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(version)
+            .key_type(KeyType::Ed448)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("Me-X <me-448-rfc9580@mail.com>".into())
+            .passphrase(None)
+            .preferred_symmetric_algorithms(smallvec![
+                SymmetricKeyAlgorithm::AES256,
+                SymmetricKeyAlgorithm::AES192,
+                SymmetricKeyAlgorithm::AES128,
+            ])
+            .preferred_hash_algorithms(smallvec![
+                HashAlgorithm::Sha256,
+                HashAlgorithm::Sha384,
+                HashAlgorithm::Sha512,
+                HashAlgorithm::Sha224,
+                HashAlgorithm::Sha1,
+            ])
+            .preferred_compression_algorithms(smallvec![
+                CompressionAlgorithm::ZLIB,
+                CompressionAlgorithm::ZIP,
+            ])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(version)
+                    .key_type(KeyType::X448)
+                    .can_encrypt(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        let armor = signed_key
+            .to_armored_string(None.into())
+            .expect("failed to serialize key");
+
+        // std::fs::write("sample-448-rfc9580.sec.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedSecretKey::from_string(&armor).expect("failed to parse key");
+        signed_key2.verify().expect("invalid key");
+
+        assert_eq!(signed_key, signed_key2);
+
+        let public_key = signed_key.public_key();
+
+        let public_signed_key = public_key
+            .sign(
+                &mut rng,
+                &*signed_key,
+                &*signed_key.public_key(),
+                &"".into(),
+            )
+            .expect("failed to sign public key");
+
+        public_signed_key.verify().expect("invalid public key");
+
+        let armor = public_signed_key
+            .to_armored_string(None.into())
+            .expect("failed to serialize public key");
+
+        // std::fs::write("sample-448-rfc9580.pub.asc", &armor).unwrap();
+
+        let (signed_key2, _headers) =
+            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
+        signed_key2.verify().expect("invalid public key");
     }
 }

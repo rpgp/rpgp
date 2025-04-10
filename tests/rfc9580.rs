@@ -208,7 +208,7 @@ fn rfc9580_legacy_25519_illegal_in_v6() {
     // -- Create a v6 ed25519 legacy signing key, expect failure --
     let mut key_params = SecretKeyParamsBuilder::default();
     key_params
-        .key_type(KeyType::EdDSALegacy)
+        .key_type(KeyType::Ed25519Legacy)
         .version(KeyVersion::V6)
         .can_sign(true)
         .primary_user_id("Me <me@example.com>".into());

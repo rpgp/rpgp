@@ -92,7 +92,7 @@ sha2 = { version = "0.10.6", features = ["oid"] }
 sha3 = { version = "0.10.5", features = ["oid"] }
 signature = "2.2"
 twofish = "0.7"
-zeroize = { version = "1.7", features = ["zeroize_derive"] }
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
 getrandom = { version = "0.2", optional = true }
 hkdf = "0.12.4"
 aes-gcm = "0.10.3"
