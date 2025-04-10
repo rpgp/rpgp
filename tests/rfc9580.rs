@@ -85,6 +85,8 @@ fn rfc9580_verify_csf() {
         let ssk = load_ssk(&keyfile);
         let spk = SignedPublicKey::from(ssk.clone());
 
+        spk.verify().expect("SignedPublicKey::verify");
+
         // load+verify csf msg
         let (csf, _) =
             CleartextSignedMessage::from_armor(File::open(csffile).unwrap()).expect("csf loaded");
