@@ -8,8 +8,9 @@ use smallvec::SmallVec;
 use crate::{
     composed::{KeyDetails, SecretKey, SecretSubkey},
     crypto::{
-        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, hash::HashAlgorithm,
-        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519,
+        aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
+        hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
+        x25519,
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
@@ -259,6 +260,8 @@ pub enum KeyType {
     Dsa(DsaKeySize),
     /// Signing with Ed25519
     Ed25519,
+    /// Signing with Ed448
+    Ed448,
     /// Encrypting with X25519
     X25519,
     /// Encrypting with X448
@@ -296,6 +299,7 @@ impl KeyType {
             KeyType::ECDSA(_) => PublicKeyAlgorithm::ECDSA,
             KeyType::Dsa(_) => PublicKeyAlgorithm::DSA,
             KeyType::Ed25519 => PublicKeyAlgorithm::Ed25519,
+            KeyType::Ed448 => PublicKeyAlgorithm::Ed448,
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
             KeyType::X448 => PublicKeyAlgorithm::X448,
         }
@@ -342,6 +346,12 @@ impl KeyType {
                 let secret = ed25519::SecretKey::generate(rng);
                 let public_params = PublicParams::Ed25519((&secret).into());
                 let secret_params = PlainSecretParams::Ed25519(secret);
+                (public_params, secret_params)
+            }
+            KeyType::Ed448 => {
+                let secret = ed448::SecretKey::generate(rng);
+                let public_params = PublicParams::Ed448((&secret).into());
+                let secret_params = PlainSecretParams::Ed448(secret);
                 (public_params, secret_params)
             }
             KeyType::X25519 => {
