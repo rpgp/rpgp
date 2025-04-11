@@ -49,7 +49,9 @@ pub enum OpsVersionSpecific {
     },
     V6 {
         #[cfg_attr(test, proptest(strategy = "any::<Vec<u8>>().prop_map(Into::into)"))]
+        #[debug("{}", hex::encode(salt))]
         salt: Bytes,
+        #[debug("{}", hex::encode(fingerprint))]
         fingerprint: [u8; 32],
     },
     #[cfg_attr(test, proptest(skip))]

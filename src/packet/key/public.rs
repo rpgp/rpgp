@@ -414,6 +414,77 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
         }
         PublicParams::Elgamal { .. } => unimplemented_err!("encryption with Elgamal"),
         PublicParams::DSA { .. } => bail!("DSA is only used for signing"),
+        PublicParams::MlKem768X25519(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem768_x25519::encrypt(
+                    &mut rng,
+                    &params.x25519_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem768X25519 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        PublicParams::MlKem1024X448(ref params) => {
+            let (sym_alg, plain) = match typ {
+                EskType::V6 => (None, plain),
+                EskType::V3_4 => {
+                    ensure!(!plain.is_empty(), "plain may not be empty");
+
+                    (
+                        Some(plain[0].into()), // byte 0 is the symmetric algorithm
+                        &plain[1..],           // strip symmetric algorithm
+                    )
+                }
+            };
+
+            let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
+                crypto::ml_kem1024_x448::encrypt(
+                    &mut rng,
+                    &params.x448_key,
+                    &params.ml_kem_key,
+                    plain,
+                )?;
+
+            Ok(PkeskBytes::MlKem1024X448 {
+                ecdh_ciphertext,
+                ml_kem_ciphertext,
+                session_key: session_key.into(),
+                sym_alg,
+            })
+        }
+        PublicParams::MlDsa65Ed25519(_) => {
+            bail!("ML DSA 65 ED2519 is only used for signing")
+        }
+        PublicParams::MlDsa87Ed448(_) => {
+            bail!("ML DSA 87 ED448 is only used for signing")
+        }
+        PublicParams::SlhDsaShake128s(_) => {
+            bail!("SLH DSA Shake 128s is only used for signing")
+        }
+        PublicParams::SlhDsaShake128f(_) => {
+            bail!("SLH DSA Shake 128f is only used for signing")
+        }
+        PublicParams::SlhDsaShake256s(_) => {
+            bail!("SLH DSA Shake 256s is only used for signing")
+        }
         PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }
 }
@@ -646,6 +717,29 @@ impl PublicKeyTrait for PubKeyInner {
             PublicParams::Ed448(ref params) => {
                 crypto::ed448::verify(&params.key, hash, hashed, sig.try_into()?)
             }
+            PublicParams::MlDsa65Ed25519(ref params) => crypto::ml_dsa65_ed25519::verify(
+                &params.ed25519,
+                &params.ml_dsa,
+                hash,
+                hashed,
+                sig.try_into()?,
+            ),
+            PublicParams::MlDsa87Ed448(ref params) => crypto::ml_dsa87_ed448::verify(
+                &params.ed448,
+                &params.ml_dsa,
+                hash,
+                hashed,
+                sig.try_into()?,
+            ),
+            PublicParams::SlhDsaShake128s(ref params) => {
+                crypto::slh_dsa_shake128s::verify(&params.key, hash, hashed, sig.try_into()?)
+            }
+            PublicParams::SlhDsaShake128f(ref params) => {
+                crypto::slh_dsa_shake128f::verify(&params.key, hash, hashed, sig.try_into()?)
+            }
+            PublicParams::SlhDsaShake256s(ref params) => {
+                todo!()
+            }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");
             }
@@ -656,6 +750,12 @@ impl PublicKeyTrait for PubKeyInner {
                 let sig: &[Mpi] = sig.try_into()?;
 
                 crypto::ecdsa::verify(params, hash, hashed, sig)
+            }
+            PublicParams::MlKem768X25519(_) => {
+                bail!("ML KEM 768 X25519 can not be used for verify operations");
+            }
+            PublicParams::MlKem1024X448(_) => {
+                bail!("ML KEM 1024 X448 can not be used for verify operations");
             }
             PublicParams::ECDH(
                 ref params @ EcdhPublicParams::Curve25519 { .. }

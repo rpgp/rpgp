@@ -336,9 +336,7 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         | &PublicKeyAlgorithm::Private101
         | &PublicKeyAlgorithm::Private102
         | &PublicKeyAlgorithm::Private103
-        | &PublicKeyAlgorithm::Private104
-        | &PublicKeyAlgorithm::Private105
-        | &PublicKeyAlgorithm::Private106
+        | &PublicKeyAlgorithm::Private104// | &PublicKeyAlgorithm::Private105 | &PublicKeyAlgorithm::Private106
         | &PublicKeyAlgorithm::Private107
         | &PublicKeyAlgorithm::Private108
         | &PublicKeyAlgorithm::Private109
@@ -348,6 +346,10 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         }
         PublicKeyAlgorithm::ElgamalEncrypt => {
             bail!("invalid signature algorithm, encryption only elgamal");
+        }
+        &PublicKeyAlgorithm::MlKem768X25519Draft
+        | &PublicKeyAlgorithm::MlKem1024X448Draft => {
+            bail!("invalid signature algorithm, ML KEM is encryption only");
         }
         _ => {
             // don't assume format, could be non-MPI

@@ -31,12 +31,31 @@ pub enum PublicKeyAlgorithm {
     /// X25519 [RFC 9580]
     X25519 = 25,
     /// X448 [RFC 9580]
-    #[cfg_attr(test, proptest(skip))]
     X448 = 26,
     /// Ed25519 [RFC 9580]
     Ed25519 = 27,
     /// Ed448 [RFC 9580]
     Ed448 = 28,
+
+    /// ML-DSA-65+Ed25519
+    MlDsa65Ed25519Draft = 30,
+    /// ML-DSA-87+Ed448
+    MlDsa87Ed448Draft = 31,
+
+    /// SLH-DSA-SHAKE-128s
+    #[cfg_attr(test, proptest(skip))]
+    SlhDsaShake128sDraft = 32,
+    /// SLH-DSA-SHAKE-128f
+    #[cfg_attr(test, proptest(skip))]
+    SlhDsaShake128fDraft = 33,
+    /// SLH-DSA-SHAKE-256s
+    #[cfg_attr(test, proptest(skip))]
+    SlhDsaShake256sDraft = 34,
+
+    /// ML-KEM-768+X25519
+    MlKem768X25519Draft = 105,
+    /// ML-KEM-1024+X448
+    MlKem1024X448Draft = 106,
 
     /// Private experimental range (from OpenPGP)
     #[cfg_attr(test, proptest(skip))]
@@ -49,10 +68,10 @@ pub enum PublicKeyAlgorithm {
     Private103 = 103,
     #[cfg_attr(test, proptest(skip))]
     Private104 = 104,
-    #[cfg_attr(test, proptest(skip))]
-    Private105 = 105,
-    #[cfg_attr(test, proptest(skip))]
-    Private106 = 106,
+    // #[cfg_attr(test, proptest(skip))]
+    // Private105 = 105,
+    // #[cfg_attr(test, proptest(skip))]
+    // Private106 = 106,
     #[cfg_attr(test, proptest(skip))]
     Private107 = 107,
     #[cfg_attr(test, proptest(skip))]

@@ -487,11 +487,29 @@ fn create_signature(
         PlainSecretParams::X25519(_) => {
             bail!("X25519 can not be used for signing operations")
         }
+        PlainSecretParams::MlKem768X25519 { .. } => {
+            bail!("ML KEM 768 X25519 can not be used for signing operations")
+        }
+        PlainSecretParams::MlKem1024X448 { .. } => {
+            bail!("ML KEM 1024 X448 can not be used for signing operations")
+        }
         PlainSecretParams::X448(_) => {
             bail!("X448 can not be used for signing operations")
         }
         PlainSecretParams::Ed25519(ref priv_key) => {
             let PublicParams::Ed25519(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::MlDsa65Ed25519(ref priv_key) => {
+            let PublicParams::MlDsa65Ed25519(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::MlDsa87Ed448(ref priv_key) => {
+            let PublicParams::MlDsa87Ed448(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
             priv_key.sign(hash, data)
@@ -519,6 +537,18 @@ fn create_signature(
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
         }
+        PlainSecretParams::SlhDsaShake128s(ref priv_key) => {
+            let PublicParams::SlhDsaShake128s(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::SlhDsaShake128f(ref priv_key) => {
+            let PublicParams::SlhDsaShake128f(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
         PlainSecretParams::Unknown { alg, .. } => {
             unsupported_err!("{:?} signing", alg);
         }
@@ -544,6 +574,26 @@ fn create_signature(
             native.extend_from_slice(&sig[1]);
 
             ensure_eq!(native.len(), 114, "expect 114 byte signature");
+
+            Ok(SignatureBytes::Native(native.into()))
+        }
+        PublicParams::MlDsa65Ed25519(_) => {
+            // native format
+            ensure_eq!(sig.len(), 3, "expect three signature parts");
+
+            let mut native = sig[0].clone();
+            native.extend_from_slice(&sig[1]);
+            native.extend_from_slice(&sig[2]);
+
+            Ok(SignatureBytes::Native(native.into()))
+        }
+        PublicParams::MlDsa87Ed448(_) => {
+            // native format
+            ensure_eq!(sig.len(), 3, "expect three signature parts");
+
+            let mut native = sig[0].clone();
+            native.extend_from_slice(&sig[1]);
+            native.extend_from_slice(&sig[2]);
 
             Ok(SignatureBytes::Native(native.into()))
         }

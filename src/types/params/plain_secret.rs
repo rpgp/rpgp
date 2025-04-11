@@ -16,8 +16,9 @@ use crate::{
     composed::PlainSessionKey,
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        elgamal, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
-        Decryptor,
+        elgamal, ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519,
+        public_key::PublicKeyAlgorithm, rsa, slh_dsa_shake128f, slh_dsa_shake128s,
+        sym::SymmetricKeyAlgorithm, x25519, x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
@@ -36,9 +37,15 @@ pub enum PlainSecretParams {
     Ed25519(ed25519::SecretKey),
     Ed25519Legacy(ed25519::SecretKey),
     X25519(x25519::SecretKey),
+    MlKem768X25519(ml_kem768_x25519::SecretKey),
+    MlKem1024X448(ml_kem1024_x448::SecretKey),
+    MlDsa65Ed25519(ml_dsa65_ed25519::SecretKey),
+    MlDsa87Ed448(ml_dsa87_ed448::SecretKey),
     Elgamal(elgamal::SecretKey),
     X448(x448::SecretKey),
     Ed448(ed448::SecretKey),
+    SlhDsaShake128s(slh_dsa_shake128s::SecretKey),
+    SlhDsaShake128f(slh_dsa_shake128f::SecretKey),
     Unknown {
         #[zeroize(skip)]
         alg: PublicKeyAlgorithm,
@@ -142,15 +149,35 @@ impl PlainSecretParams {
                 let key = crate::crypto::ed448::SecretKey::try_from_bytes(secret)?;
                 Self::Ed448(key)
             }
-            (PublicKeyAlgorithm::X25519, PublicParams::X25519(pub_params)) => {
+            (PublicKeyAlgorithm::X25519, PublicParams::X25519(_)) => {
                 let secret = i.read_array::<32>()?;
-                let key = crate::crypto::x25519::SecretKey::try_from_array(pub_params, secret)?;
+                let key = crate::crypto::x25519::SecretKey::try_from_array(secret)?;
                 Self::X25519(key)
             }
             (PublicKeyAlgorithm::X448, PublicParams::X448 { .. }) => {
                 let s = i.read_array::<56>()?;
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
                 Self::X448(key)
+            }
+            (PublicKeyAlgorithm::MlKem768X25519Draft, PublicParams::MlKem768X25519(_)) => {
+                // X25519
+                let x = i.read_array::<32>()?;
+                let x = x25519_dalek::StaticSecret::from(x);
+
+                // ML KEM
+                let ml_kem = i.read_array::<64>()?;
+                let key = crate::crypto::ml_kem768_x25519::SecretKey::try_from_parts(x, ml_kem)?;
+                Self::MlKem768X25519(key)
+            }
+            (PublicKeyAlgorithm::MlKem1024X448Draft, PublicParams::MlKem1024X448(_)) => {
+                // X448
+                let x = i.read_array::<56>()?;
+                let x = cx448::x448::Secret::from(x);
+
+                // ML KEM
+                let ml_kem = i.read_array::<64>()?;
+                let key = crate::crypto::ml_kem1024_x448::SecretKey::try_from_parts(x, ml_kem)?;
+                Self::MlKem1024X448(key)
             }
             (
                 alg,
@@ -164,6 +191,35 @@ impl PlainSecretParams {
                     data,
                     pub_params: pub_params.clone(),
                 }
+            }
+            (PublicKeyAlgorithm::MlDsa65Ed25519Draft, PublicParams::MlDsa65Ed25519(_)) => {
+                // ed25519
+                let ed = i.read_array::<32>()?;
+
+                // ML DSA
+                let ml_dsa = i.read_array::<32>()?;
+                let key = crate::crypto::ml_dsa65_ed25519::SecretKey::try_from_bytes(ed, ml_dsa)?;
+                Self::MlDsa65Ed25519(key)
+            }
+            (PublicKeyAlgorithm::MlDsa87Ed448Draft, PublicParams::MlDsa87Ed448(_)) => {
+                // ed448
+                let ed = i.read_array::<57>()?;
+
+                // ML DSA
+                let ml_dsa_seed = i.read_array::<32>()?;
+                let key =
+                    crate::crypto::ml_dsa87_ed448::SecretKey::try_from_bytes(ed, ml_dsa_seed)?;
+                Self::MlDsa87Ed448(key)
+            }
+            (PublicKeyAlgorithm::SlhDsaShake128sDraft, PublicParams::SlhDsaShake128s(_)) => {
+                let secret = i.read_array::<64>()?;
+                let key = crate::crypto::slh_dsa_shake128s::SecretKey::try_from_bytes(secret)?;
+                Self::SlhDsaShake128s(key)
+            }
+            (PublicKeyAlgorithm::SlhDsaShake128fDraft, PublicParams::SlhDsaShake128f(_)) => {
+                let secret = i.read_array::<64>()?;
+                let key = crate::crypto::slh_dsa_shake128f::SecretKey::try_from_bytes(secret)?;
+                Self::SlhDsaShake128f(key)
             }
             (_, _) => {
                 bail!("invalid combination {:?} - {:?}", alg, public_params);
@@ -390,7 +446,74 @@ impl PlainSecretParams {
                     _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
                 };
             }
+            (
+                PlainSecretParams::MlKem768X25519(ref priv_key),
+                PkeskBytes::MlKem768X25519 {
+                    ecdh_ciphertext: ephemeral,
+                    ml_kem_ciphertext,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                // Recipient public key (32 bytes)
+                let PublicParams::MlKem768X25519(params) = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for ML KEM 768 X25519",
+                        recipient.public_params()
+                    );
+                };
 
+                let data = ml_kem768_x25519::EncryptionFields {
+                    ecdh_ciphertext: ephemeral.to_owned(),
+                    ml_kem_ciphertext,
+                    ecdh_pub_key: &params.x25519_key,
+                    ml_kem_pub_key: &params.ml_kem_key,
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?;
+
+                return match (&typ, *sym_alg) {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    (EskType::V3_4, Some(sym_alg)) => Ok(PlainSessionKey::V3_4 { key, sym_alg }),
+                    (EskType::V6, None) => Ok(PlainSessionKey::V6 { key }),
+                    _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
+                };
+            }
+            (
+                PlainSecretParams::MlKem1024X448(ref priv_key),
+                PkeskBytes::MlKem1024X448 {
+                    ecdh_ciphertext: ephemeral,
+                    ml_kem_ciphertext,
+                    session_key,
+                    sym_alg,
+                },
+            ) => {
+                // Recipient public key
+                let PublicParams::MlKem1024X448(params) = recipient.public_params() else {
+                    bail!(
+                        "Unexpected recipient public_params {:?} for ML KEM 1024 X448",
+                        recipient.public_params()
+                    );
+                };
+
+                let data = ml_kem1024_x448::EncryptionFields {
+                    ecdh_ciphertext: ephemeral,
+                    ml_kem_ciphertext,
+                    ecdh_pub_key: &params.x448_key,
+                    ml_kem_pub_key: &params.ml_kem_key,
+                    encrypted_session_key: session_key,
+                };
+
+                let key = priv_key.decrypt(data)?;
+
+                return match (&typ, *sym_alg) {
+                    // We expect `sym_alg` to be set for v3 PKESK, and unset for v6 PKESK
+                    (EskType::V3_4, Some(sym_alg)) => Ok(PlainSessionKey::V3_4 { key, sym_alg }),
+                    (EskType::V6, None) => Ok(PlainSessionKey::V6 { key }),
+                    _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
+                };
+            }
             (
                 PlainSecretParams::X448(ref priv_key),
                 PkeskBytes::X448 {
@@ -409,7 +532,7 @@ impl PlainSecretParams {
 
                 let data = crate::crypto::x448::EncryptionFields {
                     ephemeral_public_point: ephemeral.to_owned(),
-                    recipient_public: params.key,
+                    recipient_public: &params.key,
                     encrypted_session_key: session_key,
                 };
 
@@ -422,8 +545,7 @@ impl PlainSecretParams {
                     Ok(PlainSessionKey::V6 { key })
                 };
             }
-
-            (PlainSecretParams::Ed25519(_), _) => bail!("EdDSA is only used for signing"),
+            (PlainSecretParams::Ed25519(_), _) => bail!("Ed25519 is only used for signing"),
             _ => unimplemented_err!(
                 "Unsupported: PlainSecretParams {:?}, PkeskBytes {:?}",
                 self,
@@ -557,7 +679,14 @@ impl PlainSecretParams {
                 writer.write_all(&q)?;
             }
             PlainSecretParams::Ed25519(key) => {
-                writer.write_all(key.secret.as_bytes().as_ref())?;
+                let q = key.secret.to_bytes();
+                writer.write_all(&q)?;
+            }
+            PlainSecretParams::MlKem768X25519(key) => {
+                key.to_writer(writer)?;
+            }
+            PlainSecretParams::MlKem1024X448(key) => {
+                key.to_writer(writer)?;
             }
             PlainSecretParams::Ed448(key) => {
                 writer.write_all(key.secret.as_bytes().as_ref())?;
@@ -568,6 +697,22 @@ impl PlainSecretParams {
             }
             PlainSecretParams::X448(key) => {
                 writer.write_all(&key.secret)?;
+            }
+            PlainSecretParams::MlDsa65Ed25519(key) => {
+                let q = key.ed25519.as_bytes();
+                writer.write_all(q)?;
+                writer.write_all(&key.ml_dsa_seed)?;
+            }
+            PlainSecretParams::MlDsa87Ed448(key) => {
+                let q = key.ed448.as_bytes();
+                writer.write_all(q)?;
+                writer.write_all(&key.ml_dsa_seed)?;
+            }
+            PlainSecretParams::SlhDsaShake128s(key) => {
+                writer.write_all(&key.key.to_bytes()[..])?;
+            }
+            PlainSecretParams::SlhDsaShake128f(key) => {
+                writer.write_all(&key.key.to_bytes()[..])?;
             }
             PlainSecretParams::Unknown { data, .. } => {
                 writer.write_all(data)?;
@@ -620,6 +765,12 @@ impl PlainSecretParams {
             }
             PlainSecretParams::X25519(_key) => 32,
             PlainSecretParams::Ed448(_key) => 57,
+            PlainSecretParams::MlKem768X25519(key) => key.write_len(),
+            PlainSecretParams::MlKem1024X448(key) => key.write_len(),
+            PlainSecretParams::MlDsa65Ed25519(_) => 32 + 32,
+            PlainSecretParams::MlDsa87Ed448(_) => 57 + 32,
+            PlainSecretParams::SlhDsaShake128s(_) => 64,
+            PlainSecretParams::SlhDsaShake128f(_) => 64,
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }
@@ -710,6 +861,26 @@ mod tests {
                 PublicKeyAlgorithm::Ed448 => any::<crate::crypto::ed448::SecretKey>()
                     .prop_map(PlainSecretParams::Ed448)
                     .boxed(),
+                PublicKeyAlgorithm::MlKem768X25519Draft => {
+                    any::<crate::crypto::ml_kem768_x25519::SecretKey>()
+                        .prop_map(PlainSecretParams::MlKem768X25519)
+                        .boxed()
+                }
+                PublicKeyAlgorithm::MlKem1024X448Draft => {
+                    any::<crate::crypto::ml_kem1024_x448::SecretKey>()
+                        .prop_map(PlainSecretParams::MlKem1024X448)
+                        .boxed()
+                }
+                PublicKeyAlgorithm::MlDsa65Ed25519Draft => {
+                    any::<crate::crypto::ml_dsa65_ed25519::SecretKey>()
+                        .prop_map(PlainSecretParams::MlDsa65Ed25519)
+                        .boxed()
+                }
+                PublicKeyAlgorithm::MlDsa87Ed448Draft => {
+                    any::<crate::crypto::ml_dsa87_ed448::SecretKey>()
+                        .prop_map(PlainSecretParams::MlDsa87Ed448)
+                        .boxed()
+                }
                 _ => {
                     unimplemented!("{:?}", alg)
                 }

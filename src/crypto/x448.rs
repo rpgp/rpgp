@@ -22,7 +22,7 @@ pub struct SecretKey {
 impl From<&SecretKey> for X448PublicParams {
     fn from(value: &SecretKey) -> Self {
         let secret = x448::Secret::from(value.secret); // does clamping
-        let public = *x448::PublicKey::from(&secret).as_bytes();
+        let public = x448::PublicKey::from(&secret);
         X448PublicParams { key: public }
     }
 }
@@ -49,7 +49,7 @@ pub struct EncryptionFields<'a> {
     pub ephemeral_public_point: [u8; 56],
 
     /// Recipient public key (56 bytes)
-    pub recipient_public: [u8; 56],
+    pub recipient_public: &'a x448::PublicKey,
 
     /// Encrypted and wrapped session key
     pub encrypted_session_key: &'a [u8],
@@ -82,7 +82,7 @@ impl Decryptor for SecretKey {
         // obtain the session key from the shared secret
         derive_session_key(
             data.ephemeral_public_point,
-            data.recipient_public,
+            data.recipient_public.as_bytes(),
             shared_secret,
             data.encrypted_session_key,
         )
@@ -95,11 +95,11 @@ impl Decryptor for SecretKey {
 /// <https://www.rfc-editor.org/rfc/rfc9580.html#name-algorithm-specific-fields-for-x>
 pub fn derive_session_key(
     ephemeral: [u8; 56],
-    recipient_public: [u8; 56],
+    recipient_public: &[u8; 56],
     shared_secret: [u8; 56],
     encrypted_session_key: &[u8],
 ) -> Result<Vec<u8>> {
-    let okm = hkdf(&ephemeral, &recipient_public, &shared_secret)?;
+    let okm = hkdf(&ephemeral, recipient_public, &shared_secret)?;
 
     let decrypted_key = aes_kw::unwrap(&okm, encrypted_session_key)?;
     ensure!(!decrypted_key.is_empty(), "empty key is not valid");
@@ -157,16 +157,14 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
     let (ephemeral_public, shared_secret) = {
         // create montgomery point
-        let Some(their_public) = x448::PublicKey::from_bytes(&recipient_public.key) else {
-            bail!("x448: invalid public key");
-        };
+        let their_public = &recipient_public.key;
 
         let mut ephemeral_secret_key_bytes = Zeroizing::new([0u8; 56]);
         rng.fill_bytes(&mut *ephemeral_secret_key_bytes);
         let our_secret = x448::Secret::from(*ephemeral_secret_key_bytes);
 
         // derive shared secret (None for low order points)
-        let Some(shared_secret) = our_secret.as_diffie_hellman(&their_public) else {
+        let Some(shared_secret) = our_secret.as_diffie_hellman(their_public) else {
             bail!("x448 Secret::as_diffie_hellman returned None");
         };
 
@@ -179,7 +177,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     // hkdf key derivation
     let okm = hkdf(
         ephemeral_public.as_bytes(),
-        &recipient_public.key,
+        recipient_public.key.as_bytes(),
         shared_secret.as_bytes(),
     )?;
 
@@ -219,7 +217,7 @@ mod tests {
 
                 let data = EncryptionFields {
                     ephemeral_public_point: ephemeral,
-                    recipient_public: pub_params.key,
+                    recipient_public: &pub_params.key,
                     encrypted_session_key: enc_sk.deref(),
                 };
 
