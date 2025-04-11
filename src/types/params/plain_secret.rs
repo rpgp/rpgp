@@ -17,8 +17,8 @@ use crate::{
     composed::PlainSessionKey,
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        elgamal, ml_kem1024_x448, ml_kem768_x25519, public_key::PublicKeyAlgorithm, rsa,
-        sym::SymmetricKeyAlgorithm, x25519, x448, Decryptor,
+        elgamal, ml_dsa65_ed25519, ml_kem1024_x448, ml_kem768_x25519,
+        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
@@ -39,6 +39,8 @@ pub enum PlainSecretParams {
     X25519(x25519::SecretKey),
     MlKem768X25519(ml_kem768_x25519::SecretKey),
     MlKem1024X448(ml_kem1024_x448::SecretKey),
+    MlDsa65Ed25519(ml_dsa65_ed25519::SecretKey),
+    // MlDsa87Ed448(ml_dsa87_ed448::SecretKey),
     Elgamal(elgamal::SecretKey),
     X448(x448::SecretKey),
     Ed448(ed448::SecretKey),
@@ -187,6 +189,25 @@ impl PlainSecretParams {
                     data,
                     pub_params: pub_params.clone(),
                 }
+            }
+            (PublicKeyAlgorithm::MlDsa65Ed25519Draft, PublicParams::MlDsa65Ed25519(_)) => {
+                // ed25519
+                let ed = i.read_array::<32>()?;
+
+                // ML DSA
+                let ml_dsa = i.read_array::<32>()?;
+                let key = crate::crypto::ml_dsa65_ed25519::SecretKey::try_from_bytes(ed, ml_dsa)?;
+                Self::MlDsa65Ed25519(key)
+            }
+            (PublicKeyAlgorithm::MlDsa87Ed448Draft, PublicParams::MlDsa87Ed448(_)) => {
+                // ed448
+                let ed = i.read_array::<57>()?;
+
+                // ML DSA
+                let ml_dsa_seed = i.read_array::<32>()?;
+                // let key = crate::crypto::ml_dsa87_ed448::SecretKey::try_from_bytes(ed, ml_dsa)?;
+                // Self::MlDsa87Ed448(key)
+                todo!()
             }
             (_, _) => {
                 bail!("invalid combination {:?} - {:?}", alg, public_params);
@@ -669,6 +690,11 @@ impl PlainSecretParams {
             PlainSecretParams::X448(key) => {
                 writer.write_all(&key.secret)?;
             }
+            PlainSecretParams::MlDsa65Ed25519(key) => {
+                let q = key.ed25519.as_bytes();
+                writer.write_all(q)?;
+                writer.write_all(&key.ml_dsa_seed)?;
+            }
             PlainSecretParams::Unknown { data, .. } => {
                 writer.write_all(data)?;
             }
@@ -722,6 +748,7 @@ impl PlainSecretParams {
             PlainSecretParams::Ed448(_key) => 57,
             PlainSecretParams::MlKem768X25519(_) => 32 + 64,
             PlainSecretParams::MlKem1024X448(_) => 56 + 64,
+            PlainSecretParams::MlDsa65Ed25519(_) => 32 + 32,
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }

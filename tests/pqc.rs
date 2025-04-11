@@ -184,3 +184,90 @@ fn test_ml_kem_1024_x448() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn test_a_2_1_transferrable_secret_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_2_1_key.sec.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::MlDsa65Ed25519Draft
+    );
+    assert_eq!(
+        key.primary_key.fingerprint().to_string(),
+        "eef4c85ce59af6a4520432960079697ebbcd521dffc500e945209a284f535791"
+    );
+
+    assert_eq!(
+        key.secret_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519Draft
+    );
+    assert_eq!(
+        key.secret_subkeys[0].fingerprint().to_string(),
+        "5718270f6330b5482f4f5c24ca8ea2d826650ad202f39c91638c348e20a03aad"
+    );
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_3_1_transferrable_secret_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_3_1_key.sec.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::MlDsa87Ed448Draft
+    );
+    assert_eq!(
+        key.primary_key.fingerprint().to_string(),
+        "ead878caeab3ae40d724cbc913777028e5f0809d393f796f710b7331c49a8ab1"
+    );
+
+    assert_eq!(
+        key.secret_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem1024X448Draft
+    );
+    assert_eq!(
+        key.secret_subkeys[0].fingerprint().to_string(),
+        "d1caef1274b00ede8ce21575250621f96152d4a9aa68b400579be98b4fa0ca68"
+    );
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_4_1_transferrable_secret_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_4_1_key.sec.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::SlhDsaShake128sDraft
+    );
+    assert_eq!(
+        key.primary_key.fingerprint().to_string(),
+        "2e7216dacc6d1c0896901f50eff94d6c071ed7fa246f0cb547f10e22f21896b1"
+    );
+
+    assert_eq!(
+        key.secret_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519Draft
+    );
+    assert_eq!(
+        key.secret_subkeys[0].fingerprint().to_string(),
+        "1adc9f55f5223a78948522a0f4d1b29aff2ed651d3fa56e234249402000ace41"
+    );
+
+    key.verify()?;
+
+    Ok(())
+}

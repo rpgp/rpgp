@@ -13,6 +13,7 @@ pub mod ed25519;
 pub mod ed448;
 pub mod elgamal;
 pub mod hash;
+pub mod ml_dsa65_ed25519;
 pub mod ml_kem1024_x448;
 pub mod ml_kem768_x25519;
 pub mod public_key;

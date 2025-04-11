@@ -67,11 +67,7 @@ des = "0.8"
 digest = "0.10.7"
 dsa = "0.6.3"
 ecdsa = "0.16.9"
-ed25519-dalek = { version = "2.1.1", default-features = false, features = [
-    "std",
-    "zeroize",
-    "fast",
-] }
+ed25519-dalek = { version = "2.1.1", default-features = false, features = ["std", "zeroize", "fast", "rand_core"] }
 elliptic-curve = "0.13"
 generic-array = "0.14.6"
 idea = "0.5"
@@ -115,6 +111,8 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = [
 ] }
 
 ml-kem = { git = "https://github.com/supinie/KEMs", branch = "master", features = ["zeroize"] }
+ml-dsa = { version = "0.0.4", features = ["zeroize"] }
+slh-dsa = { version = "0.0.3" }
 
 
 [dev-dependencies]

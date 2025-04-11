@@ -37,6 +37,17 @@ pub enum PublicKeyAlgorithm {
     /// Ed448 [RFC 9580]
     Ed448 = 28,
 
+    /// ML-DSA-65+Ed25519
+    MlDsa65Ed25519Draft = 30,
+    /// ML-DSA-87+Ed448
+    MlDsa87Ed448Draft = 31,
+    /// SLH-DSA-SHAKE-128s
+    SlhDsaShake128sDraft = 32,
+    ///	SLH-DSA-SHAKE-128f
+    SlhDsaShake128fDraft = 33,
+    ///	SLH-DSA-SHAKE-256s
+    SlhDsaShake256sDraft = 34,
+
     /// ML-KEM-768+X25519
     MlKem768X25519Draft = 105,
     /// ML-KEM-1024+X448

@@ -470,6 +470,21 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: PublicKeyTrait>(
                 sym_alg,
             })
         }
+        PublicParams::MlDsa65Ed25519(_) => {
+            bail!("ML DSA 65 ED2519 is only used for signing")
+        }
+        PublicParams::MlDsa87Ed448(_) => {
+            bail!("ML DSA 87 ED448 is only used for signing")
+        }
+        PublicParams::SlhDsaShake128s(_) => {
+            bail!("SLH DSA Shake 128s is only used for signing")
+        }
+        PublicParams::SlhDsaShake128f(_) => {
+            bail!("SLH DSA Shake 128f is only used for signing")
+        }
+        PublicParams::SlhDsaShake256s(_) => {
+            bail!("SLH DSA Shake 256s is only used for signing")
+        }
         PublicParams::Unknown { .. } => bail!("Unknown algorithm"),
     }
 }
@@ -701,6 +716,25 @@ impl PublicKeyTrait for PubKeyInner {
             }
             PublicParams::Ed448(ref params) => {
                 crypto::ed448::verify(&params.key, hash, hashed, sig.try_into()?)
+            }
+            PublicParams::MlDsa65Ed25519(ref params) => crypto::ml_dsa65_ed25519::verify(
+                &params.ed25519,
+                &params.ml_dsa,
+                hash,
+                hashed,
+                sig.try_into()?,
+            ),
+            PublicParams::MlDsa87Ed448(ref params) => {
+                todo!()
+            }
+            PublicParams::SlhDsaShake128s(ref params) => {
+                todo!()
+            }
+            PublicParams::SlhDsaShake128f(ref params) => {
+                todo!()
+            }
+            PublicParams::SlhDsaShake256s(ref params) => {
+                todo!()
             }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");

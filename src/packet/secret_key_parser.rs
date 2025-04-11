@@ -1,6 +1,7 @@
 use std::io::BufRead;
 
 use chrono::{DateTime, TimeZone, Utc};
+use log::debug;
 
 use crate::{
     crypto::public_key::PublicKeyAlgorithm,
@@ -16,6 +17,10 @@ fn parse_pub_priv_fields<B: BufRead>(
     pub_len: Option<usize>,
     mut i: B,
 ) -> Result<(PublicParams, SecretParams)> {
+    debug!(
+        "KeyVersion: {:?}, alg: {:?}, len {:?}",
+        key_ver, typ, pub_len
+    );
     let pub_params = match pub_len {
         Some(pub_len) => {
             // Use the pub_len hint to make sure we consume no more or less
@@ -32,6 +37,7 @@ fn parse_pub_priv_fields<B: BufRead>(
     };
 
     let v = i.rest()?;
+    debug!("rest: {}", hex::encode(&v));
 
     let secret_params = SecretParams::from_slice(&v, key_ver, typ, &pub_params)?;
     Ok((pub_params, secret_params))
