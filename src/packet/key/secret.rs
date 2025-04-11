@@ -537,6 +537,18 @@ fn create_signature(
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
         }
+        PlainSecretParams::SlhDsaShake128s(ref priv_key) => {
+            let PublicParams::SlhDsaShake128s(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        PlainSecretParams::SlhDsaShake128f(ref priv_key) => {
+            let PublicParams::SlhDsaShake128f(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
         PlainSecretParams::Unknown { alg, .. } => {
             unsupported_err!("{:?} signing", alg);
         }

@@ -732,10 +732,10 @@ impl PublicKeyTrait for PubKeyInner {
                 sig.try_into()?,
             ),
             PublicParams::SlhDsaShake128s(ref params) => {
-                todo!()
+                crypto::slh_dsa_shake128s::verify(&params.key, hash, hashed, sig.try_into()?)
             }
             PublicParams::SlhDsaShake128f(ref params) => {
-                todo!()
+                crypto::slh_dsa_shake128f::verify(&params.key, hash, hashed, sig.try_into()?)
             }
             PublicParams::SlhDsaShake256s(ref params) => {
                 todo!()

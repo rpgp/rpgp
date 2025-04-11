@@ -16,21 +16,25 @@ mod ed25519;
 mod ed448;
 mod eddsa_legacy;
 mod elgamal;
+mod rsa;
+mod x25519;
+mod x448;
+
 mod ml_dsa65_ed25519;
 mod ml_dsa87_ed448;
 mod ml_kem1024_x448;
 mod ml_kem768_x25519;
-mod rsa;
-mod x25519;
-mod x448;
+mod slh_dsa_shake128f;
+mod slh_dsa_shake128s;
 
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
     elgamal::ElgamalPublicParams, ml_dsa65_ed25519::MlDsa65Ed25519PublicParams,
     ml_dsa87_ed448::MlDsa87Ed448PublicParams, ml_kem1024_x448::MlKem1024X448PublicParams,
-    ml_kem768_x25519::MlKem768X25519PublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
-    x448::X448PublicParams,
+    ml_kem768_x25519::MlKem768X25519PublicParams, rsa::RsaPublicParams,
+    slh_dsa_shake128f::SlhDsaShake128fPublicParams, slh_dsa_shake128s::SlhDsaShake128sPublicParams,
+    x25519::X25519PublicParams, x448::X448PublicParams,
 };
 use super::PlainSecretParams;
 
@@ -51,8 +55,8 @@ pub enum PublicParams {
     MlKem1024X448(MlKem1024X448PublicParams),
     MlDsa65Ed25519(MlDsa65Ed25519PublicParams),
     MlDsa87Ed448(MlDsa87Ed448PublicParams),
-    SlhDsaShake128s(()),
-    SlhDsaShake128f(()),
+    SlhDsaShake128s(SlhDsaShake128sPublicParams),
+    SlhDsaShake128f(SlhDsaShake128fPublicParams),
     SlhDsaShake256s(()),
     Unknown {
         #[debug("{}", hex::encode(data))]
@@ -77,6 +81,8 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::MlKem1024X448(ref p) => Ok(Self::MlKem1024X448(p.into())),
             PlainSecretParams::MlDsa65Ed25519(ref p) => Ok(Self::MlDsa65Ed25519(p.into())),
             PlainSecretParams::MlDsa87Ed448(ref p) => Ok(Self::MlDsa87Ed448(p.into())),
+            PlainSecretParams::SlhDsaShake128s(ref p) => Ok(Self::SlhDsaShake128s(p.into())),
+            PlainSecretParams::SlhDsaShake128f(ref p) => Ok(Self::SlhDsaShake128f(p.into())),
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
             PlainSecretParams::Ed448(ref p) => Ok(Self::Ed448(p.into())),
             PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {
@@ -157,14 +163,12 @@ impl PublicParams {
                 Ok(PublicParams::MlDsa87Ed448(params))
             }
             PublicKeyAlgorithm::SlhDsaShake128sDraft => {
-                todo!()
-                // let params = SlhDsaShake128sPublicParams::try_from_reader(i)?;
-                // Ok(PublicParams::SlhDsaShake128s(params))
+                let params = SlhDsaShake128sPublicParams::try_from_reader(i)?;
+                Ok(PublicParams::SlhDsaShake128s(params))
             }
             PublicKeyAlgorithm::SlhDsaShake128fDraft => {
-                todo!()
-                // let params = SlhDsaShake128fPublicParams::try_from_reader(i)?;
-                // Ok(PublicParams::SlhDsaShake128f(params))
+                let params = SlhDsaShake128fPublicParams::try_from_reader(i)?;
+                Ok(PublicParams::SlhDsaShake128f(params))
             }
             PublicKeyAlgorithm::SlhDsaShake256sDraft => {
                 todo!()
@@ -194,6 +198,8 @@ impl PublicParams {
             PublicParams::Ed448(_) => HashAlgorithm::Sha3_512,
             PublicParams::MlDsa65Ed25519(_) => HashAlgorithm::Sha3_256,
             PublicParams::MlDsa87Ed448(_) => HashAlgorithm::Sha3_512,
+            PublicParams::SlhDsaShake128s(_) => HashAlgorithm::Sha3_256,
+            PublicParams::SlhDsaShake128f(_) => HashAlgorithm::Sha3_256,
             _ => HashAlgorithm::default(),
         }
     }
@@ -256,10 +262,10 @@ impl Serialize for PublicParams {
                 params.to_writer(writer)?;
             }
             PublicParams::SlhDsaShake128s(params) => {
-                todo!()
+                params.to_writer(writer)?;
             }
             PublicParams::SlhDsaShake128f(params) => {
-                todo!()
+                params.to_writer(writer)?;
             }
             PublicParams::SlhDsaShake256s(params) => {
                 todo!()
@@ -318,10 +324,10 @@ impl Serialize for PublicParams {
                 sum += params.write_len();
             }
             PublicParams::SlhDsaShake128s(params) => {
-                todo!()
+                sum += params.write_len();
             }
             PublicParams::SlhDsaShake128f(params) => {
-                todo!()
+                sum += params.write_len();
             }
             PublicParams::SlhDsaShake256s(params) => {
                 todo!()
