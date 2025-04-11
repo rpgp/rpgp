@@ -76,6 +76,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::MlKem768X25519(ref p) => Ok(Self::MlKem768X25519(p.into())),
             PlainSecretParams::MlKem1024X448(ref p) => Ok(Self::MlKem1024X448(p.into())),
             PlainSecretParams::MlDsa65Ed25519(ref p) => Ok(Self::MlDsa65Ed25519(p.into())),
+            PlainSecretParams::MlDsa87Ed448(ref p) => Ok(Self::MlDsa87Ed448(p.into())),
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
             PlainSecretParams::Ed448(ref p) => Ok(Self::Ed448(p.into())),
             PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {

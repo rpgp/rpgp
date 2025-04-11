@@ -17,7 +17,7 @@ use crate::{
     composed::PlainSessionKey,
     crypto::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
-        elgamal, ml_dsa65_ed25519, ml_kem1024_x448, ml_kem768_x25519,
+        elgamal, ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519,
         public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
@@ -40,7 +40,7 @@ pub enum PlainSecretParams {
     MlKem768X25519(ml_kem768_x25519::SecretKey),
     MlKem1024X448(ml_kem1024_x448::SecretKey),
     MlDsa65Ed25519(ml_dsa65_ed25519::SecretKey),
-    // MlDsa87Ed448(ml_dsa87_ed448::SecretKey),
+    MlDsa87Ed448(ml_dsa87_ed448::SecretKey),
     Elgamal(elgamal::SecretKey),
     X448(x448::SecretKey),
     Ed448(ed448::SecretKey),
@@ -205,9 +205,9 @@ impl PlainSecretParams {
 
                 // ML DSA
                 let ml_dsa_seed = i.read_array::<32>()?;
-                // let key = crate::crypto::ml_dsa87_ed448::SecretKey::try_from_bytes(ed, ml_dsa)?;
-                // Self::MlDsa87Ed448(key)
-                todo!()
+                let key =
+                    crate::crypto::ml_dsa87_ed448::SecretKey::try_from_bytes(ed, ml_dsa_seed)?;
+                Self::MlDsa87Ed448(key)
             }
             (_, _) => {
                 bail!("invalid combination {:?} - {:?}", alg, public_params);
@@ -695,6 +695,11 @@ impl PlainSecretParams {
                 writer.write_all(q)?;
                 writer.write_all(&key.ml_dsa_seed)?;
             }
+            PlainSecretParams::MlDsa87Ed448(key) => {
+                let q = key.ed448.as_bytes();
+                writer.write_all(q)?;
+                writer.write_all(&key.ml_dsa_seed)?;
+            }
             PlainSecretParams::Unknown { data, .. } => {
                 writer.write_all(data)?;
             }
@@ -749,6 +754,7 @@ impl PlainSecretParams {
             PlainSecretParams::MlKem768X25519(_) => 32 + 64,
             PlainSecretParams::MlKem1024X448(_) => 56 + 64,
             PlainSecretParams::MlDsa65Ed25519(_) => 32 + 32,
+            PlainSecretParams::MlDsa87Ed448(_) => 57 + 32,
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }

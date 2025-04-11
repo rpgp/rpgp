@@ -724,9 +724,13 @@ impl PublicKeyTrait for PubKeyInner {
                 hashed,
                 sig.try_into()?,
             ),
-            PublicParams::MlDsa87Ed448(ref params) => {
-                todo!()
-            }
+            PublicParams::MlDsa87Ed448(ref params) => crypto::ml_dsa87_ed448::verify(
+                &params.ed448,
+                &params.ml_dsa,
+                hash,
+                hashed,
+                sig.try_into()?,
+            ),
             PublicParams::SlhDsaShake128s(ref params) => {
                 todo!()
             }

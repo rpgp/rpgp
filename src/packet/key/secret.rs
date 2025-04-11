@@ -508,6 +508,12 @@ fn create_signature(
             };
             priv_key.sign(hash, data)
         }
+        PlainSecretParams::MlDsa87Ed448(ref priv_key) => {
+            let PublicParams::MlDsa87Ed448(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
         PlainSecretParams::Ed448(ref priv_key) => {
             let PublicParams::Ed448(_) = pub_params else {
                 bail!("invalid inconsistent key");

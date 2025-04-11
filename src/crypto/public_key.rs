@@ -43,9 +43,9 @@ pub enum PublicKeyAlgorithm {
     MlDsa87Ed448Draft = 31,
     /// SLH-DSA-SHAKE-128s
     SlhDsaShake128sDraft = 32,
-    ///	SLH-DSA-SHAKE-128f
+    /// SLH-DSA-SHAKE-128f
     SlhDsaShake128fDraft = 33,
-    ///	SLH-DSA-SHAKE-256s
+    /// SLH-DSA-SHAKE-256s
     SlhDsaShake256sDraft = 34,
 
     /// ML-KEM-768+X25519
