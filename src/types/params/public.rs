@@ -192,6 +192,8 @@ impl PublicParams {
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
             PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
             PublicParams::Ed448(_) => HashAlgorithm::Sha3_512,
+            PublicParams::MlDsa65Ed25519(_) => HashAlgorithm::Sha3_256,
+            PublicParams::MlDsa87Ed448(_) => HashAlgorithm::Sha3_512,
             _ => HashAlgorithm::default(),
         }
     }

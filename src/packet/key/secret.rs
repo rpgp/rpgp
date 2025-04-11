@@ -565,6 +565,26 @@ fn create_signature(
 
             Ok(SignatureBytes::Native(native.into()))
         }
+        PublicParams::MlDsa65Ed25519(_) => {
+            // native format
+            ensure_eq!(sig.len(), 3, "expect three signature parts");
+
+            let mut native = sig[0].clone();
+            native.extend_from_slice(&sig[1]);
+            native.extend_from_slice(&sig[2]);
+
+            Ok(SignatureBytes::Native(native.into()))
+        }
+        PublicParams::MlDsa87Ed448(_) => {
+            // native format
+            ensure_eq!(sig.len(), 3, "expect three signature parts");
+
+            let mut native = sig[0].clone();
+            native.extend_from_slice(&sig[1]);
+            native.extend_from_slice(&sig[2]);
+
+            Ok(SignatureBytes::Native(native.into()))
+        }
         _ => {
             // MPI format:
             // strip leading zeros, to match parse results from MPIs

@@ -41,11 +41,15 @@ pub enum PublicKeyAlgorithm {
     MlDsa65Ed25519Draft = 30,
     /// ML-DSA-87+Ed448
     MlDsa87Ed448Draft = 31,
+
     /// SLH-DSA-SHAKE-128s
+    #[cfg_attr(test, proptest(skip))]
     SlhDsaShake128sDraft = 32,
     /// SLH-DSA-SHAKE-128f
+    #[cfg_attr(test, proptest(skip))]
     SlhDsaShake128fDraft = 33,
     /// SLH-DSA-SHAKE-256s
+    #[cfg_attr(test, proptest(skip))]
     SlhDsaShake256sDraft = 34,
 
     /// ML-KEM-768+X25519

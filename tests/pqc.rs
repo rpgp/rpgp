@@ -215,6 +215,27 @@ fn test_a_2_1_transferrable_secret_key() -> TestResult {
 }
 
 #[test]
+fn test_a_2_2_transferrable_public_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_2_2_key.pub.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::MlDsa65Ed25519Draft
+    );
+
+    assert_eq!(
+        key.public_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519Draft
+    );
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
 fn test_a_3_1_transferrable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
@@ -244,6 +265,27 @@ fn test_a_3_1_transferrable_secret_key() -> TestResult {
 }
 
 #[test]
+fn test_a_3_2_transferrable_public_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_3_2_key.pub.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::MlDsa87Ed448Draft
+    );
+
+    assert_eq!(
+        key.public_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem1024X448Draft
+    );
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
 fn test_a_4_1_transferrable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
@@ -265,6 +307,27 @@ fn test_a_4_1_transferrable_secret_key() -> TestResult {
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
         "1adc9f55f5223a78948522a0f4d1b29aff2ed651d3fa56e234249402000ace41"
+    );
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_4_2_transferrable_public_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_4_2_key.pub.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::SlhDsaShake128sDraft
+    );
+
+    assert_eq!(
+        key.public_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519Draft
     );
 
     key.verify()?;

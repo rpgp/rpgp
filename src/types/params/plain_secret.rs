@@ -855,6 +855,16 @@ mod tests {
                         .prop_map(PlainSecretParams::MlKem1024X448)
                         .boxed()
                 }
+                PublicKeyAlgorithm::MlDsa65Ed25519Draft => {
+                    any::<crate::crypto::ml_dsa65_ed25519::SecretKey>()
+                        .prop_map(PlainSecretParams::MlDsa65Ed25519)
+                        .boxed()
+                }
+                PublicKeyAlgorithm::MlDsa87Ed448Draft => {
+                    any::<crate::crypto::ml_dsa87_ed448::SecretKey>()
+                        .prop_map(PlainSecretParams::MlDsa87Ed448)
+                        .boxed()
+                }
                 _ => {
                     unimplemented!("{:?}", alg)
                 }
