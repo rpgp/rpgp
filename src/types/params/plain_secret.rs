@@ -8,7 +8,6 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::{BufMut, Bytes, BytesMut};
 use hkdf::Hkdf;
 use log::debug;
-use ml_kem::EncodedSizeUser;
 use num_bigint::ModInverse;
 use sha2::Sha256;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
@@ -671,14 +670,10 @@ impl PlainSecretParams {
                 writer.write_all(&q)?;
             }
             PlainSecretParams::MlKem768X25519(key) => {
-                let q = key.x25519.to_bytes();
-                writer.write_all(&q)?;
-                writer.write_all(&key.ml_kem.as_bytes())?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::MlKem1024X448(key) => {
-                let q = key.x448.as_bytes();
-                writer.write_all(q)?;
-                writer.write_all(&key.ml_kem.as_bytes())?;
+                key.to_writer(writer)?;
             }
             PlainSecretParams::Ed448(key) => {
                 writer.write_all(key.secret.as_bytes().as_ref())?;
@@ -751,8 +746,8 @@ impl PlainSecretParams {
             }
             PlainSecretParams::X25519(_key) => 32,
             PlainSecretParams::Ed448(_key) => 57,
-            PlainSecretParams::MlKem768X25519(_) => 32 + 64,
-            PlainSecretParams::MlKem1024X448(_) => 56 + 64,
+            PlainSecretParams::MlKem768X25519(key) => key.write_len(),
+            PlainSecretParams::MlKem1024X448(key) => key.write_len(),
             PlainSecretParams::MlDsa65Ed25519(_) => 32 + 32,
             PlainSecretParams::MlDsa87Ed448(_) => 57 + 32,
             PlainSecretParams::X448(_key) => 56,

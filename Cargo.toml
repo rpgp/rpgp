@@ -110,7 +110,7 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = [
     "static_secrets",
 ] }
 
-ml-kem = { git = "https://github.com/supinie/KEMs", branch = "master", features = ["zeroize"] }
+ml-kem = { version = "0.2.1", features = ["zeroize", "deterministic"] }
 ml-dsa = { version = "0.0.4", features = ["zeroize"] }
 slh-dsa = { version = "0.0.3" }
 

@@ -13,51 +13,86 @@ use zeroize::{ZeroizeOnDrop, Zeroizing};
 use crate::{
     crypto::{aes_kw, public_key::PublicKeyAlgorithm, Decryptor},
     errors::{ensure, Result},
+    ser::Serialize,
     types::MlKem768X25519PublicParams,
 };
 
 /// Secret key for ML KEM 768 X25519
-#[derive(Clone, derive_more::Debug, ZeroizeOnDrop)]
+#[derive(Clone, derive_more::Debug)]
 pub struct SecretKey {
     #[debug("..")]
     pub(crate) x25519: StaticSecret,
     #[debug("..")]
-    pub(crate) ml_kem: DecapsulationKey<MlKem768Params>,
+    pub(crate) ml_kem: Box<DecapsulationKey<MlKem768Params>>,
+    /// Seed `d` and `z`
+    #[debug("..")]
+    pub(crate) ml_kem_seed: (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>),
 }
+impl ZeroizeOnDrop for SecretKey {}
 
 impl From<&SecretKey> for MlKem768X25519PublicParams {
     fn from(value: &SecretKey) -> Self {
         Self {
             x25519_key: PublicKey::from(&value.x25519),
-            ml_kem_key: Box::new(value.ml_kem.encapsulation_key()),
+            ml_kem_key: Box::new(value.ml_kem.encapsulation_key().clone()),
         }
     }
 }
 
 impl PartialEq for SecretKey {
     fn eq(&self, other: &Self) -> bool {
-        self.x25519.as_bytes().eq(other.x25519.as_bytes()) && self.ml_kem.eq(&other.ml_kem)
+        self.x25519.as_bytes().eq(other.x25519.as_bytes())
+            && self.ml_kem_seed.eq(&other.ml_kem_seed)
     }
 }
 
 impl Eq for SecretKey {}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(&self.x25519.to_bytes())?;
+        writer.write_all(&self.ml_kem_seed.0[..])?;
+        writer.write_all(&self.ml_kem_seed.1[..])?;
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        32 + 64
+    }
+}
 
 impl SecretKey {
     /// Generate a `SecretKey`.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
         let mut secret_key_bytes = Zeroizing::new([0u8; 32]);
         rng.fill_bytes(&mut *secret_key_bytes);
-
         let x25519 = StaticSecret::from(*secret_key_bytes);
 
-        let (de, _) = MlKem768::generate(&mut rng);
-        Self { x25519, ml_kem: de }
+        let mut d = Zeroizing::new([0u8; 32]);
+        let mut z = Zeroizing::new([0u8; 32]);
+
+        rng.fill_bytes(&mut *d);
+        rng.fill_bytes(&mut *z);
+
+        let (de, _) = MlKem768::generate_deterministic(&((*d).into()), &((*z).into()));
+        Self {
+            x25519,
+            ml_kem: Box::new(de),
+            ml_kem_seed: (d, z),
+        }
     }
 
     pub(crate) fn try_from_parts(x: StaticSecret, ml_kem: [u8; 64]) -> Result<Self> {
-        let ml_kem = DecapsulationKey::from_bytes(&(ml_kem.into()));
+        let d: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[..32].try_into().expect("fixed size"));
+        let z: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[32..].try_into().expect("fixed size"));
 
-        Ok(Self { x25519: x, ml_kem })
+        let (ml_kem, _) = MlKem768::generate_deterministic(&((*d).into()), &((*z).into()));
+
+        Ok(Self {
+            x25519: x,
+            ml_kem: Box::new(ml_kem),
+            ml_kem_seed: (d, z),
+        })
     }
 }
 
@@ -236,7 +271,7 @@ fn ml_kem_encaps<R: CryptoRng + Rng>(
 mod tests {
     use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
-    use rand_chacha::ChaChaRng;
+    use rand_chacha::{ChaCha8Rng, ChaChaRng};
 
     use super::*;
 
@@ -277,10 +312,10 @@ mod tests {
         type Strategy = BoxedStrategy<Self>;
 
         fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
-            any::<([u8; 32], [u8; 64])>()
-                .prop_map(|(a, b)| SecretKey {
-                    x25519: StaticSecret::from(a),
-                    ml_kem: DecapsulationKey::from_bytes(&b.into()),
+            any::<u64>()
+                .prop_map(|seed| {
+                    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+                    SecretKey::generate(&mut rng)
                 })
                 .boxed()
         }
