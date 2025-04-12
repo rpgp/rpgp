@@ -101,9 +101,9 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
  - Signing
    - [x] ML-DSA-65+Ed25519
    - [x] ML-DSA-87+Ed448
-   - [ ] SLH-DSA-SHAKE-128s
-   - [ ] SLH-DSA-SHAKE-128f
-   - [ ] SLH-DSA-SHAKE-256s
+   - [x] SLH-DSA-SHAKE-128s
+   - [x] SLH-DSA-SHAKE-128f
+   - [x] SLH-DSA-SHAKE-256s
 
 ## High Level API
 
