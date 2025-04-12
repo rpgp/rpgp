@@ -2,14 +2,13 @@ use std::io::BufRead;
 
 use byteorder::WriteBytesExt;
 use bytes::Bytes;
-use cx448::x448;
 #[cfg(test)]
 use proptest::prelude::*;
 
 use super::Mpi;
 use crate::{
     crypto::{public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
-    errors::{format_err, unsupported_err, InvalidInputSnafu, Result},
+    errors::{unsupported_err, InvalidInputSnafu, Result},
     parsing_reader::BufReadParsing,
     ser::Serialize,
 };
@@ -165,6 +164,7 @@ impl PkeskBytes {
                 })
             }
             PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlKem768X25519Draft => {
                 // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-public-key-encrypted-sessio>
 
@@ -201,14 +201,15 @@ impl PkeskBytes {
                     ml_kem_ciphertext,
                 })
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlKem1024X448Draft => {
                 // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-public-key-encrypted-sessio>
 
                 // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with
                 // the curve as specified in Section 4.1.1.
                 let ephemeral_public = i.read_array::<56>()?;
-                let ephemeral_public = x448::PublicKey::from_bytes(&ephemeral_public)
-                    .ok_or_else(|| format_err!("invalid x448 public key"))?;
+                let ephemeral_public = cx448::x448::PublicKey::from_bytes(&ephemeral_public)
+                    .ok_or_else(|| crate::errors::format_err!("invalid x448 public key"))?;
 
                 // A fixed-length octet string of the ML-KEM ciphertext, whose length depends on the algorithm ID as specified in Table 4.
                 let ml_kem_ciphertext = Box::new(i.read_array::<1568>()?);

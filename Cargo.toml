@@ -110,9 +110,10 @@ x25519-dalek = { version = "2.0.1", default-features = false, features = [
     "static_secrets",
 ] }
 
-ml-kem = { version = "0.2.1", features = ["zeroize", "deterministic"] }
-ml-dsa = { version = "0.0.4", features = ["zeroize"] }
-slh-dsa = { version = "0.0.3" }
+# PQC
+ml-kem = { version = "0.2.1", features = ["zeroize", "deterministic"], optional = true }
+ml-dsa = { version = "0.0.4", features = ["zeroize"], optional = true }
+slh-dsa = { version = "0.0.3", optional = true }
 
 
 [dev-dependencies]
@@ -133,6 +134,8 @@ testresult = "0.4.1"
 
 [features]
 default = ["bzip2"]
+# Currently implementing draft-07
+pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 bzip2 = ["dep:bzip2"]
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]

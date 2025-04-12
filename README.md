@@ -139,7 +139,7 @@ Checkout [FAQ.md](docs/FAQ.md).
 
 ## Minimum Supported Rust Version (MSRV)
 
-All crates in this repository support Rust 1.81 or higher. In future minimally supported
+All crates in this repository support Rust 1.83 or higher. In future minimally supported
 version of Rust can be changed, but it will be done with a minor version bump.
 
 ## Funding

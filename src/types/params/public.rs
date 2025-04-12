@@ -20,23 +20,33 @@ mod rsa;
 mod x25519;
 mod x448;
 
+#[cfg(feature = "pqc")]
 mod ml_dsa65_ed25519;
+#[cfg(feature = "pqc")]
 mod ml_dsa87_ed448;
+#[cfg(feature = "pqc")]
 mod ml_kem1024_x448;
+#[cfg(feature = "pqc")]
 mod ml_kem768_x25519;
+#[cfg(feature = "pqc")]
 mod slh_dsa_shake128f;
+#[cfg(feature = "pqc")]
 mod slh_dsa_shake128s;
+#[cfg(feature = "pqc")]
 mod slh_dsa_shake256s;
 
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
     ed25519::Ed25519PublicParams, ed448::Ed448PublicParams, eddsa_legacy::EddsaLegacyPublicParams,
-    elgamal::ElgamalPublicParams, ml_dsa65_ed25519::MlDsa65Ed25519PublicParams,
-    ml_dsa87_ed448::MlDsa87Ed448PublicParams, ml_kem1024_x448::MlKem1024X448PublicParams,
-    ml_kem768_x25519::MlKem768X25519PublicParams, rsa::RsaPublicParams,
-    slh_dsa_shake128f::SlhDsaShake128fPublicParams, slh_dsa_shake128s::SlhDsaShake128sPublicParams,
-    slh_dsa_shake256s::SlhDsaShake256sPublicParams, x25519::X25519PublicParams,
+    elgamal::ElgamalPublicParams, rsa::RsaPublicParams, x25519::X25519PublicParams,
     x448::X448PublicParams,
+};
+#[cfg(feature = "pqc")]
+pub use self::{
+    ml_dsa65_ed25519::MlDsa65Ed25519PublicParams, ml_dsa87_ed448::MlDsa87Ed448PublicParams,
+    ml_kem1024_x448::MlKem1024X448PublicParams, ml_kem768_x25519::MlKem768X25519PublicParams,
+    slh_dsa_shake128f::SlhDsaShake128fPublicParams, slh_dsa_shake128s::SlhDsaShake128sPublicParams,
+    slh_dsa_shake256s::SlhDsaShake256sPublicParams,
 };
 use super::PlainSecretParams;
 
@@ -53,12 +63,19 @@ pub enum PublicParams {
     X25519(X25519PublicParams),
     X448(X448PublicParams),
     Ed448(Ed448PublicParams),
+    #[cfg(feature = "pqc")]
     MlKem768X25519(MlKem768X25519PublicParams),
+    #[cfg(feature = "pqc")]
     MlKem1024X448(MlKem1024X448PublicParams),
+    #[cfg(feature = "pqc")]
     MlDsa65Ed25519(MlDsa65Ed25519PublicParams),
+    #[cfg(feature = "pqc")]
     MlDsa87Ed448(MlDsa87Ed448PublicParams),
+    #[cfg(feature = "pqc")]
     SlhDsaShake128s(SlhDsaShake128sPublicParams),
+    #[cfg(feature = "pqc")]
     SlhDsaShake128f(SlhDsaShake128fPublicParams),
+    #[cfg(feature = "pqc")]
     SlhDsaShake256s(SlhDsaShake256sPublicParams),
     Unknown {
         #[debug("{}", hex::encode(data))]
@@ -79,12 +96,19 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::Ed25519(ref p) => Ok(Self::Ed25519(p.into())),
             PlainSecretParams::Ed25519Legacy(ref p) => Ok(Self::EdDSALegacy(p.into())),
             PlainSecretParams::X25519(ref p) => Ok(Self::X25519(p.into())),
+            #[cfg(feature = "pqc")]
             PlainSecretParams::MlKem768X25519(ref p) => Ok(Self::MlKem768X25519(p.into())),
+            #[cfg(feature = "pqc")]
             PlainSecretParams::MlKem1024X448(ref p) => Ok(Self::MlKem1024X448(p.into())),
+            #[cfg(feature = "pqc")]
             PlainSecretParams::MlDsa65Ed25519(ref p) => Ok(Self::MlDsa65Ed25519(p.into())),
+            #[cfg(feature = "pqc")]
             PlainSecretParams::MlDsa87Ed448(ref p) => Ok(Self::MlDsa87Ed448(p.into())),
+            #[cfg(feature = "pqc")]
             PlainSecretParams::SlhDsaShake128s(ref p) => Ok(Self::SlhDsaShake128s(p.into())),
+            #[cfg(feature = "pqc")]
             PlainSecretParams::SlhDsaShake128f(ref p) => Ok(Self::SlhDsaShake128f(p.into())),
+            #[cfg(feature = "pqc")]
             PlainSecretParams::SlhDsaShake256s(ref p) => Ok(Self::SlhDsaShake256s(p.into())),
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
             PlainSecretParams::Ed448(ref p) => Ok(Self::Ed448(p.into())),
@@ -149,30 +173,37 @@ impl PublicParams {
                 let params = X448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::X448(params))
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlKem768X25519Draft => {
                 let params = MlKem768X25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlKem768X25519(params))
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlKem1024X448Draft => {
                 let params = MlKem1024X448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlKem1024X448(params))
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlDsa65Ed25519Draft => {
                 let params = MlDsa65Ed25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlDsa65Ed25519(params))
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::MlDsa87Ed448Draft => {
                 let params = MlDsa87Ed448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlDsa87Ed448(params))
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::SlhDsaShake128sDraft => {
                 let params = SlhDsaShake128sPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::SlhDsaShake128s(params))
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::SlhDsaShake128fDraft => {
                 let params = SlhDsaShake128fPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::SlhDsaShake128f(params))
             }
+            #[cfg(feature = "pqc")]
             PublicKeyAlgorithm::SlhDsaShake256sDraft => {
                 let params = SlhDsaShake256sPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::SlhDsaShake256s(params))
@@ -188,6 +219,8 @@ impl PublicParams {
             | PublicKeyAlgorithm::Private109
             | PublicKeyAlgorithm::Private110
             | PublicKeyAlgorithm::Unknown(_) => unknown(i, len),
+            #[cfg(not(feature = "pqc"))]
+            PublicKeyAlgorithm::Private105 | PublicKeyAlgorithm::Private106 => unknown(i, len),
         }
     }
 
@@ -198,10 +231,15 @@ impl PublicParams {
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
             PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
             PublicParams::Ed448(_) => HashAlgorithm::Sha3_512,
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa65Ed25519(_) => HashAlgorithm::Sha3_256,
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa87Ed448(_) => HashAlgorithm::Sha3_512,
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128s(_) => HashAlgorithm::Sha3_256,
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128f(_) => HashAlgorithm::Sha3_256,
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake256s(_) => HashAlgorithm::Sha3_512,
             _ => HashAlgorithm::default(),
         }
@@ -249,27 +287,34 @@ impl Serialize for PublicParams {
             PublicParams::X25519(params) => {
                 params.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlKem768X25519(params) => {
                 params.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlKem1024X448(params) => {
                 params.to_writer(writer)?;
             }
             PublicParams::X448(params) => {
                 params.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa65Ed25519(params) => {
                 params.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa87Ed448(params) => {
                 params.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128s(params) => {
                 params.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128f(params) => {
                 params.to_writer(writer)?;
             }
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake256s(params) => {
                 params.to_writer(writer)?;
             }
@@ -311,27 +356,34 @@ impl Serialize for PublicParams {
             PublicParams::X25519(params) => {
                 sum += params.write_len();
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlKem768X25519(params) => {
                 sum += params.write_len();
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlKem1024X448(params) => {
                 sum += params.write_len();
             }
             PublicParams::X448(params) => {
                 sum += params.write_len();
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa65Ed25519(params) => {
                 sum += params.write_len();
             }
+            #[cfg(feature = "pqc")]
             PublicParams::MlDsa87Ed448(params) => {
                 sum += params.write_len();
             }
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128s(params) => {
                 sum += params.write_len();
             }
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake128f(params) => {
                 sum += params.write_len();
             }
+            #[cfg(feature = "pqc")]
             PublicParams::SlhDsaShake256s(params) => {
                 sum += params.write_len();
             }
@@ -424,24 +476,31 @@ mod tests {
                 PublicKeyAlgorithm::Ed448 => any::<Ed448PublicParams>()
                     .prop_map(PublicParams::Ed448)
                     .boxed(),
+                #[cfg(feature = "pqc")]
                 PublicKeyAlgorithm::MlKem768X25519Draft => any::<MlKem768X25519PublicParams>()
                     .prop_map(PublicParams::MlKem768X25519)
                     .boxed(),
+                #[cfg(feature = "pqc")]
                 PublicKeyAlgorithm::MlKem1024X448Draft => any::<MlKem1024X448PublicParams>()
                     .prop_map(PublicParams::MlKem1024X448)
                     .boxed(),
+                #[cfg(feature = "pqc")]
                 PublicKeyAlgorithm::MlDsa65Ed25519Draft => any::<MlDsa65Ed25519PublicParams>()
                     .prop_map(PublicParams::MlDsa65Ed25519)
                     .boxed(),
+                #[cfg(feature = "pqc")]
                 PublicKeyAlgorithm::MlDsa87Ed448Draft => any::<MlDsa87Ed448PublicParams>()
                     .prop_map(PublicParams::MlDsa87Ed448)
                     .boxed(),
+                #[cfg(feature = "pqc")]
                 PublicKeyAlgorithm::SlhDsaShake128sDraft => any::<SlhDsaShake128sPublicParams>()
                     .prop_map(PublicParams::SlhDsaShake128s)
                     .boxed(),
+                #[cfg(feature = "pqc")]
                 PublicKeyAlgorithm::SlhDsaShake128fDraft => any::<SlhDsaShake128fPublicParams>()
                     .prop_map(PublicParams::SlhDsaShake128f)
                     .boxed(),
+                #[cfg(feature = "pqc")]
                 PublicKeyAlgorithm::SlhDsaShake256sDraft => any::<SlhDsaShake256sPublicParams>()
                     .prop_map(PublicParams::SlhDsaShake256s)
                     .boxed(),
