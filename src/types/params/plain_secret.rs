@@ -18,7 +18,7 @@ use crate::{
         aead::AeadAlgorithm, checksum, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
         elgamal, ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519,
         public_key::PublicKeyAlgorithm, rsa, slh_dsa_shake128f, slh_dsa_shake128s,
-        sym::SymmetricKeyAlgorithm, x25519, x448, Decryptor,
+        slh_dsa_shake256s, sym::SymmetricKeyAlgorithm, x25519, x448, Decryptor,
     },
     errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     parsing_reader::BufReadParsing,
@@ -46,6 +46,7 @@ pub enum PlainSecretParams {
     Ed448(ed448::SecretKey),
     SlhDsaShake128s(slh_dsa_shake128s::SecretKey),
     SlhDsaShake128f(slh_dsa_shake128f::SecretKey),
+    SlhDsaShake256s(slh_dsa_shake256s::SecretKey),
     Unknown {
         #[zeroize(skip)]
         alg: PublicKeyAlgorithm,
@@ -221,6 +222,12 @@ impl PlainSecretParams {
                 let key = crate::crypto::slh_dsa_shake128f::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake128f(key)
             }
+            (PublicKeyAlgorithm::SlhDsaShake256sDraft, PublicParams::SlhDsaShake256s(_)) => {
+                let secret = i.read_array::<128>()?;
+                let key = crate::crypto::slh_dsa_shake256s::SecretKey::try_from_bytes(secret)?;
+                Self::SlhDsaShake256s(key)
+            }
+
             (_, _) => {
                 bail!("invalid combination {:?} - {:?}", alg, public_params);
             }
@@ -714,6 +721,9 @@ impl PlainSecretParams {
             PlainSecretParams::SlhDsaShake128f(key) => {
                 writer.write_all(&key.key.to_bytes()[..])?;
             }
+            PlainSecretParams::SlhDsaShake256s(key) => {
+                writer.write_all(&key.key.to_bytes()[..])?;
+            }
             PlainSecretParams::Unknown { data, .. } => {
                 writer.write_all(data)?;
             }
@@ -771,6 +781,7 @@ impl PlainSecretParams {
             PlainSecretParams::MlDsa87Ed448(_) => 57 + 32,
             PlainSecretParams::SlhDsaShake128s(_) => 64,
             PlainSecretParams::SlhDsaShake128f(_) => 64,
+            PlainSecretParams::SlhDsaShake256s(_) => 128,
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
         }
@@ -879,6 +890,21 @@ mod tests {
                 PublicKeyAlgorithm::MlDsa87Ed448Draft => {
                     any::<crate::crypto::ml_dsa87_ed448::SecretKey>()
                         .prop_map(PlainSecretParams::MlDsa87Ed448)
+                        .boxed()
+                }
+                PublicKeyAlgorithm::SlhDsaShake128sDraft => {
+                    any::<crate::crypto::slh_dsa_shake128s::SecretKey>()
+                        .prop_map(PlainSecretParams::SlhDsaShake128s)
+                        .boxed()
+                }
+                PublicKeyAlgorithm::SlhDsaShake128fDraft => {
+                    any::<crate::crypto::slh_dsa_shake128f::SecretKey>()
+                        .prop_map(PlainSecretParams::SlhDsaShake128f)
+                        .boxed()
+                }
+                PublicKeyAlgorithm::SlhDsaShake256sDraft => {
+                    any::<crate::crypto::slh_dsa_shake256s::SecretKey>()
+                        .prop_map(PlainSecretParams::SlhDsaShake256s)
                         .boxed()
                 }
                 _ => {

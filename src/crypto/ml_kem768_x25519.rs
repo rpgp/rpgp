@@ -204,7 +204,7 @@ fn multi_key_combine(
 /// Returns
 /// - ecdh_ciphertext
 /// - ml_kem_ciphertext
-/// - encrpyted data
+/// - encrypted data
 pub fn encrypt<R: CryptoRng + Rng>(
     mut rng: R,
     ecdh_public_key: &x25519_dalek::PublicKey,

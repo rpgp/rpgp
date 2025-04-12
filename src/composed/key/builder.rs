@@ -10,7 +10,8 @@ use crate::{
     crypto::{
         aead::AeadAlgorithm, dsa, ecc_curve::ECCCurve, ecdh, ecdsa, ed25519, ed448,
         hash::HashAlgorithm, ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519,
-        public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm, x25519, x448,
+        public_key::PublicKeyAlgorithm, rsa, slh_dsa_shake128f, slh_dsa_shake128s,
+        slh_dsa_shake256s, sym::SymmetricKeyAlgorithm, x25519, x448,
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
@@ -274,6 +275,12 @@ pub enum KeyType {
     MlDsa65Ed25519,
     /// Signing using ML DSA 87 ED448
     MlDsa87EdEd448,
+    /// Signing with SLH DSA Shake 128s
+    SlhDsaShake128s,
+    /// Signing with SLH DSA Shake 128f
+    SlhDsaShake128f,
+    /// Signing with SLH DSA Shake 256s
+    SlhDsaShake256s,
 }
 
 #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -314,6 +321,9 @@ impl KeyType {
             KeyType::MlKem1024X448 => PublicKeyAlgorithm::MlKem1024X448Draft,
             KeyType::MlDsa65Ed25519 => PublicKeyAlgorithm::MlDsa65Ed25519Draft,
             KeyType::MlDsa87EdEd448 => PublicKeyAlgorithm::MlDsa87Ed448Draft,
+            KeyType::SlhDsaShake128s => PublicKeyAlgorithm::SlhDsaShake128sDraft,
+            KeyType::SlhDsaShake128f => PublicKeyAlgorithm::SlhDsaShake128fDraft,
+            KeyType::SlhDsaShake256s => PublicKeyAlgorithm::SlhDsaShake256sDraft,
         }
     }
 
@@ -400,6 +410,24 @@ impl KeyType {
                 let secret = ml_dsa87_ed448::SecretKey::generate(rng);
                 let public_params = PublicParams::MlDsa87Ed448((&secret).into());
                 let secret_params = PlainSecretParams::MlDsa87Ed448(secret);
+                (public_params, secret_params)
+            }
+            KeyType::SlhDsaShake128s => {
+                let secret = slh_dsa_shake128s::SecretKey::generate(rng);
+                let public_params = PublicParams::SlhDsaShake128s((&secret).into());
+                let secret_params = PlainSecretParams::SlhDsaShake128s(secret);
+                (public_params, secret_params)
+            }
+            KeyType::SlhDsaShake128f => {
+                let secret = slh_dsa_shake128f::SecretKey::generate(rng);
+                let public_params = PublicParams::SlhDsaShake128f((&secret).into());
+                let secret_params = PlainSecretParams::SlhDsaShake128f(secret);
+                (public_params, secret_params)
+            }
+            KeyType::SlhDsaShake256s => {
+                let secret = slh_dsa_shake256s::SecretKey::generate(rng);
+                let public_params = PublicParams::SlhDsaShake256s((&secret).into());
+                let secret_params = PlainSecretParams::SlhDsaShake256s(secret);
                 (public_params, secret_params)
             }
         };
@@ -1324,79 +1352,15 @@ mod tests {
             println!("key version {:?}", key_version);
 
             for _ in 0..10 {
-                gen_ml_dsa_65_ed25519_ml_kem_x25519(&mut rng, key_version);
+                gen_key(
+                    &mut rng,
+                    key_version,
+                    KeyType::MlDsa65Ed25519,
+                    HashAlgorithm::Sha3_256,
+                    KeyType::MlKem768X25519,
+                );
             }
         }
-    }
-
-    fn gen_ml_dsa_65_ed25519_ml_kem_x25519<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
-        let _ = pretty_env_logger::try_init();
-
-        let key_params = SecretKeyParamsBuilder::default()
-            .version(version)
-            .key_type(KeyType::MlDsa65Ed25519)
-            .can_certify(true)
-            .can_sign(true)
-            .primary_user_id("Me-X <me-ml-dsa-ml-kem-x25519-rfc9580@mail.com>".into())
-            .passphrase(None)
-            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256,])
-            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha3_256])
-            .preferred_compression_algorithms(smallvec![
-                CompressionAlgorithm::ZLIB,
-                CompressionAlgorithm::ZIP,
-            ])
-            .subkey(
-                SubkeyParamsBuilder::default()
-                    .version(version)
-                    .key_type(KeyType::MlKem768X25519)
-                    .can_encrypt(true)
-                    .passphrase(None)
-                    .build()
-                    .unwrap(),
-            )
-            .build()
-            .unwrap();
-
-        let key = key_params
-            .generate(&mut rng)
-            .expect("failed to generate secret key");
-
-        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
-
-        let armor = signed_key
-            .to_armored_string(None.into())
-            .expect("failed to serialize key");
-
-        // std::fs::write("sample-448-rfc9580.sec.asc", &armor).unwrap();
-
-        let (signed_key2, _headers) =
-            SignedSecretKey::from_string(&armor).expect("failed to parse key");
-        signed_key2.verify().expect("invalid key");
-
-        assert_eq!(signed_key, signed_key2);
-
-        let public_key = signed_key.public_key();
-
-        let public_signed_key = public_key
-            .sign(
-                &mut rng,
-                &*signed_key,
-                &*signed_key.public_key(),
-                &"".into(),
-            )
-            .expect("failed to sign public key");
-
-        public_signed_key.verify().expect("invalid public key");
-
-        let armor = public_signed_key
-            .to_armored_string(None.into())
-            .expect("failed to serialize public key");
-
-        // std::fs::write("sample-448-rfc9580.pub.asc", &armor).unwrap();
-
-        let (signed_key2, _headers) =
-            SignedPublicKey::from_string(&armor).expect("failed to parse public key");
-        signed_key2.verify().expect("invalid public key");
     }
 
     #[test]
@@ -1407,23 +1371,85 @@ mod tests {
             println!("key version {:?}", key_version);
 
             for _ in 0..10 {
-                gen_ml_dsa_87_ed448_ml_kem_x448(&mut rng, key_version);
+                gen_key(
+                    &mut rng,
+                    key_version,
+                    KeyType::MlDsa87EdEd448,
+                    HashAlgorithm::Sha3_512,
+                    KeyType::MlKem1024X448,
+                );
             }
         }
     }
 
-    fn gen_ml_dsa_87_ed448_ml_kem_x448<R: Rng + CryptoRng>(mut rng: R, version: KeyVersion) {
+    #[test]
+    #[ignore]
+    fn key_slh_dsa_128s_ml_kem_x25518() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+            gen_key(
+                &mut rng,
+                key_version,
+                KeyType::SlhDsaShake128s,
+                HashAlgorithm::Sha3_256,
+                KeyType::MlKem768X25519,
+            );
+        }
+    }
+
+    #[test]
+    fn key_slh_dsa_128f_ml_kem_x25518() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+            gen_key(
+                &mut rng,
+                key_version,
+                KeyType::SlhDsaShake128f,
+                HashAlgorithm::Sha3_256,
+                KeyType::MlKem768X25519,
+            );
+        }
+    }
+    #[test]
+    #[ignore]
+    fn key_slh_dsa_256s_ml_kem_x448() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+            println!("key version {:?}", key_version);
+
+            gen_key(
+                &mut rng,
+                key_version,
+                KeyType::SlhDsaShake256s,
+                HashAlgorithm::Sha3_512,
+                KeyType::MlKem1024X448,
+            );
+        }
+    }
+
+    fn gen_key<R: Rng + CryptoRng>(
+        mut rng: R,
+        version: KeyVersion,
+        sign: KeyType,
+        sign_hash: HashAlgorithm,
+        encrypt: KeyType,
+    ) {
         let _ = pretty_env_logger::try_init();
 
         let key_params = SecretKeyParamsBuilder::default()
             .version(version)
-            .key_type(KeyType::MlDsa87EdEd448)
+            .key_type(sign)
             .can_certify(true)
             .can_sign(true)
-            .primary_user_id("Me-X <me-ml-dsa-ml-kem-x448-rfc9580@mail.com>".into())
+            .primary_user_id("Me-X me@mail.com>".into())
             .passphrase(None)
-            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256,])
-            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha3_512])
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![sign_hash])
             .preferred_compression_algorithms(smallvec![
                 CompressionAlgorithm::ZLIB,
                 CompressionAlgorithm::ZIP,
@@ -1431,7 +1457,7 @@ mod tests {
             .subkey(
                 SubkeyParamsBuilder::default()
                     .version(version)
-                    .key_type(KeyType::MlKem1024X448)
+                    .key_type(encrypt)
                     .can_encrypt(true)
                     .passphrase(None)
                     .build()
@@ -1449,8 +1475,6 @@ mod tests {
         let armor = signed_key
             .to_armored_string(None.into())
             .expect("failed to serialize key");
-
-        // std::fs::write("sample-448-rfc9580.sec.asc", &armor).unwrap();
 
         let (signed_key2, _headers) =
             SignedSecretKey::from_string(&armor).expect("failed to parse key");
@@ -1474,8 +1498,6 @@ mod tests {
         let armor = public_signed_key
             .to_armored_string(None.into())
             .expect("failed to serialize public key");
-
-        // std::fs::write("sample-448-rfc9580.pub.asc", &armor).unwrap();
 
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");

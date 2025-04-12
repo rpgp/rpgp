@@ -25,6 +25,7 @@ pub mod ml_kem1024_x448;
 pub mod ml_kem768_x25519;
 pub mod slh_dsa_shake128f;
 pub mod slh_dsa_shake128s;
+pub mod slh_dsa_shake256s;
 
 pub trait Decryptor {
     type EncryptionFields<'a>;

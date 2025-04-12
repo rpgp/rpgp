@@ -26,6 +26,7 @@ mod ml_kem1024_x448;
 mod ml_kem768_x25519;
 mod slh_dsa_shake128f;
 mod slh_dsa_shake128s;
+mod slh_dsa_shake256s;
 
 pub use self::{
     dsa::DsaPublicParams, ecdh::EcdhPublicParams, ecdsa::EcdsaPublicParams,
@@ -34,7 +35,8 @@ pub use self::{
     ml_dsa87_ed448::MlDsa87Ed448PublicParams, ml_kem1024_x448::MlKem1024X448PublicParams,
     ml_kem768_x25519::MlKem768X25519PublicParams, rsa::RsaPublicParams,
     slh_dsa_shake128f::SlhDsaShake128fPublicParams, slh_dsa_shake128s::SlhDsaShake128sPublicParams,
-    x25519::X25519PublicParams, x448::X448PublicParams,
+    slh_dsa_shake256s::SlhDsaShake256sPublicParams, x25519::X25519PublicParams,
+    x448::X448PublicParams,
 };
 use super::PlainSecretParams;
 
@@ -57,7 +59,7 @@ pub enum PublicParams {
     MlDsa87Ed448(MlDsa87Ed448PublicParams),
     SlhDsaShake128s(SlhDsaShake128sPublicParams),
     SlhDsaShake128f(SlhDsaShake128fPublicParams),
-    SlhDsaShake256s(()),
+    SlhDsaShake256s(SlhDsaShake256sPublicParams),
     Unknown {
         #[debug("{}", hex::encode(data))]
         data: Bytes,
@@ -83,6 +85,7 @@ impl TryFrom<&PlainSecretParams> for PublicParams {
             PlainSecretParams::MlDsa87Ed448(ref p) => Ok(Self::MlDsa87Ed448(p.into())),
             PlainSecretParams::SlhDsaShake128s(ref p) => Ok(Self::SlhDsaShake128s(p.into())),
             PlainSecretParams::SlhDsaShake128f(ref p) => Ok(Self::SlhDsaShake128f(p.into())),
+            PlainSecretParams::SlhDsaShake256s(ref p) => Ok(Self::SlhDsaShake256s(p.into())),
             PlainSecretParams::X448(ref p) => Ok(Self::X448(p.into())),
             PlainSecretParams::Ed448(ref p) => Ok(Self::Ed448(p.into())),
             PlainSecretParams::Unknown { pub_params, .. } => Ok(Self::Unknown {
@@ -171,9 +174,8 @@ impl PublicParams {
                 Ok(PublicParams::SlhDsaShake128f(params))
             }
             PublicKeyAlgorithm::SlhDsaShake256sDraft => {
-                todo!()
-                // let params = SlhDsaShake256sPublicParams::try_from_reader(i)?;
-                // Ok(PublicParams::SlhDsaShake256s(params))
+                let params = SlhDsaShake256sPublicParams::try_from_reader(i)?;
+                Ok(PublicParams::SlhDsaShake256s(params))
             }
             PublicKeyAlgorithm::DiffieHellman
             | PublicKeyAlgorithm::Private100
@@ -200,6 +202,7 @@ impl PublicParams {
             PublicParams::MlDsa87Ed448(_) => HashAlgorithm::Sha3_512,
             PublicParams::SlhDsaShake128s(_) => HashAlgorithm::Sha3_256,
             PublicParams::SlhDsaShake128f(_) => HashAlgorithm::Sha3_256,
+            PublicParams::SlhDsaShake256s(_) => HashAlgorithm::Sha3_512,
             _ => HashAlgorithm::default(),
         }
     }
@@ -268,7 +271,7 @@ impl Serialize for PublicParams {
                 params.to_writer(writer)?;
             }
             PublicParams::SlhDsaShake256s(params) => {
-                todo!()
+                params.to_writer(writer)?;
             }
             PublicParams::Unknown { ref data } => {
                 writer.write_all(data)?;
@@ -330,7 +333,7 @@ impl Serialize for PublicParams {
                 sum += params.write_len();
             }
             PublicParams::SlhDsaShake256s(params) => {
-                todo!()
+                sum += params.write_len();
             }
             PublicParams::Unknown { ref data } => {
                 sum += data.len();
@@ -432,6 +435,15 @@ mod tests {
                     .boxed(),
                 PublicKeyAlgorithm::MlDsa87Ed448Draft => any::<MlDsa87Ed448PublicParams>()
                     .prop_map(PublicParams::MlDsa87Ed448)
+                    .boxed(),
+                PublicKeyAlgorithm::SlhDsaShake128sDraft => any::<SlhDsaShake128sPublicParams>()
+                    .prop_map(PublicParams::SlhDsaShake128s)
+                    .boxed(),
+                PublicKeyAlgorithm::SlhDsaShake128fDraft => any::<SlhDsaShake128fPublicParams>()
+                    .prop_map(PublicParams::SlhDsaShake128f)
+                    .boxed(),
+                PublicKeyAlgorithm::SlhDsaShake256sDraft => any::<SlhDsaShake256sPublicParams>()
+                    .prop_map(PublicParams::SlhDsaShake256s)
                     .boxed(),
                 _ => {
                     unimplemented!("{:?}", args)

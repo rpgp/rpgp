@@ -236,6 +236,53 @@ fn test_a_2_2_transferrable_public_key() -> TestResult {
 }
 
 #[test]
+fn test_a_2_3_signed_encrypted() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_2_1_key.sec.asc")?;
+    sec_key.verify()?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_2_2_key.pub.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (msg, _) = Message::from_armor_file("./tests/pqc/a_2_3_msg.asc")?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
+    // encrypt again
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    builder
+        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha3_256)
+        // encrypting to the PQ subkey
+        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[0])?;
+
+    let out = builder.to_armored_string(&mut rng, Default::default())?;
+
+    // decrypt and verify sig again
+    {
+        let (msg, _) = Message::from_armor(out.as_bytes())?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
+    Ok(())
+}
+
+#[test]
 fn test_a_3_1_transferrable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
@@ -286,6 +333,53 @@ fn test_a_3_2_transferrable_public_key() -> TestResult {
 }
 
 #[test]
+fn test_a_3_3_signed_encrypted() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_3_1_key.sec.asc")?;
+    sec_key.verify()?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_3_2_key.pub.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (msg, _) = Message::from_armor_file("./tests/pqc/a_3_3_msg.asc")?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
+    // encrypt again
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    builder
+        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha3_512)
+        // encrypting to the PQ subkey
+        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[0])?;
+
+    let out = builder.to_armored_string(&mut rng, Default::default())?;
+
+    // decrypt and verify sig again
+    {
+        let (msg, _) = Message::from_armor(out.as_bytes())?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
+    Ok(())
+}
+
+#[test]
 fn test_a_4_1_transferrable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
@@ -308,6 +402,7 @@ fn test_a_4_1_transferrable_secret_key() -> TestResult {
         key.secret_subkeys[0].fingerprint().to_string(),
         "1adc9f55f5223a78948522a0f4d1b29aff2ed651d3fa56e234249402000ace41"
     );
+    assert_eq!(key.secret_subkeys.len(), 1);
 
     key.verify()?;
 
@@ -329,8 +424,56 @@ fn test_a_4_2_transferrable_public_key() -> TestResult {
         key.public_subkeys[0].algorithm(),
         PublicKeyAlgorithm::MlKem768X25519Draft
     );
+    assert_eq!(key.public_subkeys.len(), 1);
 
     key.verify()?;
 
+    Ok(())
+}
+
+#[test]
+#[ignore]
+fn test_a_4_3_signed_encrypted() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_4_1_key.sec.asc")?;
+    sec_key.verify()?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_4_2_key.pub.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (msg, _) = Message::from_armor_file("./tests/pqc/a_4_3_msg.asc")?;
+
+        dbg!(&msg);
+        // Bug in test vectors? seems to use MlKem1024X448 not MlKem768
+        // let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        // let data = msg.as_data_string()?;
+        // assert_eq!(data, "Testing\n");
+        // msg.verify(&pub_key)?;
+        // dbg!(&msg);
+    }
+    // encrypt again
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    builder
+        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha3_256)
+        // encrypting to the PQ subkey
+        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[0])?;
+
+    let out = builder.to_armored_string(&mut rng, Default::default())?;
+
+    // decrypt and verify sig again
+    {
+        let (msg, _) = Message::from_armor(out.as_bytes())?;
+
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+    }
     Ok(())
 }

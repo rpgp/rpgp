@@ -738,7 +738,7 @@ impl PublicKeyTrait for PubKeyInner {
                 crypto::slh_dsa_shake128f::verify(&params.key, hash, hashed, sig.try_into()?)
             }
             PublicParams::SlhDsaShake256s(ref params) => {
-                todo!()
+                crypto::slh_dsa_shake256s::verify(&params.key, hash, hashed, sig.try_into()?)
             }
             PublicParams::X25519 { .. } => {
                 bail!("X25519 can not be used for verify operations");

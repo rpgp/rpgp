@@ -549,6 +549,12 @@ fn create_signature(
             };
             priv_key.sign(hash, data)
         }
+        PlainSecretParams::SlhDsaShake256s(ref priv_key) => {
+            let PublicParams::SlhDsaShake256s(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
         PlainSecretParams::Unknown { alg, .. } => {
             unsupported_err!("{:?} signing", alg);
         }
@@ -596,6 +602,13 @@ fn create_signature(
             native.extend_from_slice(&sig[2]);
 
             Ok(SignatureBytes::Native(native.into()))
+        }
+        PublicParams::SlhDsaShake128s(_)
+        | PublicParams::SlhDsaShake128f(_)
+        | PublicParams::SlhDsaShake256s(_) => {
+            // native format
+            ensure_eq!(sig.len(), 1, "expect three signature parts");
+            Ok(SignatureBytes::Native(sig[0].clone().into()))
         }
         _ => {
             // MPI format:
