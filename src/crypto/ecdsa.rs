@@ -7,7 +7,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{ecc_curve::ECCCurve, hash::HashAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, unsupported_err, Error, Result},
-    types::{EcdsaPublicParams, Mpi},
+    types::{EcdsaPublicParams, Mpi, SignatureBytes},
 };
 
 #[derive(Clone, PartialEq, Eq, ZeroizeOnDrop, derive_more::Debug)]
@@ -121,7 +121,7 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         if let Some(field_size) = self.secret_key_length() {
             // We require that the signing key length is matched by the hash digest length,
             // see https://www.rfc-editor.org/rfc/rfc9580.html#section-5.2.3.2-5
@@ -144,33 +144,33 @@ impl Signer for SecretKey {
                 let secret = p256::ecdsa::SigningKey::from(secret_key);
                 let signature: p256::ecdsa::Signature = secret.sign_prehash(digest)?;
                 let (r, s) = signature.split_bytes();
-                (r.to_vec(), s.to_vec())
+                (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
             Self::P384(secret_key) => {
                 let secret = p384::ecdsa::SigningKey::from(secret_key);
                 let signature: p384::ecdsa::Signature = secret.sign_prehash(digest)?;
                 let (r, s) = signature.split_bytes();
-                (r.to_vec(), s.to_vec())
+                (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
             Self::P521(secret_key) => {
                 let secret: SigningKey<NistP521> = secret_key.into();
                 let signing_key = p521::ecdsa::SigningKey::from(secret);
                 let signature: p521::ecdsa::Signature = signing_key.sign_prehash(digest)?;
                 let (r, s) = signature.split_bytes();
-                (r.to_vec(), s.to_vec())
+                (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
             Self::Secp256k1(secret_key) => {
                 let secret = k256::ecdsa::SigningKey::from(secret_key);
                 let signature: k256::ecdsa::Signature = secret.sign_prehash(digest)?;
                 let (r, s) = signature.split_bytes();
-                (r.to_vec(), s.to_vec())
+                (Mpi::from_slice(&r), Mpi::from_slice(&s))
             }
             Self::Unsupported { curve, .. } => {
                 unsupported_err!("curve {:?} for ECDSA", curve)
             }
         };
 
-        Ok(vec![r, s])
+        Ok(SignatureBytes::Mpis(vec![r, s]))
     }
 }
 

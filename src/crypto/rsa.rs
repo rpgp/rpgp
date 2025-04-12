@@ -21,7 +21,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{hash::HashAlgorithm, Decryptor, Signer},
     errors::{format_err, unsupported_err, Result},
-    types::{Mpi, PkeskBytes, RsaPublicParams},
+    types::{Mpi, PkeskBytes, RsaPublicParams, SignatureBytes},
 };
 
 pub(crate) const MAX_KEY_SIZE: usize = 16384;
@@ -91,7 +91,7 @@ impl Decryptor for SecretKey {
 
 impl Signer for SecretKey {
     /// Sign using RSA, with PKCS1v15 padding.
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         let sig = match hash {
             HashAlgorithm::None => return Err(format_err!("none")),
             HashAlgorithm::Md5 => sign_int::<Md5>(self.0.clone(), digest),
@@ -107,7 +107,7 @@ impl Signer for SecretKey {
             HashAlgorithm::Other(o) => unsupported_err!("Hash algorithm {} is unsupported", o),
         }?;
 
-        Ok(vec![sig.to_vec()])
+        Ok(SignatureBytes::Mpis(vec![Mpi::from_slice(&sig.to_bytes())]))
     }
 }
 

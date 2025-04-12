@@ -4,7 +4,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{bail, ensure, ensure_eq, format_err, Result},
-    types::Ed448PublicParams,
+    types::{Ed448PublicParams, SignatureBytes},
 };
 
 const MIN_HASH_LEN_BITS: usize = 512;
@@ -42,7 +42,7 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         let Some(digest_size) = hash.digest_size() else {
             bail!("EdDSA signature: invalid hash algorithm: {:?}", hash);
         };
@@ -60,11 +60,7 @@ impl Signer for SecretKey {
         );
         let signature = self.secret.sign_raw(digest);
         let bytes = signature.to_bytes();
-
-        let r = bytes[..57].to_vec();
-        let s = bytes[57..].to_vec();
-
-        Ok(vec![r, s])
+        Ok(SignatureBytes::Native(bytes.to_vec().into()))
     }
 }
 

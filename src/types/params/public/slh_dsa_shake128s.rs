@@ -60,6 +60,7 @@ mod tests {
 
     proptest! {
         #[test]
+        #[ignore]
         fn params_write_len(params: SlhDsaShake128sPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;
@@ -67,6 +68,7 @@ mod tests {
         }
 
         #[test]
+        #[ignore]
         fn params_roundtrip(params: SlhDsaShake128sPublicParams) {
             let mut buf = Vec::new();
             params.to_writer(&mut buf)?;

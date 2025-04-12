@@ -1,6 +1,7 @@
 //! # Cryptography module
 
 use self::hash::HashAlgorithm;
+use crate::types::SignatureBytes;
 
 pub mod aead;
 pub mod aes_kw;
@@ -34,5 +35,5 @@ pub trait Decryptor {
 }
 
 pub trait Signer {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<Vec<Vec<u8>>>;
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes>;
 }

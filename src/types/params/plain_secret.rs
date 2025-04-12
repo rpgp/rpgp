@@ -137,12 +137,18 @@ impl PlainSecretParams {
 
                 const SIZE: usize = ECCCurve::Ed25519.secret_key_length();
                 let secret = pad_key::<SIZE>(secret.as_ref())?;
-                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
+                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(
+                    secret,
+                    crate::crypto::ed25519::Mode::EdDSALegacy,
+                )?;
                 Self::Ed25519Legacy(key)
             }
             (PublicKeyAlgorithm::Ed25519, PublicParams::Ed25519(_pub_params)) => {
                 let secret = i.read_array::<32>()?;
-                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(secret)?;
+                let key = crate::crypto::ed25519::SecretKey::try_from_bytes(
+                    secret,
+                    crate::crypto::ed25519::Mode::Ed25519,
+                )?;
                 Self::Ed25519(key)
             }
             (PublicKeyAlgorithm::Ed448, PublicParams::Ed448(_pub_params)) => {
@@ -858,10 +864,16 @@ mod tests {
                     .prop_map(PlainSecretParams::ECDH)
                     .boxed(),
                 PublicKeyAlgorithm::EdDSALegacy => any::<ed25519::SecretKey>()
-                    .prop_map(PlainSecretParams::Ed25519Legacy)
+                    .prop_map(|mut key| {
+                        key.mode = ed25519::Mode::EdDSALegacy;
+                        PlainSecretParams::Ed25519Legacy(key)
+                    })
                     .boxed(),
                 PublicKeyAlgorithm::Ed25519 => any::<ed25519::SecretKey>()
-                    .prop_map(PlainSecretParams::Ed25519)
+                    .prop_map(|mut key| {
+                        key.mode = ed25519::Mode::Ed25519;
+                        PlainSecretParams::Ed25519(key)
+                    })
                     .boxed(),
                 PublicKeyAlgorithm::X25519 => any::<x25519::SecretKey>()
                     .prop_map(PlainSecretParams::X25519)

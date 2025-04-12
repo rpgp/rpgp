@@ -6,7 +6,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{ensure_eq, format_err, Result},
-    types::SlhDsaShake128fPublicParams,
+    types::{SignatureBytes, SlhDsaShake128fPublicParams},
 };
 
 /// Secret key for SLH DSA Shake128f
@@ -51,13 +51,13 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         ensure_eq!(hash, HashAlgorithm::Sha3_256, "invalid hash algorithm");
 
         let sig = self.key.sign(digest);
         let bytes = sig.to_bytes();
 
-        Ok(vec![bytes.to_vec()])
+        Ok(SignatureBytes::Native(bytes.to_vec().into()))
     }
 }
 

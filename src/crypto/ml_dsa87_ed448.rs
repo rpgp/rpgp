@@ -6,7 +6,7 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{ensure_eq, Result},
-    types::MlDsa87Ed448PublicParams,
+    types::{MlDsa87Ed448PublicParams, SignatureBytes},
 };
 
 /// Secret key for ML DSA 87 with Curve448.
@@ -68,18 +68,15 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         ensure_eq!(hash, HashAlgorithm::Sha3_512, "invalid hash algorithm");
 
         let ed448_sig = self.ed448.sign(digest);
-        let bytes = ed448_sig.to_bytes();
-        let r = bytes[..57].to_vec();
-        let s = bytes[57..].to_vec();
-
+        let mut bytes = ed448_sig.to_bytes().to_vec();
         let ml_dsa_sig = self.ml_dsa_sign.sign(digest);
-        let ml_dsa_sig = ml_dsa_sig.encode().to_vec();
+        bytes.extend_from_slice(&ml_dsa_sig.encode());
 
-        Ok(vec![r, s, ml_dsa_sig])
+        Ok(SignatureBytes::Native(bytes.into()))
     }
 }
 

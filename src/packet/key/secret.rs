@@ -13,9 +13,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi,
-        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SecretParams, SignatureBytes, Tag,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password,
+        PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        SignatureBytes, Tag,
     },
 };
 
@@ -462,7 +462,7 @@ fn create_signature(
     use crate::crypto::Signer;
 
     debug!("unlocked key");
-    let sig = match *priv_key {
+    match *priv_key {
         PlainSecretParams::RSA(ref priv_key) => {
             let PublicParams::RSA(_) = pub_params else {
                 bail!("inconsistent key");
@@ -557,68 +557,6 @@ fn create_signature(
         }
         PlainSecretParams::Unknown { alg, .. } => {
             unsupported_err!("{:?} signing", alg);
-        }
-    }?;
-
-    match pub_params {
-        PublicParams::Ed25519 { .. } => {
-            // native format
-            ensure_eq!(sig.len(), 2, "expect two signature parts");
-
-            let mut native = sig[0].clone();
-            native.extend_from_slice(&sig[1]);
-
-            ensure_eq!(native.len(), 64, "expect 64 byte signature");
-
-            Ok(SignatureBytes::Native(native.into()))
-        }
-        PublicParams::Ed448 { .. } => {
-            // native format
-            ensure_eq!(sig.len(), 2, "expect two signature parts");
-
-            let mut native = sig[0].clone();
-            native.extend_from_slice(&sig[1]);
-
-            ensure_eq!(native.len(), 114, "expect 114 byte signature");
-
-            Ok(SignatureBytes::Native(native.into()))
-        }
-        PublicParams::MlDsa65Ed25519(_) => {
-            // native format
-            ensure_eq!(sig.len(), 3, "expect three signature parts");
-
-            let mut native = sig[0].clone();
-            native.extend_from_slice(&sig[1]);
-            native.extend_from_slice(&sig[2]);
-
-            Ok(SignatureBytes::Native(native.into()))
-        }
-        PublicParams::MlDsa87Ed448(_) => {
-            // native format
-            ensure_eq!(sig.len(), 3, "expect three signature parts");
-
-            let mut native = sig[0].clone();
-            native.extend_from_slice(&sig[1]);
-            native.extend_from_slice(&sig[2]);
-
-            Ok(SignatureBytes::Native(native.into()))
-        }
-        PublicParams::SlhDsaShake128s(_)
-        | PublicParams::SlhDsaShake128f(_)
-        | PublicParams::SlhDsaShake256s(_) => {
-            // native format
-            ensure_eq!(sig.len(), 1, "expect three signature parts");
-            Ok(SignatureBytes::Native(sig[0].clone().into()))
-        }
-        _ => {
-            // MPI format:
-            // strip leading zeros, to match parse results from MPIs
-            let mpis = sig
-                .iter()
-                .map(|v| Mpi::from_slice(&v[..]))
-                .collect::<Vec<_>>();
-
-            Ok(SignatureBytes::Mpis(mpis))
         }
     }
 }

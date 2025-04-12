@@ -345,7 +345,7 @@ impl KeyType {
                 (public_params, secret_params)
             }
             KeyType::Ed25519Legacy => {
-                let secret = ed25519::SecretKey::generate(rng);
+                let secret = ed25519::SecretKey::generate(rng, ed25519::Mode::EdDSALegacy);
                 let public_params = PublicParams::EdDSALegacy((&secret).into());
                 let secret_params = PlainSecretParams::Ed25519Legacy(secret);
                 (public_params, secret_params)
@@ -365,7 +365,7 @@ impl KeyType {
                 (public_params, secret_params)
             }
             KeyType::Ed25519 => {
-                let secret = ed25519::SecretKey::generate(rng);
+                let secret = ed25519::SecretKey::generate(rng, ed25519::Mode::Ed25519);
                 let public_params = PublicParams::Ed25519((&secret).into());
                 let secret_params = PlainSecretParams::Ed25519(secret);
                 (public_params, secret_params)
