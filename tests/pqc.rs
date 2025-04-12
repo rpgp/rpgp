@@ -35,7 +35,7 @@ fn test_a_1_1_transferrable_secret_key() -> TestResult {
 
     assert_eq!(
         key.secret_subkeys[1].algorithm(),
-        PublicKeyAlgorithm::MlKem768X25519Draft
+        PublicKeyAlgorithm::MlKem768X25519
     );
     assert_eq!(
         key.secret_subkeys[1].fingerprint().to_string(),
@@ -61,7 +61,7 @@ fn test_a_1_2_transferrable_public_key() -> TestResult {
     );
     assert_eq!(
         key.public_subkeys[1].algorithm(),
-        PublicKeyAlgorithm::MlKem768X25519Draft
+        PublicKeyAlgorithm::MlKem768X25519
     );
 
     key.verify()?;
@@ -194,7 +194,7 @@ fn test_a_2_1_transferrable_secret_key() -> TestResult {
 
     assert_eq!(
         key.primary_key.algorithm(),
-        PublicKeyAlgorithm::MlDsa65Ed25519Draft
+        PublicKeyAlgorithm::MlDsa65Ed25519
     );
     assert_eq!(
         key.primary_key.fingerprint().to_string(),
@@ -203,7 +203,7 @@ fn test_a_2_1_transferrable_secret_key() -> TestResult {
 
     assert_eq!(
         key.secret_subkeys[0].algorithm(),
-        PublicKeyAlgorithm::MlKem768X25519Draft
+        PublicKeyAlgorithm::MlKem768X25519
     );
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
@@ -223,12 +223,12 @@ fn test_a_2_2_transferrable_public_key() -> TestResult {
 
     assert_eq!(
         key.primary_key.algorithm(),
-        PublicKeyAlgorithm::MlDsa65Ed25519Draft
+        PublicKeyAlgorithm::MlDsa65Ed25519
     );
 
     assert_eq!(
         key.public_subkeys[0].algorithm(),
-        PublicKeyAlgorithm::MlKem768X25519Draft
+        PublicKeyAlgorithm::MlKem768X25519
     );
 
     key.verify()?;
@@ -291,7 +291,7 @@ fn test_a_3_1_transferrable_secret_key() -> TestResult {
 
     assert_eq!(
         key.primary_key.algorithm(),
-        PublicKeyAlgorithm::MlDsa87Ed448Draft
+        PublicKeyAlgorithm::MlDsa87Ed448
     );
     assert_eq!(
         key.primary_key.fingerprint().to_string(),
@@ -300,7 +300,7 @@ fn test_a_3_1_transferrable_secret_key() -> TestResult {
 
     assert_eq!(
         key.secret_subkeys[0].algorithm(),
-        PublicKeyAlgorithm::MlKem1024X448Draft
+        PublicKeyAlgorithm::MlKem1024X448
     );
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
@@ -320,12 +320,12 @@ fn test_a_3_2_transferrable_public_key() -> TestResult {
 
     assert_eq!(
         key.primary_key.algorithm(),
-        PublicKeyAlgorithm::MlDsa87Ed448Draft
+        PublicKeyAlgorithm::MlDsa87Ed448
     );
 
     assert_eq!(
         key.public_subkeys[0].algorithm(),
-        PublicKeyAlgorithm::MlKem1024X448Draft
+        PublicKeyAlgorithm::MlKem1024X448
     );
 
     key.verify()?;
@@ -388,7 +388,7 @@ fn test_a_4_1_transferrable_secret_key() -> TestResult {
 
     assert_eq!(
         key.primary_key.algorithm(),
-        PublicKeyAlgorithm::SlhDsaShake128sDraft
+        PublicKeyAlgorithm::SlhDsaShake128s
     );
     assert_eq!(
         key.primary_key.fingerprint().to_string(),
@@ -397,7 +397,7 @@ fn test_a_4_1_transferrable_secret_key() -> TestResult {
 
     assert_eq!(
         key.secret_subkeys[0].algorithm(),
-        PublicKeyAlgorithm::MlKem768X25519Draft
+        PublicKeyAlgorithm::MlKem768X25519
     );
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
@@ -418,12 +418,12 @@ fn test_a_4_2_transferrable_public_key() -> TestResult {
 
     assert_eq!(
         key.primary_key.algorithm(),
-        PublicKeyAlgorithm::SlhDsaShake128sDraft
+        PublicKeyAlgorithm::SlhDsaShake128s
     );
 
     assert_eq!(
         key.public_subkeys[0].algorithm(),
-        PublicKeyAlgorithm::MlKem768X25519Draft
+        PublicKeyAlgorithm::MlKem768X25519
     );
     assert_eq!(key.public_subkeys.len(), 1);
 

@@ -329,19 +329,19 @@ impl KeyType {
             KeyType::X25519 => PublicKeyAlgorithm::X25519,
             KeyType::X448 => PublicKeyAlgorithm::X448,
             #[cfg(feature = "draft-pqc")]
-            KeyType::MlKem768X25519 => PublicKeyAlgorithm::MlKem768X25519Draft,
+            KeyType::MlKem768X25519 => PublicKeyAlgorithm::MlKem768X25519,
             #[cfg(feature = "draft-pqc")]
-            KeyType::MlKem1024X448 => PublicKeyAlgorithm::MlKem1024X448Draft,
+            KeyType::MlKem1024X448 => PublicKeyAlgorithm::MlKem1024X448,
             #[cfg(feature = "draft-pqc")]
-            KeyType::MlDsa65Ed25519 => PublicKeyAlgorithm::MlDsa65Ed25519Draft,
+            KeyType::MlDsa65Ed25519 => PublicKeyAlgorithm::MlDsa65Ed25519,
             #[cfg(feature = "draft-pqc")]
-            KeyType::MlDsa87EdEd448 => PublicKeyAlgorithm::MlDsa87Ed448Draft,
+            KeyType::MlDsa87EdEd448 => PublicKeyAlgorithm::MlDsa87Ed448,
             #[cfg(feature = "draft-pqc")]
-            KeyType::SlhDsaShake128s => PublicKeyAlgorithm::SlhDsaShake128sDraft,
+            KeyType::SlhDsaShake128s => PublicKeyAlgorithm::SlhDsaShake128s,
             #[cfg(feature = "draft-pqc")]
-            KeyType::SlhDsaShake128f => PublicKeyAlgorithm::SlhDsaShake128fDraft,
+            KeyType::SlhDsaShake128f => PublicKeyAlgorithm::SlhDsaShake128f,
             #[cfg(feature = "draft-pqc")]
-            KeyType::SlhDsaShake256s => PublicKeyAlgorithm::SlhDsaShake256sDraft,
+            KeyType::SlhDsaShake256s => PublicKeyAlgorithm::SlhDsaShake256s,
         }
     }
 

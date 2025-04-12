@@ -174,37 +174,37 @@ impl PublicParams {
                 Ok(PublicParams::X448(params))
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::MlKem768X25519Draft => {
+            PublicKeyAlgorithm::MlKem768X25519 => {
                 let params = MlKem768X25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlKem768X25519(params))
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::MlKem1024X448Draft => {
+            PublicKeyAlgorithm::MlKem1024X448 => {
                 let params = MlKem1024X448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlKem1024X448(params))
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::MlDsa65Ed25519Draft => {
+            PublicKeyAlgorithm::MlDsa65Ed25519 => {
                 let params = MlDsa65Ed25519PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlDsa65Ed25519(params))
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::MlDsa87Ed448Draft => {
+            PublicKeyAlgorithm::MlDsa87Ed448 => {
                 let params = MlDsa87Ed448PublicParams::try_from_reader(i)?;
                 Ok(PublicParams::MlDsa87Ed448(params))
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::SlhDsaShake128sDraft => {
+            PublicKeyAlgorithm::SlhDsaShake128s => {
                 let params = SlhDsaShake128sPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::SlhDsaShake128s(params))
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::SlhDsaShake128fDraft => {
+            PublicKeyAlgorithm::SlhDsaShake128f => {
                 let params = SlhDsaShake128fPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::SlhDsaShake128f(params))
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::SlhDsaShake256sDraft => {
+            PublicKeyAlgorithm::SlhDsaShake256s => {
                 let params = SlhDsaShake256sPublicParams::try_from_reader(i)?;
                 Ok(PublicParams::SlhDsaShake256s(params))
             }
@@ -477,31 +477,31 @@ mod tests {
                     .prop_map(PublicParams::Ed448)
                     .boxed(),
                 #[cfg(feature = "draft-pqc")]
-                PublicKeyAlgorithm::MlKem768X25519Draft => any::<MlKem768X25519PublicParams>()
+                PublicKeyAlgorithm::MlKem768X25519 => any::<MlKem768X25519PublicParams>()
                     .prop_map(PublicParams::MlKem768X25519)
                     .boxed(),
                 #[cfg(feature = "draft-pqc")]
-                PublicKeyAlgorithm::MlKem1024X448Draft => any::<MlKem1024X448PublicParams>()
+                PublicKeyAlgorithm::MlKem1024X448 => any::<MlKem1024X448PublicParams>()
                     .prop_map(PublicParams::MlKem1024X448)
                     .boxed(),
                 #[cfg(feature = "draft-pqc")]
-                PublicKeyAlgorithm::MlDsa65Ed25519Draft => any::<MlDsa65Ed25519PublicParams>()
+                PublicKeyAlgorithm::MlDsa65Ed25519 => any::<MlDsa65Ed25519PublicParams>()
                     .prop_map(PublicParams::MlDsa65Ed25519)
                     .boxed(),
                 #[cfg(feature = "draft-pqc")]
-                PublicKeyAlgorithm::MlDsa87Ed448Draft => any::<MlDsa87Ed448PublicParams>()
+                PublicKeyAlgorithm::MlDsa87Ed448 => any::<MlDsa87Ed448PublicParams>()
                     .prop_map(PublicParams::MlDsa87Ed448)
                     .boxed(),
                 #[cfg(feature = "draft-pqc")]
-                PublicKeyAlgorithm::SlhDsaShake128sDraft => any::<SlhDsaShake128sPublicParams>()
+                PublicKeyAlgorithm::SlhDsaShake128s => any::<SlhDsaShake128sPublicParams>()
                     .prop_map(PublicParams::SlhDsaShake128s)
                     .boxed(),
                 #[cfg(feature = "draft-pqc")]
-                PublicKeyAlgorithm::SlhDsaShake128fDraft => any::<SlhDsaShake128fPublicParams>()
+                PublicKeyAlgorithm::SlhDsaShake128f => any::<SlhDsaShake128fPublicParams>()
                     .prop_map(PublicParams::SlhDsaShake128f)
                     .boxed(),
                 #[cfg(feature = "draft-pqc")]
-                PublicKeyAlgorithm::SlhDsaShake256sDraft => any::<SlhDsaShake256sPublicParams>()
+                PublicKeyAlgorithm::SlhDsaShake256s => any::<SlhDsaShake256sPublicParams>()
                     .prop_map(PublicParams::SlhDsaShake256s)
                     .boxed(),
                 _ => {

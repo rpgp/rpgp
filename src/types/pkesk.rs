@@ -165,7 +165,7 @@ impl PkeskBytes {
             }
             PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::MlKem768X25519Draft => {
+            PublicKeyAlgorithm::MlKem768X25519 => {
                 // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-public-key-encrypted-sessio>
 
                 // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with
@@ -202,7 +202,7 @@ impl PkeskBytes {
                 })
             }
             #[cfg(feature = "draft-pqc")]
-            PublicKeyAlgorithm::MlKem1024X448Draft => {
+            PublicKeyAlgorithm::MlKem1024X448 => {
                 // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-public-key-encrypted-sessio>
 
                 // A fixed-length octet string representing an ECDH ephemeral public key in the format associated with

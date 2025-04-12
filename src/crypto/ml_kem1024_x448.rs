@@ -131,7 +131,7 @@ impl Decryptor for SecretKey {
             &ecdh_key_share,
             data.ecdh_ciphertext,
             data.ecdh_pub_key,
-            PublicKeyAlgorithm::MlKem1024X448Draft,
+            PublicKeyAlgorithm::MlKem1024X448,
         );
         // Compute sessionKey := AESKeyUnwrap(KEK, C) with AES-256 as per [RFC3394], aborting if the 64 bit integrity check fails
         // Output sessionKey
@@ -230,7 +230,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
         &ecdh_key_share,
         &ecdh_ciphertext,
         ecdh_public_key,
-        PublicKeyAlgorithm::MlKem1024X448Draft,
+        PublicKeyAlgorithm::MlKem1024X448,
     );
 
     // Compute C := AESKeyWrap(KEK, sessionKey) with AES-256 as per [RFC3394] that includes a 64 bit integrity check
