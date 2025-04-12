@@ -134,8 +134,8 @@ testresult = "0.4.1"
 
 [features]
 default = ["bzip2"]
-# Currently implementing draft-07
-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
+# Currently implementing draft-07; do not use in production!
+draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
 bzip2 = ["dep:bzip2"]
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]

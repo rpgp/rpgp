@@ -60,7 +60,7 @@ pub trait BufReadParsing: BufRead + Sized {
         Ok(arr)
     }
 
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     fn read_array_boxed<const C: usize>(&mut self) -> Result<Box<[u8; C]>> {
         let mut arr = Box::new([0u8; C]);
         let mut read = 0;

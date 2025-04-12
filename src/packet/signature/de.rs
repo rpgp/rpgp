@@ -344,7 +344,7 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
             let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
         }
-        #[cfg(not(feature = "pqc"))]
+        #[cfg(not(feature = "draft-pqc"))]
         &PublicKeyAlgorithm::Private105 | &PublicKeyAlgorithm::Private106 => {
             let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
@@ -352,7 +352,7 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         PublicKeyAlgorithm::ElgamalEncrypt => {
             bail!("invalid signature algorithm, encryption only elgamal");
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         &PublicKeyAlgorithm::MlKem768X25519Draft | &PublicKeyAlgorithm::MlKem1024X448Draft => {
             bail!("invalid signature algorithm, ML KEM is encryption only");
         }

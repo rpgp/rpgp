@@ -38,27 +38,27 @@ pub enum PublicKeyAlgorithm {
     Ed448 = 28,
 
     /// ML-DSA-65+Ed25519
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlDsa65Ed25519Draft = 30,
     /// ML-DSA-87+Ed448
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlDsa87Ed448Draft = 31,
 
     /// SLH-DSA-SHAKE-128s
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     SlhDsaShake128sDraft = 32,
     /// SLH-DSA-SHAKE-128f
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     SlhDsaShake128fDraft = 33,
     /// SLH-DSA-SHAKE-256s
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     SlhDsaShake256sDraft = 34,
 
     /// ML-KEM-768+X25519
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlKem768X25519Draft = 105,
     /// ML-KEM-1024+X448
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlKem1024X448Draft = 106,
 
     /// Private experimental range (from OpenPGP)
@@ -73,10 +73,10 @@ pub enum PublicKeyAlgorithm {
     #[cfg_attr(test, proptest(skip))]
     Private104 = 104,
     #[cfg_attr(test, proptest(skip))]
-    #[cfg(not(feature = "pqc"))]
+    #[cfg(not(feature = "draft-pqc"))]
     Private105 = 105,
     #[cfg_attr(test, proptest(skip))]
-    #[cfg(not(feature = "pqc"))]
+    #[cfg(not(feature = "draft-pqc"))]
     Private106 = 106,
     #[cfg_attr(test, proptest(skip))]
     Private107 = 107,

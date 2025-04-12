@@ -1,4 +1,4 @@
-#![cfg(feature = "pqc")]
+#![cfg(feature = "draft-pqc")]
 use pgp::{
     composed::{
         Deserializable, KeyType, Message, MessageBuilder, SecretKeyParamsBuilder, SignedPublicKey,

@@ -487,11 +487,11 @@ fn create_signature(
         PlainSecretParams::X25519(_) => {
             bail!("X25519 can not be used for signing operations")
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         PlainSecretParams::MlKem768X25519 { .. } => {
             bail!("ML KEM 768 X25519 can not be used for signing operations")
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         PlainSecretParams::MlKem1024X448 { .. } => {
             bail!("ML KEM 1024 X448 can not be used for signing operations")
         }
@@ -504,14 +504,14 @@ fn create_signature(
             };
             priv_key.sign(hash, data)
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         PlainSecretParams::MlDsa65Ed25519(ref priv_key) => {
             let PublicParams::MlDsa65Ed25519(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
             priv_key.sign(hash, data)
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         PlainSecretParams::MlDsa87Ed448(ref priv_key) => {
             let PublicParams::MlDsa87Ed448(_) = pub_params else {
                 bail!("invalid inconsistent key");
@@ -541,21 +541,21 @@ fn create_signature(
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         PlainSecretParams::SlhDsaShake128s(ref priv_key) => {
             let PublicParams::SlhDsaShake128s(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
             priv_key.sign(hash, data)
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         PlainSecretParams::SlhDsaShake128f(ref priv_key) => {
             let PublicParams::SlhDsaShake128f(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
             priv_key.sign(hash, data)
         }
-        #[cfg(feature = "pqc")]
+        #[cfg(feature = "draft-pqc")]
         PlainSecretParams::SlhDsaShake256s(ref priv_key) => {
             let PublicParams::SlhDsaShake256s(_) = pub_params else {
                 bail!("invalid inconsistent key");

@@ -164,7 +164,7 @@ impl PkeskBytes {
                 })
             }
             PublicKeyAlgorithm::Unknown(_) => Ok(PkeskBytes::Other), // we don't know the format of this data
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PublicKeyAlgorithm::MlKem768X25519Draft => {
                 // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-public-key-encrypted-sessio>
 
@@ -201,7 +201,7 @@ impl PkeskBytes {
                     ml_kem_ciphertext,
                 })
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PublicKeyAlgorithm::MlKem1024X448Draft => {
                 // <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-public-key-encrypted-sessio>
 
