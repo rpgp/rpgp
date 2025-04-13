@@ -12,7 +12,7 @@ use num_bigint::ModInverse;
 use sha2::Sha256;
 use zeroize::{ZeroizeOnDrop, Zeroizing};
 
-#[cfg(feature = "pqc")]
+#[cfg(feature = "draft-pqc")]
 use crate::crypto::{
     ml_dsa65_ed25519, ml_dsa87_ed448, ml_kem1024_x448, ml_kem768_x25519, slh_dsa_shake128f,
     slh_dsa_shake128s, slh_dsa_shake256s,
@@ -40,22 +40,22 @@ pub enum PlainSecretParams {
     Ed25519(ed25519::SecretKey),
     Ed25519Legacy(ed25519::SecretKey),
     X25519(x25519::SecretKey),
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlKem768X25519(ml_kem768_x25519::SecretKey),
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlKem1024X448(ml_kem1024_x448::SecretKey),
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlDsa65Ed25519(ml_dsa65_ed25519::SecretKey),
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     MlDsa87Ed448(ml_dsa87_ed448::SecretKey),
     Elgamal(elgamal::SecretKey),
     X448(x448::SecretKey),
     Ed448(ed448::SecretKey),
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     SlhDsaShake128s(slh_dsa_shake128s::SecretKey),
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     SlhDsaShake128f(slh_dsa_shake128f::SecretKey),
-    #[cfg(feature = "pqc")]
+    #[cfg(feature = "draft-pqc")]
     SlhDsaShake256s(slh_dsa_shake256s::SecretKey),
     Unknown {
         #[zeroize(skip)]
@@ -176,8 +176,8 @@ impl PlainSecretParams {
                 let key = crate::crypto::x448::SecretKey::try_from_bytes(s)?;
                 Self::X448(key)
             }
-            #[cfg(feature = "pqc")]
-            (PublicKeyAlgorithm::MlKem768X25519Draft, PublicParams::MlKem768X25519(_)) => {
+            #[cfg(feature = "draft-pqc")]
+            (PublicKeyAlgorithm::MlKem768X25519, PublicParams::MlKem768X25519(_)) => {
                 // X25519
                 let x = i.read_array::<32>()?;
                 let x = x25519_dalek::StaticSecret::from(x);
@@ -187,8 +187,8 @@ impl PlainSecretParams {
                 let key = crate::crypto::ml_kem768_x25519::SecretKey::try_from_parts(x, ml_kem)?;
                 Self::MlKem768X25519(key)
             }
-            #[cfg(feature = "pqc")]
-            (PublicKeyAlgorithm::MlKem1024X448Draft, PublicParams::MlKem1024X448(_)) => {
+            #[cfg(feature = "draft-pqc")]
+            (PublicKeyAlgorithm::MlKem1024X448, PublicParams::MlKem1024X448(_)) => {
                 // X448
                 let x = i.read_array::<56>()?;
                 let x = cx448::x448::Secret::from(x);
@@ -211,8 +211,8 @@ impl PlainSecretParams {
                     pub_params: pub_params.clone(),
                 }
             }
-            #[cfg(feature = "pqc")]
-            (PublicKeyAlgorithm::MlDsa65Ed25519Draft, PublicParams::MlDsa65Ed25519(_)) => {
+            #[cfg(feature = "draft-pqc")]
+            (PublicKeyAlgorithm::MlDsa65Ed25519, PublicParams::MlDsa65Ed25519(_)) => {
                 // ed25519
                 let ed = i.read_array::<32>()?;
 
@@ -221,8 +221,8 @@ impl PlainSecretParams {
                 let key = crate::crypto::ml_dsa65_ed25519::SecretKey::try_from_bytes(ed, ml_dsa)?;
                 Self::MlDsa65Ed25519(key)
             }
-            #[cfg(feature = "pqc")]
-            (PublicKeyAlgorithm::MlDsa87Ed448Draft, PublicParams::MlDsa87Ed448(_)) => {
+            #[cfg(feature = "draft-pqc")]
+            (PublicKeyAlgorithm::MlDsa87Ed448, PublicParams::MlDsa87Ed448(_)) => {
                 // ed448
                 let ed = i.read_array::<57>()?;
 
@@ -232,20 +232,20 @@ impl PlainSecretParams {
                     crate::crypto::ml_dsa87_ed448::SecretKey::try_from_bytes(ed, ml_dsa_seed)?;
                 Self::MlDsa87Ed448(key)
             }
-            #[cfg(feature = "pqc")]
-            (PublicKeyAlgorithm::SlhDsaShake128sDraft, PublicParams::SlhDsaShake128s(_)) => {
+            #[cfg(feature = "draft-pqc")]
+            (PublicKeyAlgorithm::SlhDsaShake128s, PublicParams::SlhDsaShake128s(_)) => {
                 let secret = i.read_array::<64>()?;
                 let key = crate::crypto::slh_dsa_shake128s::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake128s(key)
             }
-            #[cfg(feature = "pqc")]
-            (PublicKeyAlgorithm::SlhDsaShake128fDraft, PublicParams::SlhDsaShake128f(_)) => {
+            #[cfg(feature = "draft-pqc")]
+            (PublicKeyAlgorithm::SlhDsaShake128f, PublicParams::SlhDsaShake128f(_)) => {
                 let secret = i.read_array::<64>()?;
                 let key = crate::crypto::slh_dsa_shake128f::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake128f(key)
             }
-            #[cfg(feature = "pqc")]
-            (PublicKeyAlgorithm::SlhDsaShake256sDraft, PublicParams::SlhDsaShake256s(_)) => {
+            #[cfg(feature = "draft-pqc")]
+            (PublicKeyAlgorithm::SlhDsaShake256s, PublicParams::SlhDsaShake256s(_)) => {
                 let secret = i.read_array::<128>()?;
                 let key = crate::crypto::slh_dsa_shake256s::SecretKey::try_from_bytes(secret)?;
                 Self::SlhDsaShake256s(key)
@@ -476,7 +476,7 @@ impl PlainSecretParams {
                     _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
                 };
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             (
                 PlainSecretParams::MlKem768X25519(ref priv_key),
                 PkeskBytes::MlKem768X25519 {
@@ -511,7 +511,7 @@ impl PlainSecretParams {
                     _ => bail!("unexpected: sym_alg {:?} for {:?}", sym_alg, typ),
                 };
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             (
                 PlainSecretParams::MlKem1024X448(ref priv_key),
                 PkeskBytes::MlKem1024X448 {
@@ -714,11 +714,11 @@ impl PlainSecretParams {
                 let q = key.secret.to_bytes();
                 writer.write_all(&q)?;
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem768X25519(key) => {
                 key.to_writer(writer)?;
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem1024X448(key) => {
                 key.to_writer(writer)?;
             }
@@ -732,27 +732,27 @@ impl PlainSecretParams {
             PlainSecretParams::X448(key) => {
                 writer.write_all(&key.secret)?;
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlDsa65Ed25519(key) => {
                 let q = key.ed25519.as_bytes();
                 writer.write_all(q)?;
                 writer.write_all(&key.ml_dsa_seed)?;
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlDsa87Ed448(key) => {
                 let q = key.ed448.as_bytes();
                 writer.write_all(q)?;
                 writer.write_all(&key.ml_dsa_seed)?;
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake128s(key) => {
                 writer.write_all(&key.key.to_bytes()[..])?;
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake128f(key) => {
                 writer.write_all(&key.key.to_bytes()[..])?;
             }
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake256s(key) => {
                 writer.write_all(&key.key.to_bytes()[..])?;
             }
@@ -807,19 +807,19 @@ impl PlainSecretParams {
             }
             PlainSecretParams::X25519(_key) => 32,
             PlainSecretParams::Ed448(_key) => 57,
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem768X25519(key) => key.write_len(),
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlKem1024X448(key) => key.write_len(),
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlDsa65Ed25519(_) => 32 + 32,
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::MlDsa87Ed448(_) => 57 + 32,
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake128s(_) => 64,
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake128f(_) => 64,
-            #[cfg(feature = "pqc")]
+            #[cfg(feature = "draft-pqc")]
             PlainSecretParams::SlhDsaShake256s(_) => 128,
             PlainSecretParams::X448(_key) => 56,
             PlainSecretParams::Unknown { data, .. } => data.len(),
@@ -917,44 +917,44 @@ mod tests {
                 PublicKeyAlgorithm::Ed448 => any::<crate::crypto::ed448::SecretKey>()
                     .prop_map(PlainSecretParams::Ed448)
                     .boxed(),
-                #[cfg(feature = "pqc")]
-                PublicKeyAlgorithm::MlKem768X25519Draft => {
+                #[cfg(feature = "draft-pqc")]
+                PublicKeyAlgorithm::MlKem768X25519 => {
                     any::<crate::crypto::ml_kem768_x25519::SecretKey>()
                         .prop_map(PlainSecretParams::MlKem768X25519)
                         .boxed()
                 }
-                #[cfg(feature = "pqc")]
-                PublicKeyAlgorithm::MlKem1024X448Draft => {
+                #[cfg(feature = "draft-pqc")]
+                PublicKeyAlgorithm::MlKem1024X448 => {
                     any::<crate::crypto::ml_kem1024_x448::SecretKey>()
                         .prop_map(PlainSecretParams::MlKem1024X448)
                         .boxed()
                 }
-                #[cfg(feature = "pqc")]
-                PublicKeyAlgorithm::MlDsa65Ed25519Draft => {
+                #[cfg(feature = "draft-pqc")]
+                PublicKeyAlgorithm::MlDsa65Ed25519 => {
                     any::<crate::crypto::ml_dsa65_ed25519::SecretKey>()
                         .prop_map(PlainSecretParams::MlDsa65Ed25519)
                         .boxed()
                 }
-                #[cfg(feature = "pqc")]
-                PublicKeyAlgorithm::MlDsa87Ed448Draft => {
+                #[cfg(feature = "draft-pqc")]
+                PublicKeyAlgorithm::MlDsa87Ed448 => {
                     any::<crate::crypto::ml_dsa87_ed448::SecretKey>()
                         .prop_map(PlainSecretParams::MlDsa87Ed448)
                         .boxed()
                 }
-                #[cfg(feature = "pqc")]
-                PublicKeyAlgorithm::SlhDsaShake128sDraft => {
+                #[cfg(feature = "draft-pqc")]
+                PublicKeyAlgorithm::SlhDsaShake128s => {
                     any::<crate::crypto::slh_dsa_shake128s::SecretKey>()
                         .prop_map(PlainSecretParams::SlhDsaShake128s)
                         .boxed()
                 }
-                #[cfg(feature = "pqc")]
-                PublicKeyAlgorithm::SlhDsaShake128fDraft => {
+                #[cfg(feature = "draft-pqc")]
+                PublicKeyAlgorithm::SlhDsaShake128f => {
                     any::<crate::crypto::slh_dsa_shake128f::SecretKey>()
                         .prop_map(PlainSecretParams::SlhDsaShake128f)
                         .boxed()
                 }
-                #[cfg(feature = "pqc")]
-                PublicKeyAlgorithm::SlhDsaShake256sDraft => {
+                #[cfg(feature = "draft-pqc")]
+                PublicKeyAlgorithm::SlhDsaShake256s => {
                     any::<crate::crypto::slh_dsa_shake256s::SecretKey>()
                         .prop_map(PlainSecretParams::SlhDsaShake256s)
                         .boxed()

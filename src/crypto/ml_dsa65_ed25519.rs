@@ -5,7 +5,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
-    errors::{ensure_eq, Result},
+    errors::{ensure, ensure_eq, Result},
     types::{MlDsa65Ed25519PublicParams, SignatureBytes},
 };
 
@@ -69,7 +69,15 @@ impl SecretKey {
 
 impl Signer for SecretKey {
     fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
-        ensure_eq!(hash, HashAlgorithm::Sha3_256, "invalid hash algorithm");
+        ensure!(
+            ![
+                HashAlgorithm::Md5,
+                HashAlgorithm::Ripemd160,
+                HashAlgorithm::Sha1
+            ]
+            .contains(&hash),
+            "invalid hash algorithm"
+        );
 
         let ed25519_sig = self.ed25519.sign(digest);
         let mut bytes = ed25519_sig.to_bytes().to_vec();
@@ -89,7 +97,15 @@ pub fn verify(
     hashed: &[u8],
     sig_bytes: &[u8],
 ) -> Result<()> {
-    ensure_eq!(hash, HashAlgorithm::Sha3_256, "invalid hash algorithm");
+    ensure!(
+        ![
+            HashAlgorithm::Md5,
+            HashAlgorithm::Ripemd160,
+            HashAlgorithm::Sha1
+        ]
+        .contains(&hash),
+        "invalid hash algorithm"
+    );
     ensure_eq!(sig_bytes.len(), 64 + 3309, "invalid signature length");
 
     let ed_sig = ed25519_dalek::Signature::try_from(&sig_bytes[..64])?;
