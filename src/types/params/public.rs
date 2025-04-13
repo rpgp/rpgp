@@ -214,13 +214,13 @@ impl PublicParams {
             | PublicKeyAlgorithm::Private102
             | PublicKeyAlgorithm::Private103
             | PublicKeyAlgorithm::Private104
+            | PublicKeyAlgorithm::Private105
+            | PublicKeyAlgorithm::Private106
             | PublicKeyAlgorithm::Private107
             | PublicKeyAlgorithm::Private108
             | PublicKeyAlgorithm::Private109
             | PublicKeyAlgorithm::Private110
             | PublicKeyAlgorithm::Unknown(_) => unknown(i, len),
-            #[cfg(not(feature = "draft-pqc"))]
-            PublicKeyAlgorithm::Private105 | PublicKeyAlgorithm::Private106 => unknown(i, len),
         }
     }
 

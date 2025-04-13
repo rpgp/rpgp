@@ -56,10 +56,10 @@ pub enum PublicKeyAlgorithm {
 
     /// ML-KEM-768+X25519
     #[cfg(feature = "draft-pqc")]
-    MlKem768X25519 = 105,
+    MlKem768X25519 = 35,
     /// ML-KEM-1024+X448
     #[cfg(feature = "draft-pqc")]
-    MlKem1024X448 = 106,
+    MlKem1024X448 = 36,
 
     /// Private experimental range (from OpenPGP)
     #[cfg_attr(test, proptest(skip))]
@@ -73,10 +73,8 @@ pub enum PublicKeyAlgorithm {
     #[cfg_attr(test, proptest(skip))]
     Private104 = 104,
     #[cfg_attr(test, proptest(skip))]
-    #[cfg(not(feature = "draft-pqc"))]
     Private105 = 105,
     #[cfg_attr(test, proptest(skip))]
-    #[cfg(not(feature = "draft-pqc"))]
     Private106 = 106,
     #[cfg_attr(test, proptest(skip))]
     Private107 = 107,
