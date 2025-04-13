@@ -3,7 +3,7 @@ use std::cmp::PartialEq;
 use log::debug;
 use ml_kem::{
     kem::{Decapsulate, DecapsulationKey, Encapsulate, EncapsulationKey},
-    EncodedSizeUser, KemCore, MlKem768, MlKem768Params,
+    KemCore, MlKem768, MlKem768Params,
 };
 use rand::{CryptoRng, Rng};
 use sha3::{Digest, Sha3_256};
@@ -128,8 +128,6 @@ impl Decryptor for SecretKey {
         //                )
         let kek = multi_key_combine(
             &ml_kem_key_share,
-            data.ml_kem_ciphertext,
-            data.ml_kem_pub_key,
             &ecdh_key_share,
             &data.ecdh_ciphertext,
             data.ecdh_pub_key,
@@ -171,11 +169,11 @@ fn ml_kem_768_decaps(
 
 const DOM_SEP: &[u8] = b"OpenPGPCompositeKDFv1";
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-key-combiner>
+/// draft-ietf-openpgp-pqc-latest, Published: 11 April 2025
+/// <https://openpgp-pqc.github.io/draft-openpgp-pqc/draft-ietf-openpgp-pqc.html#name-key-combiner>
+/// (will become draft-08)
 fn multi_key_combine(
     ml_kem_key_share: &[u8; 32],
-    ml_kem_cipher_text: &[u8; 1088],
-    ml_kem_public_key: &EncapsulationKey<MlKem768Params>,
     ecdh_key_share: &[u8; 32],
     ecdh_cipher_text: &[u8; 32],
     ecdh_public_key: &x25519_dalek::PublicKey,
@@ -183,16 +181,17 @@ fn multi_key_combine(
 ) -> [u8; 32] {
     let mut hasher = Sha3_256::new();
 
-    // SHA3-256( mlkemKeyShare || ecdhKeyShare || ecdhCipherText || ecdhPublicKey
-    //             || mlkemCipherText || mlkemPublicKey || algId || domSep )
+    // SHA3-256(
+    //           mlkemKeyShare || ecdhKeyShare ||
+    //           ecdhCipherText || ecdhPublicKey ||
+    //           algId || domSep || len(domSep)
     hasher.update(ml_kem_key_share);
     hasher.update(ecdh_key_share);
     hasher.update(ecdh_cipher_text);
     hasher.update(ecdh_public_key);
-    hasher.update(ml_kem_cipher_text);
-    hasher.update(ml_kem_public_key.as_bytes());
     hasher.update(&[u8::from(alg)][..]);
     hasher.update(DOM_SEP);
+    hasher.update([u8::try_from(DOM_SEP.len()).expect("fixed size")]);
 
     hasher.finalize().into()
 }
@@ -228,8 +227,6 @@ pub fn encrypt<R: CryptoRng + Rng>(
 
     let kek = multi_key_combine(
         &ml_kem_key_share,
-        &ml_kem_ciphertext,
-        ml_kem_public_key,
         &ecdh_key_share,
         &ecdh_ciphertext,
         ecdh_public_key,
