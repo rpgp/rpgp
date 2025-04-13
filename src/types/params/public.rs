@@ -228,9 +228,21 @@ impl PublicParams {
     /// key as a signer
     pub fn hash_alg(&self) -> HashAlgorithm {
         match self {
+            PublicParams::RSA(_)
+            | PublicParams::DSA(_)
+            | PublicParams::EdDSALegacy(_)
+            | PublicParams::Ed25519(_) => HashAlgorithm::Sha256,
+
+            PublicParams::ECDSA(
+                EcdsaPublicParams::P256 { .. }
+                | EcdsaPublicParams::Secp256k1 { .. }
+                | EcdsaPublicParams::Unsupported { .. },
+            ) => HashAlgorithm::Sha256,
             PublicParams::ECDSA(EcdsaPublicParams::P384 { .. }) => HashAlgorithm::Sha384,
             PublicParams::ECDSA(EcdsaPublicParams::P521 { .. }) => HashAlgorithm::Sha512,
+
             PublicParams::Ed448(_) => HashAlgorithm::Sha3_512,
+
             #[cfg(feature = "draft-pqc")]
             PublicParams::MlDsa65Ed25519(_) => HashAlgorithm::Sha3_256,
             #[cfg(feature = "draft-pqc")]
@@ -241,7 +253,18 @@ impl PublicParams {
             PublicParams::SlhDsaShake128f(_) => HashAlgorithm::Sha3_256,
             #[cfg(feature = "draft-pqc")]
             PublicParams::SlhDsaShake256s(_) => HashAlgorithm::Sha3_512,
-            _ => HashAlgorithm::default(),
+
+            // Not actually signing capable
+            PublicParams::Elgamal(_)
+            | PublicParams::ECDH(_)
+            | PublicParams::X25519(_)
+            | PublicParams::X448(_)
+            | PublicParams::Unknown { .. } => HashAlgorithm::Sha256,
+
+            #[cfg(feature = "draft-pqc")]
+            PublicParams::MlKem768X25519(_) | PublicParams::MlKem1024X448(_) => {
+                HashAlgorithm::Sha256
+            }
         }
     }
 }
