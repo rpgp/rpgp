@@ -247,6 +247,62 @@ impl PubKeyInner {
             }
         }
 
+        // Algorithms from draft-ietf-openpgp-pqc are only legal in v6 keys.
+        // Only "ML-KEM-768 + X25519" is also allowed in v4 keys, starting in draft version -08.
+        #[cfg(feature = "draft-pqc")]
+        if version != KeyVersion::V4
+            && version != KeyVersion::V6
+            && matches!(public_params, PublicParams::MlKem768X25519(_))
+        {
+            bail!(
+                "ML-KEM-768+X25519 is illegal for key version {}",
+                u8::from(version)
+            );
+        }
+
+        #[cfg(feature = "draft-pqc")]
+        if version != KeyVersion::V6 {
+            if matches!(public_params, PublicParams::MlKem1024X448(_)) {
+                bail!(
+                    "ML-KEM-1024+X448 is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+
+            if matches!(public_params, PublicParams::MlDsa65Ed25519(_)) {
+                bail!(
+                    "ML-DSA-65+Ed25519 is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+
+            if matches!(public_params, PublicParams::MlDsa87Ed448(_)) {
+                bail!(
+                    "ML-DSA-87+Ed448 is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+
+            if matches!(public_params, PublicParams::SlhDsaShake128s(_)) {
+                bail!(
+                    "SLH-DSA-SHAKE-128s is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+            if matches!(public_params, PublicParams::SlhDsaShake128f(_)) {
+                bail!(
+                    "SLH-DSA-SHAKE-128f is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+            if matches!(public_params, PublicParams::SlhDsaShake256s(_)) {
+                bail!(
+                    "SLH-DSA-SHAKE-256s is illegal for key version {}",
+                    u8::from(version)
+                );
+            }
+        }
+
         Ok(Self {
             version,
             algorithm,

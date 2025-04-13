@@ -1288,7 +1288,7 @@ mod tests {
     fn key_gen_ed448_ml_kem_x448() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [KeyVersion::V4, KeyVersion::V6] {
+        for key_version in [KeyVersion::V6] {
             println!("key version {:?}", key_version);
 
             for _ in 0..10 {
@@ -1376,18 +1376,14 @@ mod tests {
     fn key_gen_ml_dsa_65_ed25519_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
-
-            for _ in 0..10 {
-                gen_key(
-                    &mut rng,
-                    key_version,
-                    KeyType::MlDsa65Ed25519,
-                    HashAlgorithm::Sha3_256,
-                    KeyType::MlKem768X25519,
-                );
-            }
+        for _ in 0..10 {
+            gen_key(
+                &mut rng,
+                KeyVersion::V6,
+                KeyType::MlDsa65Ed25519,
+                HashAlgorithm::Sha3_256,
+                KeyType::MlKem768X25519,
+            );
         }
     }
 
@@ -1396,54 +1392,44 @@ mod tests {
     fn key_ml_dsa_87_ed448_gen_ed448_ml_kem_x448() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
-
-            for _ in 0..10 {
-                gen_key(
-                    &mut rng,
-                    key_version,
-                    KeyType::MlDsa87EdEd448,
-                    HashAlgorithm::Sha3_512,
-                    KeyType::MlKem1024X448,
-                );
-            }
+        for _ in 0..10 {
+            gen_key(
+                &mut rng,
+                KeyVersion::V6,
+                KeyType::MlDsa87EdEd448,
+                HashAlgorithm::Sha3_512,
+                KeyType::MlKem1024X448,
+            );
         }
     }
 
     #[test]
     #[ignore]
     #[cfg(feature = "draft-pqc")]
-    fn key_slh_dsa_128s_ml_kem_x25518() {
+    fn key_slh_dsa_128s_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
-            gen_key(
-                &mut rng,
-                key_version,
-                KeyType::SlhDsaShake128s,
-                HashAlgorithm::Sha3_256,
-                KeyType::MlKem768X25519,
-            );
-        }
+        gen_key(
+            &mut rng,
+            KeyVersion::V6,
+            KeyType::SlhDsaShake128s,
+            HashAlgorithm::Sha3_256,
+            KeyType::MlKem768X25519,
+        );
     }
 
     #[test]
     #[cfg(feature = "draft-pqc")]
-    fn key_slh_dsa_128f_ml_kem_x25518() {
+    fn key_slh_dsa_128f_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
-            gen_key(
-                &mut rng,
-                key_version,
-                KeyType::SlhDsaShake128f,
-                HashAlgorithm::Sha3_256,
-                KeyType::MlKem768X25519,
-            );
-        }
+        gen_key(
+            &mut rng,
+            KeyVersion::V6,
+            KeyType::SlhDsaShake128f,
+            HashAlgorithm::Sha3_256,
+            KeyType::MlKem768X25519,
+        );
     }
     #[test]
     #[ignore]
@@ -1451,17 +1437,13 @@ mod tests {
     fn key_slh_dsa_256s_ml_kem_x448() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
-        for key_version in [KeyVersion::V4, KeyVersion::V6] {
-            println!("key version {:?}", key_version);
-
-            gen_key(
-                &mut rng,
-                key_version,
-                KeyType::SlhDsaShake256s,
-                HashAlgorithm::Sha3_512,
-                KeyType::MlKem1024X448,
-            );
-        }
+        gen_key(
+            &mut rng,
+            KeyVersion::V6,
+            KeyType::SlhDsaShake256s,
+            HashAlgorithm::Sha3_512,
+            KeyType::MlKem1024X448,
+        );
     }
 
     #[cfg(feature = "draft-pqc")]
