@@ -5,7 +5,7 @@ use zeroize::ZeroizeOnDrop;
 
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
-    errors::{ensure_eq, Result},
+    errors::{ensure, ensure_eq, Result},
     types::{MlDsa87Ed448PublicParams, SignatureBytes},
 };
 
@@ -69,7 +69,15 @@ impl SecretKey {
 
 impl Signer for SecretKey {
     fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
-        ensure_eq!(hash, HashAlgorithm::Sha3_512, "invalid hash algorithm");
+        ensure!(
+            ![
+                HashAlgorithm::Md5,
+                HashAlgorithm::Ripemd160,
+                HashAlgorithm::Sha1
+            ]
+            .contains(&hash),
+            "invalid hash algorithm"
+        );
 
         let ed448_sig = self.ed448.sign(digest);
         let mut bytes = ed448_sig.to_bytes().to_vec();
@@ -88,7 +96,15 @@ pub fn verify(
     hashed: &[u8],
     sig_bytes: &[u8],
 ) -> Result<()> {
-    ensure_eq!(hash, HashAlgorithm::Sha3_512, "invalid hash algorithm");
+    ensure!(
+        ![
+            HashAlgorithm::Md5,
+            HashAlgorithm::Ripemd160,
+            HashAlgorithm::Sha1
+        ]
+        .contains(&hash),
+        "invalid hash algorithm"
+    );
     ensure_eq!(sig_bytes.len(), 114 + 4627, "invalid signature length");
 
     let ed_sig = cx448::Signature::try_from(&sig_bytes[..114])?;
