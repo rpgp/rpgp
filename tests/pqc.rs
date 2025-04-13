@@ -14,14 +14,16 @@ use testresult::TestResult;
 
 #[test]
 fn test_a_1_1_transferable_secret_key() -> TestResult {
+    // Sample v6 Ed25519 with ML-KEM-768+X25519 Data
+
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_1_1_key.sec.asc")?;
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-eddsa-sample-sk.asc")?;
 
     assert_eq!(key.primary_key.algorithm(), PublicKeyAlgorithm::Ed25519);
     assert_eq!(
         key.primary_key.fingerprint().to_string(),
-        "7f81f9d0db7cf905ed375ba0057928075faff433a70b88c0a30a022ddeaf3ac9"
+        "2357faea8775f69acb11183f81b765cc30db7daf2768827babe202a16d07d4aa"
     );
 
     assert_eq!(
@@ -30,7 +32,7 @@ fn test_a_1_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
-        "e3ed45a07c5af795b7cc5a156738efb42301c10df886a341ede80fca4c99baa3"
+        "fe0f1b20e62a56caacc4d68f32e5a0a3c1e7a69a7d13541fa1761a3933b5b8cf"
     );
 
     assert_eq!(
@@ -39,7 +41,7 @@ fn test_a_1_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.secret_subkeys[1].fingerprint().to_string(),
-        "fecb6e4f8a9ad135c6b45e63d9016daf7706d7e8322fd6ed1d8b028f61d57ebe"
+        "23eee71a76bc1eab20017a2ba4af492136ec6e6296ed60128b2223273bcb4d2c"
     );
 
     key.verify()?;
@@ -51,7 +53,7 @@ fn test_a_1_1_transferable_secret_key() -> TestResult {
 fn test_a_1_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_1_2_key.pub.asc")?;
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-eddsa-sample-pk.asc")?;
 
     assert_eq!(key.primary_key.algorithm(), PublicKeyAlgorithm::Ed25519);
 
@@ -73,13 +75,119 @@ fn test_a_1_2_transferable_public_key() -> TestResult {
 fn test_a_1_3_signed_encrypted() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_1_1_key.sec.asc")?;
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-eddsa-sample-sk.asc")?;
     sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_1_2_key.pub.asc")?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-eddsa-sample-pk.asc")?;
     pub_key.verify()?;
 
     {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/a_1_3_msg.asc")?;
+        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-eddsa-sample-message.asc")?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
+    // encrypt again
+    let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    builder
+        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha256)
+        // encrypting to the PQ subkey
+        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[1])?;
+
+    let out = builder.to_armored_string(&mut rng, Default::default())?;
+
+    // decrypt and verify sig again
+    {
+        let (msg, _) = Message::from_armor(out.as_bytes())?;
+
+        dbg!(&msg);
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_a_2_1_transferable_secret_key() -> TestResult {
+    // Sample v4 Ed25519 with ML-KEM-768+X25519 Data
+
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v4-eddsa-sample-sk.asc")?;
+
+    assert_eq!(key.primary_key.algorithm(), PublicKeyAlgorithm::Ed25519);
+    assert_eq!(
+        key.primary_key.fingerprint().to_string(),
+        "bee82527bae0f931a3195628a3687fdca62e4844"
+    );
+
+    assert_eq!(
+        key.secret_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::X25519
+    );
+    assert_eq!(
+        key.secret_subkeys[0].fingerprint().to_string(),
+        "3e6a6bd51614ff3810ad2256ada71a07c0afbd7d"
+    );
+
+    assert_eq!(
+        key.secret_subkeys[1].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519
+    );
+    assert_eq!(
+        key.secret_subkeys[1].fingerprint().to_string(),
+        "3c5e54c7de276f3e308e7da8c5bcde48f991e7c8"
+    );
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_2_2_transferable_public_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v4-eddsa-sample-pk.asc")?;
+
+    assert_eq!(key.primary_key.algorithm(), PublicKeyAlgorithm::Ed25519);
+
+    assert_eq!(
+        key.public_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::X25519
+    );
+    assert_eq!(
+        key.public_subkeys[1].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519
+    );
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_2_3_signed_encrypted() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v4-eddsa-sample-sk.asc")?;
+    sec_key.verify()?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v4-eddsa-sample-pk.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (msg, _) = Message::from_armor_file("./tests/pqc/v4-eddsa-sample-message.asc")?;
 
         dbg!(&msg);
         let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
@@ -187,10 +295,12 @@ fn test_ml_kem_1024_x448() -> TestResult {
 }
 
 #[test]
-fn test_a_2_1_transferable_secret_key() -> TestResult {
+fn test_a_3_1_transferable_secret_key() -> TestResult {
+    // Sample ML-DSA-65+Ed25519 with ML-KEM-768+X25519 Data
+
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_2_1_key.sec.asc")?;
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-sk.asc")?;
 
     assert_eq!(
         key.primary_key.algorithm(),
@@ -198,7 +308,7 @@ fn test_a_2_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.primary_key.fingerprint().to_string(),
-        "eef4c85ce59af6a4520432960079697ebbcd521dffc500e945209a284f535791"
+        "42120bfb467bf42c8a3eecb7fd38a8ba426ae95d916f9e77c3fd3f3955e1627d"
     );
 
     assert_eq!(
@@ -207,7 +317,7 @@ fn test_a_2_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
-        "5718270f6330b5482f4f5c24ca8ea2d826650ad202f39c91638c348e20a03aad"
+        "8333c14b27fd556d29b18141811531452dd88c23a1c09e92561521014c1cc460"
     );
 
     key.verify()?;
@@ -216,10 +326,10 @@ fn test_a_2_1_transferable_secret_key() -> TestResult {
 }
 
 #[test]
-fn test_a_2_2_transferable_public_key() -> TestResult {
+fn test_a_3_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_2_2_key.pub.asc")?;
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-pk.asc")?;
 
     assert_eq!(
         key.primary_key.algorithm(),
@@ -237,16 +347,16 @@ fn test_a_2_2_transferable_public_key() -> TestResult {
 }
 
 #[test]
-fn test_a_2_3_signed_encrypted() -> TestResult {
+fn test_a_3_3_signed_encrypted() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_2_1_key.sec.asc")?;
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-sk.asc")?;
     sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_2_2_key.pub.asc")?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-pk.asc")?;
     pub_key.verify()?;
 
     {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/a_2_3_msg.asc")?;
+        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-mldsa-65-sample-message.asc")?;
 
         dbg!(&msg);
         let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
@@ -284,10 +394,12 @@ fn test_a_2_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
-fn test_a_3_1_transferable_secret_key() -> TestResult {
+fn test_a_4_1_transferable_secret_key() -> TestResult {
+    // Sample ML-DSA-87+Ed448 with ML-KEM-1024+X448 Data
+
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_3_1_key.sec.asc")?;
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-sk.asc")?;
 
     assert_eq!(
         key.primary_key.algorithm(),
@@ -295,7 +407,7 @@ fn test_a_3_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.primary_key.fingerprint().to_string(),
-        "ead878caeab3ae40d724cbc913777028e5f0809d393f796f710b7331c49a8ab1"
+        "4141f9deb6ee8c3f8484c3e0d0f41796da5c6b8e6994145e3a335f557cf544c3"
     );
 
     assert_eq!(
@@ -304,7 +416,7 @@ fn test_a_3_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
-        "d1caef1274b00ede8ce21575250621f96152d4a9aa68b400579be98b4fa0ca68"
+        "8cc1fdaed98c2f3b0601eab83fe96e06a44d234bbe61d9b04c1e81c4f66d2080"
     );
 
     key.verify()?;
@@ -313,10 +425,10 @@ fn test_a_3_1_transferable_secret_key() -> TestResult {
 }
 
 #[test]
-fn test_a_3_2_transferable_public_key() -> TestResult {
+fn test_a_4_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_3_2_key.pub.asc")?;
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-pk.asc")?;
 
     assert_eq!(
         key.primary_key.algorithm(),
@@ -334,16 +446,16 @@ fn test_a_3_2_transferable_public_key() -> TestResult {
 }
 
 #[test]
-fn test_a_3_3_signed_encrypted() -> TestResult {
+fn test_a_4_3_signed_encrypted() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_3_1_key.sec.asc")?;
+    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-sk.asc")?;
     sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_3_2_key.pub.asc")?;
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-pk.asc")?;
     pub_key.verify()?;
 
     {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/a_3_3_msg.asc")?;
+        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-mldsa-87-sample-message.asc")?;
 
         dbg!(&msg);
         let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
@@ -381,10 +493,12 @@ fn test_a_3_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
-fn test_a_4_1_transferable_secret_key() -> TestResult {
+fn test_a_5_1_transferable_secret_key() -> TestResult {
+    // Sample SLH-DSA-128s with ML-KEM-768+X25519 Data
+
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_4_1_key.sec.asc")?;
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-sk.asc")?;
 
     assert_eq!(
         key.primary_key.algorithm(),
@@ -392,7 +506,7 @@ fn test_a_4_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.primary_key.fingerprint().to_string(),
-        "2e7216dacc6d1c0896901f50eff94d6c071ed7fa246f0cb547f10e22f21896b1"
+        "e761d4ec762a5f9c35f72b0c8a030c184b903c35459e74b25341b245819ab3fe"
     );
 
     assert_eq!(
@@ -401,7 +515,7 @@ fn test_a_4_1_transferable_secret_key() -> TestResult {
     );
     assert_eq!(
         key.secret_subkeys[0].fingerprint().to_string(),
-        "1adc9f55f5223a78948522a0f4d1b29aff2ed651d3fa56e234249402000ace41"
+        "1090ff914d4fb0a40eb3354aeec8575609f0f72e6ad881f54e94932cd78227f6"
     );
     assert_eq!(key.secret_subkeys.len(), 1);
 
@@ -411,10 +525,10 @@ fn test_a_4_1_transferable_secret_key() -> TestResult {
 }
 
 #[test]
-fn test_a_4_2_transferable_public_key() -> TestResult {
+fn test_a_5_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_4_2_key.pub.asc")?;
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-pk.asc")?;
 
     assert_eq!(
         key.primary_key.algorithm(),
@@ -434,25 +548,26 @@ fn test_a_4_2_transferable_public_key() -> TestResult {
 
 #[test]
 #[ignore]
-fn test_a_4_3_signed_encrypted() -> TestResult {
+fn test_a_5_3_signed_encrypted() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_4_1_key.sec.asc")?;
+    let (sec_key, _) =
+        SignedSecretKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-sk.asc")?;
     sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_4_2_key.pub.asc")?;
+    let (pub_key, _) =
+        SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-pk.asc")?;
     pub_key.verify()?;
 
     {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/a_4_3_msg.asc")?;
+        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-message.asc")?;
 
         dbg!(&msg);
-        // Bug in test vectors? seems to use MlKem1024X448 not MlKem768
-        // let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
 
-        // let data = msg.as_data_string()?;
-        // assert_eq!(data, "Testing\n");
-        // msg.verify(&pub_key)?;
-        // dbg!(&msg);
+        let data = msg.as_data_string()?;
+        assert_eq!(data, "Testing\n");
+        msg.verify(&pub_key)?;
+        dbg!(&msg);
     }
     // encrypt again
     let mut rng = ChaCha8Rng::seed_from_u64(0);
@@ -476,5 +591,71 @@ fn test_a_4_3_signed_encrypted() -> TestResult {
         assert_eq!(data, "Testing\n");
         msg.verify(&pub_key)?;
     }
+    Ok(())
+}
+
+#[test]
+fn test_a_6_1_transferable_secret_key() -> TestResult {
+    // Sample SLH-DSA-128f with ML-KEM-768+X25519 Data
+
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-slhdsa-128f-sample-sk.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::SlhDsaShake128f
+    );
+    assert_eq!(
+        key.primary_key.fingerprint().to_string(),
+        "7625d0725493f2a0c38080e3a3928016d73ec056e4cf54b1f93a1da7794e67ad"
+    );
+
+    assert_eq!(
+        key.secret_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519
+    );
+    assert_eq!(
+        key.secret_subkeys[0].fingerprint().to_string(),
+        "cea501a4831757a33b9fa03973b81656cf2ecac6f705daf1647e1f7190366ca6"
+    );
+
+    assert_eq!(key.secret_subkeys.len(), 1);
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_7_1_transferable_secret_key() -> TestResult {
+    // Sample SLH-DSA-256s with ML-KEM-1024+X448 Data
+
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-slhdsa-256s-sample-sk.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::SlhDsaShake256s
+    );
+    assert_eq!(
+        key.primary_key.fingerprint().to_string(),
+        "eb55807530d02e475e5a6f403fec5ff9c60b078395fab4c9a862ec8c82a12a95"
+    );
+
+    assert_eq!(
+        key.secret_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem1024X448
+    );
+    assert_eq!(
+        key.secret_subkeys[0].fingerprint().to_string(),
+        "6e8bbbed8d24472510941bf18639f7f799f86e8d8f3a8f49694e5687885388c1"
+    );
+
+    assert_eq!(key.secret_subkeys.len(), 1);
+
+    key.verify()?;
+
     Ok(())
 }
