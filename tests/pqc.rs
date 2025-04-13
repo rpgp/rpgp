@@ -13,7 +13,7 @@ use smallvec::smallvec;
 use testresult::TestResult;
 
 #[test]
-fn test_a_1_1_transferrable_secret_key() -> TestResult {
+fn test_a_1_1_transferable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_1_1_key.sec.asc")?;
@@ -48,7 +48,7 @@ fn test_a_1_1_transferrable_secret_key() -> TestResult {
 }
 
 #[test]
-fn test_a_1_2_transferrable_public_key() -> TestResult {
+fn test_a_1_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_1_2_key.pub.asc")?;
@@ -187,7 +187,7 @@ fn test_ml_kem_1024_x448() -> TestResult {
 }
 
 #[test]
-fn test_a_2_1_transferrable_secret_key() -> TestResult {
+fn test_a_2_1_transferable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_2_1_key.sec.asc")?;
@@ -216,7 +216,7 @@ fn test_a_2_1_transferrable_secret_key() -> TestResult {
 }
 
 #[test]
-fn test_a_2_2_transferrable_public_key() -> TestResult {
+fn test_a_2_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_2_2_key.pub.asc")?;
@@ -284,7 +284,7 @@ fn test_a_2_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
-fn test_a_3_1_transferrable_secret_key() -> TestResult {
+fn test_a_3_1_transferable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_3_1_key.sec.asc")?;
@@ -313,7 +313,7 @@ fn test_a_3_1_transferrable_secret_key() -> TestResult {
 }
 
 #[test]
-fn test_a_3_2_transferrable_public_key() -> TestResult {
+fn test_a_3_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_3_2_key.pub.asc")?;
@@ -381,7 +381,7 @@ fn test_a_3_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
-fn test_a_4_1_transferrable_secret_key() -> TestResult {
+fn test_a_4_1_transferable_secret_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedSecretKey::from_armor_file("./tests/pqc/a_4_1_key.sec.asc")?;
@@ -411,7 +411,7 @@ fn test_a_4_1_transferrable_secret_key() -> TestResult {
 }
 
 #[test]
-fn test_a_4_2_transferrable_public_key() -> TestResult {
+fn test_a_4_2_transferable_public_key() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/a_4_2_key.pub.asc")?;
