@@ -2,7 +2,7 @@
 use pgp::{
     composed::{
         Deserializable, KeyType, Message, MessageBuilder, SecretKeyParamsBuilder, SignedPublicKey,
-        SignedSecretKey, SubkeyParamsBuilder,
+        SignedSecretKey, StandaloneSignature, SubkeyParamsBuilder,
     },
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm, sym::SymmetricKeyAlgorithm},
     types::{KeyDetails, KeyVersion, Password},
@@ -394,6 +394,25 @@ fn test_a_3_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
+fn test_a_3_4_signature() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-pk.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (sig, _) =
+            StandaloneSignature::from_armor_file("./tests/pqc/v6-mldsa-65-sample-signature.asc")?;
+
+        dbg!(&sig);
+        sig.verify(&pub_key, &b"Testing\n"[..])?;
+
+        assert!(sig.verify(&pub_key, &b"XXX"[..]).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn test_a_4_1_transferable_secret_key() -> TestResult {
     // Sample ML-DSA-87+Ed448 with ML-KEM-1024+X448 Data
 
@@ -488,6 +507,25 @@ fn test_a_4_3_signed_encrypted() -> TestResult {
         assert_eq!(data, "Testing\n");
         msg.verify(&pub_key)?;
         dbg!(&msg);
+    }
+    Ok(())
+}
+
+#[test]
+fn test_a_4_4_signature() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-pk.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (sig, _) =
+            StandaloneSignature::from_armor_file("./tests/pqc/v6-mldsa-87-sample-signature.asc")?;
+
+        dbg!(&sig);
+        sig.verify(&pub_key, &b"Testing\n"[..])?;
+
+        assert!(sig.verify(&pub_key, &b"XXX"[..]).is_err());
     }
     Ok(())
 }
@@ -595,6 +633,27 @@ fn test_a_5_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
+fn test_a_5_4_signature() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (pub_key, _) =
+        SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-pk.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (sig, _) = StandaloneSignature::from_armor_file(
+            "./tests/pqc/v6-slhdsa-128s-sample-signature.asc",
+        )?;
+
+        dbg!(&sig);
+        sig.verify(&pub_key, &b"Testing\n"[..])?;
+
+        assert!(sig.verify(&pub_key, &b"XXX"[..]).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn test_a_6_1_transferable_secret_key() -> TestResult {
     // Sample SLH-DSA-128f with ML-KEM-768+X25519 Data
 
@@ -628,6 +687,49 @@ fn test_a_6_1_transferable_secret_key() -> TestResult {
 }
 
 #[test]
+fn test_a_6_2_transferable_public_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128f-sample-pk.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::SlhDsaShake128f
+    );
+
+    assert_eq!(
+        key.public_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem768X25519
+    );
+    assert_eq!(key.public_subkeys.len(), 1);
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_6_3_signature() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (pub_key, _) =
+        SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128f-sample-pk.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (sig, _) = StandaloneSignature::from_armor_file(
+            "./tests/pqc/v6-slhdsa-128f-sample-signature.asc",
+        )?;
+
+        dbg!(&sig);
+        sig.verify(&pub_key, &b"Testing\n"[..])?;
+
+        assert!(sig.verify(&pub_key, &b"XXX"[..]).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn test_a_7_1_transferable_secret_key() -> TestResult {
     // Sample SLH-DSA-256s with ML-KEM-1024+X448 Data
 
@@ -657,5 +759,48 @@ fn test_a_7_1_transferable_secret_key() -> TestResult {
 
     key.verify()?;
 
+    Ok(())
+}
+
+#[test]
+fn test_a_7_2_transferable_public_key() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-256s-sample-pk.asc")?;
+
+    assert_eq!(
+        key.primary_key.algorithm(),
+        PublicKeyAlgorithm::SlhDsaShake256s
+    );
+
+    assert_eq!(
+        key.public_subkeys[0].algorithm(),
+        PublicKeyAlgorithm::MlKem1024X448
+    );
+    assert_eq!(key.public_subkeys.len(), 1);
+
+    key.verify()?;
+
+    Ok(())
+}
+
+#[test]
+fn test_a_7_3_signature() -> TestResult {
+    let _ = pretty_env_logger::try_init();
+
+    let (pub_key, _) =
+        SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-256s-sample-pk.asc")?;
+    pub_key.verify()?;
+
+    {
+        let (sig, _) = StandaloneSignature::from_armor_file(
+            "./tests/pqc/v6-slhdsa-256s-sample-signature.asc",
+        )?;
+
+        dbg!(&sig);
+        sig.verify(&pub_key, &b"Testing\n"[..])?;
+
+        assert!(sig.verify(&pub_key, &b"XXX"[..]).is_err());
+    }
     Ok(())
 }
