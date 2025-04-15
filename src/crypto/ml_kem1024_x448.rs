@@ -140,7 +140,7 @@ impl Decryptor for SecretKey {
     }
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x448-kem>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html#name-x448-kem>
 fn x448_kem_decaps(
     their_public: &PublicKey,
     ecdh_secret_key: &Secret,
@@ -193,7 +193,7 @@ fn multi_key_combine(
 
 /// ML KEM 1024 - X448 Encryption
 ///
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-encryption-procedure>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html#name-encryption-procedure>
 ///
 /// Returns
 /// - ecdh_ciphertext
@@ -234,7 +234,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     Ok((ecdh_ciphertext, ml_kem_ciphertext, c))
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x448-kem>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html#name-x448-kem>
 fn x448_kem_encaps<R: CryptoRng + Rng>(
     mut rng: R,
     public_key: &PublicKey,

@@ -142,7 +142,7 @@ impl Decryptor for SecretKey {
     }
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x25519-kem>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html#name-x25519-kem>
 fn x25519_kem_decaps(
     ecdh_ciphertext: &[u8; 32],
     ecdh_secret_key: &x25519_dalek::StaticSecret,
@@ -196,7 +196,7 @@ fn multi_key_combine(
 
 /// ML KEM 768 - X25519 Encryption
 ///
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-encryption-procedure>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html#name-encryption-procedure>
 ///
 /// Returns
 /// - ecdh_ciphertext
@@ -237,7 +237,7 @@ pub fn encrypt<R: CryptoRng + Rng>(
     Ok((ecdh_ciphertext, ml_kem_ciphertext, c))
 }
 
-/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-07.html#name-x25519-kem>
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html#name-x25519-kem>
 fn x25519_kem_encaps<R: CryptoRng + Rng>(
     mut rng: R,
     public_key: &x25519_dalek::PublicKey,
