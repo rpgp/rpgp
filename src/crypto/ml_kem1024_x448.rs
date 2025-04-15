@@ -17,16 +17,21 @@ use crate::{
     types::MlKem1024X448PublicParams,
 };
 
+/// Size in bytes of the X448 secret key.
+pub const X448_KEY_LEN: usize = 56;
+/// Size in bytes of the ML KEM 1024 secret key.
+pub const ML_KEM1024_KEY_LEN: usize = 64;
+
 /// Secret key for ML KEM 1024 X448
 #[derive(Clone, derive_more::Debug)]
 pub struct SecretKey {
     #[debug("..")]
-    pub(crate) x448: Secret,
+    x448: Secret,
     #[debug("..")]
-    pub(crate) ml_kem: Box<DecapsulationKey<MlKem1024Params>>,
+    ml_kem: Box<DecapsulationKey<MlKem1024Params>>,
     /// Seed `d` and `z`
     #[debug("..")]
-    pub(crate) ml_kem_seed: (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>),
+    ml_kem_seed: (Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>),
 }
 
 impl ZeroizeOnDrop for SecretKey {}
@@ -50,14 +55,15 @@ impl Eq for SecretKey {}
 
 impl Serialize for SecretKey {
     fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
-        writer.write_all(self.x448.as_bytes())?;
-        writer.write_all(&self.ml_kem_seed.0[..])?;
-        writer.write_all(&self.ml_kem_seed.1[..])?;
+        let (a, b, c) = self.as_bytes();
+        writer.write_all(a)?;
+        writer.write_all(b)?;
+        writer.write_all(c)?;
         Ok(())
     }
 
     fn write_len(&self) -> usize {
-        56 + 64
+        X448_KEY_LEN + ML_KEM1024_KEY_LEN
     }
 }
 
@@ -81,17 +87,32 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn try_from_parts(x: Secret, ml_kem: [u8; 64]) -> Result<Self> {
+    /// Create a key from the raw byte values
+    pub fn try_from_bytes(
+        x448: [u8; X448_KEY_LEN],
+        ml_kem: [u8; ML_KEM1024_KEY_LEN],
+    ) -> Result<Self> {
         let d: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[..32].try_into().expect("fixed size"));
         let z: Zeroizing<[u8; 32]> = Zeroizing::new(ml_kem[32..].try_into().expect("fixed size"));
 
         let (ml_kem, _) = MlKem1024::generate_deterministic(&((*d).into()), &((*z).into()));
+
+        let x = Secret::from(x448);
 
         Ok(Self {
             x448: x,
             ml_kem: Box::new(ml_kem),
             ml_kem_seed: (d, z),
         })
+    }
+
+    /// Returns the individual secret keys in their raw byte level representation.
+    pub fn as_bytes(&self) -> (&[u8; X448_KEY_LEN], &[u8; 32], &[u8; 32]) {
+        (
+            self.x448.as_bytes(),
+            &self.ml_kem_seed.0,
+            &self.ml_kem_seed.1,
+        )
     }
 }
 

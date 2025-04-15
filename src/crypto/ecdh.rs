@@ -149,7 +149,7 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn try_from_mpi(pub_params: &EcdhPublicParams, d: Mpi) -> Result<Self> {
+    pub fn try_from_mpi(pub_params: &EcdhPublicParams, d: Mpi) -> Result<Self> {
         match pub_params {
             EcdhPublicParams::Curve25519 { .. } => {
                 const SIZE: usize = ECCCurve::Curve25519.secret_key_length();
@@ -197,7 +197,7 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn as_mpi(&self) -> Mpi {
+    pub fn as_mpi(&self) -> Mpi {
         match self {
             Self::Curve25519 { secret, .. } => {
                 let bytes = secret.to_bytes();
@@ -214,7 +214,7 @@ impl SecretKey {
         }
     }
 
-    fn curve(&self) -> ECCCurve {
+    pub fn curve(&self) -> ECCCurve {
         match self {
             Self::Curve25519 { .. } => ECCCurve::Curve25519,
             Self::P256 { .. } => ECCCurve::P256,

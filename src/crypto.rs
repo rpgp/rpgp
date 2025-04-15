@@ -35,12 +35,14 @@ pub mod slh_dsa_shake128s;
 #[cfg(feature = "draft-pqc")]
 pub mod slh_dsa_shake256s;
 
+/// Describes keys that can decrypt data.
 pub trait Decryptor {
     type EncryptionFields<'a>;
 
     fn decrypt(&self, data: Self::EncryptionFields<'_>) -> crate::errors::Result<Vec<u8>>;
 }
 
+/// Describes keys that can sign data.
 pub trait Signer {
     fn sign(&self, hash: HashAlgorithm, digest: &[u8]) -> crate::errors::Result<SignatureBytes>;
 }
