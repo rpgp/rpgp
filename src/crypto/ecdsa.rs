@@ -128,6 +128,7 @@ impl SecretKey {
             Self::Unsupported { curve, .. } => curve.clone(),
         }
     }
+
     pub(crate) fn secret_key_length(&self) -> Option<usize> {
         match self {
             Self::P256 { .. } => Some(32),

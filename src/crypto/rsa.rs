@@ -75,6 +75,27 @@ impl SecretKey {
 
         (Mpi::from(d), Mpi::from(p), Mpi::from(q), Mpi::from(u))
     }
+
+    /// Returns the modulus size in bytes.
+    pub fn size(&self) -> usize {
+        self.0.size()
+    }
+
+    /// Returns `d`, `p`, `q`, `u` in big endian
+    pub fn to_bytes(&self) -> (Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>) {
+        let d = self.0.d().to_bytes_be();
+        let p = self.0.primes()[0].to_bytes_be();
+        let q = self.0.primes()[1].to_bytes_be();
+        let u = self.0.primes()[0]
+            .clone()
+            .mod_inverse(&self.0.primes()[1])
+            .expect("invalid prime")
+            .to_biguint()
+            .expect("invalid prime")
+            .to_bytes_be();
+
+        (d, p, q, u)
+    }
 }
 
 impl From<&SecretKey> for RsaPublicParams {

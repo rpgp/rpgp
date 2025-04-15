@@ -61,8 +61,14 @@ impl SecretKey {
         Ok(Self { key: secret })
     }
 
+    /// Returns the secret point `x` as MPI.
     pub fn to_mpi(&self) -> Mpi {
         Mpi::from(self.key.x())
+    }
+
+    /// Returns the secret point `x` as big endian bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.key.x().to_bytes_be()
     }
 }
 
