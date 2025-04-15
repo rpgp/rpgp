@@ -94,7 +94,7 @@ see the "rpgpie" results in the [OpenPGP interoperability test suite](https://te
   - [x] Iterated and Salted
   - [x] Argon2
 
-- PQC - Draft 08
+- PQC - [Draft 08](https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html)
  - Encryption & Decryption
    - [x] ML-KEM-768 x25519
    - [x] ML-KEM-1024 ed448

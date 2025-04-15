@@ -23,7 +23,7 @@ bench = false
 
 [dependencies]
 
-# general
+# General
 base64 = ">=0.21.7, < 0.23"
 buffer-redux = { version = "1.0.0", default-features = false }
 bitfields = "0.12.3"
@@ -133,12 +133,20 @@ escape_string = "0.1.2"
 testresult = "0.4.1"
 
 [features]
-default = ["bzip2"]
-# DO NOT USE IN PRODUCTION! Currently implementing draft-ietf-openpgp-pqc-08
-draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
+default = ["asm", "bzip2"]
+
+# Enables bzip2 support
 bzip2 = ["dep:bzip2"]
+# Enables assembly based optimizations
 asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
+# Allows building for wasm
 wasm = ["chrono/wasmbind", "getrandom", "getrandom/js"]
+
+# Enables implementation of draft-ietf-openpgp-pqc-08
+# This is unstable and can have breaking changes in patch releases.
+# DO NOT USE IN PRODUCTION!
+draft-pqc = ["dep:ml-kem", "dep:ml-dsa", "dep:slh-dsa"]
+
 
 [profile.bench]
 debug = 2
