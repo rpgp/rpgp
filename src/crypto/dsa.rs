@@ -32,7 +32,7 @@ impl From<&SecretKey> for DsaPublicParams {
 
 impl Zeroize for SecretKey {
     fn zeroize(&mut self) {
-        // TODO!!!!
+        // TODO: https://github.com/RustCrypto/signatures/issues/883
         // self.key.zeroize();
     }
 }

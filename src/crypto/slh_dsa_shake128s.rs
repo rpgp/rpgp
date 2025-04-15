@@ -23,7 +23,7 @@ impl ZeroizeOnDrop for SecretKey {}
 
 impl Drop for SecretKey {
     fn drop(&mut self) {
-        // TODO: can we use flat_drop to zeroize?
+        // TODO: zeroize, fixed in latest `master`
     }
 }
 

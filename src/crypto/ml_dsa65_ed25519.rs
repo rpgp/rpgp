@@ -12,7 +12,6 @@ use crate::{
 /// Secret key for ML DSA 65 with Curve25519.
 #[derive(Clone, PartialEq, derive_more::Debug)]
 pub struct SecretKey {
-    /// The secret point.
     #[debug("..")]
     pub ed25519: ed25519_dalek::SigningKey,
     #[debug("..")]
