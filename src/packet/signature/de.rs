@@ -337,15 +337,12 @@ fn actual_signature<B: BufRead>(typ: &PublicKeyAlgorithm, mut i: B) -> Result<Si
         | &PublicKeyAlgorithm::Private102
         | &PublicKeyAlgorithm::Private103
         | &PublicKeyAlgorithm::Private104
+        | &PublicKeyAlgorithm::Private105
+        | &PublicKeyAlgorithm::Private106
         | &PublicKeyAlgorithm::Private107
         | &PublicKeyAlgorithm::Private108
         | &PublicKeyAlgorithm::Private109
         | &PublicKeyAlgorithm::Private110 => {
-            let v = Mpi::try_from_reader(&mut i)?;
-            Ok(SignatureBytes::Mpis(vec![v]))
-        }
-        #[cfg(not(feature = "draft-pqc"))]
-        &PublicKeyAlgorithm::Private105 | &PublicKeyAlgorithm::Private106 => {
             let v = Mpi::try_from_reader(&mut i)?;
             Ok(SignatureBytes::Mpis(vec![v]))
         }
