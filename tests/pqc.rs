@@ -430,9 +430,9 @@ fn test_a_5_2_transferable_public_key() -> TestResult {
 #[ignore]
 fn test_a_5_3_signed_encrypted() -> TestResult {
     TestCase::SignedEncryptedMessage {
-        sec_key: "./tests/pqc/v6-slhsa-128s-sample-sk.asc",
+        sec_key: "./tests/pqc/v6-slhdsa-128s-sample-sk.asc",
         pub_key: "./tests/pqc/v6-slhdsa-128s-sample-pk.asc",
-        msg: "./tests/pqc/v6-mldsa-87-sample-message.asc",
+        msg: "./tests/pqc/v6-slhdsa-128s-sample-message.asc",
         hash: HashAlgorithm::Sha3_256,
     }
     .test()
