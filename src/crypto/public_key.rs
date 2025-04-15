@@ -31,12 +31,35 @@ pub enum PublicKeyAlgorithm {
     /// X25519 [RFC 9580]
     X25519 = 25,
     /// X448 [RFC 9580]
-    #[cfg_attr(test, proptest(skip))]
     X448 = 26,
     /// Ed25519 [RFC 9580]
     Ed25519 = 27,
     /// Ed448 [RFC 9580]
     Ed448 = 28,
+
+    /// ML-DSA-65+Ed25519
+    #[cfg(feature = "draft-pqc")]
+    MlDsa65Ed25519 = 30,
+    /// ML-DSA-87+Ed448
+    #[cfg(feature = "draft-pqc")]
+    MlDsa87Ed448 = 31,
+
+    /// SLH-DSA-SHAKE-128s
+    #[cfg(feature = "draft-pqc")]
+    SlhDsaShake128s = 32,
+    /// SLH-DSA-SHAKE-128f
+    #[cfg(feature = "draft-pqc")]
+    SlhDsaShake128f = 33,
+    /// SLH-DSA-SHAKE-256s
+    #[cfg(feature = "draft-pqc")]
+    SlhDsaShake256s = 34,
+
+    /// ML-KEM-768+X25519
+    #[cfg(feature = "draft-pqc")]
+    MlKem768X25519 = 35,
+    /// ML-KEM-1024+X448
+    #[cfg(feature = "draft-pqc")]
+    MlKem1024X448 = 36,
 
     /// Private experimental range (from OpenPGP)
     #[cfg_attr(test, proptest(skip))]

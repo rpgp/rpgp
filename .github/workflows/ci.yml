@@ -55,11 +55,18 @@ jobs:
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features asm
 
+    - name: pqc
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
+      run: cargo nextest run --lib --bins --tests --all --features draft-pqc
+
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
 
     - name: asm ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features asm
+
+    - name: pqc ignored
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
 
   build_and_test_windows:
     name: Build and test (Windows)
@@ -99,8 +106,14 @@ jobs:
     - name: tests
       run: cargo nextest run --lib --bins --tests --all
 
+    - name: tests - pqc
+      run: cargo nextest run --lib --bins --tests --all --features draft-pqc
+
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
+
+    - name: tests ignored - pqc
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
 
   cross:
     name: Cross compile
@@ -124,7 +137,7 @@ jobs:
     - name: Install stable
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: 1.83
+        toolchain: 1.85
         target: ${{ matrix.target }}
         override: true
 
@@ -133,6 +146,9 @@ jobs:
 
     - name: test
       run: cross test --release --all --target ${{ matrix.target }}
+
+    - name: test - pqc
+      run: cross test --release --all --target ${{ matrix.target }} --features draft-pqc
 
   check_wasm:
     name: Check wasm targets
@@ -165,6 +181,12 @@ jobs:
         command: check
         args: --target wasm32-unknown-unknown --no-default-features --features wasm
 
+    - name: check - pqc
+      uses: actions-rs/cargo@v1
+      with:
+        command: check
+        args: --target wasm32-unknown-unknown --no-default-features --features wasm,draft-pqc
+
   check_fmt:
     name: Checking fmt
     runs-on: ubuntu-latest
@@ -194,7 +216,7 @@ jobs:
           components: rustfmt
 
     - name: Docs
-      run: cargo doc
+      run: cargo doc --all-features
 
   clippy_check:
     runs-on: ubuntu-latest

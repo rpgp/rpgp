@@ -13,9 +13,9 @@ use crate::{
     },
     ser::Serialize,
     types::{
-        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi,
-        Password, PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait,
-        SecretParams, SignatureBytes, Tag,
+        EddsaLegacyPublicParams, EskType, Fingerprint, KeyDetails, KeyId, KeyVersion, Password,
+        PkeskBytes, PlainSecretParams, PublicKeyTrait, PublicParams, SecretKeyTrait, SecretParams,
+        SignatureBytes, Tag,
     },
 };
 
@@ -462,7 +462,7 @@ fn create_signature(
     use crate::crypto::Signer;
 
     debug!("unlocked key");
-    let sig = match *priv_key {
+    match *priv_key {
         PlainSecretParams::RSA(ref priv_key) => {
             let PublicParams::RSA(_) = pub_params else {
                 bail!("inconsistent key");
@@ -487,11 +487,33 @@ fn create_signature(
         PlainSecretParams::X25519(_) => {
             bail!("X25519 can not be used for signing operations")
         }
+        #[cfg(feature = "draft-pqc")]
+        PlainSecretParams::MlKem768X25519 { .. } => {
+            bail!("ML KEM 768 X25519 can not be used for signing operations")
+        }
+        #[cfg(feature = "draft-pqc")]
+        PlainSecretParams::MlKem1024X448 { .. } => {
+            bail!("ML KEM 1024 X448 can not be used for signing operations")
+        }
         PlainSecretParams::X448(_) => {
             bail!("X448 can not be used for signing operations")
         }
         PlainSecretParams::Ed25519(ref priv_key) => {
             let PublicParams::Ed25519(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        #[cfg(feature = "draft-pqc")]
+        PlainSecretParams::MlDsa65Ed25519(ref priv_key) => {
+            let PublicParams::MlDsa65Ed25519(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        #[cfg(feature = "draft-pqc")]
+        PlainSecretParams::MlDsa87Ed448(ref priv_key) => {
+            let PublicParams::MlDsa87Ed448(_) = pub_params else {
                 bail!("invalid inconsistent key");
             };
             priv_key.sign(hash, data)
@@ -519,43 +541,29 @@ fn create_signature(
         PlainSecretParams::Elgamal(_) => {
             unsupported_err!("Elgamal signing");
         }
+        #[cfg(feature = "draft-pqc")]
+        PlainSecretParams::SlhDsaShake128s(ref priv_key) => {
+            let PublicParams::SlhDsaShake128s(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        #[cfg(feature = "draft-pqc")]
+        PlainSecretParams::SlhDsaShake128f(ref priv_key) => {
+            let PublicParams::SlhDsaShake128f(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
+        #[cfg(feature = "draft-pqc")]
+        PlainSecretParams::SlhDsaShake256s(ref priv_key) => {
+            let PublicParams::SlhDsaShake256s(_) = pub_params else {
+                bail!("invalid inconsistent key");
+            };
+            priv_key.sign(hash, data)
+        }
         PlainSecretParams::Unknown { alg, .. } => {
             unsupported_err!("{:?} signing", alg);
-        }
-    }?;
-
-    match pub_params {
-        PublicParams::Ed25519 { .. } => {
-            // native format
-            ensure_eq!(sig.len(), 2, "expect two signature parts");
-
-            let mut native = sig[0].clone();
-            native.extend_from_slice(&sig[1]);
-
-            ensure_eq!(native.len(), 64, "expect 64 byte signature");
-
-            Ok(SignatureBytes::Native(native.into()))
-        }
-        PublicParams::Ed448 { .. } => {
-            // native format
-            ensure_eq!(sig.len(), 2, "expect two signature parts");
-
-            let mut native = sig[0].clone();
-            native.extend_from_slice(&sig[1]);
-
-            ensure_eq!(native.len(), 114, "expect 114 byte signature");
-
-            Ok(SignatureBytes::Native(native.into()))
-        }
-        _ => {
-            // MPI format:
-            // strip leading zeros, to match parse results from MPIs
-            let mpis = sig
-                .iter()
-                .map(|v| Mpi::from_slice(&v[..]))
-                .collect::<Vec<_>>();
-
-            Ok(SignatureBytes::Mpis(mpis))
         }
     }
 }

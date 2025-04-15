@@ -209,22 +209,24 @@ fn rpg_021_signed_secret_key_encrypt_panic2() {
         0x00, 0x00, 0x00, 0x29,
     ];
     // no particular meaning of this data
-    let dummy_plaintext = vec![0u8; 1];
+    // let dummy_plaintext = vec![0u8; 1];
     // note, this is non-deterministic, but does not matter for reproduction
-    let mut rng = rand::thread_rng();
-    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
-    // expected bug behavior:
-    // thread '[..]' panicked at [..]/src/crypto/x448.rs:149:75:
-    // 56
-    //
-    // crash also happens with pgp::types::EskType::V3_4
-    let _ciphertext = {
-        key.encrypt(
-            &mut rng,
-            dummy_plaintext.as_slice(),
-            pgp::types::EskType::V6,
-        )
-    };
+    // let mut rng = rand::thread_rng();
+    let key = pgp::composed::SignedSecretKey::from_bytes(bad_input);
+    assert!(key.is_err());
+    // stricter parsing triggers checks earlier
+    // // expected bug behavior:
+    // // thread '[..]' panicked at [..]/src/crypto/x448.rs:149:75:
+    // // 56
+    // //
+    // // crash also happens with pgp::types::EskType::V3_4
+    // let _ciphertext = {
+    //     key.encrypt(
+    //         &mut rng,
+    //         dummy_plaintext.as_slice(),
+    //         pgp::types::EskType::V6,
+    //     )
+    // };
 }
 
 /// RPG-020

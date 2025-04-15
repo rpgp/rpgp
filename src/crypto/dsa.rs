@@ -10,7 +10,7 @@ use zeroize::Zeroize;
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{unimplemented_err, Result},
-    types::{DsaPublicParams, Mpi},
+    types::{DsaPublicParams, Mpi, SignatureBytes},
 };
 
 /// Secret key for DSA.
@@ -32,7 +32,7 @@ impl From<&SecretKey> for DsaPublicParams {
 
 impl Zeroize for SecretKey {
     fn zeroize(&mut self) {
-        // TODO!!!!
+        // TODO: https://github.com/RustCrypto/signatures/issues/883
         // self.key.zeroize();
     }
 }
@@ -70,7 +70,7 @@ impl SecretKey {
 }
 
 impl Signer for SecretKey {
-    fn sign(&self, hash_algorithm: HashAlgorithm, digest: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn sign(&self, hash_algorithm: HashAlgorithm, digest: &[u8]) -> Result<SignatureBytes> {
         let signing_key = &self.key;
         let signature = match hash_algorithm {
             HashAlgorithm::Md5 => signing_key.sign_prehashed_rfc6979::<md5::Md5>(digest),
@@ -91,10 +91,10 @@ impl Signer for SecretKey {
             _ => unimplemented_err!("hasher {:?}", hash_algorithm),
         }?;
 
-        Ok(vec![
-            signature.r().to_bytes_be(),
-            signature.s().to_bytes_be(),
-        ])
+        Ok(SignatureBytes::Mpis(vec![
+            Mpi::from(signature.r()),
+            Mpi::from(signature.s()),
+        ]))
     }
 }
 
@@ -166,10 +166,14 @@ mod tests {
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let res = key.sign(hash_algorithm, &hashed).expect("failed to sign");
+                let SignatureBytes::Mpis(res) =
+                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
+                else {
+                    panic!("invalid sig format");
+                };
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
-                assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
+                assert_eq!((new_r, new_s), (r.clone().into(), s.clone().into()));
                 verify(&params, &hashed, r, s).expect("failed to verify");
             };
 
@@ -297,10 +301,14 @@ mod tests {
                 let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
                 let key = SecretKey { key };
 
-                let res = key.sign(hash_algorithm, &hashed).expect("failed to sign");
+                let SignatureBytes::Mpis(res) =
+                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
+                else {
+                    panic!("invalid sig format");
+                };
                 let new_r = res[0].clone();
                 let new_s = res[1].clone();
-                assert_eq!((new_r, new_s), (r.to_bytes_be(), s.to_bytes_be()));
+                assert_eq!((new_r, new_s), (r.clone().into(), s.clone().into()));
                 verify(&params, &hashed, r, s).expect("failed to verify");
             };
 

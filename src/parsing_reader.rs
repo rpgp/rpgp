@@ -60,6 +60,32 @@ pub trait BufReadParsing: BufRead + Sized {
         Ok(arr)
     }
 
+    #[cfg(feature = "draft-pqc")]
+    fn read_array_boxed<const C: usize>(&mut self) -> Result<Box<[u8; C]>> {
+        let mut arr = Box::new([0u8; C]);
+        let mut read = 0;
+
+        while read < arr.len() {
+            let buf = self.fill_buf()?;
+            if buf.is_empty() {
+                break;
+            }
+
+            let available = (arr.len() - read).min(buf.len());
+            arr[read..read + available].copy_from_slice(&buf[..available]);
+            read += available;
+            self.consume(available);
+        }
+        if read != arr.len() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "no more data available",
+            ));
+        }
+
+        Ok(arr)
+    }
+
     fn take_bytes(&mut self, size: usize) -> Result<BytesMut> {
         // Do not allocate everything upfront, only as data is actually available
         // to avoid OOM due to buggy sizes.
