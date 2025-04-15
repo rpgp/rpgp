@@ -10,14 +10,17 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::{
     crypto::{aes_kw, Decryptor},
     errors::{ensure, Result},
+    ser::Serialize,
     types::X25519PublicParams,
 };
+
+pub const KEY_LEN: usize = 32;
 
 /// Secret key for X25519
 #[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey {
     #[debug("..")]
-    pub(crate) secret: StaticSecret,
+    secret: StaticSecret,
 }
 
 impl From<&SecretKey> for X25519PublicParams {
@@ -46,9 +49,25 @@ impl SecretKey {
         SecretKey { secret }
     }
 
-    pub(crate) fn try_from_array(secret: [u8; 32]) -> Result<Self> {
+    pub fn try_from_bytes(secret: [u8; KEY_LEN]) -> Result<Self> {
         let secret = x25519_dalek::StaticSecret::from(secret);
         Ok(Self { secret })
+    }
+
+    pub fn as_bytes(&self) -> &[u8; KEY_LEN] {
+        self.secret.as_bytes()
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        let x = self.as_bytes();
+        writer.write_all(x)?;
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        KEY_LEN
     }
 }
 

@@ -6,15 +6,19 @@ use zeroize::ZeroizeOnDrop;
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{ensure, ensure_eq, format_err, Result},
+    ser::Serialize,
     types::{SignatureBytes, SlhDsaShake128fPublicParams},
 };
+
+/// Size in bytes of the serialized secret key.
+pub const KEY_LEN: usize = 64;
 
 /// Secret key for SLH DSA Shake128f
 #[derive(Clone, PartialEq, derive_more::Debug)]
 pub struct SecretKey {
     /// The secret key.
     #[debug("..")]
-    pub(crate) key: slh_dsa::SigningKey<Shake128f>,
+    key: slh_dsa::SigningKey<Shake128f>,
 }
 
 impl Eq for SecretKey {}
@@ -43,10 +47,16 @@ impl SecretKey {
         SecretKey { key }
     }
 
-    pub(crate) fn try_from_bytes(seed: [u8; 64]) -> Result<Self> {
+    /// Create a key from the raw byte values
+    pub fn try_from_bytes(seed: [u8; KEY_LEN]) -> Result<Self> {
         let key = slh_dsa::SigningKey::<Shake128f>::try_from(&seed[..])
             .map_err(|e| format_err!("invalid key {:?}", e))?;
         Ok(Self { key })
+    }
+
+    /// Returns the secret key in their raw byte level representation.
+    pub fn to_bytes(&self) -> [u8; KEY_LEN] {
+        self.key.to_bytes().into()
     }
 }
 
@@ -66,6 +76,18 @@ impl Signer for SecretKey {
         let bytes = sig.to_bytes();
 
         Ok(SignatureBytes::Native(bytes.to_vec().into()))
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        let key = self.to_bytes();
+        writer.write_all(&key)?;
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        KEY_LEN
     }
 }
 

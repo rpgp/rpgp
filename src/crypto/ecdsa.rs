@@ -91,7 +91,7 @@ impl SecretKey {
         }
     }
 
-    pub(crate) fn try_from_mpi(pub_params: &EcdsaPublicParams, d: Mpi) -> Result<Self> {
+    pub fn try_from_mpi(pub_params: &EcdsaPublicParams, d: Mpi) -> Result<Self> {
         match pub_params {
             EcdsaPublicParams::P256 { .. } => {
                 let secret = p256::SecretKey::from_slice(d.as_ref())?;
@@ -116,6 +116,35 @@ impl SecretKey {
             EcdsaPublicParams::Unsupported { curve, .. } => {
                 unsupported_err!("curve {:?} for ECDSA", curve.to_string())
             }
+        }
+    }
+
+    pub fn curve(&self) -> ECCCurve {
+        match self {
+            Self::P256 { .. } => ECCCurve::P256,
+            Self::P384 { .. } => ECCCurve::P384,
+            Self::P521 { .. } => ECCCurve::P521,
+            Self::Secp256k1 { .. } => ECCCurve::Secp256k1,
+            Self::Unsupported { curve, .. } => curve.clone(),
+        }
+    }
+    pub(crate) fn secret_key_length(&self) -> Option<usize> {
+        match self {
+            Self::P256 { .. } => Some(32),
+            Self::P384 { .. } => Some(48),
+            Self::P521 { .. } => Some(66),
+            Self::Secp256k1 { .. } => Some(32),
+            Self::Unsupported { .. } => None,
+        }
+    }
+
+    pub fn as_mpi(&self) -> Mpi {
+        match self {
+            Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
+            Self::Unsupported { x, .. } => Mpi::from_slice(x),
         }
     }
 }
@@ -171,28 +200,6 @@ impl Signer for SecretKey {
         };
 
         Ok(SignatureBytes::Mpis(vec![r, s]))
-    }
-}
-
-impl SecretKey {
-    pub(crate) fn secret_key_length(&self) -> Option<usize> {
-        match self {
-            Self::P256 { .. } => Some(32),
-            Self::P384 { .. } => Some(48),
-            Self::P521 { .. } => Some(66),
-            Self::Secp256k1 { .. } => Some(32),
-            Self::Unsupported { .. } => None,
-        }
-    }
-
-    pub(crate) fn as_mpi(&self) -> Mpi {
-        match self {
-            Self::P256(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::P384(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::P521(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Secp256k1(k) => Mpi::from_slice(k.to_bytes().as_ref()),
-            Self::Unsupported { x, .. } => Mpi::from_slice(x),
-        }
     }
 }
 

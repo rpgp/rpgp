@@ -1,5 +1,3 @@
-use std::ops::Deref;
-
 pub use dsa::KeySize;
 use dsa::{Components, Signature, SigningKey};
 use num_bigint::BigUint;
@@ -10,6 +8,7 @@ use zeroize::Zeroize;
 use crate::{
     crypto::{hash::HashAlgorithm, Signer},
     errors::{unimplemented_err, Result},
+    ser::Serialize,
     types::{DsaPublicParams, Mpi, SignatureBytes},
 };
 
@@ -45,27 +44,37 @@ impl Drop for SecretKey {
 
 impl zeroize::ZeroizeOnDrop for SecretKey {}
 
-impl Deref for SecretKey {
-    type Target = dsa::SigningKey;
-    fn deref(&self) -> &Self::Target {
-        &self.key
-    }
-}
-
 impl Eq for SecretKey {}
 
 impl SecretKey {
-    pub(crate) fn try_from_mpi(pub_params: &DsaPublicParams, x: Mpi) -> Result<Self> {
-        let secret = dsa::SigningKey::from_components(pub_params.key.clone(), x.into())?;
-        Ok(Self { key: secret })
-    }
-
     /// Generate a DSA `SecretKey`.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R, key_size: KeySize) -> Self {
         let components = Components::generate(&mut rng, key_size);
         let signing_key = SigningKey::generate(&mut rng, components);
 
         SecretKey { key: signing_key }
+    }
+
+    /// Create from the given MPI and matching public params.
+    pub fn try_from_mpi(pub_params: &DsaPublicParams, x: Mpi) -> Result<Self> {
+        let secret = dsa::SigningKey::from_components(pub_params.key.clone(), x.into())?;
+        Ok(Self { key: secret })
+    }
+
+    pub fn to_mpi(&self) -> Mpi {
+        Mpi::from(self.key.x())
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        self.to_mpi().to_writer(writer)?;
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        self.to_mpi().write_len()
     }
 }
 
