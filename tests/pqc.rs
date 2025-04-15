@@ -24,6 +24,12 @@ enum TestCase {
         primary_key_alg: PublicKeyAlgorithm,
         sub_keys: Vec<PublicKeyAlgorithm>,
     },
+    SignedEncryptedMessage {
+        sec_key: &'static str,
+        pub_key: &'static str,
+        msg: &'static str,
+        hash: HashAlgorithm,
+    },
 }
 
 impl TestCase {
@@ -68,6 +74,54 @@ impl TestCase {
 
                 Ok(())
             }
+            Self::SignedEncryptedMessage {
+                sec_key,
+                pub_key,
+                msg,
+                hash,
+            } => {
+                let (sec_key, _) = SignedSecretKey::from_armor_file(sec_key)?;
+                sec_key.verify()?;
+                let (pub_key, _) = SignedPublicKey::from_armor_file(pub_key)?;
+                pub_key.verify()?;
+
+                {
+                    let (msg, _) = Message::from_armor_file(msg)?;
+
+                    dbg!(&msg);
+                    let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+                    let data = msg.as_data_string()?;
+                    assert_eq!(data, "Testing\n");
+                    msg.verify(&pub_key)?;
+                    dbg!(&msg);
+                }
+                // encrypt again
+                let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+                let mut builder = MessageBuilder::from_bytes("", "Testing\n")
+                    .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+                builder
+                    .sign(&*sec_key, Password::empty(), *hash)
+                    // encrypting to the PQ subkey
+                    .encrypt_to_key(&mut rng, &pub_key.public_subkeys.last().unwrap())?;
+
+                let out = builder.to_armored_string(&mut rng, Default::default())?;
+
+                // decrypt and verify sig again
+                {
+                    let (msg, _) = Message::from_armor(out.as_bytes())?;
+
+                    dbg!(&msg);
+                    let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
+
+                    let data = msg.as_data_string()?;
+                    assert_eq!(data, "Testing\n");
+                    msg.verify(&pub_key)?;
+                    dbg!(&msg);
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -109,49 +163,13 @@ fn test_a_1_2_transferable_public_key() -> TestResult {
 
 #[test]
 fn test_a_1_3_signed_encrypted() -> TestResult {
-    let _ = pretty_env_logger::try_init();
-
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-eddsa-sample-sk.asc")?;
-    sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-eddsa-sample-pk.asc")?;
-    pub_key.verify()?;
-
-    {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-eddsa-sample-message.asc")?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
+    TestCase::SignedEncryptedMessage {
+        sec_key: "./tests/pqc/v6-eddsa-sample-sk.asc",
+        pub_key: "./tests/pqc/v6-eddsa-sample-pk.asc",
+        msg: "./tests/pqc/v6-eddsa-sample-message.asc",
+        hash: HashAlgorithm::Sha256,
     }
-    // encrypt again
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
-        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
-    builder
-        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha256)
-        // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[1])?;
-
-    let out = builder.to_armored_string(&mut rng, Default::default())?;
-
-    // decrypt and verify sig again
-    {
-        let (msg, _) = Message::from_armor(out.as_bytes())?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
-    }
-    Ok(())
+    .test()
 }
 
 #[test]
@@ -191,49 +209,13 @@ fn test_a_2_2_transferable_public_key() -> TestResult {
 
 #[test]
 fn test_a_2_3_signed_encrypted() -> TestResult {
-    let _ = pretty_env_logger::try_init();
-
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v4-eddsa-sample-sk.asc")?;
-    sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v4-eddsa-sample-pk.asc")?;
-    pub_key.verify()?;
-
-    {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/v4-eddsa-sample-message.asc")?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
+    TestCase::SignedEncryptedMessage {
+        sec_key: "./tests/pqc/v4-eddsa-sample-sk.asc",
+        pub_key: "./tests/pqc/v4-eddsa-sample-pk.asc",
+        msg: "./tests/pqc/v4-eddsa-sample-message.asc",
+        hash: HashAlgorithm::Sha256,
     }
-    // encrypt again
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
-        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
-    builder
-        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha256)
-        // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[1])?;
-
-    let out = builder.to_armored_string(&mut rng, Default::default())?;
-
-    // decrypt and verify sig again
-    {
-        let (msg, _) = Message::from_armor(out.as_bytes())?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
-    }
-    Ok(())
+    .test()
 }
 
 fn gen_key<R: RngCore + CryptoRng>(mut rng: R) -> TestResult<SignedSecretKey> {
@@ -334,49 +316,13 @@ fn test_a_3_2_transferable_public_key() -> TestResult {
 
 #[test]
 fn test_a_3_3_signed_encrypted() -> TestResult {
-    let _ = pretty_env_logger::try_init();
-
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-sk.asc")?;
-    sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-pk.asc")?;
-    pub_key.verify()?;
-
-    {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-mldsa-65-sample-message.asc")?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
+    TestCase::SignedEncryptedMessage {
+        sec_key: "./tests/pqc/v6-mldsa-65-sample-sk.asc",
+        pub_key: "./tests/pqc/v6-mldsa-65-sample-pk.asc",
+        msg: "./tests/pqc/v6-mldsa-65-sample-message.asc",
+        hash: HashAlgorithm::Sha3_256,
     }
-    // encrypt again
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
-        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
-    builder
-        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha3_256)
-        // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[0])?;
-
-    let out = builder.to_armored_string(&mut rng, Default::default())?;
-
-    // decrypt and verify sig again
-    {
-        let (msg, _) = Message::from_armor(out.as_bytes())?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
-    }
-    Ok(())
+    .test()
 }
 
 #[test]
@@ -426,49 +372,13 @@ fn test_a_4_2_transferable_public_key() -> TestResult {
 
 #[test]
 fn test_a_4_3_signed_encrypted() -> TestResult {
-    let _ = pretty_env_logger::try_init();
-
-    let (sec_key, _) = SignedSecretKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-sk.asc")?;
-    sec_key.verify()?;
-    let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-pk.asc")?;
-    pub_key.verify()?;
-
-    {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-mldsa-87-sample-message.asc")?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
+    TestCase::SignedEncryptedMessage {
+        sec_key: "./tests/pqc/v6-mldsa-87-sample-sk.asc",
+        pub_key: "./tests/pqc/v6-mldsa-87-sample-pk.asc",
+        msg: "./tests/pqc/v6-mldsa-87-sample-message.asc",
+        hash: HashAlgorithm::Sha3_512,
     }
-    // encrypt again
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
-        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
-    builder
-        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha3_512)
-        // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[0])?;
-
-    let out = builder.to_armored_string(&mut rng, Default::default())?;
-
-    // decrypt and verify sig again
-    {
-        let (msg, _) = Message::from_armor(out.as_bytes())?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
-    }
-    Ok(())
+    .test()
 }
 
 #[test]
@@ -519,49 +429,13 @@ fn test_a_5_2_transferable_public_key() -> TestResult {
 #[test]
 #[ignore]
 fn test_a_5_3_signed_encrypted() -> TestResult {
-    let _ = pretty_env_logger::try_init();
-
-    let (sec_key, _) =
-        SignedSecretKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-sk.asc")?;
-    sec_key.verify()?;
-    let (pub_key, _) =
-        SignedPublicKey::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-pk.asc")?;
-    pub_key.verify()?;
-
-    {
-        let (msg, _) = Message::from_armor_file("./tests/pqc/v6-slhdsa-128s-sample-message.asc")?;
-
-        dbg!(&msg);
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-        dbg!(&msg);
+    TestCase::SignedEncryptedMessage {
+        sec_key: "./tests/pqc/v6-slhsa-128s-sample-sk.asc",
+        pub_key: "./tests/pqc/v6-slhdsa-128s-sample-pk.asc",
+        msg: "./tests/pqc/v6-mldsa-87-sample-message.asc",
+        hash: HashAlgorithm::Sha3_256,
     }
-    // encrypt again
-    let mut rng = ChaCha8Rng::seed_from_u64(0);
-
-    let mut builder = MessageBuilder::from_bytes("", "Testing\n")
-        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
-    builder
-        .sign(&*sec_key, Password::empty(), HashAlgorithm::Sha3_256)
-        // encrypting to the PQ subkey
-        .encrypt_to_key(&mut rng, &pub_key.public_subkeys[0])?;
-
-    let out = builder.to_armored_string(&mut rng, Default::default())?;
-
-    // decrypt and verify sig again
-    {
-        let (msg, _) = Message::from_armor(out.as_bytes())?;
-
-        let mut msg = msg.decrypt(&Password::empty(), &sec_key)?;
-
-        let data = msg.as_data_string()?;
-        assert_eq!(data, "Testing\n");
-        msg.verify(&pub_key)?;
-    }
-    Ok(())
+    .test()
 }
 
 #[test]
