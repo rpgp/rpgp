@@ -394,7 +394,7 @@ fn test_a_3_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
-fn test_a_3_4_signature() -> TestResult {
+fn test_a_3_4_detached_signature() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-65-sample-pk.asc")?;
@@ -512,7 +512,7 @@ fn test_a_4_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
-fn test_a_4_4_signature() -> TestResult {
+fn test_a_4_4_detached_signature() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (pub_key, _) = SignedPublicKey::from_armor_file("./tests/pqc/v6-mldsa-87-sample-pk.asc")?;
@@ -633,7 +633,7 @@ fn test_a_5_3_signed_encrypted() -> TestResult {
 }
 
 #[test]
-fn test_a_5_4_signature() -> TestResult {
+fn test_a_5_4_detached_signature() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (pub_key, _) =
@@ -709,7 +709,7 @@ fn test_a_6_2_transferable_public_key() -> TestResult {
 }
 
 #[test]
-fn test_a_6_3_signature() -> TestResult {
+fn test_a_6_3_detached_signature() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (pub_key, _) =
@@ -785,7 +785,7 @@ fn test_a_7_2_transferable_public_key() -> TestResult {
 }
 
 #[test]
-fn test_a_7_3_signature() -> TestResult {
+fn test_a_7_3_detached_signature() -> TestResult {
     let _ = pretty_env_logger::try_init();
 
     let (pub_key, _) =

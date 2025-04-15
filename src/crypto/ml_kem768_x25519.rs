@@ -169,9 +169,7 @@ fn ml_kem_768_decaps(
 
 const DOM_SEP: &[u8] = b"OpenPGPCompositeKDFv1";
 
-/// draft-ietf-openpgp-pqc-latest, Published: 11 April 2025
-/// <https://openpgp-pqc.github.io/draft-openpgp-pqc/draft-ietf-openpgp-pqc.html#name-key-combiner>
-/// (will become draft-08)
+/// <https://www.ietf.org/archive/id/draft-ietf-openpgp-pqc-08.html#name-key-combiner>
 fn multi_key_combine(
     ml_kem_key_share: &[u8; 32],
     ecdh_key_share: &[u8; 32],
