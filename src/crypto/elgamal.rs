@@ -24,6 +24,10 @@ impl SecretKey {
             public: pub_params,
         }
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.x
+    }
 }
 
 impl From<&SecretKey> for ElgamalPublicParams {

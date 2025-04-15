@@ -3,22 +3,25 @@
 use self::hash::HashAlgorithm;
 use crate::types::SignatureBytes;
 
+// Symmetric
+
 pub mod aead;
 pub mod aes_kw;
-pub mod checksum;
+pub mod sym;
+
+// Encryption & Signing
+
 pub mod dsa;
-pub mod ecc_curve;
 pub mod ecdh;
 pub mod ecdsa;
 pub mod ed25519;
 pub mod ed448;
 pub mod elgamal;
-pub mod hash;
-pub mod public_key;
 pub mod rsa;
-pub mod sym;
 pub mod x25519;
 pub mod x448;
+
+// PQC
 
 #[cfg(feature = "draft-pqc")]
 pub mod ml_dsa65_ed25519;
@@ -34,6 +37,13 @@ pub mod slh_dsa_shake128f;
 pub mod slh_dsa_shake128s;
 #[cfg(feature = "draft-pqc")]
 pub mod slh_dsa_shake256s;
+
+// Misc
+
+pub mod checksum;
+pub mod ecc_curve;
+pub mod hash;
+pub mod public_key;
 
 /// Describes keys that can decrypt data.
 pub trait Decryptor {
