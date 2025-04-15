@@ -133,7 +133,7 @@ escape_string = "0.1.2"
 testresult = "0.4.1"
 
 [features]
-default = ["asm", "bzip2"]
+default = ["bzip2"]
 
 # Enables bzip2 support
 bzip2 = ["dep:bzip2"]

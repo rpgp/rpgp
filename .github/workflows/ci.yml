@@ -51,12 +51,19 @@ jobs:
     - name: doc tests
       run: cargo test --doc
 
+    - name: asm
+      if: ${{ matrix.rust == env.RUST_NIGHTLY }}
+      run: cargo nextest run --lib --bins --tests --all --features asm
+
     - name: pqc
       if: ${{ matrix.rust == env.RUST_NIGHTLY }}
       run: cargo nextest run --lib --bins --tests --all --features draft-pqc
 
     - name: tests ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release
+
+    - name: asm ignored
+      run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features asm
 
     - name: pqc ignored
       run: cargo nextest run --lib --bins --tests --all --run-ignored ignored-only --release --features draft-pqc
