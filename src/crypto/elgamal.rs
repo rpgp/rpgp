@@ -14,15 +14,19 @@ pub struct SecretKey {
 }
 
 impl SecretKey {
-    pub(crate) fn as_mpi(&self) -> Mpi {
+    pub fn as_mpi(&self) -> Mpi {
         Mpi::from_slice(&self.x)
     }
 
-    pub(crate) fn try_from_mpi(pub_params: ElgamalPublicParams, x: Mpi) -> Self {
+    pub fn try_from_mpi(pub_params: ElgamalPublicParams, x: Mpi) -> Self {
         Self {
             x: x.as_ref().to_vec(),
             public: pub_params,
         }
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.x
     }
 }
 
