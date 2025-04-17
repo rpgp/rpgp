@@ -36,6 +36,8 @@ pub struct SecretKeyParams {
     can_certify: bool,
     #[builder(default)]
     can_encrypt: bool,
+    #[builder(default)]
+    can_authenticate: bool,
 
     // -- Preferences
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
@@ -54,11 +56,11 @@ pub struct SecretKeyParams {
 
     #[builder]
     primary_user_id: String,
-
     #[builder(default)]
     user_ids: Vec<String>,
     #[builder(default)]
     user_attributes: Vec<UserAttribute>,
+
     #[builder(default)]
     passphrase: Option<String>,
     #[builder(default)]
@@ -82,8 +84,6 @@ pub struct SubkeyParams {
 
     #[builder(default)]
     can_sign: bool,
-    #[builder(default)]
-    can_certify: bool,
     #[builder(default)]
     can_encrypt: bool,
     #[builder(default)]
@@ -220,7 +220,6 @@ impl SecretKeyParams {
                         .unwrap_or_else(|| S2kParams::new_default(&mut rng, subkey.version));
                     let (public_params, secret_params) = subkey.key_type.generate(&mut rng)?;
                     let mut keyflags = KeyFlags::default();
-                    keyflags.set_certify(subkey.can_certify);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
                     keyflags.set_encrypt_storage(subkey.can_encrypt);
                     keyflags.set_sign(subkey.can_sign);
