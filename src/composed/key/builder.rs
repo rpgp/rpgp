@@ -90,10 +90,6 @@ pub struct SubkeyParams {
     can_authenticate: bool,
 
     #[builder(default)]
-    user_ids: Vec<UserId>,
-    #[builder(default)]
-    user_attributes: Vec<UserAttribute>,
-    #[builder(default)]
     passphrase: Option<String>,
     #[builder(default)]
     s2k: Option<S2kParams>,
