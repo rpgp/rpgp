@@ -12,9 +12,7 @@ use crate::{
         UserAttribute, UserId,
     },
     ser::Serialize,
-    types::{
-        CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, RevocationKey, SecretKeyTrait,
-    },
+    types::{CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -26,7 +24,6 @@ pub struct KeyDetails {
     preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
     preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-    revocation_key: Option<RevocationKey>,
 }
 
 impl KeyDetails {
@@ -40,7 +37,6 @@ impl KeyDetails {
         preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
         preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
         preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-        revocation_key: Option<RevocationKey>,
     ) -> Self {
         user_ids.insert(0, primary_user_id);
 
@@ -52,7 +48,6 @@ impl KeyDetails {
             preferred_hash_algorithms,
             preferred_compression_algorithms,
             preferred_aead_algorithms,
-            revocation_key,
         )
     }
 
@@ -66,7 +61,6 @@ impl KeyDetails {
         preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
         preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
         preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-        revocation_key: Option<RevocationKey>,
     ) -> Self {
         KeyDetails {
             user_ids,
@@ -76,7 +70,6 @@ impl KeyDetails {
             preferred_hash_algorithms,
             preferred_compression_algorithms,
             preferred_aead_algorithms,
-            revocation_key,
         }
     }
 
@@ -97,14 +90,13 @@ impl KeyDetails {
         let preferred_hash_algorithms = self.preferred_hash_algorithms;
         let preferred_compression_algorithms = self.preferred_compression_algorithms;
         let preferred_aead_algorithms = self.preferred_aead_algorithms;
-        let revocation_key = self.revocation_key;
 
         let mut users = vec![];
 
         // We consider the first entry in `user_ids` (if any) the primary user id
         // FIXME: select primary like in signed_key/shared.rs:116? (and adjust the set of non-primaries below?)
         if let Some(id) = self.user_ids.first() {
-            let mut hashed_subpackets = vec![
+            let hashed_subpackets = vec![
                 Subpacket::regular(SubpacketData::IsPrimary(true))?,
                 Subpacket::regular(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
@@ -124,9 +116,6 @@ impl KeyDetails {
                 ))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
             ];
-            if let Some(rkey) = revocation_key {
-                hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey))?);
-            }
 
             let mut config = match key.version() {
                 KeyVersion::V4 => {
