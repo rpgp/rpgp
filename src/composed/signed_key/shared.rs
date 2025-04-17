@@ -152,7 +152,6 @@ impl SignedKeyDetails {
             let preferred_compression_algorithms =
                 SmallVec::from_slice(primary_sig.preferred_compression_algs());
             let preferred_aead_algorithms = SmallVec::from_slice(primary_sig.preferred_aead_algs());
-            let revocation_key = primary_sig.revocation_key().cloned();
 
             KeyDetails::new_direct(
                 self.users.iter().map(|u| u.id.clone()).collect(),
@@ -165,7 +164,6 @@ impl SignedKeyDetails {
                 preferred_hash_algorithms,
                 preferred_compression_algorithms,
                 preferred_aead_algorithms,
-                revocation_key,
             )
         } else {
             // We don't have metadata via a primary user id, so we return a very bare KeyDetails object
@@ -183,7 +181,6 @@ impl SignedKeyDetails {
                 vec![].into(),
                 vec![].into(),
                 vec![].into(),
-                None,
             )
         }
     }

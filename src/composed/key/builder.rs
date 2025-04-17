@@ -19,9 +19,7 @@ use crate::{
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
-    types::{
-        self, CompressionAlgorithm, PlainSecretParams, PublicParams, RevocationKey, S2kParams,
-    },
+    types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
 
 #[derive(Debug, PartialEq, Eq, Builder)]
@@ -51,8 +49,6 @@ pub struct SecretKeyParams {
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
     #[builder(default)]
     preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-    #[builder(default)]
-    revocation_key: Option<RevocationKey>,
 
     #[builder]
     primary_user_id: String,
@@ -208,7 +204,6 @@ impl SecretKeyParams {
                 self.preferred_hash_algorithms,
                 self.preferred_compression_algorithms,
                 self.preferred_aead_algorithms,
-                self.revocation_key,
             ),
             Default::default(),
             self.subkeys
