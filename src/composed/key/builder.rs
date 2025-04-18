@@ -17,7 +17,7 @@ use crate::{
         hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
         x25519, x448,
     },
-    errors::{bail, Result},
+    errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
     types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
@@ -221,16 +221,15 @@ impl SecretKeyParams {
         keyflags.set_encrypt_storage(self.can_encrypt);
         keyflags.set_sign(self.can_sign);
 
-        let Some(primary_user_id) = &self.primary_user_id else {
-            // TODO: handle v6 keys without primary User ID
-            bail!("Primary User ID is required");
+        let primary_user_id = match self.primary_user_id {
+            None => None,
+            Some(id) => Some(UserId::from_str(Default::default(), id)?),
         };
 
         Ok(SecretKey::new(
             primary_key,
             KeyDetails::new(
-                // TODO: handle v6 keys without primary User ID
-                Some(UserId::from_str(Default::default(), primary_user_id)?),
+                primary_user_id,
                 self.user_ids
                     .iter()
                     .map(|m| UserId::from_str(Default::default(), m))
