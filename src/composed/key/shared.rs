@@ -15,11 +15,12 @@ use crate::{
     types::{CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
-/// A KeyDetails specifies all aspects for producing a [SignedSecretKey], except for potential
-/// subkeys.
+/// A KeyDetails specifies associated user id and attribute components, and some metadata for
+/// producing a [SignedSecretKey].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
-    user_ids: Vec<UserId>,
+    primary_user_id: Option<UserId>,
+    non_primary_user_ids: Vec<UserId>,
     user_attributes: Vec<UserAttribute>,
     keyflags: KeyFlags,
     preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
@@ -30,32 +31,8 @@ pub struct KeyDetails {
 
 impl KeyDetails {
     #[allow(clippy::too_many_arguments)] // FIXME
-    pub fn new(
-        primary_user_id: UserId,
-        mut user_ids: Vec<UserId>,
-        user_attributes: Vec<UserAttribute>,
-        keyflags: KeyFlags,
-        preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
-        preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
-        preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
-        preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-    ) -> Self {
-        user_ids.insert(0, primary_user_id);
-
-        Self::new_direct(
-            user_ids,
-            user_attributes,
-            keyflags,
-            preferred_symmetric_algorithms,
-            preferred_hash_algorithms,
-            preferred_compression_algorithms,
-            preferred_aead_algorithms,
-        )
-    }
-
-    /// The primary UserId (if any) is expected to be contained in `user_ids`
-    #[allow(clippy::too_many_arguments)] // FIXME
-    pub(crate) fn new_direct(
+    pub(crate) fn new(
+        primary_user_id: Option<UserId>,
         user_ids: Vec<UserId>,
         user_attributes: Vec<UserAttribute>,
         keyflags: KeyFlags,
@@ -65,7 +42,8 @@ impl KeyDetails {
         preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
     ) -> Self {
         KeyDetails {
-            user_ids,
+            primary_user_id,
+            non_primary_user_ids: user_ids,
             user_attributes,
             keyflags,
             preferred_symmetric_algorithms,
@@ -93,11 +71,9 @@ impl KeyDetails {
         let preferred_compression_algorithms = self.preferred_compression_algorithms;
         let preferred_aead_algorithms = self.preferred_aead_algorithms;
 
-        let mut users = vec![];
+        let mut signed_users = vec![];
 
-        // We consider the first entry in `user_ids` (if any) the primary user id
-        // FIXME: select primary like in signed_key/shared.rs:116? (and adjust the set of non-primaries below?)
-        if let Some(id) = self.user_ids.first() {
+        if let Some(primary_user_id) = self.primary_user_id {
             let hashed_subpackets = vec![
                 Subpacket::regular(SubpacketData::IsPrimary(true))?,
                 Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -136,18 +112,24 @@ impl KeyDetails {
             config.unhashed_subpackets =
                 vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
 
-            let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
+            let sig = config.sign_certification(
+                key,
+                pub_key,
+                key_pw,
+                primary_user_id.tag(),
+                &primary_user_id,
+            )?;
 
-            users.push(id.clone().into_signed(sig));
+            signed_users.push(primary_user_id.clone().into_signed(sig));
         }
 
-        // other user ids
-
-        users.extend(
-            self.user_ids
+        // non-primary user ids
+        signed_users.extend(
+            self.non_primary_user_ids
                 .into_iter()
-                .skip(1) // The first User ID was handled above, as the primary user id
                 .map(|id| {
+                    // TODO: don't add certificate metadata to these signatures for v6 keys
+
                     let hashed_subpackets = vec![
                         Subpacket::regular(SubpacketData::SignatureCreationTime(
                             chrono::Utc::now().trunc_subsecs(0),
@@ -204,7 +186,7 @@ impl KeyDetails {
         Ok(SignedKeyDetails {
             revocation_signatures: Default::default(),
             direct_signatures: Default::default(),
-            users,
+            users: signed_users,
             user_attributes,
         })
     }
