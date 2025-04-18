@@ -17,7 +17,7 @@ use crate::{
         hash::HashAlgorithm, public_key::PublicKeyAlgorithm, rsa, sym::SymmetricKeyAlgorithm,
         x25519, x448,
     },
-    errors::Result,
+    errors::{bail, Result},
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
     types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
@@ -74,8 +74,9 @@ pub struct SecretKeyParams {
     packet_version: types::PacketHeaderVersion,
 
     // -- Associated components
-    #[builder]
-    primary_user_id: String,
+    /// Primary User ID, required for v4 keys, but not required for v6 keys
+    #[builder(default, setter(custom))]
+    primary_user_id: Option<String>,
     #[builder(default)]
     user_ids: Vec<String>,
     #[builder(default)]
@@ -161,6 +162,10 @@ impl SecretKeyParamsBuilder {
             _ => {}
         }
 
+        if self.version == Some(types::KeyVersion::V4) && self.primary_user_id.is_none() {
+            return Err("V4 keys must have a primary User ID".into());
+        }
+
         Ok(())
     }
 
@@ -181,6 +186,11 @@ impl SecretKeyParamsBuilder {
         } else {
             self.subkeys = Some(vec![value.into()]);
         }
+        self
+    }
+
+    pub fn primary_user_id(&mut self, value: String) -> &mut Self {
+        self.primary_user_id = Some(Some(value));
         self
     }
 }
@@ -211,10 +221,15 @@ impl SecretKeyParams {
         keyflags.set_encrypt_storage(self.can_encrypt);
         keyflags.set_sign(self.can_sign);
 
+        let Some(primary_user_id) = &self.primary_user_id else {
+            // TODO: handle v6 keys without primary User ID
+            bail!("Primary User ID is required");
+        };
+
         Ok(SecretKey::new(
             primary_key,
             KeyDetails::new(
-                UserId::from_str(Default::default(), &self.primary_user_id)?,
+                UserId::from_str(Default::default(), primary_user_id)?,
                 self.user_ids
                     .iter()
                     .map(|m| UserId::from_str(Default::default(), m))
