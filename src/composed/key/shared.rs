@@ -15,6 +15,8 @@ use crate::{
     types::{CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
+/// A KeyDetails specifies all aspects for producing a [SignedSecretKey], except for potential
+/// subkeys.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
     user_ids: Vec<UserId>,
