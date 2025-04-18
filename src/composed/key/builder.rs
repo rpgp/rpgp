@@ -229,7 +229,8 @@ impl SecretKeyParams {
         Ok(SecretKey::new(
             primary_key,
             KeyDetails::new(
-                UserId::from_str(Default::default(), primary_user_id)?,
+                // TODO: handle v6 keys without primary User ID
+                Some(UserId::from_str(Default::default(), primary_user_id)?),
                 self.user_ids
                     .iter()
                     .map(|m| UserId::from_str(Default::default(), m))

@@ -133,7 +133,13 @@ impl SignedKeyDetails {
         Ok(())
     }
 
+    /// Derive a `KeyDetails` from a `SignedKeyDetails`.
+    /// This is more of a heuristic than a surefire transformation.
+    ///
+    /// TODO: For v6 keys, the certificate metadata must be derived from direct key signatures.
     pub fn as_unsigned(&self) -> KeyDetails {
+        // FIXME: definitely don't randomly pick "first" as a primary for v6
+
         if let Some(primary_user) = self
             .users
             .iter()
@@ -153,8 +159,13 @@ impl SignedKeyDetails {
                 SmallVec::from_slice(primary_sig.preferred_compression_algs());
             let preferred_aead_algorithms = SmallVec::from_slice(primary_sig.preferred_aead_algs());
 
-            KeyDetails::new_direct(
-                self.users.iter().map(|u| u.id.clone()).collect(),
+            KeyDetails::new(
+                Some(primary_user.id.clone()),
+                self.users
+                    .iter()
+                    .filter(|u| u.id != primary_user.id) // drop the primary
+                    .map(|u| u.id.clone())
+                    .collect(),
                 self.user_attributes
                     .iter()
                     .map(|a| a.attr.clone())
@@ -170,7 +181,8 @@ impl SignedKeyDetails {
 
             // TODO: we could check for information in a direct key signature and use that
 
-            KeyDetails::new_direct(
+            KeyDetails::new(
+                None,
                 self.users.iter().map(|u| u.id.clone()).collect(),
                 self.user_attributes
                     .iter()
