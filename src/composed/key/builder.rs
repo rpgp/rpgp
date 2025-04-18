@@ -22,12 +22,18 @@ use crate::{
     types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
 
+/// A SecretKeyParams
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct SecretKeyParams {
+    // -- OpenPGP key version of primary
+    #[builder(default)]
+    version: types::KeyVersion,
+
+    // -- Asymmetric algorithm for the primary
     key_type: KeyType,
 
-    // -- Keyflags
+    // -- Keyflags for primary
     #[builder(default)]
     can_sign: bool,
     #[builder(default)]
@@ -37,7 +43,13 @@ pub struct SecretKeyParams {
     #[builder(default)]
     can_authenticate: bool,
 
-    // -- Preferences
+    // -- Metadata for the primary key
+    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
+    created_at: chrono::DateTime<chrono::Utc>,
+    #[builder(default)]
+    expiration: Option<Duration>,
+
+    // -- Public-facing preferences on the certificate
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
     preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
@@ -47,37 +59,41 @@ pub struct SecretKeyParams {
     /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+    /// List of AEAD algorithms that indicate which algorithms the key holder prefers to use.
     #[builder(default)]
     preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
 
+    // -- Password-locking of the primary
+    #[builder(default)]
+    passphrase: Option<String>,
+    #[builder(default)]
+    s2k: Option<S2kParams>,
+
+    // -- Packet framing for the primary key
+    #[builder(default)]
+    packet_version: types::PacketHeaderVersion,
+
+    // -- Associated components
     #[builder]
     primary_user_id: String,
     #[builder(default)]
     user_ids: Vec<String>,
     #[builder(default)]
     user_attributes: Vec<UserAttribute>,
-
-    #[builder(default)]
-    passphrase: Option<String>,
-    #[builder(default)]
-    s2k: Option<S2kParams>,
-    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
-    created_at: chrono::DateTime<chrono::Utc>,
-    #[builder(default)]
-    packet_version: types::PacketHeaderVersion,
-    #[builder(default)]
-    version: types::KeyVersion,
-    #[builder(default)]
-    expiration: Option<Duration>,
-
     #[builder(default)]
     subkeys: Vec<SubkeyParams>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Builder)]
 pub struct SubkeyParams {
+    // -- OpenPGP key version of this subkey
+    #[builder(default)]
+    version: types::KeyVersion,
+
+    // -- Asymmetric algorithm of this subkey
     key_type: KeyType,
 
+    // -- Keyflags for this subkey
     #[builder(default)]
     can_sign: bool,
     #[builder(default)]
@@ -85,18 +101,21 @@ pub struct SubkeyParams {
     #[builder(default)]
     can_authenticate: bool,
 
+    // -- Metadata for the primary key
+    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
+    created_at: chrono::DateTime<chrono::Utc>,
+    #[builder(default)]
+    expiration: Option<Duration>,
+
+    // -- Password-locking of this subkey
     #[builder(default)]
     passphrase: Option<String>,
     #[builder(default)]
     s2k: Option<S2kParams>,
-    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
-    created_at: chrono::DateTime<chrono::Utc>,
+
+    // -- Packet framing for this subkey
     #[builder(default)]
     packet_version: types::PacketHeaderVersion,
-    #[builder(default)]
-    version: types::KeyVersion,
-    #[builder(default)]
-    expiration: Option<Duration>,
 }
 
 impl SecretKeyParamsBuilder {
@@ -155,6 +174,8 @@ impl SecretKeyParamsBuilder {
     }
 
     pub fn subkey<VALUE: Into<SubkeyParams>>(&mut self, value: VALUE) -> &mut Self {
+        // TODO: validity checks? (e.g. no mixing of v4/v6 primary/subkeys)
+
         if let Some(ref mut subkeys) = self.subkeys {
             subkeys.push(value.into());
         } else {

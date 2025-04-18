@@ -10,7 +10,8 @@ use crate::{
     types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
-/// User facing interface to work with a secret key.
+/// User facing interface to work with the components of a "Transferable Secret Key (TSK)"
+/// (but without any Signature packets)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretKey {
     primary_key: packet::SecretKey,
@@ -19,6 +20,8 @@ pub struct SecretKey {
     secret_subkeys: Vec<SecretSubkey>,
 }
 
+/// Wrapper for a SecretSubkey packet with associated KeyFlags
+/// TODO: Maybe remove?
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretSubkey {
     key: packet::SecretSubkey,
