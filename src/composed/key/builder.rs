@@ -128,35 +128,47 @@ impl SecretKeyParamsBuilder {
                 }
             }
             Some(KeyType::Ed25519Legacy) => {
-                if let Some(can_encrypt) = self.can_encrypt {
-                    if can_encrypt {
-                        return Err("EdDSA can only be used for signing keys".into());
-                    }
+                if self.can_encrypt == Some(true) {
+                    return Err("Ed25519Legacy can only be used for signing keys".into());
+                }
+            }
+            Some(KeyType::Ed25519) => {
+                if self.can_encrypt == Some(true) {
+                    return Err("Ed25519 can only be used for signing keys".into());
+                }
+            }
+            Some(KeyType::Ed448) => {
+                if self.can_encrypt == Some(true) {
+                    return Err("Ed448 can only be used for signing keys".into());
                 }
             }
             Some(KeyType::ECDSA(curve)) => {
-                if let Some(can_encrypt) = self.can_encrypt {
-                    if can_encrypt {
-                        return Err("ECDSA can only be used for signing keys".into());
-                    }
-                };
+                if self.can_encrypt == Some(true) {
+                    return Err("ECDSA can only be used for signing keys".into());
+                }
                 match curve {
                     ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 | ECCCurve::Secp256k1 => {}
                     _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
                 }
             }
             Some(KeyType::ECDH(_)) => {
-                if let Some(can_sign) = self.can_sign {
-                    if can_sign {
-                        return Err("ECDH can only be used for encryption keys".into());
-                    }
+                if self.can_sign == Some(true) || self.can_authenticate == Some(true) {
+                    return Err("ECDH can only be used for encryption keys".into());
+                }
+            }
+            Some(KeyType::X25519) => {
+                if self.can_sign == Some(true) || self.can_authenticate == Some(true) {
+                    return Err("X25519 can only be used for encryption keys".into());
+                }
+            }
+            Some(KeyType::X448) => {
+                if self.can_sign == Some(true) || self.can_authenticate == Some(true) {
+                    return Err("X448 can only be used for encryption keys".into());
                 }
             }
             Some(KeyType::Dsa(_)) => {
-                if let Some(can_encrypt) = self.can_encrypt {
-                    if can_encrypt {
-                        return Err("DSA can only be used for signing keys".into());
-                    }
+                if self.can_encrypt == Some(true) {
+                    return Err("DSA can only be used for signing keys".into());
                 }
             }
             _ => {}
