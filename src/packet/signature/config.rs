@@ -344,7 +344,7 @@ impl SignatureConfig {
     }
 
     /// Signs a direct key signature or a revocation.
-    pub fn sign_key<K, P>(self, signing_key: &K, key_pw: Password, key: &P) -> Result<Signature>
+    pub fn sign_key<K, P>(self, signing_key: &K, key_pw: &Password, key: &P) -> Result<Signature>
     where
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
@@ -372,7 +372,7 @@ impl SignatureConfig {
 
         let hash = &hasher.finalize()[..];
         let signed_hash_value = [hash[0], hash[1]];
-        let signature = signing_key.create_signature(&key_pw, self.hash_alg, hash)?;
+        let signature = signing_key.create_signature(key_pw, self.hash_alg, hash)?;
 
         Signature::from_config(self, signed_hash_value, signature)
     }

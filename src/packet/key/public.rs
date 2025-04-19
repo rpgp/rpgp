@@ -89,7 +89,7 @@ impl PublicKey {
         &self,
         rng: R,
         key: &K,
-        key_pw: Password,
+        key_pw: &Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait + Serialize,
@@ -165,7 +165,7 @@ impl PublicSubkey {
         &self,
         rng: R,
         key: &K,
-        key_pw: Password,
+        key_pw: &Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait + Serialize,
@@ -362,7 +362,7 @@ impl PubKeyInner {
         &self,
         mut rng: R,
         key: &K,
-        key_pw: Password,
+        key_pw: &Password,
         sig_type: SignatureType,
     ) -> Result<Signature>
     where
