@@ -21,7 +21,6 @@ pub struct SecretKey {
 }
 
 /// Wrapper for a SecretSubkey packet with associated KeyFlags
-/// TODO: Maybe remove?
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretSubkey {
     key: packet::SecretSubkey,

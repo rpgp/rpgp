@@ -65,12 +65,8 @@ impl KeyDetails {
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
-        let mut signed_users = vec![];
-
-        let key_version = key.version();
-
-        // TODO: get features from KeyDetails?
-        let features: SmallVec<[u8; 1]> = match key_version {
+        // TODO: get features via KeyDetails?
+        let features: SmallVec<[u8; 1]> = match key.version() {
             KeyVersion::V6 => [0x01 | 0x08].into(), // SEIPDv1 and SEIPDv2
             _ => [0x01].into(),                     // SEIPDv1
         };
@@ -109,14 +105,28 @@ impl KeyDetails {
             ])
         };
 
+        // --- Direct key signatures
+        let direct_signatures = match key.version() {
+            KeyVersion::V6 => {
+                let mut config = SignatureConfig::v6(
+                    &mut rng,
+                    SignatureType::Key,
+                    key.algorithm(),
+                    key.hash_alg(),
+                )?;
+                config.hashed_subpackets = subpackets_with_metadata()?;
+
+                let dks = config.sign_key(key, key_pw, pub_key)?;
+
+                vec![dks]
+            }
+            _ => vec![],
+        };
+
+        // --- User IDs
+        let mut users = vec![];
+
         if let Some(primary_user_id) = self.primary_user_id {
-            let mut hashed_subpackets = match key_version {
-                KeyVersion::V6 => basic_subpackets()?,
-                _ => subpackets_with_metadata()?,
-            };
-
-            hashed_subpackets.push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
-
             let mut config = match key.version() {
                 KeyVersion::V4 => {
                     SignatureConfig::v4(SignatureType::CertGeneric, key.algorithm(), key.hash_alg())
@@ -130,8 +140,14 @@ impl KeyDetails {
                 v => unsupported_err!("unsupported key version: {:?}", v),
             };
 
-            config.hashed_subpackets = hashed_subpackets;
-            config.unhashed_subpackets = vec![];
+            config.hashed_subpackets = match key.version() {
+                KeyVersion::V6 => basic_subpackets()?,
+                _ => subpackets_with_metadata()?,
+            };
+
+            config
+                .hashed_subpackets
+                .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
 
             let sig = config.sign_certification(
                 key,
@@ -141,16 +157,14 @@ impl KeyDetails {
                 &primary_user_id,
             )?;
 
-            signed_users.push(primary_user_id.clone().into_signed(sig));
+            users.push(primary_user_id.into_signed(sig));
         }
 
         // non-primary user ids
-        signed_users.extend(
+        users.extend(
             self.non_primary_user_ids
                 .into_iter()
                 .map(|id| {
-                    // TODO: don't add certificate metadata to these user id binding signatures for v6 keys
-
                     let mut config = match key.version() {
                         KeyVersion::V4 => SignatureConfig::v4(
                             SignatureType::CertGeneric,
@@ -166,11 +180,10 @@ impl KeyDetails {
                         v => unsupported_err!("unsupported key version: {:?}", v),
                     };
 
-                    config.hashed_subpackets = match key_version {
+                    config.hashed_subpackets = match key.version() {
                         KeyVersion::V6 => basic_subpackets()?,
                         _ => subpackets_with_metadata()?,
                     };
-                    config.unhashed_subpackets = vec![];
 
                     let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
 
@@ -179,33 +192,17 @@ impl KeyDetails {
                 .collect::<Result<Vec<_>>>()?,
         );
 
+        // --- User Attributes
         let user_attributes = self
             .user_attributes
             .into_iter()
             .map(|u| u.sign(&mut rng, key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
-        let direct_signatures = match key_version {
-            KeyVersion::V6 => {
-                let mut dks = SignatureConfig::v6(
-                    &mut rng,
-                    SignatureType::Key,
-                    key.algorithm(),
-                    key.hash_alg(),
-                )?;
-                dks.hashed_subpackets = subpackets_with_metadata()?;
-
-                let dks = dks.sign_key(key, key_pw, pub_key)?;
-
-                vec![dks]
-            }
-            _ => vec![],
-        };
-
         Ok(SignedKeyDetails {
             revocation_signatures: Default::default(),
             direct_signatures,
-            users: signed_users,
+            users,
             user_attributes,
         })
     }
