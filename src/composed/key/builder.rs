@@ -1307,6 +1307,10 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
+
+        // try making (signed) public key representations
+        let _ = signed_key.public_key();
+        let _ = signed_key.signed_public_key();
     }
 
     #[test]
@@ -1435,6 +1439,10 @@ mod tests {
         assert!(!sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
+
+        // try making (signed) public key representations
+        let _ = signed_key.public_key();
+        let _ = signed_key.signed_public_key();
     }
 
     #[test]
@@ -1481,6 +1489,10 @@ mod tests {
 
         // We made no user id
         assert!(signed_key.details.users.is_empty());
+
+        // try making (signed) public key representations
+        let _ = signed_key.public_key();
+        let _ = signed_key.signed_public_key();
     }
 
     #[test]
