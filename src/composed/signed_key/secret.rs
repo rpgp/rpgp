@@ -190,6 +190,22 @@ impl SignedSecretKey {
         )
     }
 
+    pub fn signed_public_key(&self) -> SignedPublicKey {
+        let mut public_subkeys: Vec<SignedPublicSubKey> = self.public_subkeys.to_vec();
+        let sec_subkeys: Vec<SignedPublicSubKey> = self
+            .secret_subkeys
+            .iter()
+            .map(SignedSecretSubKey::signed_public_key)
+            .collect();
+        public_subkeys.extend(sec_subkeys);
+
+        SignedPublicKey::new(
+            self.primary_key.public_key().clone(),
+            self.details.clone(),
+            public_subkeys,
+        )
+    }
+
     /// Decrypts session key using this key.
     pub fn decrypt_session_key(
         &self,
@@ -283,6 +299,10 @@ impl SignedSecretSubKey {
         typ: EskType,
     ) -> Result<PkeskBytes> {
         self.key.encrypt(rng, plain, typ)
+    }
+
+    pub fn signed_public_key(&self) -> SignedPublicSubKey {
+        SignedPublicSubKey::new(self.key.public_key().clone(), self.signatures.clone())
     }
 
     pub fn public_key(&self) -> PublicSubkey {
