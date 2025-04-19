@@ -1262,6 +1262,228 @@ mod tests {
     }
 
     #[test]
+    fn test_cert_metadata_gen_v4_v4() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        // legal v4 key, with user id
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V4)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V4)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        // We should have made no dks
+        assert!(signed_key.details.direct_signatures.is_empty());
+
+        // We made one user id
+        assert_eq!(signed_key.details.users.len(), 1);
+        let user = signed_key.details.users.first().unwrap();
+        // .. it has one binding signature
+        assert_eq!(user.signatures.len(), 1);
+        let sig = user.signatures.first().unwrap();
+        // ... key metadata is on that (primary user id binding) signature
+        assert_eq!(sig.preferred_hash_algs(), &[HashAlgorithm::Sha512]);
+        assert!(sig.key_flags().certify());
+        assert!(sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v4_v4_no_uid() {
+        // v4 key without primary user id - not legal
+        let _ = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V4)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V4)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .expect_err("should not build because of missing primary user id");
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v6_v4_illegal() {
+        // illegal v6/v4 mix
+        SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V4)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .expect_err("should not be able to build");
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v4_v6_illegal() {
+        // illegal v4/v6 mix
+        SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V4)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .expect_err("should not be able to build");
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v6_v6() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        // v6/v6 with user id
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        // --- key metadata should be on dks
+        // We made one dks
+        assert_eq!(signed_key.details.direct_signatures.len(), 1);
+        let sig = signed_key.details.direct_signatures.first().unwrap();
+        // ... key metadata is on that dks signature
+        assert_eq!(sig.preferred_hash_algs(), &[HashAlgorithm::Sha512]);
+        assert!(sig.key_flags().certify());
+        assert!(sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+
+        // - no key metadata should be on user id binding
+        // We made one user id
+        assert_eq!(signed_key.details.users.len(), 1);
+        let user = signed_key.details.users.first().unwrap();
+        // .. it has one binding signautre
+        assert_eq!(user.signatures.len(), 1);
+        let sig = user.signatures.first().unwrap();
+        // NO key metadata is on that (primary user id binding) signature
+        assert_eq!(sig.preferred_hash_algs(), &[]);
+        assert!(!sig.key_flags().certify());
+        assert!(!sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v6_v6_id_less() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        // v6/v6 without user id
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        // --- key metadata should be on dks
+        // We made one dks
+        assert_eq!(signed_key.details.direct_signatures.len(), 1);
+        let sig = signed_key.details.direct_signatures.first().unwrap();
+        // ... key metadata is on that dks signature
+        assert_eq!(sig.preferred_hash_algs(), &[HashAlgorithm::Sha512]);
+        assert!(sig.key_flags().certify());
+        assert!(sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+
+        // We made no user id
+        assert!(signed_key.details.users.is_empty());
+    }
+
+    #[test]
     #[cfg(feature = "draft-pqc")]
     fn key_gen_ed25519_ml_kem_x25519() {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
