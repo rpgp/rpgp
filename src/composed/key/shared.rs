@@ -65,18 +65,23 @@ impl KeyDetails {
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
+        // Technically this should probably check for >= version 6, for at least
+        let is_v6 = key.version() == KeyVersion::V6;
+
         // TODO: get features via KeyDetails?
-        let features: SmallVec<[u8; 1]> = match key.version() {
-            KeyVersion::V6 => [0x01 | 0x08].into(), // SEIPDv1 and SEIPDv2
-            _ => [0x01].into(),                     // SEIPDv1
+        let features: SmallVec<[u8; 1]> = if is_v6 {
+            // SEIPDv1 and SEIPDv2
+            [0x01 | 0x08].into()
+        } else {
+            // SEIPDv1
+            [0x01].into()
         };
 
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
-            Ok(vec![
+            let mut sp = vec![
                 Subpacket::critical(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
                 ))?,
-                Subpacket::regular(SubpacketData::Issuer(key.key_id()))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
                 Subpacket::critical(SubpacketData::KeyFlags(self.keyflags.clone()))?,
                 Subpacket::regular(SubpacketData::Features(features.clone()))?,
@@ -92,17 +97,28 @@ impl KeyDetails {
                 Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
                     self.preferred_aead_algorithms.clone(),
                 ))?,
-            ])
+            ];
+
+            if !is_v6 {
+                sp.push(Subpacket::regular(SubpacketData::Issuer(key.key_id()))?);
+            }
+
+            Ok(sp)
         };
 
         let basic_subpackets = || -> Result<Vec<Subpacket>> {
-            Ok(vec![
+            let mut sp = vec![
                 Subpacket::critical(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
                 ))?,
-                Subpacket::regular(SubpacketData::Issuer(key.key_id()))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
-            ])
+            ];
+
+            if !is_v6 {
+                sp.push(Subpacket::regular(SubpacketData::Issuer(key.key_id()))?);
+            }
+
+            Ok(sp)
         };
 
         // --- Direct key signatures
