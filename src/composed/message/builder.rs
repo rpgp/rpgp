@@ -120,14 +120,14 @@ struct SigningConfig<'a> {
     /// The key to sign with
     key: &'a dyn SecretKeyTrait,
     /// A password to unlock it
-    key_pw: Password,
+    key_pw: &'a Password,
     /// The hash algorithm to be used when signing.
     hash_algorithm: HashAlgorithm,
 }
 
 impl<'a> SigningConfig<'a> {
     /// Create a new signing configuration.
-    fn new(key: &'a dyn SecretKeyTrait, key_pw: Password, hash: HashAlgorithm) -> Self {
+    fn new(key: &'a dyn SecretKeyTrait, key_pw: &'a Password, hash: HashAlgorithm) -> Self {
         Self {
             key,
             key_pw,
@@ -519,7 +519,7 @@ impl<'a, R: Read, E: Encryption> Builder<'a, R, E> {
     pub fn sign(
         &mut self,
         key: &'a dyn SecretKeyTrait,
-        key_pw: Password,
+        key_pw: &'a Password,
         hash_algorithm: HashAlgorithm,
     ) -> &mut Self {
         self.signing
@@ -1211,7 +1211,7 @@ impl<R: std::io::Read> std::io::Read for SignGenerator<'_, R> {
 
                             // sign and write the signature into the buffer
                             hasher
-                                .sign(signer.key, &signer.key_pw)
+                                .sign(signer.key, signer.key_pw)
                                 .and_then(|sig| sig.to_writer_with_header(&mut writer))
                                 .map_err(|e| {
                                     std::io::Error::new(
