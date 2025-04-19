@@ -232,6 +232,7 @@ impl SecretKeyParams {
         keyflags.set_encrypt_comms(self.can_encrypt);
         keyflags.set_encrypt_storage(self.can_encrypt);
         keyflags.set_sign(self.can_sign);
+        keyflags.set_authentication(self.can_authenticate);
 
         let primary_user_id = match self.primary_user_id {
             None => None,
