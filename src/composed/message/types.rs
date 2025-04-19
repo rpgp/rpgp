@@ -1798,9 +1798,8 @@ mod tests {
         let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-        builder
-            .sign_text()
-            .sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+        let pw = Password::empty();
+        builder.sign_text().sign(&*skey, &pw, HashAlgorithm::Sha256);
 
         let armored = builder
             .to_armored_string(rng, ArmorOptions::default())
@@ -1825,7 +1824,8 @@ mod tests {
         let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-        builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+        let pw = Password::empty();
+        builder.sign(&*skey, &pw, HashAlgorithm::Sha256);
 
         let armored = builder
             .to_armored_string(rng, ArmorOptions::default())
@@ -1851,7 +1851,8 @@ mod tests {
         let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-        builder.sign(&*skey, Password::empty(), HashAlgorithm::Sha256);
+        let pw = Password::empty();
+        builder.sign(&*skey, &pw, HashAlgorithm::Sha256);
         builder.compression(CompressionAlgorithm::ZLIB);
 
         let armored = builder
@@ -1890,9 +1891,8 @@ mod tests {
 
         for input in inputs {
             let mut builder = MessageBuilder::from_bytes("hello.txt", input);
-            builder
-                .sign_text()
-                .sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
+            let pw = Password::from("test");
+            builder.sign_text().sign(&*skey, &pw, HashAlgorithm::Sha256);
 
             let armored = builder
                 .to_armored_string(&mut rng, ArmorOptions::default())
@@ -1924,7 +1924,8 @@ mod tests {
         let rng = ChaCha8Rng::seed_from_u64(0);
 
         let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
-        builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
+        let pw = Password::from("test");
+        builder.sign(&*skey, &pw, HashAlgorithm::Sha256);
 
         let armored = builder
             .to_armored_string(rng, ArmorOptions::default())
@@ -1955,7 +1956,8 @@ mod tests {
             let mut builder = MessageBuilder::from_bytes("hello.txt", "hello world\n".as_bytes());
             builder.compression(CompressionAlgorithm::ZLIB);
 
-            builder.sign(&*skey, Password::from("test"), HashAlgorithm::Sha256);
+            let pw = Password::from("test");
+            builder.sign(&*skey, &pw, HashAlgorithm::Sha256);
 
             let armored = builder
                 .to_armored_string(rng, ArmorOptions::default())

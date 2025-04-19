@@ -101,8 +101,9 @@ impl TestCase {
 
                 let mut builder = MessageBuilder::from_bytes("", "Testing\n")
                     .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+                let pw = Password::empty();
                 builder
-                    .sign(&*sec_key, Password::empty(), *hash)
+                    .sign(&*sec_key, &pw, *hash)
                     // encrypting to the PQ subkey
                     .encrypt_to_key(&mut rng, &pub_key.public_subkeys.last().unwrap())?;
 
@@ -265,8 +266,9 @@ fn test_ml_kem_1024_x448() -> TestResult {
     // encrypt & sign
     let mut builder = MessageBuilder::from_bytes("", "Testing\n")
         .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
+    let pw = Password::empty();
     builder
-        .sign(&*key_a, Password::empty(), HashAlgorithm::Sha3_512)
+        .sign(&*key_a, &pw, HashAlgorithm::Sha3_512)
         // encrypting to the PQ subkey
         .encrypt_to_key(&mut rng, &key_b.public_key().public_subkeys[0])?;
 
