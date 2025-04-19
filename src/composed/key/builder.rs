@@ -121,6 +121,35 @@ pub struct SubkeyParams {
 
 impl SecretKeyParamsBuilder {
     fn validate(&self) -> std::result::Result<(), String> {
+        // Don't allow mixing of v4/v6 primary and subkeys
+        match self.version {
+            // V6 primary
+            Some(types::KeyVersion::V6) => {
+                // all subkeys must be v6
+                for sub in self.subkeys.iter().flatten() {
+                    if sub.version != types::KeyVersion::V6 {
+                        return Err(format!(
+                            "V6 primary key may not be combined with {:?} subkey",
+                            sub.version
+                        ));
+                    }
+                }
+            }
+            // non-V6 primary
+            _ => {
+                // subkeys may not be v6
+                // (but v2/3/4 have been mixed historically, so we will let those slide)
+                for sub in self.subkeys.iter().flatten() {
+                    if sub.version == types::KeyVersion::V6 {
+                        return Err(format!(
+                            "{:?} primary key may not be combined with V6 subkey",
+                            self.version
+                        ));
+                    }
+                }
+            }
+        };
+
         match &self.key_type {
             Some(KeyType::Rsa(size)) => {
                 if *size < 2048 {
@@ -191,8 +220,6 @@ impl SecretKeyParamsBuilder {
     }
 
     pub fn subkey<VALUE: Into<SubkeyParams>>(&mut self, value: VALUE) -> &mut Self {
-        // TODO: validity checks? (e.g. no mixing of v4/v6 primary/subkeys)
-
         if let Some(ref mut subkeys) = self.subkeys {
             subkeys.push(value.into());
         } else {
