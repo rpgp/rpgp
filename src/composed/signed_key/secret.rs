@@ -404,7 +404,8 @@ k0mXubZvyl4GBg==
         let pri = &ssk.primary_key;
 
         let mut builder = crate::composed::MessageBuilder::from_bytes("", &b"Hello world"[..]);
-        builder.sign(pri, Password::empty(), HashAlgorithm::Sha256);
+        let pw = Password::empty();
+        builder.sign(pri, &pw, HashAlgorithm::Sha256);
         let signed = builder.to_armored_string(&mut rng, ArmorOptions::default())?;
 
         eprintln!("{}", signed);
@@ -444,12 +445,10 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
         ssk.verify()?;
 
         let mut rng = ChaCha8Rng::seed_from_u64(0);
+
         let mut builder = MessageBuilder::from_bytes("", &b"Hello world"[..]);
-        builder.sign(
-            &ssk.primary_key,
-            ANNEX_A_5_PASSPHRASE.into(),
-            HashAlgorithm::Sha256,
-        );
+        let pw = ANNEX_A_5_PASSPHRASE.into();
+        builder.sign(&ssk.primary_key, &pw, HashAlgorithm::Sha256);
         let msg = builder.to_vec(&mut rng)?;
         let mut msg = Message::from_bytes(&msg[..])?;
         msg.verify_read(&ssk.primary_key.public_key())?;
@@ -476,7 +475,8 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
 
         // try signing without pw
         let mut builder = MessageBuilder::from_bytes(file_name, &text[..]);
-        builder.sign(&pri, Password::empty(), HashAlgorithm::Sha256);
+        let pw = Password::empty();
+        builder.sign(&pri, &pw, HashAlgorithm::Sha256);
         let msg = builder.to_vec(&mut rng)?;
 
         let mut msg = Message::from_bytes(&msg[..])?;
@@ -487,7 +487,8 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
 
         // try signing with pw
         let mut builder = MessageBuilder::from_bytes(file_name, &text[..]);
-        builder.sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256);
+        let pw = ANNEX_A_5_PASSPHRASE.into();
+        builder.sign(&pri, &pw, HashAlgorithm::Sha256);
         let msg = builder.to_vec(&mut rng)?;
 
         let mut msg = Message::from_bytes(&msg[..])?;
@@ -504,7 +505,8 @@ ruh8m7Xo2ehSSFyWRSuTSZe5tm/KXgYG
 
         // try signing with pw
         let mut builder = MessageBuilder::from_bytes(file_name, &text[..]);
-        builder.sign(&pri, ANNEX_A_5_PASSPHRASE.into(), HashAlgorithm::Sha256);
+        let pw = ANNEX_A_5_PASSPHRASE.into();
+        builder.sign(&pri, &pw, HashAlgorithm::Sha256);
         let msg = builder.to_vec(&mut rng)?;
 
         let mut msg = Message::from_bytes(&msg[..])?;

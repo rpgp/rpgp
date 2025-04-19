@@ -175,11 +175,8 @@ fn rfc9580_roundtrip_sign_verify_inline_msg() {
         let spk = SignedPublicKey::from(ssk.clone());
 
         let mut builder = MessageBuilder::from_bytes("", MSG.as_bytes());
-        builder.sign(
-            &*ssk,
-            "".into(),
-            ssk.public_key().public_params().hash_alg(),
-        );
+        let pw = "".into();
+        builder.sign(&*ssk, &pw, ssk.public_key().public_params().hash_alg());
         let msg = builder.to_vec(&mut rng).unwrap();
 
         let mut msg = Message::from_bytes(&msg[..]).unwrap();
