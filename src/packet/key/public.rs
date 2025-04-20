@@ -8,7 +8,7 @@ use sha1_checked::{Digest, Sha1};
 
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
+    errors::{bail, ensure, ensure_eq, format_err, unimplemented_err, unsupported_err, Result},
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{
@@ -612,6 +612,80 @@ impl crate::packet::PacketTrait for PublicKey {
 impl crate::packet::PacketTrait for PublicSubkey {
     fn packet_header(&self) -> &crate::packet::PacketHeader {
         &self.packet_header
+    }
+}
+
+impl PubKeyInner {
+    fn imprint(&self, h: HashAlgorithm) -> Result<Vec<u8>> {
+        let mut hasher = h.new_hasher()?;
+
+        use crate::ser::Serialize;
+
+        match self.version {
+            KeyVersion::V2 | KeyVersion::V3 => {
+                let mut v: Vec<u8> = Vec::new();
+
+                self.public_params
+                    .to_writer(&mut v)
+                    .expect("write to hasher");
+
+                hasher.update(&v);
+
+                Ok(hasher.finalize().to_vec())
+            }
+            KeyVersion::V4 => {
+                // A one-octet version number (4).
+                let mut packet = vec![4, 0, 0, 0, 0];
+
+                // A four-octet number denoting the time that the key was created.
+                BigEndian::write_u32(&mut packet[1..5], self.created_at.timestamp() as u32);
+
+                // A one-octet number denoting the public-key algorithm of this key.
+                packet.push(self.algorithm.into());
+                self.public_params
+                    .to_writer(&mut packet)
+                    .expect("write to vec");
+
+                hasher.update(&[0x99]);
+                hasher.update(&(packet.len() as u16).to_be_bytes());
+                hasher.update(&packet);
+
+                Ok(hasher.finalize().to_vec())
+            }
+            KeyVersion::V5 => Err(format_err!("Imprint unsupported for V5 keys")),
+            KeyVersion::V6 => {
+                // Serialize public parameters
+                let mut pp: Vec<u8> = vec![];
+                self.public_params
+                    .to_writer(&mut pp)
+                    .expect("serialize to Vec<u8>");
+
+                // a.1) 0x9B (1 octet)
+                hasher.update(&[0x9B]);
+
+                // a.2) four-octet scalar octet count of (b)-(f)
+                let total_len: u32 = 1 + 4 + 1 + 4 + pp.len() as u32;
+                hasher.update(&total_len.to_be_bytes());
+
+                // b) version number = 6 (1 octet);
+                hasher.update(&[0x06]);
+
+                // c) timestamp of key creation (4 octets);
+                hasher.update(&(self.created_at.timestamp() as u32).to_be_bytes());
+
+                // d) algorithm (1 octet);
+                hasher.update(&[self.algorithm.into()]);
+
+                // e) four-octet scalar octet count for the following key material;
+                hasher.update(&(pp.len() as u32).to_be_bytes());
+
+                // f) algorithm-specific fields.
+                hasher.update(&pp);
+
+                Ok(hasher.finalize().to_vec())
+            }
+            KeyVersion::Other(v) => Err(format_err!("Imprint unsupported for {} keys", v)),
+        }
     }
 }
 
