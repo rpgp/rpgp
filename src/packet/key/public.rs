@@ -615,6 +615,8 @@ impl crate::packet::PacketTrait for PublicSubkey {
 
 impl PubKeyInner {
     fn imprint(&self, h: HashAlgorithm) -> Result<Vec<u8>> {
+        // this should only error for unknown hash algorithms or key versions
+
         let mut hasher = h.new_hasher()?;
 
         use crate::ser::Serialize;
@@ -622,16 +624,15 @@ impl PubKeyInner {
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => {
                 let mut v: Vec<u8> = Vec::new();
-
-                self.public_params
-                    .to_writer(&mut v)
-                    .expect("write to hasher");
+                self.public_params.to_writer(&mut v).expect("write to vec");
 
                 hasher.update(&v);
 
                 Ok(hasher.finalize().to_vec())
             }
             KeyVersion::V4 => {
+                hasher.update(&[0x99]);
+
                 // A one-octet version number (4).
                 let mut packet = vec![4, 0, 0, 0, 0];
 
@@ -640,11 +641,11 @@ impl PubKeyInner {
 
                 // A one-octet number denoting the public-key algorithm of this key.
                 packet.push(self.algorithm.into());
+
                 self.public_params
                     .to_writer(&mut packet)
                     .expect("write to vec");
 
-                hasher.update(&[0x99]);
                 hasher.update(&(packet.len() as u16).to_be_bytes());
                 hasher.update(&packet);
 
@@ -652,17 +653,14 @@ impl PubKeyInner {
             }
             KeyVersion::V5 => Err(format_err!("Imprint unsupported for V5 keys")),
             KeyVersion::V6 => {
-                // Serialize public parameters
-                let mut pp: Vec<u8> = vec![];
-                self.public_params
-                    .to_writer(&mut pp)
-                    .expect("serialize to Vec<u8>");
-
                 // a.1) 0x9B (1 octet)
                 hasher.update(&[0x9B]);
 
+                // length of public parameters
+                let len = self.public_params.write_len() as u32;
+
                 // a.2) four-octet scalar octet count of (b)-(f)
-                let total_len: u32 = 1 + 4 + 1 + 4 + pp.len() as u32;
+                let total_len: u32 = 1 + 4 + 1 + 4 + len;
                 hasher.update(&total_len.to_be_bytes());
 
                 // b) version number = 6 (1 octet);
@@ -675,9 +673,11 @@ impl PubKeyInner {
                 hasher.update(&[self.algorithm.into()]);
 
                 // e) four-octet scalar octet count for the following key material;
-                hasher.update(&(pp.len() as u32).to_be_bytes());
+                hasher.update(&len.to_be_bytes());
 
                 // f) algorithm-specific fields.
+                let mut pp: Vec<u8> = vec![];
+                self.public_params.to_writer(&mut pp).expect("write to vec");
                 hasher.update(&pp);
 
                 Ok(hasher.finalize().to_vec())
