@@ -1,10 +1,8 @@
 use std::io::BufRead;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use md5::Md5;
 use rand::{CryptoRng, Rng};
 use rsa::traits::PublicKeyParts;
-use sha1_checked::{Digest, Sha1};
 
 use crate::{
     crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
@@ -695,85 +693,37 @@ impl KeyDetails for PubKeyInner {
     }
 
     fn fingerprint(&self) -> Fingerprint {
-        use crate::ser::Serialize;
-
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => {
-                let mut h = Md5::new();
-                self.public_params
-                    .to_writer(&mut h)
-                    .expect("write to hasher");
-                let digest = h.finalize();
-
                 if self.version == KeyVersion::V2 {
-                    Fingerprint::V2(digest.into())
+                    Fingerprint::V2(
+                        self.imprint(HashAlgorithm::Md5)
+                            .expect("failure is not an option")
+                            .try_into()
+                            .expect("Md5 is 16 bytes"),
+                    )
                 } else {
-                    Fingerprint::V3(digest.into())
+                    Fingerprint::V3(
+                        self.imprint(HashAlgorithm::Md5)
+                            .expect("failure is not an option")
+                            .try_into()
+                            .expect("Md5 is 16 bytes"),
+                    )
                 }
             }
-            KeyVersion::V4 => {
-                // A one-octet version number (4).
-                let mut packet = vec![4, 0, 0, 0, 0];
-
-                // A four-octet number denoting the time that the key was created.
-                BigEndian::write_u32(&mut packet[1..5], self.created_at.timestamp() as u32);
-
-                // A one-octet number denoting the public-key algorithm of this key.
-                packet.push(self.algorithm.into());
-                self.public_params
-                    .to_writer(&mut packet)
-                    .expect("write to vec");
-
-                let mut h = Sha1::new();
-                h.update([0x99]);
-                h.write_u16::<BigEndian>(packet.len() as u16)
-                    .expect("write to hasher");
-                h.update(&packet);
-
-                let digest = h.finalize();
-
-                Fingerprint::V4(digest.into())
-            }
+            KeyVersion::V4 => Fingerprint::V4(
+                self.imprint(HashAlgorithm::Sha1)
+                    .expect("failure is not an option")
+                    .try_into()
+                    .expect("Sha1 is 20 bytes"),
+            ),
             KeyVersion::V5 => unimplemented!("V5 keys"),
-            KeyVersion::V6 => {
-                // Serialize public parameters
-                let mut pp: Vec<u8> = vec![];
-                self.public_params
-                    .to_writer(&mut pp)
-                    .expect("serialize to Vec<u8>");
-
-                // A v6 fingerprint is the 256-bit SHA2-256 hash of:
-                let mut h = sha2::Sha256::new();
-
-                // a.1) 0x9B (1 octet)
-                h.update([0x9B]);
-
-                // a.2) four-octet scalar octet count of (b)-(f)
-                let total_len: u32 = 1 + 4 + 1 + 4 + pp.len() as u32;
-                h.write_u32::<BigEndian>(total_len)
-                    .expect("write to hasher");
-
-                // b) version number = 6 (1 octet);
-                h.update([0x06]);
-
-                // c) timestamp of key creation (4 octets);
-                h.write_u32::<BigEndian>(self.created_at.timestamp() as u32)
-                    .expect("write to hasher");
-
-                // d) algorithm (1 octet);
-                h.update([self.algorithm.into()]);
-
-                // e) four-octet scalar octet count for the following key material;
-                h.write_u32::<BigEndian>(pp.len() as u32)
-                    .expect("write to hasher");
-
-                // f) algorithm-specific fields.
-                h.update(&pp);
-
-                let digest = h.finalize();
-
-                Fingerprint::V6(digest.into())
-            }
+            KeyVersion::V6 => Fingerprint::V6(
+                self.imprint(HashAlgorithm::Sha256)
+                    .expect("failure is not an option")
+                    .try_into()
+                    .expect("Sha256 is 32 bytes"),
+            ),
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
     }
