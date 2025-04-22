@@ -78,7 +78,7 @@ impl KeyDetails {
         };
 
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
-            let mut sp = vec![
+            Ok(vec![
                 Subpacket::critical(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
                 ))?,
@@ -97,28 +97,16 @@ impl KeyDetails {
                 Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
                     self.preferred_aead_algorithms.clone(),
                 ))?,
-            ];
-
-            if !is_v6 {
-                sp.push(Subpacket::regular(SubpacketData::Issuer(key.key_id()))?);
-            }
-
-            Ok(sp)
+            ])
         };
 
         let basic_subpackets = || -> Result<Vec<Subpacket>> {
-            let mut sp = vec![
+            Ok(vec![
                 Subpacket::critical(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
                 ))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
-            ];
-
-            if !is_v6 {
-                sp.push(Subpacket::regular(SubpacketData::Issuer(key.key_id()))?);
-            }
-
-            Ok(sp)
+            ])
         };
 
         // --- Direct key signatures
@@ -131,6 +119,10 @@ impl KeyDetails {
                     key.hash_alg(),
                 )?;
                 config.hashed_subpackets = subpackets_with_metadata()?;
+                if !is_v6 {
+                    config.unhashed_subpackets =
+                        vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+                }
 
                 let dks = config.sign_key(key, key_pw, pub_key)?;
 
@@ -164,6 +156,11 @@ impl KeyDetails {
             config
                 .hashed_subpackets
                 .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
+
+            if !is_v6 {
+                config.unhashed_subpackets =
+                    vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+            }
 
             let sig = config.sign_certification(
                 key,
@@ -200,6 +197,11 @@ impl KeyDetails {
                         KeyVersion::V6 => basic_subpackets()?,
                         _ => subpackets_with_metadata()?,
                     };
+
+                    if !is_v6 {
+                        config.unhashed_subpackets =
+                            vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+                    }
 
                     let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
 
