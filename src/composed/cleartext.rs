@@ -66,7 +66,6 @@ where {
     where
         R: rand::Rng + rand::CryptoRng,
     {
-        let key_id = key.key_id();
         let algorithm = key.algorithm();
         let hash_algorithm = key.hash_alg();
         let hashed_subpackets = vec![
@@ -75,7 +74,6 @@ where {
                 chrono::Utc::now().trunc_subsecs(0),
             ))?,
         ];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
 
         let mut config = match key.version() {
             KeyVersion::V4 => SignatureConfig::v4(SignatureType::Text, algorithm, hash_algorithm),
@@ -85,7 +83,13 @@ where {
             v => bail!("unsupported key version {:?}", v),
         };
         config.hashed_subpackets = hashed_subpackets;
-        config.unhashed_subpackets = unhashed_subpackets;
+
+        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+        // the signature.
+        if u8::from(key.version()) <= 4 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+        }
 
         Self::new(text, config, key, key_pw)
     }

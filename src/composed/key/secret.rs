@@ -111,8 +111,13 @@ impl SecretSubkey {
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
-        config.unhashed_subpackets =
-            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
+
+        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+        // the signature.
+        if u8::from(sec_key.version()) <= 4 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
+        }
 
         let signatures =
             vec![config.sign_key_binding(sec_key, pub_key, key_pw, key.public_key())?];

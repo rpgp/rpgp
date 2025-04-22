@@ -251,7 +251,6 @@ impl UserAttribute {
         let hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
             Utc::now().trunc_subsecs(0),
         ))?];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?];
 
         let mut config = match signer.version() {
             KeyVersion::V4 => SignatureConfig::v4(
@@ -270,7 +269,10 @@ impl UserAttribute {
         };
 
         config.hashed_subpackets = hashed_subpackets;
-        config.unhashed_subpackets = unhashed_subpackets;
+        if u8::from(signer.version()) <= 4 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?];
+        }
 
         let sig =
             config.sign_certification_third_party(signer, signer_pw, signee, self.tag(), &self)?;

@@ -110,25 +110,25 @@ impl KeyDetails {
         };
 
         // --- Direct key signatures
-        let direct_signatures = match key.version() {
-            KeyVersion::V6 => {
-                let mut config = SignatureConfig::v6(
-                    &mut rng,
-                    SignatureType::Key,
-                    key.algorithm(),
-                    key.hash_alg(),
-                )?;
-                config.hashed_subpackets = subpackets_with_metadata()?;
-                if !is_v6 {
-                    config.unhashed_subpackets =
-                        vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
-                }
+        let direct_signatures = if is_v6 {
+            let mut config = SignatureConfig::v6(
+                &mut rng,
+                SignatureType::Key,
+                key.algorithm(),
+                key.hash_alg(),
+            )?;
+            config.hashed_subpackets = subpackets_with_metadata()?;
 
-                let dks = config.sign_key(key, key_pw, pub_key)?;
-
-                vec![dks]
+            if u8::from(key.version()) <= 4 {
+                config.unhashed_subpackets =
+                    vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
             }
-            _ => vec![],
+
+            let dks = config.sign_key(key, key_pw, pub_key)?;
+
+            vec![dks]
+        } else {
+            vec![]
         };
 
         // --- User IDs
@@ -157,7 +157,7 @@ impl KeyDetails {
                 .hashed_subpackets
                 .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
 
-            if !is_v6 {
+            if u8::from(key.version()) <= 4 {
                 config.unhashed_subpackets =
                     vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
             }
@@ -198,7 +198,7 @@ impl KeyDetails {
                         _ => subpackets_with_metadata()?,
                     };
 
-                    if !is_v6 {
+                    if u8::from(key.version()) <= 4 {
                         config.unhashed_subpackets =
                             vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
                     }
