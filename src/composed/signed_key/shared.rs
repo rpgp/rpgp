@@ -166,6 +166,7 @@ impl SignedKeyDetails {
                 .expect("we checked this above");
 
             let keyflags = first_dks.key_flags();
+            let features = first_dks.features();
 
             let preferred_symmetric_algorithms =
                 SmallVec::from_slice(first_dks.preferred_symmetric_algs());
@@ -192,6 +193,7 @@ impl SignedKeyDetails {
                     .map(|a| a.attr.clone())
                     .collect(),
                 keyflags,
+                features.to_vec(),
                 preferred_symmetric_algorithms,
                 preferred_hash_algorithms,
                 preferred_compression_algorithms,
@@ -208,6 +210,7 @@ impl SignedKeyDetails {
                 .first()
                 .expect("invalid primary user");
             let keyflags = primary_sig.key_flags();
+            let features = primary_sig.features();
 
             let preferred_symmetric_algorithms =
                 SmallVec::from_slice(primary_sig.preferred_symmetric_algs());
@@ -228,6 +231,7 @@ impl SignedKeyDetails {
                     .map(|a| a.attr.clone())
                     .collect(),
                 keyflags,
+                features.to_vec(),
                 preferred_symmetric_algorithms,
                 preferred_hash_algorithms,
                 preferred_compression_algorithms,
@@ -247,6 +251,7 @@ impl SignedKeyDetails {
                     .map(|a| a.attr.clone())
                     .collect(),
                 KeyFlags::default(),
+                vec![0x01], // SEIPDv1
                 vec![].into(),
                 vec![].into(),
                 vec![].into(),

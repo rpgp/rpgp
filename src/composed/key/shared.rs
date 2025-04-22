@@ -23,6 +23,7 @@ pub struct KeyDetails {
     non_primary_user_ids: Vec<UserId>,
     user_attributes: Vec<UserAttribute>,
     keyflags: KeyFlags,
+    features: Vec<u8>,
     preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
     preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
@@ -36,6 +37,7 @@ impl KeyDetails {
         user_ids: Vec<UserId>,
         user_attributes: Vec<UserAttribute>,
         keyflags: KeyFlags,
+        features: Vec<u8>,
         preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
         preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
         preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
@@ -46,6 +48,7 @@ impl KeyDetails {
             non_primary_user_ids: user_ids,
             user_attributes,
             keyflags,
+            features,
             preferred_symmetric_algorithms,
             preferred_hash_algorithms,
             preferred_compression_algorithms,
@@ -68,15 +71,6 @@ impl KeyDetails {
         // Technically this should probably check for >= version 6, for at least
         let is_v6 = key.version() == KeyVersion::V6;
 
-        // TODO: get features via KeyDetails?
-        let features: SmallVec<[u8; 1]> = if is_v6 {
-            // SEIPDv1 and SEIPDv2
-            [0x01 | 0x08].into()
-        } else {
-            // SEIPDv1
-            [0x01].into()
-        };
-
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![
                 Subpacket::critical(SubpacketData::SignatureCreationTime(
@@ -84,7 +78,7 @@ impl KeyDetails {
                 ))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
                 Subpacket::critical(SubpacketData::KeyFlags(self.keyflags.clone()))?,
-                Subpacket::regular(SubpacketData::Features(features.clone()))?,
+                Subpacket::regular(SubpacketData::Features(self.features.clone().into()))?,
                 Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                     self.preferred_symmetric_algorithms.clone(),
                 ))?,

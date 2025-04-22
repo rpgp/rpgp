@@ -48,6 +48,8 @@ pub struct SecretKeyParams {
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
     expiration: Option<Duration>,
+    #[builder(default)]
+    feature_seipd_v2: bool,
 
     // -- Public-facing preferences on the certificate
     /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
@@ -266,6 +268,12 @@ impl SecretKeyParams {
             Some(id) => Some(UserId::from_str(Default::default(), id)?),
         };
 
+        let features = if !self.feature_seipd_v2 {
+            vec![0x01] // SEIPDv1
+        } else {
+            vec![0x01 | 0x08] // SEIPDv1 and SEIPDv2
+        };
+
         Ok(SecretKey::new(
             primary_key,
             KeyDetails::new(
@@ -276,6 +284,7 @@ impl SecretKeyParams {
                     .collect::<Result<Vec<_>, _>>()?,
                 self.user_attributes,
                 keyflags,
+                features,
                 self.preferred_symmetric_algorithms,
                 self.preferred_hash_algorithms,
                 self.preferred_compression_algorithms,
@@ -1307,6 +1316,7 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
+        assert_eq!(sig.features(), &[0x01]);
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
@@ -1394,6 +1404,7 @@ mod tests {
             .key_type(KeyType::Ed25519)
             .can_certify(true)
             .can_sign(true)
+            .feature_seipd_v2(true)
             .primary_user_id("alice".into())
             .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
             .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
@@ -1425,12 +1436,13 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
+        assert_eq!(sig.features(), &[0x09]);
 
         // - no key metadata should be on user id binding
         // We made one user id
         assert_eq!(signed_key.details.users.len(), 1);
         let user = signed_key.details.users.first().unwrap();
-        // .. it has one binding signautre
+        // .. it has one binding signature
         assert_eq!(user.signatures.len(), 1);
         let sig = user.signatures.first().unwrap();
         // NO key metadata is on that (primary user id binding) signature
@@ -1439,6 +1451,7 @@ mod tests {
         assert!(!sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
+        assert!(sig.features().is_empty());
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
@@ -1455,6 +1468,7 @@ mod tests {
             .key_type(KeyType::Ed25519)
             .can_certify(true)
             .can_sign(true)
+            .feature_seipd_v2(true)
             .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
             .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
             .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
@@ -1486,6 +1500,7 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
+        assert_eq!(sig.features(), &[0x09]);
 
         // We made no user id
         assert!(signed_key.details.users.is_empty());
