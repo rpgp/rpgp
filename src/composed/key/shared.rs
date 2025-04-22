@@ -73,11 +73,11 @@ impl KeyDetails {
 
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![
-                Subpacket::critical(SubpacketData::SignatureCreationTime(
+                Subpacket::regular(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
                 ))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
-                Subpacket::critical(SubpacketData::KeyFlags(self.keyflags.clone()))?,
+                Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.clone()))?,
                 Subpacket::regular(SubpacketData::Features(self.features.clone().into()))?,
                 Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
                     self.preferred_symmetric_algorithms.clone(),
@@ -96,7 +96,7 @@ impl KeyDetails {
 
         let basic_subpackets = || -> Result<Vec<Subpacket>> {
             Ok(vec![
-                Subpacket::critical(SubpacketData::SignatureCreationTime(
+                Subpacket::regular(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
                 ))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
