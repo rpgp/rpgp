@@ -282,7 +282,7 @@ pub enum KeyType {
     MlDsa65Ed25519,
     /// Signing using ML DSA 87 ED448
     #[cfg(feature = "draft-pqc")]
-    MlDsa87EdEd448,
+    MlDsa87Ed448,
     /// Signing with SLH DSA Shake 128s
     #[cfg(feature = "draft-pqc")]
     SlhDsaShake128s,
@@ -335,7 +335,7 @@ impl KeyType {
             #[cfg(feature = "draft-pqc")]
             KeyType::MlDsa65Ed25519 => PublicKeyAlgorithm::MlDsa65Ed25519,
             #[cfg(feature = "draft-pqc")]
-            KeyType::MlDsa87EdEd448 => PublicKeyAlgorithm::MlDsa87Ed448,
+            KeyType::MlDsa87Ed448 => PublicKeyAlgorithm::MlDsa87Ed448,
             #[cfg(feature = "draft-pqc")]
             KeyType::SlhDsaShake128s => PublicKeyAlgorithm::SlhDsaShake128s,
             #[cfg(feature = "draft-pqc")]
@@ -428,7 +428,7 @@ impl KeyType {
                 (public_params, secret_params)
             }
             #[cfg(feature = "draft-pqc")]
-            KeyType::MlDsa87EdEd448 => {
+            KeyType::MlDsa87Ed448 => {
                 let secret = ml_dsa87_ed448::SecretKey::generate(rng);
                 let public_params = PublicParams::MlDsa87Ed448((&secret).into());
                 let secret_params = PlainSecretParams::MlDsa87Ed448(secret);
@@ -1396,7 +1396,7 @@ mod tests {
             gen_key(
                 &mut rng,
                 KeyVersion::V6,
-                KeyType::MlDsa87EdEd448,
+                KeyType::MlDsa87Ed448,
                 HashAlgorithm::Sha3_512,
                 KeyType::MlKem1024X448,
             );
