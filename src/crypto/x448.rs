@@ -8,20 +8,30 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 use crate::{
     crypto::{aes_kw, Decryptor},
     errors::{bail, ensure, Result},
+    ser::Serialize,
     types::X448PublicParams,
 };
 
+pub const KEY_LEN: usize = 56;
+
 /// Secret key for X448
-#[derive(Clone, derive_more::Debug, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
+#[derive(Clone, derive_more::Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey {
     #[debug("..")]
-    pub(crate) secret: [u8; 56],
+    secret: x448::Secret,
 }
+
+impl PartialEq for SecretKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.secret.as_bytes().eq(other.secret.as_bytes())
+    }
+}
+
+impl Eq for SecretKey {}
 
 impl From<&SecretKey> for X448PublicParams {
     fn from(value: &SecretKey) -> Self {
-        let secret = x448::Secret::from(value.secret); // does clamping
+        let secret = value.secret;
         let public = x448::PublicKey::from(&secret);
         X448PublicParams { key: public }
     }
@@ -30,17 +40,31 @@ impl From<&SecretKey> for X448PublicParams {
 impl SecretKey {
     /// Generate an X448 `SecretKey`.
     pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let mut secret_key_bytes = Zeroizing::new([0u8; 56]);
-        rng.fill_bytes(&mut *secret_key_bytes);
-        let secret = x448::Secret::from(*secret_key_bytes); // does clamping
+        let secret = x448::Secret::new(&mut rng);
 
-        SecretKey {
-            secret: *secret.as_bytes(),
-        }
+        SecretKey { secret }
     }
 
-    pub(crate) fn try_from_bytes(secret: [u8; 56]) -> Result<Self> {
+    pub fn try_from_bytes(secret: [u8; KEY_LEN]) -> Result<Self> {
+        let secret = x448::Secret::from(secret);
+
         Ok(Self { secret })
+    }
+
+    pub fn as_bytes(&self) -> &[u8; KEY_LEN] {
+        self.secret.as_bytes()
+    }
+}
+
+impl Serialize for SecretKey {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        let x = self.as_bytes();
+        writer.write_all(x)?;
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        KEY_LEN
     }
 }
 
@@ -69,7 +93,7 @@ impl Decryptor for SecretKey {
             };
 
             // private key of the recipient.
-            let our_secret = x448::Secret::from(self.secret);
+            let our_secret = self.secret;
 
             // derive shared secret (None for low order points)
             let Some(shared_secret) = our_secret.as_diffie_hellman(&their_public) else {
@@ -193,8 +217,9 @@ mod tests {
 
     use std::ops::Deref;
 
+    use proptest::prelude::*;
     use rand::{RngCore, SeedableRng};
-    use rand_chacha::ChaChaRng;
+    use rand_chacha::{ChaCha8Rng, ChaChaRng};
 
     use super::*;
 
@@ -225,6 +250,20 @@ mod tests {
 
                 assert_eq!(&plain[..], &decrypted[..]);
             }
+        }
+    }
+
+    impl Arbitrary for SecretKey {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            any::<u64>()
+                .prop_map(|seed| {
+                    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+                    SecretKey::generate(&mut rng)
+                })
+                .boxed()
         }
     }
 }
