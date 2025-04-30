@@ -121,16 +121,6 @@ pub struct SubkeyParams {
 }
 
 impl SecretKeyParamsBuilder {
-    fn can_sign(&self) -> bool {
-        self.can_sign == Some(true)
-    }
-    fn can_encrypt(&self) -> bool {
-        self.can_encrypt == Some(true)
-    }
-    fn can_authenticate(&self) -> bool {
-        self.can_authenticate == Some(true)
-    }
-
     fn validate(&self) -> std::result::Result<(), String> {
         // Don't allow mixing of v4/v6 primary and subkeys
         match self.version {
@@ -161,57 +151,39 @@ impl SecretKeyParamsBuilder {
             }
         };
 
-        match &self.key_type {
-            Some(KeyType::Rsa(size)) => {
-                if *size < 2048 {
-                    return Err("Keys with less than 2048bits are considered insecure".into());
-                }
+        // TODO: also check for subkeys
+        if let Some(key_type) = &self.key_type {
+            if self.can_encrypt == Some(true) && !key_type.can_encrypt() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for encryption keys",
+                    key_type
+                ));
             }
-            Some(KeyType::Ed25519Legacy) => {
-                if self.can_encrypt() {
-                    return Err("Ed25519Legacy can only be used for signing keys".into());
-                }
+            if self.can_sign == Some(true) && !key_type.can_sign() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for signing keys",
+                    key_type
+                ));
             }
-            Some(KeyType::Ed25519) => {
-                if self.can_encrypt() {
-                    return Err("Ed25519 can only be used for signing keys".into());
-                }
+            if self.can_authenticate == Some(true) && !key_type.can_sign() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for authentication keys",
+                    key_type
+                ));
             }
-            Some(KeyType::Ed448) => {
-                if self.can_encrypt() {
-                    return Err("Ed448 can only be used for signing keys".into());
+
+            match key_type {
+                KeyType::Rsa(size) => {
+                    if *size < 2048 {
+                        return Err("Keys with less than 2048bits are considered insecure".into());
+                    }
                 }
-            }
-            Some(KeyType::ECDSA(curve)) => {
-                if self.can_encrypt() {
-                    return Err("ECDSA can only be used for signing keys".into());
-                }
-                match curve {
+                KeyType::ECDSA(curve) => match curve {
                     ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 | ECCCurve::Secp256k1 => {}
                     _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
-                }
+                },
+                _ => {}
             }
-            Some(KeyType::ECDH(_)) => {
-                if self.can_sign() || self.can_authenticate() {
-                    return Err("ECDH can only be used for encryption keys".into());
-                }
-            }
-            Some(KeyType::X25519) => {
-                if self.can_sign() || self.can_authenticate() {
-                    return Err("X25519 can only be used for encryption keys".into());
-                }
-            }
-            Some(KeyType::X448) => {
-                if self.can_sign() || self.can_authenticate() {
-                    return Err("X448 can only be used for encryption keys".into());
-                }
-            }
-            Some(KeyType::Dsa(_)) => {
-                if self.can_encrypt() {
-                    return Err("DSA can only be used for signing keys".into());
-                }
-            }
-            _ => {}
         }
 
         if self.version == Some(types::KeyVersion::V4) && self.primary_user_id.is_none() {
@@ -426,6 +398,48 @@ impl KeyType {
             KeyType::SlhDsaShake128f => PublicKeyAlgorithm::SlhDsaShake128f,
             #[cfg(feature = "draft-pqc")]
             KeyType::SlhDsaShake256s => PublicKeyAlgorithm::SlhDsaShake256s,
+        }
+    }
+
+    pub fn can_sign(&self) -> bool {
+        match self {
+            KeyType::Rsa(_) => true,
+
+            KeyType::Dsa(_)
+            | KeyType::ECDSA(_)
+            | KeyType::Ed25519Legacy
+            | KeyType::Ed25519
+            | KeyType::Ed448 => true,
+            KeyType::ECDH(_) | KeyType::X25519 | KeyType::X448 => false,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlKem768X25519 | KeyType::MlKem1024X448 => false,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlDsa65Ed25519
+            | KeyType::MlDsa87Ed448
+            | KeyType::SlhDsaShake128s
+            | KeyType::SlhDsaShake128f
+            | KeyType::SlhDsaShake256s => true,
+        }
+    }
+
+    pub fn can_encrypt(&self) -> bool {
+        match self {
+            KeyType::Rsa(_) => true,
+
+            KeyType::Dsa(_)
+            | KeyType::ECDSA(_)
+            | KeyType::Ed25519Legacy
+            | KeyType::Ed25519
+            | KeyType::Ed448 => false,
+            KeyType::ECDH(_) | KeyType::X25519 | KeyType::X448 => true,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlKem768X25519 | KeyType::MlKem1024X448 => true,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlDsa65Ed25519
+            | KeyType::MlDsa87Ed448
+            | KeyType::SlhDsaShake128s
+            | KeyType::SlhDsaShake128f
+            | KeyType::SlhDsaShake256s => false,
         }
     }
 
