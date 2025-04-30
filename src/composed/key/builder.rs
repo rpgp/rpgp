@@ -121,6 +121,49 @@ pub struct SubkeyParams {
 }
 
 impl SecretKeyParamsBuilder {
+    fn validate_keytype(
+        key_type: Option<&KeyType>,
+        can_sign: Option<bool>,
+        can_encrypt: Option<bool>,
+        can_authenticate: Option<bool>,
+    ) -> std::result::Result<(), String> {
+        if let Some(key_type) = &key_type {
+            if can_sign == Some(true) && !key_type.can_sign() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for signing keys",
+                    key_type
+                ));
+            }
+            if can_encrypt == Some(true) && !key_type.can_encrypt() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for encryption keys",
+                    key_type
+                ));
+            }
+            if can_authenticate == Some(true) && !key_type.can_sign() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for authentication keys",
+                    key_type
+                ));
+            }
+
+            match key_type {
+                KeyType::Rsa(size) => {
+                    if *size < 2048 {
+                        return Err("Keys with less than 2048bits are considered insecure".into());
+                    }
+                }
+                KeyType::ECDSA(curve) => match curve {
+                    ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 | ECCCurve::Secp256k1 => {}
+                    _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
+                },
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
     fn validate(&self) -> std::result::Result<(), String> {
         // Don't allow mixing of v4/v6 primary and subkeys
         match self.version {
@@ -151,38 +194,21 @@ impl SecretKeyParamsBuilder {
             }
         };
 
-        // TODO: also check for subkeys
-        if let Some(key_type) = &self.key_type {
-            if self.can_encrypt == Some(true) && !key_type.can_encrypt() {
-                return Err(format!(
-                    "KeyType {:?} can not be used for encryption keys",
-                    key_type
-                ));
-            }
-            if self.can_sign == Some(true) && !key_type.can_sign() {
-                return Err(format!(
-                    "KeyType {:?} can not be used for signing keys",
-                    key_type
-                ));
-            }
-            if self.can_authenticate == Some(true) && !key_type.can_sign() {
-                return Err(format!(
-                    "KeyType {:?} can not be used for authentication keys",
-                    key_type
-                ));
-            }
+        Self::validate_keytype(
+            self.key_type.as_ref(),
+            self.can_sign,
+            self.can_encrypt,
+            self.can_authenticate,
+        )?;
 
-            match key_type {
-                KeyType::Rsa(size) => {
-                    if *size < 2048 {
-                        return Err("Keys with less than 2048bits are considered insecure".into());
-                    }
-                }
-                KeyType::ECDSA(curve) => match curve {
-                    ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 | ECCCurve::Secp256k1 => {}
-                    _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
-                },
-                _ => {}
+        if let Some(subkeys) = &self.subkeys {
+            for subkey in subkeys {
+                Self::validate_keytype(
+                    Some(&subkey.key_type),
+                    Some(subkey.can_sign),
+                    Some(subkey.can_encrypt),
+                    Some(subkey.can_authenticate),
+                )?;
             }
         }
 
