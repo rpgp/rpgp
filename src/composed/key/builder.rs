@@ -401,6 +401,8 @@ impl KeyType {
         }
     }
 
+    /// Does this asymmetric algorithm support the cryptographic primitive of encryption?
+    /// (Note that this is a subtly different meaning from OpenPGP's key flags.)
     pub fn can_sign(&self) -> bool {
         match self {
             KeyType::Rsa(_) => true,
@@ -422,6 +424,8 @@ impl KeyType {
         }
     }
 
+    /// Does this asymmetric algorithm support the cryptographic primitive of encryption?
+    /// (Note that this is a subtly different meaning from OpenPGP's key flags.)
     pub fn can_encrypt(&self) -> bool {
         match self {
             KeyType::Rsa(_) => true,
