@@ -22,15 +22,14 @@ use crate::{
     types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
 
-/// A SecretKeyParams
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct SecretKeyParams {
-    // -- OpenPGP key version of primary
+    /// OpenPGP key version of primary
     #[builder(default)]
     version: types::KeyVersion,
 
-    // -- Asymmetric algorithm for the primary
+    /// Asymmetric algorithm for the primary
     key_type: KeyType,
 
     // -- Keyflags for primary
@@ -122,6 +121,16 @@ pub struct SubkeyParams {
 }
 
 impl SecretKeyParamsBuilder {
+    fn can_sign(&self) -> bool {
+        self.can_sign == Some(true)
+    }
+    fn can_encrypt(&self) -> bool {
+        self.can_encrypt == Some(true)
+    }
+    fn can_authenticate(&self) -> bool {
+        self.can_authenticate == Some(true)
+    }
+
     fn validate(&self) -> std::result::Result<(), String> {
         // Don't allow mixing of v4/v6 primary and subkeys
         match self.version {
@@ -159,22 +168,22 @@ impl SecretKeyParamsBuilder {
                 }
             }
             Some(KeyType::Ed25519Legacy) => {
-                if self.can_encrypt == Some(true) {
+                if self.can_encrypt() {
                     return Err("Ed25519Legacy can only be used for signing keys".into());
                 }
             }
             Some(KeyType::Ed25519) => {
-                if self.can_encrypt == Some(true) {
+                if self.can_encrypt() {
                     return Err("Ed25519 can only be used for signing keys".into());
                 }
             }
             Some(KeyType::Ed448) => {
-                if self.can_encrypt == Some(true) {
+                if self.can_encrypt() {
                     return Err("Ed448 can only be used for signing keys".into());
                 }
             }
             Some(KeyType::ECDSA(curve)) => {
-                if self.can_encrypt == Some(true) {
+                if self.can_encrypt() {
                     return Err("ECDSA can only be used for signing keys".into());
                 }
                 match curve {
@@ -183,22 +192,22 @@ impl SecretKeyParamsBuilder {
                 }
             }
             Some(KeyType::ECDH(_)) => {
-                if self.can_sign == Some(true) || self.can_authenticate == Some(true) {
+                if self.can_sign() || self.can_authenticate() {
                     return Err("ECDH can only be used for encryption keys".into());
                 }
             }
             Some(KeyType::X25519) => {
-                if self.can_sign == Some(true) || self.can_authenticate == Some(true) {
+                if self.can_sign() || self.can_authenticate() {
                     return Err("X25519 can only be used for encryption keys".into());
                 }
             }
             Some(KeyType::X448) => {
-                if self.can_sign == Some(true) || self.can_authenticate == Some(true) {
+                if self.can_sign() || self.can_authenticate() {
                     return Err("X448 can only be used for encryption keys".into());
                 }
             }
             Some(KeyType::Dsa(_)) => {
-                if self.can_encrypt == Some(true) {
+                if self.can_encrypt() {
                     return Err("DSA can only be used for signing keys".into());
                 }
             }

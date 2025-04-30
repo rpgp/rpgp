@@ -15,8 +15,8 @@ use crate::{
     types::{CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
-/// A KeyDetails specifies associated user id and attribute components, and some metadata for
-/// producing a [SignedSecretKey].
+/// This specifies associated user id and attribute components, plus some metadata for producing
+/// a [SignedSecretKey].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
     primary_user_id: Option<UserId>,
