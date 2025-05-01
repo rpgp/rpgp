@@ -190,6 +190,8 @@ impl SignedSecretKey {
         )
     }
 
+    /// Drops the secret key material in both the primary key and all secret subkeys.
+    /// All other components of the key remain as they are.
     pub fn signed_public_key(&self) -> SignedPublicKey {
         let mut public_subkeys: Vec<SignedPublicSubKey> = self.public_subkeys.to_vec();
         let sec_subkeys: Vec<SignedPublicSubKey> = self
@@ -301,6 +303,8 @@ impl SignedSecretSubKey {
         self.key.encrypt(rng, plain, typ)
     }
 
+    /// Drops the secret key material in this subkey.
+    /// All binding signatures remain as they are.
     pub fn signed_public_key(&self) -> SignedPublicSubKey {
         SignedPublicSubKey::new(self.key.public_key().clone(), self.signatures.clone())
     }
