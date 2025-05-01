@@ -186,8 +186,13 @@ impl SignedKeyDetails {
                 primary_user.map(|su| su.id.clone()),
                 self.users
                     .iter()
-                    .filter(|u| Some(&u.id) != primary_user.map(|pri_su| &pri_su.id)) // drop the primary
-                    .map(|u| u.id.clone())
+                    .filter_map(|u| {
+                        if Some(&u.id) == primary_user.map(|pri_su| &pri_su.id) {
+                            None // drop the primary
+                        } else {
+                            Some(u.id.clone())
+                        }
+                    })
                     .collect(),
                 self.user_attributes
                     .iter()
