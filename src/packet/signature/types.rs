@@ -1199,6 +1199,31 @@ pub struct KnownKeyFlags {
     _padding2: u8,
 }
 
+/// Features are encoded as "N octets of flags", currently usually 1 byte.
+/// (Only the first 4 bits have been used so far)
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
+#[bitfield(u8)]
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub struct Features {
+    #[bits(1)]
+    seipd_v1: bool,
+    #[bits(1)]
+    _ocb: bool,
+    #[bits(1)]
+    _v5_keys: bool,
+    #[bits(1)]
+    seipd_v2: bool,
+    #[bits(4)]
+    _padding: u8,
+}
+
+impl From<Features> for Vec<u8> {
+    fn from(value: Features) -> Self {
+        vec![value.into()]
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Notation {
     pub readable: bool,

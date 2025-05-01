@@ -275,10 +275,10 @@ impl SecretKeyParams {
             Some(id) => Some(UserId::from_str(Default::default(), id)?),
         };
 
-        let features = if !self.feature_seipd_v2 {
-            vec![0x01] // SEIPDv1
-        } else {
-            vec![0x01 | 0x08] // SEIPDv1 and SEIPDv2
+        let mut features = packet::Features::default();
+        features.set_seipd_v1(true);
+        if self.feature_seipd_v2 {
+            features.set_seipd_v2(true);
         };
 
         Ok(SecretKey::new(
@@ -291,7 +291,7 @@ impl SecretKeyParams {
                     .collect::<Result<Vec<_>, _>>()?,
                 self.user_attributes,
                 keyflags,
-                features,
+                features.into(),
                 self.preferred_symmetric_algorithms,
                 self.preferred_hash_algorithms,
                 self.preferred_compression_algorithms,
