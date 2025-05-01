@@ -5,7 +5,6 @@ use log::warn;
 use smallvec::SmallVec;
 use snafu::Snafu;
 
-use crate::packet::Features;
 use crate::{
     composed::{
         key::KeyDetails,
@@ -14,7 +13,7 @@ use crate::{
     },
     errors::Result,
     packet,
-    packet::{KeyFlags, PacketTrait, SignatureVersion},
+    packet::{Features, KeyFlags, PacketTrait, SignatureVersion},
     ser::Serialize,
     types::{PacketLength, PublicKeyTrait, SignedUser, SignedUserAttribute},
 };
