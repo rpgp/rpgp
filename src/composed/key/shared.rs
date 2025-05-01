@@ -68,9 +68,6 @@ impl KeyDetails {
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
-        // Technically this should probably check for >= version 6, for at least
-        let is_v6 = key.version() == KeyVersion::V6;
-
         let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
             Ok(vec![
                 Subpacket::regular(SubpacketData::SignatureCreationTime(
@@ -104,7 +101,7 @@ impl KeyDetails {
         };
 
         // --- Direct key signatures
-        let direct_signatures = if is_v6 {
+        let direct_signatures = if key.version() == KeyVersion::V6 {
             let mut config = SignatureConfig::v6(
                 &mut rng,
                 SignatureType::Key,
@@ -112,11 +109,6 @@ impl KeyDetails {
                 key.hash_alg(),
             )?;
             config.hashed_subpackets = subpackets_with_metadata()?;
-
-            if u8::from(key.version()) <= 4 {
-                config.unhashed_subpackets =
-                    vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
-            }
 
             let dks = config.sign_key(key, key_pw, pub_key)?;
 
@@ -151,7 +143,7 @@ impl KeyDetails {
                 .hashed_subpackets
                 .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
 
-            if u8::from(key.version()) <= 4 {
+            if key.version() <= KeyVersion::V4 {
                 config.unhashed_subpackets =
                     vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
             }
@@ -192,7 +184,7 @@ impl KeyDetails {
                         _ => subpackets_with_metadata()?,
                     };
 
-                    if u8::from(key.version()) <= 4 {
+                    if key.version() <= KeyVersion::V4 {
                         config.unhashed_subpackets =
                             vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
                     }

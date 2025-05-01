@@ -590,7 +590,7 @@ where
     config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
         chrono::Utc::now().trunc_subsecs(0),
     ))?];
-    if u8::from(key.version()) <= 4 {
+    if key.version() <= KeyVersion::V4 {
         config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
     }
 

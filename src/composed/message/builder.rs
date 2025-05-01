@@ -205,7 +205,7 @@ where
             v => bail!("unsupported key version {:?}", v),
         };
         sig_config.hashed_subpackets = hashed_subpackets;
-        if u8::from(config.key.version()) <= 4 {
+        if config.key.version() <= KeyVersion::V4 {
             sig_config.unhashed_subpackets =
                 vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
         }

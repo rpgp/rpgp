@@ -269,7 +269,7 @@ impl UserAttribute {
         };
 
         config.hashed_subpackets = hashed_subpackets;
-        if u8::from(signer.version()) <= 4 {
+        if signer.version() <= KeyVersion::V4 {
             config.unhashed_subpackets =
                 vec![Subpacket::regular(SubpacketData::Issuer(signer.key_id()))?];
         }
