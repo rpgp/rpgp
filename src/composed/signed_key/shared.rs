@@ -5,6 +5,7 @@ use log::warn;
 use smallvec::SmallVec;
 use snafu::Snafu;
 
+use crate::packet::Features;
 use crate::{
     composed::{
         key::KeyDetails,
@@ -243,6 +244,9 @@ impl SignedKeyDetails {
             // TODO: even for non-v6 keys, we could check for information in a direct key
             // signature and use that if it exists
 
+            let mut features = Features::new();
+            features.set_seipd_v1(true);
+
             KeyDetails::new(
                 None,
                 self.users.iter().map(|u| u.id.clone()).collect(),
@@ -251,7 +255,7 @@ impl SignedKeyDetails {
                     .map(|a| a.attr.clone())
                     .collect(),
                 KeyFlags::default(),
-                vec![0x01], // SEIPDv1
+                features.into(),
                 vec![].into(),
                 vec![].into(),
                 vec![].into(),
