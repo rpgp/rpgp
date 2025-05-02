@@ -1209,9 +1209,9 @@ pub struct Features {
     #[bits(1)]
     seipd_v1: bool,
     #[bits(1)]
-    _ocb: bool,
+    _libre_ocb: bool,
     #[bits(1)]
-    _v5_keys: bool,
+    _libre_v5_keys: bool,
     #[bits(1)]
     seipd_v2: bool,
     #[bits(4)]
