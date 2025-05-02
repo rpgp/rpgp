@@ -1297,12 +1297,18 @@ impl Serialize for Features {
 #[bitfield(u8)]
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub struct KnownFeatures {
+    /// Support for "Version 1 Symmetrically Encrypted and Integrity Protected Data packet"
     #[bits(1)]
     seipd_v1: bool,
+    /// Not standardized in OpenPGP, but used in the LibrePGP fork.
+    /// Signals support for GnuPG-specific "OCB" encryption packet format.
     #[bits(1)]
     _libre_ocb: bool,
+    /// Not standardized in OpenPGP, but used in the LibrePGP fork.
+    /// Semantics unclear.
     #[bits(1)]
     _libre_v5_keys: bool,
+    /// Support for "Version 2 Symmetrically Encrypted and Integrity Protected Data packet"
     #[bits(1)]
     seipd_v2: bool,
     #[bits(4)]
