@@ -291,7 +291,7 @@ impl SecretKeyParams {
                     .collect::<Result<Vec<_>, _>>()?,
                 self.user_attributes,
                 keyflags,
-                features.into(),
+                features,
                 self.preferred_symmetric_algorithms,
                 self.preferred_hash_algorithms,
                 self.preferred_compression_algorithms,
@@ -600,6 +600,7 @@ mod tests {
     use super::*;
     use crate::{
         composed::{Deserializable, SignedPublicKey, SignedSecretKey},
+        packet::Features,
         types::KeyVersion,
     };
 
@@ -1369,7 +1370,7 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
-        assert_eq!(sig.features(), &[0x01]);
+        assert_eq!(sig.features(), Some(&Features::from(&[0x01][..])));
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
@@ -1489,7 +1490,7 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
-        assert_eq!(sig.features(), &[0x09]);
+        assert_eq!(sig.features(), Some(&Features::from(&[0x09][..])));
 
         // - no key metadata should be on user id binding
         // We made one user id
@@ -1504,7 +1505,7 @@ mod tests {
         assert!(!sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
-        assert!(sig.features().is_empty());
+        assert!(sig.features().is_none());
 
         // try making (signed) public key representations
         let _ = signed_key.public_key();
@@ -1553,7 +1554,7 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
-        assert_eq!(sig.features(), &[0x09]);
+        assert_eq!(sig.features(), Some(&Features::from(&[0x09][..])));
 
         // We made no user id
         assert!(signed_key.details.users.is_empty());

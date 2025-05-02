@@ -481,7 +481,7 @@ fn test_parse_details() {
                 p_com_algs.clone(),
             ))
             .unwrap(),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::Features((&[0x01][..]).into())).unwrap(),
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer.clone()],
@@ -566,7 +566,7 @@ fn test_parse_details() {
                 p_com_algs.clone(),
             ))
             .unwrap(),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::Features((&[0x01][..]).into())).unwrap(),
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer.clone()],
@@ -656,7 +656,7 @@ fn test_parse_details() {
             Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(p_sym_algs)).unwrap(),
             Subpacket::regular(SubpacketData::PreferredHashAlgorithms(p_hash_algs)).unwrap(),
             Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(p_com_algs)).unwrap(),
-            Subpacket::regular(SubpacketData::Features(smallvec![1])).unwrap(),
+            Subpacket::regular(SubpacketData::Features((&[0x01][..]).into())).unwrap(),
             Subpacket::regular(SubpacketData::KeyServerPreferences(smallvec![128])).unwrap(),
         ],
         vec![issuer],

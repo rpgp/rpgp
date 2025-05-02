@@ -720,15 +720,13 @@ impl Signature {
             .unwrap_or_default()
     }
 
-    pub fn features(&self) -> &[u8] {
-        self.config()
-            .and_then(|c| {
-                c.hashed_subpackets().find_map(|p| match &p.data {
-                    SubpacketData::Features(d) => Some(&d[..]),
-                    _ => None,
-                })
+    pub fn features(&self) -> Option<&Features> {
+        self.config().and_then(|c| {
+            c.hashed_subpackets().find_map(|p| match &p.data {
+                SubpacketData::Features(feat) => Some(feat),
+                _ => None,
             })
-            .unwrap_or_else(|| &[][..])
+        })
     }
 
     pub fn revocation_reason_code(&self) -> Option<&RevocationCode> {
@@ -1199,13 +1197,106 @@ pub struct KnownKeyFlags {
     _padding2: u8,
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Features {
+    /// Handles the first byte.
+    known: KnownFeatures,
+    /// Any additional features bytes.
+    rest: Vec<u8>,
+    /// Need to store this, to fully roundtrip..
+    original_len: usize,
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Self {
+            known: Default::default(),
+            rest: vec![],
+            original_len: 1,
+        }
+    }
+}
+
+impl From<&[u8]> for Features {
+    fn from(value: &[u8]) -> Self {
+        match value.len() {
+            0 => Self {
+                known: Default::default(),
+                rest: vec![],
+                original_len: 0,
+            },
+            1 => Self {
+                known: KnownFeatures(value[0]),
+                rest: vec![],
+                original_len: 1,
+            },
+            n => Self {
+                known: KnownFeatures(value[0]),
+                rest: value[1..].to_vec(),
+                original_len: n,
+            },
+        }
+    }
+}
+
+impl Features {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn seipd_v1(&mut self) -> bool {
+        self.known.seipd_v1()
+    }
+
+    pub fn set_seipd_v1(&mut self, val: bool) {
+        self.known.set_seipd_v1(val);
+
+        if self.original_len == 0 {
+            self.original_len = 1
+        }
+    }
+
+    pub fn seipd_v2(&mut self) -> bool {
+        self.known.seipd_v2()
+    }
+
+    pub fn set_seipd_v2(&mut self, val: bool) {
+        self.known.set_seipd_v2(val);
+
+        if self.original_len == 0 {
+            self.original_len = 1
+        }
+    }
+}
+
+impl Serialize for Features {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        if self.original_len == 0 {
+            return Ok(());
+        }
+
+        writer.write_u8(self.known.0)?;
+        writer.write_all(&self.rest)?;
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        if self.original_len == 0 {
+            return 0;
+        }
+
+        1 + self.rest.len()
+    }
+}
+
 /// Features are encoded as "N octets of flags", currently usually 1 byte.
 /// (Only the first 4 bits have been used so far)
 ///
 /// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
 #[bitfield(u8)]
 #[derive(PartialEq, Eq, Copy, Clone)]
-pub struct Features {
+pub struct KnownFeatures {
     #[bits(1)]
     seipd_v1: bool,
     #[bits(1)]
@@ -1216,12 +1307,6 @@ pub struct Features {
     seipd_v2: bool,
     #[bits(4)]
     _padding: u8,
-}
-
-impl From<Features> for Vec<u8> {
-    fn from(value: Features) -> Self {
-        vec![value.into()]
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

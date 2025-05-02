@@ -198,7 +198,7 @@ impl SignedKeyDetails {
                     .map(|a| a.attr.clone())
                     .collect(),
                 keyflags,
-                features.to_vec(),
+                features.cloned().unwrap_or(Features::default()),
                 preferred_symmetric_algorithms,
                 preferred_hash_algorithms,
                 preferred_compression_algorithms,
@@ -236,7 +236,7 @@ impl SignedKeyDetails {
                     .map(|a| a.attr.clone())
                     .collect(),
                 keyflags,
-                features.to_vec(),
+                features.cloned().unwrap_or(Features::default()),
                 preferred_symmetric_algorithms,
                 preferred_hash_algorithms,
                 preferred_compression_algorithms,
@@ -259,7 +259,7 @@ impl SignedKeyDetails {
                     .map(|a| a.attr.clone())
                     .collect(),
                 KeyFlags::default(),
-                features.into(),
+                features,
                 vec![].into(),
                 vec![].into(),
                 vec![].into(),
