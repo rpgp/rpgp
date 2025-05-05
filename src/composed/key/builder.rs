@@ -47,6 +47,8 @@ pub struct SecretKeyParams {
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
     expiration: Option<Duration>,
+    #[builder(default = "true")]
+    feature_seipd_v1: bool,
     #[builder(default)]
     feature_seipd_v2: bool,
 
@@ -276,7 +278,9 @@ impl SecretKeyParams {
         };
 
         let mut features = packet::Features::default();
-        features.set_seipd_v1(true);
+        if self.feature_seipd_v1 {
+            features.set_seipd_v1(true);
+        }
         if self.feature_seipd_v2 {
             features.set_seipd_v2(true);
         };
