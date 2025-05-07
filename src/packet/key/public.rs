@@ -5,7 +5,7 @@ use digest::generic_array::GenericArray;
 use md5::Md5;
 use rand::{CryptoRng, Rng};
 use rsa::traits::PublicKeyParts;
-use sha1::Sha1;
+use sha1_checked::Sha1;
 use sha2::Sha256;
 
 use crate::{
