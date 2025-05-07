@@ -1,12 +1,20 @@
 use std::io::BufRead;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use digest::generic_array::GenericArray;
+use md5::Md5;
 use rand::{CryptoRng, Rng};
 use rsa::traits::PublicKeyParts;
+use sha1::Sha1;
+use sha2::Sha256;
 
 use crate::{
-    crypto::{self, hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::{bail, ensure, ensure_eq, format_err, unimplemented_err, unsupported_err, Result},
+    crypto::{
+        self,
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
+    errors::{bail, ensure, ensure_eq, unimplemented_err, unsupported_err, Result},
     packet::{PacketHeader, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData},
     ser::Serialize,
     types::{
@@ -614,21 +622,19 @@ impl crate::packet::PacketTrait for PublicSubkey {
 }
 
 impl PubKeyInner {
-    fn imprint(&self, h: HashAlgorithm) -> Result<Vec<u8>> {
-        // this should only error for unknown hash algorithms or key versions
-
-        let mut hasher = h.new_hasher()?;
+    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        let mut hasher = D::new();
 
         use crate::ser::Serialize;
 
         match self.version {
             KeyVersion::V2 | KeyVersion::V3 => {
                 let mut v: Vec<u8> = Vec::new();
-                self.public_params.to_writer(&mut v).expect("write to vec");
+                self.public_params.to_writer(&mut v)?;
 
                 hasher.update(&v);
 
-                Ok(hasher.finalize().to_vec())
+                Ok(hasher.finalize())
             }
             KeyVersion::V4 => {
                 hasher.update(&[0x99]);
@@ -642,16 +648,14 @@ impl PubKeyInner {
                 // A one-octet number denoting the public-key algorithm of this key.
                 packet.push(self.algorithm.into());
 
-                self.public_params
-                    .to_writer(&mut packet)
-                    .expect("write to vec");
+                self.public_params.to_writer(&mut packet)?;
 
                 hasher.update(&(packet.len() as u16).to_be_bytes());
                 hasher.update(&packet);
 
-                Ok(hasher.finalize().to_vec())
+                Ok(hasher.finalize())
             }
-            KeyVersion::V5 => Err(format_err!("Imprint unsupported for V5 keys")),
+            KeyVersion::V5 => unsupported_err!("Imprint for V5 keys"),
             KeyVersion::V6 => {
                 // a.1) 0x9B (1 octet)
                 hasher.update(&[0x9B]);
@@ -677,12 +681,12 @@ impl PubKeyInner {
 
                 // f) algorithm-specific fields.
                 let mut pp: Vec<u8> = vec![];
-                self.public_params.to_writer(&mut pp).expect("write to vec");
+                self.public_params.to_writer(&mut pp)?;
                 hasher.update(&pp);
 
-                Ok(hasher.finalize().to_vec())
+                Ok(hasher.finalize())
             }
-            KeyVersion::Other(v) => Err(format_err!("Imprint unsupported for {} keys", v)),
+            KeyVersion::Other(v) => unsupported_err!("Imprint for {} keys", v),
         }
     }
 }
@@ -697,32 +701,28 @@ impl KeyDetails for PubKeyInner {
             KeyVersion::V2 | KeyVersion::V3 => {
                 if self.version == KeyVersion::V2 {
                     Fingerprint::V2(
-                        self.imprint(HashAlgorithm::Md5)
+                        self.imprint::<Md5>()
                             .expect("failure is not an option")
-                            .try_into()
-                            .expect("Md5 is 16 bytes"),
+                            .into(),
                     )
                 } else {
                     Fingerprint::V3(
-                        self.imprint(HashAlgorithm::Md5)
+                        self.imprint::<Md5>()
                             .expect("failure is not an option")
-                            .try_into()
-                            .expect("Md5 is 16 bytes"),
+                            .into(),
                     )
                 }
             }
             KeyVersion::V4 => Fingerprint::V4(
-                self.imprint(HashAlgorithm::Sha1)
+                self.imprint::<Sha1>()
                     .expect("failure is not an option")
-                    .try_into()
-                    .expect("Sha1 is 20 bytes"),
+                    .into(),
             ),
             KeyVersion::V5 => unimplemented!("V5 keys"),
             KeyVersion::V6 => Fingerprint::V6(
-                self.imprint(HashAlgorithm::Sha256)
+                self.imprint::<Sha256>()
                     .expect("failure is not an option")
-                    .try_into()
-                    .expect("Sha256 is 32 bytes"),
+                    .into(),
             ),
             KeyVersion::Other(v) => unimplemented!("Unsupported key version {}", v),
         }
