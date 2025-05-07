@@ -53,7 +53,6 @@ pub enum HashAlgorithm {
 pub trait KnownDigest: Digest {}
 
 impl KnownDigest for md5::Md5 {}
-impl KnownDigest for sha1::Sha1 {}
 impl KnownDigest for sha1_checked::Sha1 {}
 impl KnownDigest for Ripemd160 {}
 impl KnownDigest for sha2::Sha256 {}
