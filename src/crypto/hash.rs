@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use digest::DynDigest;
+use digest::{Digest, DynDigest};
 use md5::Md5;
 use num_enum::{FromPrimitive, IntoPrimitive};
 use ripemd::Ripemd160;
@@ -48,6 +48,19 @@ pub enum HashAlgorithm {
     #[num_enum(catch_all)]
     Other(#[cfg_attr(test, proptest(strategy = "111u8.."))] u8),
 }
+
+/// Marker trait for supported hash algorithms
+pub trait KnownDigest: Digest {}
+
+impl KnownDigest for md5::Md5 {}
+impl KnownDigest for sha1::Sha1 {}
+impl KnownDigest for sha1_checked::Sha1 {}
+impl KnownDigest for Ripemd160 {}
+impl KnownDigest for sha2::Sha256 {}
+impl KnownDigest for sha2::Sha384 {}
+impl KnownDigest for sha2::Sha512 {}
+impl KnownDigest for sha3::Sha3_256 {}
+impl KnownDigest for sha3::Sha3_512 {}
 
 impl FromStr for HashAlgorithm {
     type Err = ();
