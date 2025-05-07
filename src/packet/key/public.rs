@@ -634,7 +634,7 @@ impl PubKeyInner {
                 Ok(hasher.finalize())
             }
             KeyVersion::V4 => {
-                hasher.update(&[0x99]);
+                hasher.update([0x99]);
 
                 // A one-octet version number (4).
                 let mut packet = vec![4, 0, 0, 0, 0];
@@ -647,7 +647,7 @@ impl PubKeyInner {
 
                 self.public_params.to_writer(&mut packet)?;
 
-                hasher.update(&(packet.len() as u16).to_be_bytes());
+                hasher.update((packet.len() as u16).to_be_bytes());
                 hasher.update(&packet);
 
                 Ok(hasher.finalize())
@@ -655,26 +655,26 @@ impl PubKeyInner {
             KeyVersion::V5 => unsupported_err!("Imprint for V5 keys"),
             KeyVersion::V6 => {
                 // a.1) 0x9B (1 octet)
-                hasher.update(&[0x9B]);
+                hasher.update([0x9B]);
 
                 // length of public parameters
                 let len = self.public_params.write_len() as u32;
 
                 // a.2) four-octet scalar octet count of (b)-(f)
                 let total_len: u32 = 1 + 4 + 1 + 4 + len;
-                hasher.update(&total_len.to_be_bytes());
+                hasher.update(total_len.to_be_bytes());
 
                 // b) version number = 6 (1 octet);
-                hasher.update(&[0x06]);
+                hasher.update([0x06]);
 
                 // c) timestamp of key creation (4 octets);
-                hasher.update(&(self.created_at.timestamp() as u32).to_be_bytes());
+                hasher.update((self.created_at.timestamp() as u32).to_be_bytes());
 
                 // d) algorithm (1 octet);
-                hasher.update(&[self.algorithm.into()]);
+                hasher.update([self.algorithm.into()]);
 
                 // e) four-octet scalar octet count for the following key material;
-                hasher.update(&len.to_be_bytes());
+                hasher.update(len.to_be_bytes());
 
                 // f) algorithm-specific fields.
                 let mut pp: Vec<u8> = vec![];
