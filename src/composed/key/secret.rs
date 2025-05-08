@@ -10,7 +10,8 @@ use crate::{
     types::{KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
-/// User facing interface to work with a secret key.
+/// User facing interface to work with the components of a "Transferable Secret Key (TSK)"
+/// (but without any Signature packets)
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretKey {
     primary_key: packet::SecretKey,
@@ -19,6 +20,7 @@ pub struct SecretKey {
     secret_subkeys: Vec<SecretSubkey>,
 }
 
+/// Wrapper for a SecretSubkey packet with associated KeyFlags
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SecretSubkey {
     key: packet::SecretSubkey,
@@ -109,8 +111,13 @@ impl SecretSubkey {
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
-        config.unhashed_subpackets =
-            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
+
+        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+        // the signature.
+        if sec_key.version() <= KeyVersion::V4 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
+        }
 
         let signatures =
             vec![config.sign_key_binding(sec_key, pub_key, key_pw, key.public_key())?];

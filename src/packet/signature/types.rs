@@ -720,15 +720,13 @@ impl Signature {
             .unwrap_or_default()
     }
 
-    pub fn features(&self) -> &[u8] {
-        self.config()
-            .and_then(|c| {
-                c.hashed_subpackets().find_map(|p| match &p.data {
-                    SubpacketData::Features(d) => Some(&d[..]),
-                    _ => None,
-                })
+    pub fn features(&self) -> Option<&Features> {
+        self.config().and_then(|c| {
+            c.hashed_subpackets().find_map(|p| match &p.data {
+                SubpacketData::Features(feat) => Some(feat),
+                _ => None,
             })
-            .unwrap_or_else(|| &[][..])
+        })
     }
 
     pub fn revocation_reason_code(&self) -> Option<&RevocationCode> {
@@ -1199,6 +1197,153 @@ pub struct KnownKeyFlags {
     _padding2: u8,
 }
 
+/// Signals capabilities of the keyholder's OpenPGP software.
+///
+/// Features are encoded as "N octets of flags", but currently typically use 1 byte.
+/// (Only the first 4 bits have been used so far)
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Features {
+    /// Handles the first byte.
+    /// Can be None to encode Features subpackets that are 0 byte long.
+    first: Option<KnownFeatures>,
+
+    /// Any additional features bytes.
+    /// (Must be empty if "known" is None.)
+    rest: Vec<u8>,
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Self {
+            first: Some(KnownFeatures::default()),
+            rest: vec![],
+        }
+    }
+}
+
+impl From<&[u8]> for Features {
+    fn from(value: &[u8]) -> Self {
+        match value.len() {
+            0 => Self {
+                first: None,
+                rest: vec![],
+            },
+            _ => Self {
+                first: Some(KnownFeatures(value[0])),
+                rest: value[1..].to_vec(),
+            },
+        }
+    }
+}
+
+impl From<&Features> for Vec<u8> {
+    fn from(value: &Features) -> Self {
+        let mut v = vec![];
+        value.to_writer(&mut v).expect("vec");
+        v
+    }
+}
+
+impl From<KnownFeatures> for Features {
+    fn from(value: KnownFeatures) -> Self {
+        Self {
+            first: Some(value),
+            rest: vec![],
+        }
+    }
+}
+
+impl Features {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn seipd_v1(&self) -> bool {
+        match self.first {
+            Some(k) => k.seipd_v1(),
+            None => false,
+        }
+    }
+
+    pub fn set_seipd_v1(&mut self, val: bool) {
+        if self.first.is_none() {
+            self.first = Some(KnownFeatures::default());
+        }
+
+        // Should always be Some!
+        if let Some(k) = self.first.as_mut() {
+            k.set_seipd_v1(val);
+        }
+    }
+
+    pub fn seipd_v2(&self) -> bool {
+        match self.first {
+            Some(k) => k.seipd_v2(),
+            None => false,
+        }
+    }
+
+    pub fn set_seipd_v2(&mut self, val: bool) {
+        if self.first.is_none() {
+            self.first = Some(KnownFeatures::default());
+        }
+
+        // Should always be Some!
+        if let Some(k) = self.first.as_mut() {
+            k.set_seipd_v2(val);
+        }
+    }
+}
+
+impl Serialize for Features {
+    fn to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        if let Some(k) = self.first {
+            writer.write_u8(k.0)?;
+            writer.write_all(&self.rest)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_len(&self) -> usize {
+        if self.first.is_none() {
+            0
+        } else {
+            1 + self.rest.len()
+        }
+    }
+}
+
+/// Encodes the first byte of a Features.
+///
+/// Ref <https://www.rfc-editor.org/rfc/rfc9580.html#name-features>
+#[bitfield(u8)]
+#[derive(PartialEq, Eq, Copy, Clone)]
+pub struct KnownFeatures {
+    /// Support for "Version 1 Symmetrically Encrypted and Integrity Protected Data packet"
+    #[bits(1)]
+    seipd_v1: bool,
+
+    /// Not standardized in OpenPGP, but used in the LibrePGP fork.
+    /// Signals support for GnuPG-specific "OCB" encryption packet format.
+    #[bits(1)]
+    _libre_ocb: u8,
+
+    /// Not standardized in OpenPGP, but used in the LibrePGP fork.
+    /// Semantics unclear.
+    #[bits(1)]
+    _libre_v5_keys: u8,
+
+    /// Support for "Version 2 Symmetrically Encrypted and Integrity Protected Data packet"
+    #[bits(1)]
+    seipd_v2: bool,
+
+    #[bits(4)]
+    _padding: u8,
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Notation {
     pub readable: bool,
@@ -1355,6 +1500,86 @@ mod tests {
         flags.set_sign(true);
 
         assert_eq!(flags.to_bytes().unwrap(), vec![0x03, 0x08]);
+    }
+
+    #[test]
+    fn test_features() {
+        use crate::packet::Features;
+
+        // deserialize/serialize, getters
+        {
+            let empty: Features = (&[][..]).into();
+            assert_eq!(empty.seipd_v1(), false);
+            assert_eq!(empty.seipd_v2(), false);
+
+            assert_eq!(empty.write_len(), 0);
+            let mut out = vec![];
+            empty.to_writer(&mut out).expect("write");
+            assert!(out.is_empty());
+        }
+        {
+            let seipdv1: Features = (&[0x01][..]).into();
+            assert_eq!(seipdv1.seipd_v1(), true);
+            assert_eq!(seipdv1.seipd_v2(), false);
+
+            assert_eq!(seipdv1.write_len(), 1);
+            let mut out = vec![];
+            seipdv1.to_writer(&mut out).expect("write");
+            assert_eq!(out, vec![0x01]);
+        }
+        {
+            let allbits: Features = (&[0xff][..]).into();
+            assert_eq!(allbits.seipd_v1(), true);
+            assert_eq!(allbits.seipd_v2(), true);
+
+            assert_eq!(allbits.write_len(), 1);
+            let mut out = vec![];
+            allbits.to_writer(&mut out).expect("write");
+            assert_eq!(out, vec![0xff]);
+        }
+        {
+            let three_bytes: Features = (&[0x09, 0xaa, 0xbb][..]).into();
+            assert_eq!(three_bytes.seipd_v1(), true);
+            assert_eq!(three_bytes.seipd_v2(), true);
+
+            assert_eq!(three_bytes.write_len(), 3);
+            let mut out = vec![];
+            three_bytes.to_writer(&mut out).expect("write");
+            assert_eq!(out, vec![0x09, 0xaa, 0xbb]);
+        }
+
+        // setters
+        {
+            let mut empty: Features = (&[][..]).into();
+            assert!(Vec::<u8>::from(&empty).is_empty());
+
+            empty.set_seipd_v1(true);
+            assert_eq!(Vec::<u8>::from(&empty), vec![0x01]);
+        }
+        {
+            let mut default = Features::default();
+            assert_eq!(Vec::<u8>::from(&default), vec![0x00]);
+
+            default.set_seipd_v1(true);
+            assert_eq!(Vec::<u8>::from(&default), vec![0x01]);
+
+            default.set_seipd_v2(true);
+            assert_eq!(Vec::<u8>::from(&default), vec![0x09]);
+        }
+        {
+            let mut allbits: Features = (&[0xff][..]).into();
+
+            allbits.set_seipd_v1(false);
+            assert_eq!(Vec::<u8>::from(&allbits), vec![0xfe]);
+
+            allbits.set_seipd_v2(false);
+            assert_eq!(Vec::<u8>::from(&allbits), vec![0xf6]);
+        }
+        {
+            let mut three_bytes: Features = (&[0x00, 0xaa, 0xbb][..]).into();
+            three_bytes.set_seipd_v2(true);
+            assert_eq!(Vec::<u8>::from(&three_bytes), vec![0x08, 0xaa, 0xbb]);
+        }
     }
 
     #[test]

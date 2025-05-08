@@ -19,67 +19,20 @@ use crate::{
     },
     errors::Result,
     packet::{self, KeyFlags, PubKeyInner, UserAttribute, UserId},
-    types::{
-        self, CompressionAlgorithm, PlainSecretParams, PublicParams, RevocationKey, S2kParams,
-    },
+    types::{self, CompressionAlgorithm, PlainSecretParams, PublicParams, S2kParams},
 };
 
 #[derive(Debug, PartialEq, Eq, Builder)]
 #[builder(build_fn(validate = "Self::validate"))]
 pub struct SecretKeyParams {
-    key_type: KeyType,
-
-    // -- Keyflags
-    #[builder(default)]
-    can_sign: bool,
-    #[builder(default)]
-    can_certify: bool,
-    #[builder(default)]
-    can_encrypt: bool,
-
-    // -- Preferences
-    /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
-    #[builder(default)]
-    preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
-    /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
-    #[builder(default)]
-    preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
-    /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
-    #[builder(default)]
-    preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
-    #[builder(default)]
-    preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-    #[builder(default)]
-    revocation_key: Option<RevocationKey>,
-
-    #[builder]
-    primary_user_id: String,
-
-    #[builder(default)]
-    user_ids: Vec<String>,
-    #[builder(default)]
-    user_attributes: Vec<UserAttribute>,
-    #[builder(default)]
-    passphrase: Option<String>,
-    #[builder(default)]
-    s2k: Option<S2kParams>,
-    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
-    created_at: chrono::DateTime<chrono::Utc>,
-    #[builder(default)]
-    packet_version: types::PacketHeaderVersion,
+    /// OpenPGP key version of primary
     #[builder(default)]
     version: types::KeyVersion,
-    #[builder(default)]
-    expiration: Option<Duration>,
 
-    #[builder(default)]
-    subkeys: Vec<SubkeyParams>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Builder)]
-pub struct SubkeyParams {
+    /// Asymmetric algorithm for the primary
     key_type: KeyType,
 
+    // -- Keyflags for primary
     #[builder(default)]
     can_sign: bool,
     #[builder(default)]
@@ -89,65 +42,180 @@ pub struct SubkeyParams {
     #[builder(default)]
     can_authenticate: bool,
 
+    // -- Metadata for the primary key
+    #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
+    created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
-    user_ids: Vec<UserId>,
+    expiration: Option<Duration>,
+    #[builder(default = "true")]
+    feature_seipd_v1: bool,
     #[builder(default)]
-    user_attributes: Vec<UserAttribute>,
+    feature_seipd_v2: bool,
+
+    // -- Public-facing preferences on the certificate
+    /// List of symmetric algorithms that indicate which algorithms the key holder prefers to use.
+    #[builder(default)]
+    preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
+    /// List of hash algorithms that indicate which algorithms the key holder prefers to use.
+    #[builder(default)]
+    preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
+    /// List of compression algorithms that indicate which algorithms the key holder prefers to use.
+    #[builder(default)]
+    preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
+    /// List of AEAD algorithms that indicate which algorithms the key holder prefers to use.
+    #[builder(default)]
+    preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
+
+    // -- Password-locking of the primary
     #[builder(default)]
     passphrase: Option<String>,
     #[builder(default)]
     s2k: Option<S2kParams>,
+
+    // -- Packet framing for the primary key
+    #[builder(default)]
+    packet_version: types::PacketHeaderVersion,
+
+    // -- Associated components
+    /// Primary User ID, required for v4 keys, but not required for v6 keys
+    #[builder(default, setter(custom))]
+    primary_user_id: Option<String>,
+    #[builder(default)]
+    user_ids: Vec<String>,
+    #[builder(default)]
+    user_attributes: Vec<UserAttribute>,
+    #[builder(default)]
+    subkeys: Vec<SubkeyParams>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Builder)]
+pub struct SubkeyParams {
+    // -- OpenPGP key version of this subkey
+    #[builder(default)]
+    version: types::KeyVersion,
+
+    // -- Asymmetric algorithm of this subkey
+    key_type: KeyType,
+
+    // -- Keyflags for this subkey
+    #[builder(default)]
+    can_sign: bool,
+    #[builder(default)]
+    can_encrypt: bool,
+    #[builder(default)]
+    can_authenticate: bool,
+
+    // -- Metadata for the primary key
     #[builder(default = "chrono::Utc::now().trunc_subsecs(0)")]
     created_at: chrono::DateTime<chrono::Utc>,
     #[builder(default)]
-    packet_version: types::PacketHeaderVersion,
-    #[builder(default)]
-    version: types::KeyVersion,
-    #[builder(default)]
     expiration: Option<Duration>,
+
+    // -- Password-locking of this subkey
+    #[builder(default)]
+    passphrase: Option<String>,
+    #[builder(default)]
+    s2k: Option<S2kParams>,
+
+    // -- Packet framing for this subkey
+    #[builder(default)]
+    packet_version: types::PacketHeaderVersion,
 }
 
 impl SecretKeyParamsBuilder {
-    fn validate(&self) -> std::result::Result<(), String> {
-        match &self.key_type {
-            Some(KeyType::Rsa(size)) => {
-                if *size < 2048 {
-                    return Err("Keys with less than 2048bits are considered insecure".into());
-                }
+    fn validate_keytype(
+        key_type: Option<&KeyType>,
+        can_sign: Option<bool>,
+        can_encrypt: Option<bool>,
+        can_authenticate: Option<bool>,
+    ) -> std::result::Result<(), String> {
+        if let Some(key_type) = &key_type {
+            if can_sign == Some(true) && !key_type.can_sign() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for signing keys",
+                    key_type
+                ));
             }
-            Some(KeyType::Ed25519Legacy) => {
-                if let Some(can_encrypt) = self.can_encrypt {
-                    if can_encrypt {
-                        return Err("EdDSA can only be used for signing keys".into());
+            if can_encrypt == Some(true) && !key_type.can_encrypt() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for encryption keys",
+                    key_type
+                ));
+            }
+            if can_authenticate == Some(true) && !key_type.can_sign() {
+                return Err(format!(
+                    "KeyType {:?} can not be used for authentication keys",
+                    key_type
+                ));
+            }
+
+            match key_type {
+                KeyType::Rsa(size) => {
+                    if *size < 2048 {
+                        return Err("Keys with less than 2048bits are considered insecure".into());
                     }
                 }
-            }
-            Some(KeyType::ECDSA(curve)) => {
-                if let Some(can_encrypt) = self.can_encrypt {
-                    if can_encrypt {
-                        return Err("ECDSA can only be used for signing keys".into());
-                    }
-                };
-                match curve {
+                KeyType::ECDSA(curve) => match curve {
                     ECCCurve::P256 | ECCCurve::P384 | ECCCurve::P521 | ECCCurve::Secp256k1 => {}
                     _ => return Err(format!("Curve {} is not supported for ECDSA", curve.name())),
-                }
+                },
+                _ => {}
             }
-            Some(KeyType::ECDH(_)) => {
-                if let Some(can_sign) = self.can_sign {
-                    if can_sign {
-                        return Err("ECDH can only be used for encryption keys".into());
+        }
+
+        Ok(())
+    }
+
+    fn validate(&self) -> std::result::Result<(), String> {
+        // Don't allow mixing of v4/v6 primary and subkeys
+        match self.version {
+            // V6 primary
+            Some(types::KeyVersion::V6) => {
+                // all subkeys must be v6
+                for sub in self.subkeys.iter().flatten() {
+                    if sub.version != types::KeyVersion::V6 {
+                        return Err(format!(
+                            "V6 primary key may not be combined with {:?} subkey",
+                            sub.version
+                        ));
                     }
                 }
             }
-            Some(KeyType::Dsa(_)) => {
-                if let Some(can_encrypt) = self.can_encrypt {
-                    if can_encrypt {
-                        return Err("DSA can only be used for signing keys".into());
+            // non-V6 primary
+            _ => {
+                // subkeys may not be v6
+                // (but v2/3/4 have been mixed historically, so we will let those slide)
+                for sub in self.subkeys.iter().flatten() {
+                    if sub.version == types::KeyVersion::V6 {
+                        return Err(format!(
+                            "{:?} primary key may not be combined with V6 subkey",
+                            self.version
+                        ));
                     }
                 }
             }
-            _ => {}
+        };
+
+        Self::validate_keytype(
+            self.key_type.as_ref(),
+            self.can_sign,
+            self.can_encrypt,
+            self.can_authenticate,
+        )?;
+
+        if let Some(subkeys) = &self.subkeys {
+            for subkey in subkeys {
+                Self::validate_keytype(
+                    Some(&subkey.key_type),
+                    Some(subkey.can_sign),
+                    Some(subkey.can_encrypt),
+                    Some(subkey.can_authenticate),
+                )?;
+            }
+        }
+
+        if self.version == Some(types::KeyVersion::V4) && self.primary_user_id.is_none() {
+            return Err("V4 keys must have a primary User ID".into());
         }
 
         Ok(())
@@ -168,6 +236,11 @@ impl SecretKeyParamsBuilder {
         } else {
             self.subkeys = Some(vec![value.into()]);
         }
+        self
+    }
+
+    pub fn primary_user_id(&mut self, value: String) -> &mut Self {
+        self.primary_user_id = Some(Some(value));
         self
     }
 }
@@ -197,22 +270,36 @@ impl SecretKeyParams {
         keyflags.set_encrypt_comms(self.can_encrypt);
         keyflags.set_encrypt_storage(self.can_encrypt);
         keyflags.set_sign(self.can_sign);
+        keyflags.set_authentication(self.can_authenticate);
+
+        let primary_user_id = match self.primary_user_id {
+            None => None,
+            Some(id) => Some(UserId::from_str(Default::default(), id)?),
+        };
+
+        let mut features = packet::Features::default();
+        if self.feature_seipd_v1 {
+            features.set_seipd_v1(true);
+        }
+        if self.feature_seipd_v2 {
+            features.set_seipd_v2(true);
+        };
 
         Ok(SecretKey::new(
             primary_key,
             KeyDetails::new(
-                UserId::from_str(Default::default(), &self.primary_user_id)?,
+                primary_user_id,
                 self.user_ids
                     .iter()
                     .map(|m| UserId::from_str(Default::default(), m))
                     .collect::<Result<Vec<_>, _>>()?,
                 self.user_attributes,
                 keyflags,
+                features,
                 self.preferred_symmetric_algorithms,
                 self.preferred_hash_algorithms,
                 self.preferred_compression_algorithms,
                 self.preferred_aead_algorithms,
-                self.revocation_key,
             ),
             Default::default(),
             self.subkeys
@@ -224,7 +311,6 @@ impl SecretKeyParams {
                         .unwrap_or_else(|| S2kParams::new_default(&mut rng, subkey.version));
                     let (public_params, secret_params) = subkey.key_type.generate(&mut rng)?;
                     let mut keyflags = KeyFlags::default();
-                    keyflags.set_certify(subkey.can_certify);
                     keyflags.set_encrypt_comms(subkey.can_encrypt);
                     keyflags.set_encrypt_storage(subkey.can_encrypt);
                     keyflags.set_sign(subkey.can_sign);
@@ -342,6 +428,52 @@ impl KeyType {
             KeyType::SlhDsaShake128f => PublicKeyAlgorithm::SlhDsaShake128f,
             #[cfg(feature = "draft-pqc")]
             KeyType::SlhDsaShake256s => PublicKeyAlgorithm::SlhDsaShake256s,
+        }
+    }
+
+    /// Does this asymmetric algorithm support the cryptographic primitive of encryption?
+    /// (Note that this is a subtly different meaning from OpenPGP's key flags.)
+    pub fn can_sign(&self) -> bool {
+        match self {
+            KeyType::Rsa(_) => true,
+
+            KeyType::Dsa(_)
+            | KeyType::ECDSA(_)
+            | KeyType::Ed25519Legacy
+            | KeyType::Ed25519
+            | KeyType::Ed448 => true,
+            KeyType::ECDH(_) | KeyType::X25519 | KeyType::X448 => false,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlKem768X25519 | KeyType::MlKem1024X448 => false,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlDsa65Ed25519
+            | KeyType::MlDsa87Ed448
+            | KeyType::SlhDsaShake128s
+            | KeyType::SlhDsaShake128f
+            | KeyType::SlhDsaShake256s => true,
+        }
+    }
+
+    /// Does this asymmetric algorithm support the cryptographic primitive of encryption?
+    /// (Note that this is a subtly different meaning from OpenPGP's key flags.)
+    pub fn can_encrypt(&self) -> bool {
+        match self {
+            KeyType::Rsa(_) => true,
+
+            KeyType::Dsa(_)
+            | KeyType::ECDSA(_)
+            | KeyType::Ed25519Legacy
+            | KeyType::Ed25519
+            | KeyType::Ed448 => false,
+            KeyType::ECDH(_) | KeyType::X25519 | KeyType::X448 => true,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlKem768X25519 | KeyType::MlKem1024X448 => true,
+            #[cfg(feature = "draft-pqc")]
+            KeyType::MlDsa65Ed25519
+            | KeyType::MlDsa87Ed448
+            | KeyType::SlhDsaShake128s
+            | KeyType::SlhDsaShake128f
+            | KeyType::SlhDsaShake256s => false,
         }
     }
 
@@ -472,6 +604,7 @@ mod tests {
     use super::*;
     use crate::{
         composed::{Deserializable, SignedPublicKey, SignedSecretKey},
+        packet::Features,
         types::KeyVersion,
     };
 
@@ -1193,6 +1326,248 @@ mod tests {
         let (signed_key2, _headers) =
             SignedPublicKey::from_string(&armor).expect("failed to parse public key");
         signed_key2.verify().expect("invalid public key");
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v4_v4() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        // legal v4 key, with user id
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V4)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V4)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        // We should have made no dks
+        assert!(signed_key.details.direct_signatures.is_empty());
+
+        // We made one user id
+        assert_eq!(signed_key.details.users.len(), 1);
+        let user = signed_key.details.users.first().unwrap();
+        // .. it has one binding signature
+        assert_eq!(user.signatures.len(), 1);
+        let sig = user.signatures.first().unwrap();
+        // ... key metadata is on that (primary user id binding) signature
+        assert_eq!(sig.preferred_hash_algs(), &[HashAlgorithm::Sha512]);
+        assert!(sig.key_flags().certify());
+        assert!(sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+        assert_eq!(sig.features(), Some(&Features::from(&[0x01][..])));
+
+        // try making (signed) public key representations
+        let _ = signed_key.public_key();
+        let _ = signed_key.signed_public_key();
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v4_v4_no_uid() {
+        // v4 key without primary user id - not legal
+        let _ = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V4)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V4)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .expect_err("should not build because of missing primary user id");
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v6_v4_illegal() {
+        // illegal v6/v4 mix
+        SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V4)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .expect_err("should not be able to build");
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v4_v6_illegal() {
+        // illegal v4/v6 mix
+        SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V4)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .expect_err("should not be able to build");
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v6_v6() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        // v6/v6 with user id
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .feature_seipd_v2(true)
+            .primary_user_id("alice".into())
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        // --- key metadata should be on dks
+        // We made one dks
+        assert_eq!(signed_key.details.direct_signatures.len(), 1);
+        let sig = signed_key.details.direct_signatures.first().unwrap();
+        // ... key metadata is on that dks signature
+        assert_eq!(sig.preferred_hash_algs(), &[HashAlgorithm::Sha512]);
+        assert!(sig.key_flags().certify());
+        assert!(sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+        assert_eq!(sig.features(), Some(&Features::from(&[0x09][..])));
+
+        // - no key metadata should be on user id binding
+        // We made one user id
+        assert_eq!(signed_key.details.users.len(), 1);
+        let user = signed_key.details.users.first().unwrap();
+        // .. it has one binding signature
+        assert_eq!(user.signatures.len(), 1);
+        let sig = user.signatures.first().unwrap();
+        // NO key metadata is on that (primary user id binding) signature
+        assert_eq!(sig.preferred_hash_algs(), &[]);
+        assert!(!sig.key_flags().certify());
+        assert!(!sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+        assert!(sig.features().is_none());
+
+        // try making (signed) public key representations
+        let _ = signed_key.public_key();
+        let _ = signed_key.signed_public_key();
+    }
+
+    #[test]
+    fn test_cert_metadata_gen_v6_v6_id_less() {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+
+        // v6/v6 without user id
+        // variation: this key doesn't want to do seipdv1 (in "features")
+        let key_params = SecretKeyParamsBuilder::default()
+            .version(KeyVersion::V6)
+            .key_type(KeyType::Ed25519)
+            .can_certify(true)
+            .can_sign(true)
+            .feature_seipd_v1(false) // signal that we don't like seipdv1
+            .feature_seipd_v2(true)
+            .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
+            .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
+            .preferred_compression_algorithms(smallvec![CompressionAlgorithm::ZLIB])
+            .subkey(
+                SubkeyParamsBuilder::default()
+                    .version(KeyVersion::V6)
+                    .key_type(KeyType::X25519)
+                    .can_encrypt(true)
+                    .passphrase(None)
+                    .build()
+                    .unwrap(),
+            )
+            .build()
+            .unwrap();
+
+        let key = key_params
+            .generate(&mut rng)
+            .expect("failed to generate secret key");
+
+        let signed_key = key.sign(&mut rng, &"".into()).expect("failed to sign key");
+
+        // --- key metadata should be on dks
+        // We made one dks
+        assert_eq!(signed_key.details.direct_signatures.len(), 1);
+        let sig = signed_key.details.direct_signatures.first().unwrap();
+        // ... key metadata is on that dks signature
+        assert_eq!(sig.preferred_hash_algs(), &[HashAlgorithm::Sha512]);
+        assert!(sig.key_flags().certify());
+        assert!(sig.key_flags().sign());
+        assert!(!sig.key_flags().encrypt_comms());
+        assert!(!sig.key_flags().encrypt_storage());
+        assert_eq!(sig.features(), Some(&Features::from(&[0x08][..])));
+
+        // We made no user id
+        assert!(signed_key.details.users.is_empty());
+
+        // try making (signed) public key representations
+        let _ = signed_key.public_key();
+        let _ = signed_key.signed_public_key();
     }
 
     #[test]

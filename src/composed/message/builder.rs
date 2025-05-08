@@ -195,7 +195,6 @@ where
                 chrono::Utc::now().trunc_subsecs(0),
             ))?,
         ];
-        let unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
 
         // prepare signing
         let mut sig_config = match config.key.version() {
@@ -206,7 +205,10 @@ where
             v => bail!("unsupported key version {:?}", v),
         };
         sig_config.hashed_subpackets = hashed_subpackets;
-        sig_config.unhashed_subpackets = unhashed_subpackets;
+        if config.key.version() <= KeyVersion::V4 {
+            sig_config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(key_id))?];
+        }
 
         let mut ops = match config.key.version() {
             KeyVersion::V4 => OnePassSignature::v3(typ, hash_alg, algorithm, key_id),

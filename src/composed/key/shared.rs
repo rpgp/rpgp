@@ -8,75 +8,51 @@ use crate::{
     crypto::{aead::AeadAlgorithm, hash::HashAlgorithm, sym::SymmetricKeyAlgorithm},
     errors::{unsupported_err, Result},
     packet::{
-        KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData,
+        Features, KeyFlags, PacketTrait, SignatureConfig, SignatureType, Subpacket, SubpacketData,
         UserAttribute, UserId,
     },
     ser::Serialize,
-    types::{
-        CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, RevocationKey, SecretKeyTrait,
-    },
+    types::{CompressionAlgorithm, KeyVersion, Password, PublicKeyTrait, SecretKeyTrait},
 };
 
+/// This specifies associated user id and attribute components, plus some metadata for producing
+/// a [SignedSecretKey].
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct KeyDetails {
-    user_ids: Vec<UserId>,
+    primary_user_id: Option<UserId>,
+    non_primary_user_ids: Vec<UserId>,
     user_attributes: Vec<UserAttribute>,
     keyflags: KeyFlags,
+    features: Features,
     preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
     preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
     preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
     preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-    revocation_key: Option<RevocationKey>,
 }
 
 impl KeyDetails {
     #[allow(clippy::too_many_arguments)] // FIXME
-    pub fn new(
-        primary_user_id: UserId,
-        mut user_ids: Vec<UserId>,
-        user_attributes: Vec<UserAttribute>,
-        keyflags: KeyFlags,
-        preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
-        preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
-        preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
-        preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-        revocation_key: Option<RevocationKey>,
-    ) -> Self {
-        user_ids.insert(0, primary_user_id);
-
-        Self::new_direct(
-            user_ids,
-            user_attributes,
-            keyflags,
-            preferred_symmetric_algorithms,
-            preferred_hash_algorithms,
-            preferred_compression_algorithms,
-            preferred_aead_algorithms,
-            revocation_key,
-        )
-    }
-
-    /// The primary UserId (if any) is expected to be contained in `user_ids`
-    #[allow(clippy::too_many_arguments)] // FIXME
-    pub(crate) fn new_direct(
+    pub(crate) fn new(
+        primary_user_id: Option<UserId>,
         user_ids: Vec<UserId>,
         user_attributes: Vec<UserAttribute>,
         keyflags: KeyFlags,
+        features: Features,
         preferred_symmetric_algorithms: SmallVec<[SymmetricKeyAlgorithm; 8]>,
         preferred_hash_algorithms: SmallVec<[HashAlgorithm; 8]>,
         preferred_compression_algorithms: SmallVec<[CompressionAlgorithm; 8]>,
         preferred_aead_algorithms: SmallVec<[(SymmetricKeyAlgorithm, AeadAlgorithm); 4]>,
-        revocation_key: Option<RevocationKey>,
     ) -> Self {
         KeyDetails {
-            user_ids,
+            primary_user_id,
+            non_primary_user_ids: user_ids,
             user_attributes,
             keyflags,
+            features,
             preferred_symmetric_algorithms,
             preferred_hash_algorithms,
             preferred_compression_algorithms,
             preferred_aead_algorithms,
-            revocation_key,
         }
     }
 
@@ -92,42 +68,59 @@ impl KeyDetails {
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
-        let keyflags = self.keyflags;
-        let preferred_symmetric_algorithms = self.preferred_symmetric_algorithms;
-        let preferred_hash_algorithms = self.preferred_hash_algorithms;
-        let preferred_compression_algorithms = self.preferred_compression_algorithms;
-        let preferred_aead_algorithms = self.preferred_aead_algorithms;
-        let revocation_key = self.revocation_key;
-
-        let mut users = vec![];
-
-        // We consider the first entry in `user_ids` (if any) the primary user id
-        // FIXME: select primary like in signed_key/shared.rs:116? (and adjust the set of non-primaries below?)
-        if let Some(id) = self.user_ids.first() {
-            let mut hashed_subpackets = vec![
-                Subpacket::regular(SubpacketData::IsPrimary(true))?,
+        let subpackets_with_metadata = || -> Result<Vec<Subpacket>> {
+            Ok(vec![
                 Subpacket::regular(SubpacketData::SignatureCreationTime(
                     chrono::Utc::now().trunc_subsecs(0),
                 ))?,
-                Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone()))?,
+                Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
+                Subpacket::regular(SubpacketData::KeyFlags(self.keyflags.clone()))?,
+                Subpacket::regular(SubpacketData::Features(self.features.clone()))?,
                 Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
-                    preferred_symmetric_algorithms.clone(),
+                    self.preferred_symmetric_algorithms.clone(),
                 ))?,
                 Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
-                    preferred_hash_algorithms.clone(),
+                    self.preferred_hash_algorithms.clone(),
                 ))?,
                 Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
-                    preferred_compression_algorithms.clone(),
+                    self.preferred_compression_algorithms.clone(),
                 ))?,
                 Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
-                    preferred_aead_algorithms.clone(),
+                    self.preferred_aead_algorithms.clone(),
+                ))?,
+            ])
+        };
+
+        let basic_subpackets = || -> Result<Vec<Subpacket>> {
+            Ok(vec![
+                Subpacket::regular(SubpacketData::SignatureCreationTime(
+                    chrono::Utc::now().trunc_subsecs(0),
                 ))?,
                 Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
-            ];
-            if let Some(rkey) = revocation_key {
-                hashed_subpackets.push(Subpacket::regular(SubpacketData::RevocationKey(rkey))?);
-            }
+            ])
+        };
 
+        // --- Direct key signatures
+        let direct_signatures = if key.version() == KeyVersion::V6 {
+            let mut config = SignatureConfig::v6(
+                &mut rng,
+                SignatureType::Key,
+                key.algorithm(),
+                key.hash_alg(),
+            )?;
+            config.hashed_subpackets = subpackets_with_metadata()?;
+
+            let dks = config.sign_key(key, key_pw, pub_key)?;
+
+            vec![dks]
+        } else {
+            vec![]
+        };
+
+        // --- User IDs
+        let mut users = vec![];
+
+        if let Some(primary_user_id) = self.primary_user_id {
             let mut config = match key.version() {
                 KeyVersion::V4 => {
                     SignatureConfig::v4(SignatureType::CertGeneric, key.algorithm(), key.hash_alg())
@@ -141,44 +134,36 @@ impl KeyDetails {
                 v => unsupported_err!("unsupported key version: {:?}", v),
             };
 
-            config.hashed_subpackets = hashed_subpackets;
-            config.unhashed_subpackets =
-                vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+            config.hashed_subpackets = match key.version() {
+                KeyVersion::V6 => basic_subpackets()?,
+                _ => subpackets_with_metadata()?,
+            };
 
-            let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
+            config
+                .hashed_subpackets
+                .push(Subpacket::regular(SubpacketData::IsPrimary(true))?);
 
-            users.push(id.clone().into_signed(sig));
+            if key.version() <= KeyVersion::V4 {
+                config.unhashed_subpackets =
+                    vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+            }
+
+            let sig = config.sign_certification(
+                key,
+                pub_key,
+                key_pw,
+                primary_user_id.tag(),
+                &primary_user_id,
+            )?;
+
+            users.push(primary_user_id.into_signed(sig));
         }
 
-        // other user ids
-
+        // non-primary user ids
         users.extend(
-            self.user_ids
+            self.non_primary_user_ids
                 .into_iter()
-                .skip(1) // The first User ID was handled above, as the primary user id
                 .map(|id| {
-                    let hashed_subpackets = vec![
-                        Subpacket::regular(SubpacketData::SignatureCreationTime(
-                            chrono::Utc::now().trunc_subsecs(0),
-                        ))?,
-                        Subpacket::regular(SubpacketData::KeyFlags(keyflags.clone()))?,
-                        Subpacket::regular(SubpacketData::PreferredSymmetricAlgorithms(
-                            preferred_symmetric_algorithms.clone(),
-                        ))?,
-                        Subpacket::regular(SubpacketData::PreferredHashAlgorithms(
-                            preferred_hash_algorithms.clone(),
-                        ))?,
-                        Subpacket::regular(SubpacketData::PreferredCompressionAlgorithms(
-                            preferred_compression_algorithms.clone(),
-                        ))?,
-                        Subpacket::regular(SubpacketData::PreferredAeadAlgorithms(
-                            preferred_aead_algorithms.clone(),
-                        ))?,
-                        Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
-                    ];
-                    let unhashed_subpackets =
-                        vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
-
                     let mut config = match key.version() {
                         KeyVersion::V4 => SignatureConfig::v4(
                             SignatureType::CertGeneric,
@@ -194,8 +179,15 @@ impl KeyDetails {
                         v => unsupported_err!("unsupported key version: {:?}", v),
                     };
 
-                    config.hashed_subpackets = hashed_subpackets;
-                    config.unhashed_subpackets = unhashed_subpackets;
+                    config.hashed_subpackets = match key.version() {
+                        KeyVersion::V6 => basic_subpackets()?,
+                        _ => subpackets_with_metadata()?,
+                    };
+
+                    if key.version() <= KeyVersion::V4 {
+                        config.unhashed_subpackets =
+                            vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+                    }
 
                     let sig = config.sign_certification(key, pub_key, key_pw, id.tag(), &id)?;
 
@@ -204,6 +196,7 @@ impl KeyDetails {
                 .collect::<Result<Vec<_>>>()?,
         );
 
+        // --- User Attributes
         let user_attributes = self
             .user_attributes
             .into_iter()
@@ -212,7 +205,7 @@ impl KeyDetails {
 
         Ok(SignedKeyDetails {
             revocation_signatures: Default::default(),
-            direct_signatures: Default::default(),
+            direct_signatures,
             users,
             user_attributes,
         })

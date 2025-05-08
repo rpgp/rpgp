@@ -112,8 +112,6 @@ impl PublicSubkey {
             Subpacket::regular(SubpacketData::KeyFlags(self.keyflags))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(sec_key.fingerprint()))?,
         ];
-        let unhashed_subpackets =
-            vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
 
         let mut config = match sec_key.version() {
             KeyVersion::V4 => SignatureConfig::v4(
@@ -131,7 +129,13 @@ impl PublicSubkey {
         };
 
         config.hashed_subpackets = hashed_subpackets;
-        config.unhashed_subpackets = unhashed_subpackets;
+
+        // If the version of the issuer is greater than 4, this subpacket MUST NOT be included in
+        // the signature.
+        if sec_key.version() <= KeyVersion::V4 {
+            config.unhashed_subpackets =
+                vec![Subpacket::regular(SubpacketData::Issuer(sec_key.key_id()))?];
+        }
 
         let signatures = vec![config.sign_key_binding(sec_key, pub_key, key_pw, &key)?];
 

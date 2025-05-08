@@ -89,7 +89,7 @@ impl SecretKey {
         rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: Password,
+        key_pw: &Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
@@ -168,7 +168,7 @@ impl SecretSubkey {
         rng: R,
         key: &K,
         pub_key: &P,
-        key_pw: Password,
+        key_pw: &Password,
     ) -> Result<Signature>
     where
         K: SecretKeyTrait,
@@ -571,7 +571,7 @@ fn create_signature(
 fn sign<R: CryptoRng + Rng, K, P>(
     mut rng: R,
     key: &K,
-    key_pw: Password,
+    key_pw: &Password,
     sig_typ: SignatureType,
     pub_key: &P,
 ) -> Result<Signature>
@@ -590,7 +590,9 @@ where
     config.hashed_subpackets = vec![Subpacket::regular(SubpacketData::SignatureCreationTime(
         chrono::Utc::now().trunc_subsecs(0),
     ))?];
-    config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+    if key.version() <= KeyVersion::V4 {
+        config.unhashed_subpackets = vec![Subpacket::regular(SubpacketData::Issuer(key.key_id()))?];
+    }
 
     config.sign_key(key, key_pw, pub_key)
 }

@@ -589,9 +589,9 @@ fn rev_reason<B: BufRead>(mut i: B) -> Result<SubpacketData> {
 /// Parse a Features subpacket
 /// Ref: https://www.rfc-editor.org/rfc/rfc9580.html#name-features
 fn features<B: BufRead>(mut i: B) -> Result<SubpacketData> {
-    let features = SmallVec::from_slice(&i.rest()?);
+    let features = i.rest()?;
 
-    Ok(SubpacketData::Features(features))
+    Ok(SubpacketData::Features(features.as_ref().into()))
 }
 
 /// Parse a Signature Target subpacket

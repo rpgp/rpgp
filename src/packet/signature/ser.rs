@@ -174,7 +174,7 @@ impl Serialize for SubpacketData {
                 flags.to_writer(writer)?;
             }
             SubpacketData::Features(features) => {
-                writer.write_all(features)?;
+                features.to_writer(writer)?;
             }
             SubpacketData::RevocationReason(code, reason) => {
                 writer.write_u8((*code).into())?;
@@ -278,7 +278,7 @@ impl Serialize for SubpacketData {
             SubpacketData::PreferredCompressionAlgorithms(algs) => algs.len(),
             SubpacketData::KeyServerPreferences(prefs) => prefs.len(),
             SubpacketData::KeyFlags(flags) => flags.write_len(),
-            SubpacketData::Features(features) => features.len(),
+            SubpacketData::Features(features) => features.write_len(),
 
             SubpacketData::RevocationReason(_, reason) => {
                 // 1 byte for revocation code + n for the reason

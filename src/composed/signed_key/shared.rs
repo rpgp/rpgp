@@ -13,7 +13,7 @@ use crate::{
     },
     errors::Result,
     packet,
-    packet::{KeyFlags, PacketTrait},
+    packet::{Features, KeyFlags, PacketTrait, SignatureVersion},
     ser::Serialize,
     types::{PacketLength, PublicKeyTrait, SignedUser, SignedUserAttribute},
 };
@@ -133,8 +133,78 @@ impl SignedKeyDetails {
         Ok(())
     }
 
+    /// Derive a `KeyDetails` from a `SignedKeyDetails`.
+    /// This is more of a heuristic than a surefire transformation.
+    ///
+    /// Note: this is also not checking the cryptographic validity of the signatures it's
+    /// evaluating, and e.g. not trying to find the newest signature of each type.
+    /// This whole functions is an optimistic heuristic, not a rigorous evaluation.
+    ///
+    /// Don't rely too hard on its outputs!
     pub fn as_unsigned(&self) -> KeyDetails {
-        if let Some(primary_user) = self
+        // Let's try to figure out if this SignedKeyDetails appears to belong to a v6 key, or a
+        // previous generation (this information is not explicitly encoded in self, so we're
+        // looking around, and half guessing).
+        let probably_v6 = if let Some(first) = self.direct_signatures.first() {
+            if first.version() == SignatureVersion::V6 {
+                // has a DKS, and it's v6, so yes
+                true
+            } else {
+                // has a DKS, and it's not v6, so no
+                false
+            }
+        } else {
+            // this might still be a key with v6 parts, but without a DKS, it's not a valid one
+            false
+        };
+
+        if probably_v6 {
+            // we expect the data on a dks
+            let first_dks = self
+                .direct_signatures
+                .first()
+                .expect("we checked this above");
+
+            let keyflags = first_dks.key_flags();
+            let features = first_dks.features();
+
+            let preferred_symmetric_algorithms =
+                SmallVec::from_slice(first_dks.preferred_symmetric_algs());
+            let preferred_hash_algorithms = SmallVec::from_slice(first_dks.preferred_hash_algs());
+            let preferred_compression_algorithms =
+                SmallVec::from_slice(first_dks.preferred_compression_algs());
+            let preferred_aead_algorithms = SmallVec::from_slice(first_dks.preferred_aead_algs());
+
+            let primary_user = self
+                .users
+                .iter()
+                .find(|u| u.is_primary())
+                .map_or_else(|| self.users.first(), Some);
+
+            KeyDetails::new(
+                primary_user.map(|su| su.id.clone()),
+                self.users
+                    .iter()
+                    .filter_map(|u| {
+                        if Some(&u.id) == primary_user.map(|pri_su| &pri_su.id) {
+                            None // drop the primary
+                        } else {
+                            Some(u.id.clone())
+                        }
+                    })
+                    .collect(),
+                self.user_attributes
+                    .iter()
+                    .map(|a| a.attr.clone())
+                    .collect(),
+                keyflags,
+                features.cloned().unwrap_or(Features::default()),
+                preferred_symmetric_algorithms,
+                preferred_hash_algorithms,
+                preferred_compression_algorithms,
+                preferred_aead_algorithms,
+            )
+        } else if let Some(primary_user) = self
             .users
             .iter()
             .find(|u| u.is_primary())
@@ -145,6 +215,7 @@ impl SignedKeyDetails {
                 .first()
                 .expect("invalid primary user");
             let keyflags = primary_sig.key_flags();
+            let features = primary_sig.features();
 
             let preferred_symmetric_algorithms =
                 SmallVec::from_slice(primary_sig.preferred_symmetric_algs());
@@ -152,38 +223,47 @@ impl SignedKeyDetails {
             let preferred_compression_algorithms =
                 SmallVec::from_slice(primary_sig.preferred_compression_algs());
             let preferred_aead_algorithms = SmallVec::from_slice(primary_sig.preferred_aead_algs());
-            let revocation_key = primary_sig.revocation_key().cloned();
 
-            KeyDetails::new_direct(
-                self.users.iter().map(|u| u.id.clone()).collect(),
+            KeyDetails::new(
+                Some(primary_user.id.clone()),
+                self.users
+                    .iter()
+                    .filter(|u| u.id != primary_user.id) // drop the primary
+                    .map(|u| u.id.clone())
+                    .collect(),
                 self.user_attributes
                     .iter()
                     .map(|a| a.attr.clone())
                     .collect(),
                 keyflags,
+                features.cloned().unwrap_or(Features::default()),
                 preferred_symmetric_algorithms,
                 preferred_hash_algorithms,
                 preferred_compression_algorithms,
                 preferred_aead_algorithms,
-                revocation_key,
             )
         } else {
             // We don't have metadata via a primary user id, so we return a very bare KeyDetails object
 
-            // TODO: we could check for information in a direct key signature and use that
+            // TODO: even for non-v6 keys, we could check for information in a direct key
+            // signature and use that if it exists
 
-            KeyDetails::new_direct(
+            let mut features = Features::new();
+            features.set_seipd_v1(true);
+
+            KeyDetails::new(
+                None,
                 self.users.iter().map(|u| u.id.clone()).collect(),
                 self.user_attributes
                     .iter()
                     .map(|a| a.attr.clone())
                     .collect(),
                 KeyFlags::default(),
+                features,
                 vec![].into(),
                 vec![].into(),
                 vec![].into(),
                 vec![].into(),
-                None,
             )
         }
     }
