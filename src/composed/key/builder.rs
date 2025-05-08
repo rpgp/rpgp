@@ -1521,11 +1521,13 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
 
         // v6/v6 without user id
+        // variation: this key doesn't want to do seipdv1 (in "features")
         let key_params = SecretKeyParamsBuilder::default()
             .version(KeyVersion::V6)
             .key_type(KeyType::Ed25519)
             .can_certify(true)
             .can_sign(true)
+            .feature_seipd_v1(false) // signal that we don't like seipdv1
             .feature_seipd_v2(true)
             .preferred_symmetric_algorithms(smallvec![SymmetricKeyAlgorithm::AES256])
             .preferred_hash_algorithms(smallvec![HashAlgorithm::Sha512])
@@ -1558,7 +1560,7 @@ mod tests {
         assert!(sig.key_flags().sign());
         assert!(!sig.key_flags().encrypt_comms());
         assert!(!sig.key_flags().encrypt_storage());
-        assert_eq!(sig.features(), Some(&Features::from(&[0x09][..])));
+        assert_eq!(sig.features(), Some(&Features::from(&[0x08][..])));
 
         // We made no user id
         assert!(signed_key.details.users.is_empty());
