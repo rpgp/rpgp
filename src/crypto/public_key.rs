@@ -89,3 +89,22 @@ pub enum PublicKeyAlgorithm {
     #[cfg_attr(test, proptest(skip))]
     Unknown(u8),
 }
+
+impl PublicKeyAlgorithm {
+    /// true if the algorithm uses a post-quantum cryptographic scheme
+    /// (and can thus provide post-quantum security)
+    pub fn is_pqc(&self) -> bool {
+        match self {
+            #[cfg(feature = "draft-pqc")]
+            Self::MlDsa65Ed25519
+            | Self::MlDsa87Ed448
+            | Self::SlhDsaShake128s
+            | Self::SlhDsaShake128f
+            | Self::SlhDsaShake256s
+            | Self::MlKem768X25519
+            | Self::MlKem1024X448 => true,
+
+            _ => false,
+        }
+    }
+}
