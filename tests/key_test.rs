@@ -1425,4 +1425,22 @@ fn key_imprint_sha256() {
             0xa7, 0xe0, 0xb4, 0x47
         ]
     );
+
+    // Example from
+    // <https://github.com/ProtonMail/gopenpgp/blob/2d743b4967eef9c1de7279ef771c7cfe2703608c/crypto/key_test.go#L334-L347>
+    // to test compatibility with GopenPGP.
+    let (pkey, _) =
+        SignedPublicKey::from_armor_single(File::open("./tests/openpgpjs.pub.asc").unwrap())
+            .unwrap();
+
+    let sha256 = pkey.imprint::<sha2::Sha256>().unwrap().to_vec();
+
+    assert_eq!(
+        &sha256,
+        &[
+            0xd9, 0xac, 0x0b, 0x85, 0x7d, 0xa6, 0xd2, 0xc8, 0xbe, 0x98, 0x5b, 0x25, 0x1a, 0x9e,
+            0x3d, 0xb3, 0x1e, 0x7a, 0x1d, 0x2d, 0x83, 0x2d, 0x1f, 0x07, 0xeb, 0xe8, 0x38, 0xa9,
+            0xed, 0xce, 0x9c, 0x24
+        ]
+    );
 }
