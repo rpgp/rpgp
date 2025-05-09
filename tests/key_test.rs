@@ -1417,14 +1417,10 @@ fn key_imprint_sha256() {
 
     let sha256 = pkey.imprint::<sha2::Sha256>().unwrap().to_vec();
 
-    assert_eq!(
-        &sha256,
-        &[
-            0x0b, 0x95, 0xca, 0x2d, 0x0d, 0xf9, 0x51, 0xf9, 0xd0, 0x2f, 0x10, 0x89, 0xfd, 0xf1,
-            0x62, 0x32, 0x67, 0xee, 0x2b, 0x80, 0xb7, 0xfb, 0x84, 0xf2, 0xa0, 0x69, 0xba, 0xd9,
-            0xa7, 0xe0, 0xb4, 0x47
-        ]
-    );
+    let expect =
+        hex::decode("0b95ca2d0df951f9d02f1089fdf1623267ee2b80b7fb84f2a069bad9a7e0b447").unwrap();
+
+    assert_eq!(sha256, expect);
 
     // Example from
     // <https://github.com/ProtonMail/gopenpgp/blob/2d743b4967eef9c1de7279ef771c7cfe2703608c/crypto/key_test.go#L334-L347>
@@ -1435,12 +1431,8 @@ fn key_imprint_sha256() {
 
     let sha256 = pkey.imprint::<sha2::Sha256>().unwrap().to_vec();
 
-    assert_eq!(
-        &sha256,
-        &[
-            0xd9, 0xac, 0x0b, 0x85, 0x7d, 0xa6, 0xd2, 0xc8, 0xbe, 0x98, 0x5b, 0x25, 0x1a, 0x9e,
-            0x3d, 0xb3, 0x1e, 0x7a, 0x1d, 0x2d, 0x83, 0x2d, 0x1f, 0x07, 0xeb, 0xe8, 0x38, 0xa9,
-            0xed, 0xce, 0x9c, 0x24
-        ]
-    );
+    let expect =
+        hex::decode("d9ac0b857da6d2c8be985b251a9e3db31e7a1d2d832d1f07ebe838a9edce9c24").unwrap();
+
+    assert_eq!(sha256, expect);
 }
