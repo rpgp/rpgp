@@ -11,7 +11,10 @@ use crate::{
         signed_key::SignedKeyDetails,
         ArmorOptions,
     },
-    crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
+    crypto::{
+        hash::{HashAlgorithm, KnownDigest},
+        public_key::PublicKeyAlgorithm,
+    },
     errors::{ensure, Result},
     packet::{self, Packet, PacketTrait, SignatureType},
     ser::Serialize,
@@ -30,6 +33,14 @@ pub struct SignedPublicKey {
     pub primary_key: packet::PublicKey,
     pub details: SignedKeyDetails,
     pub public_subkeys: Vec<SignedPublicSubKey>,
+}
+
+impl SignedPublicKey {
+    pub fn imprint<D: KnownDigest>(
+        &self,
+    ) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+        self.primary_key.imprint::<D>()
+    }
 }
 
 /// Parse transferable public keys from the given packets.

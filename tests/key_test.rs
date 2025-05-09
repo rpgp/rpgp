@@ -1407,3 +1407,22 @@ fn key_pub_regression1() {
 
     dbg!(&key);
 }
+
+#[test]
+fn key_imprint_sha256() {
+    let (pkey, _) = SignedPublicKey::from_armor_single(
+        File::open("./tests/autocrypt/alice@autocrypt.example.pub.asc").unwrap(),
+    )
+    .unwrap();
+
+    let sha256 = pkey.imprint::<sha2::Sha256>().unwrap().to_vec();
+
+    assert_eq!(
+        &sha256,
+        &[
+            0x0b, 0x95, 0xca, 0x2d, 0x0d, 0xf9, 0x51, 0xf9, 0xd0, 0x2f, 0x10, 0x89, 0xfd, 0xf1,
+            0x62, 0x32, 0x67, 0xee, 0x2b, 0x80, 0xb7, 0xfb, 0x84, 0xf2, 0xa0, 0x69, 0xba, 0xd9,
+            0xa7, 0xe0, 0xb4, 0x47
+        ]
+    );
+}

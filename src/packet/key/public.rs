@@ -111,6 +111,10 @@ impl PublicKey {
     ) -> Result<PkeskBytes> {
         encrypt(&self.inner, rng, plain, typ)
     }
+
+    pub fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+        self.inner.imprint::<D>()
+    }
 }
 
 impl PublicSubkey {
