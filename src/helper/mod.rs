@@ -9,7 +9,6 @@ pub use self::{
     ecdsa::{EcdsaSigner, PgpEcdsaPublicKey},
     rsa::RsaSigner,
 };
-
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     types::PublicParams,
@@ -31,17 +30,17 @@ pub trait PgpHash {
 }
 
 impl PgpHash for sha1::Sha1 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::SHA1;
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha1;
 }
 
 impl PgpHash for sha2::Sha256 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::SHA2_256;
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha256;
 }
 
 impl PgpHash for sha2::Sha384 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::SHA2_384;
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha384;
 }
 
 impl PgpHash for sha2::Sha512 {
-    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::SHA2_512;
+    const HASH_ALGORITHM: HashAlgorithm = HashAlgorithm::Sha512;
 }

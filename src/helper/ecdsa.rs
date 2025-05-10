@@ -7,18 +7,18 @@ use ecdsa::{
     hazmat::DigestPrimitive,
     PrimeCurve, SignatureSize,
 };
-use rand::{CryptoRng, Rng};
 use signature::{hazmat::PrehashSigner, Keypair};
 
 use super::{PgpHash, PgpPublicKey};
+use crate::errors::bail;
+use crate::types::{PacketHeaderVersion, Password};
 use crate::{
-    bail,
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::PublicKey,
     types::{
-        EcdsaPublicParams, EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes,
-        PublicKeyTrait, PublicParams, SecretKeyTrait, SignatureBytes, Version,
+        EcdsaPublicParams, Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PublicKeyTrait,
+        PublicParams, SecretKeyTrait, SignatureBytes,
     },
 };
 
@@ -64,7 +64,7 @@ where
     /// Create a new signer with a given public key
     pub fn new(inner: T, created_at: DateTime<Utc>) -> Result<Self> {
         let public_key = PublicKey::new(
-            Version::New,
+            PacketHeaderVersion::New,
             KeyVersion::V4,
             <T as Keypair>::VerifyingKey::PGP_ALGORITHM,
             created_at,
@@ -136,26 +136,12 @@ where
     T: PrehashSigner<ecdsa::Signature<C>>,
     C::Digest: PgpHash,
 {
-    type PublicKey = PublicKey;
-    type Unlocked = Self;
-
-    fn unlock<F, G, Tr>(&self, _pw: F, work: G) -> Result<Tr>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<Tr>,
-    {
-        work(self)
-    }
-
-    fn create_signature<F>(
+    fn create_signature(
         &self,
-        _key_pw: F,
+        _key_pw: &Password,
         hash: HashAlgorithm,
         prehashed_data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
+    ) -> Result<SignatureBytes> {
         let sig = self.sign_prehash(hash, prehashed_data)?;
 
         // MPI format:
@@ -165,38 +151,12 @@ where
         Ok(SignatureBytes::Mpis(mpis))
     }
 
-    fn public_key(&self) -> Self::PublicKey {
-        self.public_key.clone()
-    }
-
     fn hash_alg(&self) -> HashAlgorithm {
         C::Digest::HASH_ALGORITHM
     }
 }
 
-impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        _rng: R,
-        _plain: &[u8],
-        _esk_type: EskType,
-    ) -> Result<PkeskBytes> {
-        bail!("Encryption is unsupported")
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        self.public_key.serialize_for_hashing(writer)
-    }
-
+impl<C, T> KeyDetails for EcdsaSigner<T, C> {
     fn version(&self) -> KeyVersion {
         self.public_key.version()
     }
@@ -211,6 +171,17 @@ impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
+    }
+}
+
+impl<C, T> PublicKeyTrait for EcdsaSigner<T, C> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        self.public_key.verify_signature(hash, data, sig)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {

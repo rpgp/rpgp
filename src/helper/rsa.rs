@@ -2,7 +2,6 @@ use std::{fmt, marker::PhantomData};
 
 use chrono::{DateTime, Utc};
 use digest::{typenum::Unsigned, OutputSizeUser};
-use rand::{CryptoRng, Rng};
 use rsa::{
     pkcs1v15::{Signature, VerifyingKey},
     traits::PublicKeyParts,
@@ -11,18 +10,18 @@ use rsa::{
 use sha2::Digest;
 use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
+use super::{PgpHash, PgpPublicKey};
+use crate::errors::bail;
+use crate::types::{PacketHeaderVersion, Password};
 use crate::{
-    bail,
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::Result,
     packet::PublicKey,
     types::{
-        EskType, Fingerprint, KeyId, KeyVersion, Mpi, PkeskBytes, PublicKeyTrait, PublicParams,
-        SecretKeyTrait, SignatureBytes, Version,
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams,
+        SecretKeyTrait, SignatureBytes,
     },
 };
-
-use super::{PgpHash, PgpPublicKey};
 
 impl PgpPublicKey for RsaPublicKey {
     const PGP_ALGORITHM: PublicKeyAlgorithm = PublicKeyAlgorithm::RSA;
@@ -56,7 +55,7 @@ where
     /// Create a new signer with a given public key
     pub fn new(inner: T, created_at: DateTime<Utc>) -> Result<Self> {
         let public_key = PublicKey::new(
-            Version::New,
+            PacketHeaderVersion::New,
             KeyVersion::V4,
             RsaPublicKey::PGP_ALGORITHM,
             created_at,
@@ -116,26 +115,12 @@ where
     T: PrehashSigner<Signature>,
     D: Digest + PgpHash,
 {
-    type PublicKey = PublicKey;
-    type Unlocked = Self;
-
-    fn unlock<F, G, Tr>(&self, _pw: F, work: G) -> Result<Tr>
-    where
-        F: FnOnce() -> String,
-        G: FnOnce(&Self::Unlocked) -> Result<Tr>,
-    {
-        work(self)
-    }
-
-    fn create_signature<F>(
+    fn create_signature(
         &self,
-        _key_pw: F,
+        _key_pw: &Password,
         hash: HashAlgorithm,
         prehashed_data: &[u8],
-    ) -> Result<SignatureBytes>
-    where
-        F: FnOnce() -> String,
-    {
+    ) -> Result<SignatureBytes> {
         let sig = self.sign_prehash(hash, prehashed_data)?;
 
         // MPI format:
@@ -148,38 +133,12 @@ where
         Ok(SignatureBytes::Mpis(mpis))
     }
 
-    fn public_key(&self) -> Self::PublicKey {
-        self.public_key.clone()
-    }
-
     fn hash_alg(&self) -> HashAlgorithm {
         D::HASH_ALGORITHM
     }
 }
 
-impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
-    fn verify_signature(
-        &self,
-        hash: HashAlgorithm,
-        data: &[u8],
-        sig: &SignatureBytes,
-    ) -> Result<()> {
-        self.public_key.verify_signature(hash, data, sig)
-    }
-
-    fn encrypt<R: CryptoRng + Rng>(
-        &self,
-        _rng: R,
-        _plain: &[u8],
-        _esk_type: EskType,
-    ) -> Result<PkeskBytes> {
-        bail!("Encryption is unsupported")
-    }
-
-    fn serialize_for_hashing(&self, writer: &mut impl std::io::Write) -> Result<()> {
-        self.public_key.serialize_for_hashing(writer)
-    }
-
+impl<D, T> KeyDetails for RsaSigner<T, D> {
     fn version(&self) -> KeyVersion {
         self.public_key.version()
     }
@@ -194,6 +153,17 @@ impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
 
     fn algorithm(&self) -> PublicKeyAlgorithm {
         self.public_key.algorithm()
+    }
+}
+
+impl<D, T> PublicKeyTrait for RsaSigner<T, D> {
+    fn verify_signature(
+        &self,
+        hash: HashAlgorithm,
+        data: &[u8],
+        sig: &SignatureBytes,
+    ) -> Result<()> {
+        self.public_key.verify_signature(hash, data, sig)
     }
 
     fn created_at(&self) -> &chrono::DateTime<chrono::Utc> {
