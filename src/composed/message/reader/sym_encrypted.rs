@@ -93,14 +93,56 @@ impl<R: BufRead> SymEncryptedDataReader<R> {
             Self::Error => panic!("SymEncryptedDataReader errored"),
         }
     }
+
+    fn set_done(&mut self) {
+        match std::mem::replace(self, Self::Error) {
+            Self::Body { decryptor } => {
+                *self = Self::Done {
+                    source: decryptor.into_inner(),
+                }
+            }
+            Self::Done { source } => {
+                *self = Self::Done { source };
+            }
+            Self::Error => {
+                panic!("SymEncryptedDataReader errored")
+            }
+        }
+    }
+
+    fn check_done(&mut self) -> io::Result<()> {
+        match std::mem::replace(self, Self::Error) {
+            Self::Body { mut decryptor } => {
+                let buf = decryptor.fill_buf()?;
+                if buf.is_empty() {
+                    *self = Self::Done {
+                        source: decryptor.into_inner(),
+                    };
+                } else {
+                    *self = Self::Body { decryptor };
+                }
+            }
+            Self::Done { source } => {
+                *self = Self::Done { source };
+            }
+            Self::Error => {
+                panic!("SymEncryptedDataReader errored")
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
     fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        self.check_done()?;
         match self {
-            Self::Body { decryptor } => decryptor.fill_buf(),
+            Self::Body { ref mut decryptor } => decryptor.fill_buf(),
             Self::Done { .. } => Ok(&[][..]),
-            Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
+            Self::Error => {
+                panic!("SymEncryptedDataReader errored")
+            }
         }
     }
 
@@ -116,7 +158,13 @@ impl<R: BufRead> BufRead for SymEncryptedDataReader<R> {
 impl<R: BufRead> Read for SymEncryptedDataReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            Self::Body { decryptor } => decryptor.read(buf),
+            Self::Body { decryptor } => {
+                let res = decryptor.read(buf)?;
+                if res == 0 {
+                    self.set_done();
+                }
+                Ok(res)
+            }
             Self::Done { .. } => Ok(0),
             Self::Error => Err(io::Error::other("SymEncryptedDataReader errored")),
         }
