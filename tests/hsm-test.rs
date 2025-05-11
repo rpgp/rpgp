@@ -8,6 +8,7 @@ use pgp::{
         checksum, ecc_curve::ECCCurve, hash::HashAlgorithm, public_key::PublicKeyAlgorithm,
         sym::SymmetricKeyAlgorithm,
     },
+    helper::{EcdsaSigner, RsaSigner},
     packet,
     packet::{PubKeyInner, PublicKey, SignatureConfig},
     types::{
@@ -485,6 +486,8 @@ fn card_sign() {
 
 #[test]
 fn ecdsa_signer() {
+    use rsa::pkcs8::DecodePrivateKey;
+
     let inner =
         p256::ecdsa::SigningKey::read_pkcs8_pem_file("tests/unit-tests/hsm/p256.pem").unwrap();
 
@@ -493,25 +496,26 @@ fn ecdsa_signer() {
 
     let mut config = SignatureConfig::v4(
         packet::SignatureType::Binary,
-        signer.public_key().algorithm(),
-        HashAlgorithm::SHA2_256,
+        signer.algorithm(),
+        HashAlgorithm::Sha256,
     );
 
     config.hashed_subpackets = vec![
         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
-        )),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())),
+        ))
+        .unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
     ];
 
-    let signature = config.sign(&signer, String::new, DATA).unwrap();
+    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
 
-    let pubkey = signer.public_key();
-    signature.verify(&pubkey, DATA).expect("ok");
+    signature.verify(&signer, DATA).expect("ok");
 }
 
 #[test]
 fn rsa_signer() {
+    use rsa::pkcs8::DecodePrivateKey;
     let inner = rsa::pkcs1v15::SigningKey::<sha2::Sha256>::read_pkcs8_pem_file(
         "tests/unit-tests/hsm/rsa.pem",
     )
@@ -522,19 +526,19 @@ fn rsa_signer() {
 
     let mut config = SignatureConfig::v4(
         packet::SignatureType::Binary,
-        signer.public_key().algorithm(),
-        HashAlgorithm::SHA2_256,
+        signer.algorithm(),
+        HashAlgorithm::Sha256,
     );
 
     config.hashed_subpackets = vec![
         packet::Subpacket::regular(packet::SubpacketData::SignatureCreationTime(
             DateTime::<Utc>::from_timestamp(0, 0).unwrap(),
-        )),
-        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())),
+        ))
+        .unwrap(),
+        packet::Subpacket::regular(packet::SubpacketData::Issuer(signer.key_id())).unwrap(),
     ];
 
-    let signature = config.sign(&signer, String::new, DATA).unwrap();
+    let signature = config.sign(&signer, &Password::empty(), DATA).unwrap();
 
-    let pubkey = signer.public_key();
-    signature.verify(&pubkey, DATA).expect("ok");
+    signature.verify(&signer, DATA).expect("ok");
 }

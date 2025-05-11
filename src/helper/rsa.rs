@@ -10,14 +10,13 @@ use sha2::Digest;
 use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
 use super::{PgpHash, PgpPublicKey};
-use crate::types::RsaPublicParams;
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::{bail, Result},
     packet::{PubKeyInner, PublicKey},
     types::{
         Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,
-        SecretKeyTrait, SignatureBytes,
+        RsaPublicParams, SecretKeyTrait, SignatureBytes,
     },
 };
 
