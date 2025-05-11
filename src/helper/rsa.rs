@@ -4,13 +4,13 @@ use chrono::{DateTime, Utc};
 use digest::{typenum::Unsigned, OutputSizeUser};
 use rsa::{
     pkcs1v15::{Signature, VerifyingKey},
-    traits::PublicKeyParts,
     RsaPublicKey,
 };
 use sha2::Digest;
 use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
 use super::{PgpHash, PgpPublicKey};
+use crate::types::RsaPublicParams;
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
     errors::{bail, Result},
@@ -25,10 +25,7 @@ impl PgpPublicKey for RsaPublicKey {
     const PGP_ALGORITHM: PublicKeyAlgorithm = PublicKeyAlgorithm::RSA;
 
     fn pgp_parameters(&self) -> PublicParams {
-        PublicParams::RSA {
-            n: self.n().into(),
-            e: self.e().into(),
-        }
+        PublicParams::RSA(RsaPublicParams { key: self.clone() })
     }
 }
 

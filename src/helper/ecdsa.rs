@@ -41,9 +41,7 @@ pub trait PgpEcdsaPublicKey {
 
 impl PgpEcdsaPublicKey for p256::ecdsa::VerifyingKey {
     fn ecdsa_public_key(&self) -> EcdsaPublicParams {
-        let key = self.into();
-        let p = Mpi::from_raw(self.to_sec1_bytes().to_vec());
-        EcdsaPublicParams::P256 { key, p }
+        EcdsaPublicParams::P256 { key: self.into() }
     }
 }
 
