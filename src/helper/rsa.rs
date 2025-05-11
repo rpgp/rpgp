@@ -11,14 +11,12 @@ use sha2::Digest;
 use signature::{hazmat::PrehashSigner, Keypair, SignatureEncoding};
 
 use super::{PgpHash, PgpPublicKey};
-use crate::errors::bail;
-use crate::types::{PacketHeaderVersion, Password};
 use crate::{
     crypto::{hash::HashAlgorithm, public_key::PublicKeyAlgorithm},
-    errors::Result,
-    packet::PublicKey,
+    errors::{bail, Result},
+    packet::{PubKeyInner, PublicKey},
     types::{
-        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, PublicKeyTrait, PublicParams,
+        Fingerprint, KeyDetails, KeyId, KeyVersion, Mpi, Password, PublicKeyTrait, PublicParams,
         SecretKeyTrait, SignatureBytes,
     },
 };
@@ -54,8 +52,7 @@ where
 {
     /// Create a new signer with a given public key
     pub fn new(inner: T, created_at: DateTime<Utc>) -> Result<Self> {
-        let public_key = PublicKey::new(
-            PacketHeaderVersion::New,
+        let public_key = PubKeyInner::new(
             KeyVersion::V4,
             RsaPublicKey::PGP_ALGORITHM,
             created_at,
@@ -65,7 +62,7 @@ where
 
         Ok(Self {
             inner,
-            public_key,
+            public_key: PublicKey::from_inner(public_key)?,
             _digest: PhantomData,
         })
     }
