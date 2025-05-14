@@ -1,6 +1,6 @@
 use aes_gcm::aead::rand_core::CryptoRng;
 use chrono::SubsecRound;
-use rand::Rng;
+use rand::RngCore;
 use smallvec::SmallVec;
 
 use crate::{
@@ -58,13 +58,13 @@ impl KeyDetails {
 
     pub fn sign<R, K, P>(
         self,
-        mut rng: R,
+        rng: &mut R,
         key: &K,
         pub_key: &P,
         key_pw: &Password,
     ) -> Result<SignedKeyDetails>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + RngCore + ?Sized,
         K: SecretKeyTrait,
         P: PublicKeyTrait + Serialize,
     {
@@ -102,12 +102,8 @@ impl KeyDetails {
 
         // --- Direct key signatures
         let direct_signatures = if key.version() == KeyVersion::V6 {
-            let mut config = SignatureConfig::v6(
-                &mut rng,
-                SignatureType::Key,
-                key.algorithm(),
-                key.hash_alg(),
-            )?;
+            let mut config =
+                SignatureConfig::v6(rng, SignatureType::Key, key.algorithm(), key.hash_alg())?;
             config.hashed_subpackets = subpackets_with_metadata()?;
 
             let dks = config.sign_key(key, key_pw, pub_key)?;
@@ -121,7 +117,8 @@ impl KeyDetails {
         let mut users = vec![];
 
         if let Some(primary_user_id) = self.primary_user_id {
-            let mut config = SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
+            let mut config = SignatureConfig::from_key(rng, key, SignatureType::CertGeneric)?;
+
             config.hashed_subpackets = match key.version() {
                 KeyVersion::V6 => basic_subpackets()?,
                 _ => subpackets_with_metadata()?,
@@ -153,7 +150,7 @@ impl KeyDetails {
                 .into_iter()
                 .map(|id| {
                     let mut config =
-                        SignatureConfig::from_key(&mut rng, key, SignatureType::CertGeneric)?;
+                        SignatureConfig::from_key(rng, key, SignatureType::CertGeneric)?;
 
                     config.hashed_subpackets = match key.version() {
                         KeyVersion::V6 => basic_subpackets()?,
@@ -176,7 +173,7 @@ impl KeyDetails {
         let user_attributes = self
             .user_attributes
             .into_iter()
-            .map(|u| u.sign(&mut rng, key, pub_key, key_pw))
+            .map(|u| u.sign(rng, key, pub_key, key_pw))
             .collect::<Result<Vec<_>>>()?;
 
         Ok(SignedKeyDetails {
