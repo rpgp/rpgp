@@ -1,9 +1,9 @@
 use std::io::BufRead;
 
 use byteorder::{BigEndian, ByteOrder, WriteBytesExt};
-use digest::generic_array::GenericArray;
+use hybrid_array::Array;
 use md5::Md5;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 use rsa::traits::PublicKeyParts;
 use sha1_checked::Sha1;
 use sha2::Sha256;
@@ -113,9 +113,9 @@ impl PublicKey {
 }
 
 impl EncryptionKey for PublicKey {
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+    fn encrypt<R: rand::CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -184,9 +184,9 @@ impl PublicSubkey {
     }
 
     /// Produce a Subkey Binding Signature (Type ID 0x18), to bind this subkey to a primary key
-    pub fn sign<R: CryptoRng + Rng, S, K>(
+    pub fn sign<R: CryptoRng + ?Sized, S, K>(
         &self,
-        rng: R,
+        rng: &mut R,
         primary_sec_key: &S,
         primary_pub_key: &K,
         key_pw: &Password,
@@ -229,9 +229,9 @@ impl PublicSubkey {
 }
 
 impl EncryptionKey for PublicSubkey {
-    fn encrypt<R: rand::CryptoRng + rand::Rng>(
+    fn encrypt<R: rand::CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -416,9 +416,9 @@ impl PubKeyInner {
     /// Signs a direct key signature or a revocation.
     #[allow(dead_code)]
     // TODO: Expose in public API
-    fn sign<R: CryptoRng + Rng, S>(
+    fn sign<R: CryptoRng + ?Sized, S>(
         &self,
-        mut rng: R,
+        rng: &mut R,
         key: &S,
         key_pw: &Password,
         sig_type: SignatureType,
@@ -426,7 +426,7 @@ impl PubKeyInner {
     where
         S: SigningKey + Serialize,
     {
-        let mut config = SignatureConfig::from_key(&mut rng, key, sig_type)?;
+        let mut config = SignatureConfig::from_key(rng, key, sig_type)?;
         config.hashed_subpackets = vec![
             Subpacket::regular(SubpacketData::SignatureCreationTime(Timestamp::now()))?,
             Subpacket::regular(SubpacketData::IssuerFingerprint(key.fingerprint()))?,
@@ -441,9 +441,9 @@ impl PubKeyInner {
     }
 }
 
-pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
+pub(crate) fn encrypt<R: CryptoRng + ?Sized, K: KeyDetails>(
     key: &K,
-    mut rng: R,
+    rng: &mut R,
     plain: &[u8],
     typ: EskType,
 ) -> Result<PkeskBytes> {
@@ -498,7 +498,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
                 }
             };
 
-            let (ephemeral, session_key) = crypto::x25519::encrypt(&mut rng, &params.key, plain)?;
+            let (ephemeral, session_key) = crypto::x25519::encrypt(rng, &params.key, plain)?;
 
             Ok(PkeskBytes::X25519 {
                 ephemeral,
@@ -519,7 +519,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
                 }
             };
 
-            let (ephemeral, session_key) = crypto::x448::encrypt(&mut rng, params, plain)?;
+            let (ephemeral, session_key) = crypto::x448::encrypt(rng, params, plain)?;
 
             Ok(PkeskBytes::X448 {
                 ephemeral,
@@ -545,7 +545,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
 
             let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
                 crypto::ml_kem768_x25519::encrypt(
-                    &mut rng,
+                    rng,
                     &params.x25519_key,
                     &params.ml_kem_key,
                     plain,
@@ -573,12 +573,7 @@ pub(crate) fn encrypt<R: rand::CryptoRng + rand::Rng, K: KeyDetails>(
             };
 
             let (ecdh_ciphertext, ml_kem_ciphertext, session_key) =
-                crypto::ml_kem1024_x448::encrypt(
-                    &mut rng,
-                    &params.x448_key,
-                    &params.ml_kem_key,
-                    plain,
-                )?;
+                crypto::ml_kem1024_x448::encrypt(rng, &params.x448_key, &params.ml_kem_key, plain)?;
 
             Ok(PkeskBytes::MlKem1024X448 {
                 ecdh_ciphertext,
@@ -672,7 +667,7 @@ impl crate::packet::PacketTrait for PublicSubkey {
 }
 
 impl PubKeyInner {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         let mut hasher = D::new();
 
         use crate::ser::Serialize;
@@ -974,7 +969,7 @@ impl KeyDetails for PublicKey {
 }
 
 impl Imprint for PublicKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.inner.imprint::<D>()
     }
 }
@@ -1016,7 +1011,7 @@ impl KeyDetails for PublicSubkey {
 }
 
 impl Imprint for PublicSubkey {
-    fn imprint<D: KnownDigest>(&self) -> Result<GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<Array<u8, D::OutputSize>> {
         self.inner.imprint::<D>()
     }
 }

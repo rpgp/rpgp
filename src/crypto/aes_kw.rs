@@ -1,11 +1,10 @@
-use generic_array::{
+use cipher::{
+    array::Array,
     typenum::{U16, U24, U32},
-    GenericArray,
+    KeyInit,
 };
 use snafu::{ResultExt, Snafu};
 use zeroize::Zeroizing;
-
-const IV_LEN: usize = 8;
 
 /// AES key wrap possible errors.
 #[derive(Debug, Snafu)]
@@ -22,21 +21,22 @@ pub enum Error {
 /// As defined in RFC 3394.
 pub fn wrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
     let aes_size = key.len() * 8;
+    let mut buf = vec![0u8; data.len() + aes_kw::IV_LEN];
     let res = match aes_size {
         128 => {
-            let key = GenericArray::<u8, U16>::from_slice(key);
-            let kek = aes_kw::KekAes128::new(key);
-            kek.wrap_vec(data)
+            let key = Array::<u8, U16>::from_slice(key);
+            let kek = aes_kw::KwAes128::new(key);
+            kek.wrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         192 => {
-            let key = GenericArray::<u8, U24>::from_slice(key);
-            let kek = aes_kw::KekAes192::new(key);
-            kek.wrap_vec(data)
+            let key = Array::<u8, U24>::from_slice(key);
+            let kek = aes_kw::KwAes192::new(key);
+            kek.wrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         256 => {
-            let key = GenericArray::<u8, U32>::from_slice(key);
-            let kek = aes_kw::KekAes256::new(key);
-            kek.wrap_vec(data)
+            let key = Array::<u8, U32>::from_slice(key);
+            let kek = aes_kw::KwAes256::new(key);
+            kek.wrap_key(data, &mut buf).map(|b| b.to_vec())
         }
         _ => {
             return Err(InvalidKeySizeSnafu { size: aes_size }.build());
@@ -48,30 +48,29 @@ pub fn wrap(key: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
 /// AES Key Unwrap
 /// As defined in RFC 3394.
 pub fn unwrap(key: &[u8], data: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
-    let len = data.len() - IV_LEN;
-    let mut out = Zeroizing::new(vec![0u8; len]);
-
     let aes_size = key.len() * 8;
-    match aes_size {
+    let mut buf = Zeroizing::new(vec![0u8; data.len()]);
+    let out = match aes_size {
         128 => {
-            let key = GenericArray::<u8, U16>::from_slice(key);
-            let kek = aes_kw::KekAes128::new(key);
-            kek.unwrap(data, &mut out)
+            let key = Array::<u8, U16>::from_slice(key);
+            let kek = aes_kw::KwAes128::new(key);
+            kek.unwrap_key(data, &mut buf)
         }
         192 => {
-            let key = GenericArray::<u8, U24>::from_slice(key);
-            let kek = aes_kw::KekAes192::new(key);
-            kek.unwrap(data, &mut out)
+            let key = Array::<u8, U24>::from_slice(key);
+            let kek = aes_kw::KwAes192::new(key);
+            kek.unwrap_key(data, &mut buf)
         }
         256 => {
-            let key = GenericArray::<u8, U32>::from_slice(key);
-            let kek = aes_kw::KekAes256::new(key);
-            kek.unwrap(data, &mut out)
+            let key = Array::<u8, U32>::from_slice(key);
+            let kek = aes_kw::KwAes256::new(key);
+            kek.unwrap_key(data, &mut buf)
         }
         _ => {
             return Err(InvalidKeySizeSnafu { size: aes_size }.build());
         }
     }
+    .map(|b| Zeroizing::new(b.to_vec()))
     .context(WrapSnafu)?;
 
     Ok(out)

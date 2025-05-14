@@ -1,6 +1,7 @@
 #![allow(clippy::result_large_err)]
 use std::{fmt::Debug, fs::File};
 
+use chacha20::ChaCha8Rng;
 use p256::pkcs8::DecodePrivateKey;
 use pgp::{
     adapter::{EcdsaSigner, RsaSigner},
@@ -16,7 +17,6 @@ use pgp::{
     },
 };
 use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 #[derive(Debug, Clone)]
 pub struct FakeHsm {
@@ -573,7 +573,7 @@ fn ecdsa_signed_public_key() {
     );
 
     let signed_public_key = SignedPublicKey::bind_with_signing_key(
-        rand::thread_rng(),
+        &mut rand::rng(),
         &signer,
         signer.public_key().clone(),
         details,
@@ -656,7 +656,7 @@ fn ecdsa_signed_public_key_with_signing_subkey() {
     };
 
     let signed_public_key = SignedPublicKey::bind_with_signing_key(
-        rand::thread_rng(),
+        &mut rand::rng(),
         &signer,
         signer.public_key().clone(),
         details,
