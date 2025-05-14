@@ -2,9 +2,9 @@ use std::marker::PhantomData;
 
 use digest::{typenum::Unsigned, OutputSizeUser};
 use ecdsa::{
-    elliptic_curve::{generic_array::ArrayLength, CurveArithmetic},
-    hazmat::DigestPrimitive,
-    PrimeCurve, SignatureSize,
+    elliptic_curve::{array::ArraySize, CurveArithmetic},
+    hazmat::DigestAlgorithm,
+    EcdsaCurve, PrimeCurve, SignatureSize,
 };
 use signature::{hazmat::PrehashSigner, Keypair};
 
@@ -25,7 +25,7 @@ use crate::{
 impl<C> HPublicKey for ecdsa::VerifyingKey<C>
 where
     Self: PgpEcdsaPublicKey,
-    C: PrimeCurve + CurveArithmetic,
+    C: PrimeCurve + CurveArithmetic + EcdsaCurve,
 {
     const PGP_ALGORITHM: PublicKeyAlgorithm = PublicKeyAlgorithm::ECDSA;
 
@@ -99,8 +99,8 @@ where
 
 impl<C, T> EcdsaSigner<T, C>
 where
-    C: PrimeCurve + DigestPrimitive,
-    SignatureSize<C>: ArrayLength<u8>,
+    C: PrimeCurve + DigestAlgorithm,
+    SignatureSize<C>: ArraySize,
     T: PrehashSigner<ecdsa::Signature<C>>,
     C::Digest: KnownDigest,
 {
@@ -126,8 +126,8 @@ where
 
 impl<C, T> SigningKey for EcdsaSigner<T, C>
 where
-    C: PrimeCurve + DigestPrimitive,
-    SignatureSize<C>: ArrayLength<u8>,
+    C: PrimeCurve + DigestAlgorithm,
+    SignatureSize<C>: ArraySize,
     T: PrehashSigner<ecdsa::Signature<C>>,
     C::Digest: KnownDigest,
 {

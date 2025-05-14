@@ -101,10 +101,10 @@ mod tests {
 
     prop_compose! {
         pub fn dsa_pub_gen()(seed: u64) -> dsa::VerifyingKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             #[allow(deprecated)]
-            let components = dsa::Components::generate(&mut rng, dsa::KeySize::DSA_1024_160);
-            let signing_key = dsa::SigningKey::generate(&mut rng, components);
+            let Ok(components) = dsa::Components::try_generate_from_rng_with_key_size(&mut rng, dsa::KeySize::DSA_1024_160);
+            let Ok(signing_key) = dsa::SigningKey::try_generate_from_rng_with_components(&mut rng, components);
             signing_key.verifying_key().clone()
         }
     }
