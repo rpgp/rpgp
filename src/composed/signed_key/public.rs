@@ -1,7 +1,7 @@
 use std::io;
 
 use log::warn;
-use rand::{CryptoRng, Rng};
+use rand::CryptoRng;
 
 use crate::{
     armor,
@@ -146,9 +146,9 @@ impl SignedPublicKey {
 }
 
 impl EncryptionKey for SignedPublicKey {
-    fn encrypt<R: Rng + CryptoRng>(
+    fn encrypt<R: CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -187,7 +187,7 @@ impl KeyDetails for SignedPublicKey {
 }
 
 impl Imprint for SignedPublicKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<hybrid_array::Array<u8, D::OutputSize>> {
         self.primary_key.imprint::<D>()
     }
 }
@@ -229,7 +229,7 @@ impl SignedPublicKey {
     /// "Embedded primary key binding signature", is included.
     /// See <https://www.rfc-editor.org/rfc/rfc9580.html#sigtype-primary-binding>
     pub fn bind_with_signing_key<R, K>(
-        mut rng: R,
+        rng: &mut R,
         primary_signer: &K,
         primary_key: packet::PublicKey,
         details: composed::KeyDetails,
@@ -237,7 +237,7 @@ impl SignedPublicKey {
         public_subkeys: Vec<SignedPublicSubKey>,
     ) -> Result<Self>
     where
-        R: CryptoRng + Rng,
+        R: CryptoRng + ?Sized,
         K: SigningKey,
     {
         // Prevent callers from accidentally using an unrelated signing key
@@ -247,7 +247,7 @@ impl SignedPublicKey {
             "Signing key fingerprint must match primary public key fingerprint"
         );
 
-        let details = details.sign(&mut rng, primary_signer, &primary_key, key_pw)?;
+        let details = details.sign(rng, primary_signer, &primary_key, key_pw)?;
         Ok(Self {
             primary_key,
             details,
@@ -306,9 +306,9 @@ impl SignedPublicSubKey {
 }
 
 impl EncryptionKey for SignedPublicSubKey {
-    fn encrypt<R: Rng + CryptoRng>(
+    fn encrypt<R: CryptoRng + ?Sized>(
         &self,
-        rng: R,
+        rng: &mut R,
         plain: &[u8],
         typ: EskType,
     ) -> Result<PkeskBytes> {
@@ -317,7 +317,7 @@ impl EncryptionKey for SignedPublicSubKey {
 }
 
 impl Imprint for SignedPublicSubKey {
-    fn imprint<D: KnownDigest>(&self) -> Result<generic_array::GenericArray<u8, D::OutputSize>> {
+    fn imprint<D: KnownDigest>(&self) -> Result<hybrid_array::Array<u8, D::OutputSize>> {
         self.key.imprint::<D>()
     }
 }

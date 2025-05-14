@@ -133,7 +133,9 @@ pub enum Error {
         backtrace: Option<Backtrace>,
     },
     #[snafu(transparent)]
-    SigningError { source: cx448::SigningError },
+    SigningError {
+        source: ed448_goldilocks::SigningError,
+    },
 }
 
 impl From<crate::crypto::hash::Error> for Error {
@@ -160,8 +162,8 @@ impl From<cipher::InvalidLength> for Error {
     }
 }
 
-impl From<block_padding::UnpadError> for Error {
-    fn from(_: block_padding::UnpadError) -> Error {
+impl From<block_padding::Error> for Error {
+    fn from(_: block_padding::Error) -> Error {
         Error::UnpadError
     }
 }

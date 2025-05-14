@@ -180,7 +180,7 @@ fn rpg_021_signed_secret_key_encrypt_panic1() {
     let dummy_plaintext = vec![0u8; 128];
 
     // note, this is non-deterministic, but does not matter for reproduction
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let key = pgp::composed::SignedSecretKey::from_bytes(bad_input).unwrap();
 

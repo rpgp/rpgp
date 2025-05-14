@@ -42,83 +42,75 @@ flate2 = { version = "1.1.1", default-features = false, features = ["zlib-rs"] }
 bzip2 = { version = "0.6.0", optional = true }
 
 # Crypto
-aes = "0.8.4"
-aead = { version = "0.5", features = ["bytes"] }
-argon2 = { version = "0.5", features = ["zeroize", "std"] }
-block-padding = "0.3"
-blowfish = "0.9"
-camellia = "0.1"
-cast5 = "0.11"
-cfb-mode = "0.8.2"
-cipher = "0.4.2"
-const-oid = "0.9.6"
+aes = "0.9.0-rc.2"
+aead = { version = "0.6.0-rc.4", features = ["bytes"] }
+argon2 = { version = "0.6.0-rc.5", features = ["alloc", "zeroize"] }
+block-padding = "0.4.0"
+blowfish = "0.10.0-rc.2"
+camellia = "0.2.0-rc.0"
+cast5 = "0.12.0-rc.0"
+cfb-mode = "0.9.0-rc.1"
+cipher = "0.5.0-rc.3"
+const-oid = "0.10"
 crc24 = "0.1.6"
-curve25519-dalek = { version = "4.1.3", default-features = false, features = [
+crypto-bigint = { version = "0.7.0-rc.15", default-features = false, features = ["alloc"] }
+curve25519-dalek = { version = "5.0.0-pre.4", default-features = false, features = [
     "alloc",
     "precomputed-tables",
     "zeroize",
 ] }
-des = "0.8"
-digest = "0.10.7"
-dsa = "0.6.3"
-ecdsa = "0.16.9"
-ed25519-dalek = { version = "2.1.1", default-features = false, features = ["std", "zeroize", "fast", "rand_core"] }
-elliptic-curve = "0.13"
-generic-array = "0.14.6"
-idea = "0.5"
-md-5 = { version = "0.10.5", features = ["oid"] }
+des = "0.9.0-rc.2"
+digest = "0.11.0-rc.5"
+dsa = { version = "0.7.0-rc.8", features = [ "hazmat" ] }
+ecdsa = "0.17.0-rc.12"
+ed25519-dalek = { version = "3.0.0-pre.4", default-features = false, features = ["alloc", "fast", "rand_core", "zeroize"] }
+elliptic-curve = "0.14.0-rc.21"
+hybrid-array = "0.4.5"
+idea = "0.6.0-rc.0"
+md-5 = { version = "0.11.0-rc.3", features = ["oid"] }
 num_enum = ">=0.5.7, < 0.8"
-num-traits = "0.2.19"
-p256 = { version = "0.13", features = ["ecdsa", "ecdh"] }
-p384 = { version = "0.13", features = ["ecdsa"] }
-p521 = { version = "0.13", features = ["ecdsa", "ecdh"] }
-k256 = { version = "0.13", features = ["ecdsa"] }
-rand = "0.8.5"
-ripemd = { version = "0.1.3", features = ["oid"] }
-rsa = { version = "0.9.10" }
-sha1 = { version = "0.10.6", features = ["oid"] }
+p256 = { version = "0.14.0-rc.4", features = ["ecdsa", "ecdh"] }
+p384 = { version = "0.14.0-rc.4", features = ["ecdsa"] }
+p521 = { version = "0.14.0-rc.4", features = ["ecdsa", "ecdh"] }
+k256 = { version = "0.14.0-rc.4", features = ["ecdsa"] }
+rand = "0.10.0-rc.6"
+ripemd = { version = "0.2.0-rc.3", features = ["oid"] }
+rsa = { version = "0.10.0-rc.11" }
+sha1 = { version = "0.11.0-rc.3", features = ["oid"] }
 sha1-asm = { version = "0.5.3", optional = true }
-sha1-checked = { version = "0.10", features = ["zeroize"] }
-sha2 = { version = "0.10.6", features = ["oid"] }
-sha3 = { version = "0.10.8", features = ["oid"] }
-signature = "2.2"
-twofish = "0.7"
+sha1-checked = { version = "0.11.0-rc.0", features = ["zeroize"] }
+sha2 = { version = "0.11.0-rc.3", features = ["oid"] }
+sha3 = { version = "0.11.0-rc.3", features = ["oid"] }
+signature = "3.0.0-rc.6"
+twofish = "0.8.0-rc.0"
 zeroize = { version = "1.8", features = ["zeroize_derive"] }
-getrandom = { version = "0.2", optional = true }
-hkdf = "0.12.4"
-aes-gcm = "0.10.3"
-eax = "0.5.0"
-ocb3 = "0.1"
-aes-kw = { version = "0.2.1", features = ["std"] }
-cx448 = { version = "0.1.1", features = ["zeroize"] }
-num-bigint = { version = "0.8.6", features = [
-    "rand",
-    "i128",
-    "u64_digit",
-    "prime",
-    "zeroize",
-], package = "num-bigint-dig" }
-x25519-dalek = { version = "2.0.1", default-features = false, features = [
-    "alloc",
+getrandom = { version = "0.3", optional = true }
+hkdf = "0.13.0-rc.3"
+aes-gcm = "0.11.0-rc.2"
+eax = "0.6.0-rc.2"
+ocb3 = "0.2.0-rc.2"
+aes-kw = { version = "0.3.0-rc.1" }
+ed448-goldilocks = { version = "0.14.0-pre.7" }
+x448 = { version = "0.14.0-pre.4", features = ["static_secrets"] }
+x25519-dalek = { version = "3.0.0-pre.4", default-features = false, features = [
     "precomputed-tables",
     "zeroize",
     "static_secrets",
 ] }
 
 # PQC
-ml-kem = { version = "0.2.1", features = ["zeroize", "deterministic"], optional = true }
-ml-dsa = { version = "0.0.4", features = ["zeroize"], optional = true }
-slh-dsa = { version = "0.0.3", optional = true }
+ml-kem = { version = "0.3.0-pre.2", features = ["zeroize", "deterministic"], optional = true }
+ml-dsa = { version = "0.1.0-rc.2", features = ["zeroize"], optional = true }
+slh-dsa = { version = "0.2.0-rc.2", optional = true }
 replace_with = "0.1.8"
 
 
 [dev-dependencies]
 glob = "0.3"
-hex-literal = "0.4"
+hex-literal = "1"
 pretty_assertions = "1"
 pretty_env_logger = "0.5"
-rand_chacha = "0.3"
-rand_xorshift = "0.3"
+rand_xorshift = "0.5.0-rc.0"
 serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.47"
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -127,14 +119,15 @@ proptest = { version = "1.6.0", features = ["proptest-macro"] }
 proptest-derive = "0.5.1"
 escape_string = "0.1.2"
 testresult = "0.4.1"
+chacha20 = { version = "0.10.0-rc.6", features = ["rng"] }
 
 [features]
 default = ["bzip2"]
 
 # See README.md for features documentation
 bzip2 = ["dep:bzip2"]
-asm = ["dep:sha1-asm", "sha1/asm", "sha2/asm", "md-5/asm"]
-wasm = ["getrandom", "getrandom/js"]
+asm = ["dep:sha1-asm"]
+wasm = ["getrandom"]
 
 large-rsa = []
 malformed-artifact-compat = []
@@ -148,3 +141,8 @@ debug = 2
 [[bench]]
 name = "benches_main"
 harness = false
+
+[patch.crates-io]
+ml-kem = { git = "https://github.com/RustCrypto/KEMs.git" }
+
+rand_xorshift = { git = "https://github.com/rust-random/rngs.git" }

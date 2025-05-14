@@ -210,28 +210,28 @@ mod tests {
 
     proptest::prop_compose! {
         pub fn p256_pub_gen()(seed: u64) -> p256::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             p256::SecretKey::random(&mut rng).public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn p384_pub_gen()(seed: u64) -> p384::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             p384::SecretKey::random(&mut rng).public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn p521_pub_gen()(seed: u64) -> p521::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             p521::SecretKey::random(&mut rng).public_key()
         }
     }
 
     proptest::prop_compose! {
         pub fn k256_pub_gen()(seed: u64) -> k256::PublicKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             k256::SecretKey::random(&mut rng).public_key()
         }
     }

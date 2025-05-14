@@ -1,10 +1,10 @@
+use chacha20::ChaCha8Rng;
 use pgp::{
     composed::{Edata, Message, MessageBuilder, PlainSessionKey, RawSessionKey},
     crypto::sym::SymmetricKeyAlgorithm,
     packet::{ProtectedDataConfig, SymEncryptedProtectedDataConfig},
 };
 use rand::{CryptoRng, Rng, SeedableRng};
-use rand_chacha::ChaCha8Rng;
 
 const SYM_ALG: SymmetricKeyAlgorithm = SymmetricKeyAlgorithm::AES256;
 

@@ -129,8 +129,8 @@ pub(crate) fn normalize_lines(s: &str, line_break: LineBreak) -> std::borrow::Co
 mod tests {
     use std::io::Read;
 
+    use chacha20::ChaCha8Rng;
     use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::util::test::{check_strings, random_string, ChaosReader};
