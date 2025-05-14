@@ -1,5 +1,5 @@
 use ml_dsa::{KeyGen, MlDsa87};
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use signature::{Signer as _, Verifier};
 use zeroize::ZeroizeOnDrop;
 
@@ -20,7 +20,7 @@ pub const ML_DSA87_KEY_LEN: usize = 32;
 pub struct SecretKey {
     /// The secret point.
     #[debug("..")]
-    ed448: cx448::SigningKey,
+    ed448: ed448_goldilocks::SigningKey,
     #[debug("..")]
     ml_dsa_sign: Box<ml_dsa::SigningKey<MlDsa87>>,
     #[debug("{}", hex::encode(ml_dsa_verify.encode()))]
@@ -45,11 +45,11 @@ impl From<&SecretKey> for MlDsa87Ed448PublicParams {
 
 impl SecretKey {
     /// Generate an Ed448 `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R) -> Self {
-        let ed448 = cx448::SigningKey::generate(&mut rng);
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R) -> Self {
+        let ed448 = ed448_goldilocks::SigningKey::generate(rng);
         let mut ml_dsa_seed = [0u8; ML_DSA87_KEY_LEN];
         rng.fill_bytes(&mut ml_dsa_seed);
-        let ml_dsa = MlDsa87::key_gen_internal(&ml_dsa_seed.into());
+        let ml_dsa = MlDsa87::from_seed(&ml_dsa_seed.into());
 
         SecretKey {
             ed448,
@@ -64,9 +64,10 @@ impl SecretKey {
         ed448: [u8; ED448_KEY_LEN],
         ml_dsa: [u8; ML_DSA87_KEY_LEN],
     ) -> Result<Self> {
-        let ed448 = cx448::SigningKey::from(cx448::SecretKey::from_slice(&ed448));
+        let ed448 =
+            ed448_goldilocks::SigningKey::from(ed448_goldilocks::SecretKey::from_slice(&ed448));
         // use the seed format
-        let keypair = MlDsa87::key_gen_internal(&ml_dsa.into());
+        let keypair = MlDsa87::from_seed(&ml_dsa.into());
 
         Ok(Self {
             ed448,
@@ -120,7 +121,7 @@ impl Signer for SecretKey {
 
 /// Verify an EdDSA signature.
 pub fn verify(
-    ed_key: &cx448::VerifyingKey,
+    ed_key: &ed448_goldilocks::VerifyingKey,
     ml_dsa_key: &ml_dsa::VerifyingKey<MlDsa87>,
     hash: HashAlgorithm,
     hashed: &[u8],
@@ -137,7 +138,7 @@ pub fn verify(
     );
     ensure_eq!(sig_bytes.len(), 114 + 4627, "invalid signature length");
 
-    let ed_sig = cx448::Signature::try_from(&sig_bytes[..114])?;
+    let ed_sig = ed448_goldilocks::Signature::try_from(&sig_bytes[..114])?;
     ed_key.verify(hashed, &ed_sig)?;
 
     let ml_sig = sig_bytes[114..].try_into()?;
@@ -148,9 +149,9 @@ pub fn verify(
 
 #[cfg(test)]
 mod tests {
+    use chacha20::ChaCha8Rng;
     use proptest::prelude::*;
     use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
 
     use super::*;
 

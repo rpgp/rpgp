@@ -14,9 +14,10 @@
 //!     packet::{KeyFlags, UserAttribute, UserId},
 //!     types::{CompressionAlgorithm, Password, PublicKeyTrait, SecretKeyTrait},
 //! };
-//! use rand::thread_rng;
+//! use rand::rng;
 //! use smallvec::*;
 //!
+//! let mut rng = rng();
 //! let mut key_params = SecretKeyParamsBuilder::default();
 //! key_params
 //!     .key_type(KeyType::Rsa(2048))
@@ -30,11 +31,11 @@
 //!     .build()
 //!     .expect("Must be able to create secret key params");
 //! let secret_key = secret_key_params
-//!     .generate(thread_rng())
+//!     .generate(&mut rng)
 //!     .expect("Failed to generate a plain key.");
 //! let passwd_fn = Password::empty();
 //! let signed_secret_key = secret_key
-//!     .sign(&mut thread_rng(), &passwd_fn)
+//!     .sign(&mut rng, &passwd_fn)
 //!     .expect("Must be able to sign its own metadata");
 //! let public_key = signed_secret_key.public_key();
 //! ```

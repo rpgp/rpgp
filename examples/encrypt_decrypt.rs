@@ -5,7 +5,7 @@ use pgp::{
     crypto::sym::SymmetricKeyAlgorithm,
     types::PublicKeyTrait,
 };
-use rand::thread_rng;
+use rand::rng;
 
 fn main() {
     let encrypted = {
@@ -50,18 +50,20 @@ fn encrypt(cert: &SignedPublicKey, msg: &[u8]) -> Vec<u8> {
         "Unexpected subkey layout"
     );
 
+    let mut rng = rng();
+
     // Initialize encryption of `msg`, configure that the output will be a "SEIPDv1" encryption
     // container.
     let mut builder = MessageBuilder::from_bytes("", msg.to_vec())
-        .seipd_v1(thread_rng(), SymmetricKeyAlgorithm::AES256);
+        .seipd_v1(&mut rng, SymmetricKeyAlgorithm::AES256);
 
     // Add `encryption_subkey` as one recipient of the encrypted message
     builder
-        .encrypt_to_key(thread_rng(), &encryption_subkey)
+        .encrypt_to_key(&mut rng, &encryption_subkey)
         .unwrap();
 
     // Perform the actual encryption of the payload and put together the resulting encrypted message
-    builder.to_vec(thread_rng()).unwrap()
+    builder.to_vec(&mut rng).unwrap()
 }
 
 /// Interpret `msg` as an encrypted message and decrypt it (and optionally decompress one layer of
