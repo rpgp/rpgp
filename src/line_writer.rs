@@ -268,7 +268,7 @@ mod tests {
                 {
                     let mut w = LineWriter::<_, $len>::new(&mut buf, LineBreak::Crlf);
                     for i in 0..100 {
-                        let data = (0..i).map(|_| rng.gen()).collect::<Vec<_>>();
+                        let data = (0..i).map(|_| rng.random()).collect::<Vec<_>>();
                         w.write_all(&data).unwrap();
                         list.extend(&data);
                     }
