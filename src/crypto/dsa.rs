@@ -1,7 +1,7 @@
+use crypto_bigint::BoxedUint;
 pub use dsa::KeySize;
 use dsa::{Components, Signature, SigningKey};
-use num_bigint::BigUint;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use signature::hazmat::PrehashVerifier;
 use zeroize::Zeroize;
 
@@ -48,9 +48,9 @@ impl Eq for SecretKey {}
 
 impl SecretKey {
     /// Generate a DSA `SecretKey`.
-    pub fn generate<R: Rng + CryptoRng>(mut rng: R, key_size: KeySize) -> Self {
-        let components = Components::generate(&mut rng, key_size);
-        let signing_key = SigningKey::generate(&mut rng, components);
+    pub fn generate<R: RngCore + CryptoRng + ?Sized>(rng: &mut R, key_size: KeySize) -> Self {
+        let components = Components::generate(rng, key_size);
+        let signing_key = SigningKey::generate(rng, components);
 
         SecretKey { key: signing_key }
     }
@@ -68,7 +68,7 @@ impl SecretKey {
 
     /// Returns the secret point `x` as big endian bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
-        self.key.x().to_bytes_be()
+        self.key.x().to_be_bytes().to_vec()
     }
 }
 
@@ -114,9 +114,9 @@ impl Signer for SecretKey {
 }
 
 /// Verify a DSA signature.
-pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BigUint, s: BigUint) -> Result<()> {
+pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BoxedUint, s: BoxedUint) -> Result<()> {
     let verifying_key = &params.key;
-    let signature = Signature::from_components(r, s)?;
+    let signature = Signature::from_components(r, s).ok_or_else(signature::Error::new)?;
     verifying_key.verify_prehash(hashed, &signature)?;
 
     Ok(())
@@ -124,15 +124,14 @@ pub fn verify(params: &DsaPublicParams, hashed: &[u8], r: BigUint, s: BigUint) -
 
 #[cfg(test)]
 mod tests {
-    use num_traits::Num;
     use proptest::prelude::*;
     use rand::SeedableRng;
 
     use super::*;
     use crate::types::Mpi;
 
-    fn hex_num(s: &str) -> BigUint {
-        BigUint::from_str_radix(s, 16).expect("invalid hex")
+    fn hex_num(s: &str) -> BoxedUint {
+        BoxedUint::from_str_radix_vartime(s, 16).expect("invalid hex")
     }
 
     fn hash(hash_algorithm: HashAlgorithm, text: &str) -> Vec<u8> {
@@ -175,22 +174,25 @@ mod tests {
             DsaPublicParams::try_from_mpi(Mpi::from(p), Mpi::from(q), Mpi::from(g), Mpi::from(y))
                 .unwrap();
 
-        let check =
-            |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
-                let hashed = hash(hash_algorithm, text);
-                let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
-                let key = SecretKey { key };
+        let check = |hash_algorithm: HashAlgorithm,
+                     text: &str,
+                     _k: BoxedUint,
+                     r: BoxedUint,
+                     s: BoxedUint| {
+            let hashed = hash(hash_algorithm, text);
+            let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
+            let key = SecretKey { key };
 
-                let SignatureBytes::Mpis(res) =
-                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
-                else {
-                    panic!("invalid sig format");
-                };
-                let new_r = res[0].clone();
-                let new_s = res[1].clone();
-                assert_eq!((new_r, new_s), (r.clone().into(), s.clone().into()));
-                verify(&params, &hashed, r, s).expect("failed to verify");
+            let SignatureBytes::Mpis(res) =
+                key.sign(hash_algorithm, &hashed).expect("failed to sign")
+            else {
+                panic!("invalid sig format");
             };
+            let new_r = res[0].clone();
+            let new_s = res[1].clone();
+            assert_eq!((new_r, new_s), (r.clone().into(), s.clone().into()));
+            verify(&params, &hashed, r, s).expect("failed to verify");
+        };
 
         check(
             HashAlgorithm::Sha1,
@@ -310,22 +312,25 @@ mod tests {
             DsaPublicParams::try_from_mpi(Mpi::from(p), Mpi::from(q), Mpi::from(g), Mpi::from(y))
                 .unwrap();
 
-        let check =
-            |hash_algorithm: HashAlgorithm, text: &str, _k: BigUint, r: BigUint, s: BigUint| {
-                let hashed = hash(hash_algorithm, text);
-                let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
-                let key = SecretKey { key };
+        let check = |hash_algorithm: HashAlgorithm,
+                     text: &str,
+                     _k: BoxedUint,
+                     r: BoxedUint,
+                     s: BoxedUint| {
+            let hashed = hash(hash_algorithm, text);
+            let key = dsa::SigningKey::from_components(params.key.clone(), x.clone()).unwrap();
+            let key = SecretKey { key };
 
-                let SignatureBytes::Mpis(res) =
-                    key.sign(hash_algorithm, &hashed).expect("failed to sign")
-                else {
-                    panic!("invalid sig format");
-                };
-                let new_r = res[0].clone();
-                let new_s = res[1].clone();
-                assert_eq!((new_r, new_s), (r.clone().into(), s.clone().into()));
-                verify(&params, &hashed, r, s).expect("failed to verify");
+            let SignatureBytes::Mpis(res) =
+                key.sign(hash_algorithm, &hashed).expect("failed to sign")
+            else {
+                panic!("invalid sig format");
             };
+            let new_r = res[0].clone();
+            let new_s = res[1].clone();
+            assert_eq!((new_r, new_s), (r.clone().into(), s.clone().into()));
+            verify(&params, &hashed, r, s).expect("failed to verify");
+        };
 
         check(
             HashAlgorithm::Sha1,
@@ -401,7 +406,7 @@ mod tests {
 
     prop_compose! {
         pub fn key_gen()(seed: u64) -> dsa::SigningKey {
-            let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
+            let mut rng = chacha20::ChaCha8Rng::seed_from_u64(seed);
             #[allow(deprecated)]
             let components = Components::generate(&mut rng, KeySize::DSA_1024_160);
             SigningKey::generate(&mut rng, components)
